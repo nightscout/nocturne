@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -80,12 +81,13 @@ internal static class MigrationJobHarness
             .ReturnsAsync(new DecompositionResult());
 
         return new ServiceCollection()
-            .AddDbContext<NocturneDbContext>(o =>
+            .AddDbContextFactory<NocturneDbContext>(o =>
             {
                 o.UseInMemoryDatabase(database);
                 if (interceptor is not null)
                     o.AddInterceptors(interceptor);
             })
+            .AddDataServices()
             .AddScoped<ITenantAccessor, FixedTenantAccessor>()
             .AddScoped<IAuditContext, AuditContext>()
             .AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(handler))

@@ -7,7 +7,7 @@ using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Controllers.V4.Admin;
@@ -30,12 +30,12 @@ public class DemoAdminController : ControllerBase
 {
     private readonly ITenantService _tenantService;
     private readonly DemoTenantService _demoTenantService;
-    private readonly IDbContextFactory<NocturneDbContext> _factory;
+    private readonly INocturneDbContextFactory _factory;
 
     public DemoAdminController(
         ITenantService tenantService,
         DemoTenantService demoTenantService,
-        IDbContextFactory<NocturneDbContext> factory)
+        INocturneDbContextFactory factory)
     {
         _tenantService = tenantService;
         _demoTenantService = demoTenantService;
@@ -51,7 +51,7 @@ public class DemoAdminController : ControllerBase
         [FromServices] IMemoryCache cache,
         CancellationToken ct)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
+        await using var db = await _factory.CreatePlatformAsync(ct);
 
         var existing = await db.Set<TenantEntity>()
             .Include(t => t.DemoConfig)
@@ -106,7 +106,7 @@ public class DemoAdminController : ControllerBase
         [FromServices] IMemoryCache cache,
         CancellationToken ct)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
+        await using var db = await _factory.CreatePlatformAsync(ct);
 
         var tenant = await db.Set<TenantEntity>()
             .Include(t => t.DemoConfig)
@@ -147,7 +147,7 @@ public class DemoAdminController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetStatus(CancellationToken ct)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
+        await using var db = await _factory.CreatePlatformAsync(ct);
 
         var tenant = await db.Set<TenantEntity>()
             .Include(t => t.DemoConfig)
@@ -167,13 +167,11 @@ public class DemoAdminController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteEntries(CancellationToken ct)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-
-        var tenant = await db.Set<TenantEntity>().FirstOrDefaultAsync(t => t.IsDemo, ct);
+        var tenant = await FindDemoTenantAsync(ct);
         if (tenant is null)
             return NotFound();
 
-        db.TenantId = tenant.Id;
+        await using var db = await _factory.CreateForTenantAsync(tenant.Id, ct);
 
         var deleted = await DemoDataPurge.PurgeEntriesAsync(db, ct);
 
@@ -188,13 +186,11 @@ public class DemoAdminController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteTreatments(CancellationToken ct)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-
-        var tenant = await db.Set<TenantEntity>().FirstOrDefaultAsync(t => t.IsDemo, ct);
+        var tenant = await FindDemoTenantAsync(ct);
         if (tenant is null)
             return NotFound();
 
-        db.TenantId = tenant.Id;
+        await using var db = await _factory.CreateForTenantAsync(tenant.Id, ct);
 
         var deleted = await DemoDataPurge.PurgeTreatmentsAsync(db, ct)
             + await DemoDataPurge.PurgeDeviceStatusAsync(db, ct);
@@ -237,22 +233,20 @@ public class DemoAdminController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SeedExtras(
         [FromBody] DemoSeedExtrasDto? request,
-        [FromServices] SampleDataSeeder seeder,
         CancellationToken ct)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-
-        var tenant = await db.Set<TenantEntity>().FirstOrDefaultAsync(t => t.IsDemo, ct);
+        var tenant = await FindDemoTenantAsync(ct);
         if (tenant is null)
             return NotFound();
 
-        db.TenantId = tenant.Id;
+        await using var db = await _factory.CreateForTenantAsync(tenant.Id, ct);
         var publicSubjectId = await db.TenantMembers
             .Where(m => m.TenantId == tenant.Id && m.Subject!.IsSystemSubject && m.Subject.Name == "Public")
             .Select(m => (Guid?)m.SubjectId)
             .FirstOrDefaultAsync(ct);
 
-        var seeded = await seeder.SeedAsync(
+        var seeded = await SampleDataSeeder.SeedInTenantScopeAsync(
+            HttpContext.RequestServices,
             new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo),
             request?.Days ?? 7,
             publicSubjectId,
@@ -261,6 +255,12 @@ public class DemoAdminController : ControllerBase
             ct);
 
         return Ok(seeded);
+    }
+
+    private async Task<TenantEntity?> FindDemoTenantAsync(CancellationToken ct)
+    {
+        await using var db = await _factory.CreatePlatformAsync(ct);
+        return await db.Set<TenantEntity>().AsNoTracking().FirstOrDefaultAsync(t => t.IsDemo, ct);
     }
 
     private static DemoStateDto ToDto(TenantEntity tenant, bool alreadyExisted) => new(

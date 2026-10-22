@@ -90,13 +90,6 @@ public static class DemoLifestyleSeeds
         var windowStart = localToday.AddDays(-days);
         var now = DateTime.Now;
 
-        // Profile: the seeded therapy profile is active for the whole window.
-        // Resolvers read the name from metadata, not from State (which is the
-        // ProfileState enum name).
-        spans.Add(new SpanSeed(
-            StateSpanCategory.Profile, nameof(ProfileState.Active), windowStart, null,
-            new Dictionary<string, object> { ["profileName"] = DemoTherapyProfile.ProfileName }));
-
         // Pump mode: Automatic, interrupted by occasional Manual windows and
         // by Exercise mode during workouts on exercise days.
         var interruptions = new List<(DateTime Start, DateTime End, string State)>();

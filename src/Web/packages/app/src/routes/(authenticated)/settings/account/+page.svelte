@@ -53,6 +53,7 @@
     describeTotpSetupStartError,
   } from "$lib/components/account/totp-errors";
   import { page } from "$app/state";
+  import { invalidateAll } from "$app/navigation";
 
   const { data }: { data: PageData } = $props();
 
@@ -184,6 +185,7 @@
         label: newPasskeyLabel.trim() || undefined,
       });
       await credentialsQuery.refresh();
+      await invalidateAll();
       showLabelDialog = false;
       pendingPasskey = null;
       newPasskeyLabel = "";
@@ -218,6 +220,7 @@
 
     try {
       await removeCredential(removeTarget.id);
+      await invalidateAll();
       successMessage = { text: "Passkey removed.", wash: false };
       clearMessages();
     } catch (err) {
@@ -241,6 +244,7 @@
       const result = await regenerateRecoveryCodes();
       newRecoveryCodes = result.codes ?? [];
       showNewCodesDialog = true;
+      await invalidateAll();
     } catch (err) {
       errorMessage = describeSubmitError(
         err,

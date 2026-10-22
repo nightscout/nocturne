@@ -87,7 +87,7 @@ public class RefreshTokenService : IRefreshTokenService
     }
 
     /// <inheritdoc />
-    public async Task<Guid?> ValidateRefreshTokenAsync(string refreshToken)
+    public async Task<RefreshTokenSession?> ValidateRefreshTokenAsync(string refreshToken)
     {
         var tokenHash = _jwtService.HashRefreshToken(refreshToken);
 
@@ -113,7 +113,7 @@ public class RefreshTokenService : IRefreshTokenService
             return null;
         }
 
-        return record.SubjectId;
+        return new RefreshTokenSession(record.SubjectId, record.OidcSessionId);
     }
 
     /// <summary>
@@ -159,7 +159,9 @@ public class RefreshTokenService : IRefreshTokenService
             Id: Guid.CreateVersion7(),
             TokenHash: newTokenHash,
             SubjectId: oldRecord.SubjectId,
-            OidcSessionId: oldRecord.OidcSessionId,
+            // A chain issued before sessions were tagged takes an id here, so its next access token
+            // can name its session (sid).
+            OidcSessionId: oldRecord.OidcSessionId ?? Guid.CreateVersion7().ToString("N"),
             DeviceDescription: oldRecord.DeviceDescription,
             IpAddress: ipAddress ?? oldRecord.IpAddress,
             UserAgent: userAgent ?? oldRecord.UserAgent,

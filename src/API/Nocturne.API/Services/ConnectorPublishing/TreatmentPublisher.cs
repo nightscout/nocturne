@@ -23,7 +23,7 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 /// <seealso cref="ITreatmentPublisher"/>
 internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPublisher
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly ITreatmentService _treatmentService;
     private readonly ITreatmentDecomposer _treatmentDecomposer;
     private readonly ITreatmentCache _treatmentCache;
@@ -41,7 +41,7 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
     private readonly IPatientDeviceStamper _patientDeviceStamper;
 
     public TreatmentPublisher(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         ITreatmentService treatmentService,
         ITreatmentDecomposer treatmentDecomposer,
         ITreatmentCache treatmentCache,
@@ -107,7 +107,15 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             using var scope = UpstreamFingerprintScope.Open(fingerprints);
             var written = await _treatmentService.CreateTreatmentsAsync(list, cancellationToken);
             RecordSkippedDeleted(written.SkippedDeleted);
+            RecordRefused(written.Rejected.Count);
             return true;
+        }
+        catch (TreatmentBatchFailedException failed) when (!cancellationToken.IsCancellationRequested)
+        {
+            RecordSkippedDeleted(failed.Written.SkippedDeleted);
+            RecordRefused(failed.Written.Rejected.Count);
+            Logger.LogError(failed, "Failed to publish treatments for {Source}", source);
+            return false;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -187,6 +195,10 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
                 "Reclassified {Count}/{Total} TempBasal records from Scheduled to Algorithm "
                 + "(rate differs from programmed basal schedule) for {Source}",
                 reclassifiedCount, recordList.Count, source);
+
+        foreach (var record in recordList)
+            record.AdditionalProperties = TempBasalAutomaticFlag.Keep(
+                record.AdditionalProperties, TempBasalAutomaticFlag.Of(record.Origin));
     }
 
     /// <summary>
@@ -220,7 +232,8 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         var minMills = scheduledRecords.Min(r => r.StartMills);
         var maxMills = scheduledRecords.Max(r => r.StartMills);
 
-        var resolve = await _basalRateResolver.BuildResolverAsync(minMills, maxMills, cancellationToken);
+        // The range is half-open, and the last record's own start has to fall inside it.
+        var resolve = await _basalRateResolver.BuildResolverAsync(minMills, maxMills + 1, cancellationToken);
 
         var reclassified = 0;
         foreach (var record in scheduledRecords)
@@ -228,7 +241,7 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             var programmedRate = resolve(record.StartMills);
             record.ScheduledRate = programmedRate;
 
-            if (Math.Abs(record.Rate - programmedRate) > rateTolerance)
+            if (record.Rate is { } rate && Math.Abs(rate - programmedRate) > rateTolerance)
             {
                 record.Origin = TempBasalOrigin.Algorithm;
                 reclassified++;

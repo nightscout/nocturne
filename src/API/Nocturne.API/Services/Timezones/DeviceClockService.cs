@@ -8,6 +8,7 @@ using Nocturne.Core.Models.Timezones;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Timezones;
 
@@ -35,7 +36,7 @@ public class DeviceClockService : IDeviceClockService
     private const string ZoneChangeNotificationType = "connector.declaredZoneChanged";
     private const string NotificationSource = "device-clock";
 
-    private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITimezoneTimelineService _timeline;
     private readonly ITenantOwnerResolver _ownerResolver;
@@ -43,14 +44,14 @@ public class DeviceClockService : IDeviceClockService
     private readonly ILogger<DeviceClockService> _logger;
 
     public DeviceClockService(
-        NocturneDbContext db,
+        INocturneDbContextFactory contexts,
         ITenantAccessor tenantAccessor,
         ITimezoneTimelineService timeline,
         ITenantOwnerResolver ownerResolver,
         IInAppNotificationService notifications,
         ILogger<DeviceClockService> logger)
     {
-        _db = db ?? throw new ArgumentNullException(nameof(db));
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
         _timeline = timeline ?? throw new ArgumentNullException(nameof(timeline));
         _ownerResolver = ownerResolver ?? throw new ArgumentNullException(nameof(ownerResolver));
@@ -58,17 +59,9 @@ public class DeviceClockService : IDeviceClockService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    private Guid TenantId
-    {
-        get
-        {
-            var tenantId = _tenantAccessor.Context?.TenantId
-                ?? throw new InvalidOperationException("No tenant context for device clock access.");
-            // Pin the context so RLS (USING + WITH CHECK) scopes to this tenant in any scope.
-            _db.TenantId = tenantId;
-            return tenantId;
-        }
-    }
+    private Guid TenantId =>
+        _tenantAccessor.Context?.TenantId
+        ?? throw new InvalidOperationException("No tenant context for device clock access.");
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<DeviceClockSegment>> RecordObservationsAsync(
@@ -78,10 +71,11 @@ public class DeviceClockService : IDeviceClockService
         bool correctionsEnabled,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(connector);
         var tenantId = TenantId;
 
-        var existing = await _db.DeviceClockObservations
+        var existing = await db.DeviceClockObservations
             .Where(e => e.Connector == connector)
             .OrderBy(e => e.ObservedAt)
             .ToListAsync(cancellationToken);
@@ -113,7 +107,7 @@ public class DeviceClockService : IDeviceClockService
 
             var entity = DeviceClockObservationMapper.ToEntity(observation, tenantId);
             entity.Connector = connector;
-            _db.DeviceClockObservations.Add(entity);
+            db.DeviceClockObservations.Add(entity);
             byKey[key] = entity;
             changed = true;
         }
@@ -122,12 +116,12 @@ public class DeviceClockService : IDeviceClockService
         var stale = existing.Where(e => e.ObservedAt < cutoff).ToList();
         if (stale.Count > 0)
         {
-            _db.DeviceClockObservations.RemoveRange(stale);
+            db.DeviceClockObservations.RemoveRange(stale);
             changed = true;
         }
 
         if (changed)
-            await _db.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
 
         var live = byKey.Values
             .Where(e => e.ObservedAt >= cutoff)
@@ -143,7 +137,7 @@ public class DeviceClockService : IDeviceClockService
             var stampedZone = await MaintainDeclaredZoneAsync(connector, all, live, tenantId, cancellationToken);
             var stampedSegments = await AnnounceSegmentsAsync(connector, segments, live, tenantId, cancellationToken);
             if (stampedZone || stampedSegments)
-                await _db.SaveChangesAsync(cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
         }
         else if (segments.Count > 0)
         {
@@ -162,8 +156,9 @@ public class DeviceClockService : IDeviceClockService
         string? connector = null,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         _ = TenantId;
-        var query = _db.DeviceClockObservations.AsQueryable();
+        var query = db.DeviceClockObservations.AsQueryable();
         if (!string.IsNullOrWhiteSpace(connector))
             query = query.Where(e => e.Connector == connector);
 
@@ -247,7 +242,7 @@ public class DeviceClockService : IDeviceClockService
         // Skip (but still stamp) when there is nothing to do or the slot is taken: the zone is
         // already current, an identical entry exists (e.g. this service added it before the marker
         // existed), or any entry occupies the same instant — inserting there would violate the
-        // timeline's unique effective_from and a failed insert would poison the change tracker.
+        // timeline's unique effective_from.
         var occupied = entries.Any(e => e.EffectiveFrom == effectiveFrom);
         if (!string.Equals(current, zone, StringComparison.Ordinal) && !occupied)
         {

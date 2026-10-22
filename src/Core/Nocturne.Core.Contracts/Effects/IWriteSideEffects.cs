@@ -15,7 +15,6 @@ public interface IWriteSideEffects
     /// <param name="collectionName">Nightscout collection name (e.g., "entries", "treatments").</param>
     /// <param name="records">The newly created records.</param>
     /// <param name="options">Optional effect configuration; defaults to no extra effects.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task OnCreatedAsync<T>(
         string collectionName,
         IReadOnlyList<T> records,
@@ -29,9 +28,7 @@ public interface IWriteSideEffects
     /// </summary>
     /// <typeparam name="T">The domain record type that was updated.</typeparam>
     /// <param name="collectionName">Nightscout collection name.</param>
-    /// <param name="record">The updated record.</param>
     /// <param name="options">Optional effect configuration.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task OnUpdatedAsync<T>(
         string collectionName,
         T record,
@@ -46,7 +43,6 @@ public interface IWriteSideEffects
     /// <typeparam name="T">The domain record type about to be deleted.</typeparam>
     /// <param name="legacyId">The legacy record identifier used to locate V4 records for cleanup.</param>
     /// <param name="options">Optional effect configuration.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task BeforeDeleteAsync<T>(
         string legacyId,
         WriteEffectOptions? options = null,
@@ -61,7 +57,6 @@ public interface IWriteSideEffects
     /// <param name="collectionName">Nightscout collection name.</param>
     /// <param name="deletedRecord">The deleted record, or <c>null</c> if it was not available.</param>
     /// <param name="options">Optional effect configuration.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task OnDeletedAsync<T>(
         string collectionName,
         T? deletedRecord,
@@ -73,15 +68,19 @@ public interface IWriteSideEffects
     /// Run post-bulk-delete side effects: invalidate cache and broadcast aggregate delete count.
     /// </summary>
     /// <param name="collectionName">Nightscout collection name.</param>
-    /// <param name="deletedCount">Number of records that were deleted.</param>
     /// <param name="options">Optional effect configuration.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task OnBulkDeletedAsync(
         string collectionName,
         long deletedCount,
         WriteEffectOptions? options = null,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Clears <see cref="WriteEffectOptions.CacheFamiliesToClear"/> and nothing else, for a write
+    /// whose only effect on this process is stale cached data.
+    /// </summary>
+    Task InvalidateCacheAsync(WriteEffectOptions options, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -90,11 +89,8 @@ public interface IWriteSideEffects
 /// </summary>
 public sealed record WriteEffectOptions
 {
-    /// <summary>Exact cache keys to remove after a write. Evaluated eagerly.</summary>
-    public IReadOnlyList<string> CacheKeysToRemove { get; init; } = [];
-
-    /// <summary>Cache key patterns to remove via wildcard match after a write.</summary>
-    public IReadOnlyList<string> CachePatternsToClear { get; init; } = [];
+    /// <summary>Tenant cache key families to clear, in every partition, after a write.</summary>
+    public IReadOnlyList<string> CacheFamiliesToClear { get; init; } = [];
 
     /// <summary>Whether to run IDecompositionPipeline after create/update.</summary>
     public bool DecomposeToV4 { get; init; }

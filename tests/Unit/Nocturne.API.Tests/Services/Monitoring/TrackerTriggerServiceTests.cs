@@ -90,10 +90,10 @@ public class TrackerTriggerServiceTests
 
         _repository
             .Setup(r => r.ExecuteUnderDefinitionLockAsync(
-                It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<TrackerSuccessionResult>>>(),
-                It.IsAny<Func<TrackerSuccessionResult, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
-            .Returns((Guid _, Func<CancellationToken, Task<TrackerSuccessionResult>> work,
-                Func<TrackerSuccessionResult, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(ct));
+                It.IsAny<Guid>(), It.IsAny<Func<ITrackerRepository, CancellationToken, Task<TrackerSuccessionResult>>>(),
+                It.IsAny<Func<ITrackerRepository, TrackerSuccessionResult, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid _, Func<ITrackerRepository, CancellationToken, Task<TrackerSuccessionResult>> work,
+                Func<ITrackerRepository, TrackerSuccessionResult, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(_repository.Object, ct));
 
         _sut = new TrackerTriggerService(
             _repository.Object,
@@ -368,7 +368,7 @@ public class TrackerTriggerServiceTests
 
         _broadcast.Verify(
             b => b.BroadcastTrackerUpdateAsync(
-                "complete",
+                TrackerRealtimeAction.Complete,
                 It.IsAny<TrackerInstanceDto>(),
                 It.IsAny<string>(),
                 It.IsAny<TrackerVisibility>()
@@ -377,7 +377,7 @@ public class TrackerTriggerServiceTests
         );
         _broadcast.Verify(
             b => b.BroadcastTrackerUpdateAsync(
-                "create",
+                TrackerRealtimeAction.Create,
                 It.IsAny<TrackerInstanceDto>(),
                 It.IsAny<string>(),
                 It.IsAny<TrackerVisibility>()
@@ -403,10 +403,10 @@ public class TrackerTriggerServiceTests
                 running.Where(r => ids.Contains(r.StartTreatmentId!)).ToList());
         _repository
             .Setup(r => r.ExecuteUnderDefinitionLockAsync(
-                It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<TrackerStartRevert?>>>(),
-                It.IsAny<Func<TrackerStartRevert?, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
-            .Returns((Guid _, Func<CancellationToken, Task<TrackerStartRevert?>> work,
-                Func<TrackerStartRevert?, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(ct));
+                It.IsAny<Guid>(), It.IsAny<Func<ITrackerRepository, CancellationToken, Task<TrackerStartRevert?>>>(),
+                It.IsAny<Func<ITrackerRepository, TrackerStartRevert?, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid _, Func<ITrackerRepository, CancellationToken, Task<TrackerStartRevert?>> work,
+                Func<ITrackerRepository, TrackerStartRevert?, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(_repository.Object, ct));
         _repository
             .Setup(r => r.RevertStartAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid definitionId, string startTreatmentId, CancellationToken _) =>
@@ -439,7 +439,7 @@ public class TrackerTriggerServiceTests
             CompletedAt = completedAt,
         };
 
-    private void VerifyBroadcast(string action, TrackerInstanceEntity instance, Times times) =>
+    private void VerifyBroadcast(TrackerRealtimeAction action, TrackerInstanceEntity instance, Times times) =>
         _broadcast.Verify(b => b.BroadcastTrackerUpdateAsync(
             action, It.Is<TrackerInstanceDto>(d => d.Id == instance.Id), instance.UserId, It.IsAny<TrackerVisibility>()), times);
 
@@ -457,8 +457,8 @@ public class TrackerTriggerServiceTests
         await _sut.OnDeletedAsync([deviceEvent]);
 
         _reverts.Should().Equal((definition.Id, deviceEvent.Id.ToString()));
-        VerifyBroadcast("delete", started, Times.Once());
-        VerifyBroadcast("reopen", previous, Times.Once());
+        VerifyBroadcast(TrackerRealtimeAction.Delete, started, Times.Once());
+        VerifyBroadcast(TrackerRealtimeAction.Reopen, previous, Times.Once());
     }
 
     [Fact]
@@ -506,7 +506,7 @@ public class TrackerTriggerServiceTests
         await _sut.OnDeletedAsync([older, newer]);
 
         _reverts.Select(r => r.StartTreatmentId).Should().Equal(newer.Id.ToString(), older.Id.ToString());
-        VerifyBroadcast("reopen", first, Times.Once());
+        VerifyBroadcast(TrackerRealtimeAction.Reopen, first, Times.Once());
     }
 
     [Fact]

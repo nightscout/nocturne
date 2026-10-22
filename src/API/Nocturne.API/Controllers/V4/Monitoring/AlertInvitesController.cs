@@ -29,7 +29,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alert-invites")]
 public class AlertInvitesController : ControllerBase
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly ILogger<AlertInvitesController> _logger;
 
     /// <summary>
@@ -38,7 +38,7 @@ public class AlertInvitesController : ControllerBase
     /// <param name="contextFactory">Tenant-scoped factory for creating <see cref="NocturneDbContext"/> instances.</param>
     /// <param name="logger">Logger instance.</param>
     public AlertInvitesController(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         ILogger<AlertInvitesController> logger)
     {
         _contextFactory = contextFactory;

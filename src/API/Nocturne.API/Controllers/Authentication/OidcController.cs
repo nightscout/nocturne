@@ -205,7 +205,7 @@ public class OidcController : ControllerBase
         // Clear state cookie (single use)
         ClearStateCookie();
 
-        // The callback runs on the tenant subdomain (OidcCallbackRedirectMiddleware has already
+        // The callback runs on the tenant subdomain (ApexCallbackRelayMiddleware has already
         // bounced apex callbacks to {slug}.{baseDomain}), so the resolved tenant is the one being
         // logged into. Pass it through so a session is only issued to a member of that tenant.
         var currentTenantId = (HttpContext.GetTenantContext())?.TenantId;
@@ -219,6 +219,21 @@ public class OidcController : ControllerBase
             Request.Headers.UserAgent,
             currentTenantId
         );
+
+        if (result.StepUpToken is { } stepUpToken)
+        {
+            Response.SetTotpStepUpCookie(stepUpToken, _options);
+            SetLastSignInCookie(result.ProviderId);
+
+            // Not a completed login, so not a successful one; the success row is written when the
+            // second factor lands.
+            await _auditService.LogAsync(AuthAuditEventType.Login, result.SubjectId, success: false,
+                ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                detailsJson: JsonSerializer.Serialize(new { method = "oidc", secondFactorPending = true }));
+
+            return Redirect(
+                $"/auth/login?returnUrl={Uri.EscapeDataString(result.ReturnUrl ?? "/")}");
+        }
 
         if (!result.Success)
         {
@@ -255,10 +270,7 @@ public class OidcController : ControllerBase
 
         // Set session cookies
         SetSessionCookies(result.Tokens!);
-        Response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Oidc,
-            result.ProviderId?.ToString(),
-            _options);
+        SetLastSignInCookie(result.ProviderId);
 
         await _auditService.LogAsync(AuthAuditEventType.Login, result.Tokens?.SubjectId, success: true,
             ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
@@ -281,6 +293,7 @@ public class OidcController : ControllerBase
     /// endpoint so they can attach the external identity to their current account.
     /// </summary>
     [HttpGet("link")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -322,6 +335,7 @@ public class OidcController : ControllerBase
     /// Does NOT issue new session cookies.
     /// </summary>
     [HttpGet("link/callback")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -442,6 +456,7 @@ public class OidcController : ControllerBase
     /// <response code="404">Identity not found.</response>
     /// <response code="409">Cannot remove the last primary sign-in method.</response>
     [HttpDelete("link/identities/{identityId:guid}")]
+    [RequireInteractiveSession]
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetLinkedIdentities", "Passkey_ListCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -682,6 +697,10 @@ public class OidcController : ControllerBase
             tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
 
     private void ClearSessionCookies() => Response.ClearSessionCookies(_options);
+
+    private void SetLastSignInCookie(Guid? providerId) =>
+        Response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Oidc, providerId?.ToString(), _options);
 
     /// <summary>
     /// Get the refresh token from cookie or request body

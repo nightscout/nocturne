@@ -100,18 +100,12 @@ public static partial class AlertsInterop
         : OperatingSystem.IsMacOS() ? "libnocturne_alerts.dylib"
         : "libnocturne_alerts.so";
 
-    #region Memory Management
-
     /// <summary>
     /// Free a string that was returned by a nocturne_alerts function.
     /// </summary>
     /// <param name="ptr">Pointer returned by one of the nocturne_alerts functions.</param>
     [LibraryImport(LibraryName, EntryPoint = FreeStringExport)]
     public static partial void FreeString(IntPtr ptr);
-
-    #endregion
-
-    #region Native entry points
 
     /// <summary>Crate version as a plain string. Must be freed with FreeString.</summary>
     [LibraryImport(LibraryName, EntryPoint = VersionExport)]
@@ -170,10 +164,6 @@ public static partial class AlertsInterop
     [LibraryImport(LibraryName, EntryPoint = ReplayExport, StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr ReplayNative(string requestJson);
 
-    #endregion
-
-    #region Managed wrappers
-
     /// <summary>Get the nocturne_alerts library version as a managed string.</summary>
     public static string GetVersion() => ConsumeString(VersionNative(), string.Empty);
 
@@ -209,10 +199,6 @@ public static partial class AlertsInterop
             FreeString(ptr);
         }
     }
-
-    #endregion
-
-    #region Library Loading Helpers
 
     /// <summary>Whether the native nocturne_alerts library loads and passes <see cref="Probe"/>.</summary>
     public static bool IsAvailable() => Probe().IsAvailable;
@@ -270,8 +256,6 @@ public static partial class AlertsInterop
             ? NativeProbeResult.Available
             : NativeProbeResult.Unavailable($"the library does not export {string.Join(", ", missing)}");
     }
-
-    #endregion
 }
 
 /// <summary>The outcome of <see cref="AlertsInterop.Probe"/>.</summary>

@@ -7,7 +7,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.API.Tests.GoldenFiles.V1;
 
-public class EntriesGoldenTests : GoldenFileTestBase
+public class EntriesGoldenTests : GoldenFileTestBase, IClassFixture<FixedClockGoldenFileWebAppFactory>
 {
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
@@ -15,7 +15,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
     // 2024-03-26T12:00:00Z = 1711454400000
     private const long BaseMillis = 1711454400000;
 
-    public EntriesGoldenTests(GoldenFileWebAppFactory factory) : base(factory) { }
+    public EntriesGoldenTests(FixedClockGoldenFileWebAppFactory factory) : base(factory) { }
 
     #region Helper Methods
 
@@ -170,6 +170,27 @@ public class EntriesGoldenTests : GoldenFileTestBase
         await Verify(captured);
     }
 
+    private const int InsideWindowIndex = 1000;
+    private const int OutsideWindowIndex = 1440;
+
+    [Theory]
+    [InlineData("/api/v1/entries.json?count=10", 2)]
+    [InlineData("/api/v1/entries/sgv.json?count=10", 2)]
+    [InlineData("/api/v1/entries.json?count=10&find[date][$gte]=0", 3)]
+    [InlineData("/api/v1/entries/sgv.json?count=10&find[date][$gte]=0", 3)]
+    [InlineData("/api/v1/entries.json?count=10&find[dateString][$gte]=2000-01-01", 3)]
+    public async Task GetEntries_DefaultWindowDropsReadingsOlderThanFourDays(string url, int expected)
+    {
+        await SeedSensorGlucose(
+            CreateSgvEntry(0), CreateSgvEntry(InsideWindowIndex), CreateSgvEntry(OutsideWindowIndex));
+
+        var response = await Client.GetAsync(url);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        body.RootElement.GetArrayLength().Should().Be(expected);
+    }
+
     [Fact]
     public async Task GetEntries_WithEmptyDb_ReturnsEmptyArray()
     {
@@ -284,6 +305,77 @@ public class EntriesGoldenTests : GoldenFileTestBase
 
         entries.Should().ContainSingle();
         entries[0].GetProperty("_id").GetString().Should().Be("aaaaaaaaaaaaaaaaaaaaa003");
+    }
+
+    [Fact]
+    public async Task GetEntriesById_IfModifiedSinceAtTheEntry_AnswersNotModified()
+    {
+        await SeedSensorGlucose(Enumerable.Range(0, 5).Select(i => CreateSgvEntry(i)).ToArray());
+        var entryMills = BaseMillis - 2 * 300_000;
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/entries/aaaaaaaaaaaaaaaaaaaaa003.json");
+        request.Headers.IfModifiedSince = DateTimeOffset.FromUnixTimeMilliseconds(entryMills);
+        var response = await Client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotModified);
+        response.Content.Headers.LastModified.Should()
+            .Be(DateTimeOffset.FromUnixTimeMilliseconds(entryMills));
+    }
+
+    [Fact]
+    public async Task GetEntriesById_IfModifiedSinceBeforeTheEntry_ReturnsTheEntry()
+    {
+        await SeedSensorGlucose(Enumerable.Range(0, 5).Select(i => CreateSgvEntry(i)).ToArray());
+        var entryMills = BaseMillis - 2 * 300_000;
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/entries/aaaaaaaaaaaaaaaaaaaaa003.json");
+        request.Headers.IfModifiedSince = DateTimeOffset.FromUnixTimeMilliseconds(entryMills - 60_000);
+        var response = await Client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        document.RootElement.GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Current_IfModifiedSinceAtTheNewestEntry_AnswersNotModified()
+    {
+        await SeedSensorGlucose(Enumerable.Range(0, 3).Select(i => CreateSgvEntry(i)).ToArray());
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/entries/current");
+        request.Headers.IfModifiedSince = DateTimeOffset.FromUnixTimeMilliseconds(BaseMillis);
+        var response = await Client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotModified);
+        response.Content.Headers.LastModified.Should()
+            .Be(DateTimeOffset.FromUnixTimeMilliseconds(BaseMillis));
+    }
+
+    [Fact]
+    public async Task Current_IfModifiedSinceBeforeTheNewestEntry_ReturnsTheEntry()
+    {
+        await SeedSensorGlucose(Enumerable.Range(0, 3).Select(i => CreateSgvEntry(i)).ToArray());
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/entries/current");
+        request.Headers.IfModifiedSince = DateTimeOffset.FromUnixTimeMilliseconds(BaseMillis - 60_000);
+        var response = await Client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        document.RootElement.GetArrayLength().Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/entries/current")]
+    [InlineData("/api/v1/entries/bbbbbbbbbbbbbbbbbbbbbbbb.json")]
+    public async Task EmptyResult_IfModifiedSinceInTheFuture_NeverAnswersNotModified(string url)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.IfModifiedSince = DateTimeOffset.UtcNow.AddHours(1);
+        var response = await Client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).Should().Be("[]");
     }
 
     [Fact]

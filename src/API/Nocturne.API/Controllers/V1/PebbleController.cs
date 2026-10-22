@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
@@ -195,17 +196,10 @@ public class PebbleController : ControllerBase
     private async Task<bool> ResolveUseMmolAsync(string? units, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrEmpty(units))
-            return IsMmol(units);
+            return GlucoseUnits.IsMmol(units);
 
-        var appearance = await _appearanceReader.GetSharedAppearanceAsync(
-            _tenantAccessor.TenantId,
-            cancellationToken
-        );
-        return IsMmol(appearance.GlucoseUnits);
+        return await GlucoseUnits.UsesMmolAsync(_appearanceReader, _tenantAccessor, cancellationToken);
     }
-
-    private static bool IsMmol(string? units) =>
-        units?.StartsWith("mmol", StringComparison.OrdinalIgnoreCase) == true;
 
     private static string FormatGlucose(double mgdl, bool useMmol)
     {

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
@@ -19,6 +20,25 @@ public class NightscoutTreatmentWriteBackSink(
 {
     protected override string Endpoint => "/api/v1/treatments";
 
+    protected override JsonSerializerOptions SerializerOptions => TreatmentWriteBackJson.Options;
+
     protected override bool ShouldSkip(Treatment item)
         => item.DataSource == DataSources.NightscoutConnector;
+
+    protected override async Task AfterWrittenAsync(
+        NightscoutConnectorConfiguration config, IReadOnlyList<Treatment> items, CancellationToken ct)
+    {
+        foreach (var item in items)
+        {
+            if (PreBolusSplitCopy.CreatedAt(item) is not { } createdAt)
+                continue;
+
+            var found = await ExchangeAsync(config, HttpMethod.Get, PreBolusSplitCopy.Query(Endpoint, item, createdAt), ct);
+            if (found is null)
+                continue;
+
+            foreach (var id in PreBolusSplitCopy.Ids(found, item, createdAt))
+                await ExchangeAsync(config, HttpMethod.Delete, $"{Endpoint}/{Uri.EscapeDataString(id)}", ct);
+        }
+    }
 }

@@ -1,0 +1,31 @@
+name: NuGet audit
+
+# Advisories are published after a pull request's audit passed; this catches them on main weekly.
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NuGetAuditAsErrors: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-dotnet
+      # The same project set the Tests workflow builds: every test project and, through them, the
+      # API, connectors and AppHost. nocturne.sln's Windows-only projects do not restore here.
+      - name: Restore with advisories as errors
+        run: |
+          set -euo pipefail
+          sln="$RUNNER_TEMP/audit/audit.slnx"
+          dotnet new sln -n audit -o "$RUNNER_TEMP/audit" --format slnx
+          dotnet sln "$sln" add --solution-folder Unit tests/Unit/*/*.csproj
+          dotnet sln "$sln" add --solution-folder Integration tests/Integration/*/*.csproj
+          dotnet sln "$sln" add --solution-folder Parity tests/Parity/*/*.csproj
+          dotnet restore "$sln"

@@ -10,6 +10,7 @@ using Nocturne.Core.Models.SetupHub;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.SetupHub;
 
@@ -21,7 +22,7 @@ namespace Nocturne.API.Services.SetupHub;
 /// this tenant was going, so a newer upload from an app reads as <see cref="TherapySource.Synced"/>.
 /// </remarks>
 public partial class TherapySetupService(
-    NocturneDbContext db,
+    INocturneDbContextFactory contexts,
     ITherapySettingsRepository settingsRepo,
     IBasalScheduleRepository basalRepo,
     ICarbRatioScheduleRepository carbRatioRepo,
@@ -50,7 +51,8 @@ public partial class TherapySetupService(
         var sensitivity = await sensitivityRepo.GetActiveAtAsync(name, now, ct);
         var targetRange = await targetRangeRepo.GetActiveAtAsync(name, now, ct);
 
-        var source = await SourceOfAsync(settings, ct);
+        await using var db = await contexts.CreateAsync(ct);
+        var source = await SourceOfAsync(db, settings, ct);
         var confirmedId = await db.SetupHubItems.AsNoTracking()
             .Where(i => i.ItemKey == SetupHubItemKey.Therapy)
             .Select(i => i.ConfirmedRecordId)
@@ -76,6 +78,7 @@ public partial class TherapySetupService(
         if (review.Confirmed)
             return review;
 
+        await using var db = await contexts.CreateAsync(ct);
         var item = await db.SetupHubItems.FirstOrDefaultAsync(i => i.ItemKey == SetupHubItemKey.Therapy, ct);
         if (item is null)
         {
@@ -138,7 +141,8 @@ public partial class TherapySetupService(
         return await GetReviewAsync(ct);
     }
 
-    private async Task<TherapySource> SourceOfAsync(TherapySettings settings, CancellationToken ct)
+    private static async Task<TherapySource> SourceOfAsync(
+        NocturneDbContext db, TherapySettings settings, CancellationToken ct)
     {
         if (settings.DataSource == DataSources.ManualEntry)
             return TherapySource.Entered;

@@ -11,9 +11,9 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// </summary>
 /// <remarks>
 /// Not tenant-scoped (identity-level, like <see cref="TotpCredentialEntity"/> and
-/// <see cref="RecoveryCodeEntity"/>): the passkey assertion that mints a token is not tenant-scoped
-/// either, and tenant membership is checked when the session is issued. Expired rows are pruned by
-/// <c>OAuthCodeCleanupService</c>.
+/// <see cref="RecoveryCodeEntity"/>), so no RLS applies. Instead the row records the host the primary
+/// factor completed on (<see cref="BoundTenantId"/>), and the token is redeemable only there. Expired
+/// rows are pruned by <c>OAuthCodeCleanupService</c>.
 /// </remarks>
 [Table("totp_step_up_tokens")]
 public class TotpStepUpTokenEntity
@@ -30,6 +30,21 @@ public class TotpStepUpTokenEntity
     [Required]
     [Column("subject_id")]
     public Guid SubjectId { get; set; }
+
+    /// <summary>
+    /// The tenant the primary factor completed against, or null when it completed on a host that
+    /// resolves no tenant. Redemption requires the same host.
+    /// </summary>
+    [Column("bound_tenant_id")]
+    public Guid? BoundTenantId { get; set; }
+
+    /// <summary>
+    /// Whether the primary factor admitted a non-member of <see cref="BoundTenantId"/> on the
+    /// strength of a valid invite in the sign-in's return URL, so redemption must not require
+    /// membership the invitee does not hold yet.
+    /// </summary>
+    [Column("admitted_by_invite")]
+    public bool AdmittedByInvite { get; set; }
 
     /// <summary>
     /// When the token was minted.

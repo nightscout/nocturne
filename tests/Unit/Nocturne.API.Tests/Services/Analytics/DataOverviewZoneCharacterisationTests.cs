@@ -11,6 +11,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 
@@ -42,7 +43,7 @@ public class DataOverviewZoneCharacterisationTests : IDisposable
         _dbContext = TestDbContextFactory.CreateInMemoryContext(dbName);
         _dbContext.TenantId = TenantId;
 
-        var factory = new Mock<ITenantDbContextFactory>();
+        var factory = new Mock<INocturneDbContextFactory>();
         factory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
@@ -62,17 +63,13 @@ public class DataOverviewZoneCharacterisationTests : IDisposable
             .Callback<TimeInRangeMetrics>(_griInputs.Add)
             .Returns(new GlycemicRiskIndex());
 
-        var cacheService = new Mock<ICacheService>();
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.Context).Returns(new TenantContext(TenantId, "test-tenant", "Test Tenant", true, false));
+        var cacheService = new Mock<ITenantCache>();
 
         _service = new DataOverviewService(
             factory.Object,
             _therapySettings.Object,
             statistics.Object,
             cacheService.Object,
-            tenantAccessor.Object,
-            new CategoryReadContext(),
             NullLogger<DataOverviewService>.Instance
         );
     }

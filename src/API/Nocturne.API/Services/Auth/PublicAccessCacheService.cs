@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -27,7 +27,7 @@ public sealed record PublicAccessInfo(
 public sealed class PublicAccessCacheService
 {
     private readonly IMemoryCache _cache;
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly ILogger<PublicAccessCacheService> _logger;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(2);
@@ -40,7 +40,7 @@ public sealed class PublicAccessCacheService
     /// <param name="logger">Logger instance.</param>
     public PublicAccessCacheService(
         IMemoryCache cache,
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        INocturneDbContextFactory dbContextFactory,
         ILogger<PublicAccessCacheService> logger)
     {
         _cache = cache;
@@ -86,9 +86,10 @@ public sealed class PublicAccessCacheService
 
     private async Task<PublicAccessInfo?> ResolvePublicAccessAsync(Guid tenantId)
     {
-        // Pinned to the tenant being resolved: this service is a singleton on the
-        // anonymous-share request path and has no ambient tenant to inherit.
-        await using var dbContext = await _dbContextFactory.CreateTenantPinnedContextAsync(tenantId);
+        // A singleton's factory is the root one, so this reads as no reader whatever request first
+        // misses the cache: the Public subject's grants decide what a share may see, and a share
+        // could not read them.
+        await using var dbContext = await _dbContextFactory.CreateForTenantAsync(tenantId);
 
         var membership = await dbContext.TenantMembers
             .AsNoTracking()

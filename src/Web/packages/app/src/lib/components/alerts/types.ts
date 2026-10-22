@@ -13,6 +13,7 @@ import type {
 	AlertRuleResponse,
 	AlertRuleChannelResponse,
 	CreateAlertRuleChannelRequest,
+	InAppRecipientResponse,
 	ThresholdCondition,
 	RateOfChangeCondition,
 	SignalLossCondition,
@@ -750,11 +751,12 @@ export function toChannelRequest(c: ChannelDef): CreateAlertRuleChannelRequest {
 export function toChannelDef(c: AlertRuleChannelResponse): ChannelDef {
 	return {
 		_uid: newUid(),
-		channelType: c.channelType ?? ChannelType.WebPush,
+		channelType: c.channelType ?? ChannelType.InApp,
 		destination: c.destination ?? "",
 		destinationLabel: c.destinationLabel ?? "",
 		metadata: parseChannelMetadata(c.metadata),
 		hasSecret: c.hasSecret ?? false,
+		recipient: c.recipient ?? null,
 	};
 }
 
@@ -849,6 +851,8 @@ export interface ChannelDef {
 	 * serialises it; do not pre-stringify.
 	 */
 	metadata?: DeviceActionMetadata | null;
+	/** The member a stored in-app channel is sent to, as the API resolved it. Read-only. */
+	recipient?: InAppRecipientResponse | null;
 	/** Signing secret typed into the webhook editor. Write-only; never read back. */
 	secret?: string;
 	/**
@@ -914,7 +918,7 @@ export function defaultChannels(): ChannelDef[] {
 	return [
 		{
 			_uid: newUid(),
-			channelType: ChannelType.WebPush,
+			channelType: ChannelType.InApp,
 			destination: "",
 			destinationLabel: "",
 		},

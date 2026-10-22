@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.SetupHub.Items;
 
@@ -12,13 +13,20 @@ namespace Nocturne.API.Services.SetupHub.Items;
 /// or by "none". Trackers are optional. See <see cref="DeviceSetupService"/>.
 /// </summary>
 public class DevicesItem(
-    NocturneDbContext db,
+    INocturneDbContextFactory contexts,
     IPatientDeviceRepository devices,
     IPatientInsulinRepository insulins) : ISetupHubItem
 {
     public SetupHubItemKey Key => SetupHubItemKey.Devices;
 
-    public async Task<bool> WorksAsync(CancellationToken ct) =>
-        (await devices.GetCurrentAsync(ct)).Any(d => d.DeviceCategory == DeviceCategory.CGM)
-        && ((await insulins.GetCurrentAsync(ct)).Any() || await db.PatientRecords.AnyAsync(r => r.TakesNoInsulin, ct));
+    public async Task<bool> WorksAsync(CancellationToken ct)
+    {
+        if (!(await devices.GetCurrentAsync(ct)).Any(d => d.DeviceCategory == DeviceCategory.CGM))
+            return false;
+        if ((await insulins.GetCurrentAsync(ct)).Any())
+            return true;
+
+        await using var db = await contexts.CreateAsync(ct);
+        return await db.PatientRecords.AnyAsync(r => r.TakesNoInsulin, ct);
+    }
 }

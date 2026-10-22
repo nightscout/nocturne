@@ -151,6 +151,45 @@ dependencies {
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.3'
 }
 
+// Nocturne: the OkHttp 3.12 floor. Android consumers (xDrip) supply OkHttp 3.12.x and
+// gson 2.8.x in place of the versions declared above, so this resolves the same
+// dependency graph with those two pinned down and compiles the main sources against it.
+configurations {
+    okhttp3Floor {
+        extendsFrom implementation
+        canBeConsumed = false
+        canBeResolved = true
+        attributes {
+            attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.JAVA_API))
+        }
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'com.squareup.okhttp3') {
+                details.useVersion '3.12.13'
+            } else if (details.requested.group == 'com.google.code.gson' && details.requested.name == 'gson') {
+                details.useVersion '2.8.6'
+            }
+        }
+    }
+}
+
+tasks.register('compileOkhttp3Floor', JavaCompile) {
+    description = 'Compiles src/main/java against OkHttp 3.12.13 and gson 2.8.6'
+    group = 'verification'
+    source = sourceSets.main.java
+    classpath = configurations.okhttp3Floor
+    destinationDirectory = layout.buildDirectory.dir('okhttp3-floor-classes')
+    options.compilerArgs += ['-proc:none']
+    doFirst {
+        // Apache Oltu and org.json:json clash with the Android framework's org.json at dexing.
+        def banned = configurations.okhttp3Floor.incoming.resolutionResult.allComponents
+            .collect { it.moduleVersion }
+            .findAll { it != null && (it.group.startsWith('org.apache.oltu') || (it.group == 'org.json' && it.name == 'json')) }
+        if (!banned.isEmpty()) {
+            throw new GradleException("okhttp3Floor resolves dependencies Android consumers cannot take: ${banned}")
+        }
+    }
+}
+
 javadoc {
     options.tags = [ "http.response.details:a:Http Response Details" ]
 }

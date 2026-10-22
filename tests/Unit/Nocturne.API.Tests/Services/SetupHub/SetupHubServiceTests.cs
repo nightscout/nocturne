@@ -40,21 +40,24 @@ public class SetupHubServiceTests
         return db;
     }
 
-    private static SetupHubService ServiceOver(NocturneDbContext db) =>
-        new(db, new ISetupHubItem[]
+    private static SetupHubService ServiceOver(NocturneDbContext db)
+    {
+        var factory = new TestNocturneDbContextFactory(db);
+        return new(factory, new ISetupHubItem[]
         {
             // Registered out of order on purpose: the key decides the hub order.
-            new AboutItem(db), new SharingItem(db), new TherapyItem(db),
-            DevicesItemOver(db), new AlertsItem(db), new ConnectDataItem(db),
+            new AboutItem(factory), new SharingItem(factory), new TherapyItem(factory),
+            DevicesItemOver(db), new AlertsItem(factory), new ConnectDataItem(factory),
         });
+    }
 
     private SetupHubService Service => ServiceOver(_db);
 
     internal static DevicesItem DevicesItemOver(NocturneDbContext db)
     {
-        var factory = new TestTenantDbContextFactory(db);
+        var factory = new TestNocturneDbContextFactory(db);
         return new DevicesItem(
-            db,
+            factory,
             new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance),
             new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance));
     }

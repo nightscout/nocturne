@@ -1,11 +1,19 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Configuration;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Services.Profiles;
+using Nocturne.API.Tests.Services.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Analytics;
@@ -18,6 +26,12 @@ public class SummaryServiceTests
 {
     private readonly Mock<IDDataService> _mockDDataService;
     private readonly Mock<IPropertiesService> _mockPropertiesService;
+    private readonly Mock<IActiveProfileResolver> _mockActiveProfileResolver;
+    private readonly Mock<ITherapySettingsRepository> _mockTherapySettings;
+    private readonly Mock<IBasalScheduleRepository> _mockBasal = new();
+    private readonly Mock<ICarbRatioScheduleRepository> _mockCarbRatio = new();
+    private readonly Mock<ISensitivityScheduleRepository> _mockSensitivity = new();
+    private readonly Mock<ITargetRangeScheduleRepository> _mockTargetRange = new();
     private readonly Mock<ILogger<SummaryService>> _mockLogger;
     private readonly SummaryService _service;
 
@@ -25,10 +39,24 @@ public class SummaryServiceTests
     {
         _mockDDataService = new Mock<IDDataService>();
         _mockPropertiesService = new Mock<IPropertiesService>();
+        _mockActiveProfileResolver = ActiveProfileResolverMock.WithDefault();
+        _mockTherapySettings = new Mock<ITherapySettingsRepository>();
+        _mockTherapySettings
+            .Setup(x => x.GetDefaultsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         _mockLogger = new Mock<ILogger<SummaryService>>();
         _service = new SummaryService(
             _mockDDataService.Object,
             _mockPropertiesService.Object,
+            _mockActiveProfileResolver.Object,
+            _mockTherapySettings.Object,
+            new ProfileProjectionService(
+                _mockTherapySettings.Object,
+                _mockBasal.Object,
+                _mockCarbRatio.Object,
+                _mockSensitivity.Object,
+                _mockTargetRange.Object
+            ),
             _mockLogger.Object
         );
     }
@@ -57,6 +85,256 @@ public class SummaryServiceTests
         result.Treatments.Should().NotBeNull();
         result.Profile.Should().NotBeNull();
         result.State.Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetSummaryAsync_ProfileIsTheDefaultStoreEntryWithItsOwnKeys(bool nightFirst)
+    {
+        var summary = await SummaryJsonAsync(NightAndDay(nightFirst), null);
+
+        var profile = summary["profile"]!.AsObject();
+        profile["dia"]!.GetValue<double>().Should().Be(5);
+        profile["carbs_hr"]!.GetValue<int>().Should().Be(30);
+        profile["delay"]!.GetValue<int>().Should().Be(15);
+        profile["delay_high"]!.GetValue<int>().Should().Be(45);
+        profile["timezone"]!.GetValue<string>().Should().Be("Australia/Sydney");
+        profile["units"]!.GetValue<string>().Should().Be("mg/dL");
+        profile["carbratio"]![0]!["value"]!.GetValue<double>().Should().Be(12);
+        profile["target_low"]![0]!["value"]!.GetValue<double>().Should().Be(90);
+        profile["target_high"]![0]!["value"]!.GetValue<double>().Should().Be(110);
+        profile["sens"]![0]!["value"]!.GetValue<double>().Should().Be(40);
+        profile["basal"]![0]!["value"]!.GetValue<double>().Should().Be(0.9);
+        profile["basal"]![0]!["time"]!.GetValue<string>().Should().Be("00:00");
+        profile
+            .Select(p => p.Key)
+            .Should()
+            .NotContain(["carbsHr", "carbRatio", "targetLow", "targetHigh", "delayHigh", "delayLow"]);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_ProfileHasNoTimeAsSecondsAtAnyDepth()
+    {
+        var summary = await SummaryJsonAsync(NightAndDay(nightFirst: true), null);
+
+        summary["profile"]!.ToJsonString().Should().NotContain("timeAsSeconds");
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_ActiveProfileSwitchNamesTheStoreEntry()
+    {
+        var summary = await SummaryJsonAsync(NightAndDay(nightFirst: false), "Night");
+
+        var profile = summary["profile"]!.AsObject();
+        profile["carbratio"]![0]!["value"]!.GetValue<double>().Should().Be(8);
+        profile["target_low"]![0]!["value"]!.GetValue<double>().Should().Be(100);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_SwitchNamingNoStoredEntryFallsBackToTheDefault()
+    {
+        var summary = await SummaryJsonAsync(NightAndDay(nightFirst: true), "Exercise");
+
+        summary["profile"]!["carbratio"]![0]!["value"]!.GetValue<double>().Should().Be(12);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_EndedSwitchSnapshotIsNotTheDefault()
+    {
+        var rows = NightAndDay(nightFirst: true);
+        rows.Insert(
+            0,
+            StoredRow($"Night{TherapySettings.ProfileSwitchStoreMarker}1", false, 3, 0.2, Minutes(0))
+        );
+
+        var summary = await SummaryJsonAsync(rows, null);
+
+        summary["profile"]!["carbratio"]![0]!["value"]!.GetValue<double>().Should().Be(12);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Night")]
+    public async Task GetSummaryAsync_ResolvesTheEntryPastMoreThanTenNewerSwitchSnapshots(string? switchedProfile)
+    {
+        var rows = NightAndDay(nightFirst: true);
+        for (var i = 0; i < 12; i++)
+            rows.Insert(0, StoredRow($"Night{TherapySettings.ProfileSwitchStoreMarker}{i}", false, 3, 0.2, Minutes(i)));
+
+        var summary = await SummaryJsonAsync(rows, switchedProfile);
+
+        summary["profile"]!["carbratio"]![0]!["value"]!.GetValue<double>()
+            .Should().Be(switchedProfile is null ? 12 : 8);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_ProfileStartingInTheFutureStillResolves()
+    {
+        var rows = new List<TherapySettings> { StoredRow("Day", true, 12, 0.9, Minutes(5)) };
+
+        var summary = await SummaryJsonAsync(rows, null);
+
+        summary["profile"]!["carbratio"]![0]!["value"]!.GetValue<double>().Should().Be(12);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_TempBasalsGapFillFromTheResolvedProfile()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var ddata = CreateTestDData();
+        ddata.Treatments =
+        [
+            new Treatment
+            {
+                Mills = now - 3 * 3_600_000,
+                EventType = "Temp Basal",
+                Duration = 30,
+                Absolute = 2.0,
+                Created_at = DateTimeOffset
+                    .FromUnixTimeMilliseconds(now - 3 * 3_600_000)
+                    .ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            },
+        ];
+
+        var summary = await SummaryJsonAsync(ddata, NightAndDay(nightFirst: true), null);
+
+        var gapFill = summary["treatments"]!["tempBasals"]!
+            .AsArray()
+            .Where(t => t!["profile"] is not null)
+            .Select(t => t!["absolute"]!.GetValue<double>())
+            .ToList();
+        gapFill.Should().NotBeEmpty().And.OnlyContain(rate => rate == 0.9);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_WithNoProfile_ReturnsAnEmptyObject()
+    {
+        var summary = await SummaryJsonAsync([], null);
+
+        summary["profile"].Should().BeOfType<JsonObject>();
+        summary["profile"]!.AsObject().Count.Should().Be(0);
+    }
+
+    private Task<JsonNode> SummaryJsonAsync(List<TherapySettings> rows, string? switchedProfile) =>
+        SummaryJsonAsync(CreateTestDData(), rows, switchedProfile);
+
+    private async Task<JsonNode> SummaryJsonAsync(
+        DData ddata,
+        List<TherapySettings> rows,
+        string? switchedProfile
+    )
+    {
+        ddata.Profiles = [];
+        ConfigureStore(rows);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ddata);
+        _mockPropertiesService
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateTestProperties());
+        _mockActiveProfileResolver
+            .Setup(x => x.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(switchedProfile);
+        _mockTherapySettings
+            .Setup(x => x.GetDefaultsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(rows.Where(r => r.IsDefault).ToList());
+
+        var result = await _service.GetSummaryAsync(6, CancellationToken.None);
+
+        return JsonNode.Parse(JsonSerializer.Serialize(result, NightscoutJsonOptions.Create()))!;
+    }
+
+    private static DateTime Minutes(int offset) => DateTime.UtcNow.AddMinutes(offset);
+
+    // A Nightscout document {"Night", "Day"} as decomposition stores it: one row per store, one timestamp.
+    private List<TherapySettings> NightAndDay(bool nightFirst)
+    {
+        var timestamp = Minutes(-1);
+        var night = StoredRow("Night", false, 8, 0.7, timestamp, targetLow: 100, targetHigh: 120);
+        var day = StoredRow("Day", true, 12, 0.9, timestamp);
+        return nightFirst ? [night, day] : [day, night];
+    }
+
+    private void ConfigureStore(List<TherapySettings> rows)
+    {
+        _mockTherapySettings
+            .Setup(r => r.GetByProfileNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string name, CancellationToken _) => rows.Where(r => r.ProfileName == name).ToList());
+        _mockTherapySettings
+            .Setup(r => r.GetDocumentRowsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string documentId, CancellationToken _) => rows
+                .Where(r => TherapySettings.DocumentIdOf(r) == documentId && !TherapySettings.IsProfileSwitchSnapshot(r))
+                .ToList());
+
+        foreach (var row in rows)
+        {
+            var (basalValue, carbRatioValue, low, high) = _storedValues[row.Id];
+            var correlationId = row.CorrelationId!.Value;
+            _mockTherapySettings
+                .Setup(r => r.GetByIdAsync(row.Id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(row);
+            _mockBasal
+                .Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync([new BasalSchedule { ProfileName = row.ProfileName, Entries = [Schedule(basalValue)] }]);
+            _mockCarbRatio
+                .Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(
+                    [new CarbRatioSchedule { ProfileName = row.ProfileName, Entries = [Schedule(carbRatioValue)] }]
+                );
+            _mockSensitivity
+                .Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(
+                    [new SensitivitySchedule { ProfileName = row.ProfileName, Entries = [Schedule(40)] }]
+                );
+            _mockTargetRange
+                .Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(
+                    [
+                        new TargetRangeSchedule
+                        {
+                            ProfileName = row.ProfileName,
+                            Entries = [new TargetRangeEntry { Time = "00:00", Low = low, High = high, TimeAsSeconds = 0 }],
+                        },
+                    ]
+                );
+        }
+    }
+
+    private static ScheduleEntry Schedule(double value) =>
+        new() { Time = "00:00", Value = value, TimeAsSeconds = 0 };
+
+    private readonly Dictionary<Guid, (double Basal, double CarbRatio, double Low, double High)> _storedValues = new();
+
+    private TherapySettings StoredRow(
+        string name,
+        bool isDefault,
+        double carbRatio,
+        double basal,
+        DateTime timestamp,
+        double targetLow = 90,
+        double targetHigh = 110
+    )
+    {
+        var row = new TherapySettings
+        {
+            Id = Guid.NewGuid(),
+            CorrelationId = Guid.NewGuid(),
+            ProfileName = name,
+            LegacyId = $"doc1:{name}",
+            IsDefault = isDefault,
+            Timestamp = timestamp,
+            CreatedAt = timestamp,
+            ModifiedAt = timestamp,
+            Timezone = "Australia/Sydney",
+            Units = "mg/dL",
+            Dia = 5,
+            CarbsHr = 30,
+            Delay = 15,
+            DelayHigh = 45,
+        };
+        _storedValues[row.Id] = (basal, carbRatio, targetLow, targetHigh);
+        return row;
     }
 
     [Fact]
@@ -212,6 +490,42 @@ public class SummaryServiceTests
         result.Cage.Should().Be(48);
         result.Sage.Should().Be(72);
         result.Battery.Should().Be(85);
+    }
+
+    [Fact]
+    public void ProcessTempBasals_PercentTemp_ReportsTheRateItResolvedTo()
+    {
+        var profile = new ProfileData
+        {
+            Basal = new List<TimeValue> { new() { Time = "00:00", Value = 0.6 } },
+        };
+        var start = DateTimeOffset.UtcNow.AddMinutes(-40).ToUnixTimeMilliseconds();
+        var temps = new List<Treatment>
+        {
+            new() { EventType = "Temp Basal", Mills = start, Duration = 30, Percent = -50, DeliveredRate = 0.4 },
+        };
+
+        var result = _service.ProcessTempBasals(profile, temps, start - 1);
+
+        result.Should().Contain(t => t.Start == start).Which.Absolute.Should().Be(0.4);
+    }
+
+    [Fact]
+    public void ProcessTempBasals_PercentTempOfUnknownRate_LeavesTheProfileBasal()
+    {
+        var profile = new ProfileData
+        {
+            Basal = new List<TimeValue> { new() { Time = "00:00", Value = 0.6 } },
+        };
+        var start = DateTimeOffset.UtcNow.AddMinutes(-40).ToUnixTimeMilliseconds();
+        var temps = new List<Treatment>
+        {
+            new() { EventType = "Temp Basal", Mills = start, Duration = 30, Percent = -50 },
+        };
+
+        var result = _service.ProcessTempBasals(profile, temps, start - 1);
+
+        result.Should().NotContain(t => t.Absolute == 0);
     }
 
     [Fact]

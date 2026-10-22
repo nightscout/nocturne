@@ -1,7 +1,6 @@
 <script lang="ts">
   import { a1cLabel } from "$lib/utils/a1c-formatting";
   import { time } from "$lib/utils/formatting";
-  import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import {
     getColorTheme,
     setColorTheme,
@@ -27,6 +26,7 @@
     regionFormat,
     regionFormatLabel,
     REGION_FORMATS,
+    type AreaMode,
     type ColorScheme,
     type RegionFormat,
   } from "$lib/stores/appearance-store.svelte";
@@ -44,6 +44,8 @@
   import GlucoseSourceDefaultsDialog from "$lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
   import type { FeatureSettings } from "$lib/api/generated/nocturne-api-client";
   import { getUiSettings, saveFeatureSettings } from "$api/ui-settings.remote";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { SETTINGS_LOAD_FAILED } from "$lib/api/ui-settings-messages";
   import { toast } from "svelte-sonner";
   import {
     Card,
@@ -88,7 +90,6 @@
   import { coachmark } from "@nocturne/coach";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
-  const store = getSettingsStore();
   const realtimeStore = getRealtimeStore();
 
   // Dashboard widgets - use persisted state for immediate localStorage persistence
@@ -173,9 +174,6 @@
         display: { ...current.display, ...patch.display },
         trackerPills: { ...current.trackerPills, ...patch.trackerPills },
       });
-      // The dashboard still reads these through the shared settings store; reload
-      // it so the change it renders matches what was persisted.
-      await store.reload();
     } catch (err) {
       toast.error(
         describeSubmitError(err, "Could not save. Check your connection and try again.")
@@ -201,13 +199,13 @@
     </div>
   </div>
 
-  {#if store.isLoading}
+  {#if uiSettingsQuery?.loading}
     <SettingsPageSkeleton cardCount={4} />
-  {:else if store.hasError}
+  {:else if uiSettingsQuery?.error}
     <Card variant="destructive">
       <CardContent class="flex items-center gap-3 py-6">
         <AlertCircle class="h-5 w-5 text-destructive" />
-        <p class="font-medium">{store.error}</p>
+        <p class="font-medium">{remoteErrorMessage(uiSettingsQuery.error, SETTINGS_LOAD_FAILED)}</p>
       </CardContent>
     </Card>
   {:else}
@@ -753,8 +751,8 @@
                   </span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="threshold">Threshold bands</SelectItem>
                   <SelectItem value="continuous">Continuous gradient</SelectItem>
+                  <SelectItem value="threshold">Threshold bands</SelectItem>
                   <SelectItem value="single">Single color</SelectItem>
                 </SelectContent>
               </Select>
@@ -806,8 +804,8 @@
                     </span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="threshold">Threshold bands</SelectItem>
                     <SelectItem value="continuous">Continuous gradient</SelectItem>
+                    <SelectItem value="threshold">Threshold bands</SelectItem>
                     <SelectItem value="single">Single color</SelectItem>
                   </SelectContent>
                 </Select>
@@ -834,24 +832,36 @@
               value={chartAreaMode.current}
               onValueChange={(value: string) => {
                 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to the area fill options by the sibling SelectItems
-                chartAreaMode.current = value as "off" | "baseline" | "deviation";
+                chartAreaMode.current = value as AreaMode;
               }}
             >
               <SelectTrigger>
                 <span>
                   {chartAreaMode.current === "off"
                     ? "Off"
-                    : chartAreaMode.current === "baseline"
-                      ? "Baseline"
-                      : "Deviation"}
+                    : chartAreaMode.current === "full"
+                      ? "Full"
+                      : chartAreaMode.current === "baseline"
+                        ? "Fade (Trio style)"
+                        : "Outside target only"}
                 </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="off">Off</SelectItem>
-                <SelectItem value="baseline">Baseline</SelectItem>
-                <SelectItem value="deviation">Deviation</SelectItem>
+                <SelectItem value="full">Full</SelectItem>
+                <SelectItem value="baseline">Fade (Trio style)</SelectItem>
+                <SelectItem value="deviation">Outside target only</SelectItem>
               </SelectContent>
             </Select>
+            <p class="text-sm text-muted-foreground">
+              {chartAreaMode.current === "off"
+                ? "No fill under the glucose line."
+                : chartAreaMode.current === "full"
+                  ? "Fills from the glucose line to the bottom of the chart at one opacity."
+                  : chartAreaMode.current === "baseline"
+                    ? "Fills from the glucose line to the bottom of the chart, fading out toward the bottom."
+                    : "Fills only between the glucose line and the target range when it is out of range."}
+            </p>
           </div>
         </div>
 

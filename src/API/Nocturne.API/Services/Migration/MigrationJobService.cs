@@ -5,17 +5,17 @@ using Microsoft.EntityFrameworkCore;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Nocturne.API.Helpers;
-using Nocturne.API.Services.Audit;
+using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using DecompositionResult = Nocturne.Core.Models.V4.DecompositionResult;
-using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -105,9 +105,8 @@ public class MigrationJobService : IMigrationJobService
         CancellationToken ct = default
     )
     {
-        // Never start a migration without a resolved tenant. The job writes via the detached
-        // background task, so an empty/unresolved tenant here would otherwise fall back to a
-        // stale pooled DbContext tenant and import a third party's data into the wrong tenant.
+        // Never start a migration without a resolved tenant: the detached background task writes
+        // under whatever tenant it is given.
         if (tenantContext is null || tenantContext.TenantId == Guid.Empty)
         {
             throw new InvalidOperationException(
@@ -239,7 +238,7 @@ public class MigrationJobService : IMigrationJobService
     public async Task<IReadOnlyList<MigrationJobInfo>> GetHistoryAsync(Guid tenantId)
     {
         using var scope = _serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         var runs = await db.MigrationRuns.AsNoTracking()
             .Where(r => r.TenantId == tenantId)
@@ -252,7 +251,7 @@ public class MigrationJobService : IMigrationJobService
     private async Task<MigrationRunEntity?> FindRunAsync(Guid tenantId, Guid jobId)
     {
         using var scope = _serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
         return await db.MigrationRuns.AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == jobId && r.TenantId == tenantId);
     }
@@ -453,7 +452,7 @@ public class MigrationJobService : IMigrationJobService
     )
     {
         using var scope = _serviceProvider.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var dbContext = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
 
         var sources = (await dbContext
             .MigrationSources
@@ -550,47 +549,12 @@ internal class MigrationJob
     private const string AuditEndpoint = "service:migration";
 
     /// <summary>
-    /// Creates a DI scope for migration work and propagates the owning tenant's context into it,
-    /// so that tenant-scoped services (NocturneDbContext, decomposers, repositories) resolve and
-    /// write under the correct tenant. The migration runs on a detached background task with no
-    /// ambient request scope, so the tenant must be re-applied explicitly here — mirroring the
-    /// pattern used by other background services (e.g. ConnectorBackgroundService).
+    /// The DI scope migration work runs in: the owning tenant, with imported records attributed to
+    /// the migration rather than a human actor, so a backfill writes no mutation_audit_log row per
+    /// historical record.
     /// </summary>
-    private IServiceScope CreateTenantScope()
-    {
-        var scope = _serviceProvider.CreateScope();
-        if (_tenantContext is not null)
-        {
-            scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(_tenantContext);
-            // Pin the RLS tenant on the pooled DbContext too: setting ITenantAccessor alone does
-            // not retrofit an already-leased context (TenantConnectionInterceptor reads
-            // NocturneDbContext.TenantId on connection open). Without this the detached migration
-            // task could write under a stale pooled tenant. Mirrors ConnectorBackgroundService.
-            scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = _tenantContext.TenantId;
-        }
-
-        // Attribute the imported records to the migration rather than to a human actor. A backfill
-        // writes one row per historical treatment/entry, and without this every one of them also
-        // appends a mutation_audit_log row. Mirrors ConnectorBackgroundService.
-        return new SystemAttributedScope(
-            scope,
-            SystemAuditScope.PushForScope(scope.ServiceProvider, AuditEndpoint));
-    }
-
-    /// <summary>
-    /// A DI scope whose ambient <see cref="IAuditContext"/> stays system-attributed for the
-    /// scope's lifetime. Disposing releases the audit attribution, then the scope.
-    /// </summary>
-    private sealed class SystemAttributedScope(IServiceScope inner, IDisposable auditScope) : IServiceScope
-    {
-        public IServiceProvider ServiceProvider => inner.ServiceProvider;
-
-        public void Dispose()
-        {
-            auditScope.Dispose();
-            inner.Dispose();
-        }
-    }
+    private AsyncServiceScope CreateTenantScope() =>
+        TenantJobScope.Open(_serviceProvider, _tenantContext, AuditEndpoint);
 
     public MigrationJobStatus GetStatus() =>
         new()
@@ -682,7 +646,7 @@ internal class MigrationJob
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
 
             var sourceId = await UpsertSourceAsync(db, ct);
 
@@ -905,7 +869,7 @@ internal class MigrationJob
             httpClient.DefaultRequestHeaders.Add("api-secret", HashApiSecret(_request.NightscoutApiSecret));
         }
 
-        var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var dbContext = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
 
         // Build the list of collections to migrate
         var allCollections = new (string name, Func<HttpClient, CancellationToken, Task> migrate)[]
@@ -921,6 +885,7 @@ internal class MigrationJob
 
         var collectionsToMigrate = allCollections
             .Where(c => _request.Collections.Count == 0 || _request.Collections.Contains(c.name))
+            .OrderBy(c => ImportRank(c.name))
             .ToList();
 
         // Fetch counts upfront so we can show real X / Y progress
@@ -1151,12 +1116,18 @@ internal class MigrationJob
                 NightscoutMessages.ForStatus(response.StatusCode, label, read),
                 response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
                     ? MigrationFailureCause.ApiSecretRejected
-                    : MigrationFailureCause.Status);
+                    : MigrationFailureCause.Status)
+            {
+                StatusCode = response.StatusCode,
+            };
         }
     }
 
     private const string SubjectsNeedAdminSecretMessage =
         "Skipped: listing the people and devices that can sign in needs an admin API secret.";
+
+    private const string NoProfileEndpointMessage =
+        "Skipped: this Nightscout has no profile to hand over.";
 
     private const string PartialAccessMessage =
         "Nightscout refused to hand this over. The API secret was accepted for other data, so it "
@@ -1516,8 +1487,18 @@ internal class MigrationJob
         var totalFailed = 0L;
         var tally = new DecompositionTally();
 
-        var documents = await ReadPageFromSourceAsync<System.Text.Json.JsonElement>(
-            httpClient, "api/v1/profile.json", collectionName, ct);
+        System.Text.Json.JsonElement[] documents;
+        try
+        {
+            documents = await ReadPageFromSourceAsync<System.Text.Json.JsonElement>(
+                httpClient, "api/v1/profile.json", collectionName, ct);
+        }
+        catch (MigrationSourceException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _logger.LogInformation("Skipping profile migration: the source has no profile endpoint");
+            RecordCollectionSkipped(collectionName, NoProfileEndpointMessage);
+            return;
+        }
         var (profiles, newlyFailed) = ParseDocuments<Profile>(documents, collectionName, 1, []);
         totalFailed += newlyFailed;
 
@@ -1641,6 +1622,19 @@ internal class MigrationJob
         _logger.LogInformation("Migrated {Count} food items via API", totalMigrated);
     }
 
+    /// <summary>
+    /// Where a collection falls in the import: subjects first, then entries and treatments, then the
+    /// rest in their listed order, the Mongo listing included. The profile lands after the
+    /// treatments, so its write re-resolves every percent temp basal they hold
+    /// (<see cref="V4.TempBasalRateReresolver"/>).
+    /// </summary>
+    internal static int ImportRank(string collection) => collection switch
+    {
+        "subjects" => 0,
+        "entries" or "treatments" => 1,
+        _ => 2,
+    };
+
     private async Task ExecuteMongoMigrationAsync(CancellationToken ct)
     {
         _currentOperation = "Connecting to MongoDB";
@@ -1649,7 +1643,7 @@ internal class MigrationJob
         var database = client.GetDatabase(_request.MongoDatabaseName);
 
         using var scope = CreateTenantScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var dbContext = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
 
         // List available collections
         var collections = await database.ListCollectionNamesAsync(cancellationToken: ct);
@@ -1657,11 +1651,12 @@ internal class MigrationJob
 
         // Filter to requested collections
         var collectionsToMigrate =
-            _request.Collections.Count > 0
-                ? collectionList.Where(c => _request.Collections.Contains(c)).ToList()
+            (_request.Collections.Count > 0
+                ? collectionList.Where(c => _request.Collections.Contains(c))
                 : collectionList
-                    .Where(c => c is "entries" or "treatments" or "devicestatus" or "profile" or "food" or "activity")
-                    .ToList();
+                    .Where(c => c is "entries" or "treatments" or "devicestatus" or "profile" or "food" or "activity"))
+            .OrderBy(ImportRank)
+            .ToList();
 
         var totalCollections = collectionsToMigrate.Count;
         var processedCollections = 0;
@@ -1967,13 +1962,21 @@ internal class MigrationJob
         {
             Id = originalId ?? Guid.CreateVersion7().ToString(),
             DefaultProfile = defaultProfile,
-            StartDate = doc.Contains("startDate") ? doc["startDate"].AsString : DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            StartDate = doc.GetValue("startDate", BsonNull.Value) switch
+            {
+                { IsString: true } value => value.AsString,
+                { IsValidDateTime: true } value => value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                _ => null,
+            },
             Mills = mills,
             CreatedAt = doc.Contains("created_at") ? doc["created_at"].AsString : null,
             Units = doc.Contains("units") ? doc["units"].AsString : "mg/dl",
             Store = store,
             EnteredBy = doc.Contains("enteredBy") ? doc["enteredBy"].AsString : null,
             LoopSettings = loopSettings,
+            IsAPNSProduction = doc.Contains("isAPNSProduction") && doc["isAPNSProduction"].IsBoolean
+                ? doc["isAPNSProduction"].AsBoolean
+                : null,
         };
 
         using var scope = CreateTenantScope();

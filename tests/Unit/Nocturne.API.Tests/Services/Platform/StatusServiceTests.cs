@@ -34,6 +34,7 @@ namespace Nocturne.API.Tests.Services.Platform;
 /// Tests system status functionality with Nightscout compatibility and caching
 /// </summary>
 [Parity("api.status.test.js")]
+[Collection(ProcessEnvironmentCollection.Name)]
 public class StatusServiceTests
 {
     private readonly Mock<ICacheService> _mockCacheService;
@@ -194,10 +195,13 @@ public class StatusServiceTests
                 return factoryCtx;
             });
 
-        var tenantFactory = new Mock<ITenantDbContextFactory>();
+        var tenantFactory = new Mock<INocturneDbContextFactory>();
         tenantFactory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(dbName));
+        tenantFactory
+            .Setup(f => f.CreatePlatformAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => mockFactory.Object.CreateDbContextAsync().GetAwaiter().GetResult());
         var appearanceReader = new Mock<IShareAppearanceReader>();
         appearanceReader
             .Setup(r => r.GetSharedAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
@@ -207,8 +211,6 @@ public class StatusServiceTests
             _configuration,
             _mockCacheService.Object,
             _mockDemoModeService.Object,
-            ctx,
-            mockFactory.Object,
             tenantFactory.Object,
             _httpContextAccessor,
             MockTenantAccessor.Create(tenantId: tenantId, slug: "t", isDemo: isDemo).Object,
@@ -773,7 +775,7 @@ public class StatusServiceTests
     public async Task GetSystemStatusAsync_IgnoresTheLegacyFeaturesUnitsUntilTheOwnerChooses()
     {
         _dbContext.TenantId = MockTenantAccessor.DefaultTenantId;
-        await new UISettingsService(_dbContext, Mock.Of<ILogger<UISettingsService>>()).SaveSectionAsync(
+        await new UISettingsService(new TestNocturneDbContextFactory(_dbContext), Mock.Of<ILogger<UISettingsService>>()).SaveSectionAsync(
             "features", new FeatureSettings { Display = new DisplaySettings { Units = "mmol" } });
         var configuration = new ConfigurationBuilder().Build();
 
@@ -1123,6 +1125,7 @@ public class StatusServiceTests
         enabledFeatures.Should().Contain("careportal");
         enabledFeatures.Should().Contain("basal");
         enabledFeatures.Should().Contain("dbsize");
+        enabledFeatures.Should().NotContain(EnabledFeatures.Cors, "the legacy API answers foreign origins only when the instance enables cors");
     }
 
     #endregion
@@ -1436,13 +1439,12 @@ public class StatusServiceTests
             factoryCtx.TenantId = ctx.TenantId;
             return factoryCtx;
         }
-        var mockDbContextFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
-        mockDbContextFactory
-            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(FactoryContext);
-        var mockTenantDbContextFactory = new Mock<ITenantDbContextFactory>();
+        var mockTenantDbContextFactory = new Mock<INocturneDbContextFactory>();
         mockTenantDbContextFactory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FactoryContext);
+        mockTenantDbContextFactory
+            .Setup(f => f.CreatePlatformAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(FactoryContext);
         var appearanceReader = new Mock<IShareAppearanceReader>();
         appearanceReader
@@ -1454,8 +1456,6 @@ public class StatusServiceTests
             configuration,
             _mockCacheService.Object,
             _mockDemoModeService.Object,
-            ctx,
-            mockDbContextFactory.Object,
             mockTenantDbContextFactory.Object,
             httpContextAccessor ?? _httpContextAccessor,
             tenantAccessor ?? _mockTenantAccessor.Object,

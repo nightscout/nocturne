@@ -19,7 +19,6 @@ public interface IDeviceRepository
 {
     /// <summary>Returns a <see cref="Device"/> by its UUID v7, or <c>null</c> if not found.</summary>
     /// <param name="id">UUID v7 record identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<Device?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
@@ -31,14 +30,10 @@ public interface IDeviceRepository
     /// </remarks>
     /// <param name="category">Device category (e.g., Pump, CGM, Meter).</param>
     /// <param name="type">Manufacturer-defined type string (e.g., "t:slim X2").</param>
-    /// <param name="serial">Device serial number.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The matching <see cref="Device"/>, or <c>null</c> if not found.</returns>
     Task<Device?> FindByCategoryTypeAndSerialAsync(DeviceCategory category, string type, string serial, CancellationToken ct = default);
 
     /// <summary>Persist a new <see cref="Device"/> record and return the saved entity.</summary>
-    /// <param name="model">Device record to create.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<Device> CreateAsync(Device model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
@@ -52,6 +47,5 @@ public interface IDeviceRepository
     /// </remarks>
     /// <param name="id">UUID v7 identifier of the device.</param>
     /// <param name="timestamp">UTC instant the device was seen at.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task WidenSeenWindowAsync(Guid id, DateTime timestamp, WriteOrigin origin, CancellationToken ct = default);
 }

@@ -2,11 +2,12 @@ namespace Nocturne.Core.Models.V4;
 
 /// <summary>
 /// A known device model entry in the <see cref="DeviceCatalog"/>, containing manufacturer metadata
-/// and optional <see cref="CgmProperties"/> for CGM devices.
+/// and optional <see cref="CgmProperties"/> or <see cref="PumpProperties"/>.
 /// </summary>
 /// <seealso cref="DeviceCatalog"/>
 /// <seealso cref="DeviceCategory"/>
 /// <seealso cref="CgmProperties"/>
+/// <seealso cref="PumpProperties"/>
 /// <seealso cref="PatientDevice"/>
 public record DeviceCatalogEntry
 {
@@ -39,8 +40,8 @@ public record DeviceCatalogEntry
     public CgmProperties? Cgm { get; init; }
 
     /// <summary>
-    /// Insulin-pump properties (rated pod, infusion-set and reservoir wear times).
-    /// Null for non-pump devices and for a custom pump.
+    /// Insulin-pump-specific properties (pod or infusion-set wear, reservoir life).
+    /// Null for non-pump devices.
     /// </summary>
     public PumpProperties? Pump { get; init; }
 }

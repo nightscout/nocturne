@@ -10,6 +10,7 @@ vi.mock("$api/predictions.remote", () => ({
   getPredictionStatus: vi.fn(async () => ({ available: false })),
 }));
 
+import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
 import Harness from "./DeferredPlotHarness.test.svelte";
 
 describe("GlucoseChartCard inspection dialogs", () => {
@@ -34,5 +35,33 @@ describe("GlucoseChartCard inspection dialogs", () => {
 
     await expect.element(dialog).toBeVisible();
     await expect.element(dialog.getByText("120")).toBeVisible();
+  });
+
+  it("draws its axis ticks and inspection dialog in the units it is given, not the viewer's", async () => {
+    glucoseUnits.current = "mg/dl";
+    render(Harness, {
+      props: { initiallyDeferred: false, glucoseUnits: "mmol", onready: () => {} },
+    });
+
+    const plot = page.getByTestId("glucose-plot");
+    await vi.waitFor(() => {
+      const ticks = [...plot.element().querySelectorAll(".lc-axis-tick-label")].map(
+        (tick) => tick.textContent?.trim() ?? ""
+      );
+      expect(ticks.some((tick) => /^\d+\.\d$/.test(tick))).toBe(true);
+    });
+
+    const box = plot.element().getBoundingClientRect();
+    await userEvent.hover(plot, { position: { x: box.width - 40, y: box.height / 2 } });
+    const point = await vi.waitFor(() => {
+      const circle = plot.element().querySelector<SVGCircleElement>(".lc-highlight-point");
+      expect(circle).not.toBeNull();
+      return circle!;
+    });
+    await userEvent.click(point);
+
+    const dialog = page.getByRole("dialog");
+    await expect.element(dialog.getByText("6.7").first()).toBeVisible();
+    expect(dialog.element().textContent).not.toMatch(/(?<!\d)120(?!\d)/);
   });
 });

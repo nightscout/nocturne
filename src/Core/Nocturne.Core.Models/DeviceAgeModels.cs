@@ -35,9 +35,6 @@ public class DeviceAgePreferences
     [JsonPropertyName("display")]
     public string Display { get; set; } = "hours";
 
-    /// <summary>
-    /// Whether to enable alert notifications
-    /// </summary>
     [JsonPropertyName("enableAlerts")]
     public bool EnableAlerts { get; set; }
 }
@@ -77,9 +74,6 @@ public class DeviceAgeInfo
     [JsonPropertyName("treatmentDate")]
     public long? TreatmentDate { get; set; }
 
-    /// <summary>
-    /// Notes from the treatment
-    /// </summary>
     [JsonPropertyName("notes")]
     public string? Notes { get; set; }
 
@@ -95,9 +89,6 @@ public class DeviceAgeInfo
     [JsonPropertyName("level")]
     public int Level { get; set; }
 
-    /// <summary>
-    /// Display string for the age
-    /// </summary>
     [JsonPropertyName("display")]
     public string Display { get; set; } = "n/a";
 
@@ -113,15 +104,9 @@ public class DeviceAgeInfo
 /// </summary>
 public class SensorAgeInfo
 {
-    /// <summary>
-    /// Information for sensor start events
-    /// </summary>
     [JsonPropertyName("Sensor Start")]
     public DeviceAgeInfo SensorStart { get; set; } = new();
 
-    /// <summary>
-    /// Information for sensor change events
-    /// </summary>
     [JsonPropertyName("Sensor Change")]
     public DeviceAgeInfo SensorChange { get; set; } = new();
 
@@ -132,38 +117,20 @@ public class SensorAgeInfo
     public string Min { get; set; } = "Sensor Start";
 }
 
-/// <summary>
-/// Notification information for device age alerts
-/// </summary>
 public class DeviceAgeNotification
 {
-    /// <summary>
-    /// Notification title
-    /// </summary>
     [JsonPropertyName("title")]
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Notification message
-    /// </summary>
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Pushover sound to use
-    /// </summary>
     [JsonPropertyName("pushoverSound")]
     public string PushoverSound { get; set; } = "incoming";
 
-    /// <summary>
-    /// Notification level
-    /// </summary>
     [JsonPropertyName("level")]
     public int Level { get; set; }
 
-    /// <summary>
-    /// Notification group
-    /// </summary>
     [JsonPropertyName("group")]
     public string Group { get; set; } = string.Empty;
 }

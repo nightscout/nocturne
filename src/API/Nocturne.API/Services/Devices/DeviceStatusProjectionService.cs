@@ -1,10 +1,14 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text.Json;
-using System.Web;
+using Nocturne.API.Helpers;
+using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Devices;
@@ -55,18 +59,177 @@ public class DeviceStatusProjectionService
     }
 
     /// <summary>
-    /// Returns paginated <see cref="DeviceStatus"/> documents projected from V4 snapshots, newest first.
+    /// The time fields a projected status carries for its anchor's time, the one the store filters by.
+    /// </summary>
+    private static readonly IReadOnlySet<string> AnchorTimeFields =
+        new[] { "created_at", "date", "mills" }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Most statuses projected into memory for one find whose conditions only the projected document
+    /// can answer: the merged-read budget <see cref="LegacyReadLimits.MaxMergedCount"/> documents.
+    /// </summary>
+    internal int MaxFilterFetch { get; set; } = LegacyReadLimits.MaxMergedCount;
+
+    /// <summary>
+    /// Most ids an <c>_id</c> find resolves one by one. Each lookup costs several queries, so a longer
+    /// list reads through the budgeted scan instead.
+    /// </summary>
+    private const int MaxIdLookups = 100;
+
+    /// <summary>
+    /// Returns paginated <see cref="DeviceStatus"/> documents projected from V4 snapshots, newest first
+    /// or, when <paramref name="descending"/> is <c>false</c>, the oldest first.
     /// </summary>
     /// <param name="count">Maximum number of results.</param>
     /// <param name="skip">Number of results to skip for pagination.</param>
-    /// <param name="find">MongoDB-style query filter supporting <c>device</c> and <c>created_at</c> date range filters.</param>
+    /// <param name="find">JSON find honouring <c>device</c> and <c>created_at</c> only (see <see cref="ParseFindQuery"/>).</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="descending">Newest first when <c>true</c>, else the oldest first.</param>
+    /// <param name="sort">
+    /// <see cref="ReadSortField.SrvModified"/> orders by modification stamp when the find is empty or
+    /// only bounds <c>srvModified</c> from below, which is served by the modified-since pages; any
+    /// other field orders by time.
+    /// </param>
     public async Task<IEnumerable<DeviceStatus>> GetAsync(
-        int count, int skip, string? find, CancellationToken ct)
+        int count, int skip, string? find, CancellationToken ct,
+        bool descending = true, ReadSortField sort = ReadSortField.Time)
     {
+        if (ModifiedSearch.CursorFor(FindQuery.Parse(find), sort, descending) is { } after)
+            return await GetModifiedAfterAsync(count, skip, after, sort, descending, ct);
+
         var (device, from, to) = ParseFindQuery(find);
-        var groups = await _groupRepo.GetAsync(from, to, device, count, skip, ct);
+        var groups = await _groupRepo.GetAsync(from, to, device, count, skip, descending, ct);
         return await ProjectAsync(groups, ct);
+    }
+
+    private async Task<IEnumerable<DeviceStatus>> GetModifiedAfterAsync(
+        int count, int skip, long after, ReadSortField sort, bool descending, CancellationToken ct)
+    {
+        var live = await ModifiedSearch.CollectAsync(
+            async (cursor, limit, token) =>
+            {
+                var page = (await GetModifiedSinceAsync(cursor, limit, token)).ToList();
+                return new ModifiedSearch.Page<DeviceStatus>(page, page.Count == 0 ? null : page[^1].SrvModified, page.Count < limit);
+            },
+            status => status.IsValid == false,
+            status => status.Id,
+            after,
+            ModifiedSearch.ArrivesInOrder(sort, descending) ? (long)count + skip : null,
+            ModifiedSearch.MaxRead,
+            ct);
+
+        Func<DeviceStatus, long> key = sort == ReadSortField.SrvModified
+            ? status => status.SrvModified ?? status.Mills
+            : status => status.Mills;
+
+        return (descending ? live.OrderByDescending(key) : live.OrderBy(key)).Skip(skip).Take(count).ToList();
+    }
+
+    /// <summary>Parses a v1 find, in either wire form, for <see cref="GetMatchingAsync"/>.</summary>
+    public static FindQuery ParseFind(string? find) =>
+        FindQuery.Parse(find, bareRegexFields: null, AnchorTimeFields);
+
+    /// <summary>
+    /// A page of the statuses <paramref name="find"/> matches, newest first, evaluated as legacy
+    /// Nightscout evaluates it. The device equality and time bounds filter the store; every
+    /// condition is tested against the projected document.
+    /// </summary>
+    public async Task<IReadOnlyList<DeviceStatus>> GetMatchingAsync(
+        FindQuery find, int count, int skip, CancellationToken ct)
+    {
+        if (!TryGetStoreWindow(find, out var from, out var to))
+            return [];
+
+        if (find.GetEqualityValues("_id") is { Count: <= MaxIdLookups } ids)
+            return (await ResolveByIdAsync(find, ids, ct)).Skip(skip).Take(count).ToList();
+
+        var device = StoreDevice(find);
+        if (!HasResidual(find, device))
+        {
+            var page = await _groupRepo.GetAsync(from, to, device, count, skip, descending: true, ct);
+            return (await ProjectAsync(page, ct)).Where(find.Matches).ToList();
+        }
+
+        var (matching, truncated) = await FindFilteredFetch.MatchAsync<DeviceStatus>(
+            async (limit, offset) => await ProjectAsync(await _groupRepo.GetAsync(from, to, device, limit, offset, descending: true, ct), ct),
+            find.Matches, status => status.Id, (long)count + skip, MaxFilterFetch);
+
+        if (truncated)
+            _logger.LogWarning(
+                "Find-filtered device status query hit the {MaxFetch}-row window; older matches are not returned",
+                MaxFilterFetch);
+
+        if (find.HasAbandonedRegex)
+            _logger.LogWarning("A find $regex ran out of its time budget; device status matches may be incomplete");
+
+        return matching.Skip(skip).Take(count).ToList();
+    }
+
+    /// <summary>The number of statuses <see cref="GetMatchingAsync"/> pages through.</summary>
+    public async Task<long> CountMatchingAsync(FindQuery find, CancellationToken ct)
+    {
+        if (!TryGetStoreWindow(find, out var from, out var to))
+            return 0;
+
+        var device = StoreDevice(find);
+        if (find.GetEqualityValues("_id") is { Count: <= MaxIdLookups } || HasResidual(find, device))
+            return (await GetMatchingAsync(find, MaxFilterFetch, 0, ct)).Count;
+
+        return await _groupRepo.CountAsync(from, to, device, ct);
+    }
+
+    /// <summary>
+    /// The statuses an <c>_id</c> find names, each resolved as <see cref="GetByIdAsync"/> resolves an
+    /// id, newest first. A status is named by its stored id as well as by the ObjectId its wire form
+    /// carries, so an uploader's own id finds its status even when it is not an ObjectId.
+    /// </summary>
+    private async Task<List<DeviceStatus>> ResolveByIdAsync(
+        FindQuery find, IReadOnlyList<string> ids, CancellationToken ct)
+    {
+        var found = new Dictionary<string, DeviceStatus>(StringComparer.Ordinal);
+        foreach (var id in ids)
+        {
+            if (await GetByIdAsync(id, ct) is not { Id: { } storedId } status || found.ContainsKey(storedId))
+                continue;
+
+            if (storedId == id ? find.MatchesAs(status, "_id", id) : find.Matches(status))
+                found[storedId] = status;
+        }
+
+        return found.Values.OrderByDescending(status => status.Mills).ToList();
+    }
+
+    /// <summary>
+    /// The device equality the store applies. Only a condition named <c>device</c> exactly is one, as
+    /// MongoDB field names are case-sensitive. An empty one is left to the projected document, where a
+    /// status stored without a device reads as an empty one.
+    /// </summary>
+    private static string? StoreDevice(FindQuery find) =>
+        find.GetEqualityValue("device", StringComparison.Ordinal) is { Length: > 0 } device ? device : null;
+
+    private static bool HasResidual(FindQuery find, string? storeDevice) =>
+        find.HasFieldFiltersExcept(storeDevice is null ? null : "device", StringComparison.Ordinal);
+
+    /// <summary>
+    /// The store's inclusive window for the find's bounds, or false when no instant falls in it. A
+    /// bound is a whole millisecond and a stored time can carry more, so the upper end runs to the
+    /// last microsecond, the store's precision, of its millisecond.
+    /// </summary>
+    private static bool TryGetStoreWindow(FindQuery find, out DateTime? from, out DateTime? to)
+    {
+        from = null;
+        to = null;
+        var earliest = DateTimeOffset.MinValue.ToUnixTimeMilliseconds();
+        var latest = DateTimeOffset.MaxValue.ToUnixTimeMilliseconds();
+        if (find.FromMills > latest || find.ToMills < earliest || find.FromMills > find.ToMills)
+            return false;
+
+        if (find.FromMills > earliest)
+            from = DateTimeOffset.FromUnixTimeMilliseconds(find.FromMills.Value).UtcDateTime;
+        if (find.ToMills < latest)
+            to = DateTimeOffset.FromUnixTimeMilliseconds(find.ToMills.Value).UtcDateTime
+                .AddTicks(TimeSpan.TicksPerMillisecond - TimeSpan.TicksPerMicrosecond);
+        return true;
     }
 
     /// <summary>
@@ -177,18 +340,6 @@ public class DeviceStatusProjectionService
         }
 
         return statuses;
-    }
-
-    /// <summary>
-    /// Returns the number of <see cref="DeviceStatus"/> documents <see cref="GetAsync"/> projects for
-    /// <paramref name="find"/> without a page limit.
-    /// </summary>
-    /// <param name="find">MongoDB-style query filter (same format as <see cref="GetAsync"/>).</param>
-    /// <param name="ct">Cancellation token.</param>
-    public async Task<long> CountAsync(string? find, CancellationToken ct)
-    {
-        var (device, from, to) = ParseFindQuery(find);
-        return await _groupRepo.CountAsync(from, to, device, ct);
     }
 
     /// <summary>
@@ -484,155 +635,55 @@ public class DeviceStatusProjectionService
     #region Helpers
 
     /// <summary>
-    /// Parses a MongoDB-style find query string into typed filter values.
-    /// Supports two formats:
-    /// <list type="bullet">
-    /// <item>URL query string: <c>find[device]=openaps&amp;find[created_at][$gte]=2024-01-01</c></item>
-    /// <item>JSON object: <c>{"device":"openaps","created_at":{"$gte":"2024-01-01"}}</c></item>
-    /// </list>
-    /// Honours <c>device</c> as a string or <c>$eq</c>, and <c>created_at</c> with <c>$gte/$gt/$lte/$lt</c>,
-    /// plus <c>$eq</c> or a bare instant in JSON.
+    /// Parses a JSON find, <c>{"device":"openaps","created_at":{"$gte":"2024-01-01"}}</c>, into the
+    /// filters <see cref="GetAsync"/> applies. Honours <c>device</c> as a string or <c>$eq</c>, and
+    /// <c>created_at</c> with <c>$gte/$gt/$lte/$lt/$eq</c> or a bare instant; drops everything else.
     /// </summary>
     internal static (string? Device, DateTime? From, DateTime? To) ParseFindQuery(string? find)
     {
-        var (device, from, to, _) = ParseFindQueryReportingUnhonoured(find);
-        return (device, from, to);
-    }
+        if (string.IsNullOrWhiteSpace(find) || !find.TrimStart().StartsWith('{'))
+            return (null, null, null);
 
-    /// <summary>
-    /// The filters of <paramref name="find"/> when it names at least one and every <c>find</c> key
-    /// in it is one <see cref="ParseFindQuery"/> honours, else null. A delete must refuse a find it
-    /// cannot apply, since the lenient read would drop that key and select everything.
-    /// </summary>
-    internal static (string? Device, DateTime? From, DateTime? To)? ParseDeleteFind(string? find)
-    {
-        var (device, from, to, unhonoured) = ParseFindQueryReportingUnhonoured(find);
-        return unhonoured || (device is null && from is null && to is null) ? null : (device, from, to);
-    }
-
-    private static (string? Device, DateTime? From, DateTime? To, bool Unhonoured) ParseFindQueryReportingUnhonoured(
-        string? find)
-    {
-        if (string.IsNullOrWhiteSpace(find))
-            return (null, null, null, false);
-
-        // Try JSON format first
-        if (find.TrimStart().StartsWith('{'))
-        {
-            return ParseFindQueryFromJson(find);
-        }
-
-        // URL query string format: find[device]=value&find[created_at][$gte]=date
-        return ParseFindQueryFromQueryString(find);
-    }
-
-    private static (string? Device, DateTime? From, DateTime? To, bool Unhonoured) ParseFindQueryFromJson(string json)
-    {
         string? device = null;
         DateTime? from = null;
         DateTime? to = null;
-        var unhonoured = false;
 
         try
         {
-            using var doc = JsonDocument.Parse(json);
+            using var doc = JsonDocument.Parse(find);
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
-                return (null, null, null, true);
+                return (null, null, null);
 
             foreach (var field in root.EnumerateObject())
             {
-                if (field.Name == "device")
+                if (field.Name is not ("device" or "created_at"))
+                    continue;
+
+                var operators = field.Value.ValueKind == JsonValueKind.Object
+                    ? field.Value.EnumerateObject().Select(prop => (prop.Name, prop.Value)).ToList()
+                    : [("$eq", field.Value)];
+
+                foreach (var (op, operand) in operators)
                 {
-                    var operators = field.Value.ValueKind == JsonValueKind.Object
-                        ? field.Value.EnumerateObject().Select(prop => (prop.Name, prop.Value)).ToList()
-                        : [("$eq", field.Value)];
-
-                    if (operators.Count == 0)
-                        unhonoured = true;
-
-                    foreach (var (op, operand) in operators)
+                    if (field.Name == "device")
                     {
                         if (op == "$eq" && operand.ValueKind == JsonValueKind.String)
                             device = operand.GetString();
-                        else
-                            unhonoured = true;
                     }
-                }
-                else if (field.Name == "created_at")
-                {
-                    var operators = field.Value.ValueKind == JsonValueKind.Object
-                        ? field.Value.EnumerateObject().Select(prop => (prop.Name, prop.Value)).ToList()
-                        : [("$eq", field.Value)];
-
-                    foreach (var (op, operand) in operators)
+                    else if (TryParseDateTime(operand, out var dt))
                     {
-                        if (!TryParseDateTime(operand, out var dt)
-                            || !TryApplyCreatedAtCondition(op, dt, ref from, ref to))
-                            unhonoured = true;
+                        TryApplyCreatedAtCondition(op, dt, ref from, ref to);
                     }
-                }
-                else
-                {
-                    unhonoured = true;
                 }
             }
         }
         catch (JsonException)
         {
-            return (null, null, null, true);
+            return (null, null, null);
         }
 
-        return (device, from, to, unhonoured);
-    }
-
-    private static (string? Device, DateTime? From, DateTime? To, bool Unhonoured) ParseFindQueryFromQueryString(
-        string queryString)
-    {
-        string? device = null;
-        DateTime? from = null;
-        DateTime? to = null;
-        var unhonoured = false;
-
-        var parsed = HttpUtility.ParseQueryString(queryString);
-
-        foreach (string? key in parsed)
-        {
-            if (key == null) continue;
-            var isFind = key.StartsWith("find", StringComparison.OrdinalIgnoreCase);
-            var value = parsed[key];
-            if (string.IsNullOrEmpty(value))
-            {
-                unhonoured |= isFind;
-                continue;
-            }
-
-            var createdAtOp = key.ToLowerInvariant() switch
-            {
-                "find[created_at][$gte]" => "$gte",
-                "find[created_at][$gt]" => "$gt",
-                "find[created_at][$lte]" => "$lte",
-                "find[created_at][$lt]" => "$lt",
-                _ => null,
-            };
-
-            if (key.Equals("find[device]", StringComparison.OrdinalIgnoreCase))
-            {
-                device = value;
-            }
-            else if (createdAtOp is not null)
-            {
-                if (!TryParseDateTime(value, out var dt)
-                    || !TryApplyCreatedAtCondition(createdAtOp, dt, ref from, ref to))
-                    unhonoured = true;
-            }
-            else
-            {
-                unhonoured |= isFind;
-            }
-        }
-
-        return (device, from, to, unhonoured);
+        return (device, from, to);
     }
 
     /// <summary>

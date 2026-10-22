@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.SetupHub;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.SetupHub.Items;
 
@@ -12,12 +13,13 @@ namespace Nocturne.API.Services.SetupHub.Items;
 /// A revoked or lapsed link never counts, since done never reverts. "Just me" is
 /// <see cref="SetupHubItemState.NotForMe"/>, so it gives way to done if the owner shares after all.
 /// </summary>
-public class SharingItem(NocturneDbContext db) : ISetupHubItem
+public class SharingItem(INocturneDbContextFactory contexts) : ISetupHubItem
 {
     public SetupHubItemKey Key => SetupHubItemKey.Sharing;
 
     public async Task<bool> WorksAsync(CancellationToken ct)
     {
+        await using var db = await contexts.CreateAsync(ct);
         var now = DateTime.UtcNow;
         return await db.MemberInvites.AnyAsync(
                 i => i.UseCount > 0

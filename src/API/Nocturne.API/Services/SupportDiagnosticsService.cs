@@ -65,7 +65,7 @@ public class SupportDiagnosticsService(
     IConnectorHealthService connectorHealth,
     IUISettingsService uiSettings,
     ITherapySettingsResolver therapySettings,
-    ITenantDbContextFactory contextFactory,
+    INocturneDbContextFactory contextFactory,
     ILogger<SupportDiagnosticsService> logger
 ) : ISupportDiagnosticsService
 {

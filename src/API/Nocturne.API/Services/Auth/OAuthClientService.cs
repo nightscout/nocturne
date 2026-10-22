@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -14,24 +15,23 @@ namespace Nocturne.API.Services.Auth;
 /// <seealso cref="RedirectUriValidator"/>
 public class OAuthClientService : IOAuthClientService
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly RedirectUriValidator _redirectUriValidator;
     private readonly ILogger<OAuthClientService> _logger;
 
     /// <summary>
     /// Initialises a new <see cref="OAuthClientService"/>.
     /// </summary>
-    /// <param name="dbContext">The database context for reading and writing OAuth client records.</param>
     /// <param name="redirectUriValidator">
     /// Validator that applies RFC 8252 redirect URI matching rules.
     /// </param>
     /// <param name="logger">Logger instance.</param>
     public OAuthClientService(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         RedirectUriValidator redirectUriValidator,
         ILogger<OAuthClientService> logger)
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _redirectUriValidator = redirectUriValidator;
         _logger = logger;
     }
@@ -39,7 +39,8 @@ public class OAuthClientService : IOAuthClientService
     /// <inheritdoc />
     public async Task<OAuthClientInfo?> GetClientAsync(string clientId, CancellationToken ct = default)
     {
-        var entity = await _dbContext.OAuthClients
+        await using var db = await _contexts.CreateAsync(ct);
+        var entity = await db.OAuthClients
             .FirstOrDefaultAsync(c => c.ClientId == clientId, ct);
 
         if (entity == null)
@@ -54,7 +55,8 @@ public class OAuthClientService : IOAuthClientService
     /// <inheritdoc />
     public async Task<OAuthClientInfo?> GetClientByIdAsync(Guid id, CancellationToken ct = default)
     {
-        var entity = await _dbContext.OAuthClients
+        await using var db = await _contexts.CreateAsync(ct);
+        var entity = await db.OAuthClients
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == id, ct);
 
@@ -73,7 +75,8 @@ public class OAuthClientService : IOAuthClientService
         string redirectUri,
         CancellationToken ct = default)
     {
-        var entity = await _dbContext.OAuthClients
+        await using var db = await _contexts.CreateAsync(ct);
+        var entity = await db.OAuthClients
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.ClientId == clientId, ct);
 
@@ -121,8 +124,9 @@ public class OAuthClientService : IOAuthClientService
     /// <inheritdoc />
     public async Task SeedKnownOAuthClientsAsync(Guid tenantId, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         // Read existing software_ids for this tenant so we can skip already-seeded entries.
-        var existingSoftwareIds = await _dbContext.OAuthClients
+        var existingSoftwareIds = await db.OAuthClients
             .IgnoreQueryFilters()
             .Where(c => c.TenantId == tenantId && c.SoftwareId != null)
             .Select(c => c.SoftwareId!)
@@ -132,7 +136,7 @@ public class OAuthClientService : IOAuthClientService
         var added = 0;
         foreach (var entry in KnownOAuthClients.Entries.Where(e => !existingSet.Contains(e.SoftwareId)))
         {
-            _dbContext.OAuthClients.Add(new OAuthClientEntity
+            db.OAuthClients.Add(new OAuthClientEntity
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = tenantId,
@@ -150,7 +154,7 @@ public class OAuthClientService : IOAuthClientService
 
         if (added > 0)
         {
-            await _dbContext.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
             _logger.LogInformation(
                 "Seeded {Count} known OAuth clients for tenant {TenantId}",
                 added, tenantId);
@@ -158,6 +162,14 @@ public class OAuthClientService : IOAuthClientService
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Registration is anonymous, so the redirect URIs are the only thing tying a registrant to
+    /// the app it names. A <paramref name="softwareId"/> already registered on the tenant is
+    /// returned only when the submitted URIs are ones it already redirects to, and the
+    /// known-directory identity goes only to a registrant whose URIs the directory lists. Anyone
+    /// else gets a fresh unverified client that does not hold the <paramref name="softwareId"/>,
+    /// so it can neither borrow nor squat the identity of the app it names.
+    /// </remarks>
     public async Task<OAuthClientInfo> RegisterClientAsync(
         string? softwareId,
         string? clientName,
@@ -168,63 +180,43 @@ public class OAuthClientService : IOAuthClientService
         string? createdFromIp,
         CancellationToken ct = default)
     {
-        // Idempotent on (tenant, software_id) when software_id is supplied — but only for
-        // clients that completed a real registration. Known-directory seeds ship with an
-        // empty RedirectUris list (the real value is only knowable once the client
-        // registers), so returning such a seed unchanged would silently discard the
-        // submitted redirect_uris and permanently break /authorize for that client.
-        // A seed therefore adopts the incoming registration data instead.
-        if (!string.IsNullOrEmpty(softwareId))
+        await using var db = await _contexts.CreateAsync(ct);
+
+        var existing = string.IsNullOrEmpty(softwareId)
+            ? null
+            : await db.OAuthClients.FirstOrDefaultAsync(c => c.SoftwareId == softwareId, ct);
+
+        if (existing != null && Covers(DeserializeRedirectUris(existing.RedirectUris), redirectUris))
         {
-            var existing = await _dbContext.OAuthClients
-                .FirstOrDefaultAsync(c => c.SoftwareId == softwareId, ct);
-            if (existing != null)
-            {
-                if (existing.IsKnown && DeserializeRedirectUris(existing.RedirectUris).Count == 0)
-                {
-                    existing.RedirectUris = JsonSerializer.Serialize(redirectUris);
-                    existing.ClientName = clientName ?? existing.ClientName;
-                    existing.ClientUri = clientUri ?? existing.ClientUri;
-                    existing.LogoUri = logoUri ?? existing.LogoUri;
-                    existing.DisplayName = clientName ?? existing.DisplayName;
-                    existing.UpdatedAt = DateTime.UtcNow;
-                    await _dbContext.SaveChangesAsync(ct);
-
-                    _logger.LogInformation(
-                        "DCR: known-directory seed {SoftwareId} adopted registration redirect_uris ({Count} URIs)",
-                        SanitizeForLog(softwareId), redirectUris.Count);
-                    return MapToInfo(existing);
-                }
-
-                _logger.LogDebug(
-                    "DCR: returning existing client for software_id {SoftwareId} (tenant {TenantId})",
-                    SanitizeForLog(softwareId), existing.TenantId);
-                return MapToInfo(existing);
-            }
+            _logger.LogDebug(
+                "DCR: returning existing client for software_id {SoftwareId} (tenant {TenantId})",
+                SanitizeForLog(softwareId), existing.TenantId);
+            return MapToInfo(existing);
         }
 
-        // Look up the known directory entry to mark is_known and pull display defaults.
         var known = string.IsNullOrEmpty(softwareId)
             ? null
             : KnownOAuthClients.MatchBySoftwareId(softwareId);
+        var verified = existing == null && known != null && Covers(known.RedirectUris, redirectUris);
+        var holdsSoftwareId = existing == null && (known == null || verified);
 
         var entity = new OAuthClientEntity
         {
             Id = Guid.CreateVersion7(),
             // client_id is opaque to clients; use the entity Id as a stable string.
             ClientId = Guid.CreateVersion7().ToString(),
-            SoftwareId = softwareId,
-            ClientName = clientName ?? known?.DisplayName,
-            ClientUri = clientUri ?? known?.Homepage,
-            LogoUri = logoUri ?? known?.LogoUri,
-            DisplayName = clientName ?? known?.DisplayName,
-            IsKnown = known != null,
+            SoftwareId = holdsSoftwareId ? softwareId : null,
+            ClientName = verified ? known!.DisplayName : clientName,
+            ClientUri = verified ? known!.Homepage : clientUri,
+            LogoUri = verified ? known!.LogoUri : logoUri,
+            DisplayName = verified ? known!.DisplayName : clientName,
+            IsKnown = verified,
             RedirectUris = JsonSerializer.Serialize(redirectUris),
             CreatedFromIp = createdFromIp,
         };
 
-        _dbContext.OAuthClients.Add(entity);
-        await _dbContext.SaveChangesAsync(ct);
+        db.OAuthClients.Add(entity);
+        await db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "DCR: registered client {ClientId} software_id={SoftwareId} known={IsKnown}",
@@ -232,6 +224,14 @@ public class OAuthClientService : IOAuthClientService
 
         return MapToInfo(entity);
     }
+
+    /// <summary>
+    /// Whether every submitted redirect URI is one <paramref name="registered"/> already accepts at
+    /// authorize time. An empty submission is covered by anything: it can only be redirected to
+    /// URIs that were registered before it.
+    /// </summary>
+    private bool Covers(IReadOnlyCollection<string> registered, IReadOnlyList<string> submitted) =>
+        submitted.All(s => registered.Any(r => _redirectUriValidator.IsValidForAuthorize(r, s)));
 
     /// <summary>
     /// Strips control characters (including CR/LF) from a user-supplied value before it reaches a

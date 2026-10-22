@@ -83,11 +83,6 @@ public class AlertSweepServiceAutoResolveTests
         services.AddSingleton(Mock.Of<IExcursionResolutionHandler>());
         services.AddScoped<ITenantAccessor>(_ => Mock.Of<ITenantAccessor>());
         services.AddScoped<IAuditContext, AuditContext>();
-        services.AddScoped(_ => new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseSqlite("DataSource=:memory:")
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-                .Options));
 
         await using var provider = services.BuildServiceProvider();
         var sut = new AlertSweepService(

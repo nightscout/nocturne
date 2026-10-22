@@ -32,7 +32,6 @@ public class IobResult
     /// <summary>Source of the IOB calculation (e.g., "iob", "openaps").</summary>
     public string? Source { get; set; }
 
-    /// <summary>Device that reported the IOB data.</summary>
     public string? Device { get; set; }
 
     /// <summary>Timestamp of the IOB calculation (Unix milliseconds).</summary>
@@ -44,7 +43,6 @@ public class IobResult
     /// <summary>Treatment (bolus) component of IOB (units).</summary>
     public double? TreatmentIob { get; set; }
 
-    /// <summary>Formatted display string for IOB value.</summary>
     public string? Display { get; set; }
 
     /// <summary>Formatted display line including IOB details.</summary>

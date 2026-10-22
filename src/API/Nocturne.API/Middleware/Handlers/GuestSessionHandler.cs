@@ -88,7 +88,7 @@ public class GuestSessionHandler : IAuthHandler
             using var scope = _scopeFactory.CreateScope();
 
             // Propagate tenant context into the child scope so RLS allows
-            // the oauth_grants query. Without this, the scoped DbContext has
+            // the oauth_grants query. Without this, a context created in the scope has
             // TenantId = Guid.Empty and RLS silently filters out the row.
             var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
             tenantAccessor.SetTenant(tenantCtx);

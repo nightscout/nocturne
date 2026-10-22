@@ -50,7 +50,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alert-rules")]
 public class AlertRulesController : ControllerBase
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly IAlertReferenceService _referenceService;
     private readonly IAlertDeliveryService _deliveryService;
     private readonly IRuleScopeClassifier _scopeClassifier;
@@ -64,7 +64,7 @@ public class AlertRulesController : ControllerBase
     /// Initializes a new instance of <see cref="AlertRulesController"/>.
     /// </summary>
     public AlertRulesController(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAlertReferenceService referenceService,
         IAlertDeliveryService deliveryService,
         IRuleScopeClassifier scopeClassifier,
@@ -101,7 +101,7 @@ public class AlertRulesController : ControllerBase
             .OrderBy(r => r.SortOrder)
             .ToListAsync(ct);
 
-        return Ok(rules.Select(MapToResponse).ToList());
+        return Ok(await ToResponsesAsync(db, rules, ct));
     }
 
     /// <summary>
@@ -123,7 +123,7 @@ public class AlertRulesController : ControllerBase
         if (rule is null)
             return NotFound();
 
-        return Ok(MapToResponse(rule));
+        return Ok(await ToResponseAsync(db, rule, ct));
     }
 
     /// <summary>
@@ -146,7 +146,7 @@ public class AlertRulesController : ControllerBase
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
         await using var db = await _contextFactory.CreateAsync(ct);
 
-        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+        if (await ResolveAndValidateChannelsAsync(request.Channels, AlertRuleChannelWriter.NoStoredRecipients, db, ct) is { } badChannel)
             return badChannel;
 
         if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
@@ -193,7 +193,7 @@ public class AlertRulesController : ControllerBase
             .Include(r => r.Channels)
             .FirstAsync(r => r.Id == rule.Id, ct);
 
-        return CreatedAtAction(nameof(GetRule), new { id = created.Id }, MapToResponse(created));
+        return CreatedAtAction(nameof(GetRule), new { id = created.Id }, await ToResponseAsync(db, created, ct));
     }
 
     /// <summary>
@@ -208,7 +208,8 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> UpdateRule(
         Guid id, [FromBody] UpdateAlertRuleRequest request, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
+        await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
+        var db = unit.Context;
 
         var rule = await db.AlertRules
             .Include(r => r.Channels)
@@ -227,7 +228,7 @@ public class AlertRulesController : ControllerBase
             return invalid;
         var trees = new CanonicalTrees(check.ConditionParams, check.AutoResolveParams, check.ClientConfiguration);
 
-        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+        if (await ResolveAndValidateChannelsAsync(request.Channels, AlertRuleChannelWriter.InAppRecipientsOf(rule.Channels), db, ct) is { } badChannel)
             return badChannel;
 
         if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
@@ -269,6 +270,7 @@ public class AlertRulesController : ControllerBase
         if (!sameAutoResolve)
             rule.AutoResolveParams = trees.AutoResolveParams;
         rule.ClientConfiguration = trees.ClientConfiguration ?? "{}";
+        rule.ReviewReason = null;
         rule.UpdatedAt = DateTime.UtcNow;
 
         if (request.Channels is not null)
@@ -291,7 +293,7 @@ public class AlertRulesController : ControllerBase
         // A save without its clear would stand: a retried edit changes nothing, so it would not
         // clear the hold.
         if (conditionsChanged)
-            await _rearm.SaveAndClearAsync(db, id, ct);
+            await _rearm.SaveAndClearAsync(unit, id, ct);
         else
             await db.SaveChangesAsync(ct);
         if (wasEnabled && !request.IsEnabled)
@@ -309,7 +311,7 @@ public class AlertRulesController : ControllerBase
             .Include(r => r.Channels)
             .FirstAsync(r => r.Id == id, ct);
 
-        return Ok(MapToResponse(updated));
+        return Ok(await ToResponseAsync(db, updated, ct));
     }
 
     /// <summary>
@@ -367,7 +369,8 @@ public class AlertRulesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AlertRuleResponse>> ToggleRule(Guid id, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
+        await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
+        var db = unit.Context;
 
         var rule = await db.AlertRules
             .Include(r => r.Channels)
@@ -379,11 +382,11 @@ public class AlertRulesController : ControllerBase
         var wasEnabled = rule.IsEnabled;
         rule.IsEnabled = !rule.IsEnabled;
         rule.UpdatedAt = DateTime.UtcNow;
-        await _rearm.SaveAndClearAsync(db, id, ct);
+        await _rearm.SaveAndClearAsync(unit, id, ct);
         if (wasEnabled)
             await _retirement.CloseAsync([id], db.TenantId, CancellationToken.None);
 
-        return Ok(MapToResponse(rule));
+        return Ok(await ToResponseAsync(db, rule, ct));
     }
 
     /// <summary>
@@ -433,8 +436,16 @@ public class AlertRulesController : ControllerBase
         await using var db = await _contextFactory.CreateAsync(ct);
 
         // Held to the same rules as a save: a preview that accepted a destination the editor
-        // would refuse to store would report success for a channel that cannot deliver.
-        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+        // would refuse to store would report success for a channel that cannot deliver. The
+        // request names no rule, so any in-app recipient stored on this site counts as stored.
+        var storedRecipients = (await db.AlertRuleChannels
+                .AsNoTracking()
+                .Where(c => c.ChannelType == ChannelType.InApp)
+                .Select(c => c.Destination)
+                .Distinct()
+                .ToListAsync(ct))
+            .ToHashSet();
+        if (await ResolveAndValidateChannelsAsync(request.Channels, storedRecipients, db, ct) is { } badChannel)
             return badChannel;
 
         var tenantId = db.TenantId;
@@ -493,12 +504,76 @@ public class AlertRulesController : ControllerBase
     /// <inheritdoc cref="AlertRuleChannelWriter.ResolveAndValidateAsync"/>
     /// <returns>A 400 <see cref="BadRequestObjectResult"/> on the first offender, or null when all are valid.</returns>
     private async Task<ActionResult?> ResolveAndValidateChannelsAsync(
-        List<CreateAlertRuleChannelRequest>? channels, NocturneDbContext db, CancellationToken ct) =>
-        await _channels.ResolveAndValidateAsync(channels, db, HttpContext?.GetSubjectId(), ct) is { } message
+        List<CreateAlertRuleChannelRequest>? channels,
+        IReadOnlySet<string> storedRecipients,
+        NocturneDbContext db,
+        CancellationToken ct) =>
+        await _channels.ResolveAndValidateAsync(channels, storedRecipients, db, HttpContext?.GetSubjectId(), ct) is { } message
             ? BadRequest(new { message })
             : null;
 
-    private static AlertRuleResponse MapToResponse(AlertRuleEntity entity) => new()
+    private async Task<AlertRuleResponse> ToResponseAsync(
+        NocturneDbContext db, AlertRuleEntity rule, CancellationToken ct) =>
+        (await ToResponsesAsync(db, [rule], ct))[0];
+
+    /// <summary>
+    /// Maps rules to responses and, for a caller who may edit the rules, describes each in-app
+    /// channel's recipient. Only the rule editor reads it, so other callers are spared the lookup.
+    /// This is not a privacy boundary: member names are readable more widely (issue #2359).
+    /// </summary>
+    private async Task<List<AlertRuleResponse>> ToResponsesAsync(
+        NocturneDbContext db, IEnumerable<AlertRuleEntity> rules, CancellationToken ct)
+    {
+        var responses = rules.Select(rule => MapToResponse(rule, _conditionValidator.Validate(
+                rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled,
+                rule.AutoResolveParams, rule.ClientConfiguration)))
+            .ToList();
+        var inApp = responses
+            .SelectMany(r => r.Channels)
+            .Where(c => c.ChannelType == ChannelType.InApp)
+            .ToList();
+        if (inApp.Count == 0 || HttpContext?.HasScope(Scope.AlertsReadWrite) != true)
+        {
+            return responses;
+        }
+
+        var recipients = await InAppRecipients.ListAsync(db, db.TenantId, ct);
+        foreach (var channel in inApp)
+        {
+            Guid? subjectId = Guid.TryParse(channel.Destination, out var parsed) ? parsed : null;
+            string? name = null;
+            var canReceive = subjectId is { } id && recipients.TryGetValue(id, out name);
+            channel.Recipient = new InAppRecipientResponse
+            {
+                SubjectId = subjectId,
+                Name = name,
+                CanReceive = canReceive,
+            };
+        }
+
+        return responses;
+    }
+
+    /// <summary>
+    /// The members an in-app channel may be sent to, for the rule editor's recipient picker.
+    /// </summary>
+    [HttpGet("in-app-recipients")]
+    [RequireScope(Scope.AlertsReadWrite)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(List<InAppRecipientResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<InAppRecipientResponse>>> GetInAppRecipients(CancellationToken ct)
+    {
+        await using var db = await _contextFactory.CreateAsync(ct);
+
+        var members = await InAppRecipients.ListAsync(db, db.TenantId, ct);
+        return Ok(members
+            .Select(m => new InAppRecipientResponse { SubjectId = m.Key, Name = m.Value, CanReceive = true })
+            .OrderBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList());
+    }
+
+    private static AlertRuleResponse MapToResponse(
+        AlertRuleEntity entity, IReadOnlyList<RustValidationIssue> conditionIssues) => new()
     {
         Id = entity.Id,
         Name = entity.Name,
@@ -511,6 +586,8 @@ public class AlertRulesController : ControllerBase
         AllowThroughDnd = entity.AllowThroughDnd,
         ScopeClass = entity.ScopeClass,
         ManagedBy = entity.ManagedBy,
+        ReviewReason = entity.ReviewReason,
+        ConditionIssues = [.. conditionIssues],
         AutoResolveEnabled = entity.AutoResolveEnabled,
         AutoResolveParams = entity.AutoResolveParams is null
             ? null
@@ -737,6 +814,13 @@ public class AlertRuleResponse
     /// cannot be deleted here — the owning configuration re-syncs their condition, name and
     /// severity; channels and client configuration remain user-editable.</summary>
     public string? ManagedBy { get; set; }
+    /// <summary>Why a data repair changed or disabled this rule (<see cref="AlertRuleReviewReasons"/>);
+    /// null when none did. Cleared by the next edit.</summary>
+    public string? ReviewReason { get; set; }
+    /// <summary>What a save of the rule's stored conditions would reject. A stored rule keeps
+    /// evaluating with them, so a non-empty list can mean a condition that never fires as
+    /// written.</summary>
+    public List<RustValidationIssue> ConditionIssues { get; set; } = [];
     public bool AutoResolveEnabled { get; set; }
     public object? AutoResolveParams { get; set; }
     public object ClientConfiguration { get; set; } = new { };
@@ -756,6 +840,22 @@ public class AlertRuleChannelResponse
     /// <summary>Whether a webhook signing secret is stored for this channel. The secret itself is
     /// never returned.</summary>
     public bool HasSecret { get; set; }
+    /// <summary>Who an <c>in_app</c> channel is sent to. Set only for in-app channels, and only
+    /// for a caller who may edit alert rules.</summary>
+    public InAppRecipientResponse? Recipient { get; set; }
+}
+
+/// <summary>The recipient of an <c>in_app</c> alert channel.</summary>
+public class InAppRecipientResponse
+{
+    /// <summary>The subject the channel names. Null when it names none.</summary>
+    public Guid? SubjectId { get; set; }
+    /// <summary>The name the site knows the member by. Null when they cannot receive.</summary>
+    public string? Name { get; set; }
+    /// <summary>Whether the channel reaches someone: the subject is a member of the site whose
+    /// roles grant any access. A channel that does not is sent to whoever next saves the
+    /// rule.</summary>
+    public bool CanReceive { get; set; }
 }
 
 public class CreateAlertRuleRequest

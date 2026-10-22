@@ -6,7 +6,9 @@ using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Queries;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.API.Authorization;
@@ -36,6 +38,8 @@ public class CountController : ControllerBase
     /// </summary>
     internal static readonly string[] CountableStorage =
         ["entries", "treatments", "devicestatus", "profile", "food", "activity"];
+
+    private const string UnreadableFindMessage = "The find carries no condition the activity collection can read.";
 
     private readonly IEntryStore _entryStore;
     private readonly ITreatmentStore _treatmentStore;
@@ -202,7 +206,9 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _deviceStatusProjection.CountAsync(find, cancellationToken);
+            var count = await _deviceStatusProjection.CountMatchingAsync(
+                DeviceStatusProjectionService.ParseFind(LegacyFindDateWindow.Apply(find, _timeProvider.GetUtcNow())),
+                cancellationToken);
 
             _logger.LogDebug("Found {Count} device status entries matching criteria", count);
             return LegacyCountResult.For(count);
@@ -255,7 +261,11 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _activityService.CountActivitiesAsync(find, cancellationToken);
+            var activityFind = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
+            if (LegacyFindQueryString.IsUnreadableQueryString(activityFind))
+                return BadRequest(new { status = 400, message = UnreadableFindMessage, type = "client" });
+
+            var count = await _activityService.CountActivitiesAsync(activityFind, cancellationToken);
 
             _logger.LogDebug("Found {Count} activity entries matching criteria", count);
             return LegacyCountResult.For(count);
@@ -348,17 +358,27 @@ public class CountController : ControllerBase
                         cancellationToken);
                     break;
                 case "devicestatus":
-                    count = await _deviceStatusProjection.CountAsync(
-                        LegacyFindQueryString.Resolve(HttpContext?.Request, find), cancellationToken);
+                    count = await _deviceStatusProjection.CountMatchingAsync(
+                        DeviceStatusProjectionService.ParseFind(LegacyFindDateWindow.Apply(
+                            LegacyFindQueryString.Resolve(HttpContext?.Request, find), _timeProvider.GetUtcNow())),
+                        cancellationToken);
                     break;
                 case "profile":
                     count = await _profileProjectionService.CountProfilesAsync(find, cancellationToken);
                     break;
                 case "food":
-                    count = await _foodRepository.CountFoodAsync(find, type, cancellationToken);
+                    var foodFind = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
+                    if (Food.FindRefusal(FindQuery.Parse(foodFind)) is { } foodRefusal)
+                        return BadRequest(new { status = 400, message = foodRefusal, type = "client" });
+
+                    count = await _foodRepository.CountFoodAsync(foodFind, type, cancellationToken);
                     break;
                 case "activity":
-                    count = await _activityService.CountActivitiesAsync(find, cancellationToken);
+                    var activityFind = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
+                    if (LegacyFindQueryString.IsUnreadableQueryString(activityFind))
+                        return BadRequest(new { status = 400, message = UnreadableFindMessage, type = "client" });
+
+                    count = await _activityService.CountActivitiesAsync(activityFind, cancellationToken);
                     break;
                 default:
                     // This shouldn't happen due to validation above, but just in case

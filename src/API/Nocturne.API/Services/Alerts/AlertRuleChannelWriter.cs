@@ -17,16 +17,25 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
 {
     /// <summary>
     /// Fills in a DM channel's destination from the caller's linked identity on that channel's
-    /// platform and rejects a channel list whose destinations cannot deliver: a
-    /// <c>device_action</c> channel naming an unknown kind or capability, a channel type with no
-    /// delivery path, a channel type that needs a destination and was given none, or a destination
-    /// the platform adapter cannot address. Nothing downstream inspects a destination, so an
-    /// unrejected one becomes a channel that stores fine and never delivers. Returns why the first
-    /// offender is rejected, or null when all channels are valid. <paramref name="subjectId"/> is
-    /// the caller, whose linked identities fill in a DM destination.
+    /// platform, routes an in-app channel (see <see cref="ResolveInAppRecipientAsync"/>), and
+    /// rejects a channel list whose destinations cannot deliver: an in-app channel naming no
+    /// member, a <c>device_action</c> channel naming an unknown kind or capability, a channel type
+    /// with no delivery path, a channel type that needs a destination and was given none, or a
+    /// destination the platform adapter cannot address. Nothing downstream inspects a destination,
+    /// so an unrejected one becomes a channel that stores fine and never delivers. Returns why the
+    /// first offender is rejected, or null when all channels are valid. <paramref name="subjectId"/>
+    /// is the caller, whose linked identities fill in a DM destination.
     /// </summary>
+    /// <param name="storedRecipients">
+    /// The in-app recipients already stored where these channels come from, which may have left
+    /// the site since.
+    /// </param>
     public async Task<string?> ResolveAndValidateAsync(
-        List<CreateAlertRuleChannelRequest>? channels, NocturneDbContext db, Guid? subjectId, CancellationToken ct)
+        List<CreateAlertRuleChannelRequest>? channels,
+        IReadOnlySet<string> storedRecipients,
+        NocturneDbContext db,
+        Guid? subjectId,
+        CancellationToken ct)
     {
         if (channels is null)
         {
@@ -54,6 +63,25 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
             {
                 return $"A {WireName(ch.ChannelType)} channel has no delivery path. Use "
                     + $"{string.Join(" or ", replacements.Select(WireName))} instead.";
+            }
+
+            if (ChannelDestinations.RoutesToMember(ch.ChannelType))
+            {
+                var goesToSaver = string.IsNullOrWhiteSpace(ch.Destination)
+                                  || storedRecipients.Contains(ch.Destination);
+                var member = await ResolveInAppRecipientAsync(db, ch.Destination, storedRecipients, subjectId, ct);
+                if (member is null)
+                {
+                    return goesToSaver
+                        ? $"A {WireName(ch.ChannelType)} channel without a member to name is "
+                            + "delivered to the member who saves it, and this caller is not a "
+                            + "member of this site."
+                        : $"A {WireName(ch.ChannelType)} channel's destination must be the subject "
+                            + $"id of a member of this site; got '{ch.Destination}'.";
+                }
+
+                ch.Destination = member.Value.ToString();
+                continue;
             }
 
             if (ChannelDestinations.ResolvesFromLinkedIdentity(ch.ChannelType)
@@ -158,6 +186,40 @@ public sealed class AlertRuleChannelWriter(ISecretEncryptionService encryption)
             .Select(d => d.PlatformUserId)
             .FirstOrDefaultAsync(ct);
     }
+
+    /// <summary>
+    /// The member an in-app channel delivers to: the member it names, or the caller when it names
+    /// none. Null when it names a subject who may not receive (<see cref="InAppRecipients"/>).
+    /// </summary>
+    /// <remarks>
+    /// A stored recipient who has since left the site, or can no longer receive, goes to the
+    /// caller as well, rather than failing the save: the editor sends back the destination it
+    /// loaded, so refusing it would leave the rule uneditable, and keeping it would leave the
+    /// channel reaching no one.
+    /// </remarks>
+    private static async Task<Guid?> ResolveInAppRecipientAsync(
+        NocturneDbContext db, string? destination, IReadOnlySet<string> storedRecipients, Guid? subjectId,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(destination)
+            && await InAppRecipients.ResolveAsync(db, db.TenantId, destination, ct) is { } named)
+        {
+            return named;
+        }
+
+        if (!string.IsNullOrWhiteSpace(destination) && !storedRecipients.Contains(destination))
+        {
+            return null;
+        }
+
+        return await InAppRecipients.ResolveAsync(db, db.TenantId, subjectId?.ToString(), ct);
+    }
+
+    /// <summary>The in-app recipients stored on <paramref name="channels"/>.</summary>
+    public static HashSet<string> InAppRecipientsOf(IEnumerable<AlertRuleChannelEntity> channels) =>
+        channels.Where(c => c.ChannelType == ChannelType.InApp).Select(c => c.Destination).ToHashSet();
+
+    public static readonly IReadOnlySet<string> NoStoredRecipients = new HashSet<string>();
 
     /// <summary>Serialised name of a channel type, so error text matches the request wire format.</summary>
     private static string WireName(ChannelType channelType) =>

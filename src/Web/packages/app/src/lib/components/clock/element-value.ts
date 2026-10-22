@@ -19,7 +19,7 @@ import { readingAgePhrase } from "./staleness";
  * The face's units. A face saved before it carried units reads as mg/dL, as the
  * API defaults it.
  */
-function faceUnits(settings: ClockSettings | undefined): GlucoseUnits {
+export function faceUnits(settings: ClockSettings | undefined): GlucoseUnits {
   return settings?.glucoseUnits === "mmol" ? "mmol" : "mg/dl";
 }
 

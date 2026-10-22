@@ -9,10 +9,12 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Tests.TestDoubles;
 using OpenTelemetry;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Trace;
@@ -58,6 +60,84 @@ public partial class CredentialPathRedactionTests : IClassFixture<CredentialPath
         logs.Should().Contain(l => l.AttributeValues.Contains(redactedPath), "the request line carries the path");
         logs.SelectMany(l => l.AllText).Should().NotContain(text => text.Contains(token));
         spans.SelectMany(s => s.AllText).Should().NotContain(text => text.Contains(token));
+    }
+
+    [Theory]
+    [InlineData("token", "?token={0}&count=1", "?token={token}&count=1")]
+    [InlineData("secret", "?count=1&secret={0}", "?count=1&secret={secret}")]
+    [InlineData("TOKEN", "?TOKEN={0}", "?TOKEN={token}")]
+    [InlineData("access_token", "?access_token={0}", "?access_token={access_token}")]
+    public async Task QueryCredential_LeavesNoValueInLogsScopesOrSpans(string name, string queryFormat, string redactedQuery)
+    {
+        var guid = Guid.NewGuid().ToString("N");
+        var secret = $"noc_{guid}%2Fz";
+
+        var (logs, spans) = await SendAsync("GET", "/api/v1/entries" + string.Format(queryFormat, secret), "/api/v1/entries");
+
+        logs.Should().Contain(
+            l => l.Message.StartsWith("Request starting") && l.Message.Contains("/api/v1/entries" + redactedQuery),
+            $"the {name} value is replaced and the parameter name kept"
+        );
+        logs.SelectMany(l => l.AllText).Should().NotContain(text => text.Contains(guid));
+        spans.SelectMany(s => s.AllText).Should().NotContain(text => text.Contains(guid));
+    }
+
+    [Fact]
+    public void UriLogAttribute_HasItsQueryCredentialRedacted()
+    {
+        var guid = Guid.NewGuid().ToString("N");
+        var uri = new Uri($"https://nightscout.example/api/v1/entries?count=1&token=noc_{guid}");
+        var logger = _factory.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Nocturne.Tests.UriAttribute");
+
+        logger.LogWarning("Sending request to Nightscout: {Uri}", uri);
+
+        var log = _factory.Logs.Single(l => l.Message.StartsWith("Sending request to Nightscout"));
+        log.Message.Should().Contain("?count=1&token={token}");
+        log.AllText.Should().NotContain(text => text.Contains(guid));
+    }
+
+    [Fact]
+    public void RecordMixingARedactedValueAndAnUntouchedUri_LogsWithoutThrowing()
+    {
+        var guid = Guid.NewGuid().ToString("N");
+        var clean = new Uri("https://nightscout.example/api/v1/entries?count=1");
+        var logger = _factory.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Nocturne.Tests.MixedAttributes");
+
+        var log = () => logger.LogWarning("Forwarding {Path} to {Uri}", $"?token=noc_{guid}", clean);
+
+        log.Should().NotThrow();
+        var record = _factory.Logs.Single(l => l.Message.StartsWith("Forwarding"));
+        record.Message.Should().Be("Forwarding ?token={token} to https://nightscout.example/api/v1/entries?count=1");
+        record.AllText.Should().NotContain(text => text.Contains(guid));
+    }
+
+    [Theory]
+    [InlineData("/api/v1/entries?count=1&find[type]=sgv", null)]
+    [InlineData("/api/v1/entries?tokens=abc&mytoken=abc", null)]
+    [InlineData("/api/v1/entries", null)]
+    [InlineData("?token=", null)]
+    [InlineData("/api/v1/entries?a=1&token=abc&b=2#top", "/api/v1/entries?a=1&token={token}&b=2#top")]
+    [InlineData("/api/v1/entries?Secret=a%20b&token=c", "/api/v1/entries?Secret={secret}&token={token}")]
+    [InlineData("?token=abc", "?token={token}")]
+    [InlineData("/hubs/data?access_token=eyJ.abc.def", "/hubs/data?access_token={access_token}")]
+    [InlineData("?a=#&token=abc", "?a=#&token={token}")]
+    [InlineData("?%74oken=abc&se%63ret=def", "?%74oken={token}&se%63ret={secret}")]
+    [InlineData("/api/v1/entries?token=abc&token=def", "/api/v1/entries?token={token}&token={token}")]
+    public void Query_RedactsOnlyCredentialValues(string input, string? expected)
+    {
+        var redacted = new CredentialPathRedactor().TryRedact(input, out var result);
+
+        redacted.Should().Be(expected is not null);
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CredentialRouteWithQueryCredential_RedactsBoth()
+    {
+        var redactor = CredentialRouteRedactor.Create();
+
+        redactor.Redact("/api/v4/alert-invites/abc?token=def")
+            .Should().Be("/api/v4/alert-invites/{token}?token={token}");
     }
 
     [Fact]

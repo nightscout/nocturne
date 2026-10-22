@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
@@ -12,7 +11,7 @@ namespace Nocturne.API.Services.BackgroundServices;
 /// Runs every 24 hours, deleting in batches to avoid WAL bloat.
 /// </summary>
 public class SoftDeleteCleanupService(
-    IDbContextFactory<NocturneDbContext> contextFactory,
+    INocturneDbContextFactory contextFactory,
     IConfiguration configuration,
     ILogger<SoftDeleteCleanupService> logger) : BackgroundService
 {
@@ -59,28 +58,22 @@ public class SoftDeleteCleanupService(
     /// </summary>
     internal async Task PurgeExpiredRecordsAsync(CancellationToken ct)
     {
-        await using var configContext = await contextFactory.CreateDbContextAsync(ct);
-
-        // Get per-tenant retention config
-        var configs = await configContext.TenantDataRetentionConfig
-            .IgnoreQueryFilters()
-            .Select(c => new { c.TenantId, c.SoftDeleteRetentionDays })
-            .ToListAsync(ct);
-
-        // Also get all tenants that might have soft-deleted records but no config
-        var allTenantIds = await configContext.Tenants
-            .Select(t => t.Id)
-            .ToListAsync(ct);
-
-        var configMap = configs.ToDictionary(c => c.TenantId, c => c.SoftDeleteRetentionDays);
-        var tables = SoftDeletableTables(configContext.Model);
+        List<Guid> allTenantIds;
+        IReadOnlyList<string> tables;
+        await using (var platform = await contextFactory.CreatePlatformAsync(ct))
+        {
+            allTenantIds = await platform.Tenants
+                .Select(t => t.Id)
+                .ToListAsync(ct);
+            tables = SoftDeletableTables(platform.Model);
+        }
 
         foreach (var tenantId in allTenantIds)
         {
             try
             {
                 var retentionDays = SoftDeleteRetentionPolicy.ResolveDays(
-                    configMap.GetValueOrDefault(tenantId), configuration);
+                    await ReadConfiguredDaysAsync(tenantId, ct), configuration);
                 var minAge = TimeSpan.FromDays(retentionDays);
 
                 var totalDeleted = 0;
@@ -110,6 +103,14 @@ public class SoftDeleteCleanupService(
         }
     }
 
+    private async Task<int?> ReadConfiguredDaysAsync(Guid tenantId, CancellationToken ct)
+    {
+        await using var db = await contextFactory.CreateForTenantAsync(tenantId, ct);
+        return await db.TenantDataRetentionConfig
+            .Select(c => c.SoftDeleteRetentionDays)
+            .FirstOrDefaultAsync(ct);
+    }
+
     /// <summary>
     /// Deletes records from the specified table whose deleted_at is older than the window.
     /// </summary>
@@ -128,7 +129,7 @@ public class SoftDeleteCleanupService(
     /// <returns>The number of links deleted.</returns>
     private async Task<int> CleanupOrphanedLinkedRecordsAsync(Guid tenantId, CancellationToken ct)
     {
-        await using var db = await contextFactory.CreateTenantPinnedContextAsync(tenantId, ct);
+        await using var db = await contextFactory.CreateForTenantAsync(tenantId, ct);
         return await DeduplicationService.DeleteOrphanedLinksAsync(db, ct);
     }
 }

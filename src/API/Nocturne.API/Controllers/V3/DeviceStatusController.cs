@@ -83,32 +83,18 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                 ?? ConvertV3FilterToV1Find(parameters.Filter);
 
-            // Determine sort direction from sort$desc query parameter
-            // Nightscout V3: sort$desc=field means descending (newest first)
-            // reverseResults=false means descending, reverseResults=true means ascending
-            var query = HttpContext!.Request.Query;
-            var hasSortDesc = query.ContainsKey("sort$desc");
-            var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
+            var deviceStatusList = (
+                await _projection.GetAsync(
+                    parameters.Limit,
+                    parameters.Offset,
+                    findQuery,
+                    cancellationToken,
+                    parameters.Sort.Descending,
+                    ReadSortFieldOf(parameters.Sort)
+                )
+            ).ToList();
 
-            // Project device status from V4 snapshot tables
-            var deviceStatusListRaw = await _projection.GetAsync(
-                parameters.Limit,
-                parameters.Offset,
-                findQuery,
-                cancellationToken
-            );
-
-            var deviceStatusList = deviceStatusListRaw.ToList();
-
-            // Reverse results if needed (projection returns newest-first by default)
-            if (reverseResults)
-            {
-                deviceStatusList.Reverse();
-            }
-
-            var totalCount = await _projection.CountAsync(findQuery, cancellationToken);
-
-            var mappedData = deviceStatusList.Select(MapToV3Dto);
+            var mappedData = deviceStatusList.Select(MapToV3Dto).ToList();
 
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(deviceStatusList.Cast<object>());
@@ -124,7 +110,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             var response = CreateV3CollectionResponse(
                 mappedData,
                 parameters,
-                totalCount,
                 lastModified
             );
 
@@ -181,12 +166,13 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// </summary>
     /// <param name="deviceStatusData">Device status data to create (single object or array)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created device status records</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for one document; the created records for an array.</returns>
     [HttpPost]
     [Authorize]
     [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v3/devicestatus")]
-    [ProducesResponseType(typeof(DeviceStatus[]), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -256,16 +242,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                     );
                     if (existing != null)
                     {
-                        var existingIdentifier = MongoObjectId.Coerce(existing.Id);
-                        return Ok(
-                            new
-                            {
-                                status = 200,
-                                identifier = existingIdentifier,
-                                isDeduplication = true,
-                                deduplicatedIdentifier = existingIdentifier,
-                            }
-                        );
+                        return V3Deduplicated(existing.Id, existing.SrvModified);
                     }
                 }
             }
@@ -299,11 +276,17 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
             await _events.OnCreatedAsync(projectedResults, cancellationToken);
 
-            return CreatedAtAction(
-                nameof(GetDeviceStatusById),
-                new { id = projectedResults.First().Id },
-                new V3Envelope<object> { Result = projectedResults.Select(MapToV3Dto).ToList() }
-            );
+            if (deviceStatusData.ValueKind == JsonValueKind.Array)
+            {
+                return CreatedAtAction(
+                    nameof(GetDeviceStatusById),
+                    new { id = projectedResults.First().Id },
+                    new V3Envelope<object> { Result = projectedResults.Select(MapToV3Dto).ToList() }
+                );
+            }
+
+            var created = projectedResults.First();
+            return V3Created(nameof(GetDeviceStatusById), created.Id);
         }
         catch (ArgumentException ex)
         {

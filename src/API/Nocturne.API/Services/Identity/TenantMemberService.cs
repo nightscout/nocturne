@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -21,23 +21,23 @@ namespace Nocturne.API.Services.Identity;
 /// <seealso cref="ITenantMemberService"/>
 public class TenantMemberService : ITenantMemberService
 {
-    private readonly IDbContextFactory<NocturneDbContext> _factory;
+    private readonly INocturneDbContextFactory _factory;
 
-    public TenantMemberService(IDbContextFactory<NocturneDbContext> factory)
+    public TenantMemberService(INocturneDbContextFactory factory)
     {
         _factory = factory;
     }
 
     public async Task<bool> IsMemberAsync(Guid subjectId, Guid tenantId, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateTenantPinnedContextAsync(tenantId, ct);
+        await using var context = await _factory.CreateForTenantAsync(tenantId, ct);
         return await context.TenantMembers.AsNoTracking()
             .AnyAsync(tm => tm.SubjectId == subjectId && tm.TenantId == tenantId, ct);
     }
 
     public async Task<List<Guid>> GetTenantIdsForSubjectAsync(Guid subjectId, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateSubjectPinnedContextAsync(subjectId, ct);
+        await using var context = await _factory.CreateForSubjectAsync(subjectId, ct);
         return await context.TenantMembers.AsNoTracking()
             .Where(tm => tm.SubjectId == subjectId)
             .Select(tm => tm.TenantId)
@@ -46,7 +46,7 @@ public class TenantMemberService : ITenantMemberService
 
     public async Task<List<string>> GetMemberRoleNamesAsync(Guid subjectId, Guid tenantId, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateTenantPinnedContextAsync(tenantId, ct);
+        await using var context = await _factory.CreateForTenantAsync(tenantId, ct);
         return await context.TenantMembers.AsNoTracking()
             .Where(tm => tm.SubjectId == subjectId && tm.TenantId == tenantId)
             .SelectMany(tm => tm.MemberRoles)
@@ -58,7 +58,7 @@ public class TenantMemberService : ITenantMemberService
     public async Task<TenantMemberAccess?> GetMemberAccessAsync(
         Guid subjectId, Guid tenantId, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateTenantPinnedContextAsync(tenantId, ct);
+        await using var context = await _factory.CreateForTenantAsync(tenantId, ct);
         var membership = await context.TenantMembers.AsNoTracking()
             .Include(tm => tm.MemberRoles)
                 .ThenInclude(mr => mr.TenantRole)

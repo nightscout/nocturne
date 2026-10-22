@@ -22,13 +22,15 @@ public class HistoryPagedIndexTests
     {
         var paged = LegacyTreatmentTables.All
             .Except(LegacyTreatmentTables.StateSpanTables)
-            .Select(t => t.GetType().GetGenericArguments()[1])
+            .Select(t => t is LegacyProfileActivationTable
+                ? typeof(ProfileActivationEntity)
+                : t.GetType().GetGenericArguments()[1])
             .Concat(DeviceStatusHistoryTables)
             .Concat(EntryHistoryTables)
             .Concat(ProfileHistoryTables)
             .ToList();
 
-        paged.Should().HaveCount(19, "an empty set would let the equality below pass vacuously");
+        paged.Should().HaveCount(20, "an empty set would let the equality below pass vacuously");
 
         var indexed = Model().GetEntityTypes()
             .Where(e => e.GetIndexes().Any(IsHistoryIndex))

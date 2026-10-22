@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -33,7 +34,7 @@ public class TrackerAlertRuleSyncServiceTests
             db.Database.EnsureCreated();
         }
 
-        var factory = new TestTenantDbContextFactory(_options, _tenantId);
+        var factory = new TestNocturneDbContextFactory(_options, _tenantId);
 
         var classifier = new Mock<IRuleScopeClassifier>();
         classifier
@@ -48,7 +49,7 @@ public class TrackerAlertRuleSyncServiceTests
             factory,
             classifier.Object,
             _referenceService.Object,
-            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(Db())),
+            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(Db().AsFactory())),
             new AlertRuleRetirement(_excursionTracker.Object, _resolutionHandler.Object),
             NullLogger<TrackerAlertRuleSyncService>.Instance);
     }
@@ -59,20 +60,49 @@ public class TrackerAlertRuleSyncServiceTests
 
     private NocturneDbContext Db() => new(_options) { TenantId = _tenantId };
 
+    private readonly Guid _definitionOwner = Guid.NewGuid();
+
+    private async Task AddMemberAsync(Guid subjectId, bool isSystemSubject = false, bool isOwner = false)
+    {
+        await using var db = Db();
+        if (await db.Subjects.AnyAsync(s => s.Id == subjectId))
+            return;
+        var membership = new TenantMemberEntity
+        {
+            Id = Guid.NewGuid(), TenantId = _tenantId, SubjectId = subjectId, DirectPermissions = ["*"],
+        };
+        db.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Member", IsSystemSubject = isSystemSubject });
+        db.TenantMembers.Add(membership);
+        if (isOwner)
+        {
+            var role = new TenantRoleEntity { Id = Guid.NewGuid(), TenantId = _tenantId, Name = "Owner", Slug = "owner" };
+            db.TenantRoles.Add(role);
+            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
+            {
+                Id = Guid.NewGuid(), TenantMemberId = membership.Id, TenantRoleId = role.Id,
+            });
+        }
+        await db.SaveChangesAsync();
+    }
+
     private async Task<TrackerDefinitionEntity> SeedDefinitionAsync(
         TrackerMode mode = TrackerMode.Duration,
         int? lifespanHours = 240,
         TrackerCategory category = TrackerCategory.Consumable,
         double? lowReservoirUnits = null,
         NotificationUrgency lowReservoirUrgency = NotificationUrgency.Warn,
+        string? userId = null,
         params TrackerNotificationThresholdEntity[] thresholds)
     {
+        if (userId is null)
+            await AddMemberAsync(_definitionOwner);
+
         await using var db = Db();
         var definition = new TrackerDefinitionEntity
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
-            UserId = "user-1",
+            UserId = userId ?? _definitionOwner.ToString(),
             Name = "Sensor",
             Mode = mode,
             LifespanHours = lifespanHours,
@@ -140,7 +170,7 @@ public class TrackerAlertRuleSyncServiceTests
     }
 
     [Fact]
-    public async Task Sync_maps_urgency_to_severity_and_push_to_channels()
+    public async Task Sync_routes_every_threshold_to_the_definition_owner_in_app_and_never_to_web_push()
     {
         var definition = await SeedDefinitionAsync(
             thresholds:
@@ -157,13 +187,16 @@ public class TrackerAlertRuleSyncServiceTests
         var info = rules.Single(r => Params(r).GetProperty("minutes").GetInt32() == 60);
         info.Severity.Should().Be(AlertRuleSeverity.Info);
         info.AllowThroughDnd.Should().BeFalse();
-        info.Channels.Select(c => c.ChannelType).Should().Equal(ChannelType.InApp);
-
         var urgent = rules.Single(r => Params(r).GetProperty("minutes").GetInt32() == 120);
         urgent.Severity.Should().Be(AlertRuleSeverity.Critical);
         urgent.AllowThroughDnd.Should().BeTrue();
-        urgent.Channels.Select(c => c.ChannelType)
-            .Should().BeEquivalentTo([ChannelType.InApp, ChannelType.WebPush]);
+
+        foreach (var rule in new[] { info, urgent })
+        {
+            rule.Channels.Should().ContainSingle()
+                .Which.Should().Match<AlertRuleChannelEntity>(c =>
+                    c.ChannelType == ChannelType.InApp && c.Destination == definition.UserId);
+        }
     }
 
     [Fact]
@@ -550,6 +583,23 @@ public class TrackerAlertRuleSyncServiceTests
     }
 
     [Fact]
+    public async Task Sync_routes_a_definition_owned_by_the_device_account_to_the_tenants_owner()
+    {
+        var devices = Guid.NewGuid();
+        var owner = Guid.NewGuid();
+        await AddMemberAsync(devices, isSystemSubject: true);
+        await AddMemberAsync(owner, isOwner: true);
+        var definition = await SeedDefinitionAsync(userId: devices.ToString(), thresholds: [Threshold(1)]);
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using var db = Db();
+        var rule = await db.AlertRules.Include(r => r.Channels).SingleAsync();
+        rule.Channels.Should().ContainSingle()
+            .Which.Destination.Should().Be(owner.ToString());
+    }
+
+    [Fact]
     public async Task Sync_reservoir_definition_with_units_creates_level_rule_alongside_age_rules()
     {
         var definition = await SeedDefinitionAsync(
@@ -570,7 +620,9 @@ public class TrackerAlertRuleSyncServiceTests
         p.GetProperty("operator").GetString().Should().Be("<");
         p.GetProperty("value").GetDouble().Should().Be(20);
         level.Severity.Should().Be(AlertRuleSeverity.Critical);
-        level.Channels.Select(c => c.ChannelType).Should().Equal(ChannelType.InApp);
+        level.Channels.Should().ContainSingle()
+            .Which.Should().Match<AlertRuleChannelEntity>(c =>
+                c.ChannelType == ChannelType.InApp && c.Destination == definition.UserId);
 
         rules.Should().ContainSingle(r => r.ConditionType == AlertConditionType.TrackerAge);
     }
@@ -696,10 +748,10 @@ public class TrackerAlertRuleSyncServiceTests
         (await db.AlertRules.CountAsync()).Should().Be(0);
     }
 
-    private sealed class TestTenantDbContextFactory(
-        DbContextOptions<NocturneDbContext> options, Guid tenantId) : ITenantDbContextFactory
+    private sealed class TestNocturneDbContextFactory(
+        DbContextOptions<NocturneDbContext> options, Guid tenantId) : SingleReaderDbContextFactory
     {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) =>
             ValueTask.FromResult(new NocturneDbContext(options) { TenantId = tenantId });
     }
 }

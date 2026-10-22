@@ -1,7 +1,12 @@
+using System.Runtime.ExceptionServices;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.Uploads;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -37,6 +42,7 @@ public class TreatmentService : ITreatmentService
     private readonly IDataEventSink<Treatment> _events;
     private readonly IPatientInsulinRepository _insulinRepo;
     private readonly ILogger<TreatmentService> _logger;
+    private readonly IRejectedUploadRecorder? _rejected;
 
     /// <summary>
     /// Bolus event types that should be enriched with the patient's primary bolus insulin context.
@@ -67,14 +73,17 @@ public class TreatmentService : ITreatmentService
     /// <param name="events">The event sink for broadcasting create/update/delete events.</param>
     /// <param name="insulinRepo">The patient insulin repository for enriching treatments with insulin context.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="rejected">Keeps the treatments a create refused; none in tests that do not look.</param>
     public TreatmentService(
         ITreatmentStore store,
         ITreatmentDecomposer decomposer,
         ITreatmentCache cache,
         IDataEventSink<Treatment> events,
         IPatientInsulinRepository insulinRepo,
-        ILogger<TreatmentService> logger)
+        ILogger<TreatmentService> logger,
+        IRejectedUploadRecorder? rejected = null)
     {
+        _rejected = rejected;
         _store = store;
         _decomposer = decomposer;
         _cache = cache;
@@ -123,20 +132,9 @@ public class TreatmentService : ITreatmentService
         => _store.IsDeletedByUserAsync(id, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<IEnumerable<Treatment>> GetTreatmentsWithAdvancedFilterAsync(
-        int count, int skip, string? findQuery, bool reverseResults,
-        CancellationToken cancellationToken = default)
-    {
-        var query = new TreatmentQuery
-        {
-            Find = findQuery,
-            Count = count,
-            Skip = skip,
-            ReverseResults = reverseResults
-        };
-
-        return await _store.QueryAsync(query, cancellationToken);
-    }
+    public async Task<IEnumerable<Treatment>> QueryTreatmentsAsync(
+        TreatmentQuery query, CancellationToken cancellationToken = default) =>
+        await _store.QueryAsync(query, cancellationToken);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> GetTreatmentsByRangeAsync(
@@ -167,13 +165,60 @@ public class TreatmentService : ITreatmentService
 
         await PopulateInsulinContextAsync(treatmentList, cancellationToken);
 
-        var created = await _store.CreateAsync(treatmentList, cancellationToken);
+        BulkWrite<Treatment> created;
+        var stored = new List<Treatment>();
+        var completed = false;
+        try
+        {
+            created = await _store.CreateAsync(treatmentList, cancellationToken, stored);
+            completed = true;
+        }
+        catch (TreatmentBatchFailedException failed)
+        {
+            // The treatments before the failing one are stored, so reads and write-back must see them.
+            await _cache.InvalidateAsync(CancellationToken.None);
+            completed = true;
+            await _events.OnCreatedAsync(failed.Written, CancellationToken.None);
+            await RecordRejectedAsync(failed.Written);
+            if (failed.InnerException is OperationCanceledException canceled && cancellationToken.IsCancellationRequested)
+                ExceptionDispatchInfo.Throw(canceled);
+            throw;
+        }
+        finally
+        {
+            // An exception the store does not expect still leaves what it stored before it.
+            if (!completed)
+            {
+                await _cache.InvalidateAsync(CancellationToken.None);
+                if (stored.Count > 0)
+                    await _events.OnCreatedAsync(stored, CancellationToken.None);
+            }
+        }
 
         await _cache.InvalidateAsync(cancellationToken);
         await _events.OnCreatedAsync(created, cancellationToken);
+        await RecordRejectedAsync(created);
 
         return created;
     }
+
+    /// <summary>
+    /// Keeps an update the store refused for its data as a rejected upload, as a create's refusal
+    /// is kept, and returns what tells the caller it was refused.
+    /// </summary>
+    private async Task<TreatmentRefusedException> RefuseAsync(Treatment treatment, string reason, Exception ex)
+    {
+        var refusal = $"{reason}; parts of the treatment may be stored";
+        _logger.LogRefused(nameof(Treatment), reason, treatment.DataSource ?? "api", ex);
+        if (_rejected is not null)
+            await _rejected.RecordTreatmentsAsync([new BulkWriteRejection<Treatment>(0, treatment, refusal)], CancellationToken.None);
+        return new TreatmentRefusedException(refusal, ex);
+    }
+
+    private Task RecordRejectedAsync(BulkWrite<Treatment> written) =>
+        _rejected is not null && written.Rejected.Count > 0
+            ? _rejected.RecordTreatmentsAsync(written.Rejected, CancellationToken.None)
+            : Task.CompletedTask;
 
     /// <inheritdoc />
     /// <returns>The updated <see cref="Treatment"/>, or <see langword="null"/> if not found.</returns>
@@ -186,6 +231,14 @@ public class TreatmentService : ITreatmentService
         {
             updated = await _store.UpdateAsync(id, treatment, cancellationToken);
             completed = true;
+        }
+        catch (DbUpdateException ex) when (StoreRefusal.ReasonFor(ex) is { } reason)
+        {
+            throw await RefuseAsync(treatment, reason, ex);
+        }
+        catch (TreatmentMappingException ex)
+        {
+            throw await RefuseAsync(treatment, ex.Message, ex);
         }
         finally
         {

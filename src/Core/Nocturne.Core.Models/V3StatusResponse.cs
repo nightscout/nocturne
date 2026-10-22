@@ -19,9 +19,6 @@ public class V3StatusResponse
     /// </summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Server version
-    /// </summary>
     public string Version { get; set; } = string.Empty;
 
     /// <summary>
@@ -49,9 +46,6 @@ public class V3StatusResponse
     /// </summary>
     public Dictionary<string, string> ApiPermissions { get; set; } = new();
 
-    /// <summary>
-    /// API enabled status - typically true
-    /// </summary>
     public bool ApiEnabled { get; set; } = true;
 
     /// <summary>
@@ -59,9 +53,6 @@ public class V3StatusResponse
     /// </summary>
     public bool CareportalEnabled { get; set; } = true;
 
-    /// <summary>
-    /// Head of repository
-    /// </summary>
     public string Head { get; set; } = string.Empty;
 
     /// <summary>
@@ -75,9 +66,6 @@ public class V3StatusResponse
     public ExtendedStatusInfo Extended { get; set; } = new();
 }
 
-/// <summary>
-/// Storage backend information
-/// </summary>
 public class StorageInfo
 {
     /// <summary>
@@ -86,9 +74,6 @@ public class StorageInfo
     [System.Text.Json.Serialization.JsonPropertyName("storage")]
     public string StorageType { get; set; } = "postgresql";
 
-    /// <summary>
-    /// Storage backend version
-    /// </summary>
     public string Version { get; set; } = string.Empty;
 }
 
@@ -97,9 +82,6 @@ public class StorageInfo
 /// </summary>
 public class ExtendedStatusInfo
 {
-    /// <summary>
-    /// Authorization information
-    /// </summary>
     public AuthorizationInfo Authorization { get; set; } = new();
 
     /// <summary>
@@ -123,19 +105,10 @@ public class ExtendedStatusInfo
     public Dictionary<string, bool> ApiVersions { get; set; } = new();
 }
 
-/// <summary>
-/// Authorization information for the current session
-/// </summary>
 public class AuthorizationInfo
 {
-    /// <summary>
-    /// Whether the request is authorized
-    /// </summary>
     public bool IsAuthorized { get; set; }
 
-    /// <summary>
-    /// Authorization scope/permissions
-    /// </summary>
     public List<string> Scope { get; set; } = new();
 
     /// <summary>

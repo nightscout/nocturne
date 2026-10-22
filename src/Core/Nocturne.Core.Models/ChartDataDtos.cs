@@ -66,7 +66,10 @@ public class DashboardChartData
     /// <summary>Pump mode spans from <see cref="StateSpan"/> records with <see cref="StateSpanCategory.PumpMode"/>.</summary>
     public List<ChartStateSpanDto> PumpModeSpans { get; set; } = new();
 
-    /// <summary>Profile spans from <see cref="StateSpan"/> records with <see cref="StateSpanCategory.Profile"/>.</summary>
+    /// <summary>
+    /// The stretches of the window each profile activation applies over, each carrying its
+    /// <see cref="ChartStateSpanDto.ProfileActivation"/>.
+    /// </summary>
     public List<ChartStateSpanDto> ProfileSpans { get; set; } = new();
 
     /// <summary>Override spans from <see cref="StateSpan"/> records with <see cref="StateSpanCategory.Override"/>.</summary>
@@ -80,6 +83,13 @@ public class DashboardChartData
 
     /// <summary>Basal delivery spans with rate and origin information.</summary>
     public List<BasalDeliverySpanDto> BasalDeliverySpans { get; set; } = new();
+
+    /// <summary>
+    /// When the pump was last known to be in contact, as of the end of the window: the later of the
+    /// pump clock of the newest pump status and the end of the newest basal delivery span. Null when
+    /// there is neither.
+    /// </summary>
+    public long? LastPumpSyncMills { get; set; }
 
     // === Basal injection markers ===
 
@@ -296,6 +306,9 @@ public class ChartStateSpanDto
     public long? EndMills { get; set; }
     public ChartColor Color { get; set; }
     public Dictionary<string, object>? Metadata { get; set; }
+
+    /// <summary>The activation a <see cref="StateSpanCategory.Profile"/> stretch applies.</summary>
+    public V4.ProfileActivationDto? ProfileActivation { get; set; }
 }
 
 /// <summary>

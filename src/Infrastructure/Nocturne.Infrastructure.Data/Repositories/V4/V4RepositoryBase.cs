@@ -37,7 +37,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     where TEntity : class, IV4TimeSeriesEntity, IAuditable, ISystemTimestamped
 {
     /// <summary>Tenant-scoped context factory. Exposed so subclasses can implement type-specific queries.</summary>
-    protected ITenantDbContextFactory ContextFactory { get; }
+    protected INocturneDbContextFactory ContextFactory { get; }
 
     /// <summary>
     /// Actor/request metadata for the audited soft-delete path. Exposed so subclasses' type-specific
@@ -60,13 +60,14 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// Legacy <see cref="Entry"/> sink fired for glucose-family writes alongside the native V4 broadcast,
     /// so V1/V3 clients on the legacy <c>entries</c> collection still see realtime updates. Optional: when
     /// null (e.g. a non-glucose type or a repo constructed without DI) no entries projection is fired.
-    /// Gated to <see cref="WriteOrigin.Live"/> in <see cref="RaiseEntriesProjectionAsync"/>.
+    /// The projection is gated to <see cref="WriteOrigin.Live"/> in <see cref="RaiseEntriesProjectionAsync"/>;
+    /// <see cref="RaiseEntriesWrittenAsync"/> is not.
     /// </summary>
     private readonly IDataEventSink<Entry>? _entrySink;
 
     /// <summary>Initializes the base with the tenant-scoped context factory, audit context, logger, (optional) broadcaster, and (optional) legacy entry sink.</summary>
     protected V4RepositoryBase(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger logger,
         IV4RecordBroadcaster<TModel>? broadcaster = null,
@@ -96,9 +97,10 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         IReadOnlyList<TModel> models, CancellationToken ct) => Task.FromResult(models);
 
     /// <summary>
-    /// Fires the native V4 broadcast for a just-committed write — but only for <see cref="WriteOrigin.Live"/>
-    /// writes (backfill imports stay silent so clients aren't flooded). The single gate every mutating
-    /// method routes through, so the origin rule lives in exactly one place.
+    /// Raises the events for a just-committed write. The native V4 broadcast and the legacy entry
+    /// projection fire only for <see cref="WriteOrigin.Live"/> writes (backfill imports stay silent so
+    /// clients aren't flooded); <see cref="RaiseEntriesWrittenAsync"/> fires for every origin. Every
+    /// mutating method routes through here, so the origin rule lives in exactly one place.
     /// </summary>
     protected async Task RaiseBroadcastAsync(
         IReadOnlyList<TModel> created,
@@ -109,6 +111,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     {
         await V4RecordBroadcast.RaiseAsync(
             _broadcaster, created, updated, deleted.Select(m => m.Id).ToList(), origin, ct);
+        await RaiseEntriesWrittenAsync(created, updated, deleted, ct);
         await RaiseEntriesProjectionAsync(created, updated, deleted, origin, ct);
         await RaiseLiveCreatedAsync(created, origin, ct);
         await RaiseLiveDeletedAsync(deleted, origin, ct);
@@ -158,6 +161,28 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             return;
 
         await _entrySink.OnBulkDeletedAsync(deletedCount, ct);
+    }
+
+    /// <summary>
+    /// Tells the legacy entry sink what a committed write touched, for every <see cref="WriteOrigin"/>
+    /// and without the canonical-stream filter, so a sink that keeps derived data current sees
+    /// backfills, imports and non-canonical streams the realtime projection leaves out.
+    /// </summary>
+    private async Task RaiseEntriesWrittenAsync(
+        IReadOnlyList<TModel> created,
+        IReadOnlyList<TModel> updated,
+        IReadOnlyList<TModel> deleted,
+        CancellationToken ct)
+    {
+        if (_entrySink is null)
+            return;
+
+        var written = created.Concat(updated).Concat(deleted)
+            .Select(ProjectToLegacyEntry)
+            .OfType<Entry>()
+            .ToList();
+        if (written.Count > 0)
+            await _entrySink.OnWrittenAsync(written, ct);
     }
 
     /// <summary>
@@ -220,12 +245,18 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = InWindow(ctx.Set<TEntity>().AsNoTracking(), from, to, device);
+        var query = InWindow(Listed(ctx.Set<TEntity>().AsNoTracking()), from, to, device);
         if (source != null) query = query.Where(e => e.DataSource == source);
         query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(ToDomain);
     }
+
+    /// <summary>
+    /// The rows <see cref="GetAsync"/> and <see cref="CountAsync"/> list. A type whose table also
+    /// holds rows that are not records of their own narrows it.
+    /// </summary>
+    protected virtual IQueryable<TEntity> Listed(IQueryable<TEntity> rows) => rows;
 
     /// <summary>
     /// The time window and device filter of <see cref="GetAsync"/>, shared with the counts that must
@@ -673,7 +704,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public virtual async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ApplyReadVisibility(ctx.Set<TEntity>().AsNoTracking().AsQueryable(), ctx);
+        var query = ApplyReadVisibility(Listed(ctx.Set<TEntity>().AsNoTracking()), ctx);
         if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
         if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
         return await query.CountAsync(ct);
@@ -728,6 +759,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await HistoryPage.GetAsync(
+            ctx,
             DedupRecordType is { } recordType
                 ? ctx.Set<TEntity>().IncludingDeleted().AsNoTracking().ExcludeNonPrimaryKeepingDeleted(ctx, recordType)
                 : ctx.Set<TEntity>().IncludingDeleted().AsNoTracking(),

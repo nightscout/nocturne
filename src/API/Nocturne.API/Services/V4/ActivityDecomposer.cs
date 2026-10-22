@@ -10,6 +10,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.V4;
 
@@ -26,19 +27,18 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 {
     private const string XDripHeartRateType = "hr-bpm";
 
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IStateSpanRepository _stateSpanRepository;
     private readonly ILogger<ActivityDecomposer> _logger;
 
-    /// <param name="dbContext">EF Core context used for direct entity read/write operations.</param>
     /// <param name="stateSpanRepository">Repository for bulk-creating regular activities as StateSpans.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public ActivityDecomposer(
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         IStateSpanRepository stateSpanRepository,
         ILogger<ActivityDecomposer> logger)
     {
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _stateSpanRepository = stateSpanRepository;
         _logger = logger;
     }
@@ -153,19 +153,22 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         WriteOrigin origin, CancellationToken ct = default
     )
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var result = new DecompositionResult { CorrelationId = Guid.CreateVersion7() };
         NormalizeMills(activity);
 
         if (IsHeartRate(activity))
         {
             await UpsertByOriginalIdAsync(
-                _dbContext.HeartRates, MapToHeartRate(activity), HeartRateMapper.ToEntity,
+                db,
+                db.HeartRates, MapToHeartRate(activity), HeartRateMapper.ToEntity,
                 HeartRateMapper.UpdateEntity, HeartRateMapper.ToDomainModel, result, ct);
         }
         else if (IsStepCount(activity))
         {
             await UpsertByOriginalIdAsync(
-                _dbContext.StepCounts, MapToStepCount(activity), StepCountMapper.ToEntity,
+                db,
+                db.StepCounts, MapToStepCount(activity), StepCountMapper.ToEntity,
                 StepCountMapper.UpdateEntity, StepCountMapper.ToDomainModel, result, ct);
         }
         else
@@ -183,6 +186,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     public async Task<DecompositionResult> DecomposeBatchAsync(
         IReadOnlyList<Activity> activities, WriteOrigin origin, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         if (activities.Count == 0)
             return new DecompositionResult();
 
@@ -205,11 +209,13 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         }
 
         await BulkUpsertByOriginalIdAsync(
-            _dbContext.HeartRates, heartRateList, HeartRateMapper.ToEntity,
+            db,
+            db.HeartRates, heartRateList, HeartRateMapper.ToEntity,
             HeartRateMapper.UpdateEntity, HeartRateMapper.ToDomainModel, result, ct);
 
         await BulkUpsertByOriginalIdAsync(
-            _dbContext.StepCounts, stepCountList, StepCountMapper.ToEntity,
+            db,
+            db.StepCounts, stepCountList, StepCountMapper.ToEntity,
             StepCountMapper.UpdateEntity, StepCountMapper.ToDomainModel, result, ct);
 
         if (regularActivities.Count > 0)
@@ -232,15 +238,16 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     /// <inheritdoc/>
     public async Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         Guid? recordId = Guid.TryParse(id, out var parsed) ? parsed : null;
 
-        return await _dbContext.UserTombstones<StateSpanEntity>().AnyAsync(
+        return await db.UserTombstones<StateSpanEntity>().AnyAsync(
                 s => ActivityCategoryNames.Contains(s.Category) && (s.OriginalId == id || s.Id == recordId), ct)
-            || await _dbContext.UserTombstones<SleepSessionEntity>().AnyAsync(
+            || await db.UserTombstones<SleepSessionEntity>().AnyAsync(
                 s => s.OriginalId == id || s.Id == recordId, ct)
-            || await _dbContext.UserTombstones<HeartRateEntity>().AnyAsync(
+            || await db.UserTombstones<HeartRateEntity>().AnyAsync(
                 h => h.OriginalId == id || h.Id == recordId, ct)
-            || await _dbContext.UserTombstones<StepCountEntity>().AnyAsync(
+            || await db.UserTombstones<StepCountEntity>().AnyAsync(
                 s => s.OriginalId == id || s.Id == recordId, ct);
     }
 
@@ -252,10 +259,11 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     /// </remarks>
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var deleted = 0;
         var now = DateTime.UtcNow;
 
-        var heartRateEntity = await _dbContext.HeartRates.FirstOrDefaultAsync(
+        var heartRateEntity = await db.HeartRates.FirstOrDefaultAsync(
             h => h.OriginalId == legacyId,
             ct
         );
@@ -265,7 +273,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
             deleted++;
         }
 
-        var stepCountEntity = await _dbContext.StepCounts.FirstOrDefaultAsync(
+        var stepCountEntity = await db.StepCounts.FirstOrDefaultAsync(
             s => s.OriginalId == legacyId,
             ct
         );
@@ -277,7 +285,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 
         if (deleted > 0)
         {
-            await _dbContext.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
             _logger.LogDebug(
                 "Deleted {Count} decomposed records for legacy activity {LegacyId}",
                 deleted,
@@ -359,6 +367,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     /// <see cref="ResolveBySyncKeyAsync{TEntity}"/> does.
     /// </summary>
     private async Task UpsertByOriginalIdAsync<TModel, TEntity>(
+        NocturneDbContext db,
         DbSet<TEntity> set,
         TModel model,
         Func<TModel, TEntity> toEntity,
@@ -374,7 +383,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         TEntity? existing;
         if (model.Id != null)
         {
-            var (rows, userDeleted) = await ResolveByOriginalIdAsync(set, [model.Id], ct);
+            var (rows, userDeleted) = await ResolveByOriginalIdAsync(db, set, [model.Id], ct);
             if (userDeleted.Count > 0)
             {
                 result.SkippedDeleted++;
@@ -387,7 +396,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         else if (entity.SyncIdentifier != null)
         {
             var key = (entity.DataSource, entity.SyncIdentifier);
-            var (rows, userDeleted) = await ResolveBySyncKeyAsync(set, [entity.SyncIdentifier], ct);
+            var (rows, userDeleted) = await ResolveBySyncKeyAsync(db, set, [entity.SyncIdentifier], ct);
             if (userDeleted.Contains(key))
             {
                 result.SkippedDeleted++;
@@ -406,7 +415,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         {
             applyUpdate(existing, model);
             existing.DeletedAt = null;
-            await _dbContext.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
             result.UpdatedRecords.Add(toDomain(existing));
             _logger.LogDebug(
                 "Updated existing {RecordType} {Id} from legacy activity {LegacyId}",
@@ -415,7 +424,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         }
 
         await set.AddAsync(entity, ct);
-        await _dbContext.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         result.CreatedRecords.Add(toDomain(entity));
         _logger.LogDebug("Created {RecordType} from legacy activity {LegacyId}", recordType, model.Id);
     }
@@ -428,6 +437,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     /// not be written (<see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>).
     /// </summary>
     private async Task<(Dictionary<string, TEntity> Rows, HashSet<string> UserDeleted)> ResolveByOriginalIdAsync<TEntity>(
+        NocturneDbContext db,
         DbSet<TEntity> set, IReadOnlyCollection<string> originalIds, CancellationToken ct)
         where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified
     {
@@ -438,14 +448,14 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 
         var ids = originalIds.ToList();
         var candidates = await set.IgnoreQueryFilters()
-            .Where(e => e.TenantId == _dbContext.TenantId && e.OriginalId != null && ids.Contains(e.OriginalId))
+            .Where(e => e.TenantId == db.TenantId && e.OriginalId != null && ids.Contains(e.OriginalId))
             .ToListAsync(ct);
 
         foreach (var group in candidates.GroupBy(e => e.OriginalId!, StringComparer.Ordinal))
         {
             if (group.FirstOrDefault(e => e.DeletedAt == null) is { } live)
                 rows[group.Key] = live;
-            else if (group.Any(e => _dbContext.Entry(e).Property<bool>("DeletedByUser").CurrentValue))
+            else if (group.Any(e => db.Entry(e).Property<bool>("DeletedByUser").CurrentValue))
                 userDeleted.Add(group.Key);
             else
                 rows[group.Key] = group.First();
@@ -463,7 +473,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     /// </summary>
     private async Task<(Dictionary<(string? DataSource, string SyncIdentifier), TEntity> Rows,
         HashSet<(string? DataSource, string SyncIdentifier)> UserDeleted)> ResolveBySyncKeyAsync<TEntity>(
-        DbSet<TEntity> set, IReadOnlyCollection<string> syncIdentifiers, CancellationToken ct)
+        NocturneDbContext db, DbSet<TEntity> set, IReadOnlyCollection<string> syncIdentifiers, CancellationToken ct)
         where TEntity : class, ITenantScoped, ISoftDeletable, ISyncDedupable
     {
         var rows = new Dictionary<(string? DataSource, string SyncIdentifier), TEntity>();
@@ -473,7 +483,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 
         var ids = syncIdentifiers.ToList();
         var candidates = await set.IgnoreQueryFilters()
-            .Where(e => e.TenantId == _dbContext.TenantId && e.SyncIdentifier != null && ids.Contains(e.SyncIdentifier))
+            .Where(e => e.TenantId == db.TenantId && e.SyncIdentifier != null && ids.Contains(e.SyncIdentifier))
             .WhereBlocksRecreation()
             .ToListAsync(ct);
 
@@ -498,6 +508,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     /// key, either kind, the last wins.
     /// </summary>
     private async Task BulkUpsertByOriginalIdAsync<TModel, TEntity>(
+        NocturneDbContext db,
         DbSet<TEntity> set,
         List<TModel> models,
         Func<TModel, TEntity> toEntity,
@@ -512,7 +523,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
             return;
 
         var originalIds = models.Where(m => m.Id != null).Select(m => m.Id!).ToHashSet();
-        var (stored, userDeleted) = await ResolveByOriginalIdAsync(set, originalIds, ct);
+        var (stored, userDeleted) = await ResolveByOriginalIdAsync(db, set, originalIds, ct);
         result.SkippedDeleted += models.Count(m => m.Id != null && userDeleted.Contains(m.Id));
         models = models.Where(m => m.Id == null || !userDeleted.Contains(m.Id)).ToList();
 
@@ -542,7 +553,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         if (keyed.Count > 0)
         {
             var syncIds = keyed.Select(p => p.Entity.SyncIdentifier!).ToHashSet(StringComparer.Ordinal);
-            var (storedByKey, userDeletedKeys) = await ResolveBySyncKeyAsync(set, syncIds, ct);
+            var (storedByKey, userDeletedKeys) = await ResolveBySyncKeyAsync(db, set, syncIds, ct);
 
             foreach (var (model, entity) in keyed)
             {
@@ -566,7 +577,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         if (toInsert.Count > 0 || updated.Count > 0)
         {
             await set.AddRangeAsync(toInsert, ct);
-            await _dbContext.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
             result.CreatedRecords.AddRange(toInsert.Select(toDomain));
             result.UpdatedRecords.AddRange(updated.Select(toDomain));
         }

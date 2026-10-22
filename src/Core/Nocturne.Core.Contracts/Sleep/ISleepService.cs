@@ -37,9 +37,6 @@ public interface ISleepService
         SleepSource? source = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Returns a single sleep session by its identifier.
-    /// </summary>
     Task<SleepSession?> GetSessionByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -50,17 +47,11 @@ public interface ISleepService
     /// </exception>
     Task<SleepSession> UpsertSessionAsync(SleepSession session, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Updates an existing sleep session by ID.
-    /// </summary>
     /// <exception cref="V4.Repositories.RecreationBlockedException">
     /// The update moves the session onto a source and original ID that another live session, or one
     /// the user deleted, holds.
     /// </exception>
     Task<SleepSession?> UpdateSessionAsync(Guid id, SleepSession session, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Deletes a sleep session by ID.
-    /// </summary>
     Task<bool> DeleteSessionAsync(Guid id, CancellationToken cancellationToken = default);
 }

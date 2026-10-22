@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
+using Nocturne.API.Helpers;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Controllers.V1;
@@ -503,7 +505,6 @@ public class FoodController : ControllerBase
     /// <summary>
     /// Bulk delete food records by filter query
     /// Compatible with Nightscout's DELETE /api/v1/food?find[field]=value
-    /// Note: Nightscout V1 API doesn't officially support bulk delete, but returns 200 {} for such requests
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Empty object for parity with Nightscout</returns>
@@ -512,6 +513,7 @@ public class FoodController : ControllerBase
     [RequireScope(Scope.FullAccess)]
     [NightscoutEndpoint("/api/v1/food")]
     [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(400)]
     [ProducesResponseType(500)]
     public async Task<ActionResult> DeleteFoodByFilter(
         CancellationToken cancellationToken = default
@@ -524,23 +526,27 @@ public class FoodController : ControllerBase
 
         try
         {
-            // Parse find query from query string
-            var findQuery = ParseFindQuery();
+            var find = LegacyFindQueryString.Resolve(HttpContext?.Request, boundFind: null);
+            var query = FindQuery.Parse(find);
 
-            if (string.IsNullOrEmpty(findQuery))
+            if (query.IsEmpty)
             {
-                // Nightscout V1 returns 200 {} when no filter is provided
-                // This matches the legacy behavior where DELETE /api/v1/food doesn't exist
-                // but Nightscout's routing returns an empty success response
-                _logger.LogDebug("No filter query provided for bulk delete, returning empty response");
-                return Ok(new { });
+                _logger.LogWarning("Bulk delete requested without find query - this is dangerous");
+                return BadRequest(
+                    "Find query parameter is required for bulk delete to prevent accidental data loss"
+                );
             }
 
-            var deletedCount = await _foodRepository.BulkDeleteFoodAsync(findQuery, cancellationToken);
+            if (Food.FindRefusal(query) is { } refusal)
+            {
+                _logger.LogWarning("Bulk delete food refused: the find names a condition it cannot apply");
+                return BadRequest(refusal);
+            }
 
-            _logger.LogDebug("Deleted {Count} food records matching filter: {Query}", deletedCount, findQuery);
+            var deletedCount = await _foodRepository.BulkDeleteFoodAsync(find, cancellationToken);
 
-            // Nightscout returns 200 {} for delete operations
+            _logger.LogDebug("Deleted {Count} food records matching filter: {Query}", deletedCount, find);
+
             return Ok(new { });
         }
         catch (Exception ex)
@@ -548,34 +554,5 @@ public class FoodController : ControllerBase
             _logger.LogError(ex, "Error bulk deleting food records");
             return StatusCode(500, "Internal server error while deleting food records");
         }
-    }
-
-    /// <summary>
-    /// Parse find query from query string parameters
-    /// Handles find[field]=value format
-    /// </summary>
-    /// <returns>JSON query string or null if no find parameters</returns>
-    private string? ParseFindQuery()
-    {
-        var query = HttpContext.Request.Query;
-        var findParams = new Dictionary<string, object>();
-
-        foreach (var param in query)
-        {
-            if (param.Key.StartsWith("find[") && param.Key.EndsWith("]"))
-            {
-                var field = param.Key[5..^1]; // Extract field name from find[field]
-                var value = param.Value.FirstOrDefault();
-                if (value != null)
-                {
-                    findParams[field] = value;
-                }
-            }
-        }
-
-        if (findParams.Count == 0)
-            return null;
-
-        return System.Text.Json.JsonSerializer.Serialize(findParams);
     }
 }

@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -65,7 +66,7 @@ public class HubTokenAuthorizerTests
     private HubTokenAuthorizer CreateAuthorizer(IConfiguration? configuration = null) => new(
         CreateCredentialValidator(),
         _memberService.Object,
-        _dbContextFactory,
+        _dbContextFactory.AsNocturneFactory(),
         TimeProvider.System,
         configuration ?? new ConfigurationBuilder().Build(),
         NullLogger<HubTokenAuthorizer>.Instance);

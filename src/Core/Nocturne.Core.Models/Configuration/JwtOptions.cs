@@ -1,8 +1,5 @@
 namespace Nocturne.Core.Models.Configuration;
 
-/// <summary>
-/// JWT authentication configuration options.
-/// </summary>
 public class JwtOptions
 {
     public const string SectionName = "Jwt";
@@ -13,14 +10,8 @@ public class JwtOptions
     /// </summary>
     public string SecretKey { get; set; } = string.Empty;
 
-    /// <summary>
-    /// JWT token issuer.
-    /// </summary>
     public string Issuer { get; set; } = "nocturne";
 
-    /// <summary>
-    /// JWT token audience.
-    /// </summary>
     public string Audience { get; set; } = "nocturne-api";
 
     /// <summary>

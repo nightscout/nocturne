@@ -1,23 +1,11 @@
 namespace Nocturne.Core.Models.Configuration;
 
-/// <summary>
-/// Configuration options for OIDC authentication
-/// </summary>
 public class OidcOptions
 {
-    /// <summary>
-    /// Configuration section name
-    /// </summary>
     public const string SectionName = "Oidc";
 
-    /// <summary>
-    /// Session configuration
-    /// </summary>
     public SessionOptions Session { get; set; } = new();
 
-    /// <summary>
-    /// Cookie configuration
-    /// </summary>
     public CookieSettings Cookie { get; set; } = new();
 
     /// <summary>
@@ -32,9 +20,6 @@ public class OidcOptions
     public List<OidcProviderConfig> Providers { get; set; } = [];
 }
 
-/// <summary>
-/// Session configuration options
-/// </summary>
 public class SessionOptions
 {
     /// <summary>
@@ -54,9 +39,6 @@ public class SessionOptions
     public bool RotateRefreshTokens { get; set; } = true;
 }
 
-/// <summary>
-/// Cookie configuration settings
-/// </summary>
 public class CookieSettings
 {
     /// <summary>
@@ -103,7 +85,7 @@ public class CookieSettings
     /// The registered redirect_uri is the apex callback, so a login begun on any other host has to
     /// present its state cookie at the apex to be verifiable. A host-only state cookie cannot: the
     /// apex never receives it and the callback fails with <c>invalid_state</c>. That is invisible
-    /// on a tenant subdomain, where <c>OidcCallbackRedirectMiddleware</c> bounces the callback back
+    /// on a tenant subdomain, where <c>ApexCallbackRelayMiddleware</c> bounces the callback back
     /// to the originating host before the cookie is read, and fatal on a host that names no tenant
     /// — a reserved dashboard slug — because there is no slug in the state to bounce to.
     /// <para>
@@ -114,9 +96,6 @@ public class CookieSettings
     /// </remarks>
     public string? StateDomain { get; set; }
 
-    /// <summary>
-    /// Cookie path
-    /// </summary>
     public string Path { get; set; } = "/";
 
     /// <summary>
@@ -129,19 +108,10 @@ public class CookieSettings
     /// </summary>
     public bool HttpOnly { get; set; } = true;
 
-    /// <summary>
-    /// SameSite mode for the cookie
-    /// </summary>
     public SameSiteMode SameSite { get; set; } = SameSiteMode.Lax;
 
-    /// <summary>
-    /// Name of the access token cookie
-    /// </summary>
     public string AccessTokenName { get; set; } = ".Nocturne.AccessToken";
 
-    /// <summary>
-    /// Name of the refresh token cookie
-    /// </summary>
     public string RefreshTokenName { get; set; } = ".Nocturne.RefreshToken";
 
     /// <summary>
@@ -158,15 +128,9 @@ public class CookieSettings
 /// </summary>
 public class StateOptions
 {
-    /// <summary>
-    /// State cookie lifetime
-    /// </summary>
     public TimeSpan Lifetime { get; set; } = TimeSpan.FromMinutes(15);
 }
 
-/// <summary>
-/// SameSite cookie mode
-/// </summary>
 public enum SameSiteMode
 {
     /// <summary>

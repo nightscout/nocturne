@@ -44,7 +44,6 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// <param name="nativeOnly">When <c>true</c>, excludes records projected from legacy V1/V2/V3 treatments.</param>
     /// <param name="patientDeviceId">Optional filter restricting results to events linked to a single
     /// registered <see cref="PatientDevice"/>.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<DeviceEvent>> GetAsync(
         DateTime? from,
         DateTime? to,
@@ -67,7 +66,6 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// <summary>Delete <see cref="DeviceEvent"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>
     /// <param name="syncIdentifier">The external sync identifier (e.g., UUID from the uploading system).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
 
@@ -98,12 +96,10 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// </summary>
     /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>Retrieve all <see cref="DeviceEvent"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<DeviceEvent>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default
@@ -117,7 +113,6 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// <param name="asOf">When non-null, restricts to events with <c>Timestamp &lt;= asOf</c>; powers
     /// replay's <c>site_age</c> / <c>sensor_age</c> reconstruction. <c>null</c> returns the
     /// absolute latest.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The most recent matching event, or <c>null</c> if none exists.</returns>
     Task<DeviceEvent?> GetLatestByEventTypeAsync(DeviceEventType eventType, DateTime? asOf, CancellationToken ct = default);
 
@@ -131,7 +126,6 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
     /// <param name="eventTypes">Array of <see cref="DeviceEventType"/> values to search for.</param>
     /// <param name="patientDeviceId">Optional filter restricting the search to events linked to a single
     /// registered patient device. Pass <c>null</c> to search tenant-wide.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The most recent matching event, or <c>null</c> if none exists.</returns>
     Task<DeviceEvent?> GetLatestByEventTypesAsync(
         DeviceEventType[] eventTypes,

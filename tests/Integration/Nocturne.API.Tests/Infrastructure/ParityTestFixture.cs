@@ -173,6 +173,7 @@ public class ParityTestFixture : IAsyncLifetime
                             ["DISPLAY_UNITS"] = "mg/dl",
                             ["Features:EnableExternalConnectors"] = "false",
                             ["Features:EnableRealTimeNotifications"] = "false",
+                            ["Features:Enable"] = NightscoutContainer.ReportedEnable,
                             ["Environment"] = "Testing",
                         });
                     });

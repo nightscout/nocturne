@@ -39,7 +39,7 @@ public class AlertDeliveryServiceTestFireTests
         // Empty provider: every channel provider resolves to null, so dispatch is a no-op.
         var serviceProvider = new ServiceCollection().BuildServiceProvider();
         var service = new AlertDeliveryService(
-            factory,
+            factory.AsNocturneFactory(),
             tenantAccessor,
             Mock.Of<ISignalRBroadcastService>(),
             serviceProvider,

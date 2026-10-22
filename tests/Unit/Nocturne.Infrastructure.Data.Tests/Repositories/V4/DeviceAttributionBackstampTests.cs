@@ -39,7 +39,7 @@ public class DeviceAttributionBackstampTests : IDisposable
         _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
         _context = _db.CreateContext();
-        var factory = new TestTenantDbContextFactory(_context);
+        var factory = new TestNocturneDbContextFactory(_context);
         var dedup = new Mock<IDeduplicationService>().Object;
         var audit = new Mock<IAuditContext>().Object;
 

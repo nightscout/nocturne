@@ -61,7 +61,7 @@ public class GlookoConnectorServiceFaultTests
             GlookoSyncHarness.Config(useV3Api), CancellationToken.None);
 
         result.Success.Should().BeTrue(string.Join("; ", result.Errors));
-        service.Published.Should().Contain([PublishKind.Profiles, PublishKind.ProfileStateSpans]);
+        service.Published.Should().Contain([PublishKind.Profiles, PublishKind.ProfileActivations]);
     }
 
     /// <summary>

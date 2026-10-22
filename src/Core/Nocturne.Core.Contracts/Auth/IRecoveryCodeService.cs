@@ -16,6 +16,12 @@ public interface IRecoveryCodeService
     /// </summary>
     Task<bool> VerifyAndConsumeAsync(Guid? subjectId, string code);
 
+    /// <summary>
+    /// Invalidates every unused code the subject holds, so <see cref="WereCodesResetAsync"/>
+    /// prompts them for a fresh set.
+    /// </summary>
+    Task InvalidateAllAsync(Guid subjectId);
+
     /// <summary>Returns the number of unused recovery codes remaining for the subject.</summary>
     Task<int> GetRemainingCountAsync(Guid subjectId);
 

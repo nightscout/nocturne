@@ -16,7 +16,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// </summary>
 public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<DeviceStatusExtrasRepository> _logger;
 
@@ -27,7 +27,7 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
     public DeviceStatusExtrasRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<DeviceStatusExtrasRepository> logger)
     {

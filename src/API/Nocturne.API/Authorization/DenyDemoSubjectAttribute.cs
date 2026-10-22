@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Extensions;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Authorization;
 
@@ -45,9 +45,9 @@ public sealed class DenyDemoSubjectAttribute : Attribute, IAsyncAuthorizationFil
             return false;
 
         var factory = httpContext.RequestServices
-            .GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+            .GetRequiredService<INocturneDbContextFactory>();
 
-        await using var db = await factory.CreateDbContextAsync(httpContext.RequestAborted);
+        await using var db = await factory.CreatePlatformAsync(httpContext.RequestAborted);
 
         // Nullable projection so a missing row is distinguishable from false, and refuse it:
         // an access token is a self-contained JWT with no revocation check, so a subject

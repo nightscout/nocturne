@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using System.Data.Common;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
@@ -53,7 +54,7 @@ public class ConnectorSyncCursorStoreTests : IDisposable
     }
 
     private ConnectorSyncCursorStore Store(NocturneDbContext db) =>
-        new(db, NullLogger<ConnectorSyncCursorStore>.Instance);
+        new(db.AsFactory(), NullLogger<ConnectorSyncCursorStore>.Instance);
 
     [Theory]
     [InlineData("[]")]

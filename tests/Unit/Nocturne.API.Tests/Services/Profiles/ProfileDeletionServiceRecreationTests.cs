@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Profiles;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.V4;
@@ -30,13 +31,13 @@ public class ProfileDeletionServiceRecreationTests : IDisposable
 
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
-    private readonly TestTenantDbContextFactory _factory;
+    private readonly TestNocturneDbContextFactory _factory;
 
     public ProfileDeletionServiceRecreationTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
         _context = _db.CreateContext();
-        _factory = new TestTenantDbContextFactory(_context);
+        _factory = new TestNocturneDbContextFactory(_context);
     }
 
     public void Dispose()
@@ -183,6 +184,7 @@ public class ProfileDeletionServiceRecreationTests : IDisposable
         new CarbRatioScheduleRepository(_factory, audit, NullLogger<CarbRatioScheduleRepository>.Instance),
         new SensitivityScheduleRepository(_factory, audit, NullLogger<SensitivityScheduleRepository>.Instance),
         new TargetRangeScheduleRepository(_factory, audit, NullLogger<TargetRangeScheduleRepository>.Instance),
+        TempBasalTestDeps.NoReresolution(),
         NullLogger<ProfileDecomposer>.Instance);
 
     private ProfileDeletionService Deletion(IAuditContext audit) => new(

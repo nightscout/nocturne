@@ -20,13 +20,10 @@ public interface IPatientInsulinRepository
     /// <summary>Returns an insulin record by its ID, or null if not found.</summary>
     Task<PatientInsulin?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Creates a new patient insulin record.</summary>
     Task<PatientInsulin> CreateAsync(PatientInsulin model, WriteOrigin origin, CancellationToken ct = default);
 
-    /// <summary>Updates an existing patient insulin record.</summary>
     Task<PatientInsulin> UpdateAsync(Guid id, PatientInsulin model, WriteOrigin origin, CancellationToken ct = default);
 
-    /// <summary>Deletes a patient insulin record by ID.</summary>
     Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Returns the insulin designated as the primary bolus insulin, or null if none is set.</summary>

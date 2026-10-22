@@ -40,6 +40,7 @@ public class RefreshTokenIntegrationTests : ApiIntegrationTestBase
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Refresh Token Test User");
+        _accessToken = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _subjectId);
 
         Log($"Seeded tenant {_tenantId}, subject {_subjectId}");
     }
@@ -79,43 +80,81 @@ public class RefreshTokenIntegrationTests : ApiIntegrationTestBase
         Log($"Rotation succeeded — new access_token prefix: {newAccessToken![..Math.Min(10, newAccessToken.Length)]}...");
     }
 
+    private static Task<HttpResponseMessage> RefreshAsync(HttpClient client, string clientId, string refreshToken) =>
+        client.PostAsync("/api/oauth/token", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token",
+            ["refresh_token"] = refreshToken,
+            ["client_id"] = clientId
+        }));
+
+    private static async Task<string> RefreshTokenOfAsync(HttpResponseMessage response)
+    {
+        var body = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+        return body.GetProperty("refresh_token").GetString()!;
+    }
+
+    /// <summary>
+    /// Moves every rotation on <paramref name="clientId"/>'s grants a minute into the past, past
+    /// the reuse grace window, as if the client came back with the old token much later.
+    /// </summary>
+    private async Task AgeRotationsAsync(string clientId)
+    {
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT set_config('app.current_tenant_id', @tenant, false);
+            UPDATE oauth_refresh_tokens
+            SET revoked_at = revoked_at - interval '1 minute'
+            WHERE revoked_at IS NOT NULL
+              AND grant_id IN (SELECT g.id FROM oauth_grants g
+                               JOIN oauth_clients c ON c.id = g.client_id
+                               WHERE c.client_id = @client);
+            """;
+        cmd.Parameters.AddWithValue("tenant", _tenantId.ToString());
+        cmd.Parameters.AddWithValue("client", clientId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     [Fact]
     public async Task RefreshToken_OldTokenRejectedAfterRotation()
     {
-        // Arrange — complete a PKCE flow and rotate once
         using var authClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(authClient);
         var initial = await AuthTestHelpers.ExecutePkceFlowAsync(authClient, clientId);
         initial.RefreshToken.Should().NotBeNullOrWhiteSpace();
 
-        // Consume the original refresh token
-        var firstRefresh = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["grant_type"] = "refresh_token",
-            ["refresh_token"] = initial.RefreshToken!,
-            ["client_id"] = clientId
-        });
-
-        var firstResponse = await authClient.PostAsync("/api/oauth/token", firstRefresh);
+        var firstResponse = await RefreshAsync(authClient, clientId, initial.RefreshToken!);
         firstResponse.StatusCode.Should().Be(HttpStatusCode.OK, "first refresh should succeed");
+        var successor = await RefreshTokenOfAsync(firstResponse);
 
-        // Act — replay the same (now-consumed) refresh token
-        var replayForm = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["grant_type"] = "refresh_token",
-            ["refresh_token"] = initial.RefreshToken!,
-            ["client_id"] = clientId
-        });
+        await AgeRotationsAsync(clientId);
+        var replayResponse = await RefreshAsync(authClient, clientId, initial.RefreshToken!);
 
-        var replayResponse = await authClient.PostAsync("/api/oauth/token", replayForm);
-
-        // Assert
         replayResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var content = await replayResponse.Content.ReadAsStringAsync();
-        var body = JsonSerializer.Deserialize<JsonElement>(content);
-        body.GetProperty("error").GetString().Should().NotBeNullOrWhiteSpace();
+        var body = JsonSerializer.Deserialize<JsonElement>(await replayResponse.Content.ReadAsStringAsync());
+        body.GetProperty("error").GetString().Should().Be("invalid_grant");
+        (await RefreshAsync(authClient, clientId, successor)).StatusCode
+            .Should().Be(HttpStatusCode.BadRequest, "reuse revokes the grant and every token it issued");
+    }
 
-        Log("Old refresh token correctly rejected after rotation");
+    [Fact]
+    public async Task RefreshToken_OldTokenRepresentedWithinTheGraceWindow_RedeemsOnce()
+    {
+        using var authClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+        var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(authClient);
+        var initial = await AuthTestHelpers.ExecutePkceFlowAsync(authClient, clientId);
+
+        var firstResponse = await RefreshAsync(authClient, clientId, initial.RefreshToken!);
+        var graceResponse = await RefreshAsync(authClient, clientId, initial.RefreshToken!);
+        var pastCapResponse = await RefreshAsync(authClient, clientId, initial.RefreshToken!);
+
+        firstResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        graceResponse.StatusCode.Should().Be(HttpStatusCode.OK, "a parallel refresh with the same token keeps the grant");
+        pastCapResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest, "only one redemption fits in the grace window");
+        (await RefreshAsync(authClient, clientId, await RefreshTokenOfAsync(graceResponse))).StatusCode
+            .Should().Be(HttpStatusCode.BadRequest, "presenting the token past the cap revokes the grant");
     }
 
     [Fact]

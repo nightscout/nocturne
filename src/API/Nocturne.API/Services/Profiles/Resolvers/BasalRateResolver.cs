@@ -1,7 +1,5 @@
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Schedules;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -18,11 +16,9 @@ internal sealed class BasalRateResolver : IBasalRateResolver
     private readonly ITherapySettingsRepository _therapyRepo;
     private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly IActiveProfileResolver _activeProfileResolver;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly IMemoryCache _cache;
+    private readonly ProfileVersionCache _versions;
     private readonly ILogger<BasalRateResolver> _logger;
 
-    private const int CacheTtlSeconds = 5;
     private const double DefaultBasalRate = 1.0;
 
     public BasalRateResolver(
@@ -30,106 +26,97 @@ internal sealed class BasalRateResolver : IBasalRateResolver
         ITherapySettingsRepository therapyRepo,
         IPatientRecordRepository patientRecordRepo,
         IActiveProfileResolver activeProfileResolver,
-        ITenantAccessor tenantAccessor,
-        IMemoryCache cache,
+        ProfileVersionCache versions,
         ILogger<BasalRateResolver> logger)
     {
         _repo = repo;
         _therapyRepo = therapyRepo;
         _patientRecordRepo = patientRecordRepo;
         _activeProfileResolver = activeProfileResolver;
-        _tenantAccessor = tenantAccessor;
-        _cache = cache;
+        _versions = versions;
         _logger = logger;
     }
 
     public async Task<double> GetBasalRateAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
+        => await FindAsync(timeMills, specProfile, ct) ?? DefaultBasalRate;
+
+    public Task<double?> FindBasalRateAsync(long timeMills, CancellationToken ct = default)
+        => FindAsync(timeMills, specProfile: null, ct);
+
+    private async Task<double?> FindAsync(long timeMills, string? specProfile, CancellationToken ct)
     {
-        var profileName = specProfile
-            ?? await _activeProfileResolver.GetActiveProfileNameAsync(timeMills, ct)
-            ?? "Default";
+        var schedule = await ActiveSchedule.ResolveAsync(
+            timeMills, specProfile, _activeProfileResolver, _repo, _versions,
+            s => s.Entries, s => s.Basal, _therapyRepo, _patientRecordRepo, ct);
+        if (schedule is null
+            || ScheduleResolution.FindValueAtTime(schedule.Entries, schedule.SecondsFromMidnight) is not { } value)
+            return null;
 
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
-
-        var schedule = await GetCachedScheduleAsync(profileName, timestamp, ct);
-        if (schedule is null)
-            return DefaultBasalRate;
-
-        var adjustment = await _activeProfileResolver.GetCircadianAdjustmentAsync(timeMills, ct);
-        var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
-
-        var secondsFromMidnight = await ScheduleTimeHelper.GetSecondsFromMidnightAsync(
-            shiftedMills, profileName, timestamp, _therapyRepo, _patientRecordRepo, ct);
-
-        var value = ScheduleResolution.FindValueAtTime(schedule.Entries, secondsFromMidnight)
-            ?? DefaultBasalRate;
-
-        if (adjustment is not null)
-            value = value * adjustment.Percentage / 100.0;
-
-        return value;
+        return schedule.Adjustment is { } adjustment
+            ? value * adjustment.Percentage / 100.0
+            : value;
     }
 
+    /// <remarks>
+    /// Each time reads the schedule and timezone versions in force at it, so a profile upload inside
+    /// the range applies from its own start. A time outside the range reads the span nearest it.
+    /// </remarks>
     public async Task<Func<long, double>> BuildResolverAsync(
         long fromMs, long toMs, CancellationToken ct = default)
     {
-        // 1. One query for all profile spans covering the range.
-        var spans = await _activeProfileResolver.GetActiveProfileSpansForRangeAsync(fromMs, toMs, ct);
+        var spans = await _activeProfileResolver.GetProfileSpansForRangeAsync(fromMs, toMs, ct);
 
-        // 2. Pre-fetch schedule + timezone per distinct profile (typically just "Default").
-        //    Fetch at range start — same convention as BasalSegmentService.
-        var rangeStart = DateTimeOffset.FromUnixTimeMilliseconds(fromMs).UtcDateTime;
-
-        var distinctProfiles = spans.Select(s => s.ProfileName).Distinct().ToList();
-        if (distinctProfiles.Count == 0)
-            distinctProfiles.Add("Default");
-
-        var schedules = new Dictionary<string, Core.Models.V4.BasalSchedule?>(StringComparer.OrdinalIgnoreCase);
-        var timezones = new Dictionary<string, TimeZoneInfo?>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var name in distinctProfiles)
+        var patientTimezone = (await _patientRecordRepo.GetAsync(ct))?.Timezone;
+        var stores = new Dictionary<string, StoreVersions>(StringComparer.Ordinal);
+        foreach (var name in spans.Select(s => s.ProfileName).Distinct(StringComparer.Ordinal))
         {
-            schedules[name] = await GetCachedScheduleAsync(name, rangeStart, ct);
+            stores[name] = new StoreVersions(
+                await _versions.GetVersionsAsync(_repo, name, ct),
+                await _versions.GetVersionsAsync(_therapyRepo, name, ct));
+        }
 
-            var therapy = await _therapyRepo.GetActiveAtAsync(name, rangeStart, ct);
-            // null when unset/unresolvable so the closure skips conversion (treats the stamp as UTC).
+        var timezones = new Dictionary<string, TimeZoneInfo?>(StringComparer.Ordinal);
+        foreach (var id in stores.Values.SelectMany(s => s.Settings).Select(v => v.Timezone)
+                     .Concat(spans.Select(s => s.Schedules?.Timezone))
+                     .Append(patientTimezone)
+                     .OfType<string>()
+                     .Where(id => id.Length > 0)
+                     .Distinct(StringComparer.Ordinal))
+        {
             // TimeZoneHelper resolves IANA/Windows IDs and mis-cased IANA IDs (e.g. "ETC/GMT-2").
-            if (TimeZoneHelper.TryGetTimeZoneInfoFromId(therapy?.Timezone, out var tz))
-            {
-                timezones[name] = tz;
-            }
-            else
-            {
-                if (!string.IsNullOrEmpty(therapy?.Timezone))
-                    _logger.LogWarning("Timezone '{Timezone}' for profile '{Profile}' could not be resolved", therapy.Timezone, name);
-                timezones[name] = null;
-            }
+            timezones[id] = TimeZoneHelper.TryGetTimeZoneInfoFromId(id, out var tz) ? tz : null;
+            if (timezones[id] is null)
+                _logger.LogWarning("Timezone '{Timezone}' could not be resolved", id);
         }
 
         // Closure over pre-fetched data — no DB access inside.
         return timeMills =>
         {
-            // Find the active span at timeMills.
-            // Spans are in chronological order (guaranteed by GetActiveProfileSpansForRangeAsync);
-            // LastOrDefault keeps the last match so abutting spans resolve to the later one.
-            var active = spans.LastOrDefault(span =>
-                span.StartMills <= timeMills &&
-                (!span.EndMills.HasValue || span.EndMills.Value > timeMills));
-
-            var profileName  = active?.ProfileName ?? "Default";
-            var adjustment   = active?.Adjustment;
-            var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
-
-            if (!schedules.TryGetValue(profileName, out var schedule) || schedule is null)
+            if (SpanAt(spans, timeMills) is not { } span)
                 return DefaultBasalRate;
 
-            var tz  = timezones.GetValueOrDefault(profileName);
+            var at = DateTimeOffset.FromUnixTimeMilliseconds(timeMills).UtcDateTime;
+            var store = stores[span.ProfileName];
+            var adjustment = span.Adjustment;
+            var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
+
+            // null when unset/unresolvable so the stamp is read as UTC.
+            var tzId = ScheduleTimeHelper.TimezoneOf(
+                patientTimezone, span.Schedules?.Timezone, ProfileVersionCache.ActiveAt(store.Settings, at)?.Timezone);
+            var tz = tzId is null ? null : timezones.GetValueOrDefault(tzId);
+            var entries = span.Schedules is { } snapshot
+                ? snapshot.Basal
+                : ProfileVersionCache.ActiveAt(store.Basal, at)?.Entries;
+
+            if (entries is null)
+                return DefaultBasalRate;
+
             var dto = DateTimeOffset.FromUnixTimeMilliseconds(shiftedMills);
             if (tz is not null)
                 dto = TimeZoneInfo.ConvertTime(dto, tz);
 
             var secondsFromMidnight = (int)dto.TimeOfDay.TotalSeconds;
-            var value = ScheduleResolution.FindValueAtTime(schedule.Entries, secondsFromMidnight)
+            var value = ScheduleResolution.FindValueAtTime(entries, secondsFromMidnight)
                 ?? DefaultBasalRate;
 
             return adjustment is not null
@@ -138,16 +125,30 @@ internal sealed class BasalRateResolver : IBasalRateResolver
         };
     }
 
-    private async Task<Core.Models.V4.BasalSchedule?> GetCachedScheduleAsync(
-        string profileName, DateTime timestamp, CancellationToken ct)
+    /// <summary>The span holding <paramref name="timeMills"/>, or the nearest one when none does.</summary>
+    private static ProfileSpan? SpanAt(IReadOnlyList<ProfileSpan> spans, long timeMills)
     {
-        var cacheKey = $"BasalSchedule:{_tenantAccessor.TenantId}:{profileName}";
+        if (spans.Count == 0)
+            return null;
 
-        if (_cache.TryGetValue(cacheKey, out Core.Models.V4.BasalSchedule? cached))
-            return cached;
+        int low = 0, high = spans.Count - 1, found = 0;
+        while (low <= high)
+        {
+            var mid = low + (high - low) / 2;
+            if (spans[mid].StartMills <= timeMills)
+            {
+                found = mid;
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
 
-        var schedule = await _repo.GetActiveAtAsync(profileName, timestamp, ct);
-        _cache.Set(cacheKey, schedule, TimeSpan.FromSeconds(CacheTtlSeconds));
-        return schedule;
+        return spans[found];
     }
+
+    private sealed record StoreVersions(
+        Core.Models.V4.BasalSchedule[] Basal, Core.Models.V4.TherapySettings[] Settings);
 }

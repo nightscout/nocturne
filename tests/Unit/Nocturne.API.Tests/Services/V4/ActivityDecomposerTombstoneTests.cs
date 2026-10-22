@@ -26,7 +26,7 @@ public class ActivityDecomposerTombstoneTests : IDisposable
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = TenantId;
         _decomposer = new ActivityDecomposer(
-            _context, Mock.Of<IStateSpanRepository>(), NullLogger<ActivityDecomposer>.Instance);
+            _context.AsFactory(), Mock.Of<IStateSpanRepository>(), NullLogger<ActivityDecomposer>.Instance);
     }
 
     public void Dispose()

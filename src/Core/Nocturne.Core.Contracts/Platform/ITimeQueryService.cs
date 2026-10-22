@@ -17,7 +17,6 @@ public interface ITimeQueryService
     /// <param name="storage">Storage type ("entries", "treatments", "devicestatus")</param>
     /// <param name="fieldName">Field to match patterns against (default "dateString")</param>
     /// <param name="find">The request query string. Its <c>find[...]</c> keys are ANDed with the pattern; every other key is ignored.</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the time patterns</returns>
     /// <exception cref="ArgumentException">Thrown when the storage type is not supported.</exception>
     Task<IEnumerable<Entry>> ExecuteTimeQueryAsync(
@@ -39,7 +38,6 @@ public interface ITimeQueryService
     /// <param name="prefix">Pattern prefix</param>
     /// <param name="regex">Pattern regex</param>
     /// <param name="find">The request query string. Its <c>find[...]</c> keys are ANDed with the pattern; every other key is ignored.</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Entries matching the slice criteria</returns>
     /// <exception cref="ArgumentException">Thrown when the storage type is not supported.</exception>
     Task<IEnumerable<Entry>> ExecuteSliceQueryAsync(
@@ -58,15 +56,13 @@ public interface ITimeQueryService
     /// </summary>
     /// <param name="prefix">Time prefix pattern</param>
     /// <param name="regex">Time regex pattern</param>
-    /// <param name="storage">Storage type</param>
-    /// <param name="fieldName">Field name</param>
-    /// <param name="queryParameters">Additional query parameters</param>
+    /// <param name="queryString">The request query string without changes.</param>
     /// <returns>Debug information about the generated patterns and query</returns>
     TimeQueryEcho GenerateTimeQueryEcho(
         string? prefix,
         string? regex,
         string storage = "entries",
         string fieldName = "dateString",
-        Dictionary<string, object>? queryParameters = null
+        string? queryString = null
     );
 }

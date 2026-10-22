@@ -62,7 +62,7 @@ public class RefreshTokenServiceTests
         // Arrange
         _jwtService.Setup(j => j.HashRefreshToken("valid-token")).Returns("hash-valid");
         _repository.Setup(r => r.FindByHashAsync("hash-valid", default))
-            .ReturnsAsync(MakeRecord(revokedAt: null, expiresAt: DateTime.UtcNow.AddHours(1)));
+            .ReturnsAsync(MakeRecord(revokedAt: null, expiresAt: DateTime.UtcNow.AddHours(1), oidcSessionId: "family"));
 
         var service = CreateService();
 
@@ -70,7 +70,7 @@ public class RefreshTokenServiceTests
         var result = await service.ValidateRefreshTokenAsync("valid-token");
 
         // Assert
-        result.Should().Be(_subjectId);
+        result.Should().Be(new RefreshTokenSession(_subjectId, "family"));
     }
 
     [Fact]
@@ -180,6 +180,30 @@ public class RefreshTokenServiceTests
             "hash-old",
             "new-token",
             It.IsAny<TimeSpan>(),
+            default));
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("session-a")]
+    [InlineData(null)]
+    public async Task RotateRefreshTokenAsync_SuccessorBelongsToANamedSession(string? oldSession)
+    {
+        var oldTokenId = Guid.CreateVersion7();
+        _jwtService.Setup(j => j.HashRefreshToken("old-token")).Returns("hash-old");
+        _jwtService.Setup(j => j.GenerateRefreshToken()).Returns("new-token");
+        _jwtService.Setup(j => j.HashRefreshToken("new-token")).Returns("hash-new");
+        _repository.Setup(r => r.FindByHashAsync("hash-old", default))
+            .ReturnsAsync(MakeRecord(id: oldTokenId, oidcSessionId: oldSession));
+        _repository.Setup(r => r.TryMarkRotatedAsync(oldTokenId, It.IsAny<Guid>(), default))
+            .ReturnsAsync(true);
+
+        await CreateService().RotateRefreshTokenAsync("old-token");
+
+        _repository.Verify(r => r.CreateAsync(
+            It.Is<RefreshTokenRecord>(rec =>
+                !string.IsNullOrEmpty(rec.OidcSessionId)
+                && (oldSession == null || rec.OidcSessionId == oldSession)),
             default));
     }
 

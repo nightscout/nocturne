@@ -70,6 +70,29 @@ public class CompositeDataEventSinkTests
     }
 
     [Fact]
+    public async Task OnWrittenAsync_FansOutToAllSinks()
+    {
+        var entries = new List<Entry> { new() { Id = "1" } };
+
+        await _sut.OnWrittenAsync(entries);
+
+        _sink1.Verify(s => s.OnWrittenAsync(entries, It.IsAny<CancellationToken>()), Times.Once);
+        _sink2.Verify(s => s.OnWrittenAsync(entries, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task OnWrittenAsync_FirstSinkFailure_DoesNotBlockSecondSink()
+    {
+        var entries = new List<Entry> { new() { Id = "1" } };
+        _sink1.Setup(s => s.OnWrittenAsync(entries, It.IsAny<CancellationToken>()))
+              .ThrowsAsync(new InvalidOperationException("boom"));
+
+        await _sut.OnWrittenAsync(entries);
+
+        _sink2.Verify(s => s.OnWrittenAsync(entries, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task OnBulkDeletedAsync_FansOutToAllSinks()
     {
         await _sut.OnBulkDeletedAsync(42);

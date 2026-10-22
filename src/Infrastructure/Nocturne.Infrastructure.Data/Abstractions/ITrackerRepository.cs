@@ -181,7 +181,7 @@ public interface ITrackerRepository
 
     /// <summary>
     /// Runs <paramref name="work"/> in one transaction holding the definition's lock, so that
-    /// writers succeeding one tracker's run take turns across replicas.
+    /// writers succeeding one tracker's run take turns.
     /// </summary>
     /// <remarks>
     /// <paramref name="work"/> can run more than once when the store retries a transient failure.
@@ -190,8 +190,8 @@ public interface ITrackerRepository
     /// </remarks>
     Task<T> ExecuteUnderDefinitionLockAsync<T>(
         Guid definitionId,
-        Func<CancellationToken, Task<T>> work,
-        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        Func<ITrackerRepository, CancellationToken, Task<T>> work,
+        Func<ITrackerRepository, T, CancellationToken, Task<bool>>? verifySucceeded = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -8,25 +8,10 @@
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import { EmptyState } from "$lib/components/shared";
+  import type { SyncResult } from "$lib/api/generated/nocturne-api-client";
   import type { SyncProgressEvent } from "$lib/websocket/types";
   import { formatSyncMessage } from "$lib/utils/sync-messages";
   import { tick } from "svelte";
-
-  export interface BatchSyncResult {
-    success: boolean;
-    errorMessage?: string;
-    totalConnectors: number;
-    successfulConnectors: number;
-    failedConnectors: number;
-    startTime: Date;
-    endTime: Date;
-    connectorResults: {
-      connectorName: string;
-      success: boolean;
-      errorMessage?: string;
-      duration?: string;
-    }[];
-  }
 
   interface LogEntry {
     time: string;
@@ -36,14 +21,14 @@
   interface Props {
     open: boolean;
     isManualSyncing: boolean;
-    manualSyncResult: BatchSyncResult | null;
+    manualSyncResults: Record<string, SyncResult> | null;
     syncProgress: SyncProgressEvent | null;
   }
 
   let {
     open = $bindable(false),
     isManualSyncing = false,
-    manualSyncResult = null,
+    manualSyncResults = null,
     syncProgress = null,
   }: Props = $props();
 
@@ -70,15 +55,16 @@
     }
   });
 
-  /**
-   * A batch sync can partly succeed, so the outcome comes from the per-connector
-   * counts rather than a single boolean. `success: false` with no connectors
-   * attempted means the request itself failed.
-   */
+  const connectorResults = $derived(Object.entries(manualSyncResults ?? {}));
+  const totalConnectors = $derived(connectorResults.length);
+  const successfulConnectors = $derived(
+    connectorResults.filter(([, result]) => result.success).length,
+  );
+  const failedConnectors = $derived(totalConnectors - successfulConnectors);
+
+  /** A batch sync can partly succeed, so the outcome comes from the per-connector counts. */
   const outcome = $derived.by(() => {
-    if (!manualSyncResult) return null;
-    const { totalConnectors, successfulConnectors, success } = manualSyncResult;
-    if (!success && totalConnectors === 0) return "request-failed";
+    if (!manualSyncResults) return null;
     if (totalConnectors === 0) return "nothing-to-sync";
     if (successfulConnectors === 0) return "all-failed";
     if (successfulConnectors < totalConnectors) return "partial";
@@ -122,13 +108,8 @@
             </div>
           {/if}
         </div>
-      {:else if manualSyncResult}
-        {@const elapsedSeconds = Math.round(
-          (new Date(manualSyncResult.endTime!).getTime() -
-            new Date(manualSyncResult.startTime!).getTime()) /
-            1000
-        )}
-        {@const counts = `${manualSyncResult.successfulConnectors} of ${manualSyncResult.totalConnectors} connectors synced in ${elapsedSeconds}s`}
+      {:else if manualSyncResults}
+        {@const counts = `${successfulConnectors} of ${totalConnectors} connectors synced`}
         {#if outcome === "all-succeeded"}
           <div class="rounded-lg border border-success/30 bg-success/10 p-4">
             <div class="flex items-center gap-2 text-success">
@@ -144,7 +125,7 @@
             <div class="flex items-center gap-2 text-warning">
               <AlertCircle class="h-5 w-5" />
               <span class="font-medium">
-                Sync finished with {manualSyncResult.failedConnectors} failed
+                Sync finished with {failedConnectors} failed
               </span>
             </div>
             <p class="text-sm text-warning mt-1">
@@ -165,17 +146,16 @@
               <span class="font-medium">Sync failed</span>
             </div>
             <p class="text-sm text-destructive mt-1">
-              {manualSyncResult.errorMessage ??
-                (outcome === "all-failed" ? counts : "The sync could not be started.")}
+              {counts}
             </p>
           </div>
         {/if}
 
-        {#if manualSyncResult.connectorResults && manualSyncResult.connectorResults.length > 0}
+        {#if connectorResults.length > 0}
           <div class="space-y-3">
             <h4 class="font-medium text-sm">Connector Results</h4>
             <div class="space-y-2">
-              {#each manualSyncResult.connectorResults as result (result.connectorName)}
+              {#each connectorResults as [connectorId, result] (connectorId)}
                 <Item variant={result.success ? "success" : "destructive"} class="justify-between">
                   <div class="flex items-center gap-3">
                     {#if result.success}
@@ -184,17 +164,17 @@
                       <AlertCircle class="h-4 w-4 text-destructive" />
                     {/if}
                     <div>
-                      <p class="font-medium text-sm">{result.connectorName}</p>
-                      {#if !result.success && result.errorMessage}
+                      <p class="font-medium text-sm">{connectorId}</p>
+                      {#if !result.success && result.message}
                         <p class="text-xs text-muted-foreground">
-                          {result.errorMessage}
+                          {result.message}
                         </p>
                       {/if}
                     </div>
                   </div>
                   <div class="text-right text-xs text-muted-foreground">
-                    {#if result.duration}
-                      {result.duration}
+                    {#if result.durationMs != null}
+                      {result.durationMs}ms
                     {/if}
                   </div>
                 </Item>

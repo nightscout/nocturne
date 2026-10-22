@@ -8,7 +8,6 @@ namespace Nocturne.Core.Models.Authorization;
 /// <seealso cref="OidcProvider"/>
 public class SubjectOidcIdentity
 {
-    /// <summary>Unique identifier for this link record.</summary>
     public Guid Id { get; set; }
 
     /// <summary>The <see cref="Subject"/> this identity is linked to.</summary>
@@ -38,7 +37,6 @@ public class SubjectOidcIdentity
     /// <summary>When this identity was first linked to the subject.</summary>
     public DateTime LinkedAt { get; set; }
 
-    /// <summary>When this identity was last used for authentication.</summary>
     public DateTime? LastUsedAt { get; set; }
 }
 

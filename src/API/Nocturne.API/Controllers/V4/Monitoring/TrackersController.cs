@@ -44,7 +44,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     private readonly ITrackerRepository _repository;
     private readonly ISignalRBroadcastService _broadcast;
     private readonly ITrackerAlertRuleSyncService _ruleSync;
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly IAlertAcknowledgementService _acknowledgementService;
     private readonly ILogger<TrackersController> _logger;
 
@@ -61,7 +61,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
         ITrackerRepository repository,
         ISignalRBroadcastService broadcast,
         ITrackerAlertRuleSyncService ruleSync,
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAlertAcknowledgementService acknowledgementService,
         ILogger<TrackersController> logger
     )
@@ -81,8 +81,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// </summary>
     private bool CanViewTracker(TrackerDefinitionEntity tracker)
     {
-        // Admins can see everything
-        if (HttpContext.IsAdmin())
+        if (HttpContext.IsSuperuser())
             return true;
 
         // Public trackers visible to everyone
@@ -123,7 +122,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             startedAt,
             completionNotes: null,
             completeTreatmentId: null,
-            ct => _repository.StartInstanceAsync(
+            (tx, ct) => tx.StartInstanceAsync(
                 definition.Id,
                 userId,
                 startNotes,
@@ -423,7 +422,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         // Validate thresholds if being updated
@@ -533,7 +532,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         // Definition first, rules second: if the definition delete fails the tracker
@@ -644,7 +643,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (definition == null)
             return NotFound("Definition not found");
 
-        if (definition.UserId != userId && !HttpContext.IsAdmin())
+        if (definition.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         // Validate mode-specific requirements
@@ -670,14 +669,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
             request.DefinitionId
         );
 
-        // Broadcast via SignalR
-        await _broadcast.BroadcastTrackerUpdateAsync(
-            "create",
-            TrackerInstanceDto.FromEntity(instance),
-            instance.UserId,
-            definition.Visibility
-        );
-
         return CreatedAtAction(nameof(GetActiveInstances), TrackerInstanceDto.FromEntity(instance));
     }
 
@@ -699,7 +690,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         if (existing.CompletedAt != null)
@@ -724,9 +715,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
 
         // Broadcast via SignalR
         await _broadcast.BroadcastTrackerUpdateAsync(
-            "complete",
+            TrackerRealtimeAction.Complete,
             TrackerInstanceDto.FromEntity(completed),
-            existing.UserId,
+            existing.Definition.UserId,
             existing.Definition.Visibility
         );
 
@@ -751,7 +742,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         await _repository.AckInstanceAsync(id, request.SnoozeMins, HttpContext.RequestAborted);
@@ -768,9 +759,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
             if (updated != null)
             {
                 await _broadcast.BroadcastTrackerUpdateAsync(
-                    "ack",
+                    TrackerRealtimeAction.Ack,
                     TrackerInstanceDto.FromEntity(updated),
-                    updated.UserId,
+                    updated.Definition.UserId,
                     updated.Definition.Visibility
                 );
             }
@@ -794,7 +785,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         // Broadcast before deleting to get the definition name
@@ -803,9 +794,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
 
         // Broadcast via SignalR
         await _broadcast.BroadcastTrackerUpdateAsync(
-            "delete",
+            TrackerRealtimeAction.Delete,
             dto,
-            existing.UserId,
+            existing.Definition.UserId,
             existing.Definition.Visibility
         );
 
@@ -853,7 +844,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (definition == null)
             return NotFound("Definition not found");
 
-        if (definition.UserId != userId && !HttpContext.IsAdmin())
+        if (definition.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         var entity = new TrackerPresetEntity
@@ -893,7 +884,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
         var preset = await _repository.GetPresetByIdAsync(id, HttpContext.RequestAborted);
         if (preset == null)
             return NotFound();
-        if (preset.UserId != userId && !HttpContext.IsAdmin())
+        if (preset.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
         var succession = await StartSuccessorAsync(
             preset.Definition,
@@ -910,13 +901,6 @@ public class TrackersController : ControllerBase, IWriteScopedController
             "Applied preset {PresetId}, created instance {InstanceId}",
             id,
             instance.Id
-        );
-
-        await _broadcast.BroadcastTrackerUpdateAsync(
-            "create",
-            TrackerInstanceDto.FromEntity(instance),
-            instance.UserId,
-            preset.Definition.Visibility
         );
 
         return Ok(TrackerInstanceDto.FromEntity(instance));
@@ -937,7 +921,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
 
         var userId = HttpContext.GetSubjectIdString()!;
-        if (existing.UserId != userId && !HttpContext.IsAdmin())
+        if (existing.UserId != userId && !HttpContext.IsSuperuser())
             return Forbid();
 
         await _repository.DeletePresetAsync(id, HttpContext.RequestAborted);

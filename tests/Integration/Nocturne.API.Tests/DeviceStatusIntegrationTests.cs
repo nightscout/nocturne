@@ -253,6 +253,93 @@ public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task FindOnAFieldOfTheDocument_IsHonouredOnListCountAndDelete()
+    {
+        var loopAt = UniqueTime();
+        var uploaderAt = loopAt.AddMinutes(5);
+        await PostAsync(new
+        {
+            created_at = Iso(loopAt), mills = Mills(loopAt), device = "loop://iPhone",
+            loop = new { enacted = new { timestamp = Iso(loopAt), rate = 0.5, duration = 30 } },
+        });
+        await PostAsync(new { created_at = Iso(uploaderAt), mills = Mills(uploaderAt), device = "xDrip-DexcomG6", uploader = new { battery = 41 } });
+
+        var newestLoop = await ListAsync(loopAt, uploaderAt, "&find[loop][$exists]=true&count=1");
+        newestLoop.Should().ContainSingle().Which.GetProperty("device").GetString().Should().Be("loop://iPhone");
+        (await CountAsync(loopAt, uploaderAt, "&find[loop][$exists]=true")).Should().Be(1);
+
+        var deleted = await CreateAuthenticatedClient().DeleteAsync(
+            $"/api/v1/devicestatus/*?{Window(loopAt, uploaderAt)}&find[device][$ne]=loop://iPhone");
+
+        (await deleted.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("deletedCount").GetInt64().Should().Be(1);
+        (await ListAsync(loopAt, uploaderAt)).Should().ContainSingle()
+            .Which.GetProperty("device").GetString().Should().Be("loop://iPhone");
+    }
+
+    [Fact]
+    public async Task BulkDeleteById_DeletesOnlyThatStatus()
+    {
+        var at = UniqueTime();
+        await PostAsync(new { created_at = Iso(at), mills = Mills(at), device = "xDrip-DexcomG6", uploader = new { battery = 40 } });
+        await PostAsync(new { created_at = Iso(at.AddMinutes(1)), mills = Mills(at.AddMinutes(1)), device = "xDrip-DexcomG6", uploader = new { battery = 41 } });
+        var ids = (await ListAsync(at, at.AddMinutes(1))).Select(doc => doc.GetProperty("_id").GetString()).ToList();
+
+        var deleted = await CreateAuthenticatedClient().DeleteAsync($"/api/v1/devicestatus/*?find[_id]={ids[0]}");
+
+        (await deleted.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("deletedCount").GetInt64().Should().Be(1);
+        (await ListAsync(at, at.AddMinutes(1))).Select(doc => doc.GetProperty("_id").GetString())
+            .Should().Equal(ids[1]);
+    }
+
+    [Theory]
+    [InlineData("find[created_at][$gte]=")]
+    [InlineData("find[created_at][$gte]=yesterday")]
+    [InlineData("find[created_at][]=")]
+    [InlineData("find[device][$where]=1")]
+    [InlineData("find[device][$options]=i")]
+    [InlineData("find[loop][$exists]=yes")]
+    public async Task BulkDeleteWithAConditionItCannotEvaluate_IsRefusedAndDeletesNothing(string condition)
+    {
+        var at = UniqueTime();
+        var device = $"test://unevaluable-{Guid.NewGuid():N}";
+        await PostAsync(new { created_at = Iso(at), mills = Mills(at), device, uploader = new { battery = 40 } });
+
+        var response = await CreateAuthenticatedClient().DeleteAsync($"/api/v1/devicestatus/*?find[device]={device}&{condition}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ListAsync(at, at)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task AnUploadersOwnIdThatIsNotAnObjectId_FindsAndDeletesItsStatus()
+    {
+        var at = UniqueTime();
+        var id = $"xdrip-{Guid.NewGuid():N}";
+        await PostAsync(new { _id = id, created_at = Iso(at), mills = Mills(at), device = "xDrip-DexcomG6", uploader = new { battery = 40 } });
+
+        (await AuthenticatedClient.GetFromJsonAsync<List<JsonElement>>($"/api/v1/devicestatus?find[_id]={id}"))
+            .Should().ContainSingle().Which.GetProperty("created_at").GetString().Should().Be(Iso(at));
+
+        var deleted = await CreateAuthenticatedClient().DeleteAsync($"/api/v1/devicestatus/*?find[_id]={id}");
+
+        (await deleted.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("deletedCount").GetInt64().Should().Be(1);
+        (await ListAsync(at, at)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task UnencodedOffsetInABound_IsReadAsAnOffset()
+    {
+        var at = UniqueTime();
+        await PostAsync(new { created_at = Iso(at), mills = Mills(at), device = "xDrip-DexcomG6", uploader = new { battery = 40 } });
+        var local = at.AddHours(10).ToString("yyyy-MM-ddTHH:mm:ss.fff") + "+10:00";
+
+        var listed = await AuthenticatedClient.GetFromJsonAsync<List<JsonElement>>(
+            $"/api/v1/devicestatus?find[created_at][$gte]={local}&find[created_at][$lte]={local}");
+
+        listed.Should().ContainSingle().Which.GetProperty("created_at").GetString().Should().Be(Iso(at));
+    }
+
+    [Fact]
     public async Task HealthCheck_ShouldReturnOk()
     {
         // Act
@@ -262,8 +349,11 @@ public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    private static int _timeSlot;
+
+    /// <summary>A time no other call in this run returns, ten minutes from the last.</summary>
     private static DateTime UniqueTime() =>
-        new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(Random.Shared.Next(0, 50_000) * 10);
+        new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(Interlocked.Increment(ref _timeSlot) * 10);
 
     private static string Iso(DateTime at) => at.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
@@ -283,10 +373,10 @@ public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
         (await AuthenticatedClient.GetFromJsonAsync<List<JsonElement>>(
             $"/api/v1/devicestatus?{Window(from, to)}{paging}"))!;
 
-    private async Task<long> CountAsync(DateTime from, DateTime to)
+    private async Task<long> CountAsync(DateTime from, DateTime to, string find = "")
     {
         var rows = await AuthenticatedClient.GetFromJsonAsync<List<JsonElement>>(
-            $"/api/v1/count/devicestatus/where?{Window(from, to)}");
+            $"/api/v1/count/devicestatus/where?{Window(from, to)}{find}");
         return rows!.Count == 0 ? 0 : rows.Single().GetProperty("count").GetInt64();
     }
 

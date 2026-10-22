@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
@@ -17,7 +17,7 @@ public sealed record ActiveTenant(Guid Id, string Slug, string DisplayName);
 /// per window rather than one per poller tick; with no list yet, the failure reaches the caller.
 /// </remarks>
 public sealed class ActiveTenantSnapshot(
-    IDbContextFactory<NocturneDbContext> contextFactory,
+    INocturneDbContextFactory contextFactory,
     TimeProvider timeProvider,
     ILogger<ActiveTenantSnapshot> logger)
 {
@@ -60,7 +60,7 @@ public sealed class ActiveTenantSnapshot(
 
         try
         {
-            await using var context = await contextFactory.CreateDbContextAsync();
+            await using var context = await contextFactory.CreatePlatformAsync();
             var tenants = await context.Tenants.AsNoTracking()
                 .Where(t => t.IsActive)
                 .Select(t => new ActiveTenant(t.Id, t.Slug, t.DisplayName))

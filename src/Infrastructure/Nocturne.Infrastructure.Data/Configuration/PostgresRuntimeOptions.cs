@@ -20,7 +20,30 @@ internal static class PostgresRuntimeOptions
         var builder = new NpgsqlDataSourceBuilder(config.ConnectionString);
         builder.ConnectionStringBuilder.MaxPoolSize = config.MaxPoolSize;
         ApplyStatementTimeout(builder.ConnectionStringBuilder, config.StatementTimeoutSeconds);
+        ApplyIdleInTransactionTimeout(builder.ConnectionStringBuilder, config.IdleInTransactionTimeoutSeconds);
         return builder.Build();
+    }
+
+    /// <summary>
+    /// Appends a server-side <c>idle_in_transaction_session_timeout</c> to the runtime pool's
+    /// startup options, so a transaction left open by a fault is ended by PostgreSQL rather than
+    /// holding its tenant's v3 history back (<see cref="HistoryHorizon"/>) and its locks for good.
+    /// No Nocturne transaction waits between statements anywhere near that long. A non-positive
+    /// value is a no-op.
+    /// </summary>
+    internal static void ApplyIdleInTransactionTimeout(
+        NpgsqlConnectionStringBuilder builder,
+        int idleInTransactionTimeoutSeconds)
+    {
+        if (idleInTransactionTimeoutSeconds <= 0)
+        {
+            return;
+        }
+
+        var option = $"-c idle_in_transaction_session_timeout={(long)idleInTransactionTimeoutSeconds * 1000}";
+        builder.Options = string.IsNullOrWhiteSpace(builder.Options)
+            ? option
+            : $"{builder.Options} {option}";
     }
 
     /// <summary>

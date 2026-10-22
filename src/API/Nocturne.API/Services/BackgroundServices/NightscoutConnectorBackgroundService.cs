@@ -1,9 +1,11 @@
+using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Multitenancy;
 using System.Collections.Concurrent;
 using SocketIOClient;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
@@ -97,10 +99,10 @@ public class NightscoutConnectorBackgroundService
                 _socketClients, tenantId, tenantSlug, c => c.Connected, DisconnectAndDisposeAsync))
             return;
 
-        using var tenantScope = ServiceProvider.CreateScope();
-
-        var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-        tenantAccessor.SetTenant(new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false));
+        await using var tenantScope = TenantJobScope.Open(
+            ServiceProvider,
+            new TenantContext(tenantId, tenantSlug, displayName, true, IsDemo: false),
+            AuditEndpoint);
 
         var loader = tenantScope.ServiceProvider
             .GetRequiredService<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>>();

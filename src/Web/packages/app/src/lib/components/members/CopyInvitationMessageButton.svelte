@@ -2,18 +2,16 @@
   import SubmitButton from "$lib/forms/SubmitButton.svelte";
   import Check from "@lucide/svelte/icons/check";
   import MessageSquareText from "@lucide/svelte/icons/message-square-text";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
 
   interface Props {
     url: string;
     inviterName?: string;
-    onCopied: () => void;
-    onCopyFailed: () => void;
   }
 
-  let { url, inviterName, onCopied, onCopyFailed }: Props = $props();
+  let { url, inviterName }: Props = $props();
 
-  let copied = $state(false);
+  const copy = createCopyFeedback();
   let copies = $state(0);
 
   const message = $derived(
@@ -23,14 +21,8 @@
   );
 
   async function copyMessage() {
-    if (!(await copyToClipboard(message))) {
-      onCopyFailed();
-      return;
-    }
-    onCopied();
+    if (!(await copy.copy(message))) return;
     copies += 1;
-    copied = true;
-    setTimeout(() => (copied = false), 2000);
   }
 </script>
 
@@ -41,7 +33,7 @@
   class="w-full"
   onclick={copyMessage}
 >
-  {#if copied}
+  {#if copy.isCopied()}
     <Check class="h-4 w-4 text-success" />
     Message copied
   {:else}

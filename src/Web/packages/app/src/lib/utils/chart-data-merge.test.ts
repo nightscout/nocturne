@@ -34,6 +34,7 @@ function chartData(
     activitySpans: [],
     tempBasalSpans: [],
     basalDeliverySpans: [],
+    lastPumpSyncMills: null,
     defaultBasalRate: 1,
     thresholds: thresholds(),
     maxIob: 0,

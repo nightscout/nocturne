@@ -9,11 +9,11 @@ public static class AuditContextExtensions
 {
     /// <summary>
     /// True when a mutation carries no human actor: either an explicitly system-attributed
-    /// context (<see cref="IAuditContext.IsSystem"/>), or no context at all. A null context is
-    /// a background save that never populated one — an HTTP request always resolves a scoped
-    /// context — and writing it produces an audit row whose actor, auth type and endpoint are
-    /// all null. Such mutations are not recorded; their provenance is already on the records
-    /// themselves (<c>data_source</c>).
+    /// context (<see cref="IAuditContext.IsSystem"/>), or no context at all. A context is null
+    /// when the DbContext belongs to no DI scope (one from a root-resolved factory, which a
+    /// singleton or hosted service holds), and writing it would produce an audit row whose actor,
+    /// auth type and endpoint are all null. Such mutations are not recorded; their provenance is
+    /// already on the records themselves (<c>data_source</c>).
     /// </summary>
     public static bool IsSystemMutation(this IAuditContext? auditContext)
         => auditContext is null || auditContext.IsSystem;

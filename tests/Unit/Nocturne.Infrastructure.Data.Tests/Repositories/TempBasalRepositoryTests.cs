@@ -4,6 +4,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -30,7 +33,7 @@ public class TempBasalRepositoryTests : IDisposable
 
         _context = _db.CreateContext();
         _repository = new TempBasalRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<TempBasalRepository>.Instance);
@@ -204,6 +207,28 @@ public class TempBasalRepositoryTests : IDisposable
 
         result.Should().NotBeNull();
         result!.Rate.Should().Be(1.0);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ResendOnTheSameSyncKey_KeepsTheAutomaticStamp()
+    {
+        var start = DateTime.UtcNow;
+        TempBasal Send(Dictionary<string, object?>? properties) => new()
+        {
+            StartTimestamp = start,
+            Rate = 1.0,
+            DataSource = "trio",
+            SyncIdentifier = "sync-1",
+            AdditionalProperties = properties,
+        };
+
+        await _repository.CreateAsync(Send(TempBasalAutomaticFlag.Keep(null, true)), WriteOrigin.Live);
+        var stamped = await _repository.CreateAsync(Send(TempBasalAutomaticFlag.Keep(null, true)), WriteOrigin.Live);
+        TempBasalAutomaticFlag.Of(stamped.AdditionalProperties).Should().BeTrue();
+
+        var unstamped = await _repository.CreateAsync(Send(null), WriteOrigin.Live);
+        TempBasalAutomaticFlag.Of(unstamped.AdditionalProperties).Should().BeTrue();
+        (await _context.TempBasals.CountAsync()).Should().Be(1);
     }
 
     [Fact]

@@ -418,7 +418,6 @@ public sealed record RustReplayRequest
     public bool IncludeTicks { get; init; }
 }
 
-/// <summary>One replay tick.</summary>
 public sealed record RustReplayTick
 {
     /// <summary>The tick instant, UTC.</summary>

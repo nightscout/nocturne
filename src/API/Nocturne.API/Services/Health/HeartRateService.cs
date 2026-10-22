@@ -7,6 +7,7 @@ using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Health;
 
@@ -16,21 +17,20 @@ namespace Nocturne.API.Services.Health;
 /// </summary>
 /// <seealso cref="IHeartRateService"/>
 /// <seealso cref="TimeSeriesEntityService{TModel,TEntity}"/>
-/// <param name="dbContext">EF Core context providing access to the heart rates table.</param>
 /// <param name="documentProcessingService">Service that applies field processing before save.</param>
 /// <param name="signalRBroadcastService">Service used to broadcast entity changes over SignalR.</param>
 /// <param name="logger">Logger instance for this service.</param>
 public class HeartRateService(
-    NocturneDbContext dbContext,
+    INocturneDbContextFactory contexts,
     IDocumentProcessingService documentProcessingService,
     ISignalRBroadcastService signalRBroadcastService,
     ILogger<HeartRateService> logger
 )
     : TimeSeriesEntityService<HeartRate, HeartRateEntity>(
-        dbContext, documentProcessingService, signalRBroadcastService, logger),
+        contexts, documentProcessingService, signalRBroadcastService, logger),
         IHeartRateService
 {
-    protected override DbSet<HeartRateEntity> EntitySet => DbContext.HeartRates;
+    protected override DbSet<HeartRateEntity> EntitySet(NocturneDbContext db) => db.HeartRates;
     protected override string CollectionName => "heartrate";
     protected override string EntityTypeName => "heart rate";
 
@@ -68,10 +68,11 @@ public class HeartRateService(
         // Group in PostgreSQL so a dense wearable stream does not cross the API boundary as
         // hundreds of thousands of points. The source table remains untouched and the normal
         // tenant/soft-delete filters on EntitySet still apply.
+        await using var db = await Contexts.CreateAsync(cancellationToken);
         var rangeStart = from;
         var rangeEnd = to;
         var buckets = await (
-            from row in EntitySet.AsNoTracking()
+            from row in EntitySet(db).AsNoTracking()
             where row.Timestamp >= rangeStart && row.Timestamp < rangeEnd
             let utcTimestamp = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(row.Timestamp, "UTC")
             group row by new

@@ -87,11 +87,8 @@ public class CurrentTherapyStateControllerTests
             .Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         _targetRangeResolver
-            .Setup(r => r.GetLowBGTargetAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(80.0);
-        _targetRangeResolver
-            .Setup(r => r.GetHighBGTargetAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(160.0);
+            .Setup(r => r.GetBGTargetRangeAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((80.0, 160.0));
 
         var result = await _controller.GetCurrentTherapyState();
 

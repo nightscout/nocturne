@@ -24,7 +24,7 @@ public abstract class SyncKeyedRepositoryBase<TModel, TEntity> : V4RepositoryBas
 {
     /// <inheritdoc />
     protected SyncKeyedRepositoryBase(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger logger,
         IV4RecordBroadcaster<TModel>? broadcaster = null,

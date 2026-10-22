@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
@@ -24,18 +25,15 @@ namespace Nocturne.API.Controllers.V3;
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class TreatmentsController : BaseV3Controller<Treatment>
 {
-    private readonly ITreatmentStore _treatmentStore;
     private readonly ITreatmentService _treatmentService;
 
     public TreatmentsController(
-        ITreatmentStore treatmentStore,
         IDocumentProcessingService documentProcessingService,
         ITreatmentService treatmentService,
         ILogger<TreatmentsController> logger
     )
         : base(documentProcessingService, logger)
     {
-        _treatmentStore = treatmentStore;
         _treatmentService = treatmentService;
     }
 
@@ -79,25 +77,19 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                 ?? ConvertV3FilterToV1Find(parameters.Filter);
 
-            // Determine sort direction from sort$desc query parameter
-            // Nightscout V3: sort$desc=field means descending (newest first)
-            // reverseResults=false means descending, reverseResults=true means ascending
-            var hasSortDesc = HttpContext?.Request.Query.ContainsKey("sort$desc") ?? false;
-            var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
-
-            // Get treatments using existing backend with V3 parameters
-            var treatments = await _treatmentService.GetTreatmentsWithAdvancedFilterAsync(
-                count: parameters.Limit,
-                skip: parameters.Offset,
-                findQuery: findQuery,
-                reverseResults: reverseResults,
-                cancellationToken: cancellationToken
+            var treatments = await _treatmentService.QueryTreatmentsAsync(
+                new TreatmentQuery
+                {
+                    Find = findQuery,
+                    Count = parameters.Limit,
+                    Skip = parameters.Offset,
+                    ReverseResults = !parameters.Sort.Descending,
+                    SortField = ReadSortFieldOf(parameters.Sort),
+                },
+                cancellationToken
             );
 
             var treatmentsList = treatments.ToList();
-
-            // Get total count for pagination
-            var totalCount = await GetTotalCountAsync(findQuery, cancellationToken);
 
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(treatmentsList);
@@ -165,7 +157,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     /// </summary>
     /// <param name="treatment">The <see cref="Treatment"/> to create.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The created <see cref="Treatment"/>.</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for the created or already stored treatment.</returns>
     /// <remarks>
     /// Supports AAPS deduplication: if a treatment with the same ID already exists,
     /// returns 200 with <c>isDeduplication: true</c>.
@@ -180,11 +172,12 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v3/treatments")]
-    [ProducesResponseType(typeof(Treatment), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<Treatment>> CreateTreatment(
+    public async Task<ActionResult> CreateTreatment(
         [FromBody] Treatment treatment,
         CancellationToken cancellationToken = default
     )
@@ -212,16 +205,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 );
                 if (existingTreatment != null)
                 {
-                    var existingIdentifier = MongoObjectId.Coerce(existingTreatment.Id);
-                    return Ok(
-                        new
-                        {
-                            status = 200,
-                            identifier = existingIdentifier,
-                            isDeduplication = true,
-                            deduplicatedIdentifier = existingIdentifier,
-                        }
-                    );
+                    return V3Deduplicated(existingTreatment.Id, existingTreatment.SrvModified);
                 }
             }
 
@@ -234,24 +218,14 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 cancellationToken
             );
 
-            var createdTreatment = created.FirstOrDefault();
-            if (createdTreatment == null)
-            {
-                return CreateV3ErrorResponse(
-                    500,
-                    "Failed to create treatment",
-                    "Treatment creation failed"
-                );
-            }
+            if (created.Rejected is [{ Reason: var reason }])
+                return CreateV3ErrorResponse(400, "Treatment cannot be stored", reason);
+
+            var createdTreatment = created[0];
 
             _logger.LogDebug("Successfully created V3 treatment {Id}", createdTreatment.Id);
 
-            // Location resolves to the 24-hex ObjectId that matches the response body identifier.
-            return CreatedAtAction(
-                nameof(GetTreatment),
-                new { id = MongoObjectId.Coerce(createdTreatment.Id) },
-                createdTreatment
-            );
+            return V3Created(nameof(GetTreatment), createdTreatment.Id);
         }
         catch (ArgumentException ex)
         {
@@ -316,10 +290,10 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 cancellationToken
             );
 
-            var createdArray = createdTreatments.ToArray();
+            var createdArray = TreatmentEcho.InSubmittedOrder(createdTreatments);
             _logger.LogDebug(
                 "Successfully created {Count} V3 treatments via bulk operation",
-                createdArray.Length
+                createdTreatments.Count
             );
 
             return StatusCode(201, createdArray);
@@ -540,23 +514,6 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
     #region Helper Methods
 
-    private async Task<long> GetTotalCountAsync(
-        string? findQuery,
-        CancellationToken cancellationToken
-    )
-    {
-        try
-        {
-            // Use the count endpoint to get total
-            return await _treatmentStore.CountAsync(findQuery, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get total count for V3 treatments, using estimate");
-            // Return a reasonable estimate if count fails
-            return 1000;
-        }
-    }
 
     private DateTimeOffset GetLastModified(List<Treatment> treatments)
     {

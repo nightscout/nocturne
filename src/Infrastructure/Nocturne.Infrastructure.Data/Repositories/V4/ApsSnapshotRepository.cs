@@ -27,7 +27,7 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
     /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
     // logger is unused but retained for DI + direct test construction.
     public ApsSnapshotRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<ApsSnapshotRepository> logger,
         IV4RecordBroadcaster<ApsSnapshot>? broadcaster = null)

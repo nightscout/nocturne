@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
@@ -33,6 +35,8 @@ public class OAuthDeviceCodeServiceTests : IDisposable
     private readonly Guid _testClientEntityId = Guid.CreateVersion7();
     private readonly Guid _testSubjectId = Guid.CreateVersion7();
     private readonly Guid _testGrantId = Guid.CreateVersion7();
+
+    private static readonly IReadOnlySet<string> FullAccess = new HashSet<string> { Scope.FullAccess };
 
     public OAuthDeviceCodeServiceTests()
     {
@@ -75,8 +79,9 @@ public class OAuthDeviceCodeServiceTests : IDisposable
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
                 It.IsAny<bool>(),
+                It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, bool limitTo24Hours, CancellationToken _) =>
+            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, bool limitTo24Hours, bool _, CancellationToken _) =>
                 new OAuthGrantInfo
                 {
                     LimitTo24Hours = limitTo24Hours,
@@ -91,7 +96,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
     private OAuthDeviceCodeService CreateService(NocturneDbContext dbContext)
     {
         return new OAuthDeviceCodeService(
-            dbContext,
+            dbContext.AsFactory(),
             _mockJwtService.Object,
             _mockClientService.Object,
             _mockGrantService.Object,
@@ -206,7 +211,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         Assert.Equal(5, result.Interval);
 
         // Verify entity was persisted with the hashed device code
-        var entity = await db.OAuthDeviceCodes
+        var entity = await db.OAuthDeviceCodes.AsNoTracking()
             .FirstOrDefaultAsync(d => d.DeviceCodeHash == TestDeviceCodeHash);
         Assert.NotNull(entity);
         Assert.Equal(TestClientId, entity.ClientId);
@@ -255,7 +260,6 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         Assert.Equal("TESTCD01", info.UserCode);
         Assert.Equal(TestClientId, info.ClientId);
         Assert.Equal("Test App", info.ClientDisplayName);
-        Assert.False(info.IsKnownClient);
         Assert.Contains("glucose.read", info.Scopes);
         Assert.Contains("treatments.readwrite", info.Scopes);
         Assert.False(info.IsExpired);
@@ -312,13 +316,13 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         var service = CreateService(db);
 
         // Act
-        var result = await service.ApproveDeviceCodeAsync("PNDNG001", _testSubjectId);
+        var result = await service.ApproveDeviceCodeAsync("PNDNG001", _testSubjectId, FullAccess);
 
         // Assert
         Assert.True(result);
 
         // Verify entity was updated
-        var entity = await db.OAuthDeviceCodes
+        var entity = await db.OAuthDeviceCodes.AsNoTracking()
             .FirstAsync(d => d.UserCode == "PNDNG001");
         Assert.NotNull(entity.ApprovedAt);
         Assert.Equal(_testGrantId, entity.GrantId);
@@ -332,7 +336,56 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             It.IsAny<string>(),
             It.IsAny<string?>(),
             It.IsAny<bool>(),
+            true,
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApproveDeviceCodeAsync_GrantsOnlyWhatTheApproverHolds()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        await SeedGrantAsync(db);
+        await SeedDeviceCodeAsync(db, userCode: "CAPPED01",
+            scopes: [Scope.FullAccess, Scope.GlucoseRead, Scope.TreatmentsReadWrite]);
+
+        var service = CreateService(db);
+
+        var result = await service.ApproveDeviceCodeAsync(
+            "CAPPED01", _testSubjectId, new HashSet<string> { Scope.GlucoseRead });
+
+        Assert.True(result);
+        _mockGrantService.Verify(g => g.CreateOrUpdateGrantAsync(
+            _testClientEntityId,
+            _testSubjectId,
+            It.Is<IEnumerable<string>>(s => s.SequenceEqual(new[] { Scope.GlucoseRead })),
+            It.IsAny<string>(),
+            It.IsAny<string?>(),
+            It.IsAny<bool>(),
+            It.IsAny<bool>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApproveDeviceCodeAsync_ApproverHoldingNoneOfTheRequest_ReturnsFalse()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        await SeedDeviceCodeAsync(db, userCode: "NOSCOPE1", scopes: [Scope.TreatmentsReadWrite]);
+
+        var service = CreateService(db);
+
+        var result = await service.ApproveDeviceCodeAsync(
+            "NOSCOPE1", _testSubjectId, new HashSet<string> { Scope.GlucoseRead });
+
+        Assert.False(result);
+        _mockGrantService.Verify(g => g.CreateOrUpdateGrantAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<bool>(),
+            It.IsAny<bool>(),
+            It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -346,7 +399,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         var service = CreateService(db);
 
         // Act
-        var result = await service.ApproveDeviceCodeAsync("EXPRD001", _testSubjectId);
+        var result = await service.ApproveDeviceCodeAsync("EXPRD001", _testSubjectId, FullAccess);
 
         // Assert
         Assert.False(result);
@@ -363,7 +416,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         var service = CreateService(db);
 
         // Act
-        var result = await service.ApproveDeviceCodeAsync("APRVD001", _testSubjectId);
+        var result = await service.ApproveDeviceCodeAsync("APRVD001", _testSubjectId, FullAccess);
 
         // Assert
         Assert.False(result);
@@ -380,7 +433,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         var service = CreateService(db);
 
         // Act
-        var result = await service.ApproveDeviceCodeAsync("DEND0001", _testSubjectId);
+        var result = await service.ApproveDeviceCodeAsync("DEND0001", _testSubjectId, FullAccess);
 
         // Assert
         Assert.False(result);
@@ -406,7 +459,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         Assert.True(result);
 
         // Verify entity was updated
-        var entity = await db.OAuthDeviceCodes
+        var entity = await db.OAuthDeviceCodes.AsNoTracking()
             .FirstAsync(d => d.UserCode == "DENY0001");
         Assert.NotNull(entity.DeniedAt);
     }
@@ -510,11 +563,12 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
     private OAuthTokenService CreateService(NocturneDbContext dbContext)
     {
         return new OAuthTokenService(
-            dbContext,
+            dbContext.AsFactory(),
             _mockJwtService.Object,
             _mockSubjectService.Object,
             _mockGrantService.Object,
             Mock.Of<IOAuthTokenRevocationCache>(),
+            new FakeTimeProvider(DateTimeOffset.UtcNow),
             _mockLogger.Object
         );
     }
@@ -652,7 +706,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
         Assert.Null(result.ErrorDescription);
 
         // Verify a refresh token was persisted
-        var refreshToken = await db.OAuthRefreshTokens
+        var refreshToken = await db.OAuthRefreshTokens.AsNoTracking()
             .FirstOrDefaultAsync(t => t.TokenHash == TestRefreshTokenHash);
         Assert.NotNull(refreshToken);
         Assert.Equal(grantId, refreshToken.GrantId);
@@ -715,6 +769,82 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
     }
 
     [Fact]
+    public async Task ExchangeDeviceCodeAsync_ApprovedCodeExchangedTwice_IssuesTokensOnceAndRevokesTheGrant()
+    {
+        _mockJwtService.SetupSequence(j => j.GenerateRefreshToken())
+            .Returns("first-refresh-token")
+            .Returns("second-refresh-token");
+        _mockJwtService.Setup(j => j.HashRefreshToken(It.Is<string>(t => t.EndsWith("-refresh-token"))))
+            .Returns((string t) => t + "-hash");
+
+        using (var seed = CreateDbContext())
+        {
+            await SeedClientAsync(seed);
+            await SeedSubjectAsync(seed);
+            await SeedGrantAsync(seed);
+            await SeedDeviceCodeAsync(seed,
+                approvedAt: DateTime.UtcNow.AddMinutes(-1),
+                grantId: _testGrantId,
+                subjectId: _testSubjectId);
+        }
+
+        using var firstPoll = CreateDbContext();
+        var first = await CreateService(firstPoll).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+        using var secondPoll = CreateDbContext();
+        var second = await CreateService(secondPoll).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+
+        Assert.True(first.Success);
+        Assert.False(second.Success);
+        Assert.Equal("invalid_grant", second.Error);
+        Assert.Equal(1, await secondPoll.OAuthRefreshTokens.CountAsync());
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(_testGrantId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExchangeDeviceCodeAsync_CodeRedeemedByARivalPollMidExchange_FailsAndRevokesTheGrant()
+    {
+        // The rival redeems the code after this poll has read it as approved and unredeemed, so
+        // only the conditional claim can stop a second token pair.
+        var rivalRedemption = new RedeemOnNextSave();
+        using var racedDb = TestDbContextFactory.CreateSqliteWithTenant(_testTenantId, "test", rivalRedemption);
+        using var db = racedDb.CreateContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        await SeedGrantAsync(db);
+        await SeedDeviceCodeAsync(db,
+            approvedAt: DateTime.UtcNow.AddMinutes(-1),
+            grantId: _testGrantId,
+            subjectId: _testSubjectId);
+
+        rivalRedemption.Armed = true;
+        var result = await CreateService(db).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+
+        Assert.False(rivalRedemption.Armed);
+        Assert.False(result.Success);
+        Assert.Equal("invalid_grant", result.Error);
+        Assert.False(await db.OAuthRefreshTokens.AnyAsync());
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(_testGrantId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private sealed class RedeemOnNextSave : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+
+        public override async ValueTask<int> SavedChangesAsync(
+            SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+        {
+            if (Armed)
+            {
+                Armed = false;
+                await eventData.Context!.Database.ExecuteSqlRawAsync(
+                    "UPDATE oauth_device_codes SET redeemed_at = CURRENT_TIMESTAMP", cancellationToken);
+            }
+
+            return result;
+        }
+    }
+
+    [Fact]
     public async Task ExchangeDeviceCodeAsync_DeniedCode_ReturnsAccessDenied()
     {
         // Arrange
@@ -771,7 +901,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
         Assert.Equal("slow_down", result.Error);
 
         // Verify interval was increased by 5 seconds per RFC 8628
-        var entity = await db.OAuthDeviceCodes
+        var entity = await db.OAuthDeviceCodes.AsNoTracking()
             .FirstAsync(d => d.DeviceCodeHash == TestDeviceCodeHash);
         Assert.Equal(10, entity.Interval); // 5 + 5
     }

@@ -302,10 +302,12 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             var dict = new Dictionary<(StateSpanCategory, string?), StateSpanSnapshot>(needs.ReferencedStateSpans.Count);
             foreach (var key in needs.ReferencedStateSpans)
             {
-                var span = await _deps.StateSpans.GetActiveAtAsync(key.Category, key.State, now, ct);
-                if (span is not null)
+                var startedAt = key.Category == StateSpanCategory.Profile
+                    ? await ActiveProfileStartAsync(key.State, now, ct)
+                    : (await _deps.StateSpans.GetActiveAtAsync(key.Category, key.State, now, ct))?.StartTimestamp;
+                if (startedAt is { } start)
                 {
-                    dict[key] = new StateSpanSnapshot(key.Category, key.State, span.StartTimestamp);
+                    dict[key] = new StateSpanSnapshot(key.Category, key.State, start);
                 }
             }
             enriched = enriched with { ActiveStateSpans = dict };
@@ -365,8 +367,10 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         decimal glucoseMgdl, DateTime at, string? tenantTimeZoneId, CancellationToken ct)
     {
         var atMills = new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
-        var profileName = await _deps.ActiveProfileResolver.GetActiveProfileNameAsync(atMills, ct) ?? "Default";
-        var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct);
+        var profileName = await _deps.ActiveProfileResolver.GetProfileNameAsync(atMills, ct);
+        // Before the store's first version, its newest, as ProfileVersionCache.ActiveAt reads it.
+        var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct)
+            ?? (await _deps.TargetRangeSchedules.GetByProfileNameAsync(profileName, ct)).MaxBy(s => s.Timestamp);
 
         // No schedule at all — fall back to the consensus in-range band and clinical bucket defaults.
         if (schedule is null || schedule.Entries.Count == 0)
@@ -486,9 +490,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         if (needs.NeedsTempBasal)
         {
             var temp = await _deps.TempBasals.GetActiveAtAsync(now, ct);
-            if (temp is not null)
+            if (temp is { Rate: { } rate })
             {
-                enriched = enriched with { ActiveTempBasal = ProjectTempBasal(temp) };
+                enriched = enriched with { ActiveTempBasal = ProjectTempBasal(temp, rate) };
             }
         }
 
@@ -524,9 +528,9 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         return enriched;
     }
 
-    private static TempBasalSnapshot ProjectTempBasal(TempBasal t) =>
+    private static TempBasalSnapshot ProjectTempBasal(TempBasal t, double rate) =>
         new(
-            Rate: (decimal)t.Rate,
+            Rate: (decimal)rate,
             ScheduledRate: t.ScheduledRate.HasValue ? (decimal?)t.ScheduledRate.Value : null,
             StartedAt: t.StartTimestamp);
 
@@ -659,6 +663,25 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     {
         var evt = await _deps.DeviceEvents.GetLatestByEventTypeAsync(eventType, asOf, ct);
         return evt?.Timestamp;
+    }
+
+    /// <summary>
+    /// When the profile activation in force at <paramref name="now"/> started, for a
+    /// <see cref="StateSpanCategory.Profile"/> leaf. Its state matches any activation when null or
+    /// <see cref="ProfileState.Active"/>, the one state a profile span carried; otherwise it names the
+    /// profile.
+    /// </summary>
+    private async Task<DateTime?> ActiveProfileStartAsync(string? state, DateTime now, CancellationToken ct)
+    {
+        var nowMills = new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        var resolved = await _deps.ProfileActivations.GetAtAsync(nowMills, ct);
+        if (resolved is null)
+            return null;
+
+        var matches = state is null
+            || string.Equals(state, nameof(ProfileState.Active), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state, resolved.ProfileName, StringComparison.OrdinalIgnoreCase);
+        return matches ? resolved.Activation.StartTimestamp : null;
     }
 
     /// <summary>

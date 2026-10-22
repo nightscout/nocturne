@@ -44,10 +44,10 @@ public class DndWindowsController : ControllerBase
     /// <summary>Marker stamped on a window cleared because a newer window of the same scope superseded it.</summary>
     public const string SupersededBy = "system:superseded";
 
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
 
     /// <summary>Initializes a new instance of <see cref="DndWindowsController"/>.</summary>
-    public DndWindowsController(ITenantDbContextFactory contextFactory)
+    public DndWindowsController(INocturneDbContextFactory contextFactory)
     {
         _contextFactory = contextFactory;
     }

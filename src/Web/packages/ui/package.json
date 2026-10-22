@@ -2,6 +2,7 @@
   "name": "@nocturne/ui",
   "version": "0.1.0",
   "type": "module",
+  "sideEffects": ["**/*.css"],
   "description": "Nocturne design system — shared UI primitives",
   "exports": {
     "./ui/*.svelte": "./src/lib/components/ui/*.svelte",

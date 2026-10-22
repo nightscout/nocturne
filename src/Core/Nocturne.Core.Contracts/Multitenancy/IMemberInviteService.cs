@@ -85,7 +85,6 @@ public interface IMemberInviteService
 /// <summary>
 /// Result returned when a new invite link is created via <see cref="IMemberInviteService.CreateInviteAsync"/>.
 /// </summary>
-/// <param name="Id">The unique identifier of the invite.</param>
 /// <param name="Token">The opaque token embedded in the invite URL.</param>
 /// <param name="InviteUrl">The full URL that the invitee should visit to accept.</param>
 /// <param name="ExpiresAt">The UTC timestamp after which the invite is no longer valid.</param>

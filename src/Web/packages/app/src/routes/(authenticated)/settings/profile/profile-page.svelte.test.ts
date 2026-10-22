@@ -82,7 +82,7 @@ describe("settings/profile delete", () => {
     await expect.element(deleteButton()).toBeEnabled();
   });
 
-  it("blocks deleting the active profile and says why", async () => {
+  it("blocks deleting the default profile and says why", async () => {
     therapySettings = [
       therapy({ profileName: "Default" }),
       therapy({ profileName: "default", isDefault: true }),
@@ -93,7 +93,7 @@ describe("settings/profile delete", () => {
 
     await expect.element(deleteButton()).toBeDisabled();
     await expect
-      .element(page.getByText(/active profile\. Set another profile as active first/))
+      .element(page.getByText(/default profile\. Make another profile the default first/))
       .toBeVisible();
   });
 

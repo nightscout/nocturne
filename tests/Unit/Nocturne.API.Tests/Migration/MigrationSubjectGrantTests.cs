@@ -1,3 +1,5 @@
+using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Tests.Shared.Infrastructure;
 using System.Net;
 using System.Text;
 using FluentAssertions;
@@ -123,10 +125,8 @@ public class MigrationSubjectGrantTests
         var database = $"migration-grants-{Guid.NewGuid():N}";
 
         return new ServiceCollection()
-            .AddDbContext<NocturneDbContext>(o => o.UseInMemoryDatabase(database))
-            // The grant lookup builds its own context, as it does in the request pipeline.
-            .AddDbContextFactory<NocturneDbContext>(
-                o => o.UseInMemoryDatabase(database), lifetime: ServiceLifetime.Scoped)
+            .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(database))
+            .AddDataServices()
             .AddScoped<ITenantAccessor, FixedTenantAccessor>()
             .AddScoped<IAuditContext, AuditContext>()
             .AddSingleton<IHttpClientFactory, StubHttpClientFactory>()
@@ -139,7 +139,7 @@ public class MigrationSubjectGrantTests
     private static async Task<Guid> SeedOwnerAsync(IServiceProvider provider, Guid tenantId)
     {
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         var ownerSubjectId = Guid.CreateVersion7();
         var memberId = Guid.CreateVersion7();
@@ -243,7 +243,7 @@ public class MigrationSubjectGrantTests
         var tenantId = await RunSubjectMigrationAsync(provider);
 
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         var grant = await GrantForAsync(db, tenantId, "Reader");
 
@@ -273,7 +273,7 @@ public class MigrationSubjectGrantTests
         var tenantId = await RunSubjectMigrationAsync(provider);
 
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         // The regression this whole shape exists to prevent. A device imported as an account is a
         // member with no passkey and no provider, which takes the tenant into recovery mode for
@@ -292,7 +292,7 @@ public class MigrationSubjectGrantTests
         var tenantId = await RunSubjectMigrationAsync(provider);
 
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         var grant = await GrantForAsync(db, tenantId, "Reader");
         var holder = await db.Subjects.SingleAsync(s => s.Id == grant!.SubjectId);
@@ -311,7 +311,7 @@ public class MigrationSubjectGrantTests
         var tenantId = await RunSubjectMigrationAsync(provider);
 
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         // The other half of the round trip: what MemberScopeMiddleware makes of the grant when the
         // imported token authenticates. A direct grant is a scoped credential, so the holder's full
@@ -334,7 +334,7 @@ public class MigrationSubjectGrantTests
         var tenantId = await RunSubjectMigrationAsync(provider);
 
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         var grant = await GrantForAsync(db, tenantId, "Reader");
 
@@ -358,7 +358,7 @@ public class MigrationSubjectGrantTests
         // and the token the source issued still resolves through the rule that reads it. Asserting
         // the stored column alone would pass even if nothing could authenticate with it.
         var byIssuedToken = await DirectGrantTokenHandler.FindActiveGrantAsync(
-            factory, ReaderToken, tenantId, DateTime.UtcNow);
+            factory.AsNocturneFactory(), ReaderToken, tenantId, DateTime.UtcNow);
 
         byIssuedToken.Should().NotBeNull();
         byIssuedToken!.Label.Should().Be("Reader");
@@ -366,12 +366,12 @@ public class MigrationSubjectGrantTests
         // The name in front of the dash is cosmetic, and a longer prefix of the same digest is the
         // same credential; both are Nightscout's rule, not ours.
         (await DirectGrantTokenHandler.FindActiveGrantAsync(
-            factory, $"anything-{ReaderDigest}", tenantId, DateTime.UtcNow))
+            factory.AsNocturneFactory(), $"anything-{ReaderDigest}", tenantId, DateTime.UtcNow))
             .Should().NotBeNull();
 
         // A prefix taken from the middle of the digest is not a prefix of it.
         (await DirectGrantTokenHandler.FindActiveGrantAsync(
-            factory, $"reader-{ReaderDigest[8..24]}", tenantId, DateTime.UtcNow))
+            factory.AsNocturneFactory(), $"reader-{ReaderDigest[8..24]}", tenantId, DateTime.UtcNow))
             .Should().BeNull();
     }
 
@@ -382,7 +382,7 @@ public class MigrationSubjectGrantTests
         var tenantId = await RunSubjectMigrationAsync(provider);
 
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         var grant = await GrantForAsync(db, tenantId, "Boss");
 
@@ -397,7 +397,7 @@ public class MigrationSubjectGrantTests
         var tenantId = await RunSubjectMigrationAsync(provider);
 
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         // "denied" is how Nightscout spells "no access". Importing a working credential for it
         // would hand back access the source instance had taken away.
@@ -411,7 +411,7 @@ public class MigrationSubjectGrantTests
         var tenantId = await RunSubjectMigrationAsync(provider, seedOwner: false);
 
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         // The holder is created on demand and is not a person, so an import during first-run setup
         // is not blocked on somebody having claimed the site yet.
@@ -428,7 +428,7 @@ public class MigrationSubjectGrantTests
         // "logger" is a narrow custom role; the name collision must not widen the import.
         using (var seedScope = provider.CreateScope())
         {
-            var seed = seedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var seed = await seedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
             seed.Roles.Add(new RoleEntity
             {
                 Id = Guid.CreateVersion7(),
@@ -443,7 +443,7 @@ public class MigrationSubjectGrantTests
         var tenantId = await RunSubjectMigrationAsync(provider);
 
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         var grant = await GrantForAsync(db, tenantId, "Reader");
 
@@ -462,7 +462,7 @@ public class MigrationSubjectGrantTests
 
         using (var seedScope = provider.CreateScope())
         {
-            var seed = seedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var seed = await seedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
             seed.OAuthGrants.Add(new OAuthGrantEntity
             {
                 Id = Guid.CreateVersion7(),
@@ -498,7 +498,7 @@ public class MigrationSubjectGrantTests
         await job.ExecuteAsync(CancellationToken.None);
 
         using var scope = provider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
 
         // Re-running an import must not hand out a second credential for a token the tenant already
         // holds, or revoking the one on the list would leave a working duplicate behind.

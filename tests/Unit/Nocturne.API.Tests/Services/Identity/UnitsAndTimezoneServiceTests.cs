@@ -15,6 +15,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -196,14 +197,13 @@ public class UnitsAndTimezoneServiceTests
 
     private UnitsAndTimezoneService Service()
     {
-        var db = Context();
         return new UnitsAndTimezoneService(
-            db, _tenants.Object, _records.Object, _connectors.Object, _migrations.Object, _cache.Object,
+            new TestNocturneDbContextFactory(Context()), _tenants.Object, _records.Object, _connectors.Object, _migrations.Object, _cache.Object,
             NullLogger<UnitsAndTimezoneService>.Instance);
     }
 
     private NocturneDbContext Context() => new(_options) { TenantId = TenantId };
 
     private static UISettingsService UiSettings(NocturneDbContext db) =>
-        new(db, NullLogger<UISettingsService>.Instance);
+        new(new TestNocturneDbContextFactory(db), NullLogger<UISettingsService>.Instance);
 }

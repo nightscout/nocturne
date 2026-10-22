@@ -11,7 +11,6 @@ public interface IDataSourceService
     /// <summary>
     /// Get all data sources that have sent data to this Nocturne instance
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of active data sources with their status</returns>
     Task<List<DataSourceInfo>> GetActiveDataSourcesAsync(
         CancellationToken cancellationToken = default
@@ -20,8 +19,6 @@ public interface IDataSourceService
     /// <summary>
     /// Get detailed information about a specific data source
     /// </summary>
-    /// <param name="deviceId">The device identifier</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Data source info if found</returns>
     Task<DataSourceInfo?> GetDataSourceInfoAsync(
         string deviceId,
@@ -31,15 +28,10 @@ public interface IDataSourceService
     /// <summary>
     /// Get available connectors that can be configured
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>List of available connectors</returns>
     Task<List<AvailableConnector>> GetAvailableConnectorsAsync(
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get capabilities for a specific connector.
-    /// </summary>
     /// <param name="connectorId">The connector ID (e.g., "dexcom", "glooko")</param>
     /// <returns>Connector capabilities if found</returns>
     ConnectorCapabilities? GetConnectorCapabilities(string connectorId);
@@ -50,12 +42,7 @@ public interface IDataSourceService
     /// <returns>List of uploader apps with setup instructions</returns>
     List<UploaderApp> GetUploaderApps();
 
-    /// <summary>
-    /// Get the complete services overview
-    /// </summary>
     /// <param name="baseUrl">Base URL for API endpoint info</param>
-    /// <param name="isAuthenticated">Whether the current request is authenticated</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Complete services overview</returns>
     Task<ServicesOverview> GetServicesOverviewAsync(
         string baseUrl,
@@ -67,11 +54,14 @@ public interface IDataSourceService
     /// Delete all data from a specific data source.
     /// This is a destructive operation that cannot be undone.
     /// </summary>
-    /// <param name="dataSourceId">The data source ID to delete</param>
-    /// <param name="cancellationToken">Cancellation token</param>
+    /// <param name="allowReimport">
+    /// Leave the source free to send its records again, including those of earlier deletes. Otherwise
+    /// a resync skips every deleted record.
+    /// </param>
     /// <returns>Result containing number of entries and treatments deleted</returns>
     Task<DataSourceDeleteResult> DeleteDataSourceDataAsync(
         string dataSourceId,
+        bool allowReimport = false,
         CancellationToken cancellationToken = default
     );
 
@@ -79,7 +69,6 @@ public interface IDataSourceService
     /// Delete all demo data (data from the demo-service source).
     /// This is safe to call as demo data can be easily regenerated.
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result containing number of entries and treatments deleted</returns>
     Task<DataSourceDeleteResult> DeleteDemoDataAsync(CancellationToken cancellationToken = default);
 
@@ -88,10 +77,13 @@ public interface IDataSourceService
     /// This is a destructive operation that cannot be undone.
     /// </summary>
     /// <param name="connectorId">The connector ID (e.g., "dexcom", "glooko")</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Result of the delete operation</returns>
+    /// <param name="allowReimport">
+    /// As for <see cref="DeleteDataSourceDataAsync"/>; a connector that was enabled is enabled again, so
+    /// its next sync re-imports the history. Otherwise the connector is left disabled.
+    /// </param>
     Task<DataSourceDeleteResult> DeleteConnectorDataAsync(
         string connectorId,
+        bool allowReimport = false,
         CancellationToken cancellationToken = default
     );
 
@@ -99,7 +91,6 @@ public interface IDataSourceService
     /// Get a summary of data counts for a specific connector.
     /// </summary>
     /// <param name="connectorId">The connector ID (e.g., "dexcom", "glooko")</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Summary of data counts by type</returns>
     Task<ConnectorDataSummary> GetConnectorDataSummaryAsync(
         string connectorId,
@@ -110,8 +101,6 @@ public interface IDataSourceService
     /// Get statistics for a data source aggregated across all tables (V4 glucose repos,
     /// treatments, device status, state spans, etc.).
     /// </summary>
-    /// <param name="dataSource">The data source identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Aggregated statistics for the data source.</returns>
     Task<DataSourceStats> GetDataSourceStatsAsync(
         string dataSource,
@@ -122,8 +111,6 @@ public interface IDataSourceService
     /// Get the latest entry timestamp across all glucose tables (sensor glucose, meter glucose, calibrations)
     /// for a given data source.
     /// </summary>
-    /// <param name="dataSource">The data source identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The latest timestamp, or null if no records exist.</returns>
     Task<DateTime?> GetLatestGlucoseTimestampBySourceAsync(
         string dataSource,
@@ -134,8 +121,6 @@ public interface IDataSourceService
     /// Get the oldest entry timestamp across all glucose tables (sensor glucose, meter glucose, calibrations)
     /// for a given data source.
     /// </summary>
-    /// <param name="dataSource">The data source identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The oldest timestamp, or null if no records exist.</returns>
     Task<DateTime?> GetOldestGlucoseTimestampBySourceAsync(
         string dataSource,

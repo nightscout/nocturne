@@ -1,8 +1,5 @@
 import { vi } from "vitest";
-import type {
-  GoogleHealthPreview,
-  GoogleHealthStatus,
-} from "$lib/api";
+import type { GoogleHealthStatus } from "$lib/api";
 import { effectAwareQuery } from "./effect-aware-query.svelte";
 
 export const googleHealthMocks = {
@@ -12,7 +9,7 @@ export const googleHealthMocks = {
   disconnect: vi.fn(),
   sync: vi.fn(),
   purge: vi.fn(),
-  preview: vi.fn<() => Promise<GoogleHealthPreview>>(),
+  preview: vi.fn<() => Promise<GoogleHealthStatus>>(),
 };
 
 export const getGoogleHealth = () =>

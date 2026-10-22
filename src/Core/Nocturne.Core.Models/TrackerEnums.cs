@@ -134,9 +134,6 @@ public enum CompletionReason
 [JsonConverter(typeof(JsonStringEnumConverter<NotificationUrgency>))]
 public enum NotificationUrgency
 {
-    /// <summary>
-    /// Informational notification
-    /// </summary>
     Info,
 
     /// <summary>
@@ -166,9 +163,6 @@ public enum DashboardVisibility
     /// </summary>
     Off,
 
-    /// <summary>
-    /// Always show on dashboard
-    /// </summary>
     Always,
 
     /// <summary>
@@ -192,9 +186,6 @@ public enum DashboardVisibility
     Urgent
 }
 
-/// <summary>
-/// Mode of tracker operation
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<TrackerMode>))]
 public enum TrackerMode
 {

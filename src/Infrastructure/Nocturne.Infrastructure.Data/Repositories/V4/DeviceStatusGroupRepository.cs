@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
@@ -12,23 +13,26 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <inheritdoc cref="IDeviceStatusGroupRepository"/>
 public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
+    private readonly ILogger<DeviceStatusGroupRepository> _logger;
 
-    public DeviceStatusGroupRepository(ITenantDbContextFactory contextFactory)
+    public DeviceStatusGroupRepository(
+        INocturneDbContextFactory contextFactory, ILogger<DeviceStatusGroupRepository> logger)
     {
         _contextFactory = contextFactory;
+        _logger = logger;
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// The arms are read one at a time, newest first, each cut at <c>offset + limit</c> rows and
-    /// bounded below by the last row of the page so far: no older row can enter the page, and an
-    /// arm whose rows mostly belong to statuses an earlier arm anchors would otherwise be walked to
-    /// its end through its anti-joins. Each arm is an index walk on its table's tenant timestamp
-    /// index.
+    /// The arms are read one at a time in the page's order, each cut at <c>offset + limit</c> rows
+    /// and bounded on the far side by the last row of the page so far: no row past it can enter the
+    /// page, and an arm whose rows mostly belong to statuses an earlier arm anchors would otherwise
+    /// be walked to its end through its anti-joins. Each arm is an index walk on its table's tenant
+    /// timestamp index.
     /// </remarks>
     public async Task<IReadOnlyList<DeviceStatusGroup>> GetAsync(
-        DateTime? from, DateTime? to, string? device, int limit, int offset, CancellationToken ct = default)
+        DateTime? from, DateTime? to, string? device, int limit, int offset, bool descending, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var rows = Rows.Live(ctx);
@@ -40,16 +44,18 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
             var bounded = arm;
             if (page.Count == take)
             {
-                var floor = page[^1].Timestamp;
-                bounded = arm.Where(a => a.Timestamp >= floor);
+                var edge = page[^1].Timestamp;
+                bounded = descending
+                    ? arm.Where(a => a.Timestamp >= edge)
+                    : arm.Where(a => a.Timestamp <= edge);
             }
 
-            var read = await bounded
-                .OrderByDescending(a => a.Timestamp)
-                .ThenByDescending(a => a.Id)
+            var read = await (descending
+                    ? bounded.OrderByDescending(a => a.Timestamp).ThenByDescending(a => a.Id)
+                    : bounded.OrderBy(a => a.Timestamp).ThenBy(a => a.Id))
                 .Take(take)
                 .ToListAsync(ct);
-            page = NewestFirst(page.Concat(read)).Take(take).ToList();
+            page = Ordered(page.Concat(read), descending).Take(take).ToList();
         }
 
         var anchors = page.Skip(offset).ToList();
@@ -71,7 +77,8 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     /// pump) still reaches the client. The changed rows of each table are read in stamp order; every
     /// status whose stamp is below the earliest millisecond some table has not been read past is
     /// complete. The read widens until <paramref name="limit"/> statuses are, and the page ends on a
-    /// millisecond boundary for the reason <see cref="HistoryPage"/> gives.
+    /// millisecond boundary for the reason <see cref="HistoryPage"/> gives. Nothing at or after the
+    /// <see cref="HistoryHorizon"/> is settled, whichever row of its status carries the stamp.
     /// </remarks>
     public async Task<IReadOnlyList<HistoryRecord<DeviceStatusGroup>>> GetModifiedSinceAsync(
         long cursorMills, int limit, CancellationToken ct = default)
@@ -79,6 +86,7 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var rows = Rows.IncludingDeleted(ctx);
         var since = DateTimeOffset.FromUnixTimeMilliseconds(cursorMills + 1).UtcDateTime;
+        var horizon = await HistoryHorizon.GetAsync(ctx, _logger, ct) ?? DateTime.MaxValue;
 
         // A status's rows are written together, so a quarter more rows than the page usually settles
         // it in one read; the doubling covers a batch that wrote one table before the next.
@@ -86,21 +94,22 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
         {
             var changed = new[]
             {
-                await ChangedAsync(rows.Aps, since, scan, ct),
-                await ChangedAsync(rows.Pumps, since, scan, ct),
-                await ChangedAsync(rows.Uploaders, since, scan, ct),
+                await ChangedAsync(rows.Aps, since, horizon, scan, ct),
+                await ChangedAsync(rows.Pumps, since, horizon, scan, ct),
+                await ChangedAsync(rows.Uploaders, since, horizon, scan, ct),
                 await rows.Extras
-                    .Where(e => e.SysUpdatedAt >= since)
+                    .Where(e => e.SysUpdatedAt >= since && e.SysUpdatedAt < horizon)
                     .OrderBy(e => e.SysUpdatedAt)
                     .ThenBy(e => e.Id)
                     .Take(scan)
                     .Select(e => new ChangedRow { Id = e.Id, CorrelationId = e.CorrelationId, Stamp = e.SysUpdatedAt })
                     .ToListAsync(ct),
             };
+            var readToTheEnd = changed.All(t => t.Count < scan);
             var settledBefore = changed
                 .Where(t => t.Count == scan)
                 .Select(t => Millisecond(t[^1].Stamp))
-                .DefaultIfEmpty(DateTime.MaxValue)
+                .Append(horizon)
                 .Min();
 
             var keys = changed.SelectMany(t => t).Where(r => r.Stamp < settledBefore).ToList();
@@ -126,7 +135,7 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
                 .ThenBy(s => s.Anchor.Id)
                 .ToList();
 
-            if (settled.Count >= limit || settledBefore == DateTime.MaxValue)
+            if (settled.Count >= limit || readToTheEnd)
             {
                 return EndOnAMillisecond(settled, limit)
                     .Select(s => new HistoryRecord<DeviceStatusGroup>(s.Group, s.Anchor.Deleted))
@@ -136,9 +145,9 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     }
 
     private static Task<List<ChangedRow>> ChangedAsync<T>(
-        IQueryable<T> rows, DateTime since, int scan, CancellationToken ct)
+        IQueryable<T> rows, DateTime since, DateTime horizon, int scan, CancellationToken ct)
         where T : class, IV4Entity, ISystemTimestamped =>
-        rows.Where(e => e.SysUpdatedAt >= since)
+        rows.Where(e => e.SysUpdatedAt >= since && e.SysUpdatedAt < horizon)
             .OrderBy(e => e.SysUpdatedAt)
             .ThenBy(e => e.Id)
             .Take(scan)
@@ -158,8 +167,10 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
     private static DateTime Millisecond(DateTime stamp) =>
         DateTimeOffset.FromUnixTimeMilliseconds(HistoryPage.ToMilliseconds(stamp)).UtcDateTime;
 
-    private static IEnumerable<AnchorRow> NewestFirst(IEnumerable<AnchorRow> anchors) =>
-        anchors.OrderByDescending(a => a.Timestamp).ThenByDescending(a => a.Id);
+    private static IEnumerable<AnchorRow> Ordered(IEnumerable<AnchorRow> anchors, bool descending) =>
+        descending
+            ? anchors.OrderByDescending(a => a.Timestamp).ThenByDescending(a => a.Id)
+            : anchors.OrderBy(a => a.Timestamp).ThenBy(a => a.Id);
 
     /// <summary>
     /// The rows that place each status, one arm per table in the order APS, pump, uploader, extras.

@@ -312,7 +312,62 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
         await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
             records, PublishStateSpanDataAsync, config, ct);
+
+        if (await FetchAppliedProfileActivationsAsync(from, to, config, ct) is { } activations)
+            await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
+                activations.Select(ToProfileActivation).ToList(), PublishProfileActivationDataAsync, config, ct,
+                "profile activations");
     }
+
+    /// <summary>
+    ///     The activations in force on the remote during the window, or null from a remote that predates
+    ///     them, whose profile switches arrive as the Profile spans <see cref="SyncStateSpansAsync"/>
+    ///     already replayed.
+    /// </summary>
+    private async Task<List<ProfileActivationDto>?> FetchAppliedProfileActivationsAsync(
+        DateTime? from, DateTime? to, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    {
+        var url = $"{NocturneRemoteConstants.ProfileActivations}?applied=true";
+        if (from.HasValue)
+            url += $"&from={from.Value.ToUniversalTime():o}";
+        if (to.HasValue)
+            url += $"&to={to.Value.ToUniversalTime():o}";
+
+        try
+        {
+            using var response = await GetWithHeadersAsync(BuildAbsoluteUrl(url), _authHeaders, ct);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return null;
+            if (response.IsSuccessStatusCode
+                && await DeserializeResponseAsync<List<ProfileActivationDto>>(response, ct) is { } activations)
+                return activations;
+        }
+        catch (Exception ex) when (IsTransportFailure(ex))
+        {
+            _logger.LogDebug(ex, "[{ConnectorSource}] Retrying the profile activation fetch", ConnectorSource);
+        }
+
+        return await FetchOrFailAsync<List<ProfileActivationDto>>(
+            url, NocturneRemoteConstants.ProfileActivations, config, ct);
+    }
+
+    /// <summary>
+    ///     A remote activation as this instance stores it: keyed by the remote's id, with the end the
+    ///     remote settled it with, and a temporary one's length.
+    /// </summary>
+    private static ProfileActivation ToProfileActivation(ProfileActivationDto remote) => new()
+    {
+        StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(remote.StartMills).UtcDateTime,
+        EndTimestamp = remote.EndMills is { } end ? DateTimeOffset.FromUnixTimeMilliseconds(end).UtcDateTime : null,
+        RequestedDurationMs = remote.IsTemporary && remote.EndMills is { } temporaryEnd
+            ? temporaryEnd - remote.StartMills
+            : null,
+        BaseProfileName = remote.BaseProfileName,
+        Percentage = remote.Percentage,
+        TimeshiftMs = (long)Math.Round(remote.TimeshiftHours * 3_600_000),
+        App = remote.App,
+        SyncIdentifier = remote.Id.ToString(),
+    };
 
     private async Task SyncProfilesAsync(
         NocturneRemoteConnectorConfiguration config, SyncResult result,

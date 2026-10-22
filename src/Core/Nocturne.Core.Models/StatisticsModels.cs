@@ -4,9 +4,6 @@ using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models;
 
-/// <summary>
-/// Basic glucose statistics
-/// </summary>
 public class BasicGlucoseStats
 {
     /// <summary>
@@ -19,9 +16,6 @@ public class BasicGlucoseStats
     /// </summary>
     public double Mean { get; set; }
 
-    /// <summary>
-    /// Median glucose value
-    /// </summary>
     public double Median { get; set; }
 
     /// <summary>
@@ -86,9 +80,6 @@ public class GlucosePercentiles
     public double P95 { get; set; }
 }
 
-/// <summary>
-/// Glycemic variability metrics
-/// </summary>
 public class GlycemicVariability
 {
     /// <summary>
@@ -111,19 +102,10 @@ public class GlycemicVariability
     /// </summary>
     public double ContinuousOverlappingNetGlycemicAction { get; set; }
 
-    /// <summary>
-    /// Average Daily Risk Range
-    /// </summary>
     public double AverageDailyRiskRange { get; set; }
 
-    /// <summary>
-    /// Lability Index
-    /// </summary>
     public double LabilityIndex { get; set; }
 
-    /// <summary>
-    /// J-Index
-    /// </summary>
     public double JIndex { get; set; }
 
     /// <summary>
@@ -171,9 +153,6 @@ public class GlycemicVariability
     public double TimeInFluctuation { get; set; }
 }
 
-/// <summary>
-/// Glycemic thresholds for analysis
-/// </summary>
 public class GlycemicThresholds
 {
     /// <summary>
@@ -218,9 +197,6 @@ public class GlycemicThresholds
     public double VeryHigh { get; set; } = GlucoseConstants.VeryHighMgdl;
 }
 
-/// <summary>
-/// Time in range metrics
-/// </summary>
 public class TimeInRangeMetrics
 {
     /// <summary>
@@ -233,9 +209,6 @@ public class TimeInRangeMetrics
     /// </summary>
     public TimeInRangeDurations Durations { get; set; } = new();
 
-    /// <summary>
-    /// Number of episodes in each range
-    /// </summary>
     public TimeInRangeEpisodes Episodes { get; set; } = new();
 
     /// <summary>
@@ -436,24 +409,12 @@ public class AverageDailyMinutes
 /// </summary>
 public class TimeInRangeEpisodes
 {
-    /// <summary>
-    /// Number of very low episodes
-    /// </summary>
     public int VeryLow { get; set; }
 
-    /// <summary>
-    /// Number of low episodes
-    /// </summary>
     public int Low { get; set; }
 
-    /// <summary>
-    /// Number of high episodes
-    /// </summary>
     public int High { get; set; }
 
-    /// <summary>
-    /// Number of very high episodes
-    /// </summary>
     public int VeryHigh { get; set; }
 
     /// <summary>
@@ -470,9 +431,6 @@ public class TimeInRangeEpisodes
     public int BelowRange { get; set; }
 }
 
-/// <summary>
-/// Glucose distribution data point
-/// </summary>
 public class DistributionDataPoint
 {
     /// <summary>
@@ -491,35 +449,17 @@ public class DistributionDataPoint
     public double Percent { get; set; }
 }
 
-/// <summary>
-/// Distribution bin configuration
-/// </summary>
 public class DistributionBin
 {
-    /// <summary>
-    /// Range description
-    /// </summary>
     public string Range { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Minimum value for this bin
-    /// </summary>
     public double Min { get; set; }
 
-    /// <summary>
-    /// Maximum value for this bin
-    /// </summary>
     public double Max { get; set; }
 }
 
-/// <summary>
-/// Treatment summary for a collection of treatments
-/// </summary>
 public class TreatmentSummary
 {
-    /// <summary>
-    /// Aggregated treatment totals
-    /// </summary>
     public TreatmentTotals Totals { get; set; } = new();
 
     /// <summary>
@@ -563,25 +503,13 @@ public class TreatmentSummary
     public double DailyCarbs { get; set; }
 }
 
-/// <summary>
-/// Treatment totals
-/// </summary>
 public class TreatmentTotals
 {
-    /// <summary>
-    /// Food-related totals
-    /// </summary>
     public FoodTotals Food { get; set; } = new();
 
-    /// <summary>
-    /// Insulin-related totals
-    /// </summary>
     public InsulinTotals Insulin { get; set; } = new();
 }
 
-/// <summary>
-/// Food totals
-/// </summary>
 public class FoodTotals
 {
     /// <summary>
@@ -658,30 +586,15 @@ public class DayData
     /// </summary>
     public string Date { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Treatments for this day
-    /// </summary>
     public IEnumerable<Treatment> Treatments { get; set; } = Enumerable.Empty<Treatment>();
 
-    /// <summary>
-    /// Summary of treatments for this day
-    /// </summary>
     public TreatmentSummary TreatmentSummary { get; set; } = new();
 
-    /// <summary>
-    /// Time in range metrics for this day
-    /// </summary>
     public TimeInRangeMetrics TimeInRanges { get; set; } = new();
 }
 
-/// <summary>
-/// Extended analysis configuration
-/// </summary>
 public class ExtendedAnalysisConfig
 {
-    /// <summary>
-    /// Glycemic thresholds to use for analysis
-    /// </summary>
     public GlycemicThresholds Thresholds { get; set; } = new();
 
     /// <summary>
@@ -689,9 +602,6 @@ public class ExtendedAnalysisConfig
     /// </summary>
     public string SensorType { get; set; } = "GENERIC_5MIN";
 
-    /// <summary>
-    /// Whether to include looping-specific metrics
-    /// </summary>
     public bool IncludeLoopingMetrics { get; set; } = false;
 
     /// <summary>
@@ -700,9 +610,6 @@ public class ExtendedAnalysisConfig
     public string Units { get; set; } = "mg/dl";
 }
 
-/// <summary>
-/// Data quality metrics
-/// </summary>
 public class DataQuality
 {
     /// <summary>
@@ -710,9 +617,6 @@ public class DataQuality
     /// </summary>
     public int TotalReadings { get; set; }
 
-    /// <summary>
-    /// Number of missing readings
-    /// </summary>
     public int MissingReadings { get; set; }
 
     /// <summary>
@@ -725,9 +629,6 @@ public class DataQuality
     /// </summary>
     public double CgmActivePercent { get; set; }
 
-    /// <summary>
-    /// Analysis of data gaps
-    /// </summary>
     public GapAnalysis GapAnalysis { get; set; } = new();
 
     /// <summary>
@@ -735,25 +636,13 @@ public class DataQuality
     /// </summary>
     public double NoiseLevel { get; set; }
 
-    /// <summary>
-    /// Number of calibration events
-    /// </summary>
     public int CalibrationEvents { get; set; }
 
-    /// <summary>
-    /// Number of sensor warmup periods
-    /// </summary>
     public int SensorWarmups { get; set; }
 }
 
-/// <summary>
-/// Gap analysis in data
-/// </summary>
 public class GapAnalysis
 {
-    /// <summary>
-    /// Collection of identified data gaps
-    /// </summary>
     public IEnumerable<DataGap> Gaps { get; set; } = Enumerable.Empty<DataGap>();
 
     /// <summary>
@@ -767,9 +656,6 @@ public class GapAnalysis
     public double AverageGap { get; set; }
 }
 
-/// <summary>
-/// Data gap information
-/// </summary>
 public class DataGap
 {
     /// <summary>
@@ -788,9 +674,6 @@ public class DataGap
     public double Duration { get; set; }
 }
 
-/// <summary>
-/// Comprehensive glucose analytics result
-/// </summary>
 public class GlucoseAnalytics
 {
     /// <summary>
@@ -798,9 +681,6 @@ public class GlucoseAnalytics
     /// </summary>
     public BasicGlucoseStats BasicStats { get; set; } = new();
 
-    /// <summary>
-    /// Time in range analysis
-    /// </summary>
     public TimeInRangeMetrics TimeInRange { get; set; } = new();
 
     /// <summary>
@@ -810,9 +690,6 @@ public class GlucoseAnalytics
     /// </summary>
     public GlycemicVariability? GlycemicVariability { get; set; }
 
-    /// <summary>
-    /// Data quality assessment
-    /// </summary>
     public DataQuality DataQuality { get; set; } = new();
 
     /// <summary>
@@ -820,9 +697,6 @@ public class GlucoseAnalytics
     /// </summary>
     public StatisticReliability? Reliability { get; set; }
 
-    /// <summary>
-    /// Time period of the analysis
-    /// </summary>
     public AnalysisTime Time { get; set; } = new();
 
     /// <summary>
@@ -831,9 +705,6 @@ public class GlucoseAnalytics
     public ClinicalTargetAssessment? ClinicalAssessment { get; set; }
 }
 
-/// <summary>
-/// Analysis time information
-/// </summary>
 public class AnalysisTime
 {
     /// <summary>
@@ -882,9 +753,6 @@ public class MultiPeriodStatistics
     /// </summary>
     public PeriodStatistics Last90Days { get; set; } = new();
 
-    /// <summary>
-    /// When the statistics were last updated
-    /// </summary>
     public DateTime LastUpdated { get; set; }
 }
 
@@ -898,29 +766,14 @@ public class PeriodStatistics
     /// </summary>
     public int PeriodDays { get; set; }
 
-    /// <summary>
-    /// Start date of the period
-    /// </summary>
     public DateTime StartDate { get; set; }
 
-    /// <summary>
-    /// End date of the period
-    /// </summary>
     public DateTime EndDate { get; set; }
 
-    /// <summary>
-    /// Comprehensive glucose analytics for this period
-    /// </summary>
     public GlucoseAnalytics? Analytics { get; set; }
 
-    /// <summary>
-    /// Treatment summary for this period
-    /// </summary>
     public TreatmentSummary? TreatmentSummary { get; set; }
 
-    /// <summary>
-    /// Comprehensive insulin delivery statistics for this period
-    /// </summary>
     public InsulinDeliveryStatistics? InsulinDelivery { get; set; }
 
     /// <summary>
@@ -928,9 +781,6 @@ public class PeriodStatistics
     /// </summary>
     public bool HasSufficientData { get; set; }
 
-    /// <summary>
-    /// Glucose Management Indicator for this period
-    /// </summary>
     public GlucoseManagementIndicator? Gmi { get; set; }
 
     /// <summary>
@@ -938,14 +788,8 @@ public class PeriodStatistics
     /// </summary>
     public StatisticReliability? Reliability { get; set; }
 
-    /// <summary>
-    /// Number of glucose entries in this period
-    /// </summary>
     public int EntryCount { get; set; }
 
-    /// <summary>
-    /// Number of treatments in this period
-    /// </summary>
     public int TreatmentCount { get; set; }
 }
 
@@ -1219,7 +1063,6 @@ public class ClinicalTargets
     /// Returns the evidence-based clinical targets for the specified <see cref="DiabetesPopulation"/>.
     /// Based on International Consensus on Time in Range (2019) and subsequent updates.
     /// </summary>
-    /// <param name="population">The diabetes population for which to retrieve targets</param>
     /// <returns>A <see cref="ClinicalTargets"/> instance with population-appropriate thresholds</returns>
     public static ClinicalTargets ForPopulation(DiabetesPopulation population)
     {
@@ -1297,7 +1140,6 @@ public class GlucoseManagementIndicator
     /// <summary>Mean glucose used for calculation (mg/dL)</summary>
     public double MeanGlucose { get; set; }
 
-    /// <summary>Interpretation of the GMI value</summary>
     public GlucoseManagementIndicatorLevel Interpretation { get; set; }
 
     /// <summary>Reliability assessment for this GMI calculation</summary>
@@ -1340,7 +1182,6 @@ public class GlycemicRiskIndex
     /// <summary>Hyper component = VHigh% + (0.5 × High%)</summary>
     public double HyperglycemiaComponent { get; set; }
 
-    /// <summary>Risk zone classification</summary>
     public GRIZone Zone { get; set; }
 
     /// <summary>Interpretation of the GRI score</summary>
@@ -1376,7 +1217,6 @@ public class PeriodMetrics
     /// <summary>Name of the period (e.g., "Overnight", "Morning")</summary>
     public string PeriodName { get; set; } = string.Empty;
 
-    /// <summary>Number of readings in this period</summary>
     public int ReadingCount { get; set; }
 
     /// <summary>Mean glucose (mg/dL)</summary>
@@ -1418,18 +1258,13 @@ public class StatisticReliability
     public int ReadingCount { get; set; }
 }
 
-/// <summary>
-/// Target achievement status
-/// </summary>
 public enum TargetStatus
 {
-    /// <summary>Target met</summary>
     Met,
 
     /// <summary>Close to target (within 10%)</summary>
     Close,
 
-    /// <summary>Target not met</summary>
     NotMet,
 
     /// <summary>
@@ -1438,24 +1273,18 @@ public enum TargetStatus
     NotAssessed,
 }
 
-/// <summary>
-/// Individual target assessment
-/// </summary>
 public class TargetAssessment
 {
-    /// <summary>Name of the metric</summary>
     public string MetricName { get; set; } = string.Empty;
 
     /// <summary>Current value, or null when <see cref="Status"/> is <see cref="TargetStatus.NotAssessed"/></summary>
     public double? CurrentValue { get; set; }
 
-    /// <summary>Target value</summary>
     public double TargetValue { get; set; }
 
     /// <summary>Whether target is a maximum (true) or minimum (false)</summary>
     public bool IsMaximumTarget { get; set; }
 
-    /// <summary>Status of target achievement</summary>
     public TargetStatus Status { get; set; }
 
     /// <summary>Difference from target, or null when not assessed</summary>
@@ -1477,15 +1306,10 @@ public class LocalizedInsight
     public Dictionary<string, double> Context { get; set; } = new();
 }
 
-/// <summary>
-/// Comprehensive clinical target assessment
-/// </summary>
 public class ClinicalTargetAssessment
 {
-    /// <summary>Population type used for targets</summary>
     public DiabetesPopulation Population { get; set; }
 
-    /// <summary>Clinical targets used for assessment</summary>
     public ClinicalTargets Targets { get; set; } = new();
 
     /// <summary>Time in range assessment</summary>
@@ -1494,19 +1318,16 @@ public class ClinicalTargetAssessment
     /// <summary>Time below range assessment</summary>
     public TargetAssessment TBRAssessment { get; set; } = new();
 
-    /// <summary>Time very low assessment</summary>
     public TargetAssessment VeryLowAssessment { get; set; } = new();
 
     /// <summary>Time above range assessment</summary>
     public TargetAssessment TARAssessment { get; set; } = new();
 
-    /// <summary>Time very high assessment</summary>
     public TargetAssessment VeryHighAssessment { get; set; } = new();
 
     /// <summary>Coefficient of variation assessment</summary>
     public TargetAssessment CVAssessment { get; set; } = new();
 
-    /// <summary>Number of targets met</summary>
     public int TargetsMet { get; set; }
 
     /// <summary>Total number of targets, assessed or not</summary>
@@ -1518,7 +1339,6 @@ public class ClinicalTargetAssessment
     /// </summary>
     public int TargetsAssessed { get; set; }
 
-    /// <summary>Overall assessment category</summary>
     public ClinicalAssessmentLevel OverallAssessment { get; set; }
 
     /// <summary>List of actionable insights/recommendations with localization keys and context</summary>
@@ -1531,9 +1351,6 @@ public class ClinicalTargetAssessment
     public List<LocalizedInsight> Strengths { get; set; } = new();
 }
 
-/// <summary>
-/// Data sufficiency assessment for reporting
-/// </summary>
 public class DataSufficiencyAssessment
 {
     /// <summary>Whether there is sufficient data for a valid report</summary>
@@ -1548,7 +1365,6 @@ public class DataSufficiencyAssessment
     /// <summary>Expected number of readings (based on sensor type)</summary>
     public int ExpectedReadings { get; set; }
 
-    /// <summary>Actual number of readings</summary>
     public int ActualReadings { get; set; }
 
     /// <summary>Data completeness percentage</summary>
@@ -1569,13 +1385,9 @@ public class DataSufficiencyAssessment
     /// <summary>Warning message if data is insufficient</summary>
     public string WarningMessage { get; set; } = string.Empty;
 
-    /// <summary>Recommendation for improving data collection</summary>
     public string Recommendation { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Extended glucose analytics with all new metrics
-/// </summary>
 public class ExtendedGlucoseAnalytics : GlucoseAnalytics
 {
     /// <summary>Glucose Management Indicator (modern replacement for eA1c)</summary>
@@ -1584,10 +1396,8 @@ public class ExtendedGlucoseAnalytics : GlucoseAnalytics
     /// <summary>Glycemic Risk Index (composite risk score)</summary>
     public GlycemicRiskIndex GRI { get; set; } = new();
 
-    /// <summary>Clinical target assessment</summary>
     public new ClinicalTargetAssessment ClinicalAssessment { get; set; } = new();
 
-    /// <summary>Data sufficiency assessment</summary>
     public DataSufficiencyAssessment DataSufficiency { get; set; } = new();
 
     /// <summary>Treatment summary if treatment data is available</summary>
@@ -1664,7 +1474,7 @@ public sealed class ContributingDevice
 
 /// <summary>
 /// Data point for site change impact analysis
-/// Represents averaged glucose at a specific time offset from site change
+/// Averaged glucose at a specific time offset from site change
 /// </summary>
 public class SiteChangeImpactDataPoint
 {
@@ -1696,9 +1506,6 @@ public class SiteChangeImpactDataPoint
     public double Percentile90 { get; set; }
 }
 
-/// <summary>
-/// Summary statistics for site change impact
-/// </summary>
 public class SiteChangeImpactSummary
 {
     /// <summary>Average glucose before site change (mg/dL)</summary>
@@ -1860,8 +1667,11 @@ public class InsulinDeliveryStatistics
     public int BasalInjectionCount { get; set; }
 
     /// <summary>
-    /// Reliability assessment for insulin delivery statistics
+    /// The manual boluses that make up <see cref="TotalBolus"/>, one record per counted bolus.
+    /// Filled only when the caller asks for them and holds treatments.read; null otherwise.
     /// </summary>
+    public List<Bolus>? ManualBoluses { get; set; }
+
     public StatisticReliability? Reliability { get; set; }
 }
 
@@ -1906,14 +1716,8 @@ public class DailyBasalBolusRatioData
     public double BolusPercent { get; set; }
 }
 
-/// <summary>
-/// Response model for daily basal/bolus ratio statistics
-/// </summary>
 public class DailyBasalBolusRatioResponse
 {
-    /// <summary>
-    /// Daily breakdown of basal/bolus ratios
-    /// </summary>
     public List<DailyBasalBolusRatioData> DailyData { get; set; } = new();
 
     /// <summary>
@@ -1979,14 +1783,8 @@ public class HourlyBasalPercentileData
     public int Count { get; set; }
 }
 
-/// <summary>
-/// Temp basal information statistics
-/// </summary>
 public class TempBasalInfo
 {
-    /// <summary>
-    /// Total number of temp basals in the period
-    /// </summary>
     public int Total { get; set; }
 
     /// <summary>
@@ -2015,9 +1813,6 @@ public class TempBasalInfo
 /// </summary>
 public class BasalStats
 {
-    /// <summary>
-    /// Number of basal events
-    /// </summary>
     public int Count { get; set; }
 
     /// <summary>
@@ -2041,9 +1836,6 @@ public class BasalStats
     public double TotalDelivered { get; set; }
 }
 
-/// <summary>
-/// Comprehensive basal analysis response
-/// </summary>
 public class BasalAnalysisResponse
 {
     /// <summary>
@@ -2051,9 +1843,6 @@ public class BasalAnalysisResponse
     /// </summary>
     public BasalStats Stats { get; set; } = new();
 
-    /// <summary>
-    /// Temp basal information
-    /// </summary>
     public TempBasalInfo TempBasalInfo { get; set; } = new();
 
     /// <summary>
@@ -2067,14 +1856,8 @@ public class BasalAnalysisResponse
     /// </summary>
     public int WindowDays { get; set; }
 
-    /// <summary>
-    /// Start date of the analysis period
-    /// </summary>
     public string StartDate { get; set; } = string.Empty;
 
-    /// <summary>
-    /// End date of the analysis period
-    /// </summary>
     public string EndDate { get; set; } = string.Empty;
 }
 
@@ -2149,12 +1932,8 @@ public class HourlyInsulinDeliveryResponse
     public string EndDate { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Complete site change impact analysis result
-/// </summary>
 public class SiteChangeImpactAnalysis
 {
-    /// <summary>Number of site changes analyzed</summary>
     public int SiteChangeCount { get; set; }
 
     /// <summary>Average number of days between site changes</summary>
@@ -2224,16 +2003,13 @@ public class AidTimeSegment
     /// <summary>Which AID algorithm was active during this segment</summary>
     public AidAlgorithm Algorithm { get; set; }
 
-    /// <summary>Start of the segment</summary>
     public DateTime StartDate { get; set; }
 
-    /// <summary>End of the segment</summary>
     public DateTime EndDate { get; set; }
 
     /// <summary>Duration of the segment in hours</summary>
     public double DurationHours { get; set; }
 
-    /// <summary>Computed metrics for this segment</summary>
     public AidSegmentMetrics Metrics { get; set; } = new();
 }
 
@@ -2251,7 +2027,6 @@ public class AidSegmentMetrics
     /// <summary>Number of loop iterations (applicable to open-source AIDs)</summary>
     public int? LoopCycleCount { get; set; }
 
-    /// <summary>Number of enacted suggestions</summary>
     public int? EnactedCount { get; set; }
 }
 
@@ -2264,10 +2039,8 @@ public class AidDetectionContext
     /// <summary>Which AID algorithm to detect metrics for</summary>
     public AidAlgorithm Algorithm { get; set; }
 
-    /// <summary>Start of the detection window</summary>
     public DateTime StartDate { get; set; }
 
-    /// <summary>End of the detection window</summary>
     public DateTime EndDate { get; set; }
 
     /// <summary>APS snapshots within the segment window (for OS AID strategies)</summary>
@@ -2284,7 +2057,6 @@ public class AidDetectionContext
 /// </summary>
 public class DeviceSegmentInput
 {
-    /// <summary>Which AID algorithm this device uses</summary>
     public AidAlgorithm Algorithm { get; set; }
 
     /// <summary>Start of the device's active window</summary>

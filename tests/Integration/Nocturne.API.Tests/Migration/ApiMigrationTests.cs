@@ -4,7 +4,6 @@ using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
-using Nocturne.Core.Constants;
 
 using Xunit;
 using Xunit.Abstractions;
@@ -67,16 +66,8 @@ public class ApiMigrationTests : ApiIntegrationTestBase, IClassFixture<Migration
         status.CollectionProgress["entries"].IsComplete.Should().BeTrue();
         status.CollectionProgress["entries"].DocumentsMigrated.Should().BeGreaterThan(0);
 
-        // Verify data via V3 API with dataSource filtering
-        var filter = JsonSerializer.Serialize(new { dataSource = DataSources.MongoDbImport });
-        var entriesResponse = await AuthenticatedClient.GetAsync(
-            $"/api/v3/entries?filter={Uri.EscapeDataString(filter)}&limit=100");
-
-        entriesResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var responseBody = await entriesResponse.Content.ReadAsStringAsync();
-        var v3Response = JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
-
-        var entries = v3Response.GetProperty("result").EnumerateArray().ToList();
+        // The database is emptied before each test, so every entry it holds was migrated.
+        var entries = await GetV3RecordsAsync("entries");
         entries.Count.Should().Be((int)status.CollectionProgress["entries"].DocumentsMigrated);
 
         var minSgv = entries.Min(e => e.GetProperty("sgv").GetDouble());
@@ -141,20 +132,73 @@ public class ApiMigrationTests : ApiIntegrationTestBase, IClassFixture<Migration
         var firstCount = firstStatus.CollectionProgress["treatments"].DocumentsMigrated;
         firstCount.Should().BeGreaterThan(0, "first migration should import treatments");
 
+        var storedAfterFirst = (await GetV3RecordsAsync("treatments")).Count;
+        storedAfterFirst.Should().BeGreaterThan(0);
+
         // Act — second run with same data
         var secondStatus = await RunMigrationToCompletionAsync(
             MigrationMode.Api,
             collections: ["treatments"]);
 
-        // Assert — second run should detect all duplicates
+        // Assert — DocumentsMigrated counts the documents taken in, inserted or not; the second run
+        // upserts each by its Nightscout _id, so the stored treatments stay as they were.
         secondStatus.State.Should().Be(MigrationJobState.Completed);
-        secondStatus.CollectionProgress["treatments"].DocumentsMigrated.Should().Be(0,
-            "all treatments already exist and should be detected as duplicates");
+        (await GetV3RecordsAsync("treatments")).Should().HaveCount(storedAfterFirst,
+            "re-importing the same treatments updates them rather than adding copies");
 
-        Log($"First run: {firstCount} treatments, second run: 0 (duplicates skipped)");
+        Log($"First run: {firstCount} treatments, {storedAfterFirst} stored after both runs");
+    }
+
+    [Fact]
+    public async Task JobStatus_DuringMigration_ShowsProgressAndCompletion()
+    {
+        var request = new StartMigrationRequest
+        {
+            Mode = MigrationMode.Api,
+            NightscoutUrl = _migration.MockNightscoutUrl,
+            Collections = ["entries", "treatments"]
+        };
+
+        MigrationJobInfo? jobInfo;
+        using (_migration.HoldEntries())
+        {
+            var startResponse = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/start", request);
+            startResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
+            jobInfo = await startResponse.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
+            jobInfo.Should().NotBeNull();
+
+            var held = await PollUntilAsync(jobInfo!.Id, s => s.State != MigrationJobState.Pending);
+            held.State.Should().Be(MigrationJobState.Running, "the job is waiting on the held entries");
+        }
+
+        var finalStatus = await PollUntilCompleteAsync(jobInfo.Id);
+
+        finalStatus.State.Should().Be(MigrationJobState.Completed);
+        finalStatus.CollectionProgress["entries"].DocumentsMigrated.Should().Be(_migration.EntryCount);
     }
 
     #region Helpers
+
+    private async Task<MigrationJobStatus> PollUntilAsync(Guid jobId, Func<MigrationJobStatus, bool> done)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (true)
+        {
+            var status = await AuthenticatedClient.GetFromJsonAsync<MigrationJobStatus>(
+                $"/api/v4/migration/{jobId}/status", JsonOptions);
+            if (done(status!) || DateTime.UtcNow > deadline)
+                return status!;
+            await Task.Delay(100);
+        }
+    }
+
+    private async Task<List<JsonElement>> GetV3RecordsAsync(string collection)
+    {
+        var response = await AuthenticatedClient.GetAsync($"/api/v3/{collection}?limit=1000");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync(), JsonOptions);
+        return body.GetProperty("result").EnumerateArray().ToList();
+    }
 
     private async Task<MigrationJobStatus> RunMigrationToCompletionAsync(
         MigrationMode mode,

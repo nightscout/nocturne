@@ -17,12 +17,11 @@ public enum ConnectorFoodEntryStatus
     /// <summary>Entry was processed and no matching treatment was found; kept as a standalone record</summary>
     Standalone,
 
-    /// <summary>Entry has been deleted</summary>
     Deleted,
 }
 
 /// <summary>
-/// Represents a connector-imported food entry for matching and attribution.
+/// Connector-imported food entry for matching and attribution.
 /// </summary>
 /// <seealso cref="ConnectorFoodEntryStatus"/>
 /// <seealso cref="Food"/>
@@ -82,7 +81,6 @@ public class ConnectorFoodEntry
     [JsonPropertyName("energy")]
     public decimal Energy { get; set; }
 
-    /// <summary>Number of servings consumed</summary>
     [JsonPropertyName("servings")]
     public decimal Servings { get; set; }
 
@@ -119,7 +117,6 @@ public class ConnectorFoodEntryImport
     [JsonPropertyName("externalFoodId")]
     public string ExternalFoodId { get; set; } = string.Empty;
 
-    /// <summary>When the food was consumed</summary>
     [JsonPropertyName("consumedAt")]
     public DateTimeOffset ConsumedAt { get; set; }
 
@@ -147,7 +144,6 @@ public class ConnectorFoodEntryImport
     [JsonPropertyName("energy")]
     public decimal Energy { get; set; }
 
-    /// <summary>Number of servings consumed</summary>
     [JsonPropertyName("servings")]
     public decimal Servings { get; set; }
 

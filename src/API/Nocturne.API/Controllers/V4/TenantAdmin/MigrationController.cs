@@ -16,7 +16,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 [ApiController]
 [Tags("TenantAdmin")]
 [Route("api/v4/migration")]
-[RequireAdmin]
+[RequireSuperuser]
 public class MigrationController : ControllerBase
 {
     private readonly IMigrationJobService _migrationService;

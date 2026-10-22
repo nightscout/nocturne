@@ -57,7 +57,7 @@ public class FoodsControllerTests : IDisposable
     private FoodsController CreateController(AuthContext? authContext)
     {
         var controller = new FoodsController(
-            _dbContext,
+            _dbContext.AsFactory(),
             _favoriteServiceMock.Object,
             _treatmentFoodServiceMock.Object,
             _foodServiceMock.Object

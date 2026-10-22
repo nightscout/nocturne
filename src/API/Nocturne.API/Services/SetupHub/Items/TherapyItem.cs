@@ -3,6 +3,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.SetupHub;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.SetupHub.Items;
 
@@ -11,11 +12,14 @@ namespace Nocturne.API.Services.SetupHub.Items;
 /// hand (<see cref="TherapySetupService"/>). A profile merely arriving is not enough: nobody has
 /// checked it yet.
 /// </summary>
-public class TherapyItem(NocturneDbContext db) : ISetupHubItem
+public class TherapyItem(INocturneDbContextFactory contexts) : ISetupHubItem
 {
     public SetupHubItemKey Key => SetupHubItemKey.Therapy;
 
-    public async Task<bool> WorksAsync(CancellationToken ct) =>
-        await db.SetupHubItems.AnyAsync(i => i.ItemKey == Key && i.ConfirmedRecordId != null, ct)
-        || await db.TherapySettings.AnyAsync(t => t.DataSource == DataSources.ManualEntry, ct);
+    public async Task<bool> WorksAsync(CancellationToken ct)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        return await db.SetupHubItems.AnyAsync(i => i.ItemKey == Key && i.ConfirmedRecordId != null, ct)
+            || await db.TherapySettings.AnyAsync(t => t.DataSource == DataSources.ManualEntry, ct);
+    }
 }

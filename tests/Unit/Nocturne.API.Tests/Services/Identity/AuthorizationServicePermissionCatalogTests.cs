@@ -35,7 +35,7 @@ public class AuthorizationServicePermissionCatalogTests : IDisposable
             roles.Object,
             new Mock<IDirectGrantService>().Object,
             new Mock<IJwtService>().Object,
-            _dbContext,
+            _dbContext.AsFactory(),
             new Nocturne.Infrastructure.Data.Services.CategoryReadContext()
         );
     }

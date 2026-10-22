@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Audit;
 using System.Linq;
 using Nocturne.Core.Contracts.Devices;
@@ -24,7 +25,6 @@ namespace Nocturne.API.Services.V4;
 /// <seealso cref="IDecomposer{T}"/>
 public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Entry>
 {
-    private readonly NocturneDbContext _dbContext;
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
     private readonly ICalibrationRepository _calibrationRepository;
@@ -33,7 +33,6 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     private readonly IAuditContext _auditContext;
 
     public EntryDecomposer(
-        NocturneDbContext dbContext,
         ISensorGlucoseRepository sensorGlucoseRepository,
         IMeterGlucoseRepository meterGlucoseRepository,
         ICalibrationRepository calibrationRepository,
@@ -43,7 +42,6 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         ILogger<EntryDecomposer> logger)
         : base(logger)
     {
-        _dbContext = dbContext;
         _sensorGlucoseRepository = sensorGlucoseRepository;
         _meterGlucoseRepository = meterGlucoseRepository;
         _calibrationRepository = calibrationRepository;
@@ -52,12 +50,20 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         _auditContext = auditContext;
     }
 
+    /// <summary>The tables an entry decomposes into, all keyed by its legacy id.</summary>
+    private StoredCorrelationLookup[] EntryTables =>
+    [
+        _sensorGlucoseRepository.GetCorrelationIdsByLegacyIdAsync,
+        _meterGlucoseRepository.GetCorrelationIdsByLegacyIdAsync,
+        _calibrationRepository.GetCorrelationIdsByLegacyIdAsync,
+    ];
+
     /// <inheritdoc />
     public async Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default)
     {
         var result = new DecompositionResult
         {
-            CorrelationId = Guid.CreateVersion7()
+            CorrelationId = CorrelationIdFor(entry.Id, await GetStoredCorrelationIdsAsync([entry.Id], EntryTables, ct))
         };
 
         var entryType = entry.Type?.ToLowerInvariant();
@@ -158,10 +164,11 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         var mbgList = new List<MeterGlucose>();
         var calList = new List<Calibration>();
         var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
+        var correlationIds = await GetStoredCorrelationIdsAsync(entries.Select(e => e.Id), EntryTables, ct);
 
         foreach (var entry in entries)
         {
-            var correlationId = Guid.CreateVersion7();
+            var correlationId = CorrelationIdFor(entry.Id, correlationIds);
             switch (entry.Type?.ToLowerInvariant())
             {
                 case "sgv":
@@ -281,7 +288,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
 
         // A find[type]=x equality narrows the sweep to that record type.
         var typeFilter = findQuery.GetEqualityValue("type");
-        if (typeFilter is not null and not ("sgv" or "mbg" or "cal"))
+        if (typeFilter is not null && !LegacyEntryTypes.All.Contains(typeFilter))
         {
             Logger.LogWarning("BulkDelete refused: the find names a record type the sweep does not cover");
             return 0;
@@ -339,6 +346,10 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             Direction = MapDirection(entry.Direction),
             TrendRate = entry.TrendRate,
             Noise = entry.Noise,
+            Filtered = entry.Filtered,
+            Unfiltered = entry.Unfiltered,
+            Delta = entry.Delta,
+            Rssi = entry.Rssi,
             Device = entry.Device,
             App = entry.App,
             DataSource = entry.DataSource,

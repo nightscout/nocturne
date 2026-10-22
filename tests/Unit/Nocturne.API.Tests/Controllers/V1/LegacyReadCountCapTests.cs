@@ -9,6 +9,7 @@ using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Effects;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
@@ -95,34 +96,16 @@ public class LegacyReadCountCapTests
         int? observedCount = null;
         entryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string?>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<bool>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())
             )
-            .Callback(
-                (
-                    string? _,
-                    int count,
-                    int _,
-                    string? _,
-                    string? _,
-                    bool _,
-                    CancellationToken _
-                ) => observedCount = count
-            )
+            .Callback((EntryQuery query, CancellationToken _) => observedCount = query.Count)
             .ReturnsAsync(Array.Empty<Entry>());
 
         var controller = new EntriesController(
             entryService.Object,
             Mock.Of<IDocumentProcessingService>(),
-            Mock.Of<IProcessingStatusService>(),
             Mock.Of<ICanonicalAlertEvaluator>(),
+            TimeProvider.System,
             Mock.Of<ILogger<EntriesController>>()
         )
         {
@@ -336,12 +319,12 @@ public class LegacyReadCountCapTests
                     It.IsAny<DateTime?>(),
                     It.IsAny<string?>(),
                     It.IsAny<int>(),
-                    It.IsAny<int>(),
+                    It.IsAny<int>(), It.IsAny<bool>(),
                     It.IsAny<CancellationToken>()
                 )
             )
             .Callback(
-                (DateTime? _, DateTime? _, string? _, int limit, int _, CancellationToken _) =>
+                (DateTime? _, DateTime? _, string? _, int limit, int _, bool _, CancellationToken _) =>
                     observedLimit = limit
             )
             .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
@@ -361,6 +344,7 @@ public class LegacyReadCountCapTests
             Mock.Of<IDeviceStatusDecomposer>(),
             Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDataEventSink<DeviceStatus>>(),
+            TimeProvider.System,
             Mock.Of<ILogger<DeviceStatusController>>()
         )
         {

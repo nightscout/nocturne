@@ -1,3 +1,7 @@
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Services.ProfileActivations;
+using Nocturne.API.Services.Caching;
 using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -73,7 +77,7 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             .Returns((IEnumerable<StepCount> docs) => docs);
 
         var stateSpanRepository = new StateSpanRepository(
-            _context,
+            _context.AsFactory(),
             Mock.Of<IDeduplicationService>(),
             Mock.Of<IAuditContext>(),
             NullLogger<StateSpanRepository>.Instance);
@@ -82,11 +86,11 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             stateSpanRepository, NullLogger<StateSpanService>.Instance);
 
         var heartRateService = new HeartRateService(
-            _context, processing.Object, Mock.Of<ISignalRBroadcastService>(),
+            _context.AsFactory(), processing.Object, Mock.Of<ISignalRBroadcastService>(),
             NullLogger<HeartRateService>.Instance);
 
         var stepCountService = new StepCountService(
-            _context, processing.Object, Mock.Of<ISignalRBroadcastService>(),
+            _context.AsFactory(), processing.Object, Mock.Of<ISignalRBroadcastService>(),
             NullLogger<StepCountService>.Instance);
 
         var activityService = new ActivityService(
@@ -96,7 +100,7 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IDataEventSink<Activity>>(),
             new ActivityDecomposer(
-                _context, stateSpanRepository, NullLogger<ActivityDecomposer>.Instance),
+                _context.AsFactory(), stateSpanRepository, NullLogger<ActivityDecomposer>.Instance),
             heartRateService,
             stepCountService,
             NullLogger<ActivityService>.Instance);
@@ -114,7 +118,9 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             Mock.Of<IHeartRateService>(),
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
-            _context,
+            _context.AsFactory(),
+            Mock.Of<IProfileActivationRepository>(),
+            new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
             Mock.Of<IAuditContext>(),
             new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance);

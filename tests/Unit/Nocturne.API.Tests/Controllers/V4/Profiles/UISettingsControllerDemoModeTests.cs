@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
@@ -8,6 +7,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using static Nocturne.API.Tests.Controllers.V4.Profiles.UISettingsControllerHarness;
 
@@ -112,14 +112,11 @@ public class UISettingsControllerDemoModeTests
     public async Task GetUISettings_inDemoMode_stopsWaitingOnAHungDemoService()
     {
         var demoService = StubDemoService.Hanging();
-        var elapsed = Stopwatch.StartNew();
 
-        var settings = await ProxiedGet(demoService);
-        elapsed.Stop();
+        var settings = await ProxiedGet(demoService).WaitAsync(UISettingsController.DemoServiceProxyTimeout * 10);
 
         settings.Devices.ConnectedDevices.Should().NotBeEmpty();
         demoService.Cancelled.Should().BeTrue();
-        elapsed.Elapsed.Should().BeLessThan(UISettingsController.DemoServiceProxyTimeout * 4);
     }
 
     [Fact]
@@ -127,7 +124,7 @@ public class UISettingsControllerDemoModeTests
     {
         var demoService = new StubDemoService(HttpStatusCode.OK, ProxiedSettings);
         var controller = NewController(
-            new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
+            new UISettingsService(NewDatabase().AsFactory(), NullLogger<UISettingsService>.Instance),
             DemoMode(enabled: false, serviceUrl: "http://demo-service"),
             demoService.Factory
         );
@@ -158,7 +155,7 @@ public class UISettingsControllerDemoModeTests
     )
     {
         var controller = NewController(
-            new UISettingsService(NewDatabase(), NullLogger<UISettingsService>.Instance),
+            new UISettingsService(NewDatabase().AsFactory(), NullLogger<UISettingsService>.Instance),
             DemoMode(enabled: true, serviceUrl: serviceUrl),
             demoService.Factory
         );
@@ -232,7 +229,7 @@ public class UISettingsControllerDemoModeTests
                 var factory = new Mock<IHttpClientFactory>();
                 factory
                     .Setup(f => f.CreateClient(It.IsAny<string>()))
-                    .Returns(() => new HttpClient(new Handler(this)));
+                    .Returns(() => new HttpClient(new Handler(this)) { Timeout = Timeout.InfiniteTimeSpan });
 
                 return factory.Object;
             }

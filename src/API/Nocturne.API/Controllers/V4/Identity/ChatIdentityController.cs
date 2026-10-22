@@ -107,19 +107,35 @@ public class ChatIdentityController : ControllerBase
 
     /// <summary>Claim a pending link token after /connect slash command auth.</summary>
     /// <remarks>
-    /// A token carries no subject, and a chat account already linked to this tenant keeps the
-    /// link it has, so the row this returns may belong to another subject and predate the claim.
+    /// Answers 400 for a token that cannot be claimed here
+    /// (<see cref="ChatLinkTokenRejectedException"/>) and 409 when this tenant's link for the chat
+    /// account belongs to another member (<see cref="ChatAccountLinkedToAnotherMemberException"/>).
+    /// 400 rather than 410 because the generated remote functions forward 400 and flatten 410 to a
+    /// 500.
     /// </remarks>
     [HttpPost("links/claim")]
     [RemoteCommand(Invalidates = ["GetLinks"])]
     [ProducesResponseType(typeof(ChatIdentityLinkResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ChatIdentityLinkResponse>> ClaimLink(
         [FromBody] ClaimChatIdentityLinkRequest body, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
         var userId = GetUserIdOrThrow();
-        var entry = await _service.ClaimPendingLinkAsync(tenantId, userId, body.Token, ct);
-        return Ok(MapResponse(entry, ownedByCaller: entry.NocturneUserId == userId));
+        try
+        {
+            var entry = await _service.ClaimPendingLinkAsync(tenantId, userId, body.Token, ct);
+            return Ok(MapResponse(entry, ownedByCaller: true));
+        }
+        catch (ChatLinkTokenRejectedException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
+        }
+        catch (ChatAccountLinkedToAnotherMemberException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status409Conflict, title: "Conflict");
+        }
     }
 
     /// <inheritdoc cref="ChatIdentityService.SetDefaultAsync"/>
@@ -199,6 +215,7 @@ public class ChatIdentityController : ControllerBase
         {
             Platform = pending.Platform,
             PlatformUserId = pending.PlatformUserId,
+            PlatformUserName = pending.PlatformUserName,
             Source = pending.Source,
         });
     }
@@ -276,6 +293,7 @@ public class PendingLinkViewResponse
 {
     public string Platform { get; set; } = string.Empty;
     public string PlatformUserId { get; set; } = string.Empty;
+    public string? PlatformUserName { get; set; }
     public string Source { get; set; } = string.Empty;
 }
 

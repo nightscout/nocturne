@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -24,7 +25,7 @@ public class AuditRetentionServiceTests
     });
 
     private AuditRetentionService CreateService(Dictionary<string, string?> settings) =>
-        new(_contextFactory.Object,
+        new(_contextFactory.Object.AsNocturneFactory(),
             new ConfigurationBuilder().AddInMemoryCollection(settings).Build(),
             _logger.Object);
 
@@ -285,7 +286,7 @@ public class AuditRetentionServiceTests
         IDbContextFactory<NocturneDbContext> contextFactory,
         IConfiguration configuration,
         ILogger<AuditRetentionService> logger)
-        : AuditRetentionService(contextFactory, configuration, logger)
+        : AuditRetentionService(contextFactory.AsNocturneFactory(), configuration, logger)
     {
         public List<(Guid TenantId, string Table, TimeSpan MinAge)> Purges { get; } = [];
 

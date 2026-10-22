@@ -1,26 +1,27 @@
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
-/// Insulin-pump properties for a <see cref="DeviceCatalogEntry"/>: the manufacturer's rated wear
-/// times for the parts that get changed.
+/// Insulin-pump-specific properties for a <see cref="DeviceCatalogEntry"/>, describing what wears out
+/// and how often.
 /// </summary>
 /// <seealso cref="DeviceCatalogEntry"/>
+/// <seealso cref="DeviceCatalog"/>
 public record PumpProperties
 {
     /// <summary>
-    /// True for a patch pump (e.g. Omnipod), where the pod holds the insulin and the cannula and is
-    /// changed as one; there is then no separate reservoir to change.
+    /// Whether the pump is a patch (pod) that carries its own cannula and reservoir and is replaced
+    /// whole, rather than a tubed pump with a separate infusion set and refillable reservoir.
     /// </summary>
-    public required bool IsPatchPump { get; init; }
+    public required bool IsPatch { get; init; }
 
     /// <summary>
-    /// Rated wear time of the pod, or of the infusion set for a tubed pump, in hours.
+    /// Approved wear of one pod, or of one infusion set on a tubed pump, in hours.
     /// </summary>
     public required int SiteDurationHours { get; init; }
 
     /// <summary>
-    /// Rated in-use time of the reservoir or cartridge in hours; null for a patch pump, and for a
-    /// pump whose reservoir is rated only as changed when empty.
+    /// How long one reservoir is expected to last on a tubed pump, in hours. Null for patch pumps,
+    /// whose reservoir goes with the pod.
     /// </summary>
     public int? ReservoirDurationHours { get; init; }
 }

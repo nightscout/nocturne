@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -44,7 +45,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 [Route("api/auth/platform-access")]
 [AllowAnonymous]
 public class PlatformAccessController(
-    NocturneDbContext dbContext,
+    INocturneDbContextFactory contexts,
     IJwtService jwtService,
     IAuthAuditService authAudit,
     IOptions<OidcOptions> oidcOptions,
@@ -64,6 +65,7 @@ public class PlatformAccessController(
     [HttpGet]
     public async Task<IActionResult> Access([FromQuery] string? tenant, CancellationToken ct)
     {
+        await using var db = await contexts.CreateAsync(ct);
         if (string.IsNullOrWhiteSpace(tenant))
             return Problem(detail: "No tenant slug was given.", statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
 
@@ -88,7 +90,7 @@ public class PlatformAccessController(
         }
 
         // The tenants table is not RLS-scoped, so this resolves any tenant by slug.
-        var target = await dbContext.Tenants.AsNoTracking()
+        var target = await db.Tenants.AsNoTracking()
             .Where(t => t.Slug == tenant)
             .Select(t => new { t.Id, t.Slug, t.IsActive })
             .FirstOrDefaultAsync(ct);

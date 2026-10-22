@@ -78,6 +78,42 @@ describe("GlucoseTrack rendering contract", () => {
 		expect(stopsIn(grads[0]).length).toBe(10);
 	});
 
+	it("continuous mode stop offsets ascend, so the browser does not collapse them onto the first", async () => {
+		const { container } = render(Harness, {
+			lineColorMode: "continuous",
+			areaMode: "off",
+			showPoints: false,
+		});
+
+		const offsets = [...stopsIn(gradients(container)[0])].map((s) => Number(s.getAttribute("offset")));
+		for (let i = 1; i < offsets.length; i++) {
+			expect(offsets[i]).toBeGreaterThan(offsets[i - 1]);
+		}
+	});
+
+	it("pins the stroke gradient to the plot area rather than the whole SVG", async () => {
+		const { container } = render(Harness, {
+			lineColorMode: "threshold",
+			areaMode: "off",
+			showPoints: false,
+		});
+
+		const grad = gradients(container)[0];
+		expect(grad.getAttribute("y1")).toBe("0");
+		expect(grad.getAttribute("y2")).not.toContain("%");
+	});
+
+	it("full area mode renders a fill at one opacity throughout", async () => {
+		const { container } = render(Harness, {
+			lineColorMode: "single",
+			areaMode: "full",
+			showPoints: false,
+		});
+
+		const colors = [...stopsIn(gradients(container)[0])].map((s) => s.getAttribute("stop-color"));
+		expect(new Set(colors).size).toBe(1);
+	});
+
 	it("showPoints={false} suppresses point circles", async () => {
 		const { container } = render(Harness, {
 			lineColorMode: "single",

@@ -9,6 +9,7 @@ using Nocturne.API.Controllers.V3;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Effects;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
@@ -46,11 +47,8 @@ public class V3FilterOperatorMergeTests
         string? captured = null;
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(s => s.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback<string?, int, int, string?, string?, bool, CancellationToken>(
-                (_, _, _, find, _, _, _) => captured = find)
+            .Setup(s => s.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<EntryQuery, CancellationToken>((query, _) => captured = query.Find)
             .ReturnsAsync(Array.Empty<Entry>());
 
         var controller = new EntriesController(
@@ -98,14 +96,11 @@ public class V3FilterOperatorMergeTests
         string? captured = null;
         var treatments = new Mock<ITreatmentService>();
         treatments
-            .Setup(s => s.GetTreatmentsWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<int, int, string?, bool, CancellationToken>((_, _, find, _, _) => captured = find)
+            .Setup(s => s.QueryTreatmentsAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<TreatmentQuery, CancellationToken>((query, _) => captured = query.Find)
             .ReturnsAsync(Array.Empty<Treatment>());
 
         var controller = new TreatmentsController(
-            Mock.Of<ITreatmentStore>(),
             Mock.Of<IDocumentProcessingService>(),
             treatments.Object,
             NullLogger<TreatmentsController>.Instance)
@@ -171,9 +166,9 @@ public class V3FilterOperatorMergeTests
         groupRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .Callback<DateTime?, DateTime?, string?, int, int, CancellationToken>(
-                (from, to, device, _, _, _) => captured = (from, to, device))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback<DateTime?, DateTime?, string?, int, int, bool, CancellationToken>(
+                (from, to, device, _, _, _, _) => captured = (from, to, device))
             .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
 
         var projection = new DeviceStatusProjectionService(
@@ -210,11 +205,8 @@ public class V3FilterOperatorMergeTests
         (string? Type, string? Find) captured = default;
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(s => s.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback<string?, int, int, string?, string?, bool, CancellationToken>(
-                (type, _, _, find, _, _, _) => captured = (type, find))
+            .Setup(s => s.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<EntryQuery, CancellationToken>((query, _) => captured = (query.Type, query.Find))
             .ReturnsAsync(Array.Empty<Entry>());
 
         var controller = new EntriesController(

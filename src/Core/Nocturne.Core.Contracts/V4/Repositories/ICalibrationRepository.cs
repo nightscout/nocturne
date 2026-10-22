@@ -24,7 +24,6 @@ public interface ICalibrationRepository : ILegacyKeyedRepository<Calibration>
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
-    /// <param name="ct">Cancellation token.</param>
     new Task<IEnumerable<Calibration>> GetAsync(DateTime? from, DateTime? to, string? device, string? source, int limit = 100, int offset = 0, bool descending = true, CancellationToken ct = default);
 
     /// <summary>
@@ -34,20 +33,17 @@ public interface ICalibrationRepository : ILegacyKeyedRepository<Calibration>
     /// <param name="device">Device identifier to match, or <c>null</c> for any device.</param>
     /// <param name="from">Inclusive start of the time range.</param>
     /// <param name="to">Exclusive end of the time range.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<Calibration?> FindStoredDuplicateAsync(
         string? device, DateTime from, DateTime to, CancellationToken ct = default);
 
     /// <summary>Retrieve all <see cref="Calibration"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<Calibration>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default);
 
     /// <summary>
     /// Retrieve the timestamp of the most recently stored <see cref="Calibration"/>, optionally scoped to a data source.
     /// </summary>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The latest timestamp, or <c>null</c> if no records exist.</returns>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
@@ -55,7 +51,6 @@ public interface ICalibrationRepository : ILegacyKeyedRepository<Calibration>
     /// Retrieve the timestamp of the oldest stored <see cref="Calibration"/>, optionally scoped to a data source.
     /// </summary>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The oldest timestamp, or <c>null</c> if no records exist.</returns>
     Task<DateTime?> GetOldestTimestampAsync(string? source = null, CancellationToken ct = default);
 
@@ -63,16 +58,11 @@ public interface ICalibrationRepository : ILegacyKeyedRepository<Calibration>
     /// Delete all <see cref="Calibration"/> records matching the given data source.
     /// </summary>
     /// <param name="source">Data source identifier (e.g., connector name).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default);
 
-    /// <summary>
-    /// Delete all records within the given time range.
-    /// </summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Inclusive end, or <c>null</c> for no upper bound.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 }

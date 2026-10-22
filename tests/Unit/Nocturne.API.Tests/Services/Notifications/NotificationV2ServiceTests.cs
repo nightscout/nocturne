@@ -41,7 +41,8 @@ public class NotificationV2ServiceTests
     }
 
     private (NotificationV2Service Service, MockApnsClientFactory Apns) CreateWithLoopPush(
-        Profile? currentProfile
+        Profile? currentProfile,
+        string? pushServerEnvironment = null
     )
     {
         var apns = new MockApnsClientFactory();
@@ -53,6 +54,7 @@ public class NotificationV2ServiceTests
                     ApnsKey = "mock-key",
                     ApnsKeyId = "ABC123DEFG",
                     DeveloperTeamId = "TEAM123456",
+                    PushServerEnvironment = pushServerEnvironment ?? new LoopConfiguration().PushServerEnvironment,
                 }
             ),
             apns
@@ -70,9 +72,14 @@ public class NotificationV2ServiceTests
         return (service, apns);
     }
 
-    private static Profile ProfileWithLoopSettings(string? deviceToken, string? bundleIdentifier) =>
+    private static Profile ProfileWithLoopSettings(
+        string? deviceToken,
+        string? bundleIdentifier,
+        bool? isApnsProduction = null
+    ) =>
         new()
         {
+            IsAPNSProduction = isApnsProduction,
             LoopSettings = new LoopProfileSettings
             {
                 DeviceToken = deviceToken,
@@ -112,6 +119,32 @@ public class NotificationV2ServiceTests
         push.GetProperty("otp").Should().Be("123456");
         push.GetProperty("start-time").Should().Be("2026-09-30T01:02:03.000Z");
         push.GetProperty("remote-address").Should().Be("10.0.0.5");
+    }
+
+    [Theory]
+    [InlineData(false, "production", true)]
+    [InlineData(true, "development", false)]
+    [InlineData(null, "production", false)]
+    [InlineData(null, "development", true)]
+    public async Task SendLoopNotificationAsync_TheProfilesEnvironmentOutranksTheConfiguredOne(
+        bool? profileIsProduction,
+        string configuredEnvironment,
+        bool expectDevelopmentServer
+    )
+    {
+        var (service, apns) = CreateWithLoopPush(
+            ProfileWithLoopSettings("profile-device-token", "com.loopkit.Loop", profileIsProduction),
+            configuredEnvironment
+        );
+
+        var result = await service.SendLoopNotificationAsync(
+            new LoopNotificationData { EventType = "Temporary Override Cancel" },
+            "10.0.0.5"
+        );
+
+        result.Success.Should().BeTrue(result.Message);
+        apns.CapturedPushes.Should().ContainSingle().Which
+            .SentToDevelopmentServer.Should().Be(expectDevelopmentServer);
     }
 
     [Fact]

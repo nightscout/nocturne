@@ -73,6 +73,7 @@ public class BolusEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttrib
     /// </summary>
     [Column("insulin_type")]
     [MaxLength(128)]
+    [FitToColumn]
     public string? InsulinType { get; set; }
 
     /// <summary>

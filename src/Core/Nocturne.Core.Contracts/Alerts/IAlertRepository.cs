@@ -15,7 +15,6 @@ public interface IAlertRepository
     /// Returns all enabled <see cref="AlertRuleSnapshot"/> records for the specified tenant.
     /// </summary>
     /// <param name="tenantId">The tenant whose rules should be retrieved.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>A read-only list of enabled alert rule snapshots.</returns>
     Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesAsync(Guid tenantId, CancellationToken ct);
 
@@ -24,8 +23,6 @@ public interface IAlertRepository
     /// rule fires; <see cref="AlertRuleChannelSnapshot.SortOrder"/> is cosmetic only.
     /// </summary>
     /// <param name="tenantId">The tenant that owns the rule, used to scope the query.</param>
-    /// <param name="ruleId">The alert rule identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<AlertRuleChannelSnapshot>> GetChannelsForRuleAsync(Guid tenantId, Guid ruleId, CancellationToken ct);
 
     /// <summary>
@@ -33,12 +30,8 @@ public interface IAlertRepository
     /// </summary>
     Task<AlertInstanceSnapshot> CreateInstanceAsync(CreateAlertInstanceRequest request, CancellationToken ct);
 
-    /// <summary>
-    /// Returns all alert instances associated with a specific excursion.
-    /// </summary>
     /// <param name="tenantId">The tenant that owns the excursion, used to scope the query.</param>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>A read-only list of alert instances for the excursion.</returns>
     Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
 
@@ -54,7 +47,6 @@ public interface IAlertRepository
     /// (e.g. <c>"hysteresis"</c>, <c>"auto"</c>). Null is allowed only as a defensive
     /// fall-back — every production call site has a reason.
     /// </param>
-    /// <param name="ct">Cancellation token.</param>
     Task ResolveInstancesForExcursionAsync(Guid tenantId, Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct);
 
     /// <summary>
@@ -73,15 +65,12 @@ public interface IAlertRepository
     /// </summary>
     /// <param name="tenantId">The tenant that owns the excursion, used to scope the query.</param>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<string>> GetInAppDestinationsForExcursionAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
 
     /// <summary>
     /// Updates an existing alert instance (e.g., advancing its escalation step or snooze state).
     /// </summary>
     /// <param name="request">The update request containing the fields to change.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes when the instance has been updated.</returns>
     Task UpdateInstanceAsync(UpdateAlertInstanceRequest request, CancellationToken ct);
 
     /// <summary>
@@ -90,8 +79,6 @@ public interface IAlertRepository
     /// </summary>
     /// <param name="tenantId">The tenant that owns the instances, used to scope the update.</param>
     /// <param name="instanceIds">The alert instance identifiers whose pending deliveries should be expired.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes when the deliveries have been expired.</returns>
     Task ExpirePendingDeliveriesAsync(Guid tenantId, IReadOnlyList<Guid> instanceIds, CancellationToken ct);
 
     /// <summary>
@@ -99,21 +86,16 @@ public interface IAlertRepository
     /// </summary>
     /// <param name="tenantId">The tenant that owns the excursion, used to scope the delete.</param>
     /// <param name="excursionId">The closed excursion.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task DeleteExcursionMutesAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
 
     /// <summary>
     /// Counts the number of active (unresolved) excursions for a tenant.
     /// </summary>
-    /// <param name="tenantId">The tenant identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The count of active excursions.</returns>
     Task<int> CountActiveExcursionsAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
     /// Returns all excursions that are currently in a hysteresis cool-down period.
     /// </summary>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>A read-only list of excursion snapshots in hysteresis.</returns>
     Task<IReadOnlyList<HysteresisExcursionSnapshot>> GetExcursionsInHysteresisAsync(CancellationToken ct);
 
@@ -121,8 +103,6 @@ public interface IAlertRepository
     /// Returns the tenant-level alert context (global mute state, timezone, etc.) used
     /// by the orchestrator to evaluate scheduling rules.
     /// </summary>
-    /// <param name="tenantId">The tenant identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The tenant alert context, or <c>null</c> if the tenant has no alert configuration.</returns>
     Task<TenantAlertContext?> GetTenantAlertContextAsync(Guid tenantId, CancellationToken ct);
 
@@ -176,7 +156,6 @@ public interface IAlertRepository
     /// Returns every enabled rule across all active tenants, each tenant's in
     /// <c>SortOrder</c>. The sweep selects the rules it evaluates on the wall clock from these.
     /// </summary>
-    /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<AlertRuleSnapshot>> GetAllEnabledRulesAsync(CancellationToken ct);
 
     /// <summary>
@@ -184,7 +163,6 @@ public interface IAlertRepository
     /// <paramref name="asOf"/>, so they can resume escalation.
     /// </summary>
     /// <param name="asOf">The point-in-time cutoff for expired snoozes.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>A read-only list of previously snoozed instance snapshots.</returns>
     Task<IReadOnlyList<SnoozedInstanceSnapshot>> GetExpiredSnoozedInstancesAsync(DateTime asOf, CancellationToken ct);
 
@@ -193,8 +171,6 @@ public interface IAlertRepository
     /// the <see cref="AlertRule"/> id that owns it. Used by <c>alert_state</c> conditions to
     /// reference live alerts cross-rule.
     /// </summary>
-    /// <param name="tenantId">The tenant identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>
     /// Dictionary keyed by alert rule id. Each value's <see cref="ActiveAlertSnapshot.State"/> is
     /// always <c>"firing"</c>; downstream evaluators decide acknowledgement state from
@@ -206,7 +182,5 @@ public interface IAlertRepository
     /// <summary>
     /// Persists all pending changes tracked by the underlying context.
     /// </summary>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes when changes have been saved.</returns>
     Task SaveChangesAsync(CancellationToken ct);
 }

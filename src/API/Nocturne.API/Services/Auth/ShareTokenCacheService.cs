@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.API.Services.Auth;
@@ -23,14 +23,14 @@ namespace Nocturne.API.Services.Auth;
 public sealed class ShareTokenCacheService : IShareTokenResolver
 {
     private readonly IMemoryCache _cache;
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly ILogger<ShareTokenCacheService> _logger;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(2);
 
     public ShareTokenCacheService(
         IMemoryCache cache,
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        INocturneDbContextFactory dbContextFactory,
         ILogger<ShareTokenCacheService> logger)
     {
         _cache = cache;
@@ -57,7 +57,7 @@ public sealed class ShareTokenCacheService : IShareTokenResolver
         if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
             return cached;
 
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync(ct);
+        await using var dbContext = await _dbContextFactory.CreatePlatformAsync(ct);
 
         var tenant = await dbContext.Tenants
             .AsNoTracking()

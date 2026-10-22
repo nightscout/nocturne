@@ -5,7 +5,6 @@
   import BatteryLow from "@lucide/svelte/icons/battery-low";
   import BatteryMedium from "@lucide/svelte/icons/battery-medium";
   import BatteryWarning from "@lucide/svelte/icons/battery-warning";
-  import Zap from "@lucide/svelte/icons/zap";
   import { onMount } from "svelte";
   import { timeAgo } from "$lib/utils";
   import { time } from "$lib/utils/formatting";
@@ -102,10 +101,9 @@
             {@const IconComponent = getBatteryIconComponent(currentStatus.level)}
             <IconComponent class="h-3 w-3" />
           {/if}
-          {currentStatus.display}
-          {#if currentStatus.min.isCharging}
-            <Zap class="h-3 w-3" />
-          {/if}
+          {currentStatus.min.battery != null
+            ? `${currentStatus.min.battery}%`
+            : currentStatus.display}
         </span>
       </div>
     {:else}

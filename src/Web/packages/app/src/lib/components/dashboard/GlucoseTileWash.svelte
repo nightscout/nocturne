@@ -13,7 +13,7 @@
   interface Props {
     mills: number | undefined;
     variant: GlucoseTileVariant;
-    delta: number;
+    delta: number | null;
   }
 
   let { mills, variant, delta }: Props = $props();

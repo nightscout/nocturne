@@ -9,6 +9,7 @@ using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Connectors.NocturneRemote.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -425,6 +426,46 @@ public class NocturneRemoteConnectorServiceCrawlTests
                 "state spans resume from their own newest record, not glucose's");
     }
 
+    [Fact]
+    public async Task SyncDataAsync_ReplicatesTheRemotesAppliedProfileActivationsKeyedByTheirIds()
+    {
+        var remoteId = Guid.NewGuid();
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.ProfileActivations, RemoteFakeHandler.Json($$"""
+                [{"id":"{{remoteId}}","baseProfileName":"Sick","percentage":120,"timeshiftHours":1.5,
+                  "phase":"Effective","origin":"Uploader","app":"AAPS","isTemporary":true,
+                  "startMills":1767427200000,"endMills":1767430800000}]
+                """));
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.StateSpans] }, fixture.Config, CancellationToken.None);
+
+        handler.Requests.Should().Contain(u => u.Contains(NocturneRemoteConstants.ProfileActivations + "?applied=true"));
+        var activation = fixture.PublishedActivations.Should().ContainSingle().Subject;
+        activation.SyncIdentifier.Should().Be(remoteId.ToString());
+        activation.BaseProfileName.Should().Be("Sick");
+        activation.Percentage.Should().Be(120);
+        activation.TimeshiftMs.Should().Be(5_400_000);
+        activation.RequestedDurationMs.Should().Be(3_600_000);
+        activation.EndMills.Should().Be(1767430800000);
+        result.Errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_FromARemoteWithoutProfileActivations_ReplaysOnlyItsSpans()
+    {
+        var handler = new RemoteFakeHandler()
+            .Break(NocturneRemoteConstants.ProfileActivations, HttpStatusCode.NotFound);
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.StateSpans] }, fixture.Config, CancellationToken.None);
+
+        result.Errors.Should().BeEmpty("a remote that predates activations sends its switches as Profile spans");
+        fixture.PublishedActivations.Should().BeEmpty();
+    }
+
     /// <summary>
     /// A caller's lower bound is never narrowed by a family's resume point. An explicit <c>from</c>
     /// with no <c>to</c> is a legitimate request shape and the one an admin repairing a months-old
@@ -780,6 +821,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
         internal NocturneRemoteConnectorConfiguration Config { get; }
         internal List<SensorGlucose> PublishedGlucose { get; } = [];
         internal List<Bolus> PublishedBoluses { get; } = [];
+        internal List<ProfileActivation> PublishedActivations { get; } = [];
 
         internal ServiceFixture(
             RemoteFakeHandler handler,
@@ -823,6 +865,18 @@ public class NocturneRemoteConnectorServiceCrawlTests
             metadata
                 .Setup(p => p.GetLatestStateSpanTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(latestStateSpan);
+            metadata
+                .Setup(p => p.PublishStateSpansAsync(
+                    It.IsAny<IEnumerable<StateSpan>>(), It.IsAny<string>(),
+                    It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+            metadata
+                .Setup(p => p.PublishProfileActivationsAsync(
+                    It.IsAny<IEnumerable<ProfileActivation>>(), It.IsAny<string>(),
+                    It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+                .Callback<IEnumerable<ProfileActivation>, string, WriteOrigin, CancellationToken>(
+                    (batch, _, _, _) => PublishedActivations.AddRange(batch))
+                .ReturnsAsync(true);
 
             treatments
                 .Setup(p => p.PublishBolusesAsync(
@@ -953,6 +1007,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
             return Task.FromResult(
                 path == V1DeviceStatus || path == NocturneRemoteConstants.Foods
+                    || path == NocturneRemoteConstants.ProfileActivations
                     ? Json("[]")
                     : GlucosePage(total: 0));
         }

@@ -64,7 +64,7 @@ public class UserDisplayPreferences
     private static readonly HashSet<string> AllowedColorThemes = new(StringComparer.Ordinal) { "nocturne", "trio", "aaps", "classic" };
     private static readonly HashSet<string> AllowedPredictionModes = new(StringComparer.Ordinal) { "cone", "lines", "main", "iob", "zt", "uam", "cob" };
     private static readonly HashSet<string> AllowedColorModes = new(StringComparer.Ordinal) { "single", "threshold", "continuous" };
-    private static readonly HashSet<string> AllowedAreaModes = new(StringComparer.Ordinal) { "off", "baseline", "deviation" };
+    private static readonly HashSet<string> AllowedAreaModes = new(StringComparer.Ordinal) { "off", "full", "baseline", "deviation" };
 
     /// <summary>
     /// Validates the constrained string values and numeric ranges. Returns a "field: message"
@@ -204,7 +204,6 @@ public class UserDisplayPreferences
     [JsonPropertyName("nightModeSchedule")]
     public bool? NightModeSchedule { get; set; }
 
-    /// <summary>Prediction display preferences.</summary>
     [JsonPropertyName("prediction")]
     public PredictionPreferences? Prediction { get; set; }
 
@@ -263,7 +262,7 @@ public class ChartPreferences
     [JsonPropertyName("showPoints")]
     public bool? ShowPoints { get; set; }
 
-    /// <summary>Area fill mode: "off", "baseline", or "deviation".</summary>
+    /// <summary>Area fill mode: "off", "full", "baseline", or "deviation".</summary>
     [JsonPropertyName("areaMode")]
     public string? AreaMode { get; set; }
 

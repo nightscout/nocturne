@@ -24,7 +24,6 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -56,9 +55,9 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         public Task DisposeAsync() => Task.CompletedTask;
     }
 
-    private sealed class Factory(Func<NocturneDbContext> create) : ITenantDbContextFactory
+    private sealed class Factory(Func<NocturneDbContext> create) : SingleReaderDbContextFactory
     {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => ValueTask.FromResult(create());
     }
 
     private sealed record Setup(
@@ -74,12 +73,12 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         Func<NocturneDbContext> Db);
 
     private NocturneDbContext Context(Guid tenant) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
+        new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
                 maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
             .AddInterceptors(
-                new TenantConnectionInterceptor(), new MutationAuditInterceptor(Mock.Of<IHttpContextAccessor>()))
-            .Options) { TenantId = tenant, AuditContext = _audit };
+                new TenantConnectionInterceptor(), new MutationAuditInterceptor())
+            .Options) { TenantId = tenant }.AttributedTo(_audit);
 
     private readonly IAuditContext _audit = Mock.Of<IAuditContext>();
 
@@ -117,7 +116,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
             .ReturnsAsync((GlucoseProcessing?)null);
 
         var decomposer = new EntryDecomposer(
-            Context(tenant), sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
+            sensorGlucose, meterGlucose, calibration, new GlucoseProcessingResolver(config.Object),
             Mock.Of<IPatientDeviceStamper>(), audit, NullLogger<EntryDecomposer>.Instance);
         var store = new EntryReadService(
             sensorGlucose, meterGlucose, calibration, TestDoubles.CanonicalGlucosePassThrough.Create(),
@@ -129,8 +128,8 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         documents.Setup(d => d.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
             .Returns<IEnumerable<Entry>>(entries => entries);
         var controller = new EntriesController(
-            service, documents.Object, Mock.Of<IProcessingStatusService>(), Mock.Of<ICanonicalAlertEvaluator>(),
-            NullLogger<EntriesController>.Instance)
+            service, documents.Object, Mock.Of<ICanonicalAlertEvaluator>(),
+            TimeProvider.System, NullLogger<EntriesController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
@@ -149,7 +148,12 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
     private static string ServedId(Entry entry) =>
         JsonDocument.Parse(JsonSerializer.Serialize(entry)).RootElement.GetProperty("_id").GetString()!;
 
-    private static long Mills() => DateTimeOffset.UtcNow.AddMinutes(-Random.Shared.Next(10, 10_000)).ToUnixTimeMilliseconds();
+    private static readonly DateTimeOffset TimeBase = DateTimeOffset.UtcNow.AddMinutes(-10);
+    private static int _timeSlot;
+
+    /// <summary>A time no other call in this run returns, a minute before the last.</summary>
+    private static long Mills() =>
+        TimeBase.AddMinutes(-Interlocked.Increment(ref _timeSlot)).ToUnixTimeMilliseconds();
 
     [Fact]
     public async Task An_entry_with_a_legacy_id_is_deleted_by_it_and_broadcast()

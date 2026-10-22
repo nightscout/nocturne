@@ -29,6 +29,7 @@ public class DeviceClockServiceTests : IDisposable
     public DeviceClockServiceTests()
     {
         _db = TestDbContextFactory.CreateInMemoryContext();
+        _db.TenantId = _tenantId;
 
         var accessor = new Mock<ITenantAccessor>();
         accessor.SetupGet(a => a.Context)
@@ -39,9 +40,9 @@ public class DeviceClockServiceTests : IDisposable
             .ReturnsAsync(OwnerId);
 
         _timeline = new TimezoneTimelineService(
-            _db, accessor.Object, NullLogger<TimezoneTimelineService>.Instance);
+            _db.AsFactory(), accessor.Object, NullLogger<TimezoneTimelineService>.Instance);
         _service = new DeviceClockService(
-            _db, accessor.Object, _timeline, owners.Object, _notifications.Object,
+            _db.AsFactory(), accessor.Object, _timeline, owners.Object, _notifications.Object,
             NullLogger<DeviceClockService>.Instance);
     }
 

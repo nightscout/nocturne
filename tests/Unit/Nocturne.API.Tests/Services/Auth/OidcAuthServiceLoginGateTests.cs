@@ -32,6 +32,7 @@ public class OidcAuthServiceLoginGateTests
     private readonly Mock<IHttpClientFactory> _httpFactory = new();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
     private readonly Mock<IMemberInviteService> _memberInviteService = new();
+    private readonly Mock<ITotpService> _totpService = new();
     private readonly OidcAuthService _service;
 
     public OidcAuthServiceLoginGateTests()
@@ -46,6 +47,7 @@ public class OidcAuthServiceLoginGateTests
             _httpFactory.Object,
             _tenantMemberService.Object,
             _memberInviteService.Object,
+            _totpService.Object,
             new EphemeralDataProtectionProvider(),
             options,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
@@ -83,7 +85,7 @@ public class OidcAuthServiceLoginGateTests
         _subjectService
             .Setup(s => s.FindOrCreateFromOidcAsync(
                 It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>()))
             .ReturnsAsync(subject);
         return subject;
     }
@@ -256,10 +258,103 @@ public class OidcAuthServiceLoginGateTests
         result.Success.Should().BeTrue();
         result.IsAccessDenied.Should().BeFalse();
         result.Tokens.Should().NotBeNull();
+        result.StepUpToken.Should().BeNull();
 
         _sessionService.Verify(
             s => s.IssueSessionAsync(subject.Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_WhenSubjectHasAnAuthenticator_WithholdsTheSessionForTheSecondFactor()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        var provider = Provider();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _totpService.Setup(t => t.GetCredentialCountAsync(subject.Id)).ReturnsAsync(1);
+        _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, tenantId, false)).ReturnsAsync("step-up-token");
+        SetupSessionIssuance();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(returnUrl: "/reports"), provider, Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeFalse();
+        result.StepUpToken.Should().Be("step-up-token");
+        result.Tokens.Should().BeNull();
+        result.SubjectId.Should().Be(subject.Id);
+        result.ProviderId.Should().Be(provider.Id);
+        result.ReturnUrl.Should().Be("/reports");
+
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _subjectService.Verify(s => s.UpdateLastLoginAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_WhenANonMemberHasAnAuthenticator_IsDeniedBeforeAStepUpTokenIsMinted()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _totpService.Setup(t => t.GetCredentialCountAsync(subject.Id)).ReturnsAsync(1);
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.IsAccessDenied.Should().BeTrue();
+        result.StepUpToken.Should().BeNull();
+        _totpService.Verify(
+            t => t.CreateStepUpTokenAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_WhenAnInviteeHasAnAuthenticator_BindsTheInviteToTheStepUpToken()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _memberInviteService
+            .Setup(s => s.GetInviteByTokenAsync("invite-token", tenantId))
+            .ReturnsAsync(ValidInvite(tenantId));
+        _totpService.Setup(t => t.GetCredentialCountAsync(subject.Id)).ReturnsAsync(1);
+        _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, tenantId, true)).ReturnsAsync("step-up-token");
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(returnUrl: "/join?token=invite-token"),
+            Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.StepUpToken.Should().Be("step-up-token");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_OnATenantlessHostWithAnAuthenticator_BindsTheTokenToNoTenant()
+    {
+        var subject = SetupResolvedSubject();
+        _totpService.Setup(t => t.GetCredentialCountAsync(subject.Id)).ReturnsAsync(1);
+        _totpService.Setup(t => t.CreateStepUpTokenAsync(subject.Id, null, false)).ReturnsAsync("step-up-token");
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(tenantSlug: null!), Provider(), Claims(), currentTenantId: null, ipAddress: null, userAgent: null);
+
+        result.StepUpToken.Should().Be("step-up-token");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

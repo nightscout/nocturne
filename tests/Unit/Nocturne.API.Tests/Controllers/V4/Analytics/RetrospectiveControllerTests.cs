@@ -6,12 +6,14 @@ using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -34,7 +36,7 @@ public class RetrospectiveControllerTests
         return new DeviceStatusProjectionService(
             Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
                     It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>())
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())
                 == Task.FromResult<IReadOnlyList<DeviceStatusGroup>>(Array.Empty<DeviceStatusGroup>())),
             new Mock<IApsSnapshotRepository>().Object,
             new Mock<IPumpSnapshotRepository>().Object,
@@ -95,8 +97,7 @@ public class RetrospectiveControllerTests
             Times.Never);
     }
 
-    [Fact]
-    public async Task GetRetrospectiveTimeline_CallsBuildResolverOnceNotGetBasalRateAsync()
+    private void SetupTimelineDependencies()
     {
         _basalRateResolverMock
             .Setup(r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
@@ -113,9 +114,7 @@ public class RetrospectiveControllerTests
             .Returns(new CobResult());
 
         _entryServiceMock
-            .Setup(s => s.GetEntriesAsync(
-                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(s => s.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Entry>());
 
         _bolusRepoMock
@@ -143,6 +142,12 @@ public class RetrospectiveControllerTests
                 It.IsAny<bool>(),
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<CarbIntake>());
+    }
+
+    [Fact]
+    public async Task GetRetrospectiveTimeline_CallsBuildResolverOnceNotGetBasalRateAsync()
+    {
+        SetupTimelineDependencies();
 
         var controller = CreateController();
 
@@ -160,20 +165,34 @@ public class RetrospectiveControllerTests
     }
 
     [Fact]
-    public async Task GetRetrospectiveData_CallsEntryServiceWithAdvancedFilter()
+    public async Task GetRetrospectiveTimeline_ReadsEveryEntryOfTheDayByTime()
+    {
+        SetupTimelineDependencies();
+        EntryQuery? captured = null;
+        _entryServiceMock
+            .Setup(s => s.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<EntryQuery, CancellationToken>((query, _) => captured = query)
+            .ReturnsAsync(new List<Entry>());
+        var controller = CreateController();
+
+        await controller.GetRetrospectiveTimeline("2024-01-15");
+
+        captured.Should().NotBeNull();
+        captured!.Type.Should().BeNull();
+        captured.Count.Should().Be(5000);
+        var find = FindQuery.Parse(captured.Find);
+        find.FromMills.Should().Be(new DateTimeOffset(2024, 1, 15, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds());
+        find.ToMills.Should().Be(new DateTimeOffset(2024, 1, 16, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds() - 1);
+    }
+
+    [Fact]
+    public async Task GetRetrospectiveData_QueriesSgvAroundTheTime()
     {
         // Arrange
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         _entryServiceMock
-            .Setup(s => s.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string?>(),
-                It.IsAny<int>(),
-                It.IsAny<int>(),
-                It.IsAny<string?>(),
-                It.IsAny<string?>(),
-                It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(s => s.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Entry>());
 
         _bolusRepoMock
@@ -236,13 +255,8 @@ public class RetrospectiveControllerTests
         var expectedFind = $"{{\"mills\":{{\"$gte\":{fromMills},\"$lte\":{toMills}}}}}";
 
         _entryServiceMock.Verify(
-            s => s.GetEntriesWithAdvancedFilterAsync(
-                "sgv",
-                50,
-                0,
-                expectedFind,
-                null,
-                false,
+            s => s.QueryEntriesAsync(
+                It.Is<EntryQuery>(q => q.Type == "sgv" && q.Count == 50 && q.Skip == 0 && q.Find == expectedFind && !q.ReverseResults),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }

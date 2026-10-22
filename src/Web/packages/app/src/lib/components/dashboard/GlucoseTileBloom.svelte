@@ -5,8 +5,8 @@
   /** One bloom per reading: `seed`, `delta` and `token` are read once, when the canvas mounts. */
   interface Props {
     seed: number;
-    /** mg/dL since the previous reading; the splotches' line is steepest at ±15. */
-    delta: number;
+    /** mg/dL since the previous reading; the splotches' line is steepest at ±15, and level when it is unknown. */
+    delta: number | null;
     /** CSS custom property holding the range's colour, e.g. `--glucose-high`. */
     token: string;
     onstatechange: (state: PlayerState) => void;
@@ -31,7 +31,7 @@
     if (!el || !container) return;
     const reading = untrack(() => ({
       seed,
-      slope: Math.min(1, Math.max(-1, delta / 15)),
+      slope: Math.min(1, Math.max(-1, (delta ?? 0) / 15)),
       colour: tokenColour(el, token),
     }));
     return mountPlayer(container, el, {

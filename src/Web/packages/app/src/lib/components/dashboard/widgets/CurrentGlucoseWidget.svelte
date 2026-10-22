@@ -131,7 +131,7 @@
             <BatteryIcon class="size-3" aria-hidden="true" />
           {/if}
           <span class="sr-only">Uploader battery</span>
-          {uploader.display}
+          {uploader.min?.battery != null ? `${uploader.min.battery}%` : uploader.display}
         </span>
       {/if}
     </div>

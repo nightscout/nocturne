@@ -2,6 +2,7 @@ import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
 import { checkOnboarding } from "$lib/server/onboarding-check";
 import { getRequestStatus } from "$lib/server/request-status";
+import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import { toIsoString } from "$lib/utils/api-date";
 import { autoLoginEndpoint, autoLoginRedirect } from "$lib/server/auto-login";
@@ -22,7 +23,19 @@ function hasGlucoseReadPermission(permissions: string[]): boolean {
   return permissions.some((p) => GLUCOSE_READ_PERMISSIONS.includes(p));
 }
 
-export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, parent }) => {
+/** A failed read hides the banner: it is a nudge, and must not take the shell down with it. */
+async function readShowBackupSignInPrompt(apiClient: App.Locals["apiClient"]): Promise<boolean> {
+  try {
+    return (await apiClient.backupSignInPrompt.getBackupSignInPrompt()).show ?? false;
+  } catch (error) {
+    console.error("Failed to read the backup sign-in prompt:", error);
+    return false;
+  }
+}
+
+export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, parent, depends }) => {
+  depends(SHELL_DATA_KEY);
+
   // Untracked, so SvelteKit reuses this load's data across client navigations instead of re-running
   // it whenever the path changes: the URL only shapes a cookie flag and the login return address.
   const { protocol, pathname, search, origin } = untrack(() => ({
@@ -39,6 +52,12 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   // Tenant status drives the anonymous-access gate and the demo banner. Shared with the root
   // layout's tenantless check, and null on failure — default to no anonymous access then
   // (fail safe: require sign-in rather than over-expose).
+  // Started with the status call so the prompt read adds no round-trip of its own; it never
+  // rejects, so a redirect below leaves nothing unhandled.
+  const backupSignInPrompt =
+    locals.user && !locals.isGuestSession
+      ? readShowBackupSignInPrompt(locals.apiClient)
+      : Promise.resolve(false);
   const status = await getRequestStatus(locals);
   const anonymousReadAccess = status?.anonymousReadAccess ?? false;
 
@@ -47,7 +66,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   // (it grants public read only under ShareAccess); this gate just avoids rendering the shell and
   // then bursting 401s on the bare host.
   // Security headers for the share host (Referrer-Policy, X-Robots-Tag) are applied for every
-  // response in hooks.server.ts (shareHostSecurityHandle).
+  // response in hooks.server.ts (securityHeadersHandle).
   const publicViewAllowed = locals.isShareHost && anonymousReadAccess;
 
   // Resolved above every redirect below, because none of them reaches anywhere a share host can
@@ -126,11 +145,14 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   const isDemo = status?.isDemo ?? false;
   const nextResetAt = toIsoString(status?.nextResetAt);
 
+  const showBackupSignInPrompt = !tenantless && !isDemo && (await backupSignInPrompt);
+
   return {
     user: locals.user ?? null,
     isGuestSession: locals.isGuestSession ?? false,
     guestExpiresAt: locals.guestExpiresAt ?? null,
     canViewRealtimeData,
+    showBackupSignInPrompt,
     isDemo,
     nextResetAt,
     onboardingComplete,

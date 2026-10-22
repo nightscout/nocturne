@@ -228,7 +228,7 @@ public class TreatmentFindDateWindowTests
         var projection = new Mock<IV4ToLegacyProjectionService>();
         projection
             .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Treatment>());
 
         await NewReadService(projection.Object, NullLogger<TreatmentReadService>.Instance).QueryAsync(
@@ -239,7 +239,7 @@ public class TreatmentFindDateWindowTests
             });
 
         projection.Verify(p => p.GetProjectedTreatmentsAsync(
-            WindowStartMills, null, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()));
+            WindowStartMills, null, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()));
     }
 
     [Fact]
@@ -252,7 +252,7 @@ public class TreatmentFindDateWindowTests
         var projection = new Mock<IV4ToLegacyProjectionService>();
         projection
             .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), maxFilterFetch, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<long?>(), It.IsAny<long?>(), maxFilterFetch, It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(projected);
         var logger = new Mock<ILogger<TreatmentReadService>>();
 
@@ -297,5 +297,5 @@ public class TreatmentFindDateWindowTests
         new(projection, Mock.Of<ITreatmentDecomposer>(), Mock.Of<IDecompositionPipeline>(),
             Mock.Of<ITempBasalRepository>(), Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(),
             Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
-            Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(), logger);
+            Mock.Of<IBolusCalculationRepository>(), Mock.Of<IProfileActivationRepository>(), Mock.Of<IStateSpanService>(), logger);
 }

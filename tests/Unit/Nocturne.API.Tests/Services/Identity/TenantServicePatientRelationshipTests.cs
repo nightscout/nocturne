@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.V4;
@@ -32,11 +33,12 @@ public sealed class TenantServicePatientRelationshipTests : IDisposable
     public void Dispose() => _db.Dispose();
 
     private TenantService Service() => new(
-        _db.ContextFactory,
+        _db.ContextFactory.AsNocturneFactory(),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
+        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         Mock.Of<ILogger<TenantService>>());
 
     [Fact]

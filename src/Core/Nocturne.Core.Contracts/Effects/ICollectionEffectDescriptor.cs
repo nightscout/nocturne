@@ -12,20 +12,6 @@ public interface ICollectionEffectDescriptor
     string CollectionName { get; }
 
     /// <summary>
-    /// Get exact cache keys that should be removed after a write to this collection.
-    /// </summary>
-    /// <param name="tenantCacheId">Tenant-scoped cache ID prefix.</param>
-    /// <returns>List of cache keys to remove.</returns>
-    IReadOnlyList<string> GetCacheKeysToRemove(string tenantCacheId);
-
-    /// <summary>
-    /// Get cache key patterns (wildcards) that should be cleared after a write to this collection.
-    /// </summary>
-    /// <param name="tenantCacheId">Tenant-scoped cache ID prefix.</param>
-    /// <returns>List of wildcard patterns to clear.</returns>
-    IReadOnlyList<string> GetCachePatternsToClear(string tenantCacheId);
-
-    /// <summary>
     /// Whether writes to this collection should trigger V4 decomposition
     /// (splitting legacy records into granular V4 tables).
     /// </summary>

@@ -16,7 +16,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 [Route("api/v4/admin/deduplication")]
 [Produces("application/json")]
 [AllowDuringSetup]
-[RequireAdmin]
+[RequireSuperuser]
 public class DeduplicationController : ControllerBase
 {
     private readonly IDeduplicationService _deduplicationService;

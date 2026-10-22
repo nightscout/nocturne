@@ -69,6 +69,18 @@ public class DeduplicationJobTenantScopeTests : IDisposable
     }
 
     [Fact]
+    public async Task StartDeduplicationJobAsync_ThrowsWithoutTheCallersReadContext()
+    {
+        var service = CreateService(
+            new Mock<IServiceScopeFactory>().Object, new StubTenantAccessor(TestTenant), withReadContext: false);
+
+        var act = async () => await service.StartDeduplicationJobAsync();
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*read context*");
+    }
+
+    [Fact]
     public async Task StartDeduplicationJobAsync_PinsTheCapturedTenantBeforeResolvingTheScopedService()
     {
         var calls = new List<string>();
@@ -93,7 +105,7 @@ public class DeduplicationJobTenantScopeTests : IDisposable
             "the background scope runs as the tenant that asked for the job");
         calls.Should().ContainInOrder(
             new[] { "set-tenant", "resolve-dedup-service" },
-            "the scoped DbContext reads the accessor when it is built, so the tenant must be pinned first");
+            "the job's scope must carry the tenant before anything in it runs");
     }
 
     [Fact]
@@ -166,11 +178,13 @@ public class DeduplicationJobTenantScopeTests : IDisposable
         return await service.StartDeduplicationJobAsync();
     }
 
-    private DeduplicationService CreateService(IServiceScopeFactory scopeFactory, ITenantAccessor? tenantAccessor)
+    private DeduplicationService CreateService(
+        IServiceScopeFactory scopeFactory, ITenantAccessor? tenantAccessor, bool withReadContext = true)
     {
         var context = _db.CreateContext();
         return new DeduplicationService(
-            context, scopeFactory, NullLogger<DeduplicationService>.Instance, tenantAccessor);
+            context.AsFactory(), scopeFactory, NullLogger<DeduplicationService>.Instance, tenantAccessor,
+            withReadContext ? new CategoryReadContext() : null);
     }
 
     /// <summary>

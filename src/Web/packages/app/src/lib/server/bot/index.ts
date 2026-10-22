@@ -55,6 +55,7 @@ const platformBuilders: Record<string, PlatformConfigBuilder> = {
 		fromDb: (fields) => ({
 			enabled: true,
 			botToken: fields["botToken"],
+			webhookSecretToken: fields["webhookSecretToken"],
 		}),
 		fromEnv: () => !!env.TELEGRAM_BOT_TOKEN,
 	},

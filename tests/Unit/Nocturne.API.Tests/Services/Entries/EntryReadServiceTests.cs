@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.Platform;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -874,6 +875,74 @@ public class EntryReadServiceTests
         _sgRepo.Verify(r => r.GetForEntriesAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
             It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    #endregion
+
+    #region QueryAsync sort field
+
+    private void StoreHoldingReadings(params SensorGlucose[] readings)
+    {
+        _sgRepo.Setup(r => r.GetForEntriesByValueAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? _, DateTime? _, string? _, int limit, int offset, bool descending, CancellationToken _) =>
+                (descending
+                    ? readings.OrderByDescending(r => r.Mgdl).ThenByDescending(r => r.Timestamp)
+                    : readings.OrderBy(r => r.Mgdl).ThenBy(r => r.Timestamp))
+                .Skip(offset).Take(limit).ToList());
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task QueryAsync_SgvSortAscending_ReturnsTheLowestReadingsRatherThanTheOldest()
+    {
+        StoreHoldingReadings(MakeSg(Now.AddMinutes(-4), 200), MakeSg(Now.AddMinutes(-3), 90), MakeSg(Now.AddMinutes(-2), 150), MakeSg(Now.AddMinutes(-1), 60));
+
+        var result = await _sut.QueryAsync(new EntryQuery
+        {
+            Type = "sgv", Count = 2, ReverseResults = true, SortField = ReadSortField.Sgv,
+        });
+
+        Assert.Equal([60d, 90d], result.Select(e => e.Sgv!.Value));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task QueryAsync_SgvSortDescending_ReturnsTheHighestReadingsFirst()
+    {
+        StoreHoldingReadings(MakeSg(Now.AddMinutes(-4), 200), MakeSg(Now.AddMinutes(-3), 90), MakeSg(Now.AddMinutes(-2), 150), MakeSg(Now.AddMinutes(-1), 60));
+
+        var result = await _sut.QueryAsync(new EntryQuery
+        {
+            Type = "sgv", Count = 2, SortField = ReadSortField.Sgv,
+        });
+
+        Assert.Equal([200d, 150d], result.Select(e => e.Sgv!.Value));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task QueryAsync_SgvSortAcrossTypes_PlacesEntriesWithoutAnSgvBelowEveryReading()
+    {
+        StoreHoldingReadings(MakeSg(Now.AddMinutes(-3), 90), MakeSg(Now.AddMinutes(-2), 60));
+        _mgRepo.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { MakeMg(Now.AddMinutes(-1), 300) });
+        _calRepo.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Calibration>());
+
+        var ascending = await _sut.QueryAsync(new EntryQuery
+        {
+            Count = 3, ReverseResults = true, SortField = ReadSortField.Sgv,
+        });
+        var descending = await _sut.QueryAsync(new EntryQuery { Count = 3, SortField = ReadSortField.Sgv });
+
+        Assert.Equal(["mbg", "sgv", "sgv"], ascending.Select(e => e.Type));
+        Assert.Equal(["sgv", "sgv", "mbg"], descending.Select(e => e.Type));
     }
 
     #endregion

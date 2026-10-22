@@ -72,3 +72,22 @@ describe("authenticateGuestSession", () => {
     expect(event.locals.user?.permissions).toEqual(["api:entries:read"]);
   });
 });
+
+describe("authenticateGuestSession when the API is down", () => {
+  it("marks the session unreadable rather than leaving it known to be signed out", async () => {
+    const event = guestRequest("real-guest-session");
+    const down = vi.fn<typeof fetch>(async () => new Response("bad gateway", { status: 502 }));
+
+    await authenticateGuestSession(event, "https://api.test", down);
+
+    expect(event.locals.sessionUnreadable).toBe(true);
+  });
+
+  it("does not mark it unreadable when the API says the guest session is not valid", async () => {
+    const event = guestRequest("garbage");
+
+    await authenticateGuestSession(event, "https://api.test", sessionApi("real-guest-session"));
+
+    expect(event.locals.sessionUnreadable).toBeUndefined();
+  });
+});

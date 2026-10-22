@@ -12,9 +12,6 @@ namespace Nocturne.Core.Models.Configuration;
 /// <seealso cref="AlarmPriority"/>
 public class AlarmProfileConfiguration
 {
-    /// <summary>
-    /// Unique identifier for this alarm profile
-    /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
@@ -24,15 +21,9 @@ public class AlarmProfileConfiguration
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Description of what this alarm is for
-    /// </summary>
     [JsonPropertyName("description")]
     public string? Description { get; set; }
 
-    /// <summary>
-    /// Whether this alarm is currently enabled
-    /// </summary>
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
@@ -67,15 +58,9 @@ public class AlarmProfileConfiguration
     [JsonPropertyName("persistenceMinutes")]
     public int PersistenceMinutes { get; set; } = 0;
 
-    /// <summary>
-    /// Audio configuration for this alarm
-    /// </summary>
     [JsonPropertyName("audio")]
     public AlarmAudioSettings Audio { get; set; } = new();
 
-    /// <summary>
-    /// Vibration settings for this alarm
-    /// </summary>
     [JsonPropertyName("vibration")]
     public AlarmVibrationSettings Vibration { get; set; } = new();
 
@@ -85,9 +70,6 @@ public class AlarmProfileConfiguration
     [JsonPropertyName("visual")]
     public AlarmVisualSettings Visual { get; set; } = new();
 
-    /// <summary>
-    /// Snooze behavior configuration
-    /// </summary>
     [JsonPropertyName("snooze")]
     public AlarmSnoozeSettings Snooze { get; set; } = new();
 
@@ -121,9 +103,6 @@ public class AlarmProfileConfiguration
     [JsonPropertyName("displayOrder")]
     public int DisplayOrder { get; set; }
 
-    /// <summary>
-    /// Timestamp when this profile was created
-    /// </summary>
     [JsonPropertyName("createdAt")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
@@ -134,9 +113,6 @@ public class AlarmProfileConfiguration
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
-/// <summary>
-/// Types of alarm triggers
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum AlarmTriggerType
 {
@@ -168,16 +144,12 @@ public enum AlarmTriggerType
     Custom,
 }
 
-/// <summary>
-/// Priority levels for alarms
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum AlarmPriority
 {
     /// <summary>Low priority - can be silenced easily</summary>
     Low,
 
-    /// <summary>Normal priority</summary>
     Normal,
 
     /// <summary>High priority - louder, more persistent</summary>
@@ -187,14 +159,8 @@ public enum AlarmPriority
     Critical,
 }
 
-/// <summary>
-/// Audio settings for an alarm
-/// </summary>
 public class AlarmAudioSettings
 {
-    /// <summary>
-    /// Whether sound is enabled for this alarm
-    /// </summary>
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
@@ -241,14 +207,8 @@ public class AlarmAudioSettings
     public int RepeatCount { get; set; } = 0;
 }
 
-/// <summary>
-/// Vibration settings for an alarm
-/// </summary>
 public class AlarmVibrationSettings
 {
-    /// <summary>
-    /// Whether vibration is enabled for this alarm
-    /// </summary>
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
@@ -270,9 +230,6 @@ public class AlarmVibrationSettings
 /// </summary>
 public class AlarmVisualSettings
 {
-    /// <summary>
-    /// Whether to flash the screen when alarm triggers
-    /// </summary>
     [JsonPropertyName("screenFlash")]
     public bool ScreenFlash { get; set; }
 
@@ -313,9 +270,6 @@ public class AlarmVisualSettings
     public string? EmergencyInstructions { get; set; }
 }
 
-/// <summary>
-/// Snooze settings for an alarm
-/// </summary>
 public class AlarmSnoozeSettings
 {
     /// <summary>
@@ -384,9 +338,6 @@ public class AlarmScheduleSettings
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; }
 
-    /// <summary>
-    /// Time ranges when this alarm is active
-    /// </summary>
     [JsonPropertyName("activeRanges")]
     public List<TimeRange> ActiveRanges { get; set; } = new();
 
@@ -397,16 +348,10 @@ public class AlarmScheduleSettings
     [JsonPropertyName("activeDays")]
     public List<int>? ActiveDays { get; set; }
 
-    /// <summary>
-    /// Timezone for schedule interpretation
-    /// </summary>
     [JsonPropertyName("timezone")]
     public string? Timezone { get; set; }
 }
 
-/// <summary>
-/// A time range for scheduling
-/// </summary>
 public class TimeRange
 {
     /// <summary>
@@ -442,15 +387,9 @@ public class UserAlarmConfiguration
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
-    /// <summary>
-    /// Global sound enabled setting
-    /// </summary>
     [JsonPropertyName("soundEnabled")]
     public bool SoundEnabled { get; set; } = true;
 
-    /// <summary>
-    /// Global vibration enabled setting
-    /// </summary>
     [JsonPropertyName("vibrationEnabled")]
     public bool VibrationEnabled { get; set; } = true;
 
@@ -460,15 +399,9 @@ public class UserAlarmConfiguration
     [JsonPropertyName("globalVolume")]
     public int GlobalVolume { get; set; } = 80;
 
-    /// <summary>
-    /// List of all configured alarm profiles
-    /// </summary>
     [JsonPropertyName("profiles")]
     public List<AlarmProfileConfiguration> Profiles { get; set; } = new();
 
-    /// <summary>
-    /// Custom sounds uploaded by the user
-    /// </summary>
     [JsonPropertyName("customSounds")]
     public List<CustomSoundReference> CustomSounds { get; set; } = new();
 
@@ -478,19 +411,12 @@ public class UserAlarmConfiguration
     [JsonPropertyName("emergencyContacts")]
     public List<EmergencyContactConfig> EmergencyContacts { get; set; } = new();
 
-    /// <summary>
-    /// Notification channels configuration
-    /// </summary>
     [JsonPropertyName("channels")]
     public NotificationChannelsConfig Channels { get; set; } = new();
 }
 
-/// <summary>
-/// Reference to a custom uploaded sound
-/// </summary>
 public class CustomSoundReference
 {
-    /// <summary>Unique identifier for this custom sound.</summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
@@ -506,7 +432,6 @@ public class CustomSoundReference
     [JsonPropertyName("durationSeconds")]
     public int? DurationSeconds { get; set; }
 
-    /// <summary>When this sound was uploaded.</summary>
     [JsonPropertyName("uploadedAt")]
     public DateTimeOffset UploadedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -516,11 +441,9 @@ public class CustomSoundReference
 /// </summary>
 public class EmergencyContactConfig
 {
-    /// <summary>Unique identifier for this contact.</summary>
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>Display name for the contact.</summary>
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
@@ -548,20 +471,15 @@ public class EmergencyContactConfig
     public bool Enabled { get; set; } = true;
 }
 
-/// <summary>
-/// Notification channels configuration
-/// </summary>
 public class NotificationChannelsConfig
 {
-    /// <summary>Web push notification channel configuration.</summary>
+    /// <summary>Web push notification channel.</summary>
     [JsonPropertyName("push")]
     public ChannelConfig Push { get; set; } = new() { Enabled = true };
 
-    /// <summary>Email notification channel configuration.</summary>
     [JsonPropertyName("email")]
     public ChannelConfig Email { get; set; } = new();
 
-    /// <summary>SMS notification channel configuration.</summary>
     [JsonPropertyName("sms")]
     public ChannelConfig Sms { get; set; } = new();
 
@@ -570,12 +488,8 @@ public class NotificationChannelsConfig
     public PushoverChannelConfig? Pushover { get; set; }
 }
 
-/// <summary>
-/// Base channel configuration
-/// </summary>
 public class ChannelConfig
 {
-    /// <summary>Whether this notification channel is enabled.</summary>
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; }
 
@@ -586,16 +500,12 @@ public class ChannelConfig
     public AlarmPriority MinPriority { get; set; } = AlarmPriority.Normal;
 }
 
-/// <summary>
-/// Pushover-specific channel configuration
-/// </summary>
 public class PushoverChannelConfig : ChannelConfig
 {
     /// <summary>Pushover user key for delivering notifications.</summary>
     [JsonPropertyName("userKey")]
     public string? UserKey { get; set; }
 
-    /// <summary>Pushover application API token.</summary>
     [JsonPropertyName("apiToken")]
     public string? ApiToken { get; set; }
 }

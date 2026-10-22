@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -69,7 +70,7 @@ public class AlertRuleConditionAuditServiceTests
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new NocturneDbContext(_options));
         var services = new ServiceCollection()
-            .AddSingleton(factory.Object)
+            .AddSingleton(factory.Object.AsNocturneFactory())
             .AddSingleton(_validator.Object)
             .BuildServiceProvider();
 

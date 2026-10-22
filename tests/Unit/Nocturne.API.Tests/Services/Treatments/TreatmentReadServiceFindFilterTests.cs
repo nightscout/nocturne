@@ -34,6 +34,7 @@ public class TreatmentReadServiceFindFilterTests
             new Mock<INoteRepository>().Object,
             new Mock<IDeviceEventRepository>().Object,
             new Mock<IBolusCalculationRepository>().Object,
+            Mock.Of<IProfileActivationRepository>(),
             Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
     }
@@ -42,7 +43,7 @@ public class TreatmentReadServiceFindFilterTests
     {
         _projection
             .Setup(p => p.GetProjectedTreatmentsAsync(
-                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
+                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(treatments);
     }
 
@@ -64,6 +65,32 @@ public class TreatmentReadServiceFindFilterTests
         });
 
         result.Should().ContainSingle().Which.Id.Should().Be("2");
+    }
+
+    [Fact]
+    public async Task QueryAsync_EventTypeFilterAscending_ReturnsTheOldestMatchesOldestFirst()
+    {
+        var all = new[]
+        {
+            new Treatment { Id = "1", Mills = 5000, EventType = "Site Change" },
+            new Treatment { Id = "2", Mills = 4000, EventType = "Correction Bolus" },
+            new Treatment { Id = "3", Mills = 3000, EventType = "Site Change" },
+            new Treatment { Id = "4", Mills = 2000, EventType = "Site Change" },
+        };
+        _projection
+            .Setup(p => p.GetProjectedTreatmentsAsync(
+                It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long? _, long? _, int limit, bool _, bool _, CancellationToken _) =>
+                all.OrderBy(t => t.Mills).Take(limit).ToList());
+
+        var result = await _service.QueryAsync(new TreatmentQuery
+        {
+            Find = "find[eventType]=Site Change",
+            Count = 2,
+            ReverseResults = true,
+        });
+
+        result.Select(t => t.Id).Should().Equal("4", "3");
     }
 
     [Fact]
@@ -115,7 +142,7 @@ public class TreatmentReadServiceFindFilterTests
 
         result.Should().ContainSingle();
         _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(from, to, 10, false, It.IsAny<CancellationToken>()),
+            p => p.GetProjectedTreatmentsAsync(from, to, 10, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -135,7 +162,7 @@ public class TreatmentReadServiceFindFilterTests
 
         result.Should().ContainSingle().Which.Id.Should().Be("1");
         _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(from, null, It.IsAny<int>(), false, It.IsAny<CancellationToken>()),
+            p => p.GetProjectedTreatmentsAsync(from, null, It.IsAny<int>(), false, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -154,10 +181,10 @@ public class TreatmentReadServiceFindFilterTests
             .ToList();
 
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 100, false, It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 100, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(firstPage);
         _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 400, false, It.IsAny<CancellationToken>()))
+            .Setup(p => p.GetProjectedTreatmentsAsync(null, null, 400, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(secondPage);
 
         var result = await _service.QueryAsync(new TreatmentQuery
@@ -168,7 +195,7 @@ public class TreatmentReadServiceFindFilterTests
 
         result.Select(t => t.Id).Should().Equal("match-1", "match-2");
         _projection.Verify(
-            p => p.GetProjectedTreatmentsAsync(null, null, 400, false, It.IsAny<CancellationToken>()),
+            p => p.GetProjectedTreatmentsAsync(null, null, 400, false, It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -181,6 +208,47 @@ public class TreatmentReadServiceFindFilterTests
             new Treatment { Id = "3", Mills = 1000, EventType = "Sensor Change" });
 
         var count = await _service.CountAsync("find[eventType]=Sensor Change");
+
+        count.Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData("find[eventType]=/bolus/i")]
+    [InlineData("find[enteredBy]=/XDRIP/i")]
+    [InlineData("find[notes]=/lunch/i")]
+    public async Task QueryAsync_BareRegexLiteralOnATreatmentField_MatchesAsARegex(string find)
+    {
+        SetupProjection(
+            new Treatment { Id = "1", Mills = 3000, EventType = "Meal Bolus", EnteredBy = "xdrip", Notes = "Lunch" },
+            new Treatment { Id = "2", Mills = 2000, EventType = "Correction Bolus", EnteredBy = "xdrip-2", Notes = "lunch fix" },
+            new Treatment { Id = "3", Mills = 1000, EventType = "Note", EnteredBy = "Loop", Notes = "walk" });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = find, Count = 10 });
+
+        result.Select(t => t.Id).Should().Equal("1", "2");
+    }
+
+    [Fact]
+    public async Task QueryAsync_BareRegexLiteralOnAnotherField_StaysLiteral()
+    {
+        SetupProjection(
+            new Treatment { Id = "1", Mills = 2000, EventType = "Meal Bolus", Insulin = 2 },
+            new Treatment { Id = "2", Mills = 1000, EventType = "Note", Insulin = 3 });
+
+        var result = await _service.QueryAsync(new TreatmentQuery { Find = "find[insulin]=/2/", Count = 10 });
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CountAsync_BareRegexLiteralOnEventType_CountsRegexMatches()
+    {
+        SetupProjection(
+            new Treatment { Id = "1", Mills = 3000, EventType = "Meal Bolus" },
+            new Treatment { Id = "2", Mills = 2000, EventType = "Correction Bolus" },
+            new Treatment { Id = "3", Mills = 1000, EventType = "Note" });
+
+        var count = await _service.CountAsync("find[eventType]=/bolus/i");
 
         count.Should().Be(2);
     }

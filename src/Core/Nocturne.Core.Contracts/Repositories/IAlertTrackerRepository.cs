@@ -13,11 +13,7 @@ namespace Nocturne.Core.Contracts.Repositories;
 /// <seealso cref="Nocturne.Core.Contracts.Alerts.IExcursionTracker"/>
 public interface IAlertTrackerRepository
 {
-    /// <summary>
-    /// Get the tracker state for a specific alert rule.
-    /// </summary>
     /// <param name="alertRuleId">The unique identifier of the <see cref="AlertRule"/>.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The <see cref="AlertTrackerState"/> for the rule, or <c>null</c> if no state has been recorded yet.</returns>
     Task<AlertTrackerState?> GetTrackerStateAsync(
         Guid alertRuleId,
@@ -27,27 +23,18 @@ public interface IAlertTrackerRepository
     /// Insert or update the tracker state for a rule.
     /// </summary>
     /// <param name="state">The <see cref="AlertTrackerState"/> to persist.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task UpsertTrackerStateAsync(
         AlertTrackerState state,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Get the alert rule configuration.
-    /// </summary>
     /// <param name="alertRuleId">The unique identifier of the <see cref="AlertRule"/>.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The <see cref="AlertRule"/>, or <c>null</c> if not found.</returns>
     Task<AlertRule?> GetRuleAsync(
         Guid alertRuleId,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Create a new excursion record and return it.
-    /// </summary>
     /// <param name="alertRuleId">The <see cref="AlertRule"/> that triggered the excursion.</param>
     /// <param name="startedAt">UTC time when the excursion began.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The newly created <see cref="AlertExcursion"/>.</returns>
     Task<AlertExcursion> CreateExcursionAsync(
         Guid alertRuleId,
@@ -56,7 +43,6 @@ public interface IAlertTrackerRepository
 
     /// <summary>The excursion with <paramref name="excursionId"/>, or <c>null</c> if there is none.</summary>
     /// <param name="excursionId">The unique identifier of the <see cref="AlertExcursion"/>.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<AlertExcursion?> GetExcursionAsync(
         Guid excursionId,
         CancellationToken ct = default);
@@ -66,7 +52,6 @@ public interface IAlertTrackerRepository
     /// </summary>
     /// <param name="excursionId">The unique identifier of the <see cref="AlertExcursion"/> to close.</param>
     /// <param name="endedAt">UTC time when the excursion ended.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task CloseExcursionAsync(
         Guid excursionId,
         DateTime endedAt,
@@ -77,7 +62,6 @@ public interface IAlertTrackerRepository
     /// </summary>
     /// <param name="excursionId">The unique identifier of the <see cref="AlertExcursion"/>.</param>
     /// <param name="hysteresisStartedAt">UTC time when hysteresis began.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task SetHysteresisStartedAsync(
         Guid excursionId,
         DateTime hysteresisStartedAt,
@@ -87,25 +71,28 @@ public interface IAlertTrackerRepository
     /// Clear the hysteresis timestamp on an excursion (when resuming from hysteresis).
     /// </summary>
     /// <param name="excursionId">The unique identifier of the <see cref="AlertExcursion"/>.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task ClearHysteresisAsync(
         Guid excursionId,
         CancellationToken ct = default);
 
     /// <summary>
     /// Holds <paramref name="alertRuleId"/>'s transition lock until the transaction
-    /// (<see cref="ExecuteInTransactionAsync{T}"/>) it is taken in ends, so that one process at a
-    /// time reads and writes the rule's tracker state. The default, for a store no other process
-    /// shares, takes nothing.
+    /// (<see cref="ExecuteInTransactionAsync{T}"/>) it is taken in ends. Every writer of the rule's
+    /// tracker state already holds the API's in-process per-rule lease
+    /// (<c>AlertRuleEvaluationGate</c>) across read, decide and write, so no writer in the same
+    /// process changes the state under another. This lock is a backstop for a second API process
+    /// briefly overlapping the first, such as a pod being drained while its replacement starts. Call
+    /// it on the repository the transaction hands its work. The default, for a store no other
+    /// process shares, takes nothing.
     /// </summary>
     /// <param name="alertRuleId">The rule whose transition is about to be written.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task LockRuleAsync(Guid alertRuleId, CancellationToken ct = default) => Task.CompletedTask;
 
     /// <summary>
     /// Runs <paramref name="work"/> in one database transaction, so the writes it makes through
-    /// this repository commit or roll back together. The default, for a store with no
-    /// transactions, runs it as is.
+    /// the repository it is handed commit or roll back together. That repository runs on the
+    /// transaction; calls on this one outside it each run on their own. The default, for a store
+    /// with no transactions, hands over this repository and runs the work as is.
     /// </summary>
     /// <remarks>
     /// <paramref name="work"/> can run more than once when the store retries a transient failure.
@@ -116,7 +103,7 @@ public interface IAlertTrackerRepository
     /// again. Without it, a commit that landed but reported failure runs the work twice.
     /// </remarks>
     Task<T> ExecuteInTransactionAsync<T>(
-        Func<CancellationToken, Task<T>> work,
-        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
-        CancellationToken ct = default) => work(ct);
+        Func<IAlertTrackerRepository, CancellationToken, Task<T>> work,
+        Func<IAlertTrackerRepository, T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        CancellationToken ct = default) => work(this, ct);
 }

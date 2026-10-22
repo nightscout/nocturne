@@ -11,7 +11,7 @@ namespace Nocturne.API.Services.Profiles;
 /// <inheritdoc />
 public class ProfileDeletionService : IProfileDeletionService
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly ITherapySettingsRepository _therapyRepo;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<ProfileDeletionService> _logger;
@@ -30,7 +30,7 @@ public class ProfileDeletionService : IProfileDeletionService
     /// </param>
     /// <param name="logger">Logger.</param>
     public ProfileDeletionService(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         ITherapySettingsRepository therapyRepo,
         IAuditContext auditContext,
         ILogger<ProfileDeletionService> logger

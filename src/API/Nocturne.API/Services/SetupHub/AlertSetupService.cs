@@ -30,7 +30,7 @@ namespace Nocturne.API.Services.SetupHub;
 /// (<see cref="AlertDeliveryCheck"/>).
 /// </remarks>
 public class AlertSetupService(
-    NocturneDbContext db,
+    INocturneDbContextFactory contexts,
     IRuleScopeClassifier scopeClassifier,
     ISecretEncryptionService encryption,
     IAlertDeliveryService delivery,
@@ -59,9 +59,10 @@ public class AlertSetupService(
 
     public async Task<AlertSetupStatus> GetAsync(Guid callerId, CancellationToken ct)
     {
-        var routing = await RoutingAsync(ct);
-        var units = await UnitsAsync(callerId, ct);
-        var starters = await StartersAsync(tracking: false, ct);
+        await using var db = await contexts.CreateAsync(ct);
+        var routing = await RoutingAsync(db, ct);
+        var units = await UnitsAsync(db, callerId, ct);
+        var starters = await StartersAsync(db, tracking: false, ct);
 
         var rules = Enum.GetValues<StarterAlertKind>().Select(kind =>
         {
@@ -80,7 +81,7 @@ public class AlertSetupService(
             : primary is [{ ChannelType: ChannelType.InApp } only] && only.Destination == callerId.ToString();
 
         var members = routing == AlertRouting.ToYou
-            ? await MembersAsync(callerId, starters.GetValueOrDefault(StarterAlertKind.UrgentLow), ct)
+            ? await MembersAsync(db, callerId, starters.GetValueOrDefault(StarterAlertKind.UrgentLow), ct)
             : [];
 
         return new AlertSetupStatus(
@@ -114,25 +115,35 @@ public class AlertSetupService(
         }
         catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            db.ChangeTracker.Clear();
             return await SaveOnceAsync(callerId, request, ct);
         }
     }
 
     private async Task<AlertSetupStatus> SaveOnceAsync(Guid callerId, SaveAlertSetupRequest request, CancellationToken ct)
     {
-        var routing = await RoutingAsync(ct);
+        await using (var unit = await DbUnitOfWork.OpenAsync(contexts, ct))
+            await SaveStartersAsync(unit, callerId, request, ct);
+
+        return await GetAsync(callerId, ct);
+    }
+
+    private async Task SaveStartersAsync(
+        DbUnitOfWork unit, Guid callerId, SaveAlertSetupRequest request, CancellationToken ct)
+    {
+        var db = unit.Context;
+        var routing = await RoutingAsync(db, ct);
         if (routing == AlertRouting.LeftForRecipient)
             throw new InvalidOperationException("The person this is handed over to chooses where alerts go.");
         if (request.Rules.GroupBy(r => r.Kind).Any(g => g.Count() > 1))
             throw new ArgumentException("Each starter rule may be given once.");
 
         var channelRequests = ChannelsFor(callerId, request.Channels);
-        if (await _channels.ResolveAndValidateAsync(channelRequests, db, callerId, ct) is { } badChannel)
+        if (await _channels.ResolveAndValidateAsync(
+            channelRequests, AlertRuleChannelWriter.NoStoredRecipients, db, callerId, ct) is { } badChannel)
             throw new ArgumentException(badChannel);
 
-        var units = await UnitsAsync(callerId, ct);
-        var starters = await StartersAsync(tracking: true, ct);
+        var units = await UnitsAsync(db, callerId, ct);
+        var starters = await StartersAsync(db, tracking: true, ct);
         var tenantId = db.TenantId;
         var now = DateTime.UtcNow;
         var rearmed = new List<Guid>();
@@ -188,17 +199,15 @@ public class AlertSetupService(
             if (kind == StarterAlertKind.UrgentLow || routing == AlertRouting.ToYouAsCaregiver)
                 rule.AllowThroughDnd = true;
 
-            ReplacePrimaryChannels(rule, callerId, channelRequests);
+            ReplacePrimaryChannels(db, rule, callerId, channelRequests);
         }
 
         if (rearmed.Count > 0)
-            await rearm.SaveAndClearAsync(db, rearmed, ct);
+            await rearm.SaveAndClearAsync(unit, rearmed, ct);
         else
             await db.SaveChangesAsync(ct);
         if (retired.Count > 0)
             await retirement.CloseAsync(retired, tenantId, CancellationToken.None);
-
-        return await GetAsync(callerId, ct);
     }
 
     /// <summary>
@@ -208,10 +217,11 @@ public class AlertSetupService(
     /// <exception cref="InvalidOperationException">No starter rule is enabled, or the onboarder is a helper.</exception>
     public async Task<AlertSetupTest> SendTestAsync(Guid callerId, CancellationToken ct)
     {
-        if (await RoutingAsync(ct) == AlertRouting.LeftForRecipient)
+        await using var db = await contexts.CreateAsync(ct);
+        if (await RoutingAsync(db, ct) == AlertRouting.LeftForRecipient)
             throw new InvalidOperationException("The person this is handed over to chooses where alerts go.");
 
-        var starters = await StartersAsync(tracking: false, ct);
+        var starters = await StartersAsync(db, tracking: false, ct);
         var rule = starters.Values.FirstOrDefault(r => r.IsEnabled)
             ?? throw new InvalidOperationException("No starter alert is switched on.");
 
@@ -228,7 +238,8 @@ public class AlertSetupService(
     /// <exception cref="KeyNotFoundException">No test of a starter rule has this id.</exception>
     public async Task<AlertSetupTest> GetTestAsync(Guid instanceId, CancellationToken ct)
     {
-        var name = await StarterTests()
+        await using var db = await contexts.CreateAsync(ct);
+        var name = await StarterTests(db)
             .Where(i => i.Id == instanceId)
             .Select(i => i.AlertExcursion!.AlertRule!.Name)
             .FirstOrDefaultAsync(ct)
@@ -254,7 +265,8 @@ public class AlertSetupService(
     public async Task<AlertSetupStatus> ConfirmReceivedAsync(
         Guid callerId, Guid instanceId, bool acknowledgedOpenPageOnly, CancellationToken ct)
     {
-        var routing = await RoutingAsync(ct);
+        await using var db = await contexts.CreateAsync(ct);
+        var routing = await RoutingAsync(db, ct);
         if (routing == AlertRouting.LeftForRecipient)
             throw new InvalidOperationException("The person this is handed over to chooses where alerts go.");
 
@@ -289,12 +301,13 @@ public class AlertSetupService(
     public async Task<AlertSetupStatus> SetUrgentLowRecipientAsync(
         Guid callerId, Guid memberId, bool alerted, CancellationToken ct)
     {
-        if (await RoutingAsync(ct) != AlertRouting.ToYou)
+        await using var db = await contexts.CreateAsync(ct);
+        if (await RoutingAsync(db, ct) != AlertRouting.ToYou)
             throw new InvalidOperationException("Only a patient setting up their own alerts adds someone to urgent lows.");
-        if (!(await MembersAsync(callerId, null, ct)).Any(m => m.SubjectId == memberId))
+        if (!(await MembersAsync(db, callerId, null, ct)).Any(m => m.SubjectId == memberId))
             throw new KeyNotFoundException();
 
-        var starters = await StartersAsync(tracking: true, ct);
+        var starters = await StartersAsync(db, tracking: true, ct);
         var urgentLow = starters.GetValueOrDefault(StarterAlertKind.UrgentLow)
             ?? throw new InvalidOperationException("The starter rules are not saved yet.");
 
@@ -350,10 +363,11 @@ public class AlertSetupService(
         return requested;
     }
 
-    private IQueryable<AlertInstanceEntity> StarterTests() =>
+    private static IQueryable<AlertInstanceEntity> StarterTests(NocturneDbContext db) =>
         db.AlertInstances.AsNoTracking().Where(i => i.IsTest && i.AlertExcursion!.AlertRule!.StarterKind != null);
 
-    private async Task<Dictionary<StarterAlertKind, AlertRuleEntity>> StartersAsync(bool tracking, CancellationToken ct)
+    private static async Task<Dictionary<StarterAlertKind, AlertRuleEntity>> StartersAsync(
+        NocturneDbContext db, bool tracking, CancellationToken ct)
     {
         var query = db.AlertRules.Include(r => r.Channels).Where(r => r.StarterKind != null);
         var rules = await (tracking ? query : query.AsNoTracking()).ToListAsync(ct);
@@ -363,7 +377,7 @@ public class AlertSetupService(
             .ToDictionary(g => g.Key, g => g.OrderBy(r => r.CreatedAt).First());
     }
 
-    private async Task<AlertRouting> RoutingAsync(CancellationToken ct) =>
+    private static async Task<AlertRouting> RoutingAsync(NocturneDbContext db, CancellationToken ct) =>
         await db.Tenants.AsNoTracking()
                 .Where(t => t.Id == db.TenantId)
                 .Select(t => t.PatientRelationship)
@@ -374,7 +388,7 @@ public class AlertSetupService(
                 _ => AlertRouting.ToYou,
             };
 
-    private async Task<string> UnitsAsync(Guid callerId, CancellationToken ct)
+    private static async Task<string> UnitsAsync(NocturneDbContext db, Guid callerId, CancellationToken ct)
     {
         var preferences = await db.Subjects.AsNoTracking()
             .Where(s => s.Id == callerId)
@@ -387,7 +401,8 @@ public class AlertSetupService(
         return UserDisplayPreferences.Deserialize(preferences).GlucoseUnits ?? tenantUnits ?? GlucoseUnitDefaults.MgDl;
     }
 
-    private async Task<List<AlertSetupMember>> MembersAsync(Guid callerId, AlertRuleEntity? urgentLow, CancellationToken ct)
+    private static async Task<List<AlertSetupMember>> MembersAsync(
+        NocturneDbContext db, Guid callerId, AlertRuleEntity? urgentLow, CancellationToken ct)
     {
         var alerted = urgentLow?.Channels
             .Where(c => c.ChannelType == ChannelType.InApp)
@@ -421,7 +436,7 @@ public class AlertSetupService(
         && subjectId != callerId;
 
     private void ReplacePrimaryChannels(
-        AlertRuleEntity rule, Guid callerId, List<CreateAlertRuleChannelRequest> requests)
+        NocturneDbContext db, AlertRuleEntity rule, Guid callerId, List<CreateAlertRuleChannelRequest> requests)
     {
         var retained = AlertRuleChannelWriter.CollectRetainedSecrets(rule.Channels);
         var members = rule.Channels.Where(c => IsMemberChannel(c, callerId)).ToList();

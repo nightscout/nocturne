@@ -13,6 +13,8 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware.Handlers;
@@ -30,6 +32,7 @@ public class GuestSessionHandlerTests
     private readonly Guid _otherTenantId = Guid.CreateVersion7();
     private readonly Guid _dataOwnerId = Guid.CreateVersion7();
 
+    private readonly string _dbName = Guid.NewGuid().ToString();
     private readonly DbContextOptions<NocturneDbContext> _dbOptions;
     private readonly GuestSessionCacheService _sessionCache;
     private readonly GuestSessionHandler _handler;
@@ -37,7 +40,7 @@ public class GuestSessionHandlerTests
     public GuestSessionHandlerTests()
     {
         _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .UseInMemoryDatabase(databaseName: _dbName)
             .Options;
 
         using (var seed = new NocturneDbContext(_dbOptions))
@@ -50,15 +53,13 @@ public class GuestSessionHandlerTests
         _sessionCache = new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()));
 
         // Mirrors the request pipeline: the handler sets the tenant on the scope's accessor and
-        // the scoped DbContext is pinned from it, so the grant lookup is tenant-filtered.
+        // every context the scope's factory creates reads it, so the grant lookup is tenant-filtered.
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(_sessionCache);
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
-        services.AddScoped(sp => new NocturneDbContext(_dbOptions)
-        {
-            TenantId = sp.GetRequiredService<ITenantAccessor>().TenantId,
-        });
+        services.AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(_dbName));
+        services.AddDataServices();
         services.AddScoped<IGuestLinkService, GuestLinkService>();
         services.AddScoped<GrantRevocationService>();
         var provider = services.BuildServiceProvider();
@@ -190,7 +191,7 @@ public class GuestSessionHandlerTests
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _tenantId })
         {
             var service = new GuestLinkService(
-                ctx, _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
+                ctx.AsFactory(), _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
             (await service.RevokeAsync(grantId, _dataOwnerId)).Should().BeTrue();
         }
 
@@ -222,7 +223,7 @@ public class GuestSessionHandlerTests
     {
         await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = tenantId };
         var service = new GuestLinkService(
-            ctx, _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
+            ctx.AsFactory(), _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
 
         var created = await service.CreateGuestLinkAsync(
             _dataOwnerId, _dataOwnerId, "Caregiver", "https://acme.example.test",

@@ -1,3 +1,5 @@
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Core.Contracts.Identity;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -5,7 +7,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Authorization;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -58,7 +62,7 @@ public class ApiKeyHandlerTests : IDisposable
             .ReturnsAsync(() => _db.CreateContext(_testTenantId));
 
         var logger = new Mock<ILogger<ApiKeyHandler>>();
-        _handler = new ApiKeyHandler(_dbContextFactory.Object, _clock, logger.Object);
+        _handler = new ApiKeyHandler(_dbContextFactory.Object.AsNocturneFactory(), _clock, logger.Object);
     }
 
     public void Dispose()
@@ -290,8 +294,7 @@ public class ApiKeyHandlerTests : IDisposable
         Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
         Assert.Contains("health.readwrite", result.AuthContext.Scopes);
 
-        await Task.Delay(200);
-
+        Assert.False(_requestServices!.ScopeFactoryRequested);
         mockNotificationService.Verify(s => s.CreateNotificationAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
@@ -564,6 +567,7 @@ public class ApiKeyHandlerTests : IDisposable
             await ctx.SaveChangesAsync();
         }
 
+        var nudged = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var mockNotificationService = new Mock<IInAppNotificationService>();
         mockNotificationService
             .Setup(s => s.CreateNotificationAsync(
@@ -573,6 +577,7 @@ public class ApiKeyHandlerTests : IDisposable
                 It.IsAny<string?>(), It.IsAny<List<NotificationActionDto>?>(),
                 It.IsAny<ResolutionConditions?>(), It.IsAny<Dictionary<string, object>?>(),
                 It.IsAny<CancellationToken>()))
+            .Callback(() => nudged.TrySetResult())
             .ReturnsAsync(new InAppNotificationDto());
 
         var context = CreateHttpContextWithServices(mockNotificationService.Object);
@@ -581,10 +586,9 @@ public class ApiKeyHandlerTests : IDisposable
         var result = await _handler.AuthenticateAsync(context);
 
         Assert.True(result.Succeeded);
+        await nudged.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-        // Allow the fire-and-forget task to complete
-        await Task.Delay(200);
-
+        Assert.True(_requestServices!.ScopeFactoryRequested);
         mockNotificationService.Verify(s => s.CreateNotificationAsync(
             _subjectId.ToString(),
             "api-key-rotation",
@@ -598,6 +602,39 @@ public class ApiKeyHandlerTests : IDisposable
             It.Is<List<NotificationActionDto>>(a => a.Count == 1 && a[0].ActionId == "manage-keys" && a[0].Label == "Manage Keys"),
             It.IsAny<ResolutionConditions?>(),
             It.IsAny<Dictionary<string, object>?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(_testTenantId, _nudgeTenantId);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_SiteSecretOnTheDeviceSubject_NudgesTheOwner()
+    {
+        var sha1Hash = HashUtils.Sha1Hex("sitesecret");
+        var ownerId = Guid.CreateVersion7();
+
+        await using (var ctx = _db.CreateContext(_testTenantId))
+        {
+            var devices = await ctx.DeviceSubjectOf(_testTenantId);
+            ctx.OAuthGrants.Add(OAuthGrantEntity.AdoptedLegacyCredential(
+                devices, "Nightscout (migrated)", [Scope.HealthReadWrite], legacySecretHash: sha1Hash));
+            await ctx.SaveChangesAsync();
+        }
+
+        var mockNotificationService = new Mock<IInAppNotificationService>();
+        var context = CreateHttpContextWithServices(mockNotificationService.Object, ownerId);
+        context.Request.Headers["api-secret"] = sha1Hash;
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.Succeeded);
+        await Task.Delay(200);
+
+        mockNotificationService.Verify(s => s.CreateNotificationAsync(
+            ownerId.ToString(), "api-key-rotation", It.IsAny<string>(),
+            It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string?>(), It.IsAny<List<NotificationActionDto>?>(),
+            It.IsAny<ResolutionConditions?>(), It.IsAny<Dictionary<string, object>?>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -626,8 +663,7 @@ public class ApiKeyHandlerTests : IDisposable
 
         Assert.True(result.Succeeded);
 
-        await Task.Delay(200);
-
+        Assert.False(_requestServices!.ScopeFactoryRequested);
         mockNotificationService.Verify(s => s.CreateNotificationAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
@@ -644,15 +680,27 @@ public class ApiKeyHandlerTests : IDisposable
         return context;
     }
 
-    private DefaultHttpContext CreateHttpContextWithServices(IInAppNotificationService notificationService)
+    private Guid? _nudgeTenantId;
+    private ScopeFactoryRecordingServiceProvider? _requestServices;
+
+    private DefaultHttpContext CreateHttpContextWithServices(
+        IInAppNotificationService notificationService, Guid? ownerSubjectId = null)
     {
         var services = new ServiceCollection();
-        services.AddSingleton(notificationService);
-        var serviceProvider = services.BuildServiceProvider();
+        services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
+        var owner = ownerSubjectId?.ToString();
+        services.AddScoped(_ => Mock.Of<ITenantOwnerResolver>(r =>
+            r.GetOwnerSubjectIdAsync(_testTenantId, It.IsAny<CancellationToken>()) == Task.FromResult(owner)));
+        services.AddScoped(sp =>
+        {
+            _nudgeTenantId = sp.GetRequiredService<ITenantAccessor>().TenantId;
+            return notificationService;
+        });
+        _requestServices = new ScopeFactoryRecordingServiceProvider(services.BuildServiceProvider());
 
         var context = new DefaultHttpContext
         {
-            RequestServices = serviceProvider,
+            RequestServices = _requestServices,
         };
         context.Items["TenantContext"] = new TenantContext(_testTenantId, "default", "Default", true, IsDemo: false);
         return context;

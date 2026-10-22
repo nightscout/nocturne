@@ -1,3 +1,4 @@
+using Nocturne.API.Multitenancy;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -20,6 +21,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Services.Demo.Configuration;
 using Nocturne.Services.Demo.Services;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Seeding;
 
@@ -62,8 +64,10 @@ public sealed record SampleDataSeedResult(
 /// </summary>
 public class SampleDataSeeder
 {
+    private const string AuditEndpoint = "service:sample-data-seeder";
+
     private readonly ITenantAccessor _tenantAccessor;
-    private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IEntryService _entryService;
     private readonly ITreatmentService _treatmentService;
     private readonly ISleepService _sleepService;
@@ -75,6 +79,9 @@ public class SampleDataSeeder
     private readonly IDeviceStatusDecomposer _deviceStatusDecomposer;
     private readonly ITreatmentDecomposer _treatmentDecomposer;
     private readonly ITreatmentCache _treatmentCache;
+    private readonly ICompressionLowDetectionService _compressionLowDetectionService;
+    private readonly ICompressionLowService _compressionLowService;
+    private readonly ICompressionLowRepository _compressionLowRepository;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<SampleDataSeeder> _logger;
 
@@ -100,7 +107,7 @@ public class SampleDataSeeder
 
     public SampleDataSeeder(
         ITenantAccessor tenantAccessor,
-        NocturneDbContext db,
+        INocturneDbContextFactory contexts,
         IEntryService entryService,
         ITreatmentService treatmentService,
         ISleepService sleepService,
@@ -112,11 +119,14 @@ public class SampleDataSeeder
         IDeviceStatusDecomposer deviceStatusDecomposer,
         ITreatmentDecomposer treatmentDecomposer,
         ITreatmentCache treatmentCache,
+        ICompressionLowDetectionService compressionLowDetectionService,
+        ICompressionLowService compressionLowService,
+        ICompressionLowRepository compressionLowRepository,
         ILoggerFactory loggerFactory,
         ILogger<SampleDataSeeder> logger)
     {
         _tenantAccessor = tenantAccessor;
-        _db = db;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _entryService = entryService;
         _treatmentService = treatmentService;
         _sleepService = sleepService;
@@ -128,8 +138,30 @@ public class SampleDataSeeder
         _deviceStatusDecomposer = deviceStatusDecomposer;
         _treatmentDecomposer = treatmentDecomposer;
         _treatmentCache = treatmentCache;
+        _compressionLowDetectionService = compressionLowDetectionService;
+        _compressionLowService = compressionLowService;
+        _compressionLowRepository = compressionLowRepository;
         _loggerFactory = loggerFactory;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Runs <see cref="SeedAsync"/> in a DI scope of <paramref name="tenant"/>'s own, so the calling
+    /// request's tenant is left as it was. Dev-only and demo-admin routes bypass tenant resolution,
+    /// so the caller's scope has no tenant of its own to seed under.
+    /// </summary>
+    public static async Task<SampleDataSeedResult> SeedInTenantScopeAsync(
+        IServiceProvider services,
+        TenantContext tenant,
+        int days,
+        Guid? ownerSubjectId,
+        string dataSource = DevSampleDataSource,
+        bool includeGlucose = true,
+        CancellationToken ct = default)
+    {
+        await using var scope = TenantJobScope.Open(services, tenant, AuditEndpoint);
+        return await scope.ServiceProvider.GetRequiredService<SampleDataSeeder>()
+            .SeedAsync(tenant, days, ownerSubjectId, dataSource, includeGlucose, ct);
     }
 
     /// <summary>
@@ -150,15 +182,12 @@ public class SampleDataSeeder
         bool includeGlucose = true,
         CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         days = Math.Clamp(days, 1, MaxDays);
 
-        // Ingestion services resolve the tenant through ITenantAccessor for
-        // factory-created contexts, and through the request-scoped context's
-        // TenantId (normally pinned by tenant resolution middleware, which
-        // dev-only and demo-admin routes bypass) for entity stamping and the
-        // RLS GUC.
-        _tenantAccessor.SetTenant(tenant);
-        _db.TenantId = tenant.TenantId;
+        if (_tenantAccessor.TenantId != tenant.TenantId)
+            throw new InvalidOperationException(
+                $"Seed {tenant.Slug} from a scope of its own; see {nameof(SeedInTenantScopeAsync)}.");
 
         var config = new DemoModeConfiguration { BackfillDays = days };
 
@@ -166,9 +195,11 @@ public class SampleDataSeeder
         // history matches the lows/highs actually visible on the chart.
         var episodeTracker = new DemoAlertSeeds.GlucoseEpisodeTracker(DemoAlertSeeds.Defaults);
 
+        await SeedPatientProfileAsync(db, ct);
+
         // Seed the therapy profile before glucose so scheduled-basal context
         // exists from the first record.
-        var profilesCreated = await SeedProfileAsync(config, ct);
+        var profilesCreated = await SeedProfileAsync(db, config, ct);
 
         var entryCount = 0;
         var treatmentCount = 0;
@@ -197,9 +228,6 @@ public class SampleDataSeeder
                 entryBatch.Clear();
             }
 
-            // The batch decomposer a migration backfills treatments through, rather than the
-            // service's one-at-a-time live path. That path's insulin-context stamping has nothing
-            // to stamp yet: the patient's insulins are seeded after the timeline.
             async Task FlushTreatmentsAsync()
             {
                 if (treatmentBatch.Count == 0) return;
@@ -233,10 +261,13 @@ public class SampleDataSeeder
             {
                 ct.ThrowIfCancellationRequested();
 
-                step.Entry.DataSource = dataSource;
+                foreach (var reading in DemoCoverageSeeds.CgmReadings(step))
+                {
+                    reading.DataSource = dataSource;
+                    entryBatch.Add(reading);
+                }
                 episodeTracker.Observe(
                     DateTimeOffset.FromUnixTimeMilliseconds(step.Entry.Mills).UtcDateTime, step.Entry.Sgv);
-                entryBatch.Add(step.Entry);
                 foreach (var extra in step.ExtraEntries)
                 {
                     extra.DataSource = dataSource;
@@ -280,14 +311,14 @@ public class SampleDataSeeder
             await FlushStatusesAsync();
             await _treatmentCache.InvalidateAsync(ct);
 
-            await StampTempBasalScheduledRatesAsync(dataSource, config.BasalRate, ct);
+            await StampTempBasalScheduledRatesAsync(db, dataSource, config.BasalRate, ct);
         }
         else
         {
             // Replay the stored stream so seeded alarm history matches the
             // chart exactly.
             var since = DateTime.UtcNow.AddDays(-days);
-            var stored = _db.SensorGlucose
+            var stored = db.SensorGlucose
                 .AsNoTracking()
                 .Where(e => e.Timestamp >= since && e.DataSource == dataSource)
                 .OrderBy(e => e.Timestamp)
@@ -306,7 +337,7 @@ public class SampleDataSeeder
         // DeviceEvent already exists — a re-seed would otherwise insert exact
         // duplicates (treatments have no sync key).
         var deviceSchedule = DemoDeviceLifecycle.GenerateSchedule(localToday, days);
-        var existingDeviceEventTimes = (await _db.DeviceEvents
+        var existingDeviceEventTimes = (await db.DeviceEvents
                 .AsNoTracking()
                 .Where(d => d.DataSource == dataSource)
                 .Select(d => d.Timestamp)
@@ -322,19 +353,22 @@ public class SampleDataSeeder
         var sleepCount = await SeedSleepAsync(localToday, days, dataSource, ct);
         var (heartRateCount, stepCount) = await SeedActivityAsync(localToday, days, dataSource, ct);
         var (trackerDefinitions, trackerInstances) =
-            await SeedTrackersAsync(deviceSchedule, ownerSubjectId, ct);
+            await SeedTrackersAsync(db, deviceSchedule, ownerSubjectId, ct);
         var (alertRules, alertExcursions) =
-            await SeedAlertsAsync(tenant.TenantId, episodeTracker.Episodes, ct);
+            await SeedAlertsAsync(db, tenant.TenantId, ownerSubjectId, episodeTracker.Episodes, ct);
+        if (includeGlucose && dataSource == Nocturne.Core.Constants.DataSources.DemoService)
+            await SeedCompressionLowReviewsAsync(localToday, days, ct);
 
-        var foodCount = await SeedFoodsAsync(mealCarbLinks, ownerSubjectId, ct);
-        var stateSpanCount = await SeedStateSpansAsync(localToday, days, dataSource, ct);
-        await SeedPatientProfileAsync(ct);
-        await SeedBodyWeightAsync(localToday, days, dataSource, ct);
-        await SeedTimezoneTimelineAsync(localToday, days, ct);
-        await SeedDndWindowAsync(localToday, ct);
-        var clockFaces = await SeedClockFacesAsync(ownerSubjectId, ct);
+        var foodCount = await SeedFoodsAsync(db, mealCarbLinks, ownerSubjectId, ct);
+        var stateSpanCount = await SeedStateSpansAsync(db, localToday, days, dataSource, ct);
+        await SeedBodyWeightAsync(db, localToday, days, dataSource, ct);
+        await SeedTimezoneTimelineAsync(db, localToday, days, ct);
+        await SeedDndWindowAsync(db, localToday, ct);
+        var clockFaces = await SeedClockFacesAsync(db, ownerSubjectId, ct);
         var notificationCount = await SeedNotificationsAsync(
+            db,
             ownerSubjectId, tenant.TenantId, episodeTracker.Episodes, ct);
+        await SeedLabHbA1cAsync(db, localToday, dataSource, ct);
 
         _logger.LogInformation(
             "Seeded tenant {Slug} ({Days} days): {Entries} entries, {Treatments} treatments, "
@@ -360,9 +394,9 @@ public class SampleDataSeeder
     /// (which decomposes it into TherapySettings plus the basal/carb-ratio/
     /// sensitivity/target schedules), unless the demo profile already exists.
     /// </summary>
-    private async Task<int> SeedProfileAsync(DemoModeConfiguration config, CancellationToken ct)
+    private async Task<int> SeedProfileAsync(NocturneDbContext db, DemoModeConfiguration config, CancellationToken ct)
     {
-        var exists = await _db.TherapySettings
+        var exists = await db.TherapySettings
             .AnyAsync(t => t.ProfileName == DemoTherapyProfile.ProfileName, ct);
         if (exists)
             return 0;
@@ -439,6 +473,7 @@ public class SampleDataSeeder
     /// regenerated schedule.
     /// </summary>
     private async Task<(int Definitions, int Instances)> SeedTrackersAsync(
+        NocturneDbContext db,
         List<DeviceChangeEvent> schedule, Guid? ownerSubjectId, CancellationToken ct)
     {
         if (ownerSubjectId is not { } owner)
@@ -460,7 +495,7 @@ public class SampleDataSeeder
                 definition = await _trackerRepository.CreateDefinitionAsync(new TrackerDefinitionEntity
                 {
                     Id = Guid.CreateVersion7(),
-                    TenantId = _db.TenantId,
+                    TenantId = db.TenantId,
                     UserId = userId,
                     Name = spec.Name,
                     Category = spec.Category,
@@ -474,7 +509,7 @@ public class SampleDataSeeder
             }
 
             // Rebuild instances from the schedule (idempotent re-seed).
-            await _db.TrackerInstances.PurgeAsync(i => i.DefinitionId == definition.Id, ct);
+            await db.TrackerInstances.PurgeAsync(i => i.DefinitionId == definition.Id, ct);
 
             var changes = schedule
                 .Where(e => e.EventType == spec.TriggerEventType)
@@ -504,13 +539,16 @@ public class SampleDataSeeder
 
     /// <summary>
     /// A standard alert rule set (urgent low / low / high / signal loss, each
-    /// with an in-app channel) plus historical excursions and resolved alert
+    /// with an in-app channel to <paramref name="ownerSubjectId"/>, and no channel
+    /// without one) plus historical excursions and resolved alert
     /// instances taken from the threshold crossings of the generated glucose
     /// stream — so /alerts/history lines up with the chart. Rules are
     /// found-or-created by name; their alarm history is wiped and rebuilt.
     /// </summary>
     private async Task<(int Rules, int Excursions)> SeedAlertsAsync(
+        NocturneDbContext db,
         Guid tenantId,
+        Guid? ownerSubjectId,
         IReadOnlyList<DemoAlertSeeds.GlucoseEpisode> episodes,
         CancellationToken ct)
     {
@@ -519,7 +557,7 @@ public class SampleDataSeeder
 
         foreach (var seed in DemoAlertSeeds.Defaults)
         {
-            var rule = await _db.AlertRules
+            var rule = await db.AlertRules
                 .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Name == seed.Name, ct);
 
             if (rule is null)
@@ -536,27 +574,31 @@ public class SampleDataSeeder
                     Severity = seed.Severity,
                     IsEnabled = true,
                 };
-                rule.Channels.Add(new AlertRuleChannelEntity
+                if (ownerSubjectId is { } owner)
                 {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
-                    AlertRuleId = rule.Id,
-                    ChannelType = ChannelType.InApp,
-                    SortOrder = 0,
-                });
-                _db.AlertRules.Add(rule);
+                    rule.Channels.Add(new AlertRuleChannelEntity
+                    {
+                        Id = Guid.CreateVersion7(),
+                        TenantId = tenantId,
+                        AlertRuleId = rule.Id,
+                        ChannelType = ChannelType.InApp,
+                        Destination = owner.ToString(),
+                        SortOrder = 0,
+                    });
+                }
+                db.AlertRules.Add(rule);
                 rulesCreated++;
             }
 
             rulesByName[seed.Name] = rule;
         }
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         // Rebuild alarm history for the seeded rules (idempotent re-seed).
         var seededRuleIds = rulesByName.Values.Select(r => r.Id).ToList();
-        await _db.AlertInstances.PurgeAsync(
+        await db.AlertInstances.PurgeAsync(
             i => i.AlertExcursion != null && seededRuleIds.Contains(i.AlertExcursion.AlertRuleId), ct);
-        await _db.AlertExcursions.PurgeAsync(e => seededRuleIds.Contains(e.AlertRuleId), ct);
+        await db.AlertExcursions.PurgeAsync(e => seededRuleIds.Contains(e.AlertRuleId), ct);
 
         var excursionsCreated = 0;
         foreach (var episode in episodes.OrderByDescending(e => e.StartUtc).Take(MaxAlarmEpisodes))
@@ -591,10 +633,10 @@ public class SampleDataSeeder
                 // The engine's wire reason for a threshold clearing naturally.
                 ResolutionReason = "hysteresis",
             });
-            _db.AlertExcursions.Add(excursion);
+            db.AlertExcursions.Add(excursion);
             excursionsCreated++;
         }
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return (rulesCreated, excursionsCreated);
     }
@@ -606,6 +648,7 @@ public class SampleDataSeeder
     /// the meal timestamps, so re-seeding stays consistent.
     /// </summary>
     private async Task<int> SeedFoodsAsync(
+        NocturneDbContext db,
         List<(DateTime Time, string MealName)> mealCarbLinks, Guid? ownerSubjectId, CancellationToken ct)
     {
         var foodsByName = new Dictionary<string, FoodEntity>(StringComparer.OrdinalIgnoreCase);
@@ -615,13 +658,13 @@ public class SampleDataSeeder
         foreach (var seed in DemoLifestyleSeeds.FoodLibrary)
         {
             position++;
-            var food = await _db.Foods.FirstOrDefaultAsync(f => f.Name == seed.Name, ct);
+            var food = await db.Foods.FirstOrDefaultAsync(f => f.Name == seed.Name, ct);
             if (food is null)
             {
                 food = new FoodEntity
                 {
                     Id = Guid.CreateVersion7(),
-                    TenantId = _db.TenantId,
+                    TenantId = db.TenantId,
                     Name = seed.Name,
                     Category = seed.Category,
                     Subcategory = seed.Subcategory,
@@ -633,13 +676,13 @@ public class SampleDataSeeder
                     Energy = seed.Energy,
                     Position = position,
                 };
-                _db.Foods.Add(food);
+                db.Foods.Add(food);
                 created++;
             }
 
             foodsByName[seed.Name] = food;
         }
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         // Favorites: the snacks and one dinner, owned by the demo member.
         if (ownerSubjectId is { } owner)
@@ -650,20 +693,20 @@ public class SampleDataSeeder
             {
                 if (!foodsByName.TryGetValue(name, out var food))
                     continue;
-                var exists = await _db.UserFoodFavorites
+                var exists = await db.UserFoodFavorites
                     .AnyAsync(f => f.UserId == userId && f.FoodId == food.Id, ct);
                 if (!exists)
                 {
-                    _db.UserFoodFavorites.Add(new UserFoodFavoriteEntity
+                    db.UserFoodFavorites.Add(new UserFoodFavoriteEntity
                     {
                         Id = Guid.CreateVersion7(),
-                        TenantId = _db.TenantId,
+                        TenantId = db.TenantId,
                         UserId = userId,
                         FoodId = food.Id,
                     });
                 }
             }
-            await _db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
         }
 
         // Food attribution on the meals' carb intakes (~60% of meals, as a
@@ -671,12 +714,12 @@ public class SampleDataSeeder
         if (mealCarbLinks.Count > 0)
         {
             var mealTimes = mealCarbLinks.Select(m => m.Time).ToList();
-            var intakes = await _db.CarbIntakes
+            var intakes = await db.CarbIntakes
                 .Where(c => mealTimes.Contains(c.Timestamp))
                 .Select(c => new { c.Id, c.Timestamp, c.Carbs })
                 .ToListAsync(ct);
             var linkedIntakeIds = intakes.Select(i => i.Id).ToList();
-            await _db.TreatmentFoods.PurgeAsync(tf => linkedIntakeIds.Contains(tf.CarbIntakeId), ct);
+            await db.TreatmentFoods.PurgeAsync(tf => linkedIntakeIds.Contains(tf.CarbIntakeId), ct);
 
             foreach (var (time, mealName) in mealCarbLinks)
             {
@@ -695,10 +738,10 @@ public class SampleDataSeeder
                 {
                     if (!foodsByName.TryGetValue(seed.Name, out var food))
                         continue;
-                    _db.TreatmentFoods.Add(new TreatmentFoodEntity
+                    db.TreatmentFoods.Add(new TreatmentFoodEntity
                     {
                         Id = Guid.CreateVersion7(),
-                        TenantId = _db.TenantId,
+                        TenantId = db.TenantId,
                         CarbIntakeId = intake.Id,
                         FoodId = food.Id,
                         Portions = seed.Carbs > 0 ? Math.Round((decimal)(intake.Carbs / seed.Carbs), 2) : 1,
@@ -706,7 +749,7 @@ public class SampleDataSeeder
                     });
                 }
             }
-            await _db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
         }
 
         return created;
@@ -719,10 +762,11 @@ public class SampleDataSeeder
     /// stamps it on its own temps after decomposition.
     /// </summary>
     private async Task StampTempBasalScheduledRatesAsync(
+        NocturneDbContext db,
         string dataSource, double baseRate, CancellationToken ct)
     {
         var scheduled = Nocturne.Core.Models.V4.TempBasalOrigin.Scheduled.ToString();
-        var temps = await _db.TempBasals
+        var temps = await db.TempBasals
             .Where(t => t.DataSource == dataSource && t.ScheduledRate == null && t.Origin != scheduled)
             .ToListAsync(ct);
         foreach (var temp in temps)
@@ -730,27 +774,40 @@ public class SampleDataSeeder
             var local = DateTime.SpecifyKind(temp.Timestamp, DateTimeKind.Utc).ToLocalTime();
             temp.ScheduledRate = DemoTherapyProfile.ScheduledRateAt(local, baseRate);
         }
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>
-    /// State spans for the window: pump mode with manual/exercise windows, the
-    /// active profile, workout overrides and temporary targets, illness runs,
-    /// and the travel span. Spans carrying our data source are wiped and
-    /// rebuilt (idempotent re-seed).
+    /// State spans for the window: pump mode with manual/exercise windows, workout
+    /// overrides and temporary targets, illness runs, and the travel span; and the
+    /// seeded therapy profile's activation over the whole window. Rows carrying our
+    /// data source are wiped and rebuilt (idempotent re-seed).
     /// </summary>
     private async Task<int> SeedStateSpansAsync(
+        NocturneDbContext db,
         DateTime localToday, int days, string dataSource, CancellationToken ct)
     {
-        await _db.StateSpans.PurgeAsync(s => s.Source == dataSource, ct);
+        await db.StateSpans.PurgeAsync(s => s.Source == dataSource, ct);
+        await db.ProfileActivations.PurgeAsync(a => a.DataSource == dataSource, ct);
+
+        db.ProfileActivations.Add(new ProfileActivationEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = db.TenantId,
+            Timestamp = localToday.AddDays(-days).ToUniversalTime(),
+            Phase = nameof(Nocturne.Core.Models.V4.ProfileActivationPhase.Requested),
+            Origin = nameof(Nocturne.Core.Models.V4.ProfileActivationOrigin.User),
+            BaseProfileName = DemoTherapyProfile.ProfileName,
+            DataSource = dataSource,
+        });
 
         var spans = DemoLifestyleSeeds.BuildSpans(localToday, days);
         foreach (var seed in spans)
         {
-            _db.StateSpans.Add(new StateSpanEntity
+            db.StateSpans.Add(new StateSpanEntity
             {
                 Id = Guid.CreateVersion7(),
-                TenantId = _db.TenantId,
+                TenantId = db.TenantId,
                 Category = seed.Category.ToString(),
                 State = seed.State,
                 StartTimestamp = seed.StartLocal.ToUniversalTime(),
@@ -759,7 +816,7 @@ public class SampleDataSeeder
                 MetadataJson = seed.Metadata is null ? null : JsonSerializer.Serialize(seed.Metadata),
             });
         }
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return spans.Count;
     }
@@ -771,13 +828,13 @@ public class SampleDataSeeder
     /// creates an empty record through the API's get-or-create, and a re-seed
     /// must not overwrite the user's own edits.
     /// </summary>
-    private async Task SeedPatientProfileAsync(CancellationToken ct)
+    private async Task SeedPatientProfileAsync(NocturneDbContext db, CancellationToken ct)
     {
-        var record = await _db.PatientRecords.FirstOrDefaultAsync(ct);
+        var record = await db.PatientRecords.FirstOrDefaultAsync(ct);
         if (record is null)
         {
-            record = new PatientRecordEntity { Id = Guid.CreateVersion7(), TenantId = _db.TenantId };
-            _db.PatientRecords.Add(record);
+            record = new PatientRecordEntity { Id = Guid.CreateVersion7(), TenantId = db.TenantId };
+            db.PatientRecords.Add(record);
         }
         record.PreferredName ??= "Demo";
         record.DiabetesType ??= "type1";
@@ -785,38 +842,42 @@ public class SampleDataSeeder
         record.DateOfBirth ??= new DateOnly(1992, 4, 17);
         record.Timezone ??= DemoTherapyProfile.LocalIanaTimezone();
 
-        var deviceSeeds = new (string Category, string Manufacturer, string Model, string? Aid)[]
+        var deviceSeeds = new (string Category, string Manufacturer, string Model, string? Aid, string? Serial)[]
         {
-            ("cgm", "Dexcom", "G7", null),
-            ("pump", "Insulet", "Omnipod DASH", DemoDeviceStatusGenerator.DeviceName),
-            ("meter", "Ascensia", "Contour Next One", null),
+            ("cgm", "Dexcom", "G7", null, DemoCoverageSeeds.PrimaryCgmSerial),
+            ("cgm", "Dexcom", "G6", null, DemoCoverageSeeds.ComparisonCgmSerial),
+            ("pump", "Insulet", "Omnipod DASH", DemoDeviceStatusGenerator.DeviceName, null),
+            ("meter", "Ascensia", "Contour Next One", null, null),
         };
-        foreach (var (category, manufacturer, model, aid) in deviceSeeds)
+        foreach (var (category, manufacturer, model, aid, serial) in deviceSeeds)
         {
-            var exists = await _db.PatientDevices
-                .AnyAsync(d => d.Manufacturer == manufacturer && d.Model == model, ct);
-            if (!exists)
+            var existing = await db.PatientDevices
+                .FirstOrDefaultAsync(d => d.Manufacturer == manufacturer && d.Model == model, ct);
+            if (existing is null)
             {
-                _db.PatientDevices.Add(new PatientDeviceEntity
+                db.PatientDevices.Add(new PatientDeviceEntity
                 {
                     Id = Guid.CreateVersion7(),
-                    TenantId = _db.TenantId,
+                    TenantId = db.TenantId,
                     DeviceCategory = category,
                     Manufacturer = manufacturer,
                     Model = model,
+                    SerialNumber = serial,
                     AidAlgorithm = aid,
                     StartDate = DateOnly.FromDateTime(DateTime.Today.AddMonths(-8)),
                     IsCurrent = true,
                 });
             }
+            else if (existing.SerialNumber is null && serial is not null)
+                existing.SerialNumber = serial;
         }
 
-        if (!await _db.PatientInsulins.AnyAsync(ct))
+        if (!await db.PatientInsulins.AnyAsync(ct))
         {
-            _db.PatientInsulins.Add(new PatientInsulinEntity
+            db.PatientInsulins.Add(new PatientInsulinEntity
             {
                 Id = Guid.CreateVersion7(),
-                TenantId = _db.TenantId,
+                TenantId = db.TenantId,
                 InsulinCategory = "RapidActing",
                 Name = "Humalog",
                 IsCurrent = true,
@@ -829,14 +890,109 @@ public class SampleDataSeeder
             });
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task SeedCompressionLowReviewsAsync(DateTime localToday, int days, CancellationToken ct)
+    {
+        var nights = Enumerable.Range(0, days)
+            .Select(offset => DateOnly.FromDateTime(localToday.AddDays(-offset)))
+            .Where(DemoCoverageSeeds.IsCompressionNight)
+            .Take(3)
+            .ToList();
+        var pendingByNight = new Dictionary<DateOnly, List<CompressionLowSuggestion>>();
+        foreach (var night in nights)
+        {
+            var existing = (await _compressionLowService.GetSuggestionsAsync(null, night, ct))
+                .ToList();
+            var existingDemo = existing
+                .Where(suggestion => suggestion.DataSource == Nocturne.Core.Constants.DataSources.DemoService)
+                .ToList();
+            if (existingDemo.Count > 0)
+            {
+                pendingByNight[night] = existingDemo
+                    .Where(suggestion => suggestion.Status == CompressionLowStatus.Pending)
+                    .OrderBy(suggestion => suggestion.StartMills)
+                    .ToList();
+                continue;
+            }
+
+            var existingIds = existing.Select(suggestion => suggestion.Id).ToHashSet();
+            await _compressionLowDetectionService.DetectForNightAsync(night, ct);
+            var detected = (await _compressionLowService.GetSuggestionsAsync(
+                    CompressionLowStatus.Pending, night, ct))
+                .Where(suggestion => !existingIds.Contains(suggestion.Id))
+                .OrderBy(suggestion => suggestion.StartMills)
+                .ToList();
+            foreach (var suggestion in detected)
+            {
+                var readings = await _entryService.GetEntriesAsync(
+                    find: $"{{\"mills\":{{\"$gte\":{suggestion.StartMills - 900_000},\"$lte\":{suggestion.EndMills + 900_000}}}}}",
+                    count: 1000,
+                    skip: 0,
+                    cancellationToken: ct);
+                var candidateReadings = readings.Where(entry => entry.Sgv.HasValue).ToList();
+                if (candidateReadings.Count == 0 || candidateReadings.Any(entry =>
+                        entry.DataSource != Nocturne.Core.Constants.DataSources.DemoService))
+                    continue;
+
+                suggestion.DataSource = Nocturne.Core.Constants.DataSources.DemoService;
+                await _compressionLowRepository.UpdateAsync(suggestion, ct);
+            }
+            pendingByNight[night] = detected
+                .Where(suggestion => suggestion.DataSource == Nocturne.Core.Constants.DataSources.DemoService)
+                .ToList();
+        }
+
+        foreach (var (night, index) in nights.Select((night, index) => (night, index)))
+        {
+            if (index == 0)
+                continue;
+
+            var nadirMills = DemoCoverageSeeds.CompressionNadirMills(night);
+            var suggestion = pendingByNight[night].FirstOrDefault(pending =>
+                pending.StartMills <= nadirMills && pending.EndMills >= nadirMills);
+            if (suggestion is null)
+                continue;
+
+            if (index == 1)
+                await _compressionLowService.AcceptSuggestionAsync(
+                    suggestion.Id, suggestion.StartMills, suggestion.EndMills, ct, demoSeed: true);
+            else
+                await _compressionLowService.DismissSuggestionAsync(suggestion.Id, ct);
+        }
+    }
+
+    private async Task SeedLabHbA1cAsync(NocturneDbContext db, DateTime localToday, string dataSource, CancellationToken ct)
+    {
+        if (dataSource != Nocturne.Core.Constants.DataSources.DemoService)
+            return;
+
+        const string note = "Demo lab result";
+        if (await db.LabHbA1cResults.AnyAsync(result => result.Note == note, ct))
+            return;
+
+        foreach (var (monthsAgo, value) in new[] { (12, 7.2), (6, 6.9), (0, 6.8) })
+        {
+            db.LabHbA1cResults.Add(new LabHbA1cResultEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = db.TenantId,
+                MeasuredAt = DateTime.SpecifyKind(localToday.AddMonths(-monthsAgo), DateTimeKind.Utc),
+                ValuePercent = value,
+                Note = note,
+                CreatedAt = DateTime.UtcNow,
+            });
+        }
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Weekly Sunday-morning weigh-ins with a deterministic sync key.</summary>
     private async Task SeedBodyWeightAsync(
+        NocturneDbContext db,
         DateTime localToday, int days, string dataSource, CancellationToken ct)
     {
-        var existing = (await _db.BodyWeights
+        var existing = (await db.BodyWeights
                 .AsNoTracking()
                 .Where(w => w.DataSource == dataSource)
                 .Select(w => w.SyncIdentifier)
@@ -857,10 +1013,10 @@ public class SampleDataSeeder
             if (weighIn > DateTime.Now)
                 continue;
 
-            _db.BodyWeights.Add(new BodyWeightEntity
+            db.BodyWeights.Add(new BodyWeightEntity
             {
                 Id = Guid.CreateVersion7(),
-                TenantId = _db.TenantId,
+                TenantId = db.TenantId,
                 Mills = new DateTimeOffset(weighIn).ToUnixTimeMilliseconds(),
                 WeightKg = (decimal)DemoLifestyleSeeds.WeightKgOn(day),
                 Device = "Demo Scale",
@@ -869,7 +1025,7 @@ public class SampleDataSeeder
             });
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>
@@ -878,9 +1034,9 @@ public class SampleDataSeeder
     /// EffectiveFrom is a local wall-clock value (Kind=Unspecified), matching
     /// <c>TimezoneTimelineService</c>. Created only when the timeline is empty.
     /// </summary>
-    private async Task SeedTimezoneTimelineAsync(DateTime localToday, int days, CancellationToken ct)
+    private async Task SeedTimezoneTimelineAsync(NocturneDbContext db, DateTime localToday, int days, CancellationToken ct)
     {
-        if (await _db.TimezoneTimeline.AnyAsync(ct))
+        if (await db.TimezoneTimeline.AnyAsync(ct))
             return;
 
         var home = DemoTherapyProfile.LocalIanaTimezone();
@@ -888,49 +1044,49 @@ public class SampleDataSeeder
         var tripStart = localToday.AddDays(-DemoLifestyleSeeds.TripStartDaysAgo).AddHours(14);
         var tripEnd = tripStart.AddDays(DemoLifestyleSeeds.TripLengthDays).AddHours(-4);
 
-        _db.TimezoneTimeline.Add(new TimezoneTimelineEntity
+        db.TimezoneTimeline.Add(new TimezoneTimelineEntity
         {
             Id = Guid.CreateVersion7(),
-            TenantId = _db.TenantId,
+            TenantId = db.TenantId,
             EffectiveFrom = DateTime.SpecifyKind(windowStart, DateTimeKind.Unspecified),
             Timezone = home,
         });
 
         if (tripStart > windowStart && tripEnd < DateTime.Now)
         {
-            _db.TimezoneTimeline.Add(new TimezoneTimelineEntity
+            db.TimezoneTimeline.Add(new TimezoneTimelineEntity
             {
                 Id = Guid.CreateVersion7(),
-                TenantId = _db.TenantId,
+                TenantId = db.TenantId,
                 EffectiveFrom = DateTime.SpecifyKind(tripStart, DateTimeKind.Unspecified),
                 Timezone = DemoLifestyleSeeds.TripTimezone,
             });
-            _db.TimezoneTimeline.Add(new TimezoneTimelineEntity
+            db.TimezoneTimeline.Add(new TimezoneTimelineEntity
             {
                 Id = Guid.CreateVersion7(),
-                TenantId = _db.TenantId,
+                TenantId = db.TenantId,
                 EffectiveFrom = DateTime.SpecifyKind(tripEnd, DateTimeKind.Unspecified),
                 Timezone = home,
             });
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>
     /// One historical, already-cleared DND window so the alerts pages show a
     /// worked example without suppressing the demo's live alerts.
     /// </summary>
-    private async Task SeedDndWindowAsync(DateTime localToday, CancellationToken ct)
+    private async Task SeedDndWindowAsync(NocturneDbContext db, DateTime localToday, CancellationToken ct)
     {
-        if (await _db.DndWindows.AnyAsync(ct))
+        if (await db.DndWindows.AnyAsync(ct))
             return;
 
         var start = localToday.AddDays(-1).AddHours(22.5);
-        _db.DndWindows.Add(new DndWindowEntity
+        db.DndWindows.Add(new DndWindowEntity
         {
             Id = Guid.CreateVersion7(),
-            TenantId = _db.TenantId,
+            TenantId = db.TenantId,
             Scope = DndScope.All,
             StartedAt = start.ToUniversalTime(),
             EndsAt = start.AddHours(8.5).ToUniversalTime(),
@@ -938,36 +1094,36 @@ public class SampleDataSeeder
             ClearedBy = "demo",
             Source = "web",
         });
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>The default clock face for the owner, found-or-created by name.</summary>
-    private async Task<int> SeedClockFacesAsync(Guid? ownerSubjectId, CancellationToken ct)
+    private async Task<int> SeedClockFacesAsync(NocturneDbContext db, Guid? ownerSubjectId, CancellationToken ct)
     {
         if (ownerSubjectId is not { } owner)
             return 0;
 
         var userId = owner.ToString();
-        var exists = await _db.ClockFaces.AnyAsync(c => c.UserId == userId, ct);
+        var exists = await db.ClockFaces.AnyAsync(c => c.UserId == userId, ct);
         if (exists)
             return 0;
 
-        var ownerPreferences = await _db.Subjects
+        var ownerPreferences = await db.Subjects
             .AsNoTracking()
             .Where(s => s.Id == owner)
             .Select(s => s.Preferences)
             .FirstOrDefaultAsync(ct);
 
-        _db.ClockFaces.Add(new ClockFaceEntity
+        db.ClockFaces.Add(new ClockFaceEntity
         {
             Id = Guid.CreateVersion7(),
-            TenantId = _db.TenantId,
+            TenantId = db.TenantId,
             UserId = userId,
             Name = "Bedside Clock",
             ConfigJson = ClockFaceService.Serialize(
                 ClockFaceConfig.Starter(UserDisplayPreferences.Deserialize(ownerPreferences))),
         });
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         return 1;
     }
 
@@ -977,6 +1133,7 @@ public class SampleDataSeeder
     /// same story as /alerts/history. Rebuilt per seed via the data source tag.
     /// </summary>
     private async Task<int> SeedNotificationsAsync(
+        NocturneDbContext db,
         Guid? ownerSubjectId,
         Guid tenantId,
         IReadOnlyList<DemoAlertSeeds.GlucoseEpisode> episodes,
@@ -986,7 +1143,7 @@ public class SampleDataSeeder
             return 0;
 
         var userId = owner.ToString();
-        await _db.InAppNotifications.PurgeAsync(n => n.UserId == userId && n.Source == "sample-seed", ct);
+        await db.InAppNotifications.PurgeAsync(n => n.UserId == userId && n.Source == "sample-seed", ct);
 
         var created = 0;
         foreach (var episode in episodes.OrderByDescending(e => e.StartUtc).Take(MaxAlarmNotifications))
@@ -994,7 +1151,7 @@ public class SampleDataSeeder
             var rng = DayScenarios.RngFor(episode.StartUtc.Date, $"ack:{episode.RuleName}");
             var acknowledged = rng.NextDouble() < 0.7;
 
-            _db.InAppNotifications.Add(new InAppNotificationEntity
+            db.InAppNotifications.Add(new InAppNotificationEntity
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = tenantId,
@@ -1014,7 +1171,7 @@ public class SampleDataSeeder
             created++;
         }
 
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         return created;
     }
 }

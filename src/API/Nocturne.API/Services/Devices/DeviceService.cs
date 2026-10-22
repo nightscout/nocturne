@@ -97,7 +97,7 @@ public class DeviceService : IDeviceService
             device.FirstSeenTimestamp = timestamp;
     }
 
-    public IAsyncDisposable DeferLastSeen(CancellationToken ct = default)
+    public ILastSeenDeferral DeferLastSeen(CancellationToken ct = default)
     {
         _deferDepth++;
         return new SeenWindowDeferral(this, ct);
@@ -113,8 +113,7 @@ public class DeviceService : IDeviceService
         if (--_deferDepth > 0)
             return;
 
-        var pending = _deferredSeen.Values.ToList();
-        _deferredSeen.Clear();
+        var pending = TakeDeferredSeen();
         for (var i = 0; i < pending.Count; i++)
         {
             var (device, firstPersisted, lastPersisted) = pending[i];
@@ -127,19 +126,57 @@ public class DeviceService : IDeviceService
             }
             catch
             {
-                foreach (var (d, first, last) in pending.Skip(i))
-                {
-                    d.FirstSeenTimestamp = first;
-                    d.LastSeenTimestamp = last;
-                }
+                Restore(pending.Skip(i));
                 throw;
             }
         }
     }
 
-    private sealed class SeenWindowDeferral(DeviceService owner, CancellationToken ct) : IAsyncDisposable
+    private void DiscardDeferredSeen()
     {
-        public ValueTask DisposeAsync() => new(owner.FlushDeferredSeenAsync(ct));
+        if (--_deferDepth > 0)
+            return;
+
+        Restore(TakeDeferredSeen());
+    }
+
+    private List<(Device Device, DateTime FirstPersisted, DateTime LastPersisted)> TakeDeferredSeen()
+    {
+        var pending = _deferredSeen.Values.ToList();
+        _deferredSeen.Clear();
+        return pending;
+    }
+
+    private static void Restore(IEnumerable<(Device Device, DateTime FirstPersisted, DateTime LastPersisted)> pending)
+    {
+        foreach (var (device, first, last) in pending)
+        {
+            device.FirstSeenTimestamp = first;
+            device.LastSeenTimestamp = last;
+        }
+    }
+
+    private sealed class SeenWindowDeferral(DeviceService owner, CancellationToken ct) : ILastSeenDeferral
+    {
+        private bool _settled;
+
+        public ValueTask DisposeAsync()
+        {
+            if (_settled)
+                return ValueTask.CompletedTask;
+
+            _settled = true;
+            return new(owner.FlushDeferredSeenAsync(ct));
+        }
+
+        public void Discard()
+        {
+            if (_settled)
+                return;
+
+            _settled = true;
+            owner.DiscardDeferredSeen();
+        }
     }
 
     public async Task<Guid?> ResolvePatientDeviceAsync(Guid? deviceId, long mills, CancellationToken ct = default)

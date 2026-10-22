@@ -1,3 +1,10 @@
+<script lang="ts" module>
+  export interface MemberChanges {
+    access?: { roleIds: string[]; permissions: string[] };
+    limitTo24Hours?: boolean;
+  }
+</script>
+
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
@@ -17,6 +24,7 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import { formatMediumDateTime } from "$lib/utils/formatting";
+  import FormError from "$lib/forms/FormError.svelte";
   import type { TenantMemberDto, TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
 
   interface Props {
@@ -26,10 +34,10 @@
     canManage: boolean;
     isExpanded: boolean;
     isSaving: boolean;
+    saveError?: string | null;
     currentSubjectId?: string;
     onToggleExpand: () => void;
-    onSaveRoles: (roleIds: string[], permissions: string[]) => void;
-    onSaveLimitTo24Hours?: (limitTo24Hours: boolean) => void;
+    onSave: (changes: MemberChanges) => void;
     onRemove: () => void;
   }
 
@@ -40,10 +48,10 @@
     canManage = false,
     isExpanded = false,
     isSaving = false,
+    saveError = null,
     currentSubjectId,
     onToggleExpand,
-    onSaveRoles,
-    onSaveLimitTo24Hours,
+    onSave,
     onRemove,
   }: Props = $props();
 
@@ -69,11 +77,12 @@
     })
   );
 
-  const isDirty = $derived(
+  const isAccessDirty = $derived(
     JSON.stringify([...editingRoleIds].sort()) !== JSON.stringify([...originalRoleIds].sort()) ||
-    JSON.stringify([...editingPermissions].sort()) !== JSON.stringify([...originalPermissions].sort()) ||
-    editingLimitTo24Hours !== originalLimitTo24Hours
+    JSON.stringify([...editingPermissions].sort()) !== JSON.stringify([...originalPermissions].sort())
   );
+  const isLimitDirty = $derived(editingLimitTo24Hours !== originalLimitTo24Hours);
+  const isDirty = $derived(isAccessDirty || isLimitDirty);
 
   function toggleExpand() {
     if (!isExpanded) {
@@ -97,10 +106,12 @@
   }
 
   function handleSave() {
-    onSaveRoles(editingRoleIds, editingPermissions);
-    if (editingLimitTo24Hours !== originalLimitTo24Hours && onSaveLimitTo24Hours) {
-      onSaveLimitTo24Hours(editingLimitTo24Hours);
-    }
+    onSave({
+      access: isAccessDirty
+        ? { roleIds: editingRoleIds, permissions: editingPermissions }
+        : undefined,
+      limitTo24Hours: isLimitDirty ? editingLimitTo24Hours : undefined,
+    });
   }
 
   function handleCancel() {
@@ -272,6 +283,7 @@
 
       <!-- Cancel / Save - only when dirty -->
       {#if isDirty}
+        <FormError issues={saveError} focusOnShow />
         <div class="flex gap-3">
           <Button
             variant="outline"

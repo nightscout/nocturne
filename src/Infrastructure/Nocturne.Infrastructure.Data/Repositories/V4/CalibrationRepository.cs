@@ -24,7 +24,7 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// Initializes a new instance of the <see cref="CalibrationRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public CalibrationRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger, IV4RecordBroadcaster<Calibration>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
+    public CalibrationRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger, IV4RecordBroadcaster<Calibration>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
         : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
     }

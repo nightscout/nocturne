@@ -749,6 +749,8 @@ public class TandemE2eSyncTests
         public IMetadataPublisher Metadata => this;
         public int SkippedDeleted => 0;
 
+        public int Refused => 0;
+
         private static Task<bool> Record<T>(List<T> sink, IEnumerable<T> records)
         {
             sink.AddRange(records);
@@ -817,6 +819,8 @@ public class TandemE2eSyncTests
             Task.FromResult<int?>(0);
         public Task<bool> PublishStateSpansAsync(IEnumerable<StateSpan> stateSpans, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Record(StateSpans, stateSpans);
+        public Task<bool> PublishProfileActivationsAsync(IEnumerable<ProfileActivation> activations, string source, WriteOrigin origin, CancellationToken ct = default) =>
+            Task.FromResult(true);
         public Task<bool> PublishSystemEventsAsync(IEnumerable<SystemEvent> systemEvents, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Record(SystemEvents, systemEvents);
         public Task<bool> PublishNotesAsync(IEnumerable<Note> records, string source, WriteOrigin origin, CancellationToken ct = default) =>

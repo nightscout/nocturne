@@ -35,9 +35,6 @@ public class PatientRecord
     /// </summary>
     public DateOnly? DiagnosisDate { get; set; }
 
-    /// <summary>
-    /// Patient's date of birth.
-    /// </summary>
     public DateOnly? DateOfBirth { get; set; }
 
     /// <summary>

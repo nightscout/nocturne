@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Authorization;
+
 namespace Nocturne.API.Models.OAuth;
 
 /// <summary>
@@ -25,10 +27,8 @@ public class OAuthGrantDto
     /// </summary>
     public string? ClientDisplayName { get; set; }
 
-    /// <summary>
-    /// Whether the associated client is a recognized/trusted application.
-    /// </summary>
-    public bool IsKnownClient { get; set; }
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Auth.OAuthGrantInfo.ClientIdentity"/>
+    public OAuthClientIdentity ClientIdentity { get; set; }
 
     /// <summary>
     /// OAuth scopes authorized by this grant.

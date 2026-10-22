@@ -123,6 +123,37 @@ public class DirectionServiceTests
     }
 
     [Fact]
+    public void BuildBuckets_AnchorsFourFiveMinuteBucketsAtTheNewestReading()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        const long minute = 60 * 1000;
+        var entries = new List<Entry>
+        {
+            new() { Mills = now, Mgdl = 120 },
+            new() { Mills = now - 2 * minute, Mgdl = 110 },
+            new() { Mills = now - 3 * minute, Mgdl = 100 },
+            new() { Mills = now - 8 * minute, Mgdl = 39 },
+            new() { Mills = now - 8 * minute - 1000, Mgdl = 80 },
+            new() { Mills = now - 9 * minute, Mgdl = 30 },
+            new() { Mills = now - 20 * minute, Mgdl = 70 },
+        };
+
+        var buckets = DirectionService.BuildBuckets(entries);
+
+        Assert.Equal(4, buckets.Count);
+        Assert.Equal(115, buckets[0].Mean);
+        Assert.Equal(now, buckets[0].Last!.Mills);
+        Assert.Equal(100, buckets[1].Mean);
+        Assert.Empty(buckets[1].Errors);
+        Assert.Equal(80, buckets[2].Mean);
+        Assert.Equal(now - 8 * minute - 1000, buckets[2].Last!.Mills);
+        Assert.Equal(3, buckets[2].Entries.Count);
+        Assert.Equal(30, Assert.Single(buckets[2].Errors).Mgdl);
+        Assert.Null(buckets[3].Mean);
+        Assert.Empty(buckets[3].Entries);
+    }
+
+    [Fact]
     public void CalculateDelta_ShouldCalculateCorrectDelta()
     {
         // Arrange

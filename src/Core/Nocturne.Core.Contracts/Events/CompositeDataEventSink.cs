@@ -48,6 +48,13 @@ public class CompositeDataEventSink<T>(
     }
 
     /// <inheritdoc />
+    public async Task OnWrittenAsync(IReadOnlyList<T> items, CancellationToken ct = default)
+    {
+        foreach (var sink in _sinks)
+            await InvokeAsync(sink, s => s.OnWrittenAsync(items, ct));
+    }
+
+    /// <inheritdoc />
     public async Task OnBulkDeletedAsync(long deletedCount, CancellationToken ct = default)
     {
         foreach (var sink in _sinks)

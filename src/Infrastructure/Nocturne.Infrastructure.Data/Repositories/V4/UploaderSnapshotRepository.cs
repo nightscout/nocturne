@@ -27,7 +27,7 @@ public class UploaderSnapshotRepository : SyncUpsertRepositoryBase<UploaderSnaps
     /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
     // logger is unused but retained for DI + direct test construction.
     public UploaderSnapshotRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<UploaderSnapshotRepository> logger,
         IV4RecordBroadcaster<UploaderSnapshot>? broadcaster = null)

@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Entries;
-using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.Treatments;
@@ -9,25 +8,26 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.V4;
 
 /// <summary>
-/// Projects V4 granular records back into the legacy <see cref="Entry"/> and <see cref="Treatment"/>
-/// shapes for v1/v2/v3 API compatibility.
+/// Projects V4 granular records back into the legacy <see cref="Treatment"/> shape for v1/v2/v3 API
+/// compatibility.
 /// </summary>
 /// <remarks>
 /// This service is the read side of the dual-path architecture.
 /// The write side (legacy record → V4 typed record) is handled by <see cref="DecompositionPipeline"/>.
-/// Projection covers: <see cref="SensorGlucose"/> → <see cref="Entry"/>,
-/// <see cref="Bolus"/> and <see cref="CarbIntake"/> → <see cref="Treatment"/>,
+/// Projection covers: <see cref="Bolus"/> and <see cref="CarbIntake"/> → <see cref="Treatment"/>,
 /// <see cref="DeviceEvent"/> → <see cref="Treatment"/> using the legacy event-type map, and the
-/// <see cref="StateSpan"/>s a legacy treatment was decomposed into back into that treatment.
+/// <see cref="StateSpan"/>s and <see cref="ProfileActivation"/>s a legacy treatment was decomposed
+/// into back into that treatment.
 /// <para>
-/// Entries are projected V4-native-only, supplementing the rows the legacy entries table still
-/// holds. Treatments have no legacy table left to supplement, so every treatment read projects
-/// records of both provenances — see <see cref="LegacyTreatmentRange.NativeOnly"/>.
+/// Every treatment read projects records of both provenances, since treatments have no legacy table
+/// left to supplement. See <see cref="LegacyTreatmentRange.NativeOnly"/>.
 /// </para>
 /// </remarks>
 /// <seealso cref="IV4ToLegacyProjectionService"/>
@@ -35,14 +35,12 @@ namespace Nocturne.API.Services.V4;
 /// <seealso cref="DecompositionPipeline"/>
 public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 {
-    private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly LegacyTreatmentRepositories _repositories;
     private readonly ITreatmentFoodService _treatmentFoodService;
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<V4ToLegacyProjectionService> _logger;
 
     public V4ToLegacyProjectionService(
-        ISensorGlucoseRepository sensorGlucoseRepository,
         IBolusRepository bolusRepository,
         ICarbIntakeRepository carbIntakeRepository,
         IBGCheckRepository bgCheckRepository,
@@ -51,11 +49,10 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         ITempBasalRepository tempBasalRepository,
         IBolusCalculationRepository bolusCalculationRepository,
         ITreatmentFoodService treatmentFoodService,
-        NocturneDbContext dbContext,
+        INocturneDbContextFactory contexts,
         ILogger<V4ToLegacyProjectionService> logger
     )
     {
-        _sensorGlucoseRepository = sensorGlucoseRepository;
         _repositories = new LegacyTreatmentRepositories(
             bolusRepository,
             carbIntakeRepository,
@@ -66,77 +63,15 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             bolusCalculationRepository
         );
         _treatmentFoodService = treatmentFoodService;
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
     }
 
-    /// <inheritdoc />
     /// <summary>
     /// Converts nullable unix milliseconds to nullable DateTime.
     /// </summary>
     private static DateTime? MillsToDateTime(long? mills) =>
         mills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(mills.Value).UtcDateTime : null;
-
-    public async Task<IEnumerable<Entry>> GetProjectedEntriesAsync(
-        long? fromMills,
-        long? toMills,
-        int limit,
-        int offset,
-        bool descending,
-        CancellationToken ct = default
-    )
-    {
-        IEnumerable<SensorGlucose> records;
-        try
-        {
-            records = await _sensorGlucoseRepository.GetAsync(
-                from: MillsToDateTime(fromMills),
-                to: MillsToDateTime(toMills),
-                device: null,
-                source: null,
-                limit: limit,
-                offset: offset,
-                descending: descending,
-                nativeOnly: true,
-                ct: ct
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to fetch V4 SensorGlucose records for projection");
-            return Enumerable.Empty<Entry>();
-        }
-
-        return records.Select(ProjectSensorGlucoseToEntry);
-    }
-
-    /// <inheritdoc />
-    public async Task<Entry?> GetLatestProjectedEntryAsync(CancellationToken ct = default)
-    {
-        IEnumerable<SensorGlucose> records;
-        try
-        {
-            records = await _sensorGlucoseRepository.GetAsync(
-                from: null,
-                to: null,
-                device: null,
-                source: null,
-                limit: 1,
-                offset: 0,
-                descending: true,
-                nativeOnly: true,
-                ct: ct
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to fetch V4 SensorGlucose records for latest projection");
-            return null;
-        }
-
-        var latest = records.FirstOrDefault();
-        return latest == null ? null : ProjectSensorGlucoseToEntry(latest);
-    }
 
     /// <inheritdoc />
     public async Task<IEnumerable<Treatment>> GetProjectedTreatmentsAsync(
@@ -144,16 +79,21 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         long? toMills,
         int limit,
         bool nativeOnly = true,
+        bool descending = true,
         CancellationToken ct = default
     )
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var range = new LegacyTreatmentRange(
-            MillsToDateTime(fromMills), MillsToDateTime(toMills), limit, nativeOnly);
+            MillsToDateTime(fromMills), MillsToDateTime(toMills), limit, nativeOnly, descending);
 
-        var rows = await FetchAsync(table => table.InRangeAsync(_repositories, _dbContext, range, ct));
-        var treatments = await AssembleAsync(rows, ct);
+        var rows = await FetchAsync(table => table.InRangeAsync(_repositories, db, range, ct));
+        var treatments = await AssembleAsync(db, rows, ct);
 
-        return treatments.OrderByDescending(t => t.Mills).Take(limit);
+        return (descending
+                ? treatments.OrderByDescending(t => t.Mills)
+                : treatments.OrderBy(t => t.Mills))
+            .Take(limit);
     }
 
     /// <inheritdoc />
@@ -163,11 +103,13 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     public async Task<IEnumerable<Treatment>> GetProjectedTreatmentsModifiedSinceAsync(
         long lastModifiedMills, int limit, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
+        using var horizon = HistoryHorizon.Share();
         var perTable = new List<(ILegacyTreatmentTable Table, int Order, IReadOnlyList<FetchedRecord> Rows)>();
         foreach (var table in LegacyTreatmentTables.All)
         {
             var rows = await FetchSafe(
-                table, t => t.ModifiedSinceAsync(_dbContext, lastModifiedMills, limit, _logger, ct));
+                table, t => t.ModifiedSinceAsync(db, lastModifiedMills, limit, _logger, ct));
             perTable.Add((table, LegacyTreatmentTables.OrderOf(table), rows));
         }
 
@@ -190,9 +132,10 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         if (page.Count > 0)
             page = ExtendToMillisecondAsync(page, ordered);
 
-        page = await WithLiveMealPartnersAsync(page, ct);
+        var newest = page.Count == 0 ? (DateTime?)null : page.Max(r => r.Modified);
+        page = await WithLiveMealPartnersAsync(db, page, ct);
 
-        var treatments = await AssembleAsync(page, ct);
+        var treatments = await AssembleAsync(db, page, ct, newest);
 
         return treatments.OrderBy(t => t.SrvModified ?? t.Mills);
     }
@@ -235,6 +178,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     /// deleted). Stamped at or below the page's newest row, the added rows leave its cursor where it was.
     /// </summary>
     private async Task<List<FetchedRecord>> WithLiveMealPartnersAsync(
+        NocturneDbContext db,
         List<FetchedRecord> page, CancellationToken ct)
     {
         var deletes = new Dictionary<Guid, DateTime>();
@@ -253,7 +197,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         var partners = new List<FetchedRecord>();
         foreach (var table in LegacyTreatmentTables.MealTables)
         {
-            var live = await FetchSafe(table, t => t.LiveByCorrelationAsync(_dbContext, deletes.Keys, ct));
+            var live = await FetchSafe(table, t => t.LiveByCorrelationAsync(db, deletes.Keys, ct));
             partners.AddRange(live
                 .Where(row => seen.Add(RecordId(row)))
                 .Select(row => row with { Modified = deletes[((IV4Record)row.Record).CorrelationId!.Value] }));
@@ -269,21 +213,27 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     /// An id resolves when it is the span's primary key, the 24-hex ObjectId served for that key, or
     /// the treatment id the span was written under, verbatim or as the ObjectId it is served as.
     /// </remarks>
-    public async Task<Treatment?> GetProjectedStateSpanTreatmentAsync(string id, CancellationToken ct = default) =>
-        await FindStateSpanAsync(id, ct) is { } row
-            ? (await AssembleAsync([row], ct)).Single()
+    public async Task<Treatment?> GetProjectedStateSpanTreatmentAsync(string id, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        return await FindStateSpanAsync(db, id, ct) is { } row
+            ? (await AssembleAsync(db, [row], ct)).Single()
             : null;
+    }
 
     /// <inheritdoc />
     /// <remarks>Resolves an id as <see cref="GetProjectedStateSpanTreatmentAsync"/> does.</remarks>
-    public async Task<string?> GetStateSpanTreatmentIdAsync(string id, CancellationToken ct = default) =>
-        await FindStateSpanAsync(id, ct) is { } row ? ((StateSpanEntity)row.Record).OriginalId : null;
+    public async Task<string?> GetStateSpanTreatmentIdAsync(string id, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        return await FindStateSpanAsync(db, id, ct) is { } row ? ((StateSpanEntity)row.Record).OriginalId : null;
+    }
 
-    private async Task<FetchedRecord?> FindStateSpanAsync(string id, CancellationToken ct)
+    private async Task<FetchedRecord?> FindStateSpanAsync(NocturneDbContext db, string id, CancellationToken ct)
     {
         foreach (var table in LegacyTreatmentTables.StateSpanTables)
         {
-            var span = await MatchingId(table.Rows(_dbContext), id)
+            var span = await MatchingId(table.Rows(db), id)
                 .OrderBy(s => s.OriginalId == id ? 0 : 1)
                 .ThenBy(s => s.Id)
                 .FirstOrDefaultAsync(ct);
@@ -299,9 +249,10 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     /// <remarks>Resolves an id as <see cref="GetProjectedStateSpanTreatmentAsync"/> does.</remarks>
     public async Task<bool> IsStateSpanDeletedByUserAsync(string id, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         foreach (var table in LegacyTreatmentTables.StateSpanTables)
         {
-            if (await MatchingId(table.UserTombstones(_dbContext), id).AnyAsync(ct))
+            if (await MatchingId(table.UserTombstones(db), id).AnyAsync(ct))
                 return true;
         }
 
@@ -312,28 +263,39 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     public async Task<long> CountProjectedStateSpanTreatmentsAsync(
         long? fromMills, long? toMills, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var (from, to) = (MillsToDateTime(fromMills), MillsToDateTime(toMills));
         long count = 0;
         foreach (var table in LegacyTreatmentTables.StateSpanTables)
         {
             count += await FetchSafe(
-                table, _ => table.InWindow(_dbContext, from, to).LongCountAsync(ct), 0L);
+                table, _ => table.InWindow(db, from, to).LongCountAsync(ct), 0L);
         }
 
-        var notes = _dbContext.Notes.AsNoTracking().ExcludeNonPrimary(_dbContext, RecordType.Note);
-        if (from is { } lower)
-            notes = notes.Where(n => n.Timestamp >= lower);
-        if (to is { } upper)
-            notes = notes.Where(n => n.Timestamp <= upper);
-
-        foreach (var table in LegacyTreatmentTables.StateSpanTables)
-        {
-            var keys = table.Rows(_dbContext).Select(s => s.OriginalId);
-            count -= await FetchSafe(
-                table, _ => notes.Where(n => n.LegacyId != null && keys.Contains(n.LegacyId)).LongCountAsync(ct), 0L);
-        }
+        var activations = LegacyTreatmentTables.ProfileActivationTable;
+        count += await FetchSafe(
+            activations, _ => LegacyProfileActivationTable.InWindow(db, from, to).LongCountAsync(ct), 0L);
 
         return count;
+    }
+
+    /// <inheritdoc />
+    public async Task<long> CountNotesServedApartAsync(
+        long? fromMills, long? toMills, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        IQueryable<NoteEntity> InWindow(IQueryable<NoteEntity> notes)
+        {
+            notes = notes.AsNoTracking().ExcludeNonPrimary(db, RecordType.Note);
+            if (MillsToDateTime(fromMills) is { } lower)
+                notes = notes.Where(n => n.Timestamp >= lower);
+            if (MillsToDateTime(toMills) is { } upper)
+                notes = notes.Where(n => n.Timestamp <= upper);
+            return notes;
+        }
+
+        return await InWindow(db.Notes).LongCountAsync(ct)
+            - await InWindow(LegacyTreatmentTables.NotesServedWithAnotherRecord(db)).LongCountAsync(ct);
     }
 
     private static IQueryable<StateSpanEntity> MatchingId(IQueryable<StateSpanEntity> rows, string id)
@@ -359,7 +321,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
     /// <summary>
     /// Reads every record type through <paramref name="fetch"/>. Types are read sequentially: they
-    /// share a scoped DbContext, which is not thread-safe, so they cannot be run concurrently via
+    /// share the caller's context, which is not thread-safe, so they cannot be run concurrently via
     /// <see cref="Task.WhenAll(Task[])"/>. A type whose read fails contributes nothing rather than
     /// failing the whole page.
     /// </summary>
@@ -375,13 +337,26 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     }
 
     /// <summary>
-    /// Assembles a page, serving the Note a span's treatment wrote beside it before
-    /// <see cref="LegacyTreatmentTables.NotesKey"/> was kept on the span as part of the span.
+    /// Assembles a page, serving the Note a record's treatment wrote beside it as part of that record
+    /// (<see cref="LegacyTreatmentTables.NotesServedWithAnotherRecord"/>), stamped no older than the
+    /// Note's row, deleted or not, so a conditional read sees an edit of the notes alone.
     /// </summary>
+    /// <param name="historyCursor">
+    /// The newest row stamp of a history page, or null for any other read. A history page also serves:
+    /// the records holding a Note on it that the page does not, since editing only the notes moves the
+    /// Note's row alone; a held Note as a tombstone under its own id, which a client that synced it as
+    /// a treatment of its own before it was served as part of its record still holds; and the live
+    /// Note of a record deleted on the page that leaves no other, which a search now serves apart. No
+    /// row is stamped above <paramref name="historyCursor"/>, so the client's cursor stays where the
+    /// page put it.
+    /// </param>
     private async Task<List<Treatment>> AssembleAsync(
-        IReadOnlyList<FetchedRecord> rows, CancellationToken ct
+        NocturneDbContext db,
+        IReadOnlyList<FetchedRecord> rows, CancellationToken ct,
+        DateTime? historyCursor = null
     )
     {
+        var foldedNotes = new HashSet<string>(StringComparer.Ordinal);
         var noteKeys = rows
             .Select(r => r.Record)
             .OfType<Note>()
@@ -391,41 +366,154 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             .ToList();
         if (noteKeys.Count > 0)
         {
-            var onSpans = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var table in LegacyTreatmentTables.StateSpanTables)
+            var onPage = rows
+                .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
+                .OfType<string>()
+                .ToHashSet(StringComparer.Ordinal);
+            var holders = new List<FetchedRecord>();
+            foreach (var table in LegacyTreatmentTables.All.Where(t => t.RecordType != nameof(Note)))
+                holders.AddRange(await FetchSafe(table, t => t.LiveByTreatmentKeyAsync(db, noteKeys, ct)));
+            var live = holders
+                .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
+                .OfType<string>()
+                .ToHashSet(StringComparer.Ordinal);
+
+            // A span or activation served its treatment's Note before records did, so no client
+            // holds that Note apart.
+            var heldByRecords = holders
+                .Concat(rows.Where(r => r.Deleted))
+                .Where(r => r.Record is not (Note or StateSpanEntity or ProfileActivation))
+                .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
+                .OfType<string>()
+                .ToHashSet(StringComparer.Ordinal);
+
+            bool Held(FetchedRecord row) =>
+                row.Record is Note { LegacyId: { } key } && (live.Contains(key) || (row.Deleted && onPage.Contains(key)));
+
+            if (historyCursor is null)
             {
-                onSpans.UnionWith(await FetchSafe(
-                    table,
-                    _ => table.Rows(_dbContext)
-                        .Where(s => noteKeys.Contains(s.OriginalId!))
-                        .Select(s => s.OriginalId!)
-                        .ToListAsync(ct),
-                    new List<string>()));
+                rows = rows.Where(r => !Held(r)).ToList();
             }
-            if (onSpans.Count > 0)
-                rows = rows.Where(r => r.Record is not Note { LegacyId: { } key } || !onSpans.Contains(key)).ToList();
+            else
+            {
+                var seen = rows.Select(RecordId).ToHashSet();
+                var kept = rows
+                    .Where(r => !Held(r) || heldByRecords.Contains(((Note)r.Record).LegacyId!))
+                    .ToList();
+                foldedNotes.UnionWith(kept.Where(Held).Select(r => RecordId(r).ToString()));
+                rows =
+                [
+                    .. kept.Select(r => Held(r) ? r with { Deleted = true } : r),
+                    .. holders.Where(h => seen.Add(RecordId(h))),
+                ];
+            }
         }
 
-        var spanKeys = rows
-            .Select(r => r.Record)
-            .OfType<StateSpanEntity>()
-            .Select(s => s.OriginalId)
+        if (historyCursor is not null)
+            rows = await WithNotesOfDeletedRecordsAsync(db, rows, ct);
+
+        var keys = rows
+            .Select(r => LegacyTreatmentTables.ServedKey(r.Record))
             .OfType<string>()
             .Distinct()
             .ToList();
-        Dictionary<string, string>? spanNotes = null;
-        if (spanKeys.Count > 0)
+        Dictionary<string, string>? notes = null;
+        Dictionary<string, DateTime> noteStamps = [];
+        if (keys.Count > 0)
         {
-            spanNotes = (await _dbContext.Notes.AsNoTracking()
-                    .Where(n => n.LegacyId != null && spanKeys.Contains(n.LegacyId))
-                    .OrderBy(n => n.Id)
-                    .Select(n => new { Key = n.LegacyId!, n.Text })
-                    .ToListAsync(ct))
+            var written = await db.Notes.IncludingDeleted().AsNoTracking()
+                .Where(n => n.LegacyId != null && keys.Contains(n.LegacyId))
+                .OrderBy(n => n.Id)
+                .Select(n => new { Key = n.LegacyId!, n.Text, Live = n.DeletedAt == null, n.SysUpdatedAt })
+                .ToListAsync(ct);
+            notes = written
+                .Where(n => n.Live)
                 .GroupBy(n => n.Key, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.First().Text, StringComparer.Ordinal);
+            noteStamps = written
+                .GroupBy(n => n.Key, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.Max(n => n.SysUpdatedAt), StringComparer.Ordinal);
         }
 
-        return LegacyTreatmentTables.Assemble(rows, await LoadCarbFoodsAsync(rows, ct), spanNotes);
+        rows = rows.Select(r => r with { Modified = StampOf(r) }).ToList();
+
+        DateTime StampOf(FetchedRecord row)
+        {
+            var stamp = row.Modified;
+            if (row.Record is not Note
+                && LegacyTreatmentTables.ServedKey(row.Record) is { } key
+                && noteStamps.TryGetValue(key, out var noteStamp)
+                && noteStamp > stamp)
+                stamp = noteStamp;
+            return historyCursor is { } cursor && stamp > cursor ? cursor : stamp;
+        }
+
+        var treatments = LegacyTreatmentTables.Assemble(rows, await LoadCarbFoodsAsync(rows, ct), notes);
+        return foldedNotes.Count == 0
+            ? treatments
+            : treatments.Select(t => t.Id is { } id && foldedNotes.Contains(id) ? FoldedNoteTombstone(t) : t).ToList();
+    }
+
+    /// <summary>
+    /// A folded Note's tombstone carries its identity and deletion alone: its event type and sync
+    /// identifier are its treatment's, and a client matching on those would take it for the record
+    /// that is still served.
+    /// </summary>
+    private static Treatment FoldedNoteTombstone(Treatment note) => new()
+    {
+        Id = note.Id,
+        EventType = "Note",
+        Mills = note.Mills,
+        SrvCreated = note.SrvCreated,
+        SrvModified = note.SrvModified,
+        IsValid = false,
+    };
+
+    /// <summary>
+    /// Adds the live Notes of the records deleted on a history page whose treatment keeps no other
+    /// live record, stamped with that delete: a search serves such a Note as a treatment of its own,
+    /// and its row did not move.
+    /// </summary>
+    private async Task<IReadOnlyList<FetchedRecord>> WithNotesOfDeletedRecordsAsync(
+        NocturneDbContext db, IReadOnlyList<FetchedRecord> rows, CancellationToken ct)
+    {
+        var deletes = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+        foreach (var row in rows.Where(r => r.Deleted && r.Record is not Note))
+        {
+            if (LegacyTreatmentTables.ServedKey(row.Record) is not { } key)
+                continue;
+            if (!deletes.TryGetValue(key, out var stamp) || row.Modified > stamp)
+                deletes[key] = row.Modified;
+        }
+
+        foreach (var row in rows.Where(r => !r.Deleted && r.Record is not Note))
+        {
+            if (LegacyTreatmentTables.ServedKey(row.Record) is { } key)
+                deletes.Remove(key);
+        }
+
+        if (deletes.Count == 0)
+            return rows;
+
+        var keys = deletes.Keys.ToList();
+        foreach (var table in LegacyTreatmentTables.All.Where(t => t.RecordType != nameof(Note)))
+        {
+            foreach (var holder in await FetchSafe(table, t => t.LiveByTreatmentKeyAsync(db, keys, ct)))
+            {
+                if (LegacyTreatmentTables.ServedKey(holder.Record) is { } key)
+                    deletes.Remove(key);
+            }
+        }
+
+        if (deletes.Count == 0)
+            return rows;
+
+        var noteTable = LegacyTreatmentTables.All.Single(t => t.RecordType == nameof(Note));
+        var seen = rows.Select(RecordId).ToHashSet();
+        var notes = (await FetchSafe(noteTable, t => t.LiveByTreatmentKeyAsync(db, deletes.Keys, ct)))
+            .Where(n => seen.Add(RecordId(n)))
+            .Select(n => n with { Modified = deletes[((Note)n.Record).LegacyId!] });
+        return [.. rows, .. notes];
     }
 
     private async Task<CarbFoodIndex> LoadCarbFoodsAsync(
@@ -473,7 +561,4 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             return fallback;
         }
     }
-
-    private static Entry ProjectSensorGlucoseToEntry(SensorGlucose sg) =>
-        SensorGlucoseToEntryMapper.ToEntry(sg);
 }

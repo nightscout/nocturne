@@ -74,6 +74,12 @@ public class OAuthDeviceCodeEntity : ITenantScoped, IEntityCreated
     public DateTime? DeniedAt { get; set; }
 
     /// <summary>
+    /// When the client exchanged this approved code for tokens (null until then, prevents replay)
+    /// </summary>
+    [Column("redeemed_at")]
+    public DateTime? RedeemedAt { get; set; }
+
+    /// <summary>
     /// Foreign key to the grant created on approval (null until approved)
     /// </summary>
     [Column("grant_id")]

@@ -28,7 +28,9 @@ public static class TrackerSuccession
     /// running instance already stands for this start, or when another writer completes a running
     /// instance first. With <paramref name="replay"/> it also starts nothing when nothing is running
     /// and a run of the definition ended after <paramref name="startedAt"/>: someone has already
-    /// moved the tracker past the start being re-offered.
+    /// moved the tracker past the start being re-offered. Each run it completes is broadcast as
+    /// <see cref="TrackerRealtimeAction.Complete"/>, then the new run as
+    /// <see cref="TrackerRealtimeAction.Create"/>.
     /// </summary>
     public static async Task<TrackerSuccessionResult> StartAsync(
         ITrackerRepository repository,
@@ -38,30 +40,30 @@ public static class TrackerSuccession
         DateTime startedAt,
         string? completionNotes,
         string? completeTreatmentId,
-        Func<CancellationToken, Task<TrackerInstanceEntity>> start,
+        Func<ITrackerRepository, CancellationToken, Task<TrackerInstanceEntity>> start,
         CancellationToken ct,
         Func<IReadOnlyList<TrackerInstanceEntity>, bool>? alreadyStarted = null,
         bool replay = false)
     {
         var result = await repository.ExecuteUnderDefinitionLockAsync(
             definition.Id,
-            async token =>
+            async (tx, token) =>
             {
                 List<TrackerInstanceEntity> completed = [];
                 if (definition.Mode == TrackerMode.Duration)
                 {
-                    var running = await repository.GetActiveInstancesForDefinitionAsync(definition.Id, token);
+                    var running = await tx.GetActiveInstancesForDefinitionAsync(definition.Id, token);
                     if (alreadyStarted?.Invoke(running) == true)
                         return new TrackerSuccessionResult(TrackerSuccessionOutcome.AlreadyStarted, null, completed);
                     if (replay && running.Count == 0
-                        && await repository.HasRunEndedAfterAsync(definition.Id, startedAt, token))
+                        && await tx.HasRunEndedAfterAsync(definition.Id, startedAt, token))
                         return new TrackerSuccessionResult(TrackerSuccessionOutcome.EndedSince, null, completed);
                     if (running.Any(i => i.StartedAt >= startedAt))
                         return new TrackerSuccessionResult(TrackerSuccessionOutcome.NewerRunning, null, completed);
 
                     foreach (var instance in running)
                     {
-                        var won = await repository.CompleteInstanceAsync(
+                        var won = await tx.CompleteInstanceAsync(
                             instance.Id,
                             TrackerSchedule.ReasonForReplacement(definition.LifespanHours, instance.StartedAt, startedAt),
                             completionNotes,
@@ -75,11 +77,11 @@ public static class TrackerSuccession
                     }
                 }
 
-                return new TrackerSuccessionResult(TrackerSuccessionOutcome.Started, await start(token), completed);
+                return new TrackerSuccessionResult(TrackerSuccessionOutcome.Started, await start(tx, token), completed);
             },
-            async (attempt, token) =>
+            async (tx, attempt, token) =>
                 attempt.Started is { } started
-                && await repository.GetInstanceByIdAsync(started.Id, token) is not null,
+                && await tx.GetInstanceByIdAsync(started.Id, token) is not null,
             ct
         );
 
@@ -92,12 +94,20 @@ public static class TrackerSuccession
                 startedAt
             );
             await broadcast.BroadcastTrackerUpdateAsync(
-                "complete",
+                TrackerRealtimeAction.Complete,
                 TrackerInstanceDto.FromEntity(instance),
                 definition.UserId,
                 definition.Visibility
             );
         }
+
+        if (result.Started is { } started)
+            await broadcast.BroadcastTrackerUpdateAsync(
+                TrackerRealtimeAction.Create,
+                TrackerInstanceDto.FromEntity(started),
+                definition.UserId,
+                definition.Visibility
+            );
 
         return result;
     }

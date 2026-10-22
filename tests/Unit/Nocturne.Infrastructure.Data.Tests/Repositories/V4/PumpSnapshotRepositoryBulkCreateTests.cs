@@ -23,7 +23,7 @@ public class PumpSnapshotRepositoryBulkCreateTests : IDisposable
         var dbName = $"pump_snapshot_bulk_tests_{Guid.NewGuid()}";
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
-        _repository = new PumpSnapshotRepository(new TestTenantDbContextFactory(_context), new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance);
+        _repository = new PumpSnapshotRepository(new TestNocturneDbContextFactory(_context), new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance);
     }
 
     public void Dispose()

@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -29,6 +30,8 @@ public class DeviceStatusProjectionServiceTests
 
     private static readonly DateTime ReferenceTime = new(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc);
     private static readonly long ReferenceMillis = new DateTimeOffset(ReferenceTime).ToUnixTimeMilliseconds();
+    private const string First = "5f8d0c1e8a7b4c3d9e5f0001";
+    private const string Second = "5f8d0c1e8a7b4c3d9e5f0002";
 
     public DeviceStatusProjectionServiceTests()
     {
@@ -49,7 +52,7 @@ public class DeviceStatusProjectionServiceTests
         _groupRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DeviceStatusGroup>());
 
         _pumpRepo
@@ -67,7 +70,7 @@ public class DeviceStatusProjectionServiceTests
         _stateSpanRepo
             .Setup(r => r.GetByCategory(
                 It.IsAny<StateSpanCategory>(),
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<StateSpan>());
     }
@@ -285,6 +288,46 @@ public class DeviceStatusProjectionServiceTests
         result.Override.CurrentCorrectionRange.MaxValue.Should().Be(160.0);
     }
 
+    [Theory]
+    [InlineData(-30, 30, true)]
+    [InlineData(-30, 1, true)]
+    [InlineData(-30, null, true)]
+    [InlineData(0, 30, true)]
+    [InlineData(-30, 0, null)]
+    [InlineData(1, 30, null)]
+    public async Task GetAsync_ProjectsTheOverrideActiveAtTheStatusTime(int startMinutes, int? endMinutes, bool? expectedActive)
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.Loop);
+        aps.LoopJson = "{}";
+        ReturnGroups(new DeviceStatusGroup(aps, null, null, null, ReferenceTime));
+        ReturnOverrides(OverrideSpan(startMinutes, endMinutes));
+
+        var result = (await _service.GetAsync(10, 0, null, CancellationToken.None)).Should().ContainSingle().Subject;
+
+        result.Override?.Active.Should().Be(expectedActive);
+        (result.Override is null).Should().Be(expectedActive is null);
+    }
+
+    [Theory]
+    [InlineData(-30, 30, true)]
+    [InlineData(-30, 1, true)]
+    [InlineData(-30, null, true)]
+    [InlineData(-30, 0, null)]
+    public async Task GetByIdAsync_ProjectsTheOverrideActiveAtTheStatusTime(int startMinutes, int? endMinutes, bool? expectedActive)
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.Loop);
+        aps.LoopJson = "{}";
+        _apsRepo
+            .Setup(r => r.GetByIdAsync(aps.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(aps);
+        ReturnOverrides(OverrideSpan(startMinutes, endMinutes));
+
+        var result = await _service.GetByIdAsync(aps.Id.ToString(), CancellationToken.None);
+
+        result!.Override?.Active.Should().Be(expectedActive);
+        (result.Override is null).Should().Be(expectedActive is null);
+    }
+
     #endregion
 
     #region ProjectFromSnapshots — Extras
@@ -495,7 +538,7 @@ public class DeviceStatusProjectionServiceTests
             new DeviceStatusGroup(null, null, uploader, null, ReferenceTime));
         _stateSpanRepo
             .Setup(r => r.GetByCategory(
-                StateSpanCategory.Override, It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                StateSpanCategory.Override, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new StateSpan { StartTimestamp = ReferenceTime.AddMinutes(-5) }]);
 
         var results = (await _service.GetAsync(10, 0, null, CancellationToken.None)).ToList();
@@ -508,15 +551,53 @@ public class DeviceStatusProjectionServiceTests
     {
         await _service.GetAsync(2, 1, null, CancellationToken.None);
 
-        _groupRepo.Verify(r => r.GetAsync(null, null, null, 2, 1, It.IsAny<CancellationToken>()), Times.Once);
+        _groupRepo.Verify(r => r.GetAsync(null, null, null, 2, 1, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAsync_Ascending_PagesFromTheOldestEndOfTheRepository()
+    {
+        await _service.GetAsync(2, 1, """{"device":"openaps://rpi"}""", CancellationToken.None, descending: false);
+
+        _groupRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", 2, 1, false, It.IsAny<CancellationToken>()), Times.Once);
+        _groupRepo.Verify(
+            r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAsync_SrvModifiedAfterACursor_PagesByStampAndNeverReadsTheTimeOrderedPage()
+    {
+        var stamps = Enumerable.Range(1, 3).Select(i => ReferenceTime.AddMinutes(i)).ToList();
+        var groups = stamps
+            .Select(stamp => new DeviceStatusGroup(
+                CreateApsSnapshot(AidAlgorithm.AndroidAps), null, null, null, stamp))
+            .ToList();
+        _groupRepo
+            .Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long cursor, int _, CancellationToken _) => groups
+                .Where(g => new DateTimeOffset(g.ModifiedAt).ToUnixTimeMilliseconds() > cursor)
+                .Select(g => new HistoryRecord<DeviceStatusGroup>(g, false))
+                .ToList());
+
+        var result = (await _service.GetAsync(
+            2, 1, $"find[srvModified][$gt]={ReferenceMillis}", CancellationToken.None,
+            descending: false, sort: ReadSortField.SrvModified)).ToList();
+
+        result.Select(r => r.SrvModified).Should().Equal(
+            new DateTimeOffset(stamps[1]).ToUnixTimeMilliseconds(),
+            new DateTimeOffset(stamps[2]).ToUnixTimeMilliseconds());
+        _groupRepo.Verify(
+            r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
     public async Task GetAsync_WithDeviceFilter_PassesDeviceToRepository()
     {
-        await _service.GetAsync(10, 0, "find[device]=openaps://rpi", CancellationToken.None);
+        await _service.GetAsync(10, 0, """{"device":"openaps://rpi"}""", CancellationToken.None);
 
-        _groupRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", 10, 0, It.IsAny<CancellationToken>()), Times.Once);
+        _groupRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", 10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -526,10 +607,254 @@ public class DeviceStatusProjectionServiceTests
         var expectedTo = new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1);
 
         await _service.GetAsync(10, 0,
-            "find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z",
+            """{"created_at":{"$gte":"2024-01-15T00:00:00Z","$lt":"2024-01-16T00:00:00Z"}}""",
             CancellationToken.None);
 
-        _groupRepo.Verify(r => r.GetAsync(expectedFrom, expectedTo, null, 10, 0, It.IsAny<CancellationToken>()), Times.Once);
+        _groupRepo.Verify(r => r.GetAsync(expectedFrom, expectedTo, null, 10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    #endregion
+
+    #region GetMatchingAsync / CountMatchingAsync
+
+    [Fact]
+    public async Task GetMatchingAsync_TestsAFieldOfTheProjectedDocument_NotJustTheNewest()
+    {
+        var uploader = CreateUploaderSnapshot();
+        uploader.Timestamp = ReferenceTime.AddMinutes(5);
+        uploader.Device = "xDrip-DexcomG6";
+        var loop = CreateApsSnapshot(AidAlgorithm.Loop);
+        loop.LoopJson = "{}";
+        loop.Device = "loop://iPhone";
+        ReturnGroups(
+            new DeviceStatusGroup(null, null, uploader, null, ReferenceTime),
+            new DeviceStatusGroup(loop, null, null, null, ReferenceTime));
+
+        var matches = await _service.GetMatchingAsync(
+            DeviceStatusProjectionService.ParseFind("find[loop][$exists]=true&count=1"), 1, 0, CancellationToken.None);
+
+        matches.Should().ContainSingle().Which.Id.Should().Be(loop.LegacyId);
+    }
+
+    [Theory]
+    [InlineData("find[_id][$in]=" + Second, Second)]
+    [InlineData("find[device][$ne]=loop://iPhone", First)]
+    [InlineData("find[openaps][$exists]=true", First)]
+    [InlineData("""{"$or":[{"device":"loop://iPhone"},{"_id":"5f8d0c1e8a7b4c3d9e5f0001"}]}""", First + "," + Second)]
+    public async Task GetMatchingAsync_KeepsOnlyTheStatusesEveryConditionMatches(string find, string expected)
+    {
+        var openAps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        openAps.LegacyId = First;
+        openAps.Device = "openaps://rig";
+        var loop = CreateApsSnapshot(AidAlgorithm.Loop);
+        loop.LegacyId = Second;
+        loop.LoopJson = "{}";
+        loop.Device = "loop://iPhone";
+        loop.CorrelationId = null;
+        ReturnGroups(
+            new DeviceStatusGroup(openAps, null, null, null, ReferenceTime),
+            new DeviceStatusGroup(loop, null, null, null, ReferenceTime));
+        _apsRepo.Setup(r => r.GetByLegacyIdAsync(Second, It.IsAny<CancellationToken>())).ReturnsAsync(loop);
+
+        var matches = await _service.GetMatchingAsync(
+            DeviceStatusProjectionService.ParseFind(find), 10, 0, CancellationToken.None);
+
+        matches.Select(m => m.Id).Should().Equal(expected.Split(','));
+        (await _service.CountMatchingAsync(DeviceStatusProjectionService.ParseFind(find), CancellationToken.None))
+            .Should().Be(expected.Split(',').Length);
+    }
+
+    [Theory]
+    [InlineData("""{"device":"loop://iPhone","created_at":{}}""")]
+    [InlineData("""{"device":"loop://iPhone","$or":[]}""")]
+    [InlineData("""{"device":"loop://iPhone","created_at":{"$options":"i"}}""")]
+    [InlineData("find[device]=loop://iPhone&find[created_at][$gt]=253402300799999")]
+    public async Task GetMatchingAsync_AConditionThatCanMatchNothing_NeverWidensToTheDevice(string find)
+    {
+        var loop = CreateApsSnapshot(AidAlgorithm.Loop);
+        loop.LoopJson = "{}";
+        loop.Device = "loop://iPhone";
+        ReturnGroups(new DeviceStatusGroup(loop, null, null, null, ReferenceTime));
+        _groupRepo
+            .Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var parsed = DeviceStatusProjectionService.ParseFind(find);
+
+        (await _service.GetMatchingAsync(parsed, 10, 0, CancellationToken.None)).Should().BeEmpty();
+        (await _service.CountMatchingAsync(parsed, CancellationToken.None)).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("find[created_at][$gt]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z")]
+    [InlineData("find[created_at][$gt]=1705276800000&find[created_at][$lt]=1705363200000")]
+    [InlineData("find[created_at][$gte]=2024-01-14T00:00:00Z&find[created_at][$gt]=2024-01-15T00:00:00Z"
+        + "&find[created_at][$lte]=2024-01-17T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z")]
+    [InlineData("find[created_at][$gt]=2024-01-15T10:00:00 10:00&find[created_at][$lt]=2024-01-16T10:00:00 10:00")]
+    [InlineData("find[created_at][$gt]=2024-01-15T10:00:00%2B10:00&find[created_at][$lt]=2024-01-16T10:00:00%2B10:00")]
+    [InlineData("find[created_at][$gte]=2024-01-15T00:00:00.0005Z&find[created_at][$lt]=2024-01-15T23:59:59.9995Z")]
+    public async Task GetMatchingAsync_PushesTheExactWholeMillisecondWindowDown(string find)
+    {
+        await _service.GetMatchingAsync(DeviceStatusProjectionService.ParseFind(find), 10, 0, CancellationToken.None);
+
+        _groupRepo.Verify(r => r.GetAsync(
+            new DateTime(2024, 1, 15, 0, 0, 0, 1, DateTimeKind.Utc),
+            new DateTime(2024, 1, 15, 23, 59, 59, 999, 999, DateTimeKind.Utc),
+            null, 10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetMatchingAsync_AStoredTimeInsideTheLastMillisecond_FallsInTheWindow()
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        aps.Timestamp = ReferenceTime.AddTicks(7_000);
+        ReturnGroups(new DeviceStatusGroup(aps, null, null, null, ReferenceTime));
+
+        var matches = await _service.GetMatchingAsync(
+            DeviceStatusProjectionService.ParseFind($"find[created_at][$lte]={ReferenceMillis}"), 10, 0, CancellationToken.None);
+
+        matches.Should().ContainSingle();
+        _groupRepo.Verify(r => r.GetAsync(
+            null, ReferenceTime.AddTicks(TimeSpan.TicksPerMillisecond - TimeSpan.TicksPerMicrosecond),
+            null, 10, 0, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetMatchingAsync_PushesTheDeviceAndPageDown_WhenNothingElseIsLeft()
+    {
+        await _service.GetMatchingAsync(
+            DeviceStatusProjectionService.ParseFind("find[device]=openaps://rpi"), 2, 1, CancellationToken.None);
+
+        _groupRepo.Verify(r => r.GetAsync(null, null, "openaps://rpi", 2, 1, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("find[timestamp][$gte]=2024-01-15T00:00:00Z")]
+    [InlineData("find[Created_At][$gte]=2024-01-15T00:00:00Z")]
+    public async Task GetMatchingAsync_ABoundOnAFieldTheStatusDoesNotCarry_MatchesNothing(string find)
+    {
+        ReturnGroups(new DeviceStatusGroup(CreateApsSnapshot(AidAlgorithm.OpenAps), null, null, null, ReferenceTime));
+
+        (await _service.GetMatchingAsync(DeviceStatusProjectionService.ParseFind(find), 10, 0, CancellationToken.None))
+            .Should().BeEmpty();
+        _groupRepo.Verify(r => r.GetAsync(null, null, null, It.IsAny<int>(), 0, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetMatchingAsync_ById_ResolvesTheStatusWithoutScanningTheStore()
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        aps.CorrelationId = null;
+        aps.LegacyId = First;
+        _apsRepo.Setup(r => r.GetByLegacyIdAsync(aps.LegacyId!, It.IsAny<CancellationToken>())).ReturnsAsync(aps);
+
+        var matches = await _service.GetMatchingAsync(
+            DeviceStatusProjectionService.ParseFind($"find[_id]={aps.LegacyId}"), 10, 0, CancellationToken.None);
+
+        matches.Should().ContainSingle().Which.Id.Should().Be(aps.LegacyId);
+        (await _service.GetMatchingAsync(
+                DeviceStatusProjectionService.ParseFind($"find[_id]={aps.LegacyId}&find[device]=other"), 10, 0,
+                CancellationToken.None))
+            .Should().BeEmpty();
+        _groupRepo.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("find[_id]=abc-123")]
+    [InlineData("find[_id][$in]=abc-123&find[_id][$in]=5f8d0c1e8a7b4c3d9e5f0009")]
+    public async Task GetMatchingAsync_ByAnIdThatIsNotAnObjectId_FindsTheStatusStoredUnderIt(string find)
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        aps.CorrelationId = null;
+        aps.LegacyId = "abc-123";
+        _apsRepo.Setup(r => r.GetByLegacyIdAsync("abc-123", It.IsAny<CancellationToken>())).ReturnsAsync(aps);
+        var parsed = DeviceStatusProjectionService.ParseFind(find);
+
+        (await _service.GetMatchingAsync(parsed, 10, 0, CancellationToken.None))
+            .Should().ContainSingle().Which.Id.Should().Be("abc-123");
+        (await _service.CountMatchingAsync(parsed, CancellationToken.None)).Should().Be(1);
+        (await _service.GetMatchingAsync(
+                DeviceStatusProjectionService.ParseFind(find + "&find[device]=other"), 10, 0, CancellationToken.None))
+            .Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("find[Device]=test-device")]
+    [InlineData("find[DEVICE]=test-device&find[created_at][$gte]=2024-01-01T00:00:00Z")]
+    public async Task GetMatchingAsync_ACaseVariantOfDevice_MatchesNothingOnListAndCount(string find)
+    {
+        ReturnGroups(new DeviceStatusGroup(CreateApsSnapshot(AidAlgorithm.OpenAps), null, null, null, ReferenceTime));
+        _groupRepo
+            .Setup(r => r.CountAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+        var parsed = DeviceStatusProjectionService.ParseFind(find);
+
+        (await _service.GetMatchingAsync(parsed, 10, 0, CancellationToken.None)).Should().BeEmpty();
+        (await _service.CountMatchingAsync(parsed, CancellationToken.None)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetMatchingAsync_AResidualThatMatchesLittle_ReadsNoMoreThanTheBudget()
+    {
+        var stored = Enumerable.Range(0, 1_000).Select(i =>
+        {
+            var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+            aps.LegacyId = $"5f8d0c1e8a7b4c3d9e{i:x6}";
+            return new DeviceStatusGroup(aps, null, null, null, ReferenceTime);
+        }).ToArray();
+        var read = 0;
+        _groupRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? _, DateTime? _, string? _, int limit, int offset, bool _, CancellationToken _) =>
+            {
+                var page = stored.Skip(offset).Take(limit).ToArray();
+                read += page.Length;
+                return page;
+            });
+        _service.MaxFilterFetch = 300;
+        var parsed = DeviceStatusProjectionService.ParseFind("find[loop][$exists]=true");
+
+        (await _service.GetMatchingAsync(parsed, 1, 0, CancellationToken.None)).Should().BeEmpty();
+        read.Should().Be(300);
+        read = 0;
+        (await _service.CountMatchingAsync(parsed, CancellationToken.None)).Should().Be(0);
+        read.Should().Be(300);
+    }
+
+    [Fact]
+    public async Task GetMatchingAsync_WithAFieldCondition_PagesAfterFiltering()
+    {
+        var statuses = Enumerable.Range(0, 6).Select(i =>
+        {
+            var aps = CreateApsSnapshot(i % 2 == 0 ? AidAlgorithm.Loop : AidAlgorithm.OpenAps);
+            aps.LegacyId = $"s{i}";
+            aps.LoopJson = "{}";
+            return new DeviceStatusGroup(aps, null, null, null, ReferenceTime);
+        }).ToArray();
+        ReturnGroups(statuses);
+
+        var page = await _service.GetMatchingAsync(
+            DeviceStatusProjectionService.ParseFind("find[loop][$exists]=true"), 1, 1, CancellationToken.None);
+
+        page.Select(s => s.Id).Should().Equal("s2");
+    }
+
+    [Fact]
+    public async Task CountMatchingAsync_WithoutAFieldCondition_CountsInTheStore()
+    {
+        _groupRepo.Setup(r => r.CountAsync(
+                new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc), null, "openaps://rpi", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(4);
+
+        (await _service.CountMatchingAsync(
+                DeviceStatusProjectionService.ParseFind(
+                    "find[device]=openaps://rpi&find[created_at][$gte]=2024-01-15T00:00:00Z"),
+                CancellationToken.None))
+            .Should().Be(4);
     }
 
     #endregion
@@ -621,7 +946,7 @@ public class DeviceStatusProjectionServiceTests
             .ReturnsAsync([]);
         _stateSpanRepo
             .Setup(r => r.GetByCategory(
-                It.IsAny<StateSpanCategory>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<StateSpanCategory>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         var result = await _service.GetByIdAsync(extras.Id.ToString(), CancellationToken.None);
@@ -684,39 +1009,6 @@ public class DeviceStatusProjectionServiceTests
     }
 
     [Fact]
-    public void ParseFindQuery_WithDevice_ExtractsDevice()
-    {
-        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(
-            "find[device]=openaps://rpi");
-
-        device.Should().Be("openaps://rpi");
-        from.Should().BeNull();
-        to.Should().BeNull();
-    }
-
-    [Fact]
-    public void ParseFindQuery_WithCreatedAtGte_ExtractsFrom()
-    {
-        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(
-            "find[created_at][$gte]=2024-01-15T00:00:00Z");
-
-        device.Should().BeNull();
-        from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
-        to.Should().BeNull();
-    }
-
-    [Fact]
-    public void ParseFindQuery_WithCreatedAtRange_ExtractsFromAndTo()
-    {
-        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(
-            "find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z");
-
-        device.Should().BeNull();
-        from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
-        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1));
-    }
-
-    [Fact]
     public void ParseFindQuery_WithJsonDevice_ExtractsDevice()
     {
         var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(
@@ -734,17 +1026,6 @@ public class DeviceStatusProjectionServiceTests
             """{"created_at":{"$gte":"2024-01-15T00:00:00Z","$lt":"2024-01-16T00:00:00Z"}}""");
 
         device.Should().BeNull();
-        from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
-        to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1));
-    }
-
-    [Fact]
-    public void ParseFindQuery_WithDeviceAndDateRange_ExtractsAll()
-    {
-        var (device, from, to) = DeviceStatusProjectionService.ParseFindQuery(
-            "find[device]=openaps://rpi&find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z");
-
-        device.Should().Be("openaps://rpi");
         from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc));
         to.Should().Be(new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1));
     }
@@ -817,23 +1098,6 @@ public class DeviceStatusProjectionServiceTests
 
     [Theory]
     [InlineData("""{"device":{"$eq":"loop://iPhone","$ne":"openaps://rpi"}}""")]
-    [InlineData("""{"device":{"$ne":"openaps://rpi"}}""")]
-    [InlineData("""{"created_at":{"$gte":1705276800000,"$ne":1705320000000}}""")]
-    [InlineData("""{"created_at":{"$gte":true}}""")]
-    [InlineData("""{"created_at":{"$gte":9223372036854775807}}""")]
-    [InlineData("""{"created_at":{"$lte":-9223372036854775808}}""")]
-    [InlineData("""{"created_at":{"$gte":1e300}}""")]
-    [InlineData("""{"created_at":{"$gte":"9223372036854775807"}}""")]
-    [InlineData("""{"created_at":99999999999999999}""")]
-    [InlineData("""{"device":{"$ne":"openaps://rpi","$eq":"loop://iPhone"}}""")]
-    [InlineData("""{"device":{},"created_at":{"$gte":1705276800000}}""")]
-    public void ParseDeleteFind_WithUnsupportedJsonCondition_Refuses(string find)
-    {
-        DeviceStatusProjectionService.ParseDeleteFind(find).Should().BeNull();
-    }
-
-    [Theory]
-    [InlineData("""{"device":{"$eq":"loop://iPhone","$ne":"openaps://rpi"}}""")]
     [InlineData("""{"device":{"$ne":"openaps://rpi","$eq":"loop://iPhone"}}""")]
     public void ParseFindQuery_WithDeviceEqualityBesideAnotherOperator_KeepsTheDevice(string find)
     {
@@ -845,91 +1109,12 @@ public class DeviceStatusProjectionServiceTests
     [Theory]
     [InlineData("""{"created_at":{"$gt":1705276800000,"$lt":1705363200000}}""")]
     [InlineData("""{"created_at":{"$lt":1705363200000,"$gt":1705276800000}}""")]
-    [InlineData("find[created_at][$gt]=1705276800000&find[created_at][$lt]=1705363200000")]
-    [InlineData("find[created_at][$lt]=2024-01-16T00:00:00Z&find[created_at][$gt]=2024-01-15T00:00:00Z")]
     public void ParseFindQuery_WithStrictBounds_ExcludesTheBoundaryInstants(string find)
     {
         var (_, from, to) = DeviceStatusProjectionService.ParseFindQuery(find);
 
         from.Should().Be(new DateTime(2024, 1, 15, 0, 0, 0, 1, DateTimeKind.Utc));
         to.Should().Be(new DateTime(2024, 1, 15, 23, 59, 59, 999, DateTimeKind.Utc));
-    }
-
-    [Theory]
-    [InlineData("find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$gt]=2024-01-15T12:00:00Z"
-        + "&find[created_at][$lte]=2024-01-16T00:00:00Z&find[created_at][$lt]=2024-01-15T18:00:00Z")]
-    [InlineData("find[created_at][$lt]=2024-01-15T18:00:00Z&find[created_at][$lte]=2024-01-16T00:00:00Z"
-        + "&find[created_at][$gt]=2024-01-15T12:00:00Z&find[created_at][$gte]=2024-01-15T00:00:00Z")]
-    public void ParseFindQuery_WithQueryStringBoundsOnBothSides_Intersects(string find)
-    {
-        var (_, from, to) = DeviceStatusProjectionService.ParseFindQuery(find);
-
-        from.Should().Be(new DateTime(2024, 1, 15, 12, 0, 0, 1, DateTimeKind.Utc));
-        to.Should().Be(new DateTime(2024, 1, 15, 17, 59, 59, 999, DateTimeKind.Utc));
-    }
-
-    [Fact]
-    public void ParseDeleteFind_WithStrictQueryStringBounds_DeletesTheExactWindow()
-    {
-        var filters = DeviceStatusProjectionService.ParseDeleteFind(
-            "find[device]=openaps://rpi&find[created_at][$gt]=1705276800000&find[created_at][$lt]=1705363200000");
-
-        filters.Should().Be(("openaps://rpi",
-            (DateTime?)new DateTime(2024, 1, 15, 0, 0, 0, 1, DateTimeKind.Utc),
-            (DateTime?)new DateTime(2024, 1, 15, 23, 59, 59, 999, DateTimeKind.Utc)));
-    }
-
-    [Theory]
-    [InlineData("""{"created_at":{"$gt":253402300799999}}""")]
-    [InlineData("""{"created_at":{"$lt":-62135596800000}}""")]
-    [InlineData("""{"created_at":{"$gt":"9999-12-31T23:59:59.9999999Z"}}""")]
-    [InlineData("find[created_at][$gt]=253402300799999")]
-    [InlineData("find[created_at][$lt]=0001-01-01T00:00:00Z")]
-    public void ParseDeleteFind_WithStrictBoundBeyondTheDateRange_Refuses(string find)
-    {
-        DeviceStatusProjectionService.ParseDeleteFind(find).Should().BeNull();
-    }
-
-    [Theory]
-    [InlineData("""{"created_at":{"$gte":253402300799999}}""")]
-    [InlineData("find[created_at][$lte]=0001-01-01T00:00:00Z")]
-    public void ParseDeleteFind_WithInclusiveBoundAtTheDateRangeEdge_Applies(string find)
-    {
-        DeviceStatusProjectionService.ParseDeleteFind(find).Should().NotBeNull();
-    }
-
-    #endregion
-
-    #region CountAsync
-
-    [Fact]
-    public async Task CountAsync_ReturnsTheRepositoryCount()
-    {
-        _groupRepo.Setup(r => r.CountAsync(null, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(12);
-
-        (await _service.CountAsync(null, CancellationToken.None)).Should().Be(12);
-    }
-
-    [Fact]
-    public async Task CountAsync_WithDateFilter_PassesDatesToRepository()
-    {
-        var expectedFrom = new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc);
-        var expectedTo = new DateTime(2024, 1, 16, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(-1);
-        _groupRepo.Setup(r => r.CountAsync(expectedFrom, expectedTo, null, It.IsAny<CancellationToken>())).ReturnsAsync(8);
-
-        var count = await _service.CountAsync(
-            "find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z",
-            CancellationToken.None);
-
-        count.Should().Be(8);
-    }
-
-    [Fact]
-    public async Task CountAsync_WithDeviceFilter_PassesDeviceToRepository()
-    {
-        _groupRepo.Setup(r => r.CountAsync(null, null, "openaps://rpi", It.IsAny<CancellationToken>())).ReturnsAsync(4);
-
-        (await _service.CountAsync("find[device]=openaps://rpi", CancellationToken.None)).Should().Be(4);
     }
 
     #endregion
@@ -940,8 +1125,21 @@ public class DeviceStatusProjectionServiceTests
         _groupRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(groups);
+
+    private void ReturnOverrides(params StateSpan[] spans) =>
+        _stateSpanRepo
+            .Setup(r => r.GetByCategory(
+                StateSpanCategory.Override, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(spans);
+
+    private static StateSpan OverrideSpan(int startMinutes, int? endMinutes) => new()
+    {
+        Category = StateSpanCategory.Override,
+        StartTimestamp = ReferenceTime.AddMinutes(startMinutes),
+        EndTimestamp = endMinutes is { } end ? ReferenceTime.AddMinutes(end) : null,
+    };
 
     private void ReturnHistory(params HistoryRecord<DeviceStatusGroup>[] page) =>
         _groupRepo

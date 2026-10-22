@@ -86,17 +86,42 @@ public class Ar2Tests
         Assert.All(predicted, p => Assert.InRange(p.GetProperty("mgdl").GetInt32(), 36, 400));
     }
 
-    private async Task<JsonElement> GetAr2PropertyAsync(double mgdlFiveMinutesAgo, double mgdlNow)
+    [Fact]
+    public async Task PropertiesForecast_FromOneMinuteReadings_FollowsTheFiveMinuteTrend()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var ddata = new DData
-        {
-            Sgvs = new List<Entry>
+        var readings = Enumerable
+            .Range(0, 20)
+            .Select(m => new Entry { Type = "sgv", Mills = now - m * 60 * 1000, Mgdl = 200 - 2 * m })
+            .ToList();
+
+        var ar2 = await GetAr2PropertyAsync(readings);
+
+        // Buckets {200,198,196} and {194..186} give Curr = ln(198/140) and Prev = ln(190/140).
+        var predicted = ar2
+            .GetProperty("forecast")
+            .GetProperty("predicted")
+            .EnumerateArray()
+            .Select(p => p.GetProperty("mgdl").GetInt32());
+        Assert.Equal(new[] { 203, 207, 209, 210, 210, 209 }, predicted);
+        Assert.Equal("BG 15m: 209 mg/dl", ar2.GetProperty("displayLine").GetString());
+    }
+
+    private Task<JsonElement> GetAr2PropertyAsync(double mgdlFiveMinutesAgo, double mgdlNow)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        return GetAr2PropertyAsync(
+            new List<Entry>
             {
                 new() { Type = "sgv", Mills = now - 5 * 60 * 1000, Mgdl = mgdlFiveMinutesAgo },
                 new() { Type = "sgv", Mills = now, Mgdl = mgdlNow },
-            },
-        };
+            }
+        );
+    }
+
+    private async Task<JsonElement> GetAr2PropertyAsync(List<Entry> sgvs)
+    {
+        var ddata = new DData { Sgvs = sgvs };
 
         var ddataService = new Mock<IDDataService>();
         ddataService
@@ -177,111 +202,5 @@ public class Ar2Tests
 
         // Assert
         Assert.True(result);
-    }
-
-    [Fact]
-    public async Task GenerateForecastConeAsync_ShouldReturnEmptyList_WhenCannotForecast()
-    {
-        // Arrange
-        var ddata = new DData();
-        var bgNowProperties = new Dictionary<string, object>(); // Missing required properties
-        var deltaProperties = new Dictionary<string, object>();
-
-        // Act
-        var result = await _ar2Service.GenerateForecastConeAsync(
-            ddata,
-            bgNowProperties,
-            deltaProperties,
-            cancellationToken: CancellationToken.None
-        );
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Empty(result);
-    }
-
-    [Fact]
-    public async Task GenerateForecastConeAsync_ShouldGenerateConePoints_WithValidData()
-    {
-        // Arrange
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var before = now - (5 * 60 * 1000);
-
-        var ddata = new DData
-        {
-            Sgvs = new List<Entry>
-            {
-                new() { Mills = before, Mgdl = 100 },
-                new() { Mills = now, Mgdl = 105 },
-            },
-        };
-
-        var bgNowProperties = new Dictionary<string, object> { ["mean"] = 105.0, ["mills"] = now };
-
-        var deltaProperties = new Dictionary<string, object> { ["mean5MinsAgo"] = 100.0 };
-
-        // Act
-        var result = await _ar2Service.GenerateForecastConeAsync(
-            ddata,
-            bgNowProperties,
-            deltaProperties,
-            2.0,
-            CancellationToken.None
-        );
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.NotEmpty(result);
-
-        // Should generate cone points for 13 steps (from legacy CONE_STEPS array)
-        // Each step generates 2 points (positive and negative cone), so 26 total
-        Assert.Equal(26, result.Count);
-
-        // All points should have cyan color
-        Assert.All(result, point => Assert.Equal("cyan", point.Color));
-
-        // Points should have valid mg/dL values (between 36-400)
-        Assert.All(
-            result,
-            point =>
-            {
-                Assert.True(point.Mgdl >= 36);
-                Assert.True(point.Mgdl <= 400);
-            }
-        );
-    }
-
-    [Fact]
-    public async Task GenerateForecastConeAsync_ShouldGenerateLine_WhenConeFactorZero()
-    {
-        // Arrange - test case from ar2.test.js "should plot a line if coneFactor is 0"
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var before = now - (5 * 60 * 1000);
-
-        var ddata = new DData
-        {
-            Sgvs = new List<Entry>
-            {
-                new() { Mills = before, Mgdl = 100 },
-                new() { Mills = now, Mgdl = 105 },
-            },
-        };
-
-        var bgNowProperties = new Dictionary<string, object> { ["mean"] = 105.0, ["mills"] = now };
-
-        var deltaProperties = new Dictionary<string, object> { ["mean5MinsAgo"] = 100.0 };
-
-        // Act - coneFactor of 0 should generate a line (only positive points)
-        var result = await _ar2Service.GenerateForecastConeAsync(
-            ddata,
-            bgNowProperties,
-            deltaProperties,
-            0.0,
-            CancellationToken.None
-        );
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal(13, result.Count); // Only 13 points (no negative cone points)
     }
 }

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Mappers;
 
@@ -64,6 +65,12 @@ internal sealed class GlookoSyncContext
 
     /// <summary>The patient code every patient-scoped Glooko URL is built from.</summary>
     internal string? PatientCode => UserData?.GlookoCode;
+
+    /// <summary>
+    ///     The SSV2 resume cursors this run's scans reached, by resource, awaiting the publish of the
+    ///     records fetched under them.
+    /// </summary>
+    internal Dictionary<string, ConnectorSyncCursor> PendingSsv2Cursors { get; } = new(StringComparer.Ordinal);
 
     /// <summary>Meter units from the V3 profile; fetched once per run.</summary>
     internal string? MeterUnits { get; set; }

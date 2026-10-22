@@ -1,8 +1,10 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Legacy;
@@ -198,9 +200,8 @@ public class TimeQueryFindTests
         string? captured = null;
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(e => e.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .Callback<string, int, int, CancellationToken>((find, _, _, _) => captured = find)
+            .Setup(e => e.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<EntryQuery, CancellationToken>((query, _) => captured = query.Find)
             .ReturnsAsync([]);
         var controller = Build(
             "?token=x&secret=y&_=1&count=5&find[sgv][$gte]=120", entryService: entries.Object);
@@ -229,9 +230,8 @@ public class TimeQueryFindTests
             });
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(e => e.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .Callback<string, int, int, CancellationToken>((find, _, _, _) => captured = find)
+            .Setup(e => e.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+            .Callback<EntryQuery, CancellationToken>((query, _) => captured = query.Find)
             .ReturnsAsync([]);
         var controller = Build("?token=x", braces.Object, entries.Object);
 
@@ -240,6 +240,70 @@ public class TimeQueryFindTests
         var parsed = FindQuery.Parse(captured);
         parsed.Matches(Sgv("m", "2015-04-02&x+y%z|(a)", 100)).Should().BeTrue();
         parsed.Matches(Sgv("n", "2015-04-09&x+y%z|(a)", 100)).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("20{14..15}", "-04-02T{13..14}", "?find[sgv][$gte]=120&token=x&secret=y&_=1&type=mbg&device=ignored", "b,e")]
+    [InlineData("2015-04", null, "?find[dateString][$regex]=T13&find[dateString][$regex]=T14", "")]
+    [InlineData("2015-04", null, "?find[type][$regex]=%2F%2Fsgv%2Fi%2F", "")]
+    public async Task Echo_AppliedQueryMatchesTheNormalTimesQuery(
+        string prefix, string? regex, string query, string expectedIds)
+    {
+        var controller = Build(query);
+
+        ActionResult<TimeQueryEcho> result;
+        if (regex == null)
+        {
+            result = controller.GetTimeQueryEchoWithPrefix(prefix);
+        }
+        else
+        {
+            result = controller.GetTimeQueryEchoWithPrefixAndRegex(prefix, regex);
+        }
+
+        var response = result.Result.Should().BeOfType<OkObjectResult>().Which;
+        var echo = response.Value.Should().BeOfType<TimeQueryEcho>().Which;
+
+        string echoJson = JsonSerializer.Serialize(echo.Query);
+        var echoConditions = FindQuery.Parse(echoJson);
+        string[] expectedEntryIds = Array.Empty<string>();
+        if (expectedIds.Length != 0)
+        {
+            expectedEntryIds = expectedIds.Split(',');
+        }
+        Entries.Where(echoConditions.Matches).Select(e => e.Id).Should().BeEquivalentTo(expectedEntryIds);
+
+        ActionResult normalResult;
+        if (regex == null)
+        {
+            normalResult = await controller.GetTimeBasedEntriesWithPrefix(prefix, count: 100);
+        }
+        else
+        {
+            normalResult = await controller.GetTimeBasedEntriesWithPrefixAndRegex(prefix, regex, count: 100);
+        }
+        IdsOf(normalResult).Should().BeEquivalentTo(expectedEntryIds);
+    }
+
+    [Theory]
+    [InlineData("{0..2147483647}", null)]
+    [InlineData("{a,b}{c,d}{e,f}{g,h}{i,j}{k,l}{m,n}{o,p}{q,r}{s,t}", null)]
+    [InlineData("2015-04", "(?=T13)T1")]
+    [InlineData("2015-04", @"(T1)\1")]
+    public async Task Times_RefusesAPatternItCannotEvaluate(string prefix, string? regex)
+    {
+        var controller = Build("?token=x");
+
+        var times = regex is null
+            ? await controller.GetTimeBasedEntriesWithPrefix(prefix, count: 100)
+            : await controller.GetTimeBasedEntriesWithPrefixAndRegex(prefix, regex, count: 100);
+        var slice = await controller.GetSlicedDataWithAll(
+            "entries", "dateString", "sgv", prefix, regex ?? "T13", count: 100);
+        var echo = controller.GetTimeQueryEchoWithPrefixAndRegex(prefix, regex ?? "T13");
+
+        times.Should().BeOfType<BadRequestObjectResult>();
+        slice.Should().BeOfType<BadRequestObjectResult>();
+        echo.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     private static string[] IdsOf(ActionResult result) =>
@@ -256,19 +320,17 @@ public class TimeQueryFindTests
         var entries = entryService ?? FakeEntries();
         var treatments = new Mock<ITreatmentService>();
         treatments
-            .Setup(t => t.GetTreatmentsWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync((int _, int _, string? find, bool _, CancellationToken _) =>
+            .Setup(t => t.QueryTreatmentsAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TreatmentQuery query, CancellationToken _) =>
             {
-                var parsed = FindQuery.Parse(find);
+                var parsed = FindQuery.Parse(query.Find);
                 return Treatments.Where(parsed.Matches).ToList().AsEnumerable();
             });
 
         var deviceStatuses = new DeviceStatusProjectionService(
             Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
                     It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>())
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())
                 == Task.FromResult<IReadOnlyList<Nocturne.Core.Models.V4.DeviceStatusGroup>>(
                     Array.Empty<Nocturne.Core.Models.V4.DeviceStatusGroup>())),
             new Mock<IApsSnapshotRepository>().Object,
@@ -299,11 +361,10 @@ public class TimeQueryFindTests
     {
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(e => e.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string find, int _, int _, CancellationToken _) =>
+            .Setup(e => e.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((EntryQuery query, CancellationToken _) =>
             {
-                var parsed = FindQuery.Parse(find);
+                var parsed = FindQuery.Parse(query.Find);
                 return Entries.Where(parsed.Matches).ToList().AsEnumerable();
             });
         return entries.Object;

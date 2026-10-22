@@ -1,9 +1,11 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -16,7 +18,7 @@ public class GoogleHealthWorkerTests
     [Fact]
     public async Task Imports_are_concurrent_bounded_and_keep_claims_until_completion_or_shutdown()
     {
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinatorStore.Coordinator();
         var tenants = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToArray();
         var releases = tenants.ToDictionary(id => id, _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
         var started = Channel.CreateUnbounded<Guid>();
@@ -44,7 +46,7 @@ public class GoogleHealthWorkerTests
         });
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
-            coordinator, NullLogger<GoogleHealthWorker>.Instance);
+            coordinator, ConfiguredPlatform, NullLogger<GoogleHealthWorker>.Instance);
         foreach (var tenant in tenants) Assert.True(await coordinator.QueueAsync(tenant, 1, default));
         await worker.StartAsync(default);
         try
@@ -83,7 +85,7 @@ public class GoogleHealthWorkerTests
     public async Task Scheduled_run_conflict_keeps_manual_request_until_retry_shutdown_or_cancellation(bool shutdown, bool cancel)
     {
         var tenant = Guid.NewGuid();
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinatorStore.Coordinator();
         var conflicted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var retried = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -117,7 +119,7 @@ public class GoogleHealthWorkerTests
         services.AddScoped<ITenantAccessor, TenantAccessor>();
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
-            coordinator, NullLogger<GoogleHealthWorker>.Instance);
+            coordinator, ConfiguredPlatform, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
         var scheduled = await coordinator.AcquireAsync(tenant, default);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -176,7 +178,7 @@ public class GoogleHealthWorkerTests
     public async Task Infrastructure_failure_preserves_request_for_another_worker(string stage)
     {
         var tenant = Guid.NewGuid();
-        var coordinator = new GoogleHealthCoordinator();
+        var coordinator = InMemoryGoogleHealthCoordinatorStore.Coordinator();
         var failed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Task<T> Fail<T>()
         {
@@ -202,7 +204,7 @@ public class GoogleHealthWorkerTests
         services.AddScoped<ITenantAccessor, TenantAccessor>();
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
-            coordinator, NullLogger<GoogleHealthWorker>.Instance);
+            coordinator, ConfiguredPlatform, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await worker.StartAsync(default);
@@ -220,6 +222,43 @@ public class GoogleHealthWorkerTests
         }
         finally { await worker.StopAsync(default); }
     }
+
+    [Fact]
+    public async Task An_unconfigured_instance_drops_queued_imports_without_syncing_or_touching_health()
+    {
+        var tenant = Guid.NewGuid();
+        var coordinator = InMemoryGoogleHealthCoordinatorStore.Coordinator();
+        var sync = new Mock<IConnectorSyncService>();
+        var configurations = new Mock<IConnectorConfigurationService>();
+        var services = new ServiceCollection();
+        services.AddSingleton(Mock.Of<ITenantService>());
+        services.AddSingleton(sync.Object);
+        services.AddSingleton(configurations.Object);
+        services.AddScoped<ITenantAccessor, TenantAccessor>();
+        using var provider = services.BuildServiceProvider();
+        using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
+            coordinator, Options.Create(new GoogleHealthPlatformOptions()), NullLogger<GoogleHealthWorker>.Instance);
+        Assert.True(await coordinator.QueueAsync(tenant, 1, default));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await worker.StartAsync(default);
+        try
+        {
+            while (await coordinator.ProgressAsync(tenant, timeout.Token) is not null)
+                await Task.Delay(10, timeout.Token);
+        }
+        finally { await worker.StopAsync(default); }
+
+        sync.VerifyNoOtherCalls();
+        configurations.VerifyNoOtherCalls();
+    }
+
+    private static readonly IOptions<GoogleHealthPlatformOptions> ConfiguredPlatform = Options.Create(
+        new GoogleHealthPlatformOptions
+        {
+            ClientId = "synthetic.apps.googleusercontent.com",
+            ClientSecret = "synthetic-secret",
+            RedirectUri = "https://example.test" + GoogleHealthPlatformOptions.CallbackPath
+        });
 
     private sealed class TenantAccessor : ITenantAccessor
     {

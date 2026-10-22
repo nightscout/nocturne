@@ -188,6 +188,19 @@ When the human is ready, they open the site and register the first passkey throu
 - **`BASE_DOMAIN` is unset.** The API resolves tenants as `{slug}.{BASE_DOMAIN}`, and the WebSocket bridge requires it. If it's empty, host→tenant resolution fails and the dashboard bounces to `/setup` (and the bridge logs `BASE_DOMAIN is required`). Set it in `.env` to the domain you serve Nocturne on, for **both** the API and web containers, then recreate them.
 - **Single-tenant install served at the base domain.** If your one tenant lives at the apex (`https://<BASE_DOMAIN>/`, no subdomain), update to the latest image — older builds reported `setup_required` for `/api/v4/status` on the apex and bounced configured single-tenant installs to `/setup`.
 
+**Redirected to `/auth/recovery`.** A member of the tenant has no way left to sign in (no passkey, and no working sign-in provider), so the tenant is in recovery mode until they register a passkey. The member can sign in with one of their own recovery codes. Otherwise someone has to issue them a one-time recovery code: an administrator who can still sign in sees the locked-out members on the `/auth/recovery` page and can create a link there. If nobody who can sign in has that authority (the only owner is the one locked out, or the account is an instance administrator or also belongs to another tenant), the operator issues the code with the instance key:
+
+```bash
+KEY_HASH=$(printf %s "$INSTANCE_KEY" | sha256sum | cut -d' ' -f1)
+H=(-H "X-Instance-Key: $KEY_HASH" -H 'X-Instance-Service: nocturne-operator')
+curl -fsS "${H[@]}" "https://$BASE_DOMAIN/api/v4/admin/tenants"               # find the tenant id
+curl -fsS "${H[@]}" "https://$BASE_DOMAIN/api/v4/admin/tenants/<tenant-id>"   # find the member's subjectId
+curl -fsS "${H[@]}" -X POST \
+  "https://$BASE_DOMAIN/api/v4/admin/tenants/<tenant-id>/members/<subject-id>/recovery-code"
+```
+
+Send the member `https://<tenant-host>/auth/recovery?code=<code>`. The code works once and expires after 24 hours. Using it cancels any recovery codes the member still had.
+
 ### Generating locally
 
 If you have the .NET 10 SDK and Aspire CLI installed, you can generate the production bundle from source:

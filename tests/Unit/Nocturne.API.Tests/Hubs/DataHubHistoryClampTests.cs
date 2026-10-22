@@ -19,6 +19,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
@@ -42,7 +43,7 @@ public class DataHubHistoryClampTests
         public HttpContext? HttpContext { get; set; }
     }
 
-    /// <summary>What the read context and the scoped DbContext said at the moment entries were read.</summary>
+    /// <summary>What the read context and a context of the handshake scope said at the moment entries were read.</summary>
     private sealed class ReadObservation
     {
         public bool? CategoryReadContextClamped { get; set; }
@@ -57,9 +58,9 @@ public class DataHubHistoryClampTests
         var treatmentService = new Mock<ITreatmentService>();
 
         var services = new ServiceCollection();
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
-        services.AddDbContext<NocturneDbContext>(options =>
-            options.UseInMemoryDatabase($"DataHubHistoryClamp_{Guid.NewGuid()}"));
+        var database = $"DataHubHistoryClamp_{Guid.NewGuid()}";
+        services.AddDbContextFactory<NocturneDbContext>(options => options.UseInMemoryDatabase(database));
+        services.AddDataServices();
         services.AddSingleton(entryService.Object);
         services.AddSingleton(treatmentService.Object);
         services.AddSingleton(new DeviceStatusProjectionService(
@@ -72,8 +73,8 @@ public class DataHubHistoryClampTests
             NullLogger<DeviceStatusProjectionService>.Instance));
         var requestServices = services.BuildServiceProvider().CreateScope().ServiceProvider;
 
-        // The handshake request pinned its scoped DbContext before any credential was known.
-        var db = requestServices.GetRequiredService<NocturneDbContext>();
+        // A context the handshake request created before any credential was known.
+        var db = requestServices.GetRequiredService<INocturneDbContextFactory>().CreateAsync().AsTask().GetAwaiter().GetResult();
         var readContext = requestServices.GetRequiredService<ICategoryReadContext>();
 
         entryService
@@ -185,6 +186,40 @@ public class DataHubHistoryClampTests
     }
 
     [Fact]
+    public async Task A_clamped_credential_subscribes_to_no_category()
+    {
+        var (hub, _, authorizer, _) = CreateHub();
+        authorizer
+            .Setup(a => a.AuthorizeTokenAsync("tok", Tenant, Scope.GlucoseRead))
+            .ReturnsAsync(InBand(historyClamped: true));
+        await hub.Authorize(new AuthorizeRequest { Token = "tok" });
+        var groups = Mock.Get(hub.Groups);
+        groups.Invocations.Clear();
+
+        var result = await hub.Subscribe(new StorageSubscribeRequest());
+
+        groups.Verify(
+            g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        System.Text.Json.JsonSerializer.Serialize(result).Should().Contain("\"collections\":[]");
+    }
+
+    [Fact]
+    public async Task An_unclamped_credential_subscribes_to_the_categories_it_holds()
+    {
+        var (hub, _, authorizer, _) = CreateHub();
+        authorizer
+            .Setup(a => a.AuthorizeTokenAsync("tok", Tenant, Scope.GlucoseRead))
+            .ReturnsAsync(InBand(historyClamped: false));
+        await hub.Authorize(new AuthorizeRequest { Token = "tok" });
+
+        var result = await hub.Subscribe(new StorageSubscribeRequest());
+
+        System.Text.Json.JsonSerializer.Serialize(result)
+            .Should().Contain("\"collections\":[\"entries\",\"glucose\"]");
+    }
+
+    [Fact]
     public async Task A_later_in_band_authorization_does_not_replace_a_clamped_grant()
     {
         var (hub, _, authorizer, seen) = CreateHub();
@@ -213,7 +248,7 @@ public class DataHubHistoryClampTests
 
         httpContext.RequestServices.GetRequiredService<ICategoryReadContext>()
             .IsHistoryClamped.Should().BeTrue();
-        httpContext.RequestServices.GetRequiredService<NocturneDbContext>()
+        httpContext.RequestServices.GetRequiredService<TenantReadContext>()
             .HistoryClamped.Should().BeTrue();
     }
 

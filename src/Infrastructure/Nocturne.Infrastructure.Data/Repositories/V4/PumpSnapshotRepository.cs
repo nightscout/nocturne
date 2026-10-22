@@ -27,7 +27,7 @@ public class PumpSnapshotRepository : SyncUpsertRepositoryBase<PumpSnapshot, Pum
     /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
     // logger is unused but retained for DI + direct test construction.
     public PumpSnapshotRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IAuditContext auditContext,
         ILogger<PumpSnapshotRepository> logger,
         IV4RecordBroadcaster<PumpSnapshot>? broadcaster = null)

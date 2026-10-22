@@ -8,6 +8,7 @@ using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -63,6 +64,34 @@ public class TempBasalControllerTests
         created[0].StartTimestamp.Should().Be(T0.UtcDateTime);
         created[0].EndTimestamp.Should().Be(T0.UtcDateTime.AddMinutes(30));
         created[0].Origin.Should().Be(TempBasalOrigin.Algorithm);
+    }
+
+    [Theory]
+    [InlineData(TempBasalOrigin.Algorithm, true)]
+    [InlineData(TempBasalOrigin.Manual, false)]
+    [InlineData(TempBasalOrigin.Scheduled, null)]
+    public async Task CreateTempBasals_StampsAutomaticFromAnExplicitOrigin(TempBasalOrigin origin, bool? expected)
+    {
+        var request = Request();
+        request.Origin = origin;
+
+        var result = await _controller.CreateTempBasals([request], CancellationToken.None);
+
+        var created = ((ObjectResult)result.Result!).Value.Should().BeOfType<TempBasal[]>().Subject;
+        TempBasalAutomaticFlag.Of(created[0].AdditionalProperties).Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task CreateTempBasals_LeavesAutomaticUnstamped_WhenOriginIsOmitted()
+    {
+        var request = Request();
+        request.Origin = null;
+
+        var result = await _controller.CreateTempBasals([request], CancellationToken.None);
+
+        var created = ((ObjectResult)result.Result!).Value.Should().BeOfType<TempBasal[]>().Subject;
+        created[0].Origin.Should().Be(TempBasalOrigin.Manual);
+        TempBasalAutomaticFlag.Of(created[0].AdditionalProperties).Should().BeNull();
     }
 
     [Fact]

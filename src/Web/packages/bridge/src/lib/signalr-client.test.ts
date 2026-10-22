@@ -271,3 +271,108 @@ describe("SignalRClient connection lifecycle", () => {
     expect(signalr.buildConnection).toHaveBeenCalledTimes(11);
   });
 });
+
+describe("SignalRClient reconnect confirmation", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    signalr.buildConnection.mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  function confirmedClient(confirmReconnect: () => Promise<boolean>): SignalRClient {
+    return new SignalRClient({} as MessageTranslator, {
+      hubUrl: "http://api/hubs/data",
+      reconnectAttempts: 3,
+      reconnectDelay: 100,
+      maxReconnectDelay: 1000,
+      instanceKey: "test-instance-key",
+      confirmReconnect,
+    });
+  }
+
+  it("backs off from a hub that closes the connection right after its handshake, as from a failed connect", async () => {
+    // The API completes the handshake, then closes a connection whose host resolves to a tenant
+    // other than the expected one; the invocation in flight fails with it.
+    const refusing = () => {
+      const hub = new FakeHubConnection();
+      hub.invoke = vi.fn(async () => {
+        hub.emitClose();
+        throw new Error("Invocation canceled due to the underlying connection being closed.");
+      });
+      return hub;
+    };
+    queueConnections(...Array.from({ length: 4 }, refusing));
+    const client = confirmedClient(async () => true);
+
+    await client.connect();
+    expect(signalr.buildConnection).toHaveBeenCalledTimes(1);
+
+    for (const delay of [100, 200, 400]) {
+      const built = signalr.buildConnection.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(signalr.buildConnection).toHaveBeenCalledTimes(built);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signalr.buildConnection).toHaveBeenCalledTimes(built + 1);
+    }
+    await client.disconnect();
+  });
+
+  it("reconnects a lost connection only once its tenant is confirmed", async () => {
+    const first = new FakeHubConnection();
+    const second = new FakeHubConnection();
+    queueConnections(first, second);
+    const confirmation = deferred<boolean>();
+    const confirmReconnect = vi.fn(() => confirmation.promise);
+    const client = confirmedClient(confirmReconnect);
+    await client.connect();
+
+    first.emitClose();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(confirmReconnect).toHaveBeenCalledTimes(1);
+    expect(second.start).not.toHaveBeenCalled();
+
+    confirmation.resolve(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.isConnected()).toBe(true);
+  });
+
+  it("does not reconnect while its tenant goes unconfirmed, and asks again", async () => {
+    const first = new FakeHubConnection();
+    const second = new FakeHubConnection();
+    queueConnections(first, second);
+    const confirmReconnect = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const client = confirmedClient(confirmReconnect);
+    await client.connect();
+
+    first.emitClose();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(second.start).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(confirmReconnect).toHaveBeenCalledTimes(2);
+    expect(client.isConnected()).toBe(true);
+  });
+
+  it("stops retrying once its tenant is gone and the client is disconnected", async () => {
+    const first = new FakeHubConnection();
+    queueConnections(first);
+    const held: { client?: SignalRClient } = {};
+    const confirmReconnect = vi.fn(async () => {
+      await held.client!.disconnect();
+      return false;
+    });
+    const client = confirmedClient(confirmReconnect);
+    held.client = client;
+    await client.connect();
+
+    first.emitClose();
+    await vi.advanceTimersByTimeAsync(10000);
+
+    expect(confirmReconnect).toHaveBeenCalledTimes(1);
+    expect(signalr.buildConnection).toHaveBeenCalledTimes(1);
+  });
+});

@@ -36,8 +36,8 @@ vi.mock("$lib/stores/realtime-store.svelte", () => ({
   tryGetRealtimeStore: () => store,
 }));
 
-vi.mock("$lib/stores/settings-store.svelte", () => ({
-  getSettingsStore: () => settings,
+vi.mock("$api/ui-settings.remote", () => ({
+  getUiSettings: () => remoteQuery(() => settings),
 }));
 
 const summary = vi.hoisted(() => ({ current: undefined as { mills: number; status: string } | undefined }));
@@ -110,6 +110,30 @@ describe("CurrentBGDisplay", () => {
     render(CurrentBGDisplay, { showPills: false });
 
     await expect.element(page.getByText("123", { exact: true })).toBeInTheDocument();
+  });
+
+  it("hides the tracker pills while the tenant's settings turn them off", async () => {
+    await page.viewport(1280, 900);
+    dashboardTopWidgets.hydrate([WidgetId.TirChart, WidgetId.Tdd]);
+    settings.features.trackerPills.enabled = false;
+    store.trackerDefinitions = [
+      { id: "def-1", name: "Sensor", category: "Sensor", dashboardVisibility: "Always", lifespanHours: 240 },
+    ];
+    store.trackerInstances = [
+      {
+        id: "inst-1",
+        definitionId: "def-1",
+        definitionName: "Sensor",
+        category: "Sensor",
+        startedAt: new Date(now - 48 * 3600_000).toISOString(),
+        ageHours: 48,
+        isActive: true,
+      },
+    ];
+    render(CurrentBGDisplay, { showPills: false });
+
+    await expect.element(page.getByText("123")).toBeVisible();
+    expect(page.getByRole("button", { name: /Sensor/ }).elements()).toHaveLength(0);
   });
 
   it("loads the tracker completion dialog when a tracker pill is first completed", async () => {

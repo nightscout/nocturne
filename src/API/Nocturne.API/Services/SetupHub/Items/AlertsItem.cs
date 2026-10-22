@@ -1,6 +1,7 @@
 using Nocturne.Core.Contracts.SetupHub;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.SetupHub.Items;
 
@@ -9,9 +10,13 @@ namespace Nocturne.API.Services.SetupHub.Items;
 /// A rule alone is not enough: nothing says its alerts reach anyone. A helper is offered it too and
 /// leaves it for the person they hand over to, since a helper cannot confirm a test.
 /// </summary>
-public class AlertsItem(NocturneDbContext db) : ISetupHubItem
+public class AlertsItem(INocturneDbContextFactory contexts) : ISetupHubItem
 {
     public SetupHubItemKey Key => SetupHubItemKey.Alerts;
 
-    public Task<bool> WorksAsync(CancellationToken ct) => AlertDeliveryCheck.VerifiedAsync(db, ct);
+    public async Task<bool> WorksAsync(CancellationToken ct)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        return await AlertDeliveryCheck.VerifiedAsync(db, ct);
+    }
 }

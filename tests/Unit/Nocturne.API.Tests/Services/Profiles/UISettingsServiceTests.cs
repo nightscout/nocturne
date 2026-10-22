@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Profiles;
@@ -608,6 +609,6 @@ public class UISettingsServiceTests
 
     private static UISettingsService NewService(NocturneDbContext context)
     {
-        return new UISettingsService(context, NullLogger<UISettingsService>.Instance);
+        return new UISettingsService(context.AsFactory(), NullLogger<UISettingsService>.Instance);
     }
 }

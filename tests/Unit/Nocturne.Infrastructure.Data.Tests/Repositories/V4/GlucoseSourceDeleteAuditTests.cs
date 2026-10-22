@@ -131,7 +131,7 @@ public class CalibrationRepositorySourceDeleteTests : GlucoseSourceDeleteAuditTe
 
     protected override string AuditEntityType => "Calibration";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new CalibrationRepository(contextFactory, auditContext, Logger<CalibrationRepository>());
 
     protected override CalibrationEntity NewRow(Guid id, DateTime timestamp, string? dataSource, string? device) =>
@@ -159,7 +159,7 @@ public class MeterGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAuditT
 
     protected override string AuditEntityType => "MeterGlucose";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new MeterGlucoseRepository(contextFactory, auditContext, Logger<MeterGlucoseRepository>());
 
     protected override MeterGlucoseEntity NewRow(Guid id, DateTime timestamp, string? dataSource, string? device) =>
@@ -188,7 +188,7 @@ public class SensorGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAudit
 
     protected override string AuditEntityType => "SensorGlucose";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new SensorGlucoseRepository(
             contextFactory,
             new Mock<IDeduplicationService>().Object,

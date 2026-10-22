@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -11,15 +12,14 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class UserFoodFavoriteRepository : IUserFoodFavoriteRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UserFoodFavoriteRepository"/> class.
     /// </summary>
-    /// <param name="context">The database context.</param>
-    public UserFoodFavoriteRepository(NocturneDbContext context)
+    public UserFoodFavoriteRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <summary>
@@ -33,7 +33,8 @@ public class UserFoodFavoriteRepository : IUserFoodFavoriteRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entities = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await db
             .Set<UserFoodFavoriteEntity>()
             .AsNoTracking()
             .Where(f => f.UserId == userId)
@@ -58,7 +59,8 @@ public class UserFoodFavoriteRepository : IUserFoodFavoriteRepository
         CancellationToken cancellationToken = default
     )
     {
-        return await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db
             .Set<UserFoodFavoriteEntity>()
             .AsNoTracking()
             .AnyAsync(f => f.UserId == userId && f.FoodId == foodId, cancellationToken);
@@ -77,7 +79,11 @@ public class UserFoodFavoriteRepository : IUserFoodFavoriteRepository
         CancellationToken cancellationToken = default
     )
     {
-        var exists = await IsFavoriteAsync(userId, foodId, cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var exists = await db
+            .Set<UserFoodFavoriteEntity>()
+            .AsNoTracking()
+            .AnyAsync(f => f.UserId == userId && f.FoodId == foodId, cancellationToken);
         if (exists)
         {
             return null;
@@ -85,8 +91,8 @@ public class UserFoodFavoriteRepository : IUserFoodFavoriteRepository
 
         var entity = new UserFoodFavoriteEntity { UserId = userId, FoodId = foodId };
 
-        _context.Set<UserFoodFavoriteEntity>().Add(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        db.Set<UserFoodFavoriteEntity>().Add(entity);
+        await db.SaveChangesAsync(cancellationToken);
         return new UserFoodFavorite
         {
             Id = entity.Id,
@@ -108,7 +114,8 @@ public class UserFoodFavoriteRepository : IUserFoodFavoriteRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db
             .Set<UserFoodFavoriteEntity>()
             .FirstOrDefaultAsync(f => f.UserId == userId && f.FoodId == foodId, cancellationToken);
 
@@ -117,8 +124,8 @@ public class UserFoodFavoriteRepository : IUserFoodFavoriteRepository
             return false;
         }
 
-        _context.Set<UserFoodFavoriteEntity>().Remove(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        db.Set<UserFoodFavoriteEntity>().Remove(entity);
+        await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 }

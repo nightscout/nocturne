@@ -8,6 +8,7 @@ using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.SetupHub;
 using Nocturne.API.Services.SetupHub.Items;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.SetupHub;
 using Nocturne.Core.Contracts.V4;
@@ -31,14 +32,14 @@ public class TherapySetupServiceTests : IDisposable
 
     private readonly SqliteTestDatabase _database;
     private readonly NocturneDbContext _db;
-    private readonly TestTenantDbContextFactory _factory;
+    private readonly TestNocturneDbContextFactory _factory;
     private readonly IAuditContext _audit = new SystemAuditContext();
 
     public TherapySetupServiceTests()
     {
         _database = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
         _db = _database.CreateContext();
-        _factory = new TestTenantDbContextFactory(_db);
+        _factory = new TestNocturneDbContextFactory(_db);
     }
 
     public void Dispose()
@@ -56,7 +57,7 @@ public class TherapySetupServiceTests : IDisposable
         patients.Setup(p => p.GetAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PatientRecord { Timezone = "Australia/Melbourne" });
         return new TherapySetupService(
-            _db,
+            _factory,
             SettingsRepo,
             new BasalScheduleRepository(_factory, _audit, NullLogger<BasalScheduleRepository>.Instance),
             new CarbRatioScheduleRepository(_factory, _audit, NullLogger<CarbRatioScheduleRepository>.Instance),
@@ -65,7 +66,7 @@ public class TherapySetupServiceTests : IDisposable
             patients.Object);
     }
 
-    private SetupHubService Hub() => new(_db, [new TherapyItem(_db)]);
+    private SetupHubService Hub() => new(_factory, [new TherapyItem(_factory)]);
 
     private ProfileDecomposer Decomposer() => new(
         SettingsRepo,
@@ -73,6 +74,7 @@ public class TherapySetupServiceTests : IDisposable
         new CarbRatioScheduleRepository(_factory, _audit, NullLogger<CarbRatioScheduleRepository>.Instance),
         new SensitivityScheduleRepository(_factory, _audit, NullLogger<SensitivityScheduleRepository>.Instance),
         new TargetRangeScheduleRepository(_factory, _audit, NullLogger<TargetRangeScheduleRepository>.Instance),
+        TempBasalTestDeps.NoReresolution(),
         NullLogger<ProfileDecomposer>.Instance);
 
     private static readonly DateTime ProfileMadeAt = new(2026, 3, 1, 8, 0, 0, DateTimeKind.Utc);

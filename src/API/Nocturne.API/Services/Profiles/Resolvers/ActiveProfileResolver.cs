@@ -1,219 +1,104 @@
-using System.Globalization;
-using System.Text.Json;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
-using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
 /// <summary>
-/// Resolves the active profile name and CircadianPercentageProfile adjustments at a given time
-/// by querying Profile <see cref="StateSpan"/> records via <see cref="IStateSpanService"/>.
-/// Candidate spans are cached per tenant with a 5-second TTL, keyed by minute.
+/// The active profile at a time, read from the <see cref="IProfileActivationResolver"/>.
 /// </summary>
 internal sealed class ActiveProfileResolver : IActiveProfileResolver
 {
-    private readonly IStateSpanService _stateSpanService;
-    private readonly ITenantAccessor _tenantAccessor;
-    private readonly IMemoryCache _cache;
-    private readonly ICategoryReadContext _categoryReadContext;
-    private readonly ILogger<ActiveProfileResolver> _logger;
-
-    private const int CacheTtlSeconds = 5;
-    private const long MillisPerMinute = 60_000;
+    private readonly IProfileActivationResolver _activations;
+    private readonly IProfileActivationRepository _repository;
+    private readonly ProfileStoreTimelineSource _stores;
 
     public ActiveProfileResolver(
-        IStateSpanService stateSpanService,
-        ITenantAccessor tenantAccessor,
-        IMemoryCache cache,
-        ICategoryReadContext categoryReadContext,
-        ILogger<ActiveProfileResolver> logger)
+        IProfileActivationResolver activations,
+        IProfileActivationRepository repository,
+        ProfileStoreTimelineSource stores)
     {
-        _stateSpanService = stateSpanService;
-        _tenantAccessor = tenantAccessor;
-        _cache = cache;
-        _categoryReadContext = categoryReadContext;
-        _logger = logger;
+        _activations = activations;
+        _repository = repository;
+        _stores = stores;
     }
 
-    public async Task<string?> GetActiveProfileNameAsync(long timeMills, CancellationToken ct = default)
-    {
-        var span = await GetActiveProfileSpanAsync(timeMills, ct);
-        return ExtractProfileName(span);
-    }
+    public async Task<string?> GetActiveProfileNameAsync(long timeMills, CancellationToken ct = default) =>
+        (await _activations.GetAtAsync(timeMills, ct))?.ProfileName;
 
-    public async Task<CircadianAdjustment?> GetCircadianAdjustmentAsync(long timeMills, CancellationToken ct = default)
-    {
-        var span = await GetActiveProfileSpanAsync(timeMills, ct);
-        return ExtractCircadianAdjustment(span);
-    }
+    public async Task<string> GetProfileNameAsync(long timeMills, CancellationToken ct = default) =>
+        (await _stores.GetAsync(ct)).StoreFor(await GetActiveProfileNameAsync(timeMills, ct), timeMills);
 
-    public async Task<IReadOnlyList<ProfileSpan>> GetActiveProfileSpansForRangeAsync(
+    public async Task<string> GetDefaultProfileNameAsync(long timeMills, CancellationToken ct = default) =>
+        (await _stores.GetAsync(ct)).DefaultAt(timeMills);
+
+    public async Task<CircadianAdjustment?> GetCircadianAdjustmentAsync(long timeMills, CancellationToken ct = default) =>
+        (await _activations.GetAtAsync(timeMills, ct))?.Scaling;
+
+    public async Task<ProfileActivationSnapshot?> GetActiveSchedulesAsync(long timeMills, CancellationToken ct = default) =>
+        (await _activations.GetAtAsync(timeMills, ct))?.Schedules;
+
+    public async Task<IReadOnlyList<ProfileSpan>> GetProfileSpansForRangeAsync(
         long fromMs, long toMs, CancellationToken ct = default)
     {
-        var toDateTime = DateTimeOffset.FromUnixTimeMilliseconds(toMs).UtcDateTime;
+        if (toMs <= fromMs)
+            toMs = fromMs + 1;
 
-        // Fetch all profile spans that started at or before range end.
-        // Includes spans that started before [fromMs] but are still active during the range.
-        // No `from:` filter for this reason — same pattern as TherapyTimelineResolver.
-        var rawSpans = await _stateSpanService.GetStateSpansAsync(
-            category: StateSpanCategory.Profile,
-            to: toDateTime,
-            count: 1000,
-            cancellationToken: ct);
+        var stores = await _stores.GetAsync(ct);
+        var spans = new List<ProfileSpan>();
+        var cursor = fromMs;
+        foreach (var segment in await _activations.GetRangeAsync(fromMs, toMs, ct))
+        {
+            if (segment.StartMills > cursor)
+                AddCut(spans, stores, cursor, segment.StartMills, null);
+            var end = Math.Min(segment.EndMills, toMs);
+            AddCut(spans, stores, Math.Max(segment.StartMills, cursor), end, segment.Active);
+            cursor = Math.Max(cursor, end);
+        }
 
-        // Sort in-memory for reliable chronological order regardless of DB ordering.
-        return rawSpans
-            .Select(s => new ProfileSpan(
-                ProfileName: ExtractProfileName(s) ?? "Default",
-                StartMills: s.StartMills,
-                EndMills: s.EndMills,
-                Adjustment: ExtractCircadianAdjustment(s)))
-            .OrderBy(s => s.StartMills)
-            .ToList();
+        if (cursor < toMs)
+            AddCut(spans, stores, cursor, toMs, null);
+        return spans;
     }
 
-    public async Task<TreatmentInsulinContext?> GetActiveInsulinContextAsync(long timeMills, CancellationToken ct = default)
+    /// <summary>
+    /// Adds [<paramref name="fromMs"/>, <paramref name="toMs"/>) under <paramref name="active"/>, cut
+    /// wherever the store it reads changes with the profile document in force.
+    /// </summary>
+    private static void AddCut(
+        List<ProfileSpan> spans, ProfileStoreTimeline stores, long fromMs, long toMs, ResolvedProfileActivation? active)
     {
-        var span = await GetActiveProfileSpanAsync(timeMills, ct);
-        return ExtractInsulinContext(span);
+        if (toMs <= fromMs)
+            return;
+
+        var start = fromMs;
+        var store = stores.StoreFor(active?.ProfileName, fromMs);
+        foreach (var change in stores.ChangesWithin(fromMs, toMs))
+        {
+            var next = stores.StoreFor(active?.ProfileName, change);
+            if (string.Equals(next, store, StringComparison.Ordinal))
+                continue;
+            spans.Add(new ProfileSpan(store, start, change, active?.Scaling, active?.Schedules));
+            (start, store) = (change, next);
+        }
+
+        spans.Add(new ProfileSpan(store, start, toMs, active?.Scaling, active?.Schedules));
     }
 
     /// <remarks>
-    /// The cache holds the newest spans that started by the end of the minute, so the active span is picked at
-    /// the exact time and the answer does not depend on which lookup in the minute came first. It is keyed
-    /// by tenant, not history window, so a history-clamped request, which sees only the last 24 hours of
-    /// <c>state_spans</c>, neither reads nor writes it.
+    /// An effective activation uploaded without the insulin falls back to the requested activation
+    /// it confirms, which an uploader may have sent it on instead.
     /// </remarks>
-    private async Task<StateSpan?> GetActiveProfileSpanAsync(long timeMills, CancellationToken ct)
+    public async Task<TreatmentInsulinContext?> GetActiveInsulinContextAsync(long timeMills, CancellationToken ct = default)
     {
-        var minuteStart = timeMills / MillisPerMinute * MillisPerMinute;
-        var tenantId = _tenantAccessor.TenantId;
-        var cacheKey = $"ActiveProfile:{tenantId}:{minuteStart}";
-        var useCache = !_categoryReadContext.IsHistoryClamped;
+        if ((await _activations.GetAtAsync(timeMills, ct))?.Activation is not { } active)
+            return null;
 
-        if (!useCache || !_cache.TryGetValue(cacheKey, out IReadOnlyList<StateSpan>? candidates) || candidates is null)
-        {
-            var minuteEnd = DateTimeOffset.FromUnixTimeMilliseconds(minuteStart + MillisPerMinute - 1).UtcDateTime;
-            candidates = (await _stateSpanService.GetStateSpansAsync(
-                category: StateSpanCategory.Profile,
-                to: minuteEnd,
-                count: 100,
-                cancellationToken: ct)).ToList();
+        if (active.Snapshot?.Insulin is { } insulin)
+            return insulin;
 
-            if (useCache)
-                _cache.Set(cacheKey, candidates, TimeSpan.FromSeconds(CacheTtlSeconds));
-        }
-
-        return candidates
-            .Where(s => s.StartMills <= timeMills && (!s.EndMills.HasValue || s.EndMills.Value > timeMills))
-            .OrderByDescending(s => s.StartMills)
-            .FirstOrDefault();
+        return active.RequestedActivationId is { } requestedId
+            ? (await _repository.GetByIdAsync(requestedId, ct))?.Snapshot?.Insulin
+            : null;
     }
-
-    private static string? ExtractProfileName(StateSpan? span)
-    {
-        if (span?.Metadata is null)
-            return null;
-
-        if (span.Metadata.TryGetValue("profileName", out var value))
-            return ConvertToString(value);
-
-        return null;
-    }
-
-    private static CircadianAdjustment? ExtractCircadianAdjustment(StateSpan? span)
-    {
-        if (span?.Metadata is null)
-            return null;
-
-        if (!span.Metadata.TryGetValue("percentage", out var pctValue))
-            return null;
-
-        var percentage = ConvertToDouble(pctValue);
-        if (percentage is null)
-            return null;
-
-        long timeshiftMs = 0;
-        if (span.Metadata.TryGetValue("timeshift", out var tsValue))
-        {
-            var timeshiftHours = ConvertToDouble(tsValue) ?? 0;
-            timeshiftMs = (long)(timeshiftHours % 24 * 3_600_000);
-        }
-
-        return new CircadianAdjustment(percentage.Value, timeshiftMs);
-    }
-
-    private static TreatmentInsulinContext? ExtractInsulinContext(StateSpan? span)
-    {
-        if (span?.Metadata is null)
-            return null;
-
-        if (!span.Metadata.TryGetValue("insulinDia", out var diaValue))
-            return null;
-
-        var dia = ConvertToDouble(diaValue);
-        if (dia is null or <= 0)
-            return null;
-
-        var peak = span.Metadata.TryGetValue("insulinPeak", out var peakValue)
-            ? (int)(ConvertToDouble(peakValue) ?? 0)
-            : 0;
-
-        if (peak <= 0)
-            return null;
-
-        var name = span.Metadata.TryGetValue("insulinName", out var nameValue)
-            ? ConvertToString(nameValue) ?? ""
-            : "";
-
-        var concentration = span.Metadata.TryGetValue("insulinConcentration", out var concValue)
-            ? (int)(ConvertToDouble(concValue) ?? 100)
-            : 100;
-
-        var curve = span.Metadata.TryGetValue("insulinCurve", out var curveValue)
-            ? ConvertToString(curveValue) ?? "rapid-acting"
-            : "rapid-acting";
-
-        return new TreatmentInsulinContext
-        {
-            PatientInsulinId = Guid.Empty,
-            InsulinName = name,
-            Dia = dia.Value,
-            Peak = peak,
-            Concentration = concentration,
-            Curve = curve,
-        };
-    }
-
-    /// <summary>
-    /// Converts a metadata value (which may be a <see cref="JsonElement"/> after deserialization)
-    /// to a string.
-    /// </summary>
-    private static string? ConvertToString(object? value) => value switch
-    {
-        null => null,
-        string s => s,
-        JsonElement { ValueKind: JsonValueKind.String } je => je.GetString(),
-        _ => value.ToString(),
-    };
-
-    /// <summary>
-    /// Converts a metadata value (which may be a <see cref="JsonElement"/> after deserialization)
-    /// to a double.
-    /// </summary>
-    private static double? ConvertToDouble(object? value) => value switch
-    {
-        null => null,
-        double d => d,
-        int i => i,
-        long l => l,
-        float f => f,
-        JsonElement { ValueKind: JsonValueKind.Number } je => je.GetDouble(),
-        _ => double.TryParse(value.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var d) ? d : null,
-    };
 }

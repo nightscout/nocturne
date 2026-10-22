@@ -3,6 +3,7 @@
   // turns on `deferDrawing` alone.
   import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { transformChartData } from "$lib/utils/chart-data-transform";
+  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
   import GlucoseChartCard from "./GlucoseChartCard.svelte";
 
   interface Props {
@@ -10,11 +11,18 @@
     showPredictions?: boolean;
     /** Narrower than a phone, so the header's controls take their own line. */
     narrow?: boolean;
+    glucoseUnits?: GlucoseUnits;
     /** Hands the test the setter for `deferDrawing`. */
     onready: (setDeferred: (deferred: boolean) => void) => void;
   }
 
-  let { initiallyDeferred, showPredictions = false, narrow = false, onready }: Props = $props();
+  let {
+    initiallyDeferred,
+    showPredictions = false,
+    narrow = false,
+    glucoseUnits,
+    onready,
+  }: Props = $props();
 
   createRealtimeStore({
     url: "",
@@ -40,5 +48,5 @@
 </script>
 
 <div class="h-[600px] {narrow ? 'w-[340px]' : 'w-[800px]'}">
-  <GlucoseChartCard {initialChartData} {showPredictions} deferDrawing={deferred} />
+  <GlucoseChartCard {initialChartData} {showPredictions} {glucoseUnits} deferDrawing={deferred} />
 </div>

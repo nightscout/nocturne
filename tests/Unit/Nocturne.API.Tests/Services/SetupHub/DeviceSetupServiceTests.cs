@@ -38,13 +38,13 @@ public class DeviceSetupServiceTests
         _db.Tenants.Add(new TenantEntity { Id = TenantId, Slug = "own", DisplayName = "Own" });
         _db.SaveChanges();
 
-        var factory = new TestTenantDbContextFactory(_db);
+        var factory = new TestNocturneDbContextFactory(_db);
         _service = new DeviceSetupService(
-            _db,
+            factory,
             new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance),
             new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
             _reattribution.Object,
-            new TrackerRepository(_db),
+            new TrackerRepository(factory),
             _ruleSync.Object,
             _therapySettings.Object);
         _therapySettings.Setup(t => t.GetActionTimeAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>()))

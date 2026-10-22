@@ -5,7 +5,6 @@
     refreshSummaryOnNewReading,
   } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
-  import { createSettingsStore } from "$lib/stores/settings-store.svelte";
   import { createAuthStore } from "$lib/stores/auth-store.svelte";
   import { authInterceptorState } from "$lib/api/auth-interceptor";
   import { remoteErrorMessage } from "$lib/api/remote-error";
@@ -19,7 +18,10 @@
   import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
   import { browser, dev } from "$app/environment";
-  import { beforeNavigate, goto } from "$app/navigation";
+  import { beforeNavigate, goto, invalidate } from "$app/navigation";
+  import { refreshOnVisible } from "$lib/utils/refresh-on-return.svelte";
+  import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "$lib/constants/shell-data";
+  import { createShellRevalidator } from "$lib/utils/shell-session";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import AlertSurfaces from "$lib/components/alerts/AlertSurfaces.svelte";
@@ -77,17 +79,29 @@
     () => realtimeStore.currentEntry?.mills,
     () => data.canViewRealtimeData
   );
-  createAuthStore(); // Initialize auth store in context
+  const authStore = createAuthStore(); // Initialize auth store in context
+  refreshOnVisible(
+    createShellRevalidator(
+      () => data,
+      () => void invalidate(SHELL_DATA_KEY)
+    ),
+    SHELL_REVALIDATE_INTERVAL_MS
+  );
+
+  // svelte-ignore state_referenced_locally
+  let sessionSubjectId = data.user?.subjectId ?? null;
+  $effect(() => {
+    const subjectId = data.user?.subjectId ?? null;
+    if (subjectId === sessionSubjectId) return;
+    sessionSubjectId = subjectId;
+    void authStore.loadSession();
+  });
 
   // Suppress the auth interceptor's login redirect for guest and public
   // sessions — these have limited scopes so some endpoints return 401/403.
   $effect(() => {
     authInterceptorState.setGuestSession(data.isGuestSession || !data.isAuthenticated);
   });
-
-  // Create settings store in context for the entire app
-  // This makes feature settings available on all pages including the main dashboard.
-  createSettingsStore(!tenantless);
 
   const commandPalette = lazyComponent(
     () => import("$lib/components/command-palette/CommandPalette.svelte"),
@@ -141,10 +155,16 @@
 
   // Initialize realtime and title/favicon services for users authorized to
   // view glucose data (authenticated with read permissions, or public site visitors).
+  let realtimeRunning = false;
   $effect(() => {
     if (data.canViewRealtimeData) {
+      realtimeRunning = true;
       realtimeStore.initialize();
       titleFaviconService.initialize();
+    } else if (realtimeRunning) {
+      realtimeRunning = false;
+      realtimeStore.destroy();
+      titleFaviconService.destroy();
     }
   });
 
@@ -275,7 +295,7 @@
             <GuestBanner expiresAt={data.guestExpiresAt} />
           {/if}
           {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
-            <BackupSignInPrompt />
+            <BackupSignInPrompt show={data.showBackupSignInPrompt} />
           {/if}
       </div>
       {#if data.user && !data.isGuestSession}

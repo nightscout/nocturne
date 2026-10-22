@@ -22,7 +22,6 @@ public interface IBasalScheduleRepository : IProfileScopedRepository<BasalSchedu
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
-    /// <param name="ct">Cancellation token.</param>
     new Task<IEnumerable<BasalSchedule>> GetAsync(
         DateTime? from,
         DateTime? to,

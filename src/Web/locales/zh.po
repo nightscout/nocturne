@@ -196,10 +196,8 @@ msgstr ""
 msgid "<0/> Authorization denied. The device will not be granted access."
 msgstr ""
 
-#: src/lib/components/PreludeQuickConnect.svelte
-#: src/lib/components/XdripQuickConnect.svelte
-msgid "<0/> wants access"
-msgstr ""
+#~ msgid "<0/> wants access"
+#~ msgstr ""
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
@@ -230,6 +228,7 @@ msgstr ""
 #: src/lib/components/XdripQuickConnect.svelte
 #: src/routes/(authenticated)/oauth/device/+page.svelte
 #: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
+#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 msgid "<0/> Continue"
 msgstr ""
 
@@ -394,9 +393,8 @@ msgstr ""
 msgid "Failed to save settings"
 msgstr ""
 
-#: src/lib/stores/settings-store.svelte.ts
-msgid "Validation error"
-msgstr ""
+#~ msgid "Validation error"
+#~ msgstr ""
 
 #~ msgid "Failed to save alarm configuration"
 #~ msgstr ""
@@ -573,6 +571,7 @@ msgstr ""
 #: src/lib/components/patient/PatientInsulinManager.svelte
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
 #: src/lib/components/schedule/TargetRangeCard.svelte
 #: src/lib/components/settings/AlarmProfileDialog.svelte
 #: src/lib/components/settings/ApiTokens.svelte
@@ -677,11 +676,13 @@ msgstr ""
 msgid "Glucose"
 msgstr ""
 
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/actogram/Actogram.svelte
 #: src/lib/components/actogram/Actogram.svelte
 msgid "ArrowDown"
 msgstr ""
 
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/actogram/Actogram.svelte
 msgid "ArrowUp"
 msgstr ""
@@ -849,7 +850,6 @@ msgstr ""
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 msgid "Name"
 msgstr ""
@@ -877,10 +877,11 @@ msgstr ""
 msgid "Custom Permission"
 msgstr ""
 
+#: ../cms/src/editor/ComponentPropsEditor.svelte
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
 msgid "Add"
@@ -1160,6 +1161,7 @@ msgid "Started"
 msgstr ""
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
 #: src/lib/components/reports/sensor-integrity/ClusterTable.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
@@ -1184,11 +1186,13 @@ msgstr ""
 msgid "Page {0} of {1} ({2} total)"
 msgstr ""
 
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Previous"
 msgstr ""
 
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Next"
@@ -1249,6 +1253,8 @@ msgstr ""
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
+#: src/routes/(authenticated)/settings/profile/+page.svelte
+#: src/routes/(authenticated)/settings/profile/+page.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 msgid "Default"
 msgstr ""
@@ -1406,6 +1412,8 @@ msgstr ""
 #~ msgid "{0}m <0/>"
 #~ msgstr ""
 
+#: ../cms/src/editor/ComponentPropsEditor.svelte
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/reports/sleep/SleepCompositionChart.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
@@ -1567,7 +1575,7 @@ msgstr ""
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthCategoryTable.svelte
 msgid "Status"
 msgstr ""
 
@@ -1623,7 +1631,6 @@ msgstr ""
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "<0/> Waiting for passkey..."
@@ -1651,7 +1658,6 @@ msgstr ""
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/LoginForm.svelte
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "Username"
@@ -1696,7 +1702,6 @@ msgstr ""
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "Display name"
 msgstr ""
@@ -1704,7 +1709,6 @@ msgstr ""
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
 #: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "Your name"
 msgstr ""
@@ -1740,7 +1744,6 @@ msgid "Carbs:"
 msgstr ""
 
 #. 0: stats.totalCarbs.toFixed(0)
-#. 0: monthSummary.avgDailyCarbs.toFixed(0)
 #. 0: carbs
 #. 0: totalCarbs
 #. 0: carbIntake.carbs ?? 0
@@ -1762,7 +1765,6 @@ msgstr ""
 #. 0: (summary?.totals?.food?.carbs ?? 0).toFixed(0)
 #. 0: row.carbs
 #: src/lib/components/calendar/CalendarDayCell.svelte
-#: src/lib/components/calendar/CalendarMonthSummary.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/CarbMarker.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
@@ -1792,7 +1794,6 @@ msgstr ""
 
 #. 0: stats.totalBolus.toFixed(1)
 #. 0: stats.totalBasal.toFixed(1)
-#. 0: monthSummary.tdd.toFixed(1)
 #. 0: units.toFixed(1)
 #. 0: insulin.toFixed(1)
 #. 0: formatInsulinDisplay(bolus.insulin)
@@ -1806,7 +1807,6 @@ msgstr ""
 #. 0: (row.insulin ?? 0).toFixed(2)
 #: src/lib/components/calendar/CalendarDayCell.svelte
 #: src/lib/components/calendar/CalendarDayCell.svelte
-#: src/lib/components/calendar/CalendarMonthSummary.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BasalInjectionMarker.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
@@ -1962,7 +1962,6 @@ msgstr ""
 
 #: src/lib/components/auth/RecoveryCodes.svelte
 #: src/lib/components/connectors/UploaderSetupView.svelte
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 msgid "Continue"
 msgstr ""
 
@@ -2023,6 +2022,7 @@ msgstr ""
 msgid "Redo (Ctrl+Shift+Z)"
 msgstr ""
 
+#: ../cms/src/editor/PreviewPane.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 msgid "Preview"
@@ -2082,6 +2082,7 @@ msgstr ""
 
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
 msgid "Hours"
 msgstr ""
@@ -2217,10 +2218,11 @@ msgid "System"
 msgstr ""
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Weight"
 msgstr ""
 
+#: ../cms/src/lib/components/edra/shadcn/components/toolbar/FontSize.svelte
 #: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
 #: src/routes/(authenticated)/food/GiLabel.svelte
@@ -2380,6 +2382,7 @@ msgid "You are about to permanently delete all data synchronized by this connect
 msgstr ""
 
 #: src/lib/components/connectors/ConnectorDangerZone.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "Delete All Data"
 msgstr ""
 
@@ -2442,7 +2445,6 @@ msgstr ""
 
 #: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
@@ -2523,9 +2525,8 @@ msgstr ""
 msgid "Connector Not Running"
 msgstr ""
 
-#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-msgid "Total records"
-msgstr ""
+#~ msgid "Total records"
+#~ msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
@@ -2553,7 +2554,6 @@ msgstr ""
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/settings/ConnectorConfigForm.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Configured"
 msgstr ""
 
@@ -2572,6 +2572,7 @@ msgstr ""
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 msgid "From"
@@ -2678,8 +2679,6 @@ msgstr ""
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
-#: src/routes/(authenticated)/settings/profile/+page.svelte
-#: src/routes/(authenticated)/settings/profile/+page.svelte
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Active"
 msgstr ""
@@ -2755,9 +2754,8 @@ msgstr ""
 msgid "<0/> Deleting..."
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "<0/> Delete All Data"
-msgstr ""
+#~ msgid "<0/> Delete All Data"
+#~ msgstr ""
 
 #: src/lib/components/connectors/ConnectorSetup.svelte
 msgid "Failed to load available connectors"
@@ -3007,10 +3005,8 @@ msgstr ""
 #~ msgid "Sync completed successfully"
 #~ msgstr ""
 
-#. 0: manualSyncResult.successfulConnectors; 1: manualSyncResult.totalConnectors; 2: elapsedSeconds
-#: src/lib/components/connectors/ManualSyncDialog.svelte
-msgid "{0} of {1} connectors synced in {2}s"
-msgstr ""
+#~ msgid "{0} of {1} connectors synced in {2}s"
+#~ msgstr ""
 
 #: src/lib/components/connectors/ManualSyncDialog.svelte
 msgid "Connector Results"
@@ -3197,8 +3193,6 @@ msgid "<0/> Has Data"
 msgstr ""
 
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
-#: src/lib/components/connectors/ServerConnectorsCard.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Not Configured"
 msgstr ""
 
@@ -3261,10 +3255,8 @@ msgstr ""
 msgid "<0/> Generate API key"
 msgstr ""
 
-#. 0: getUploaderName(selectedUploader)
-#: src/lib/components/connectors/UploaderSetupDialog.svelte
-msgid "Creates an API token pre-configured for {0}"
-msgstr ""
+#~ msgid "Creates an API token pre-configured for {0}"
+#~ msgstr ""
 
 #. 0: getUploaderName(selectedUploader)
 #: src/lib/components/connectors/UploaderSetupDialog.svelte
@@ -3357,15 +3349,12 @@ msgstr ""
 msgid "Authorize Application"
 msgstr ""
 
-#: src/lib/components/connectors/UploaderSetupView.svelte
 #: src/routes/(authenticated)/oauth/consent/+page.svelte
-#: src/routes/(authenticated)/oauth/device/+page.svelte
 msgid "<0/> wants to access your Nocturne data."
 msgstr ""
 
-#: src/lib/components/connectors/UploaderSetupView.svelte
-msgid "This application is not in the Nocturne known app directory. Only approve if you trust it."
-msgstr ""
+#~ msgid "This application is not in the Nocturne known app directory. Only approve if you trust it."
+#~ msgstr ""
 
 #: src/lib/components/connectors/UploaderSetupView.svelte
 #: src/routes/(authenticated)/oauth/consent/+page.svelte
@@ -3413,6 +3402,7 @@ msgstr ""
 msgid "<0/> Generating API key..."
 msgstr ""
 
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
 #: src/lib/components/connectors/UploaderSetupView.svelte
 msgid "Copy this now. It cannot be shown again."
 msgstr ""
@@ -3450,7 +3440,6 @@ msgid "({0} min)"
 msgstr ""
 
 #: src/lib/components/settings/ClientDevices.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
 #: src/routes/(authenticated)/settings/patient/+page.svelte
 msgid "Devices"
@@ -3460,9 +3449,7 @@ msgstr ""
 msgid "Insulins"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/Finish.svelte
@@ -3589,6 +3576,7 @@ msgstr ""
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
+#: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -3604,7 +3592,7 @@ msgstr ""
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -3645,6 +3633,7 @@ msgstr ""
 msgid "Add Food"
 msgstr ""
 
+#: ../cms/src/editor/ContentEditor.svelte
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
@@ -3654,6 +3643,7 @@ msgstr ""
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
+#: src/routes/(authenticated)/settings/profile/+page.svelte
 msgid "Saving..."
 msgstr ""
 
@@ -3703,7 +3693,7 @@ msgstr ""
 
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Glycemic Index"
 msgstr ""
 
@@ -3716,8 +3706,7 @@ msgstr ""
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Unit"
 msgstr ""
 
@@ -4071,6 +4060,7 @@ msgstr ""
 #: src/lib/components/entries/DeviceEventSection.svelte
 #: src/lib/components/patient/InsulinFormFields.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
 #: src/lib/components/status-pills/COBPill.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/lib/components/treatments/edit-dialog/BasalInjectionFormFields.svelte
@@ -4254,12 +4244,10 @@ msgstr ""
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Sleep"
 msgstr ""
 
@@ -4451,9 +4439,7 @@ msgid "Time Spans"
 msgstr ""
 
 #: ../portal/src/routes/features/+page.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/+layout.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
@@ -4509,7 +4495,7 @@ msgid "Setup"
 msgstr ""
 
 #: src/lib/components/layout/UserMenu.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/account/+page.svelte
@@ -4517,7 +4503,7 @@ msgstr ""
 msgid "Account"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/patient/+page.svelte
 msgid "Patient Record"
@@ -4924,6 +4910,7 @@ msgstr ""
 msgid "No guest links yet. Create one to share temporary read-only access."
 msgstr ""
 
+#: ../cms/src/editor/ContentSidebar.svelte
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
@@ -5016,9 +5003,7 @@ msgstr ""
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/routes/(authenticated)/food/+page.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Category"
 msgstr ""
 
@@ -5144,10 +5129,8 @@ msgstr ""
 msgid "Manufacturer"
 msgstr ""
 
-#: src/lib/components/patient/PatientDeviceManager.svelte
-#: src/lib/components/patient/PatientDeviceManager.svelte
-msgid "Model"
-msgstr ""
+#~ msgid "Model"
+#~ msgstr ""
 
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
@@ -5558,109 +5541,75 @@ msgid "No time blocks configured. Click \"Add Time Block\" to get started."
 msgstr ""
 
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "No access"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 msgid "Read"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 msgid "Read & Write"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 msgid "Full access"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Blood Glucose"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Treatments"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Identity"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/routes/(authenticated)/settings/admin/+page.svelte
 msgid "Administration"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Manage Roles"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Invite Members"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Manage Members"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-msgid "Tenant Settings"
-msgstr ""
+#~ msgid "Tenant Settings"
+#~ msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Manage Sharing"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 msgid "Audit"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "View Audit Logs"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Manage Audit Settings"
 msgstr ""
 
@@ -5741,7 +5690,7 @@ msgstr ""
 msgid "Recommended"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "All permissions"
 msgstr ""
 
@@ -6063,6 +6012,7 @@ msgstr ""
 #~ msgid "No glucose readings found for percentile visualization"
 #~ msgstr ""
 
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
 #: src/lib/components/reports/HourlyGlucoseDistributionChart.svelte
 msgid "Percentage"
 msgstr ""
@@ -6213,12 +6163,9 @@ msgid "COB"
 msgstr ""
 
 #: src/lib/components/reports/RetrospectiveStats.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "g"
 msgstr ""
 
@@ -6235,6 +6182,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
+#: src/routes/(authenticated)/alerts/dnd/+page.svelte
 msgid "Scheduled"
 msgstr ""
 
@@ -6601,10 +6549,12 @@ msgid "Audio Playback"
 msgstr ""
 
 #: src/lib/components/alerts/ChannelsSection.svelte
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/lib/components/settings/BrowserCapabilities.svelte
 #: src/lib/components/settings/BrowserCapabilities.svelte
 #: src/lib/components/settings/BrowserCapabilities.svelte
 #: src/lib/components/settings/BrowserCapabilities.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Unavailable"
 msgstr ""
 
@@ -6815,9 +6765,8 @@ msgstr ""
 msgid "Failed to delete sound"
 msgstr ""
 
-#: src/lib/components/settings/CustomSoundUpload.svelte
-msgid "Upload your own alarm sounds (MP3, WAV, OGG, up to 5MB)"
-msgstr ""
+#~ msgid "Upload your own alarm sounds (MP3, WAV, OGG, up to 5MB)"
+#~ msgstr ""
 
 #: src/lib/components/settings/CustomSoundUpload.svelte
 msgid "<0/> Upload Sound"
@@ -6888,10 +6837,10 @@ msgstr ""
 msgid "<0/> Inactive"
 msgstr ""
 
-#. 0: formatNumber(totalEntries)
+#. 0: rejectedCount
 #. 0: formatNumber(allRows.length)
 #. 0: formatCount(col.migrated)
-#: src/lib/components/settings/DataSourceRow.svelte
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "{0} records"
@@ -7047,6 +6996,8 @@ msgstr ""
 msgid "App"
 msgstr ""
 
+#: src/lib/components/patient/PatientDeviceManager.svelte
+#: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 #: src/lib/components/settings/GlucoseSourceDefaultsDialog.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
@@ -7145,17 +7096,13 @@ msgstr ""
 msgid "Flash the title and favicon during urgent glucose levels"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
 msgid "Heart Rate"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Step Count"
 msgstr ""
@@ -7164,7 +7111,7 @@ msgstr ""
 msgid "Platform"
 msgstr ""
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Sharing"
 msgstr ""
 
@@ -7234,7 +7181,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Activity"
 msgstr ""
 
@@ -7913,6 +7860,7 @@ msgstr ""
 msgid "Start"
 msgstr ""
 
+#: ../cms/src/editor/ContentSidebar.svelte
 #: src/lib/components/treatments/ColumnFilterPopover.svelte
 msgid "Search..."
 msgstr ""
@@ -7931,8 +7879,10 @@ msgstr ""
 msgid "Rows per page"
 msgstr ""
 
+#. 0: clampedPage + 1; 1: pageCount
 #. 0: table.getState().pagination.pageIndex + 1; 1: table.getPageCount()
 #. 0: page; 1: history.totalPages
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/treatments/DataTablePagination.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Page {0} of {1}"
@@ -7946,6 +7896,7 @@ msgstr ""
 #: src/lib/components/treatments/DataTableToolbar.svelte
 #: src/lib/components/treatments/DataTableToolbar.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 msgid "Clear"
 msgstr ""
 
@@ -8034,7 +7985,6 @@ msgstr ""
 
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
 #: src/routes/(authenticated)/food/+page.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/food/FoodListHeader.svelte
 msgid "GI"
 msgstr ""
@@ -8450,8 +8400,6 @@ msgid "{0} minor"
 msgstr ""
 
 #: src/routes/(authenticated)/compatibility/+page.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "None"
 msgstr ""
@@ -8645,43 +8593,36 @@ msgstr ""
 #~ msgid "Tab through fields · ⌘+Enter to save and add another · Esc to close"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Per"
-msgstr ""
+#~ msgid "Per"
+#~ msgstr ""
 
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/settings/alarm-profile/AlarmAudioTab.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Hide"
 msgstr ""
 
-#. 0: showDetails ? 'Hide' \\: 'Add'
-#: src/routes/(authenticated)/food/Composer.svelte
+#. 0: showDetails ? "Hide" \\: "Add"
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "<0/> {0} fat, protein, category..."
 msgstr ""
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Fat"
-msgstr ""
+#~ msgid "Fat"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Protein"
-msgstr ""
+#~ msgid "Protein"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/food/FoodListHeader.svelte
 msgid "Energy"
 msgstr ""
 
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "kcal"
 msgstr ""
 
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Subcategory"
 msgstr ""
 
@@ -8727,6 +8668,7 @@ msgstr ""
 msgid "Failed to delete food"
 msgstr ""
 
+#: src/routes/(authenticated)/food/FoodFields.svelte
 #: src/routes/(authenticated)/food/FoodListHeader.svelte
 msgid "Name <0/>"
 msgstr ""
@@ -8755,10 +8697,10 @@ msgstr ""
 msgid "Add to favorites"
 msgstr ""
 
+#. 0: draft.portion ?? 100; 1: draft.unit ?? "g"
 #. 0: food.portion ?? 0; 1: food.unit ?? 'g'
-#. 0: draft.portion ?? 100; 1: draft.unit ?? 'g'
+#: src/routes/(authenticated)/food/FoodFields.svelte
 #: src/routes/(authenticated)/food/FoodRow.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
 msgid "per {0} {1}"
 msgstr ""
 
@@ -8791,13 +8733,13 @@ msgstr ""
 #~ msgid "auto"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "No category"
 msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "No subcategory"
 msgstr ""
 
@@ -9866,7 +9808,7 @@ msgstr ""
 msgid "Import your history"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthCategoryTable.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 msgid "Import"
 msgstr ""
@@ -11026,6 +10968,7 @@ msgid "Selected Target"
 msgstr ""
 
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 msgid "Reason"
 msgstr ""
 
@@ -11092,17 +11035,15 @@ msgstr ""
 msgid "Displays the mobile sidebar."
 msgstr ""
 
-#. 0: appName
-#: src/routes/(authenticated)/oauth/device/+page.svelte
-msgid "Authorize {0}"
-msgstr ""
+#~ msgid "Authorize {0}"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/oauth/device/+page.svelte
 #: src/routes/(authenticated)/oauth/device/+page.svelte
 msgid "Link a Device"
 msgstr ""
 
-#. 0: deviceInfo ? `Authorize ${appName}` \\: "Link a Device"
+#. 0: deviceInfo ? "Authorize a Device" \\: "Link a Device"
 #. 0: dateDisplay ? `${dateDisplay} - Sleep Report` \\: "Sleep Report"
 #: src/routes/(authenticated)/oauth/device/+page.svelte
 #: src/routes/(authenticated)/reports/sleep/[date]/+page.svelte
@@ -11784,6 +11725,7 @@ msgid "90th %ile"
 msgstr ""
 
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/sensor-integrity/+page.svelte
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "<0/> Data Quality"
@@ -12408,7 +12350,7 @@ msgstr ""
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Steps"
 msgstr ""
 
@@ -13144,7 +13086,6 @@ msgid "Failed to load services"
 msgstr ""
 
 #: src/routes/(authenticated)/alerts/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Unknown error"
 msgstr ""
 
@@ -13246,7 +13187,6 @@ msgstr ""
 msgid "Member updated successfully."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/members/+page.svelte
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "Failed to update member. Please try again."
 msgstr ""
@@ -13426,9 +13366,8 @@ msgstr ""
 msgid "Failed to cancel migration"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Validating"
-msgstr ""
+#~ msgid "Validating"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
@@ -14312,22 +14251,18 @@ msgstr ""
 msgid "Recovery Mode"
 msgstr ""
 
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
-msgid "This instance has accounts that need a passkey registered. Enter your username and register a passkey to restore access."
-msgstr ""
+#~ msgid "This instance has accounts that need a passkey registered. Enter your username and register a passkey to restore access."
+#~ msgstr ""
 
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
-msgid "Optional. Updates your display name if provided."
-msgstr ""
+#~ msgid "Optional. Updates your display name if provided."
+#~ msgstr ""
 
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "<0/> Register passkey"
 msgstr ""
 
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
-msgid "Passkey registered successfully."
-msgstr ""
+#~ msgid "Passkey registered successfully."
+#~ msgstr ""
 
 #~ msgid "Save these recovery codes in a safe place. Each code can only be used once."
 #~ msgstr ""
@@ -14335,13 +14270,11 @@ msgstr ""
 #~ msgid "Copy your recovery codes before continuing."
 #~ msgstr ""
 
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
-msgid "Passkey registered successfully. Recovery mode has been deactivated."
-msgstr ""
+#~ msgid "Passkey registered successfully. Recovery mode has been deactivated."
+#~ msgstr ""
 
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
-msgid "Register a passkey to restore normal access."
-msgstr ""
+#~ msgid "Register a passkey to restore normal access."
+#~ msgstr ""
 
 #~ msgid "Invalid or expired code"
 #~ msgstr ""
@@ -15186,6 +15119,7 @@ msgid "Missing state token."
 msgstr ""
 
 #: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
+#: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
 msgid "This link is expired or invalid. Please run /connect in your chat app again."
 msgstr ""
 
@@ -15233,17 +15167,14 @@ msgstr ""
 msgid "Your chat account is now linked to Nocturne. You can close this tab and head back to your chat app."
 msgstr ""
 
-#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
-msgid "We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
-msgstr ""
+#~ msgid "We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
+#~ msgstr ""
 
-#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
-msgid "Missing Token"
-msgstr ""
+#~ msgid "Missing Token"
+#~ msgstr ""
 
-#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
-msgid "Missing token parameter."
-msgstr ""
+#~ msgid "Missing token parameter."
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
 msgid "Discord account linked"
@@ -15258,9 +15189,8 @@ msgstr ""
 msgid "Back to Settings"
 msgstr ""
 
-#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
-msgid "Link failed"
-msgstr ""
+#~ msgid "Link failed"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Condition"
@@ -15457,9 +15387,8 @@ msgstr ""
 #~ msgid "Critical channels unreachable. Alerts may not deliver."
 #~ msgstr ""
 
-#: src/lib/components/alerts/DndNoticeStrip.svelte
-msgid "Do Not Disturb is on. Only critical rules will fire."
-msgstr ""
+#~ msgid "Do Not Disturb is on. Only critical rules will fire."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
 msgid "Failed to save DND settings"
@@ -16659,10 +16588,7 @@ msgstr ""
 msgid "<0/> Device authorized successfully. Prelude is now connected."
 msgstr ""
 
-#: src/lib/components/PreludeQuickConnect.svelte
-#: src/lib/components/XdripQuickConnect.svelte
 #: src/routes/(authenticated)/oauth/consent/+page.svelte
-#: src/routes/(authenticated)/oauth/device/+page.svelte
 msgid "This application is not in the Nocturne known app directory. Only approve if you trust this application."
 msgstr ""
 
@@ -17621,117 +17547,97 @@ msgstr ""
 msgid "{0}g carbs · {1}% match"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "CGM readings and manual blood glucose entries"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Insulin doses, carb entries, and therapy events"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Device Status"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Pump, CGM, and phone status reports"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Heart rate data from wearables"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Daily step counts from activity trackers"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Food & Meals"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Food database entries and nutritional information"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Statistics"
-msgstr ""
+#~ msgid "Statistics"
+#~ msgstr ""
 
 #~ msgid "Time-in-range, A1c estimates, and averages"
 #~ msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
-msgid "Generated reports and data exports"
-msgstr ""
+#~ msgid "Generated reports and data exports"
+#~ msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/components/rbac/permission-categories.svelte.ts
 msgid "Therapy Settings"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Treatment Profile"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Basal rates, sensitivity factors, carb ratios, and targets"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Alert rules, notification delivery, and history"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Display name, email, and account details"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Create, edit, and delete roles"
-msgstr ""
+#~ msgid "Create, edit, and delete roles"
+#~ msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Create and send invite links"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Edit member roles and remove members"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Site name, units, and preferences"
-msgstr ""
+#~ msgid "Site name, units, and preferences"
+#~ msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Public sharing and follower configuration"
-msgstr ""
+#~ msgid "Public sharing and follower configuration"
+#~ msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionSummary.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Guest Links"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Create and revoke temporary guest access links"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Read the history of data changes"
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Configure audit retention and export"
 msgstr ""
 
@@ -18014,25 +17920,21 @@ msgstr ""
 msgid "Health Data"
 msgstr ""
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "All Health Data"
 msgstr ""
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
-msgid "Shortcut — covers all health categories below"
-msgstr ""
+#~ msgid "Shortcut — covers all health categories below"
+#~ msgstr ""
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
-msgid "Read-only"
-msgstr ""
+#~ msgid "Read-only"
+#~ msgstr ""
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
-msgid "Follower access and data sharing configuration"
-msgstr ""
+#~ msgid "Follower access and data sharing configuration"
+#~ msgstr ""
 
-#: src/lib/components/settings/TokenScopeSelector.svelte
-msgid "Unrestricted access to all data including deletion"
-msgstr ""
+#~ msgid "Unrestricted access to all data including deletion"
+#~ msgstr ""
 
 #. 0: data.tempBasal.duration
 #. 0: data.tempBasal.remaining
@@ -18552,15 +18454,11 @@ msgstr ""
 msgid "Point color mode"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/appearance/+page.svelte
-#: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "Baseline"
-msgstr ""
+#~ msgid "Baseline"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/appearance/+page.svelte
-#: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "Deviation"
-msgstr ""
+#~ msgid "Deviation"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Area fill"
@@ -18667,13 +18565,11 @@ msgstr ""
 msgid "Profiles are typically uploaded from your diabetes management app (like AAPS, Loop, or xDrip+). They contain your basal rates, insulin sensitivity factors, and carb ratios."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/profile/+page.svelte
-msgid "Switching..."
-msgstr ""
+#~ msgid "Switching..."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/profile/+page.svelte
-msgid "Set as active"
-msgstr ""
+#~ msgid "Set as active"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "Members only"
@@ -18841,7 +18737,7 @@ msgstr ""
 msgid "Weight History - Settings - Nocturne"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 #: src/routes/(authenticated)/settings/weight/+page.svelte
 msgid "Weight history"
 msgstr ""
@@ -18936,9 +18832,7 @@ msgstr ""
 msgid "Enter the code shared with you to view health data. The code works once — this device stays signed in for 48 hours."
 msgstr ""
 
-#. 0: displayName.trim() || username.trim()
 #. 0: username
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
 #: src/routes/(unauthenticated)/auth/recovery/passkey/+page.svelte
 msgid "{0}'s passkey"
 msgstr ""
@@ -19950,9 +19844,8 @@ msgstr ""
 #~ msgid "Authentication"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Sign in with Google"
-msgstr "使用 Google 登录"
+#~ msgid "Sign in with Google"
+#~ msgstr "使用 Google 登录"
 
 #~ msgid "Sign in with GitHub"
 #~ msgstr ""
@@ -20596,9 +20489,8 @@ msgstr ""
 msgid "Find <0>Nocturne</0> in the list and click it."
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 12 characters). Use the generator below for each secret field."
-msgstr ""
+#~ msgid "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 12 characters). Use the generator below for each secret field."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
@@ -21065,6 +20957,7 @@ msgid "Error Loading Test Report"
 msgstr ""
 
 #: src/lib/forms/FormField.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "(required)"
 msgstr ""
 
@@ -21087,9 +20980,8 @@ msgstr ""
 msgid "Reconnected to real-time data"
 msgstr ""
 
-#: src/lib/stores/settings-store.svelte.ts
-msgid "We couldn't save your alarm settings. Please try again."
-msgstr ""
+#~ msgid "We couldn't save your alarm settings. Please try again."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/alerts/+page.svelte
 msgid "Changing alerts requires the alerts.readwrite permission."
@@ -21112,17 +21004,14 @@ msgstr ""
 msgid "Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close"
 msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-msgid "Name <0/><1>(required)</1>"
-msgstr ""
+#~ msgid "Name <0/><1>(required)</1>"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-msgid "Carbs <0/><1>(required)</1>"
-msgstr ""
+#~ msgid "Carbs <0/><1>(required)</1>"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-msgid "Portion <0/><1>(required)</1>"
-msgstr ""
+#~ msgid "Portion <0/><1>(required)</1>"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Pump Modes"
@@ -21611,9 +21500,8 @@ msgstr ""
 msgid "Or continue with a passkey"
 msgstr ""
 
-#: src/lib/components/auth/LoginForm.svelte
-msgid "Your passkey was accepted. Enter the current code from your authenticator app to finish signing in."
-msgstr ""
+#~ msgid "Your passkey was accepted. Enter the current code from your authenticator app to finish signing in."
+#~ msgstr ""
 
 #: src/lib/components/clock/ClockFacePreview.svelte
 msgid "Failed to load preview"
@@ -21643,7 +21531,6 @@ msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "We couldn't start the sync. Please try again."
 msgstr ""
 
@@ -21651,7 +21538,7 @@ msgstr ""
 msgid "We couldn't download the food data. Please try again."
 msgstr ""
 
-#. 0: manualSyncResult.failedConnectors
+#. 0: failedConnectors
 #: src/lib/components/connectors/ManualSyncDialog.svelte
 msgid "Sync finished with {0} failed"
 msgstr ""
@@ -21664,9 +21551,8 @@ msgstr ""
 msgid "No enabled connectors were found."
 msgstr ""
 
-#: src/lib/components/connectors/ManualSyncDialog.svelte
-msgid "The sync could not be started."
-msgstr ""
+#~ msgid "The sync could not be started."
+#~ msgstr ""
 
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "This data source has no data left to delete."
@@ -21705,9 +21591,8 @@ msgstr ""
 msgid "Add a backup way to sign in"
 msgstr ""
 
-#: src/lib/components/layout/BackupSignInPrompt.svelte
-msgid "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes — one-time codes you can type in if you lose your device."
-msgstr ""
+#~ msgid "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes — one-time codes you can type in if you lose your device."
+#~ msgstr ""
 
 #: src/lib/components/layout/BackupSignInPrompt.svelte
 msgid "Account settings"
@@ -21761,8 +21646,7 @@ msgstr ""
 msgid "We couldn't save your patient record. Your changes are still here — please try again."
 msgstr ""
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/constants/scope-labels.svelte.ts
 msgid "Sleep sessions, stages, and overnight biometrics"
 msgstr ""
 
@@ -22307,9 +22191,8 @@ msgstr ""
 msgid "Generate recovery codes"
 msgstr ""
 
-#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
-msgid "We couldn't register a passkey for that username. This page only works for an account that has no passkey and no linked sign-in provider — otherwise sign in with a recovery code."
-msgstr ""
+#~ msgid "We couldn't register a passkey for that username. This page only works for an account that has no passkey and no linked sign-in provider — otherwise sign in with a recovery code."
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/auth/handoff/+page.svelte
 msgid "Signing you in - Nocturne"
@@ -23810,17 +23693,16 @@ msgstr ""
 msgid "<0/> Play Preview"
 msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Fat <0>optional</0>"
 msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
+#: src/routes/(authenticated)/food/FoodFields.svelte
 msgid "Protein <0>optional</0>"
 msgstr ""
 
-#: src/routes/(authenticated)/food/InlineEditor.svelte
-msgid "Energy <0>auto</0>"
-msgstr ""
+#~ msgid "Energy <0>auto</0>"
+#~ msgstr ""
 
 #. 0: rule.name
 #. 0: perm
@@ -23912,17 +23794,17 @@ msgstr ""
 msgid "Glucose target range {0}"
 msgstr ""
 
-#. 0: bg(FALLBACK_GLUCOSE_THRESHOLDS.low)
+#. 0: bg(thresholds.low)
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
 msgid "Low {0}"
 msgstr ""
 
-#. 0: bg(FALLBACK_GLUCOSE_THRESHOLDS.high)
+#. 0: bg(thresholds.high)
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
 msgid "High {0}"
 msgstr ""
 
-#. 0: bgRange(FALLBACK_GLUCOSE_THRESHOLDS.low, FALLBACK_GLUCOSE_THRESHOLDS.high)
+#. 0: bgRange(thresholds.low, thresholds.high)
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
 msgid "Target range {0}"
 msgstr ""
@@ -24025,7 +23907,7 @@ msgstr ""
 #~ msgstr ""
 
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Heart rate"
 msgstr ""
 
@@ -24065,7 +23947,7 @@ msgstr ""
 msgid "{0} print:stroke-2"
 msgstr ""
 
-#. 0: bg(lowThreshold); 1: bg(highThreshold)
+#. 0: bg(lowThreshold, glucoseUnits); 1: bg(highThreshold, glucoseUnits)
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Range limits {0} / {1}"
 msgstr ""
@@ -24978,18 +24860,15 @@ msgstr ""
 msgid "Part of this rule's conditions has a setting its kind of condition doesn't have, so it can't be saved."
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Records in the last 30 days"
-msgstr ""
+#~ msgid "Records in the last 30 days"
+#~ msgstr ""
 
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "All glucose records"
 msgstr ""
 
-#. 0: formatNumber(selectedDataSource.totalEntries)
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "This source sent {0} records in the last 30 days."
-msgstr ""
+#~ msgid "This source sent {0} records in the last 30 days."
+#~ msgstr ""
 
 #. 0: inviterName; 1: url
 #: src/lib/components/members/CopyInvitationMessageButton.svelte
@@ -25009,9 +24888,8 @@ msgstr ""
 msgid "<0/> Copy invitation message"
 msgstr ""
 
-#: src/lib/components/members/CreateInviteCard.svelte
-msgid "Couldn't copy the message to the clipboard. Copy the link manually instead."
-msgstr ""
+#~ msgid "Couldn't copy the message to the clipboard. Copy the link manually instead."
+#~ msgstr ""
 
 #: src/lib/components/members/InviteSummary.svelte
 msgid "the person who sent it"
@@ -25063,10 +24941,8 @@ msgstr ""
 msgid "<0/> <1/> on Nocturne."
 msgstr ""
 
-#. 0: formatNumber(totalEntries)
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "{0} records in the last 30 days"
-msgstr ""
+#~ msgid "{0} records in the last 30 days"
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/join/+page.svelte
 msgid "You're signed in as <0/>"
@@ -25700,7 +25576,7 @@ msgstr "选择至少一种数据类型开始导入"
 #. 0: lastSeen(connection.lastSync)
 #. 0: lastSeen(status.lastSync)
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthSyncProgress.svelte
 msgid "Last successful sync: {0}"
 msgstr "上次成功同步：{0}"
 
@@ -25712,285 +25588,271 @@ msgstr "等待第一次同步成功"
 msgid "Import steps, heart rate, weight, and sleep from Google Health"
 msgstr "从 Google Health 导入步数、心率、体重和睡眠"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Step history"
 msgstr "步数历史记录"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Heart-rate history"
 msgstr "心率历史记录"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Sleep history"
 msgstr "睡眠史"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Vitals"
 msgstr "命脉"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Body measurement"
 msgstr "身体测量"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Nutrition"
 msgstr "营养"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Cycle tracking"
 msgstr "周期追踪"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Save the Google configuration first."
-msgstr "首先保存 Google 配置。"
+#~ msgid "Save the Google configuration first."
+#~ msgstr "首先保存 Google 配置。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Check the client ID and import start date."
-msgstr "检查客户 ID 和导入开始日期。"
+#~ msgid "Check the client ID and import start date."
+#~ msgstr "检查客户 ID 和导入开始日期。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Use an HTTPS URL ending exactly in /settings/connectors/google-health/callback."
-msgstr "使用以 /settings/connectors/google-health/callback 结尾的 HTTPS URL。"
+#~ msgid "Use an HTTPS URL ending exactly in /settings/connectors/google-health/callback."
+#~ msgstr "使用以 /settings/connectors/google-health/callback 结尾的 HTTPS URL。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Google rejected the client ID or secret."
-msgstr "Google 拒绝了客户端 ID 或密码。"
+#~ msgid "Google rejected the client ID or secret."
+#~ msgstr "Google 拒绝了客户端 ID 或密码。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google rejected a requested Health scope."
 msgstr "Google 拒绝了请求的健康范围。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google rejected the OAuth request."
 msgstr "Google 拒绝了 OAuth 请求。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google did not return a usable session."
 msgstr "Google 没有返回可用的会话。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "A Google client secret is required."
-msgstr "需要 Google 客户端密码。"
+#~ msgid "A Google client secret is required."
+#~ msgstr "需要 Google 客户端密码。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Review and save the available data types before importing."
 msgstr "导入前检查并保存可用的数据类型。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Select at least one data type before starting an import."
 msgstr "在开始导入之前至少选择一种数据类型。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Only the user who created this connection can change it."
-msgstr "只有创建此连接的用户才能更改它。"
+#~ msgid "Only the user who created this connection can change it."
+#~ msgstr "只有创建此连接的用户才能更改它。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Disconnect before changing these settings."
-msgstr "更改这些设置之前请先断开连接。"
+#~ msgid "Disconnect before changing these settings."
+#~ msgstr "更改这些设置之前请先断开连接。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "This is a different Google account. Purge the old import before switching."
 msgstr "这是另一个 Google 帐户。在切换之前清除旧的导入。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "The sign-in attempt expired. Start again."
 msgstr "登录尝试已过期。重新开始。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google did not grant background access. Revoke access and reconnect."
 msgstr "Google 未授予后台访问权限。撤销访问并重新连接。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Not every requested permission was granted."
 msgstr "并非所有请求的许可都被授予。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google denied access."
 msgstr "Google 拒绝访问。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google access expired or was revoked. Reconnect."
 msgstr "Google 访问权限已过期或被撤销。重新连接。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google's request limit was reached. Nocturne will retry later."
 msgstr "已达到 Google 的请求限制。Nocturne 将稍后重试。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google is temporarily unavailable. Existing data was preserved."
 msgstr "Google 暂时无法使用。现有数据被保留。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "This Google account is not linked to Fitbit."
 msgstr "此 Google 帐户未链接到 Fitbit。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google rejected the data request."
 msgstr "Google 拒绝了数据请求。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "This account cannot access this API version."
 msgstr "该帐户无法访问该 API 版本。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "This data type is unavailable for this account."
 msgstr "此数据类型对该帐户不可用。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google does not permit this data type to be read."
 msgstr "Google 不允许读取此数据类型。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google rejected this date range. Choose a later start date."
 msgstr "Google 拒绝了这个日期范围。选择较晚的开始日期。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google rejected Nocturne's time filter."
 msgstr "Google 拒绝了 Nocturne 的时间过滤器。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google rejected the filter for this data type."
 msgstr "Google 拒绝了针对此数据类型的过滤器。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google did not recognise this data type."
 msgstr "Google 无法识别此数据类型。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google could not reconcile the sources."
 msgstr "Google 无法协调消息来源。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google returned an incomplete response."
 msgstr "Google 返回了不完整的回复。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Google returned no measurements for this date range."
-msgstr "Google 未返回此日期范围内的任何测量结果。"
+#~ msgid "Google returned no measurements for this date range."
+#~ msgstr "Google 未返回此日期范围内的任何测量结果。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "The saved connection cannot be read. Configure it again."
 msgstr "无法读取保存的连接。重新配置一下。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "The saved selection contains an unsupported type."
 msgstr "保存的选择包含不受支持的类型。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Disconnected locally. Revoke the app in Google as well."
 msgstr "本地已断开。也在 Google 中撤销该应用程序。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google exceeded the pagination safety limit. Try a later start date, or report the technical code if this persists."
 msgstr "Google 超出了分页安全限制。请尝试稍后的开始日期，或者如果这种情况仍然存在，请报告技术代码。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google returned an unexpected data format."
 msgstr "Google 返回了意外的数据格式。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Google returned overlapping measurements."
-msgstr "Google 返回了重叠的测量结果。"
+#~ msgid "Google returned overlapping measurements."
+#~ msgstr "Google 返回了重叠的测量结果。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Google returned data outside the requested range."
-msgstr "Google 返回的数据超出了请求的范围。"
+#~ msgid "Google returned data outside the requested range."
+#~ msgstr "Google 返回的数据超出了请求的范围。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Nocturne could not retrieve every page."
 msgstr "Nocturne 无法检索每一页。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Nocturne could not complete the import. Check the server log for the technical code and stage."
 msgstr "Nocturne 无法完成导入。检查服务器日志中的技术代码和阶段。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "The import is running in the background. You can leave this page and return later."
 msgstr "导入在后台运行。您可以离开此页面并稍后返回。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google Health import completed."
 msgstr "Google Health 导入已完成。"
 
-#. 0: item.errorCode
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#. 0: type.errorCode
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Read failed ({0})"
 msgstr "读取失败 ({0})"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Not yet supported by Nocturne"
 msgstr "Nocturne 尚不支持"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Permission not granted"
 msgstr "未授予许可"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Import needs attention"
 msgstr "进口需要注意"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Import enabled"
 msgstr "启用导入"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Import enabled; no data found"
 msgstr "启用导入；没有找到数据"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Available to connect"
 msgstr "可以连接"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Supported, but no data found"
 msgstr "支持，但未找到数据"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Waiting for the background worker"
 msgstr "等待后台工作者"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Refreshing the Google session"
 msgstr "刷新 Google 会话"
 
 #. 0: dataTypeLabel(status.syncDataType)
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Reading {0}"
 msgstr "正在阅读 {0}"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Reading Google Health data"
 msgstr "读取 Google Health 数据"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Validating the downloaded data"
 msgstr "验证下载的数据"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Updating Nocturne health records"
 msgstr "更新 Nocturne 健康记录"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Preparing the import"
 msgstr "准备导入"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Import status is temporarily unavailable. Retrying."
 msgstr "导入状态暂时不可用。重试。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google sign-in failed or was cancelled."
 msgstr "Google 登录失败或被取消。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google did not grant the requested read access."
 msgstr "Google 未授予所请求的读取权限。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "The Nocturne session was missing after the Google redirect. Sign in and reconnect in the same browser."
 msgstr "Google 重定向后，Nocturne 会话丢失。在同一浏览器中登录并重新连接。"
 
@@ -26002,7 +25864,7 @@ msgstr "Google Health · 连接器和应用程序"
 msgid "Server connector for health and fitness data"
 msgstr "用于健康和健身数据的服务器连接器"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "The import could not be completed."
 msgstr "导入无法完成。"
 
@@ -26011,11 +25873,11 @@ msgstr "导入无法完成。"
 msgid "Technical code: <0/> {0}"
 msgstr "技术代码： <0/> {0}"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthSyncProgress.svelte
 msgid "Import running in the background"
 msgstr "导入在后台运行"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthSyncProgress.svelte
 msgid "Google Health import progress"
 msgstr "Google Health 导入进度"
 
@@ -26040,21 +25902,19 @@ msgid "Each sync refreshes today and imports one older calendar month."
 msgstr "每次同步都会更新今天的数据，并导入一个更早的日历月。"
 
 #. 0: status.syncCompletedDataTypes; 1: status.syncTotalDataTypes
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthSyncProgress.svelte
 msgid "{0} of {1} data types read"
 msgstr "读取 {0} 或 {1} 数据类型"
 
-#. 0: status.syncPagesRead; 1: status.syncPagesRead === 1 ? "page" \\: "pages"
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "{0} Google {1} read for this data type"
-msgstr "{0} Google {1} 读取此数据类型"
+#~ msgid "{0} Google {1} read for this data type"
+#~ msgstr "{0} Google {1} 读取此数据类型"
 
-#. 0: status.syncProgressPercent ?? 0
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#. 0: percent
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthSyncProgress.svelte
 msgid "{0}% complete"
 msgstr "{0}% 完成"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthSyncProgress.svelte
 msgid "You can keep using Nocturne or leave this page. The server will continue the import."
 msgstr "您可以继续使用Nocturne 或离开此页面。服务器将继续导入。"
 
@@ -26066,55 +25926,39 @@ msgstr "与 Google Health API 的只读 OAuth 连接"
 msgid "Loading connection status…"
 msgstr "正在加载连接状态..."
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Google client ID <0/>"
-msgstr "Google 客户端 ID <0/>"
+#~ msgid "Google client ID <0/>"
+#~ msgstr "Google 客户端 ID <0/>"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Client secret <0/>"
-msgstr "客户端机密 <0/>"
+#~ msgid "Client secret <0/>"
+#~ msgstr "客户端机密 <0/>"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Callback URL <0/>"
-msgstr "回调地址 <0/>"
+#~ msgid "Callback URL <0/>"
+#~ msgstr "回调地址 <0/>"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Import data from <0/>"
 msgstr "从 <0/> 导入数据"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Nocturne retrieves every available page from this date. An early start date can make the first import take longer."
-msgstr "Nocturne 检索从此日期起的所有可用页面。较早的开始日期可能会使首次导入花费更长的时间。"
+#~ msgid "Nocturne retrieves every available page from this date. An early start date can make the first import take longer."
+#~ msgstr "Nocturne 检索从此日期起的所有可用页面。较早的开始日期可能会使首次导入花费更长的时间。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Save and connect"
-msgstr "保存并连接"
+#~ msgid "Save and connect"
+#~ msgstr "保存并连接"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "<0/>Disconnect"
-msgstr "<0/>断开连接"
+#~ msgid "<0/>Disconnect"
+#~ msgstr "<0/>断开连接"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Leave empty to keep the saved secret"
-msgstr "留空以保守保存的秘密"
+#~ msgid "Leave empty to keep the saved secret"
+#~ msgstr "留空以保守保存的秘密"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Save and reconnect"
-msgstr "保存并重新连接"
+#~ msgid "Save and reconnect"
+#~ msgstr "保存并重新连接"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Edit connection settings"
-msgstr "编辑连接设置"
+#~ msgid "Edit connection settings"
+#~ msgstr "编辑连接设置"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "The encrypted Google Cloud configuration is saved."
-msgstr "加密的 Google Cloud 配置已保存。"
+#~ msgid "The encrypted Google Cloud configuration is saved."
+#~ msgstr "加密的 Google Cloud 配置已保存。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Review the available data below, then save your selection to start importing."
@@ -26132,9 +25976,8 @@ msgstr "Google Health已连接。自动同步大约每 15 分钟运行一次。"
 msgid "<0/>Sync now"
 msgstr "<0/>立即同步"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Change the import start date and selection below without reconnecting. Disconnect only to change OAuth settings."
-msgstr "更改下面的导入开始日期和选择，无需重新连接。仅在更改 OAuth 设置时断开连接。"
+#~ msgid "Change the import start date and selection below without reconnecting. Disconnect only to change OAuth settings."
+#~ msgstr "更改下面的导入开始日期和选择，无需重新连接。仅在更改 OAuth 设置时断开连接。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health data"
@@ -26144,66 +25987,62 @@ msgstr "Google Health数据"
 msgid "Detected data types and how Nocturne can use them"
 msgstr "检测到的数据类型以及 Nocturne 如何使用它们"
 
-#. 0: group.selectedCount; 1: group.entries.length
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#. 0: selectedCount; 1: types.length
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthCategoryTable.svelte
 msgid "{0}/{1} selected"
 msgstr "已选择 {0}/{1}"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthCategoryTable.svelte
 msgid "Data type"
 msgstr "数据类型"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthCategoryTable.svelte
 msgid "Found"
 msgstr "成立"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthCategoryTable.svelte
 msgid "Nocturne destination"
 msgstr "Nocturne 目的地"
 
-#. 0: dataTypeLabel(item.dataType)
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#. 0: dataTypeLabel(dataType)
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthCategoryTable.svelte
 msgid "Import {0}"
 msgstr "导入 {0}"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Not scanned"
 msgstr "未扫描"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "No permission"
 msgstr "没有许可"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Scan failed"
 msgstr "扫描失败"
 
-#. 0: item.count
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#. 0: type.count
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Yes ({0})"
 msgstr "是（{0}）"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "No"
 msgstr "不"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "No destination yet"
 msgstr "还没有目的地"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Scanning the selected history in Google Health…"
-msgstr "正在扫描 Google Health 中选定的历史记录..."
+#~ msgid "Scanning the selected history in Google Health…"
+#~ msgstr "正在扫描 Google Health 中选定的历史记录..."
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "This runs separately, so the rest of the page remains available."
-msgstr "它是单独运行的，因此页面的其余部分仍然可用。"
+#~ msgid "This runs separately, so the rest of the page remains available."
+#~ msgstr "它是单独运行的，因此页面的其余部分仍然可用。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "No inventory has been loaded yet."
-msgstr "尚未加载任何库存。"
+#~ msgid "No inventory has been loaded yet."
+#~ msgstr "尚未加载任何库存。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Scanning inventory…"
@@ -26225,29 +26064,23 @@ msgstr "保存选择并导入"
 msgid "Choose an earlier date to import older data shared with Google Health. Empty results are not errors. Clear all selections and save to pause imports; previously imported data is kept."
 msgstr "选择较早的日期来导入与 Google Health 共享的旧数据。空结果不是错误。清除所有选择并保存以暂停导入；先前导入的数据将被保留。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Enable the Google Health API and create an OAuth Web application client."
-msgstr "启用 Google Health API 并创建 OAuth Web 应用程序客户端。"
+#~ msgid "Enable the Google Health API and create an OAuth Web application client."
+#~ msgstr "启用 Google Health API 并创建 OAuth Web 应用程序客户端。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Add your account as a test user while the consent screen is in testing."
-msgstr "当同意屏幕处于测试阶段时，将您的帐户添加为测试用户。"
+#~ msgid "Add your account as a test user while the consent screen is in testing."
+#~ msgstr "当同意屏幕处于测试阶段时，将您的帐户添加为测试用户。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Register the callback URL above as an Authorized redirect URI."
-msgstr "将上面的回调 URL 注册为授权重定向 URI。"
+#~ msgid "Register the callback URL above as an Authorized redirect URI."
+#~ msgstr "将上面的回调 URL 注册为授权重定向 URI。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Keep the client secret private."
-msgstr "保守客户秘密。"
+#~ msgid "Keep the client secret private."
+#~ msgstr "保守客户秘密。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Google Cloud setup"
-msgstr "Google Cloud 设置"
+#~ msgid "Google Cloud setup"
+#~ msgstr "Google Cloud 设置"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "Google setup documentation"
-msgstr "Google 设置文档"
+#~ msgid "Google setup documentation"
+#~ msgstr "Google 设置文档"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Delete imported Google Health data?"
@@ -26273,13 +26106,11 @@ msgstr "<0/> 连接器和应用程序"
 msgid "Import recovery"
 msgstr "进口回收"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "If a historical import stops or needs to be repeated, reset the Google Health connector from a chosen date. The reset re-reads the range and keeps the normal duplicate protection."
-msgstr "如果历史导入停止或需要重复，请从所选日期重置 Google Health 连接器。复位重新读取范围并保持正常的重复保护。"
+#~ msgid "If a historical import stops or needs to be repeated, reset the Google Health connector from a chosen date. The reset re-reads the range and keeps the normal duplicate protection."
+#~ msgstr "如果历史导入停止或需要重复，请从所选日期重置 Google Health 连接器。复位重新读取范围并保持正常的重复保护。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "The reset runs in the background. Platform administrators can monitor or cancel it from the connector reset page."
-msgstr "重置在后台运行。平台管理员可以从连接器重置页面监控或取消它。"
+#~ msgid "The reset runs in the background. Platform administrators can monitor or cancel it from the connector reset page."
+#~ msgstr "重置在后台运行。平台管理员可以从连接器重置页面监控或取消它。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Open connector reset"
@@ -26393,103 +26224,103 @@ msgstr ""
 msgid "One or more connectors failed; review the connector details and retry the failed range."
 msgstr "一个或多个连接器失败；请查看连接器详情，并重试失败的时间范围。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Sleep sessions and stages"
 msgstr "睡眠记录和阶段"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Active energy burned"
 msgstr "活动消耗的能量"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Total calories"
 msgstr "总热量"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Distance"
 msgstr "距离"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Floors"
 msgstr "楼层数"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Workouts"
 msgstr "运动记录"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Body fat"
 msgstr "体脂"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Height"
 msgstr "身高"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Nutrition log"
 msgstr "饮食日志"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Hydration"
 msgstr "饮水量"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Blood glucose"
 msgstr "血糖"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Oxygen saturation"
 msgstr "血氧饱和度"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Heart rate variability"
 msgstr "心率变异性"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Resting heart rate"
 msgstr "静息心率"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Daily oxygen saturation"
 msgstr "每日血氧饱和度"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Daily respiratory rate"
 msgstr "每日呼吸频率"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Sleep respiratory rate"
 msgstr "睡眠呼吸频率"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Core body temperature"
 msgstr "核心体温"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Menstrual period"
 msgstr "月经"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Ovulation test"
 msgstr "排卵测试"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Cervical mucus"
 msgstr "宫颈黏液"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Sexual activity"
 msgstr "性活动"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Unknown data type"
 msgstr "未知数据类型"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google Health currently provides no read-only scope for this type."
 msgstr "Google Health 目前未为此类型提供只读权限。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Not exposed as a readable Google Health API data type."
 msgstr "Google Health API 未提供此可读取数据类型。"
 
@@ -26497,21 +26328,20 @@ msgstr "Google Health API 未提供此可读取数据类型。"
 msgid "Status unavailable"
 msgstr "状态不可用"
 
-#~ msgid "Disconnecting…"
-#~ msgstr "正在断开连接…"
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnecting…"
+msgstr "正在断开连接…"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Disconnecting Google Health. The current scan or import is being stopped."
 msgstr "正在断开 Google Health 连接，并停止当前扫描或导入。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Google Health is disconnected. Your imported data has been kept."
 msgstr "Google Health 已断开连接。已保留导入的数据。"
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
-msgid "<0/>Disconnecting…"
-msgstr "<0/>正在断开连接…"
+#~ msgid "<0/>Disconnecting…"
+#~ msgstr "<0/>正在断开连接…"
 
 #: src/lib/stores/realtime-store.svelte.ts
 msgid "Real-time data unavailable"
@@ -26527,10 +26357,8 @@ msgstr ""
 msgid "How your {0} has trended over the years"
 msgstr ""
 
-#. 0: a1cLabel(true)
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Time-in-range, {0} estimates, and averages"
-msgstr ""
+#~ msgid "Time-in-range, {0} estimates, and averages"
+#~ msgstr ""
 
 #. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -26657,11 +26485,11 @@ msgstr ""
 msgid "{0} / {1} processed"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Another Google Health import is already running. The inventory will be available when it finishes; refresh this page afterwards."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Nocturne downloaded the data, but could not store it locally. Retry the same range; if it persists, use the technical stage from the server log."
 msgstr ""
 
@@ -26813,4 +26641,978 @@ msgstr ""
 
 #: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
 msgid "Update data"
+msgstr ""
+
+#: ../cms/src/editor/ContentSidebar.svelte
+msgid "Content"
+msgstr ""
+
+#: ../cms/src/editor/ContentSidebar.svelte
+msgid "No content found."
+msgstr ""
+
+#. 0: selectedComponent.name
+#: ../cms/src/editor/ComponentPropsEditor.svelte
+msgid "{0} Props"
+msgstr ""
+
+#: ../cms/src/editor/MetadataPanel.svelte
+msgid "Metadata <0/>"
+msgstr ""
+
+#: ../cms/src/editor/PreviewPane.svelte
+msgid "Email preview will use better-svelte-email renderer."
+msgstr ""
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Editing"
+msgstr ""
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "No content selected"
+msgstr ""
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Save Draft"
+msgstr ""
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Publish"
+msgstr ""
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "All messages"
+msgstr ""
+
+#: ../cms/src/translations/TranslationEditor.svelte
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Untranslated"
+msgstr ""
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "With drafts"
+msgstr ""
+
+#. 0: translatedCount; 1: messages.length
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "{0} of {1} messages translated or drafted"
+msgstr ""
+
+#. 0: drafts.size; 1: drafts.size === 1 ? '' \\: 's'
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "{0} draft{1}"
+msgstr ""
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "Search source text or translations"
+msgstr ""
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "No messages match."
+msgstr ""
+
+#. 0: message.msgidPlural
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Plural: {0}"
+msgstr ""
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Discard draft"
+msgstr ""
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Draft"
+msgstr ""
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Fuzzy"
+msgstr ""
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Translated"
+msgstr ""
+
+#. 0: n
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Form {0}"
+msgstr ""
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "No translation yet"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View glucose readings"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove glucose readings"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View treatments"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove treatments"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View device status"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, update and remove device status"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View treatment profile"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, update and remove treatment profile"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View alerts"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Manage alerts"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View reports and analytics"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View basic account info"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Manage sharing settings"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View heart rate data"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove heart rate data"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View step count data"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove step count data"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View sleep data"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove sleep data"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View food data"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, record and remove food data"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View all health data (read-only)"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "View, update and remove all health data"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Send notifications to this device, and mute an alert for yourself from it"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Use this device's alarms: sound, vibration, flashlight, and full-screen alerts"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Create, edit and delete roles"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Change site name, units and preferences"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Manage public sharing and followers"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Full access to all data and settings, including deletion"
+msgstr ""
+
+#. 0: a1cLabel(true)
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Generated reports and data exports, and statistics: time in range, {0} estimates, and averages"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Site Settings"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Covers all the health categories"
+msgstr ""
+
+#: src/lib/components/alerts/DndPanel.svelte
+#: src/routes/(authenticated)/alerts/dnd/+page.svelte
+msgid "Scheduled, on now"
+msgstr ""
+
+#: src/lib/components/alerts/SidebarDndToggle.svelte
+msgid "Scheduled Do Not Disturb window is on now"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records in total"
+msgstr ""
+
+#. 0: selectedConnector.totalEntriesWindowDays
+#. 0: selectedDataSource.totalEntriesWindowDays
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records in the last {0} days"
+msgstr ""
+
+#. 0: formatNumber(selectedDataSource.totalEntries)
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "This source sent {0} records in total."
+msgstr ""
+
+#. 0: formatNumber(selectedDataSource.totalEntries); 1: selectedDataSource.totalEntriesWindowDays
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "This source sent {0} records in the last {1} days."
+msgstr ""
+
+#. 0: formatNumber(totalEntries)
+#: src/lib/components/settings/DataSourceRow.svelte
+msgid "{0} records in total"
+msgstr ""
+
+#. 0: formatNumber(totalEntries); 1: totalEntriesWindowDays
+#: src/lib/components/settings/DataSourceRow.svelte
+msgid "{0} records in the last {1} days"
+msgstr ""
+
+#: ../cms/src/lib/components/edra/shadcn/editor.svelte
+msgid "Unable to load the content"
+msgstr ""
+
+#: ../cms/src/lib/components/edra/shadcn/editor.svelte
+msgid "The content of this page might be corrupted."
+msgstr ""
+
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
+msgid "Tab"
+msgstr ""
+
+#. 0: text; 1: value; 2: border; 3: value
+#: ../cms/src/lib/components/edra/shadcn/components/toolbar/QuickColors.svelte
+msgid "{0} background-color: {1}50; border: {2} {3};"
+msgstr ""
+
+#: src/lib/components/layout/BackupSignInPrompt.svelte
+msgid "There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes, which are one-time codes you can type in if you lose your device."
+msgstr ""
+
+#. 0: successfulConnectors; 1: totalConnectors
+#: src/lib/components/connectors/ManualSyncDialog.svelte
+msgid "{0} of {1} connectors synced"
+msgstr ""
+
+#. 0: result.durationMs
+#: src/lib/components/connectors/ManualSyncDialog.svelte
+msgid "{0}ms"
+msgstr ""
+
+#: src/lib/connectors/google-health-error.svelte.ts
+msgid "Your Nocturne session is missing or has expired. Sign in to Nocturne and reload this page."
+msgstr ""
+
+#: src/lib/connectors/google-health-error.svelte.ts
+msgid "Your Nocturne account cannot access these settings. Use an administrator account with tenant settings permission."
+msgstr ""
+
+#: src/lib/connectors/google-health-error.svelte.ts
+msgid "This feature is missing from the installed version. Check that Nocturne is up to date."
+msgstr ""
+
+#: src/lib/connectors/google-health-error.svelte.ts
+msgid "Too many requests were made. Try again in a few minutes."
+msgstr ""
+
+#: src/lib/connectors/google-health-error.svelte.ts
+msgid "Nocturne could not process the request. Check the server log for this attempt."
+msgstr ""
+
+#: src/lib/connectors/google-health-error.svelte.ts
+msgid "A page or connection error occurred. Reload the page; if this continues, report the technical code."
+msgstr ""
+
+#. 0: message; 1: technical
+#: src/lib/connectors/google-health-error.svelte.ts
+msgid "{0} Technical code: {1}."
+msgstr ""
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+msgid "Not enabled on this Nocturne server"
+msgstr ""
+
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Not connected"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthSyncProgress.svelte
+msgid "1 Google page read for this data type"
+msgstr ""
+
+#. 0: status.syncPagesRead
+#: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthSyncProgress.svelte
+msgid "{0} Google pages read for this data type"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
+msgid "Connect Google Health first."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
+msgid "Google Health is not enabled on this Nocturne server."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
+msgid "This server's Google client has changed since you connected. Connect Google Health again; your imported data is kept."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
+msgid "Check the import start date."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
+msgid "Google rejected this server's redirect URI. Ask your Nocturne operator to check the Google Health setup."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
+msgid "Google rejected this server's Google client. Ask your Nocturne operator to check the Google Health setup."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
+msgid "Disconnect Google Health first."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Your Nocturne operator hasn't enabled Google Health on this server."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "How Google Health is enabled"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Link Google Health in the Google Health app first, then connect. Google asks which data to share with Nocturne."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Connect Google Health"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is connected, but imports are paused because your Nocturne operator has turned Google Health off."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnect"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Change the import start date and selection below without reconnecting."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "If a historical import stops or needs to be repeated, reset the Google Health connector from a chosen date. The reset runs in the background, re-reads the range and keeps the normal duplicate protection; platform administrators can monitor or cancel it."
+msgstr ""
+
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
+msgid "Failed to generate API key. You can create one in the API tokens section."
+msgstr ""
+
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
+msgid "Copy API key"
+msgstr ""
+
+#. 0: getUploaderName(selectedUploader)
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
+msgid "Creates an API key for {0} with read and write access to health data."
+msgstr ""
+
+#: src/lib/components/connectors/UploaderSetupDialog.svelte
+msgid "In AAPS, open Config Builder, then Synchronization, and select NSClient V3. In its settings, paste the URL into Nightscout URL and the API key into NS access token."
+msgstr ""
+
+#: src/lib/components/patient/DeviceNameCombobox.svelte
+msgid "Search devices..."
+msgstr ""
+
+#: src/lib/components/patient/DeviceNameCombobox.svelte
+msgid "Search or type a device name..."
+msgstr ""
+
+#. 0: typed
+#: src/lib/components/patient/DeviceNameCombobox.svelte
+msgid "<0/> Use \"{0}\""
+msgstr ""
+
+#: src/lib/components/patient/DeviceNameCombobox.svelte
+msgid "No devices found."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Full"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Fade (Trio style)"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Outside target only"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "No fill under the glucose line."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Fills from the glucose line to the bottom of the chart at one opacity."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Fills from the glucose line to the bottom of the chart, fading out toward the bottom."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Fills only between the glucose line and the target range when it is out of range."
+msgstr ""
+
+#: src/lib/components/audit/AuditMutationsTable.svelte
+#: src/lib/components/audit/AuditMutationsTable.svelte
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Allow re-import"
+msgstr ""
+
+#: src/lib/components/audit/AuditMutationsTable.svelte
+msgid "Records released for re-import:"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Delete and Allow Re-import"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+msgid "The connector stays enabled and imports this data again on its next sync, along with any of its records deleted earlier."
+msgstr ""
+
+#. 0: displayName
+#: src/lib/components/connectors/ConnectorDangerZone.svelte
+msgid "The connector is disabled, and deleted records are never imported again, even if {0} still has them."
+msgstr ""
+
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records this source sends again are imported, including any of its records deleted earlier."
+msgstr ""
+
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Deleted records are never imported again, even if this source sends them."
+msgstr ""
+
+#: src/routes/(authenticated)/food/FoodFields.svelte
+msgid "Energy <0>optional</0>"
+msgstr ""
+
+#: src/routes/(authenticated)/food/FoodFields.svelte
+msgid "Portion <0/>"
+msgstr ""
+
+#: src/lib/components/alerts/DndNoticeStrip.svelte
+msgid "Do Not Disturb is on. Only critical rules and rules allowed through Do Not Disturb will fire."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 32 characters). Use the generator below for each secret field."
+msgstr ""
+
+#: src/routes/(authenticated)/oauth/consent/+page.svelte
+msgid "Approving sends access to <0/>"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Unavailable member"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "No recipient"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Me"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Member"
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "This channel has no recipient. Saving the rule sends it to you."
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "This person can no longer receive alerts on this site. Saving the rule sends this channel to you."
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Shown in this person's Nocturne notification centre."
+msgstr ""
+
+#: src/lib/components/alerts/ChannelsSection.svelte
+msgid "Recipient"
+msgstr ""
+
+#: src/lib/components/alerts/AlertRuleRow.svelte
+msgid "Needs review"
+msgstr ""
+
+#: src/lib/components/alerts/conditionIssues.svelte.ts
+msgid "Part of this rule's conditions is malformed, so the rule may not alert as set. Edit its conditions and save it."
+msgstr ""
+
+#. 0: needsReview
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "{0} alert rules need review."
+msgstr ""
+
+#. 0: needsReview === 1 ? "1 alert rule needs review." \\: `${needsReview} alert rules need review.`
+#: src/routes/(authenticated)/alerts/+page.svelte
+msgid "{0} An update changed or turned off rules set up in an older format, or their conditions may not alert as set. They are marked below."
+msgstr ""
+
+#: src/lib/components/shared/SkippedRecordsNote.svelte
+msgid "1 record could not be stored. It is listed under"
+msgstr ""
+
+#. 0: formatNumber(refused)
+#: src/lib/components/shared/SkippedRecordsNote.svelte
+msgid "{0} records could not be stored. They are listed under"
+msgstr ""
+
+#: src/lib/components/shared/SkippedRecordsNote.svelte
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Rejected Uploads"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
+msgid "Records an uploader sent that Nocturne could not store"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Error Loading Rejected Uploads"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Rejected Uploads - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Records an uploader sent that Nocturne answered but could not store, because a value in them could not be stored as sent. Most uploaders treat them as saved, so they are not in your data. Each is listed once, with how many times it was sent. Long text in a record is shortened here."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "<0/> Export this page"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "<0/> Clear this page"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "No rejected uploads."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Last sent"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Times sent"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Record"
+msgstr ""
+
+#. 0: formatDateTime(row.firstSeenAt)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "First {0}"
+msgstr ""
+
+#. 0: formatNumber(row.payloadBytes ?? 0)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Shortened from {0} bytes."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "<0/> Newer"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Older <0/>"
+msgstr ""
+
+#. 0: formatNumber(offset + 1); 1: formatNumber(offset + rows.length); 2: formatNumber(total)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "{0}–{1} of {2}"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Clear rejected uploads"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Clearing..."
+msgstr ""
+
+#. 0: formatNumber(rows.length)
+#: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
+msgid "Remove the {0} rejected uploads on this page? Export them first to keep a copy. They are not in your data and cannot be recovered once cleared. Uploads not on this page are kept."
+msgstr ""
+
+#: src/lib/components/PreludeQuickConnect.svelte
+#: src/lib/components/XdripQuickConnect.svelte
+msgid "A device wants access"
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "Telegram webhook calls are refused until one is set. Choose a random value of letters, digits, <0/> or <1/> (for example from <2/>), save it here with the bot enabled, then register the webhook again with the same value:"
+msgstr ""
+
+#: src/lib/components/admin/IntegrationsTabContent.svelte
+msgid "A webhook secret token is required"
+msgstr ""
+
+#: src/lib/components/auth/DeviceAppClaimNotice.svelte
+msgid "This request says it is from <0/>, but a device sign-in cannot prove which app started it. Only approve if you started this sign-in yourself on a device you trust."
+msgstr ""
+
+#: src/lib/components/auth/LoginForm.svelte
+msgid "Enter the current code from your authenticator app to finish signing in."
+msgstr ""
+
+#: src/lib/components/connectors/UploaderSetupView.svelte
+#: src/routes/(authenticated)/oauth/device/+page.svelte
+msgid "A device wants to access your Nocturne data."
+msgstr ""
+
+#: src/lib/components/settings/ConnectedApps.svelte
+msgid "Unverified"
+msgstr ""
+
+#: src/routes/(authenticated)/oauth/device/+page.svelte
+msgid "Authorize a Device"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
+msgid "Link the <0/> account <1/> to your Nocturne account? It will be able to read your glucose and acknowledge your alerts."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
+msgid "Only continue if you started this link yourself."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "We couldn't complete the Discord link. It may have expired. Please try again from Settings."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Missing link details"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Start linking your Discord account again from Settings."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Can't complete this link"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "This link has expired, or was started from another browser or account. Start linking your Discord account again from Settings."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Link the Discord account <0/> to your Nocturne account?"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Link the Discord account you just signed in with to your Nocturne account?"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "Link Discord account"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "<0/> It will be able to read your glucose and acknowledge your alerts."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "<0/> Link account"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
+msgid "This chat account is already linked to another member."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "This Discord account is already linked to another member."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/bot/discord/finalize/+page.svelte
+msgid "This link is expired or invalid. Please try again from Settings."
+msgstr ""
+
+#. 0: activation.timeshiftHours > 0 ? "+" \\: ""; 1: activation.timeshiftHours
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "{0}{1}h"
+msgstr ""
+
+#. 0: activation.enteredBy ?? "a person"
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "<0/> Recorded by {0}"
+msgstr ""
+
+#. 0: profileActivationSource(activation) ?? "a connector"
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "<0/> Reported by {0}"
+msgstr ""
+
+#. 0: profileActivationSource(activation) ?? activation.enteredBy ?? "an uploader"
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "<0/> Uploaded by {0}"
+msgstr ""
+
+#. 0: formatDateTimeCompact(activation.endMills)
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "· Until {0}"
+msgstr ""
+
+#. 0: formatDateTimeCompact(activation.startMills)
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "<0/> · Since {0} <1/>"
+msgstr ""
+
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "<0/> Active profile switch"
+msgstr ""
+
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "The active switch could not be loaded."
+msgstr ""
+
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "No switch is active. The default profile applies."
+msgstr ""
+
+#. 0: profileActivationSource(status.reported) ?? "your AID system"
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "This switch is recorded, but Nocturne's calculations follow the profile {0} reports while it does."
+msgstr ""
+
+#. 0: recorded.baseProfileName
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "{0} has changed since this switch was recorded. The switch keeps the schedules it was recorded with."
+msgstr ""
+
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "The switch was not recorded again."
+msgstr ""
+
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "Switch again"
+msgstr ""
+
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "The switch was not ended."
+msgstr ""
+
+#: src/lib/components/profile/ActiveProfileActivation.svelte
+msgid "End switch"
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "The switch was not recorded."
+msgstr ""
+
+#. 0: profileName
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "Switch to {0}"
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "Starts now. Scales the profile by a percentage and shifts its schedule by whole hours."
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "The switch is recorded in Nocturne only. It is not sent to your pump, and AAPS and Nightscout followers never see it."
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "An AID system"
+msgstr ""
+
+#. 0: profileActivationSource(reported) ?? "An AID system"
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "{0} is reporting the profile your pump runs. The switch will be recorded, but Nocturne's calculations follow the reported profile while it does."
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "Enter a whole number from 30 to 250."
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "Enter a whole number from -23 to 23."
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "Timeshift (hours)"
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "Temporary"
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "Minutes"
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "Enter a length from 1 minute to 7 days."
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "Runs until another switch replaces it or it is ended."
+msgstr ""
+
+#: src/lib/components/profile/ProfileSwitchDialog.svelte
+msgid "<0/> Record switch"
+msgstr ""
+
+#. 0: FORMATS
+#: src/lib/components/settings/CustomSoundUpload.svelte
+msgid "Choose one of these formats: {0}"
+msgstr ""
+
+#. 0: MAX_CUSTOM_SOUND_SIZE_MB
+#: src/lib/components/settings/CustomSoundUpload.svelte
+msgid "The file is larger than {0} MB"
+msgstr ""
+
+#: src/lib/components/settings/CustomSoundUpload.svelte
+msgid "This file could not be played. Check that it is a valid audio file."
+msgstr ""
+
+#: src/lib/components/settings/CustomSoundUpload.svelte
+msgid "The audio file took too long to load"
+msgstr ""
+
+#. 0: FORMATS; 1: MAX_CUSTOM_SOUND_SIZE_MB
+#: src/lib/components/settings/CustomSoundUpload.svelte
+msgid "Upload your own alarm sounds ({0}, up to {1} MB)"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/profile/+page.svelte
+msgid "Make default"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/profile/+page.svelte
+#: src/routes/(authenticated)/settings/profile/+page.svelte
+msgid "Switch…"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
+msgid "Too many attempts. Wait a minute, then try again."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
+msgid "That recovery code has expired or was already used. Ask an administrator for a new one."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
+msgid "Some accounts here have no way to sign in. If yours is one of them, sign in with one of your own recovery codes, or ask an administrator for a one-time recovery code."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
+msgid "Recovery code from your administrator"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
+msgid "<0/> Checking code..."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/+page.svelte
+msgid "Sign in with your own recovery code instead"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+msgid "Couldn't create a recovery link."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+msgid "Members who can't sign in"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+msgid "Send a member a one-time recovery link so they can register a new passkey. It works once and expires after 24 hours."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+msgid "Only the operator can recover this account"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+msgid "<0/> Create link"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+msgid "They still have recovery codes of their own. If they've lost them, a link cancels those codes once it is used."
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+msgid "Recovery link"
+msgstr ""
+
+#: src/routes/(unauthenticated)/auth/recovery/LockedOutMembers.svelte
+msgid "Copy recovery link"
 msgstr ""

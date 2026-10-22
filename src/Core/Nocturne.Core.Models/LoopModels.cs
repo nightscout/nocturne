@@ -19,9 +19,6 @@ public class LoopNotificationData
     [JsonPropertyName("eventType")]
     public string? EventType { get; set; }
 
-    /// <summary>
-    /// Notes/comments associated with the notification
-    /// </summary>
     [JsonPropertyName("notes")]
     public string? Notes { get; set; }
 
@@ -113,9 +110,6 @@ public class LoopConfiguration
     public string PushServerEnvironment { get; set; } = ConnectorDefaults.LoopPushServerEnvironment;
 }
 
-/// <summary>
-/// Loop notification response model
-/// </summary>
 public class LoopNotificationResponse
 {
     /// <summary>
@@ -130,15 +124,9 @@ public class LoopNotificationResponse
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Timestamp when the response was generated
-    /// </summary>
     [JsonPropertyName("timestamp")]
     public long Timestamp { get; set; }
 
-    /// <summary>
-    /// Additional response data
-    /// </summary>
     [JsonPropertyName("data")]
     public object? Data { get; set; }
 }
@@ -149,20 +137,17 @@ public class LoopNotificationResponse
 /// </summary>
 public class LoopOverridePreset
 {
-    /// <summary>
-    /// Gets or sets the preset name
-    /// </summary>
     [JsonPropertyName("name")]
     public string? Name { get; set; }
 
     /// <summary>
-    /// Gets or sets the emoji symbol for the preset
+    /// Emoji symbol for the preset
     /// </summary>
     [JsonPropertyName("symbol")]
     public string? Symbol { get; set; }
 
     /// <summary>
-    /// Gets or sets the duration in seconds (Loop's external format)
+    /// Duration in seconds (Loop's external format)
     /// </summary>
     [JsonPropertyName("duration")]
     public double? Duration { get; set; }
@@ -175,34 +160,22 @@ public class LoopOverridePreset
     [JsonIgnore]
     public double? DurationMinutes => Duration.HasValue ? Duration.Value / 60.0 : null;
 
-    /// <summary>
-    /// Gets or sets the target glucose range
-    /// </summary>
     [JsonPropertyName("targetRange")]
     [JsonConverter(typeof(LoopTargetRangeConverter))]
     public LoopTargetRange? TargetRange { get; set; }
 
     /// <summary>
-    /// Gets or sets the insulin needs scale factor (e.g., 0.9 for 90%)
+    /// Insulin needs scale factor (e.g., 0.9 for 90%)
     /// </summary>
     [JsonPropertyName("insulinNeedsScaleFactor")]
     public double? InsulinNeedsScaleFactor { get; set; }
 }
 
-/// <summary>
-/// Loop target glucose range
-/// </summary>
 public class LoopTargetRange
 {
-    /// <summary>
-    /// Gets or sets the minimum target value
-    /// </summary>
     [JsonPropertyName("minValue")]
     public double? MinValue { get; set; }
 
-    /// <summary>
-    /// Gets or sets the maximum target value
-    /// </summary>
     [JsonPropertyName("maxValue")]
     public double? MaxValue { get; set; }
 }
@@ -214,69 +187,54 @@ public class LoopTargetRange
 public class LoopProfileSettings
 {
     /// <summary>
-    /// Gets or sets the Apple Push Notification device token
+    /// Apple Push Notification device token
     /// </summary>
     [JsonPropertyName("deviceToken")]
     public string? DeviceToken { get; set; }
 
     /// <summary>
-    /// Gets or sets the iOS bundle identifier for the Loop app
+    /// iOS bundle identifier for the Loop app
     /// </summary>
     [JsonPropertyName("bundleIdentifier")]
     public string? BundleIdentifier { get; set; }
 
-    /// <summary>
-    /// Gets or sets the list of override presets
-    /// </summary>
     [JsonPropertyName("overridePresets")]
     public List<LoopOverridePreset>? OverridePresets { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether closed loop dosing is enabled
-    /// </summary>
     [JsonPropertyName("dosingEnabled")]
     public bool? DosingEnabled { get; set; }
 
-    /// <summary>
-    /// Gets or sets the minimum BG guard value
-    /// </summary>
     [JsonPropertyName("minimumBGGuard")]
     public double? MinimumBGGuard { get; set; }
 
-    /// <summary>
-    /// Gets or sets the pre-meal target range
-    /// </summary>
     [JsonPropertyName("preMealTargetRange")]
     [JsonConverter(typeof(LoopTargetRangeConverter))]
     public LoopTargetRange? PreMealTargetRange { get; set; }
 
-    /// <summary>
-    /// Gets or sets the workout target range
-    /// </summary>
     [JsonPropertyName("workoutTargetRange")]
     [JsonConverter(typeof(LoopTargetRangeConverter))]
     public LoopTargetRange? WorkoutTargetRange { get; set; }
 
     /// <summary>
-    /// Gets or sets the maximum bolus amount in units
+    /// Maximum bolus amount in units
     /// </summary>
     [JsonPropertyName("maximumBolus")]
     public double? MaximumBolus { get; set; }
 
     /// <summary>
-    /// Gets or sets the maximum basal rate in units per hour
+    /// Maximum basal rate in units per hour
     /// </summary>
     [JsonPropertyName("maximumBasalRatePerHour")]
     public double? MaximumBasalRatePerHour { get; set; }
 
     /// <summary>
-    /// Gets or sets the dosing strategy (e.g., "automaticBolus", "tempBasalOnly")
+    /// Dosing strategy (e.g., "automaticBolus", "tempBasalOnly")
     /// </summary>
     [JsonPropertyName("dosingStrategy")]
     public string? DosingStrategy { get; set; }
 
     /// <summary>
-    /// Gets or sets the currently active schedule override
+    /// Currently active schedule override
     /// </summary>
     [JsonPropertyName("scheduleOverride")]
     public LoopOverridePreset? ScheduleOverride { get; set; }

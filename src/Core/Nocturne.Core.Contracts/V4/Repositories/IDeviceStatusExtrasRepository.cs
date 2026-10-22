@@ -13,8 +13,6 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 public interface IDeviceStatusExtrasRepository : IBulkCreateRepository<DeviceStatusExtras>
 {
     /// <summary>Persist a new <see cref="DeviceStatusExtras"/> and return the saved entity.</summary>
-    /// <param name="model">Record to create.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<DeviceStatusExtras> CreateAsync(DeviceStatusExtras model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>The <see cref="DeviceStatusExtras"/> with the given id, or <c>null</c>.</summary>
@@ -28,12 +26,10 @@ public interface IDeviceStatusExtrasRepository : IBulkCreateRepository<DeviceSta
 
     /// <summary>Retrieve <see cref="DeviceStatusExtras"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<DeviceStatusExtras>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
 
     /// <summary>Delete the <see cref="DeviceStatusExtras"/> record(s) with the given correlation ID.</summary>
     /// <param name="correlationId">Correlation ID to match.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default);
 }

@@ -6,9 +6,11 @@
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
   import { useApsPrediction } from "./aps-prediction.svelte";
   import InspectionChart from "./InspectionChart.svelte";
+  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
   import InspectionFooter from "./InspectionFooter.svelte";
 
   interface Props {
+    glucoseUnits?: GlucoseUnits;
     open: boolean;
     timestamp: Date;
     glucoseValue: number;
@@ -60,6 +62,7 @@
     onClose,
     onNavigateDelivery,
     onNavigateTreatment,
+    glucoseUnits,
   }: Props = $props();
 
   const sourceDisplayName = $derived(getDataSourceDisplayName(dataSource));
@@ -104,9 +107,9 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-3">
         <span class="text-3xl font-bold text-(--glucose-color)" style:--glucose-color={glucoseColor}>
-          {bg(glucoseValue)}
+          {bg(glucoseValue, glucoseUnits)}
         </span>
-        <span class="text-sm text-muted-foreground">{bgLabel()}</span>
+        <span class="text-sm text-muted-foreground">{bgLabel(glucoseUnits)}</span>
         <Badge variant="outline" class={rangeBadgeClass}>
           {rangeStatus}
         </Badge>
@@ -128,7 +131,7 @@
     <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm py-3">
       {#if delta != null}
         <span class="text-muted-foreground">Delta</span>
-        <span class="font-medium">{bgDelta(delta)} {bgLabel()}</span>
+        <span class="font-medium">{bgDelta(delta, true, glucoseUnits)} {bgLabel(glucoseUnits)}</span>
       {/if}
 
       {#if iob != null}
@@ -173,6 +176,7 @@
     </div>
 
     <InspectionChart
+      {glucoseUnits}
       {glucoseData}
       centerTime={timestamp}
       predictionData={aps.predictionData}

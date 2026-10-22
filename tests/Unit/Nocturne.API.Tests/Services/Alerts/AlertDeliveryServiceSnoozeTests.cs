@@ -66,17 +66,17 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
         services.AddSingleton(Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant));
         services.AddSingleton<IMemoryCache>(_ => new MemoryCache(new MemoryCacheOptions()));
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
-        services.AddSingleton<WebPushProvider>();
         services.AddSingleton<InAppProvider>();
         services.AddSingleton<DeviceActionProvider>();
         services.AddSingleton<ChatBotProvider>();
         services.AddSingleton<HomeAssistantProvider>();
+        services.AddSingleton<HomeAssistantConnections>();
 
         var provider = services.BuildServiceProvider();
         _providers.Add(provider);
 
         return new AlertDeliveryService(
-            _factory,
+            _factory.AsNocturneFactory(),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             _broadcast.Object,
             provider,
@@ -153,7 +153,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
 
         (await DeliveriesAsync()).Should().BeEmpty();
         _broadcast.Verify(b => b.BroadcastAlertEventAsync(It.IsAny<string>(), It.IsAny<object>()), Times.Never,
-            "neither alert_dispatch (web toast) nor alert_push (web push) may go out");
+            "alert_dispatch may not go out");
         _broadcast.Verify(b => b.BroadcastDeviceActionAsync(It.IsAny<DeviceActionIntent>()), Times.Never);
         _inApp.VerifyNoOtherCalls();
         _httpClientFactory.Verify(f => f.CreateClient(It.IsAny<string>()), Times.Never, "chat bot must not be called");
@@ -181,7 +181,6 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
         var deliveries = await DeliveriesAsync();
         deliveries.Select(d => d.ChannelType).Should().BeEquivalentTo(EveryChannel().Select(c => c.ChannelType));
         _broadcast.Verify(b => b.BroadcastAlertEventAsync("alert_dispatch", It.IsAny<object>()), Times.Once);
-        _broadcast.Verify(b => b.BroadcastAlertEventAsync("alert_push", It.IsAny<object>()), Times.Once);
         _broadcast.Verify(b => b.BroadcastDeviceActionAsync(It.IsAny<DeviceActionIntent>()), Times.Once);
     }
 
@@ -189,9 +188,16 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
     public async Task Never_snoozed_instance_is_delivered()
     {
         var instanceId = await SeedInstanceAsync(snoozedUntil: null);
+        var member = Guid.NewGuid();
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            db.Subjects.Add(new SubjectEntity { Id = member, Name = "Member" });
+            db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.NewGuid(), TenantId = Tenant, SubjectId = member, DirectPermissions = ["*"] });
+            await db.SaveChangesAsync();
+        }
 
         await CreateService().DispatchAsync(
-            instanceId, [Channel(ChannelType.WebPush, string.Empty)], Payload(instanceId), CancellationToken.None);
+            instanceId, [Channel(ChannelType.InApp, member.ToString())], Payload(instanceId), CancellationToken.None);
 
         (await DeliveriesAsync()).Should().ContainSingle(d => d.Status == "delivered");
     }

@@ -1,4 +1,3 @@
-using System.Data.Common;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +18,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 
@@ -49,17 +49,12 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
         therapySettings
             .Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string?)null);
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        tenantAccessor.SetupGet(a => a.Context)
-            .Returns(new TenantContext(TenantId, "test", "Test", true, false));
 
         _service = new DataOverviewService(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             therapySettings.Object,
             new Mock<IStatisticsService>().Object,
-            new Mock<ICacheService>().Object,
-            tenantAccessor.Object,
-            new CategoryReadContext(),
+            Mock.Of<ITenantCache>(),
             NullLogger<DataOverviewService>.Instance);
     }
 
@@ -220,29 +215,5 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
             SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger) =>
             method == IsNaN ? sql.IsNull(arguments[0]) : null;
-    }
-
-    private sealed class StatementRecorder : DbCommandInterceptor
-    {
-        private readonly List<string> _statements = [];
-
-        public IReadOnlyList<string> All => _statements;
-
-        public void Clear() => _statements.Clear();
-
-        public override InterceptionResult<DbDataReader> ReaderExecuting(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
-        {
-            _statements.Add(command.CommandText);
-            return result;
-        }
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
-            CancellationToken cancellationToken = default)
-        {
-            _statements.Add(command.CommandText);
-            return ValueTask.FromResult(result);
-        }
     }
 }

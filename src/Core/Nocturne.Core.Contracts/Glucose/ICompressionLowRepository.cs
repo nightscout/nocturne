@@ -15,7 +15,6 @@ public interface ICompressionLowRepository
     /// </summary>
     /// <param name="status">Optional <see cref="CompressionLowStatus"/> filter.</param>
     /// <param name="nightOf">Optional night date filter.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Matching suggestions.</returns>
     Task<IEnumerable<CompressionLowSuggestion>> GetSuggestionsAsync(
         CompressionLowStatus? status = null,
@@ -26,7 +25,6 @@ public interface ICompressionLowRepository
     /// Get a single <see cref="CompressionLowSuggestion"/> by ID.
     /// </summary>
     /// <param name="id">Suggestion ID.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The suggestion if found; <c>null</c> otherwise.</returns>
     Task<CompressionLowSuggestion?> GetByIdAsync(
         Guid id,
@@ -35,18 +33,24 @@ public interface ICompressionLowRepository
     /// <summary>
     /// Persist a new <see cref="CompressionLowSuggestion"/>.
     /// </summary>
-    /// <param name="suggestion">Suggestion to create.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The created suggestion with assigned ID.</returns>
     Task<CompressionLowSuggestion> CreateAsync(
         CompressionLowSuggestion suggestion,
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Persist several new <see cref="CompressionLowSuggestion"/> records in one save.
+    /// </summary>
+    /// <param name="suggestions">Suggestions to create.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task CreateManyAsync(
+        IReadOnlyCollection<CompressionLowSuggestion> suggestions,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Update an existing <see cref="CompressionLowSuggestion"/>.
     /// </summary>
     /// <param name="suggestion">Suggestion with updated fields.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The updated suggestion, or <c>null</c> if not found.</returns>
     Task<CompressionLowSuggestion?> UpdateAsync(
         CompressionLowSuggestion suggestion,
@@ -56,7 +60,6 @@ public interface ICompressionLowRepository
     /// Count pending suggestions for a specific night.
     /// </summary>
     /// <param name="nightOf">The night date to count suggestions for.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Number of pending suggestions.</returns>
     Task<int> CountPendingForNightAsync(
         DateOnly nightOf,
@@ -75,7 +78,6 @@ public interface ICompressionLowRepository
     /// Delete a <see cref="CompressionLowSuggestion"/> by ID.
     /// </summary>
     /// <param name="id">Suggestion ID to delete.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><c>true</c> if deleted; <c>false</c> if not found.</returns>
     Task<bool> DeleteAsync(
         Guid id,

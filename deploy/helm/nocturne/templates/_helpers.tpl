@@ -230,3 +230,14 @@ postgresql.auth.existingSecret + custom secretKeys.
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+"true" when a removed toggle (api.autoscaling, api.pdb, web.autoscaling) asks to
+be on, whether given as a map with `enabled` or as a bare scalar, and whether
+the value is a bool, 1, or "true" in any case.
+*/}}
+{{- define "nocturne.removedToggleOn" -}}
+{{- $v := . -}}
+{{- if kindIs "map" . -}}{{- $v = get . "enabled" -}}{{- end -}}
+{{- if has (lower (toString $v)) (list "true" "1") -}}true{{- end -}}
+{{- end -}}

@@ -148,10 +148,12 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     {
         _progressReporter = progressReporter;
         var skippedBefore = _publisher?.SkippedDeleted ?? 0;
+        var refusedBefore = _publisher?.Refused ?? 0;
         try
         {
             var result = await body();
             result.ItemsSkipped = (_publisher?.SkippedDeleted ?? 0) - skippedBefore;
+            result.ItemsRefused = (_publisher?.Refused ?? 0) - refusedBefore;
             StandInFailureMessage(result);
             await ReportSyncOutcomeAsync(result.Success, FailureMessage(result), cancellationToken);
             return result;
@@ -726,6 +728,29 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             ConnectorSource, WriteOrigin.Live,
             cancellationToken
         ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
+    }
+
+    /// <summary>
+    ///     Profile activations derive from what a connector reads as the pump's active program and gate
+    ///     and count under <see cref="SyncDataType.StateSpans"/>, as the Profile spans they replace did.
+    /// </summary>
+    protected virtual async Task<bool> PublishProfileActivationDataAsync(
+        IEnumerable<ProfileActivation> activations,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for profile activation submission");
+            return false;
+        }
+
+        return await _publisher.Metadata.PublishProfileActivationsAsync(
+            activations,
+            ConnectorSource, WriteOrigin.Live,
+            cancellationToken
+        );
     }
 
     /// <summary>

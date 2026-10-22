@@ -48,11 +48,6 @@ public class UISettingsConfiguration
     public DataQualitySettings DataQuality { get; set; } = new();
 }
 
-#region Device Settings
-
-/// <summary>
-/// Settings for connected devices
-/// </summary>
 public class DeviceSettings
 {
     [JsonPropertyName("connectedDevices")]
@@ -72,7 +67,7 @@ public class DeviceSettings
 }
 
 /// <summary>
-/// Represents a device connected to the user's diabetes management system.
+/// Device connected to the user's diabetes management system.
 /// </summary>
 public class ConnectedDevice
 {
@@ -110,10 +105,6 @@ public class CgmConfiguration
     public int SensorWarmupHours { get; set; } = 2;
 }
 
-#endregion
-
-#region Algorithm Settings
-
 /// <summary>
 /// Algorithm settings for predictions, autosens, and closed loop
 /// </summary>
@@ -135,9 +126,6 @@ public class AlgorithmSettings
     public SafetyLimits SafetyLimits { get; set; } = new();
 }
 
-/// <summary>
-/// Settings for glucose prediction algorithms.
-/// </summary>
 public class PredictionSettings
 {
     [JsonPropertyName("enabled")]
@@ -165,9 +153,6 @@ public class AutosensSettings
     public double Max { get; set; } = 1.2;
 }
 
-/// <summary>
-/// Carbohydrate absorption model settings.
-/// </summary>
 public class CarbAbsorptionSettings
 {
     [JsonPropertyName("defaultMinutes")]
@@ -212,10 +197,6 @@ public class SafetyLimits
     [JsonPropertyName("maxDailyBasalMultiplier")]
     public double MaxDailyBasalMultiplier { get; set; } = 3.0;
 }
-
-#endregion
-
-#region Feature Settings
 
 /// <summary>
 /// Feature settings including display preferences and plugins
@@ -524,9 +505,6 @@ public class BatteryDisplaySettings
     [JsonPropertyName("urgentThreshold")]
     public int UrgentThreshold { get; set; } = 20;
 
-    /// <summary>
-    /// Whether to enable battery low alerts
-    /// </summary>
     [JsonPropertyName("enableAlerts")]
     public bool EnableAlerts { get; set; } = true;
 
@@ -580,10 +558,6 @@ public class TrackerPillsSettings
     public string Visibility { get; set; } = "always";
 }
 
-#endregion
-
-#region Notification Settings
-
 /// <summary>
 /// Notification settings using the modern xDrip+-style alarm profile configuration.
 /// This class now directly wraps UserAlarmConfiguration for full customization.
@@ -597,11 +571,6 @@ public class NotificationSettings
     [JsonPropertyName("alarmConfiguration")]
     public UserAlarmConfiguration AlarmConfiguration { get; set; } = new();
 }
-
-#endregion
-
-
-#region Services Settings
 
 /// <summary>
 /// Services settings including connected services/connectors
@@ -624,7 +593,7 @@ public class ServicesSettings
 }
 
 /// <summary>
-/// Represents a service currently connected to the user's Nocturne instance.
+/// Service currently connected to the user's Nocturne instance.
 /// </summary>
 public class ConnectedService
 {
@@ -657,7 +626,7 @@ public class ConnectedService
 }
 
 /// <summary>
-/// Represents a service that can be connected to Nocturne but is not yet configured.
+/// Service that can be connected to Nocturne but is not yet configured.
 /// </summary>
 public class AvailableService
 {
@@ -692,10 +661,6 @@ public class SyncSettings
     public bool BackgroundRefresh { get; set; } = true;
 }
 
-#endregion
-
-#region Data Quality Settings
-
 /// <summary>
 /// Data quality settings including sleep schedule and compression low detection
 /// </summary>
@@ -707,9 +672,6 @@ public class DataQualitySettings
     [JsonPropertyName("sleepSchedule")]
     public SleepScheduleSettings SleepSchedule { get; set; } = new();
 
-    /// <summary>
-    /// Compression low detection settings
-    /// </summary>
     [JsonPropertyName("compressionLowDetection")]
     public CompressionLowDetectionSettings CompressionLowDetection { get; set; } = new();
 }
@@ -740,9 +702,6 @@ public class SleepScheduleSettings
     public string? Timezone { get; set; }
 }
 
-/// <summary>
-/// Compression low detection settings
-/// </summary>
 public class CompressionLowDetectionSettings
 {
     /// <summary>
@@ -758,5 +717,3 @@ public class CompressionLowDetectionSettings
     [JsonPropertyName("excludeFromStatistics")]
     public bool ExcludeFromStatistics { get; set; } = true;
 }
-
-#endregion

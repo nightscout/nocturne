@@ -3,12 +3,14 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Demo;
+using Nocturne.API.Services.ProfileActivations;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
@@ -16,6 +18,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -27,30 +30,42 @@ namespace Nocturne.API.Services.Connectors;
 /// <seealso cref="IDataSourceService"/>
 public class DataSourceService : IDataSourceService
 {
-    private readonly NocturneDbContext _context;
+    /// <summary>
+    /// How far back discovery counts records. Published on every <see cref="DataSourceInfo"/> as its
+    /// <see cref="DataSourceInfo.TotalEntriesWindowDays"/>.
+    /// </summary>
+    internal const int DiscoveryWindowDays = 30;
+
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ISensorGlucoseRepository _sensorGlucose;
     private readonly IMeterGlucoseRepository _meterGlucose;
     private readonly ICalibrationRepository _calibrations;
     private readonly IAuditContext _auditContext;
     private readonly IConnectorConfigurationService _connectorConfiguration;
+    private readonly ITreatmentDecomposer _treatmentDecomposer;
+    private readonly ProfileActivationWriter _profileActivationWriter;
     private readonly ILogger<DataSourceService> _logger;
 
     public DataSourceService(
-        NocturneDbContext context,
+        INocturneDbContextFactory contexts,
         ISensorGlucoseRepository sensorGlucose,
         IMeterGlucoseRepository meterGlucose,
         ICalibrationRepository calibrations,
         IAuditContext auditContext,
         IConnectorConfigurationService connectorConfiguration,
+        ITreatmentDecomposer treatmentDecomposer,
+        ProfileActivationWriter profileActivationWriter,
         ILogger<DataSourceService> logger
     )
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _profileActivationWriter = profileActivationWriter;
         _sensorGlucose = sensorGlucose;
         _meterGlucose = meterGlucose;
         _calibrations = calibrations;
         _auditContext = auditContext;
         _connectorConfiguration = connectorConfiguration;
+        _treatmentDecomposer = treatmentDecomposer;
         _logger = logger;
     }
 
@@ -107,9 +122,10 @@ public class DataSourceService : IDataSourceService
     }
 
     private async Task<Dictionary<string, (int active, int stale)>> LoadThresholdOverridesAsync(
+        NocturneDbContext db,
         CancellationToken ct)
     {
-        var configs = await _context.ConnectorConfigurations
+        var configs = await db.ConnectorConfigurations
             .AsNoTracking()
             .Select(c => new { c.ConnectorName, c.ConfigurationJson })
             .ToListAsync(ct);
@@ -148,7 +164,8 @@ public class DataSourceService : IDataSourceService
     /// that no contributing table could tell.
     /// </summary>
     private async Task<Dictionary<string, TableStats>> GetNonGlucoseStatsAsync(
-        DateTime thirtyDaysAgo, DateTime last24HoursDate, CancellationToken ct)
+        NocturneDbContext db,
+        DateTime windowStart, DateTime last24HoursDate, CancellationToken ct)
     {
         var result = new Dictionary<string, TableStats>(StringComparer.OrdinalIgnoreCase);
 
@@ -185,8 +202,8 @@ public class DataSourceService : IDataSourceService
 
         async Task MergeTimeSeriesAsync<TEntity>() where TEntity : class, IV4TimeSeriesEntity
         {
-            var stats = await _context.Set<TEntity>()
-                .Where(e => e.Timestamp >= thirtyDaysAgo)
+            var stats = await db.Set<TEntity>()
+                .Where(e => e.Timestamp >= windowStart)
                 .GroupBy(e => e.DataSource ?? e.Device)
                 .Select(g => new
                 {
@@ -218,8 +235,8 @@ public class DataSourceService : IDataSourceService
         // reported device string (DeviceStatusDecomposer) or from the row's data source, falling back
         // to the entering party (TreatmentDecomposer). It therefore names neither handle in
         // particular and contributes no evidence about which one its bucket's key is.
-        var ssStats = await _context.StateSpans
-            .Where(s => s.StartTimestamp >= thirtyDaysAgo)
+        var ssStats = await db.StateSpans
+            .Where(s => s.StartTimestamp >= windowStart)
             .GroupBy(s => s.Source)
             .Select(g => new { Key = g.Key, Count = g.LongCount(), Count24H = g.Count(x => x.StartTimestamp >= last24HoursDate), Latest = g.Max(x => x.StartTimestamp), Oldest = (DateTime?)g.Min(x => x.StartTimestamp) })
             .ToListAsync(ct);
@@ -233,16 +250,17 @@ public class DataSourceService : IDataSourceService
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         _logger.LogDebug("Getting active data sources");
 
         var now = DateTimeOffset.UtcNow;
         var last24Hours = now.AddHours(-24);
-        var thirtyDaysAgoDate = now.AddDays(-30).UtcDateTime;
+        var windowStart = now.AddDays(-DiscoveryWindowDays).UtcDateTime;
         var last24HoursDate = last24Hours.UtcDateTime;
 
-        // Get distinct devices from V4 sensor glucose in the last 30 days
-        var entryDevices = await _context
-            .SensorGlucose.Where(e => e.Timestamp >= thirtyDaysAgoDate && e.Device != null && e.Device != "")
+        // Get distinct devices from V4 sensor glucose inside the discovery window
+        var entryDevices = await db
+            .SensorGlucose.Where(e => e.Timestamp >= windowStart && e.Device != null && e.Device != "")
             .GroupBy(e => e.Device)
             .Select(g => new
             {
@@ -263,9 +281,9 @@ public class DataSourceService : IDataSourceService
         // not DataSource: an entry's identity here is the uploader string that CreateDataSourceInfo
         // parses for name, category and icon, so a connector-imported snapshot still lists its rig.
         // The connector keeps its own entry via GetNonGlucoseStatsAsync, which keys on DataSource.
-        var deviceStatusDevices = await _context
+        var deviceStatusDevices = await db
             .ApsSnapshots.Where(ds =>
-                ds.Timestamp >= thirtyDaysAgoDate && ds.Device != null && ds.Device != ""
+                ds.Timestamp >= windowStart && ds.Device != null && ds.Device != ""
             )
             .GroupBy(ds => ds.Device)
             .Select(g => new
@@ -277,11 +295,11 @@ public class DataSourceService : IDataSourceService
             .ToListAsync(cancellationToken);
 
         // Batch-aggregate non-glucose tables
-        var nonGlucoseStats = await GetNonGlucoseStatsAsync(thirtyDaysAgoDate, last24HoursDate, cancellationToken);
+        var nonGlucoseStats = await GetNonGlucoseStatsAsync(db, windowStart, last24HoursDate, cancellationToken);
 
         // Load user threshold overrides and connector configs for LastSuccessfulSync
-        var thresholdOverrides = await LoadThresholdOverridesAsync(cancellationToken);
-        var connectorConfigs = await _context.ConnectorConfigurations
+        var thresholdOverrides = await LoadThresholdOverridesAsync(db, cancellationToken);
+        var connectorConfigs = await db.ConnectorConfigurations
             .AsNoTracking()
             .Select(c => new { c.ConnectorName, c.LastSuccessfulSync })
             .ToListAsync(cancellationToken);
@@ -422,6 +440,7 @@ public class DataSourceService : IDataSourceService
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var connectors = ConnectorMetadataService.GetAll()
             .Select(connector => new AvailableConnector
             {
@@ -440,7 +459,7 @@ public class DataSourceService : IDataSourceService
             .ToList();
 
         // Check which connectors have actual saved configuration in the database
-        var configuredNames = await _context.ConnectorConfigurations
+        var configuredNames = await db.ConnectorConfigurations
             .AsNoTracking()
             .Select(c => c.ConnectorName.ToLower())
             .ToListAsync(cancellationToken);
@@ -626,6 +645,7 @@ public class DataSourceService : IDataSourceService
             Id = GenerateId(deviceId),
             DeviceId = deviceId,
             DeviceIdHandle = handle,
+            TotalEntriesWindowDays = DiscoveryWindowDays,
         };
 
         // Parse device identifier to determine type
@@ -794,6 +814,7 @@ public class DataSourceService : IDataSourceService
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         _logger.LogDebug("Getting data summary for connector: {ConnectorId}", connectorId);
 
         // Resolve the connector metadata to find the correct data source ID
@@ -807,58 +828,58 @@ public class DataSourceService : IDataSourceService
         var counts = new Dictionary<string, long>();
 
         // Glucose
-        var sensorGlucoseCount = await _context
+        var sensorGlucoseCount = await db
             .SensorGlucose.FromSource(deviceId)
             .LongCountAsync(cancellationToken);
         if (sensorGlucoseCount > 0) counts[nameof(SyncDataType.Glucose)] = sensorGlucoseCount;
 
-        var meterGlucoseCount = await _context
+        var meterGlucoseCount = await db
             .MeterGlucose.FromSource(deviceId)
             .LongCountAsync(cancellationToken);
         if (meterGlucoseCount > 0) counts[nameof(SyncDataType.ManualBG)] = meterGlucoseCount;
 
-        var calibrationsCount = await _context
+        var calibrationsCount = await db
             .Calibrations.FromSource(deviceId)
             .LongCountAsync(cancellationToken);
         if (calibrationsCount > 0) counts[nameof(SyncDataType.Calibrations)] = calibrationsCount;
 
         // Treatments
-        var bolusCount = await _context
+        var bolusCount = await db
             .Boluses.FromSource(deviceId)
             .LongCountAsync(cancellationToken);
         if (bolusCount > 0) counts[nameof(SyncDataType.Boluses)] = bolusCount;
 
-        var carbIntakeCount = await _context
+        var carbIntakeCount = await db
             .CarbIntakes.FromSource(deviceId)
             .LongCountAsync(cancellationToken);
         if (carbIntakeCount > 0) counts[nameof(SyncDataType.CarbIntake)] = carbIntakeCount;
 
-        var bgChecksCount = await _context
+        var bgChecksCount = await db
             .BGChecks.FromSource(deviceId)
             .LongCountAsync(cancellationToken);
         if (bgChecksCount > 0) counts[nameof(SyncDataType.BGChecks)] = bgChecksCount;
 
-        var bolusCalcCount = await _context
+        var bolusCalcCount = await db
             .BolusCalculations.FromSource(deviceId)
             .LongCountAsync(cancellationToken);
         if (bolusCalcCount > 0) counts[nameof(SyncDataType.BolusCalculations)] = bolusCalcCount;
 
-        var notesCount = await _context
+        var notesCount = await db
             .Notes.FromSource(deviceId)
             .LongCountAsync(cancellationToken);
         if (notesCount > 0) counts[nameof(SyncDataType.Notes)] = notesCount;
 
-        var deviceEventsCount = await _context
+        var deviceEventsCount = await db
             .DeviceEvents.FromSource(deviceId)
             .LongCountAsync(cancellationToken);
         if (deviceEventsCount > 0) counts[nameof(SyncDataType.DeviceEvents)] = deviceEventsCount;
 
-        var stateSpansCount = await _context
+        var stateSpansCount = await db
             .StateSpans.Where(s => s.Source == deviceId)
             .LongCountAsync(cancellationToken);
         if (stateSpansCount > 0) counts[nameof(SyncDataType.StateSpans)] = stateSpansCount;
 
-        var deviceStatusCount = await _context
+        var deviceStatusCount = await db
             .ApsSnapshots.FromSource(deviceId)
             .LongCountAsync(cancellationToken);
         if (deviceStatusCount > 0) counts[nameof(SyncDataType.DeviceStatus)] = deviceStatusCount;
@@ -873,9 +894,11 @@ public class DataSourceService : IDataSourceService
     /// <inheritdoc />
     public async Task<DataSourceDeleteResult> DeleteConnectorDataAsync(
         string connectorId,
+        bool allowReimport = false,
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         _logger.LogInformation("Deleting data for connector: {ConnectorId}", connectorId);
 
         try
@@ -899,12 +922,21 @@ public class DataSourceService : IDataSourceService
                 deviceId
             );
 
+            var reEnable = allowReimport
+                && (await _connectorConfiguration.GetConfigurationAsync(connectorId, cancellationToken))?.IsActive == true;
+
             // Disable the connector before purging so a scheduled or in-flight sync cannot
             // re-import the data we are about to delete.
             await _connectorConfiguration.SetActiveAsync(
                 connectorId, isActive: false, _auditContext.SubjectName, cancellationToken);
 
-            var deletedCounts = await DeleteAllSourceDataAsync(deviceId, cancellationToken);
+            var deletedCounts = await DeleteAllSourceDataAsync(db, deviceId, allowReimport, cancellationToken);
+
+            // With nothing of the source left stored, the connector's next sync imports its
+            // history from the start.
+            if (reEnable)
+                await _connectorConfiguration.SetActiveAsync(
+                    connectorId, isActive: true, _auditContext.SubjectName, cancellationToken);
 
             _logger.LogInformation(
                 "Deleted data for connector {ConnectorId} (device {DeviceId}): {DeletedCounts}",
@@ -940,13 +972,15 @@ public class DataSourceService : IDataSourceService
     /// Capability matrix (entity interfaces decide the path):
     /// <list type="bullet">
     /// <item>Glucose and the auditable+soft-deletable records (Bolus, CarbIntake, BolusCalculation,
-    ///   DeviceEvent, BGCheck, Note, ApsSnapshot, TempBasal, StateSpan) take the audited soft-delete path,
+    ///   DeviceEvent, BGCheck, Note, ApsSnapshot, TempBasal, StateSpan, ProfileActivation) take the audited soft-delete path,
     ///   which stamps the <c>deleted_by_user</c> flag the soft-delete dedup reads to block re-import
     ///   (<see cref="SoftDeleteDedupExtensions"/>).</item>
     /// </list>
     /// </remarks>
     private async Task<Dictionary<string, long>> DeleteAllSourceDataAsync(
+        NocturneDbContext db,
         string source,
+        bool allowReimport,
         CancellationToken cancellationToken
     )
     {
@@ -957,25 +991,33 @@ public class DataSourceService : IDataSourceService
 
         // Auditable + soft-deletable records: audited soft-delete, user-attributed.
         var scope = $"data_source={source}";
-        var bolusesDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.Boluses.FromSource(source), _auditContext, scope, cancellationToken);
-        var carbIntakesDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.CarbIntakes.FromSource(source), _auditContext, scope, cancellationToken);
-        var bolusCalcsDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.BolusCalculations.FromSource(source), _auditContext, scope, cancellationToken);
-        var deviceEventsDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.DeviceEvents.FromSource(source), _auditContext, scope, cancellationToken);
-        var bgChecksDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.BGChecks.FromSource(source), _auditContext, scope, cancellationToken);
-        var notesDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.Notes.FromSource(source), _auditContext, scope, cancellationToken);
-        var deviceStatusDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.ApsSnapshots.FromSource(source), _auditContext, scope, cancellationToken);
-        var tempBasalsDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.TempBasals.FromSource(source), _auditContext, scope, cancellationToken);
+        var bolusesDeleted = await db.AuditedSoftDeleteAsync(
+            db.Boluses.FromSource(source), _auditContext, scope, cancellationToken);
+        var carbIntakesDeleted = await db.AuditedSoftDeleteAsync(
+            db.CarbIntakes.FromSource(source), _auditContext, scope, cancellationToken);
+        var bolusCalcsDeleted = await db.AuditedSoftDeleteAsync(
+            db.BolusCalculations.FromSource(source), _auditContext, scope, cancellationToken);
+        var deviceEventsDeleted = await db.AuditedSoftDeleteAsync(
+            db.DeviceEvents.FromSource(source), _auditContext, scope, cancellationToken);
+        var bgChecksDeleted = await db.AuditedSoftDeleteAsync(
+            db.BGChecks.FromSource(source), _auditContext, scope, cancellationToken);
+        var notesDeleted = await db.AuditedSoftDeleteAsync(
+            db.Notes.FromSource(source), _auditContext, scope, cancellationToken);
+        var deviceStatusDeleted = await db.AuditedSoftDeleteAsync(
+            db.ApsSnapshots.FromSource(source), _auditContext, scope, cancellationToken);
+        var tempBasalsDeleted = await db.AuditedSoftDeleteAsync(
+            db.TempBasals.FromSource(source), _auditContext, scope, cancellationToken);
 
-        var stateSpansDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.StateSpans.Where(s => s.Source == source), _auditContext, scope, cancellationToken);
+        await _treatmentDecomposer.DeleteProfileSwitchSnapshotsFromSourceAsync(
+            source, WriteOrigin.Live, cancellationToken);
+        var stateSpansDeleted = await db.AuditedSoftDeleteAsync(
+            db.StateSpans.Where(s => s.Source == source), _auditContext, scope, cancellationToken);
+        stateSpansDeleted += await db.AuditedSoftDeleteAsync(
+            db.ProfileActivations.FromSource(source), _auditContext, scope, cancellationToken);
+        await _profileActivationWriter.AfterBulkRemovalAsync(cancellationToken);
+
+        if (allowReimport)
+            await AllowSourceReimportAsync(db, source, scope, cancellationToken);
 
         var deletedCounts = new Dictionary<string, long>();
         if (sensorGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = sensorGlucoseDeleted;
@@ -992,6 +1034,33 @@ public class DataSourceService : IDataSourceService
         if (stateSpansDeleted > 0) deletedCounts[nameof(SyncDataType.StateSpans)] = stateSpansDeleted;
 
         return deletedCounts;
+    }
+
+    /// <summary>
+    /// Releases every user tombstone <paramref name="source"/> produced, including those of earlier
+    /// deletes, so the source can send its records again.
+    /// </summary>
+    private async Task AllowSourceReimportAsync(NocturneDbContext db, string source, string scope, CancellationToken ct)
+    {
+        await db.AuditedAllowReimportAsync(db.SensorGlucose.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.MeterGlucose.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.Calibrations.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.Boluses.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.CarbIntakes.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.BolusCalculations.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.DeviceEvents.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.BGChecks.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.Notes.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.ApsSnapshots.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.TempBasals.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.ProfileActivations.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.TherapySettings.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.BasalSchedules.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.CarbRatioSchedules.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.SensitivitySchedules.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(db.TargetRangeSchedules.FromSource(source), _auditContext, scope, ct);
+        await db.AuditedAllowReimportAsync(
+            db.StateSpans.Where(s => s.Source == source), _auditContext, scope, ct);
     }
 
     internal static string GenerateId(string deviceId) => $"ds-{HashUtils.Sha256Hex(deviceId)[..8]}";
@@ -1016,9 +1085,11 @@ public class DataSourceService : IDataSourceService
     /// <inheritdoc />
     public async Task<DataSourceDeleteResult> DeleteDataSourceDataAsync(
         string dataSourceId,
+        bool allowReimport = false,
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         _logger.LogInformation("Deleting data for data source: {DataSourceId}", dataSourceId);
 
         try
@@ -1039,7 +1110,7 @@ public class DataSourceService : IDataSourceService
 
             var deviceId = source.DeviceId;
 
-            var deletedCounts = await DeleteAllSourceDataAsync(deviceId, cancellationToken);
+            var deletedCounts = await DeleteAllSourceDataAsync(db, deviceId, allowReimport, cancellationToken);
 
             _logger.LogInformation(
                 "Deleted data for {DeviceId}: {DeletedCounts}",
@@ -1073,13 +1144,14 @@ public class DataSourceService : IDataSourceService
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         _logger.LogInformation("Deleting all demo data");
 
         try
         {
-            var glucoseDeleted = await DemoDataPurge.PurgeEntriesAsync(_context, cancellationToken);
-            var treatmentsDeleted = await DemoDataPurge.PurgeTreatmentsAsync(_context, cancellationToken);
-            var deviceStatusDeleted = await DemoDataPurge.PurgeDeviceStatusAsync(_context, cancellationToken);
+            var treatmentsDeleted = await DemoDataPurge.PurgeTreatmentsAsync(db, cancellationToken);
+            var glucoseDeleted = await DemoDataPurge.PurgeEntriesAsync(db, cancellationToken);
+            var deviceStatusDeleted = await DemoDataPurge.PurgeDeviceStatusAsync(db, cancellationToken);
 
             var deletedCounts = new Dictionary<string, long>();
             if (glucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = glucoseDeleted;
@@ -1114,11 +1186,12 @@ public class DataSourceService : IDataSourceService
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var oneDayAgoDate = now.AddHours(-24).UtcDateTime;
 
         // Query V4 sensor glucose stats
-        var sgStats = await _context
+        var sgStats = await db
             .SensorGlucose.FromSource(dataSource)
             .GroupBy(_ => 1)
             .Select(g => new
@@ -1131,7 +1204,7 @@ public class DataSourceService : IDataSourceService
             .FirstOrDefaultAsync(cancellationToken);
 
         // Query state span stats
-        var stateSpanStats = await _context
+        var stateSpanStats = await db
             .StateSpans.Where(s => s.Source == dataSource)
             .GroupBy(_ => 1)
             .Select(g => new
@@ -1144,91 +1217,91 @@ public class DataSourceService : IDataSourceService
             .FirstOrDefaultAsync(cancellationToken);
 
         // Query V4 table counts for per-type breakdown
-        var meterGlucoseTotal = await _context
+        var meterGlucoseTotal = await db
             .MeterGlucose.FromSource(dataSource)
             .LongCountAsync(cancellationToken);
         var meterGlucose24h = meterGlucoseTotal > 0
-            ? await _context.MeterGlucose
+            ? await db.MeterGlucose
                 .FromSource(dataSource)
                 .Where(mg => mg.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
-        var bolusesTotal = await _context
+        var bolusesTotal = await db
             .Boluses.FromSource(dataSource)
             .LongCountAsync(cancellationToken);
         var boluses24h = bolusesTotal > 0
-            ? await _context.Boluses
+            ? await db.Boluses
                 .FromSource(dataSource)
                 .Where(b => b.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
-        var carbIntakesTotal = await _context
+        var carbIntakesTotal = await db
             .CarbIntakes.FromSource(dataSource)
             .LongCountAsync(cancellationToken);
         var carbIntakes24h = carbIntakesTotal > 0
-            ? await _context.CarbIntakes
+            ? await db.CarbIntakes
                 .FromSource(dataSource)
                 .Where(c => c.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
-        var bolusCalcsTotal = await _context
+        var bolusCalcsTotal = await db
             .BolusCalculations.FromSource(dataSource)
             .LongCountAsync(cancellationToken);
         var bolusCalcs24h = bolusCalcsTotal > 0
-            ? await _context.BolusCalculations
+            ? await db.BolusCalculations
                 .FromSource(dataSource)
                 .Where(bc => bc.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
-        var notesTotal = await _context
+        var notesTotal = await db
             .Notes.FromSource(dataSource)
             .LongCountAsync(cancellationToken);
         var notes24h = notesTotal > 0
-            ? await _context.Notes
+            ? await db.Notes
                 .FromSource(dataSource)
                 .Where(n => n.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
-        var deviceEventsTotal = await _context
+        var deviceEventsTotal = await db
             .DeviceEvents.FromSource(dataSource)
             .LongCountAsync(cancellationToken);
         var deviceEvents24h = deviceEventsTotal > 0
-            ? await _context.DeviceEvents
+            ? await db.DeviceEvents
                 .FromSource(dataSource)
                 .Where(de => de.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
-        var deviceStatusTotal = await _context
+        var deviceStatusTotal = await db
             .ApsSnapshots.FromSource(dataSource)
             .LongCountAsync(cancellationToken);
         var deviceStatus24h = deviceStatusTotal > 0
-            ? await _context.ApsSnapshots
+            ? await db.ApsSnapshots
                 .FromSource(dataSource)
                 .Where(ds => ds.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
-        var bgChecksTotal = await _context
+        var bgChecksTotal = await db
             .BGChecks.FromSource(dataSource)
             .LongCountAsync(cancellationToken);
         var bgChecks24h = bgChecksTotal > 0
-            ? await _context.BGChecks
+            ? await db.BGChecks
                 .FromSource(dataSource)
                 .Where(b => b.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
-        var tempBasalsTotal = await _context
+        var tempBasalsTotal = await db
             .TempBasals.FromSource(dataSource)
             .LongCountAsync(cancellationToken);
         var tempBasals24h = tempBasalsTotal > 0
-            ? await _context.TempBasals
+            ? await db.TempBasals
                 .FromSource(dataSource)
                 .Where(t => t.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
@@ -1318,15 +1391,16 @@ public class DataSourceService : IDataSourceService
     public async Task<DateTime?> GetLatestTreatmentTimestampBySourceAsync(
         string dataSource, CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var timestamps = new[]
         {
-            await _context.Boluses.AsNoTracking().FromSource(dataSource).OrderByDescending(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.CarbIntakes.AsNoTracking().FromSource(dataSource).OrderByDescending(c => c.Timestamp).Select(c => (DateTime?)c.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.BGChecks.AsNoTracking().FromSource(dataSource).OrderByDescending(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.Notes.AsNoTracking().FromSource(dataSource).OrderByDescending(n => n.Timestamp).Select(n => (DateTime?)n.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.DeviceEvents.AsNoTracking().FromSource(dataSource).OrderByDescending(d => d.Timestamp).Select(d => (DateTime?)d.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.TempBasals.AsNoTracking().FromSource(dataSource).OrderByDescending(t => t.Timestamp).Select(t => (DateTime?)t.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.BolusCalculations.AsNoTracking().FromSource(dataSource).OrderByDescending(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.Boluses.AsNoTracking().FromSource(dataSource).OrderByDescending(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.CarbIntakes.AsNoTracking().FromSource(dataSource).OrderByDescending(c => c.Timestamp).Select(c => (DateTime?)c.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.BGChecks.AsNoTracking().FromSource(dataSource).OrderByDescending(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.Notes.AsNoTracking().FromSource(dataSource).OrderByDescending(n => n.Timestamp).Select(n => (DateTime?)n.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.DeviceEvents.AsNoTracking().FromSource(dataSource).OrderByDescending(d => d.Timestamp).Select(d => (DateTime?)d.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.TempBasals.AsNoTracking().FromSource(dataSource).OrderByDescending(t => t.Timestamp).Select(t => (DateTime?)t.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.BolusCalculations.AsNoTracking().FromSource(dataSource).OrderByDescending(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
         };
         return timestamps.Where(t => t.HasValue).Select(t => t!.Value).DefaultIfEmpty().Max() is var max && max == default ? null : max;
     }
@@ -1335,15 +1409,16 @@ public class DataSourceService : IDataSourceService
     public async Task<DateTime?> GetOldestTreatmentTimestampBySourceAsync(
         string dataSource, CancellationToken cancellationToken = default)
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var timestamps = new[]
         {
-            await _context.Boluses.AsNoTracking().FromSource(dataSource).OrderBy(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.CarbIntakes.AsNoTracking().FromSource(dataSource).OrderBy(c => c.Timestamp).Select(c => (DateTime?)c.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.BGChecks.AsNoTracking().FromSource(dataSource).OrderBy(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.Notes.AsNoTracking().FromSource(dataSource).OrderBy(n => n.Timestamp).Select(n => (DateTime?)n.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.DeviceEvents.AsNoTracking().FromSource(dataSource).OrderBy(d => d.Timestamp).Select(d => (DateTime?)d.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.TempBasals.AsNoTracking().FromSource(dataSource).OrderBy(t => t.Timestamp).Select(t => (DateTime?)t.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.BolusCalculations.AsNoTracking().FromSource(dataSource).OrderBy(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.Boluses.AsNoTracking().FromSource(dataSource).OrderBy(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.CarbIntakes.AsNoTracking().FromSource(dataSource).OrderBy(c => c.Timestamp).Select(c => (DateTime?)c.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.BGChecks.AsNoTracking().FromSource(dataSource).OrderBy(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.Notes.AsNoTracking().FromSource(dataSource).OrderBy(n => n.Timestamp).Select(n => (DateTime?)n.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.DeviceEvents.AsNoTracking().FromSource(dataSource).OrderBy(d => d.Timestamp).Select(d => (DateTime?)d.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.TempBasals.AsNoTracking().FromSource(dataSource).OrderBy(t => t.Timestamp).Select(t => (DateTime?)t.Timestamp).FirstOrDefaultAsync(cancellationToken),
+            await db.BolusCalculations.AsNoTracking().FromSource(dataSource).OrderBy(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
         };
         return timestamps.Where(t => t.HasValue).Select(t => t!.Value).DefaultIfEmpty().Min() is var min && min == default ? null : min;
     }

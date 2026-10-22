@@ -3,7 +3,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Middleware;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Scope = Nocturne.Core.Models.Authorization.Scope;
 
 namespace Nocturne.API.Extensions;
@@ -130,11 +130,11 @@ public static class HttpContextExtensions
     }
 
     /// <summary>
-    /// Check if the current request has admin permissions
+    /// Check if the current request holds superuser permissions
     /// </summary>
     /// <param name="context">HTTP context</param>
     /// <returns>True if the request holds superuser permissions</returns>
-    public static bool IsAdmin(this HttpContext context)
+    public static bool IsSuperuser(this HttpContext context)
     {
         return context.HasPermission("*");
     }
@@ -194,17 +194,12 @@ public static class HttpContextExtensions
         context.RequestServices?.GetService<ICategoryReadContext>()?.IsHistoryClamped == true;
 
     /// <summary>
-    /// Clamps every read on the request's services to the last 24 hours: onto
-    /// <see cref="ICategoryReadContext"/>, which the DbContext factory and the PHI caches read, and
-    /// onto the request-scoped context, which was pinned before authentication ran. There is no way
-    /// to lift it.
+    /// Clamps every read on the request's services to the last 24 hours, through
+    /// <see cref="ICategoryReadContext"/>, which every context of the request and the PHI caches
+    /// read. There is no way to lift it.
     /// </summary>
-    public static void ClampMemberHistory(this HttpContext context)
-    {
+    public static void ClampMemberHistory(this HttpContext context) =>
         context.RequestServices.GetService<ICategoryReadContext>()?.ClampMemberHistory();
-        if (context.RequestServices.GetService<NocturneDbContext>() is { } db)
-            db.HistoryClamped = true;
-    }
 
     /// <summary>
     /// The history limit something this caller mints carries: the requested limit, or the
@@ -212,6 +207,21 @@ public static class HttpContextExtensions
     /// </summary>
     public static bool InheritHistoryClamp(this HttpContext context, bool requested) =>
         requested || context.IsCallerHistoryClamped();
+
+    private const string ReaderItemKey = "TenantReader";
+
+    /// <summary>
+    /// Records who the request reads as, once authentication and member scope have narrowed it.
+    /// Kept in <see cref="HttpContext.Items"/> because SignalR serves a long-polling connection from a
+    /// copy of the upgrade request: the copy keeps the items but gets a DI scope of its own that never
+    /// ran the middleware.
+    /// </summary>
+    public static void RecordReader(this HttpContext context) =>
+        context.Items[ReaderItemKey] = TenantReader.Of(context.RequestServices);
+
+    /// <summary>The reader <see cref="RecordReader"/> recorded, or null when the request recorded none.</summary>
+    public static TenantReader? GetRecordedReader(this HttpContext context) =>
+        context.Items.TryGetValue(ReaderItemKey, out var reader) ? reader as TenantReader : null;
 
     /// <summary>
     /// The tenant the request resolved to, or <see langword="null"/> when it resolved to none.

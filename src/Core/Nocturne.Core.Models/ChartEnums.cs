@@ -25,7 +25,6 @@ public enum DeviceEventType
     /// <summary>Insulin cartridge changed</summary>
     InsulinChange,
 
-    /// <summary>Pump battery changed</summary>
     PumpBatteryChange,
 
     /// <summary>Omnipod pod changed</summary>
@@ -52,7 +51,6 @@ public enum DeviceEventType
     /// <summary>Pump insulin delivery resumed</summary>
     PumpResume,
 
-    /// <summary>Pump priming event</summary>
     Priming,
 
     /// <summary>Pump tubing primed</summary>
@@ -64,10 +62,8 @@ public enum DeviceEventType
     /// <summary>Pump reservoir rewind</summary>
     Rewind,
 
-    /// <summary>Pump date changed</summary>
     DateChanged,
 
-    /// <summary>Pump time changed</summary>
     TimeChanged,
 
     /// <summary>Maximum bolus limit changed</summary>
@@ -85,20 +81,17 @@ public enum DeviceEventType
 /// Replaces magic string comparisons with a proper enum.
 /// </summary>
 /// <seealso cref="Treatment"/>
-/// <seealso cref="TreatmentEventType"/>
 [JsonConverter(typeof(JsonStringEnumConverter<BolusType>))]
 public enum BolusType
 {
     /// <summary>Generic bolus with no specific meal context</summary>
     Bolus,
 
-    /// <summary>Bolus given with a meal</summary>
     MealBolus,
 
     /// <summary>Correction bolus to bring glucose into range</summary>
     CorrectionBolus,
 
-    /// <summary>Bolus given with a snack</summary>
     SnackBolus,
 
     /// <summary>Bolus delivered via the pump's built-in wizard</summary>

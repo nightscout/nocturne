@@ -2,6 +2,7 @@ import { Context } from "runed";
 import type { ChartDataEngine } from "./engine/chart-data-view.svelte";
 import type { TrackLayout } from "./engine/track-layout";
 import type { PointInspection } from "./engine/point-inspection.svelte";
+import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
 
 export interface LegendState {
 	readonly iob: boolean;
@@ -31,6 +32,8 @@ export interface GlucoseChartContext {
 	 * for gutter labels, larger text and ink. Unset for hosts that never print.
 	 */
 	readonly printing?: boolean;
+	/** Units the chart's glucose values are written in. Unset means the viewer's preference. */
+	readonly glucoseUnits?: GlucoseUnits;
 }
 
 // Extracted as a message, this name makes wuchale wrap `ctx` in $derived, which

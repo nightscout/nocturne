@@ -46,19 +46,14 @@ public class ApsSnapshot : V4RecordBase
     /// </summary>
     public string? SyncIdentifier { get; set; }
 
-    /// <summary>
-    /// Which AID algorithm produced this snapshot.
-    /// </summary>
     /// <seealso cref="V4.AidAlgorithm"/>
     public AidAlgorithm AidAlgorithm { get; set; }
 
     /// <summary>Total insulin on board</summary>
     public double? Iob { get; set; }
 
-    /// <summary>Basal component of IOB</summary>
     public double? BasalIob { get; set; }
 
-    /// <summary>Bolus component of IOB</summary>
     public double? BolusIob { get; set; }
 
     /// <summary>Carbs on board</summary>
@@ -70,7 +65,6 @@ public class ApsSnapshot : V4RecordBase
     /// <summary>Predicted eventual BG if no further action</summary>
     public double? EventualBg { get; set; }
 
-    /// <summary>Algorithm target BG</summary>
     public double? TargetBg { get; set; }
 
     /// <summary>Recommended bolus (insulinReq for OpenAPS, recommendedBolus for Loop)</summary>

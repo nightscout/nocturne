@@ -18,7 +18,6 @@ public interface IAlertDeliveryService
     /// <param name="alertInstanceId">The alert instance the deliveries belong to.</param>
     /// <param name="channels">The rule's channel list (typically empty when the rule was created with no opt-in delivery surface).</param>
     /// <param name="payload">The <see cref="AlertPayload"/> rendered into each delivery.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task DispatchAsync(
         Guid alertInstanceId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,

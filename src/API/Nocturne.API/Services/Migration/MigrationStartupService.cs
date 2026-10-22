@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Migration;
 
@@ -42,7 +43,7 @@ public class MigrationStartupService : IHostedService
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await using var dbContext = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(cancellationToken);
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationV1Service>();
 
             // Get the source identifier based on mode

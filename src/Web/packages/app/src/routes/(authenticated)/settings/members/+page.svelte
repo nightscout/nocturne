@@ -34,7 +34,7 @@
   import CreateInviteCard from "$lib/components/members/CreateInviteCard.svelte";
   import PendingInvitesList from "$lib/components/members/PendingInvitesList.svelte";
   import PendingRequestsList from "$lib/components/members/PendingRequestsList.svelte";
-  import MemberCard from "$lib/components/members/MemberCard.svelte";
+  import MemberCard, { type MemberChanges } from "$lib/components/members/MemberCard.svelte";
   import GuestLinksSection from "$lib/components/members/GuestLinksSection.svelte";
   import PublicAccessCard from "$lib/components/members/PublicAccessCard.svelte";
   import MembershipRequestsCard from "$lib/components/members/MembershipRequestsCard.svelte";
@@ -98,6 +98,7 @@
   // --- Member edit state ---
   let expandedMember = $state<string | null>(null);
   let isSavingMember = $state(false);
+  let memberSaveError = $state<string | null>(null);
   let isRevokingInvite = $state<string | null>(null);
 
   // Visible members — system subjects (e.g. Public) are managed via the
@@ -114,6 +115,7 @@
   }
 
   function toggleExpandMember(memberId: string) {
+    memberSaveError = null;
     if (expandedMember === memberId) {
       expandedMember = null;
     } else {
@@ -121,23 +123,30 @@
     }
   }
 
-  async function saveMemberChanges(memberId: string, roleIds: string[], permissions: string[]) {
+  async function saveMemberChanges(memberId: string, changes: MemberChanges) {
     isSavingMember = true;
-    errorMessage = null;
+    memberSaveError = null;
+    const { access, limitTo24Hours } = changes;
     try {
       await Promise.all([
-        setMemberRoles({ id: memberId, request: { roleIds } }),
-        setMemberPermissions({
-          id: memberId,
-          request: { directPermissions: permissions },
-        }),
+        ...(access
+          ? [
+              setMemberRoles({ id: memberId, request: { roleIds: access.roleIds } }),
+              setMemberPermissions({
+                id: memberId,
+                request: { directPermissions: access.permissions },
+              }),
+            ]
+          : []),
+        ...(limitTo24Hours !== undefined
+          ? [setMemberLimitTo24Hours({ id: memberId, request: { limitTo24Hours } })]
+          : []),
       ]);
       successMessage = { text: "Member updated successfully.", wash: true };
       expandedMember = null;
       clearMessages();
     } catch (e) {
-      errorMessage = describeSubmitError(e, "Failed to update member. Please try again.");
-      clearMessages();
+      memberSaveError = describeSubmitError(e, "Failed to update member. Please try again.");
     } finally {
       isSavingMember = false;
     }
@@ -261,20 +270,9 @@
               currentSubjectId={page.data.user?.subjectId}
               isExpanded={expandedMember === member.subjectId}
               isSaving={isSavingMember}
+              saveError={expandedMember === member.subjectId ? memberSaveError : null}
               onToggleExpand={() => toggleExpandMember(member.subjectId!)}
-              onSaveRoles={(roleIds, permissions) =>
-                saveMemberChanges(member.id!, roleIds, permissions)}
-              onSaveLimitTo24Hours={async (limitTo24Hours) => {
-                try {
-                  await setMemberLimitTo24Hours({
-                    id: member.id!,
-                    request: { limitTo24Hours },
-                  });
-                } catch (e) {
-                  errorMessage = describeSubmitError(e, "Failed to update member. Please try again.");
-                  clearMessages();
-                }
-              }}
+              onSave={(changes) => saveMemberChanges(member.id!, changes)}
               onRemove={async () => {
                 if (!member.subjectId) return;
                 errorMessage = null;

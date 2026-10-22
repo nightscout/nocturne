@@ -5,6 +5,7 @@ import type {
   SeriesPoint,
 } from "./chart-data-view.svelte";
 import { BasalDeliveryOrigin } from "$api-clients";
+import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
 import {
   bg,
   bgLabel,
@@ -84,6 +85,7 @@ export function createPointInspection(
   finders: SeriesFinders,
   glucoseData: () => GlucosePoint[],
   seriesData: InspectionSeriesData,
+  glucoseUnits: () => GlucoseUnits | undefined = () => undefined,
 ): PointInspection {
   let timestamp = $state<Date | null>(null);
   let glucosePoint = $state<{ sgv: number; color: string } | null>(null);
@@ -98,7 +100,7 @@ export function createPointInspection(
     opts.push({
       type: "glucose",
       label: "Glucose",
-      preview: `${bg(glucosePoint.sgv)} ${bgLabel()}`,
+      preview: `${bg(glucosePoint.sgv, glucoseUnits())} ${bgLabel(glucoseUnits())}`,
     });
 
     if (context.basalRate != null) {

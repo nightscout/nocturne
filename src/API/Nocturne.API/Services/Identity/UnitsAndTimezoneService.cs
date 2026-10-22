@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -55,7 +56,7 @@ public record UnitsAndTimezoneDto(
 
 /// <inheritdoc />
 public class UnitsAndTimezoneService(
-    NocturneDbContext db,
+    INocturneDbContextFactory contexts,
     ITenantService tenants,
     IPatientRecordRepository patientRecords,
     IConnectorConfigurationService connectorConfigurations,
@@ -71,6 +72,7 @@ public class UnitsAndTimezoneService(
     {
         var (nightscout, unavailable) = readNightscout ? await ReadNightscoutAsync(ct) : (null, false);
 
+        await using var db = await contexts.CreateAsync(ct);
         var preferences = await db.Subjects.AsNoTracking()
             .Where(s => s.Id == ownerSubjectId)
             .Select(s => s.Preferences)
@@ -89,13 +91,16 @@ public class UnitsAndTimezoneService(
     public async Task<UnitsAndTimezoneDto> SetAsync(
         Guid tenantId, Guid ownerSubjectId, string glucoseUnits, string timezone, CancellationToken ct = default)
     {
-        var subject = await db.Subjects.FirstAsync(s => s.Id == ownerSubjectId, ct);
+        await using (var db = await contexts.CreateAsync(ct))
+        {
+            var subject = await db.Subjects.FirstAsync(s => s.Id == ownerSubjectId, ct);
 
-        var preferences = UserDisplayPreferences.Deserialize(subject.Preferences);
-        preferences.GlucoseUnits = glucoseUnits;
-        subject.Preferences = preferences.Serialize();
-        subject.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
+            var preferences = UserDisplayPreferences.Deserialize(subject.Preferences);
+            preferences.GlucoseUnits = glucoseUnits;
+            subject.Preferences = preferences.Serialize();
+            subject.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
 
         await tenants.SetDefaultGlucoseUnitsAsync(tenantId, glucoseUnits, ct);
         await cache.RemoveByPatternAsync(StatusService.SystemStatusCacheKey(tenantId.ToString()) + "*", ct);

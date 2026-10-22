@@ -95,9 +95,9 @@ public sealed class AuthenticationMiddlewarePrincipalTests
         // including the ones that should succeed, look rejected.
         var dbName = $"auth_principal_{Guid.NewGuid()}";
         var services = new ServiceCollection();
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddSingleton(memberService.Object);
-        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName));
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
         var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };
@@ -166,9 +166,9 @@ public sealed class AuthenticationMiddlewarePrincipalTests
         var memberService = new Mock<ITenantMemberService>();
         var dbName = $"auth_principal_reject_{Guid.NewGuid()}";
         var services = new ServiceCollection();
-        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddSingleton(memberService.Object);
-        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName));
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName).AsFactory());
         var provider = services.BuildServiceProvider();
 
         var context = new DefaultHttpContext { RequestServices = provider };

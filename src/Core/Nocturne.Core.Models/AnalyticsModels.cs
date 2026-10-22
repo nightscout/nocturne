@@ -42,9 +42,6 @@ public class AnalyticsEvent
     /// </summary>
     public long Timestamp { get; set; }
 
-    /// <summary>
-    /// Additional anonymous metadata
-    /// </summary>
     public Dictionary<string, object> Metadata { get; set; } = new();
 }
 
@@ -58,9 +55,6 @@ public class AnalyticsBatch
     /// </summary>
     public string InstallationId { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Collection of analytics events
-    /// </summary>
     public List<AnalyticsEvent> Events { get; set; } = new();
 
     /// <summary>
@@ -73,9 +67,6 @@ public class AnalyticsBatch
     /// </summary>
     public long BatchTimestamp { get; set; }
 
-    /// <summary>
-    /// Version of the analytics schema
-    /// </summary>
     public string SchemaVersion { get; set; } = "1.0";
 }
 
@@ -89,14 +80,8 @@ public class SystemInfo
     /// </summary>
     public string Platform { get; set; } = string.Empty;
 
-    /// <summary>
-    /// .NET runtime version
-    /// </summary>
     public string RuntimeVersion { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Nocturne version
-    /// </summary>
     public string NocturneVersion { get; set; } = string.Empty;
 
     /// <summary>
@@ -104,9 +89,6 @@ public class SystemInfo
     /// </summary>
     public string DeploymentType { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Whether demo mode is enabled
-    /// </summary>
     public bool DemoModeEnabled { get; set; }
 
     /// <summary>
@@ -114,19 +96,10 @@ public class SystemInfo
     /// </summary>
     public List<string> EnabledConnectors { get; set; } = new();
 
-    /// <summary>
-    /// Enabled features/plugins
-    /// </summary>
     public List<string> EnabledFeatures { get; set; } = new();
 
-    /// <summary>
-    /// Database type being used
-    /// </summary>
     public string DatabaseType { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Whether caching is enabled
-    /// </summary>
     public bool CacheEnabled { get; set; }
 }
 
@@ -197,29 +170,14 @@ public class UsageStatistics
 /// </summary>
 public class AnalyticsCollectionConfig
 {
-    /// <summary>
-    /// Whether to collect API usage analytics
-    /// </summary>
     public bool CollectApiUsage { get; set; } = true;
 
-    /// <summary>
-    /// Whether to collect UI navigation analytics
-    /// </summary>
     public bool CollectUiUsage { get; set; } = true;
 
-    /// <summary>
-    /// Whether to collect system performance metrics
-    /// </summary>
     public bool CollectPerformanceMetrics { get; set; } = true;
 
-    /// <summary>
-    /// Whether to collect error and health metrics
-    /// </summary>
     public bool CollectHealthMetrics { get; set; } = true;
 
-    /// <summary>
-    /// Whether to collect feature usage statistics
-    /// </summary>
     public bool CollectFeatureUsage { get; set; } = true;
 
     /// <summary>

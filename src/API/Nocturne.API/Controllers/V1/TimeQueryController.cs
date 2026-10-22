@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Platform;
+using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -162,27 +163,11 @@ public class TimeQueryController : ControllerBase
                 entriesArray.Length
             );
 
-            // Handle different output formats
-            if (format != null && !format.Equals("json", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    var formattedData = DataFormatService.FormatEntries(entriesArray, format);
-                    var contentType = DataFormatService.GetContentType(format);
-                    return Content(formattedData, contentType);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to format data as {Format}, falling back to JSON",
-                        format
-                    );
-                    return Ok(entriesArray);
-                }
-            }
-
-            return Ok(entriesArray);
+            return EntriesResult(entriesArray, format);
+        }
+        catch (TimePatternRejectedException ex)
+        {
+            return BadRequest(ex.Message);
         }
         catch (Exception ex)
         {
@@ -298,23 +283,13 @@ public class TimeQueryController : ControllerBase
 
         try
         {
-            // Extract query parameters
-            var queryParameters = new Dictionary<string, object>();
-            foreach (var param in Request.Query)
-            {
-                if (param.Key != "storage" && param.Key != "field")
-                {
-                    queryParameters[param.Key] = param.Value.ToString() ?? "";
-                }
-            }
-
             // Generate debug information
             var echo = _timeQueryService.GenerateTimeQueryEcho(
                 prefix: prefix,
                 regex: regex,
                 storage: storage,
                 fieldName: field,
-                queryParameters: queryParameters
+                queryString: Request.QueryString.Value
             );
 
             _logger.LogDebug(
@@ -323,6 +298,10 @@ public class TimeQueryController : ControllerBase
             );
 
             return Ok(echo);
+        }
+        catch (TimePatternRejectedException ex)
+        {
+            return BadRequest(ex.Message);
         }
         catch (Exception ex)
         {
@@ -572,27 +551,11 @@ public class TimeQueryController : ControllerBase
                 entriesArray.Length
             );
 
-            // Handle different output formats
-            if (format != null && !format.Equals("json", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    var formattedData = DataFormatService.FormatEntries(entriesArray, format);
-                    var contentType = DataFormatService.GetContentType(format);
-                    return Content(formattedData, contentType);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to format data as {Format}, falling back to JSON",
-                        format
-                    );
-                    return Ok(entriesArray);
-                }
-            }
-
-            return Ok(entriesArray);
+            return EntriesResult(entriesArray, format);
+        }
+        catch (TimePatternRejectedException ex)
+        {
+            return BadRequest(ex.Message);
         }
         catch (Exception ex)
         {
@@ -617,6 +580,9 @@ public class TimeQueryController : ControllerBase
             );
         }
     }
+
+    private ActionResult EntriesResult(Entry[] entries, string? format) =>
+        this.EntriesText(entries, format) ?? Ok(entries);
 
     /// <summary>
     /// The request's <c>find[...]</c> pairs alone, so no other key (<c>token</c>, <c>secret</c>, a

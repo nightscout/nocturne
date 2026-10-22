@@ -23,7 +23,8 @@ public class AboutItemTests
         _db.TenantId = TenantId;
         _db.Tenants.Add(new TenantEntity { Id = TenantId, Slug = "own", DisplayName = "Own" });
         _db.SaveChanges();
-        _service = new SetupHubService(_db, [new AboutItem(_db)]);
+        var factory = new TestNocturneDbContextFactory(_db);
+        _service = new SetupHubService(factory, [new AboutItem(factory)]);
     }
 
     private async Task<SetupHubItemState> StateAsync() =>

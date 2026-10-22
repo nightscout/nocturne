@@ -1,3 +1,4 @@
+using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -40,9 +41,9 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
 
     public TreatmentDecomposerDeviceEventReactionTests()
     {
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TenantId, SqliteNpgsqlJson.Translate);
         _context = _db.CreateContext();
-        var factory = new TestTenantDbContextFactory(_context);
+        var factory = new TestNocturneDbContextFactory(_context);
         var audit = Mock.Of<IAuditContext>();
         var dedup = Mock.Of<IDeduplicationService>();
 
@@ -53,7 +54,7 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
             .Returns(Task.CompletedTask);
 
         _decomposer = new TreatmentDecomposer(
-            _context,
+            _context.AsFactory(),
             new BolusRepository(factory, dedup, audit, NullLogger<BolusRepository>.Instance),
             new TempBasalRepository(factory, dedup, audit, NullLogger<TempBasalRepository>.Instance),
             new CarbIntakeRepository(factory, dedup, audit, NullLogger<CarbIntakeRepository>.Instance),
@@ -62,12 +63,15 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
             new DeviceEventRepository(factory, dedup, audit, NullLogger<DeviceEventRepository>.Instance),
             new BolusCalculationRepository(factory, dedup, audit, NullLogger<BolusCalculationRepository>.Instance),
             Mock.Of<IStateSpanService>(),
+            ProfileActivationTestDeps.Repository(_context),
+            ProfileActivationTestDeps.Writer(_context),
             Mock.Of<ITreatmentFoodService>(),
             Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(),
             Mock.Of<IProfileDecomposer>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
+            TempBasalTestDeps.Unscheduled(),
             audit,
             NullLogger<TreatmentDecomposer>.Instance,
             reactor.Object);

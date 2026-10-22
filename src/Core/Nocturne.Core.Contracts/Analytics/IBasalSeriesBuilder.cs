@@ -23,7 +23,6 @@ public interface IBasalSeriesBuilder
     /// from the caller so the resolver is hit once per chart-data request instead of once per
     /// consumer.
     /// </param>
-    /// <param name="ct">Cancellation token</param>
     Task<List<BasalPoint>> BuildAsync(
         List<TempBasal> tempBasals,
         long startTime,

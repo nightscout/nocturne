@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -13,13 +12,11 @@ namespace Nocturne.Infrastructure.Data.Interceptors;
 /// <summary>
 /// SaveChanges interceptor that captures mutation diffs for auditable entities
 /// and appends <see cref="MutationAuditLogEntity"/> records to the same save
-/// transaction. Registered as a singleton; scoped <see cref="IAuditContext"/>
-/// is resolved through <see cref="IHttpContextAccessor"/>.
+/// transaction. Registered as a singleton; the actor is the <see cref="NocturneDbContext.AuditContext"/>
+/// of the context being saved.
 /// </summary>
 public class MutationAuditInterceptor : SaveChangesInterceptor
 {
-    private readonly IHttpContextAccessor _httpContextAccessor;
-
     private static readonly ConcurrentDictionary<(Type EntityType, string PropertyName), AuditPropertyBehavior>
         PropertyBehaviorCache = new();
 
@@ -28,14 +25,6 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
         WriteIndented = false,
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
-
-    /// <summary>
-    /// Initializes the interceptor with access to the current HTTP context for audit metadata.
-    /// </summary>
-    public MutationAuditInterceptor(IHttpContextAccessor httpContextAccessor)
-    {
-        _httpContextAccessor = httpContextAccessor;
-    }
 
     /// <inheritdoc />
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -46,16 +35,10 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
         if (eventData.Context is not NocturneDbContext context)
             return new ValueTask<InterceptionResult<int>>(result);
 
-        // The context-level property wins: it is the audit context the writer attached to this
-        // context (ITenantDbContextFactory stamps its own DI scope's instance, background services
-        // set it directly), so a save made in a child scope is attributed by that scope rather
-        // than by the enclosing request. Reading the request scope first attributed a child
-        // scope's system-attributed connector writes to whoever triggered the sync.
-        // The scoped-context registration leaves the property unset, so an HTTP request falls
-        // back to the request scope's instance.
-        var auditContext = context.AuditContext
-            ?? _httpContextAccessor.HttpContext?.RequestServices
-                .GetService(typeof(IAuditContext)) as IAuditContext;
+        // The DI scope that created the context supplies its actor (TenantReadContext), so a save
+        // made in a child scope is attributed by that scope rather than by an enclosing request. A
+        // context with no scope has none.
+        var auditContext = context.AuditContext;
 
         var auditEntries = new List<MutationAuditLogEntity>();
         var now = DateTime.UtcNow;
@@ -93,9 +76,6 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
             // automated data ingestion (CGM readings, temp basals, etc.) whose provenance is
             // already captured on the records themselves (data_source), so they are not recorded
             // here — auditing them grew this table to 36GB / ~1.8M rows-per-day in production.
-            // A null context counts as system: an HTTP request always resolves a scoped context,
-            // so no context at all means an unattributed background save, whose audit row would
-            // carry a null actor, auth type and endpoint.
             // The soft-delete/dedup maintenance above still runs for these mutations.
             if (auditContext.IsSystemMutation())
                 continue;

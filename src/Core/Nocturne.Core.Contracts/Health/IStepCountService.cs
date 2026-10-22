@@ -14,8 +14,6 @@ public interface IStepCountService
     /// <param name="skip">Number of records to skip for pagination</param>
     /// <param name="from">Inclusive lower bound on the timestamp, or <see langword="null"/> for none</param>
     /// <param name="to">Inclusive upper bound on the timestamp, or <see langword="null"/> for none</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Collection of step count records</returns>
     Task<IEnumerable<StepCount>> GetStepCountsAsync(
         int count = 10,
         int skip = 0,
@@ -24,14 +22,10 @@ public interface IStepCountService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get step count records within a date range
-    /// </summary>
     /// <param name="from">Start of date range (inclusive)</param>
     /// <param name="to">End of date range (exclusive)</param>
     /// <param name="count">Maximum number of records to return; <see langword="null"/> for every record in the range</param>
     /// <param name="skip">Number of records to skip for pagination</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Collection of step count records ordered by timestamp ascending</returns>
     Task<IEnumerable<StepCount>> GetStepCountsByDateRangeAsync(
         DateTime from,
@@ -46,25 +40,17 @@ public interface IStepCountService
     /// resume watermark), or <c>null</c> when that source has written none.
     /// </summary>
     /// <param name="source">The data source to scope to.</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     Task<DateTime?> GetLatestTimestampAsync(
         string source,
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get a specific step count record by ID
-    /// </summary>
-    /// <param name="id">Record ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Step count record if found, null otherwise</returns>
     Task<StepCount?> GetStepCountByIdAsync(string id, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Create new step count records with WebSocket broadcasting
     /// </summary>
-    /// <param name="stepCounts">Step count records to create</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Created records with assigned IDs</returns>
     Task<IEnumerable<StepCount>> CreateStepCountsAsync(
         IEnumerable<StepCount> stepCounts,
@@ -74,9 +60,7 @@ public interface IStepCountService
     /// <summary>
     /// Update an existing step count record with WebSocket broadcasting
     /// </summary>
-    /// <param name="id">Record ID to update</param>
     /// <param name="stepCount">Updated step count data</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Updated record if successful, null otherwise</returns>
     Task<StepCount?> UpdateStepCountAsync(
         string id,
@@ -87,8 +71,6 @@ public interface IStepCountService
     /// <summary>
     /// Delete a step count record with WebSocket broadcasting
     /// </summary>
-    /// <param name="id">Record ID to delete</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if deleted successfully, false otherwise</returns>
     Task<bool> DeleteStepCountAsync(string id, CancellationToken cancellationToken = default);
 }

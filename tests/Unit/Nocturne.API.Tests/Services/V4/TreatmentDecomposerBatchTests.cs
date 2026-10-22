@@ -1,6 +1,8 @@
+using Nocturne.API.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
@@ -13,6 +15,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
@@ -35,6 +38,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
     private readonly Mock<IProfileDecomposer> _profileDecomposerMock;
     private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock;
     private readonly Mock<IPatientInsulinRepository> _insulinRepoMock;
+    private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new();
     private readonly TreatmentDecomposer _decomposer;
 
     public TreatmentDecomposerBatchTests()
@@ -78,6 +82,9 @@ public class TreatmentDecomposerBatchTests : IDisposable
         _tempBasalRepoMock
             .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<V4Models.TempBasal> records, WriteOrigin origin, CancellationToken _) => [.. records]);
+        _tempBasalRepoMock
+            .Setup(x => x.GetRelativeByLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
         // StateSpanService returns a new StateSpan
         _stateSpanServiceMock
@@ -94,8 +101,13 @@ public class TreatmentDecomposerBatchTests : IDisposable
             .Setup(s => s.ResolveAsync(It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
-        _decomposer = new TreatmentDecomposer(
-            _context,
+        _decomposer = CreateDecomposer(_deviceServiceMock.Object);
+    }
+
+    private TreatmentDecomposer CreateDecomposer(IDeviceService deviceService)
+    {
+        return new TreatmentDecomposer(
+            _context.AsFactory(),
             _bolusRepoMock.Object,
             _tempBasalRepoMock.Object,
             _carbRepoMock.Object,
@@ -104,12 +116,15 @@ public class TreatmentDecomposerBatchTests : IDisposable
             _deviceEventRepoMock.Object,
             _bolusCalcRepoMock.Object,
             _stateSpanServiceMock.Object,
+            ProfileActivationTestDeps.Repository(_context),
+            ProfileActivationTestDeps.Writer(_context),
             _treatmentFoodServiceMock.Object,
-            _deviceServiceMock.Object,
+            deviceService,
             Mock.Of<IPatientDeviceStamper>(),
             _profileDecomposerMock.Object,
             _activeProfileResolverMock.Object,
             _insulinRepoMock.Object,
+            TempBasalTestDeps.Rates(_basalRateResolverMock.Object),
             Mock.Of<IAuditContext>(),
             NullLogger<TreatmentDecomposer>.Instance);
     }
@@ -206,6 +221,81 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         result.CreatedRecords.Should().BeEmpty();
         result.CorrelationId.Should().BeNull();
+    }
+
+    /// <summary>
+    /// Each temp resolves against the schedule in force at its own start, as the single path does, so
+    /// a batch spanning a profile edit gives each side its own rate.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_PercentTempBasals_ResolveEachAtItsOwnStart()
+    {
+        _basalRateResolverMock
+            .Setup(r => r.FindBasalRateAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long mills, CancellationToken _) => mills < 1700001000000 ? 0.8 : 1.2);
+
+        var treatments = new List<Treatment>
+        {
+            new() { Id = "tb-percent-1", EventType = "Temp Basal", Mills = 1700000000000, Duration = 30, Percent = -50 },
+            new() { Id = "tb-percent-2", EventType = "Temp Basal", Mills = 1700002000000, Duration = 30, Percent = 50 },
+            new() { Id = "tb-aaps", EventType = "Temp Basal", Mills = 1700003000000, Duration = 30, Percent = -30, Rate = 0.7 },
+            new() { Id = "tb-absolute", EventType = "Temp Basal", Mills = 1700004000000, Duration = 30, Absolute = 1.5 },
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
+
+        var temps = result.CreatedRecords.OfType<V4Models.TempBasal>().ToDictionary(t => t.LegacyId!);
+        temps["tb-percent-1"].Rate.Should().BeApproximately(0.4, 1e-9);
+        temps["tb-percent-1"].ScheduledRate.Should().Be(0.8);
+        temps["tb-percent-1"].Percent.Should().Be(-50);
+        temps["tb-percent-2"].Rate.Should().BeApproximately(1.8, 1e-9);
+        temps["tb-percent-2"].ScheduledRate.Should().Be(1.2);
+        temps["tb-aaps"].Rate.Should().Be(0.7);
+        temps["tb-aaps"].Percent.Should().Be(-30);
+        temps["tb-absolute"].Rate.Should().Be(1.5);
+        temps["tb-absolute"].Percent.Should().BeNull();
+        temps["tb-absolute"].ScheduledRate.Should().BeNull();
+    }
+
+    /// <summary>
+    /// AAPS uploads a temp ahead of the profile switch that set it; a percent-only temp resolves after
+    /// the batch's switches are written, and a temp carrying its rate keeps it.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_PercentTempBeforeSwitchInTheSameBatch_SeesTheSwitch()
+    {
+        _basalRateResolverMock
+            .Setup(r => r.FindBasalRateAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _context.ProfileActivations.Any() ? 1.5 : 1.0);
+
+        var treatments = new List<Treatment>
+        {
+            new() { Id = "tb-percent", EventType = "Temp Basal", Mills = 1700000060000, Duration = 30, Percent = -50 },
+            new() { Id = "tb-aaps", EventType = "Temp Basal", Mills = 1700000120000, Duration = 30, Percent = 50, Rate = 1.65 },
+            new() { Id = "ps-1", EventType = "Profile Switch", Mills = 1700000000000, Profile = "Default", Duration = 0, Percentage = 150 },
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
+
+        var temps = result.CreatedRecords.OfType<V4Models.TempBasal>().ToDictionary(t => t.LegacyId!);
+        temps["tb-percent"].Rate.Should().BeApproximately(0.75, 1e-9);
+        temps["tb-aaps"].Rate.Should().Be(1.65);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_PercentOnlyTempWithNoScheduleInForce_LeavesRateUnknown()
+    {
+        var treatments = new List<Treatment>
+        {
+            new() { Id = "tb-percent", EventType = "Temp Basal", Mills = 1700000000000, Duration = 30, Percent = -50 },
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
+
+        var temp = result.CreatedRecords.OfType<V4Models.TempBasal>().Single();
+        temp.Rate.Should().BeNull();
+        temp.ScheduledRate.Should().BeNull();
+        temp.Percent.Should().Be(-50);
     }
 
     [Fact]
@@ -472,28 +562,110 @@ public class TreatmentDecomposerBatchTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeBatchAsync_ProfileSwitch_DelegatesToStateSpanService()
+    public async Task DecomposeBatchAsync_ProfileSwitch_WritesAProfileActivation()
     {
-        // Arrange
         var treatments = new List<Treatment>
         {
             new() { Id = "ps-1", EventType = "Profile Switch", Mills = 1700000000000, Profile = "Default", Duration = 0 },
         };
 
-        // Act
         var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
 
-        // Assert — profile switch uses individual upsert, not bulk insert
+        result.CreatedRecords.OfType<V4Models.ProfileActivation>().Should().ContainSingle()
+            .Which.LegacyId.Should().Be("ps-1");
         _stateSpanServiceMock.Verify(
-            x => x.UpsertStateSpanAsync(
-                It.Is<StateSpan>(s => s.Category == StateSpanCategory.Profile),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
+            x => x.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
         _tempBasalRepoMock.Verify(
             x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
         result.CreatedRecords.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_OnePumpManyTreatments_WritesLastSeenOnceWithTheNewestTimestamp()
+    {
+        var pumpId = Guid.NewGuid();
+        var deviceRepo = new Mock<IDeviceRepository>();
+        deviceRepo
+            .Setup(r => r.FindByCategoryTypeAndSerialAsync(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new V4Models.Device
+            {
+                Id = pumpId,
+                Category = V4Models.DeviceCategory.InsulinPump,
+                Type = "Omnipod DASH",
+                Serial = "SN-1",
+                FirstSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
+                LastSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
+            });
+        var decomposer = CreateDecomposer(CreateDeviceService(deviceRepo));
+
+        var treatments = Enumerable.Range(1, 5)
+            .Select(n => new Treatment
+            {
+                Id = $"bolus-{n}",
+                EventType = "Correction Bolus",
+                Mills = 1_000 + n * 1_000,
+                Insulin = 1,
+                PumpType = "Omnipod DASH",
+                PumpSerial = "SN-1",
+            })
+            .ToList();
+
+        await decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
+
+        deviceRepo.Verify(
+            r => r.WidenSeenWindowAsync(
+                pumpId, DateTimeOffset.FromUnixTimeMilliseconds(6_000).UtcDateTime,
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        deviceRepo.Verify(
+            r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_BatchThrowsAndLastSeenWriteWouldFail_SurfacesTheBatchException()
+    {
+        var deviceRepo = new Mock<IDeviceRepository>();
+        deviceRepo
+            .Setup(r => r.FindByCategoryTypeAndSerialAsync(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new V4Models.Device
+            {
+                Id = Guid.NewGuid(),
+                Category = V4Models.DeviceCategory.InsulinPump,
+                Type = "Omnipod DASH",
+                Serial = "SN-1",
+                FirstSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
+                LastSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000).UtcDateTime,
+            });
+        deviceRepo
+            .Setup(r => r.FindByCategoryTypeAndSerialAsync(V4Models.DeviceCategory.InsulinPump, "Omnipod DASH", "SN-2", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("batch failure"));
+        deviceRepo
+            .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("flush failure"));
+        var decomposer = CreateDecomposer(CreateDeviceService(deviceRepo));
+
+        var treatments = new List<Treatment>
+        {
+            new() { Id = "bolus-1", EventType = "Correction Bolus", Mills = 2_000, Insulin = 1, PumpType = "Omnipod DASH", PumpSerial = "SN-1" },
+            new() { Id = "bolus-2", EventType = "Correction Bolus", Mills = 3_000, Insulin = 1, PumpType = "Omnipod DASH", PumpSerial = "SN-2" },
+        };
+
+        var act = () => decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage("batch failure");
+    }
+
+    private static DeviceService CreateDeviceService(Mock<IDeviceRepository> deviceRepo)
+    {
+        var patientDevices = new Mock<IPatientDeviceRepository>();
+        patientDevices
+            .Setup(r => r.GetByDeviceIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        return new DeviceService(deviceRepo.Object, patientDevices.Object, MockTenantAccessor.Create().Object);
     }
 }

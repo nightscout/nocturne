@@ -6,6 +6,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Alerts;
@@ -87,21 +88,17 @@ public class EntriesController : BaseV3Controller<Entry>
                 ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
                 ?? ConvertV3FilterToV1Find(parameters.Filter);
 
-            // Determine sort direction from sort$desc query parameter
-            // Nightscout V3: sort$desc=field means descending (newest first)
-            // reverseResults=false means descending, reverseResults=true means ascending
-            var hasSortDesc = HttpContext?.Request.Query.ContainsKey("sort$desc") ?? false;
-            var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
-
-            // Get entries using service layer with V3 parameters
-            var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
-                type: type,
-                count: parameters.Limit,
-                skip: parameters.Offset,
-                findQuery: findQuery,
-                dateString: null, // V3 uses filter instead
-                reverseResults: reverseResults,
-                cancellationToken: cancellationToken
+            var entries = await _entryService.QueryEntriesAsync(
+                new EntryQuery
+                {
+                    Type = type,
+                    Find = findQuery,
+                    Count = parameters.Limit,
+                    Skip = parameters.Offset,
+                    ReverseResults = !parameters.Sort.Descending,
+                    SortField = ReadSortFieldOf(parameters.Sort),
+                },
+                cancellationToken
             );
 
             var entriesList = entries.ToList();
@@ -175,7 +172,7 @@ public class EntriesController : BaseV3Controller<Entry>
     /// </summary>
     /// <param name="entry">The <see cref="Entry"/> to create.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The created <see cref="Entry"/> in V3 format.</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for the created or already stored entry.</returns>
     /// <remarks>
     /// Supports AAPS deduplication: if an entry with the same device, type and timestamp already
     /// exists, returns a 200 response with <c>isDeduplication: true</c> instead of creating a
@@ -190,11 +187,12 @@ public class EntriesController : BaseV3Controller<Entry>
     [Authorize]
     [RequireScope(Scope.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries")]
-    [ProducesResponseType(typeof(Entry), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
-    public async Task<ActionResult<Entry>> CreateEntry(
+    public async Task<ActionResult> CreateEntry(
         [FromBody] Entry entry,
         CancellationToken cancellationToken = default
     )
@@ -223,16 +221,7 @@ public class EntriesController : BaseV3Controller<Entry>
                 );
                 if (existingEntry != null)
                 {
-                    var existingIdentifier = MongoObjectId.Coerce(existingEntry.Id);
-                    return Ok(
-                        new
-                        {
-                            status = 200,
-                            identifier = existingIdentifier,
-                            isDeduplication = true,
-                            deduplicatedIdentifier = existingIdentifier,
-                        }
-                    );
+                    return V3Deduplicated(existingEntry.Id, existingEntry.SrvModified);
                 }
             }
 
@@ -257,12 +246,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
             await _alertEvaluator.EvaluateForEntriesAsync([createdEntry], cancellationToken);
 
-            // Location resolves to the 24-hex ObjectId that matches the response body identifier.
-            return CreatedAtAction(
-                nameof(GetEntry),
-                new { id = MongoObjectId.Coerce(createdEntry.Id) },
-                createdEntry.ToV3Response()
-            );
+            return V3Created(nameof(GetEntry), createdEntry.Id);
         }
         catch (ArgumentException ex)
         {

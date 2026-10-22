@@ -9,6 +9,7 @@
 
   interface Props {
     boluses: Bolus[];
+    totalBolus: number;
     scheduledBasal: number;
     additionalBasal: number;
     totalInsulin: number;
@@ -18,6 +19,7 @@
 
   let {
     boluses,
+    totalBolus,
     scheduledBasal,
     additionalBasal,
     totalInsulin,
@@ -31,11 +33,6 @@
     );
     return `color-mix(in oklch, var(--insulin-bolus), white ${mixPercent}%)`;
   }
-
-  // Get boluses with insulin
-  const bolusTreatments = $derived(
-    boluses.filter((t) => (t.insulin ?? 0) > 0)
-  );
 
   // Build correlation map for tooltip (bolus correlationId -> carb intake)
   const carbByCorrelation = $derived(
@@ -65,7 +62,7 @@
   const segmentData = $derived.by(() => {
     const segments: SegmentData[] = [];
 
-    bolusTreatments.forEach((t, i) => {
+    boluses.forEach((t, i) => {
       const linkedCarb = t.correlationId
         ? carbByCorrelation.get(t.correlationId)
         : undefined;
@@ -76,13 +73,23 @@
         key: `bolus-${i}`,
         label: `Bolus${bolusTime ? ` @ ${bolusTime}` : ""}`,
         value: t.insulin ?? 0,
-        color: getBolusColor(i, bolusTreatments.length),
+        color: getBolusColor(i, boluses.length),
         bolus: t,
         linkedCarbs: linkedCarb?.carbs ?? undefined,
         time: bolusTime,
         props: arcProps("insulin-bolus"),
       });
     });
+
+    if (boluses.length === 0 && totalBolus > 0) {
+      segments.push({
+        key: "bolus",
+        label: "Bolus",
+        value: totalBolus,
+        color: getBolusColor(0, 1),
+        props: arcProps("insulin-bolus"),
+      });
+    }
 
     if (scheduledBasal > 0) {
       segments.push({
@@ -106,10 +113,6 @@
 
     return segments;
   });
-
-  const totalBolus = $derived(
-    bolusTreatments.reduce((sum, t) => sum + (t.insulin ?? 0), 0)
-  );
 
   const keyItems = $derived(
     (

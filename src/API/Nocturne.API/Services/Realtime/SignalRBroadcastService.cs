@@ -81,7 +81,7 @@ public interface ISignalRBroadcastService
     /// only a Public definition is visible tenant-wide, otherwise just to its owner.
     /// </remarks>
     Task BroadcastTrackerUpdateAsync(
-        string action,
+        TrackerRealtimeAction action,
         TrackerInstanceDto trackerInstance,
         string ownerSubjectId,
         TrackerVisibility visibility
@@ -468,7 +468,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
 
     /// <inheritdoc />
     public async Task BroadcastTrackerUpdateAsync(
-        string action,
+        TrackerRealtimeAction action,
         TrackerInstanceDto trackerInstance,
         string ownerSubjectId,
         TrackerVisibility visibility

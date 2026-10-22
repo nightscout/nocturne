@@ -28,9 +28,7 @@ public class TimezoneTimelineEntry
     /// <summary>IANA timezone id (e.g. <c>"Australia/Sydney"</c>). Windows ids are also accepted.</summary>
     public string Timezone { get; set; } = string.Empty;
 
-    /// <summary>When this entry was created.</summary>
     public DateTime? CreatedAt { get; set; }
 
-    /// <summary>When this entry was last updated.</summary>
     public DateTime? UpdatedAt { get; set; }
 }

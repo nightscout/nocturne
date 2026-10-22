@@ -1,6 +1,7 @@
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -46,9 +47,7 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
         var pumpModeSpans = context.StateSpans.TryGetValue(StateSpanCategory.PumpMode, out var pumpModeRaw)
             ? MapStateSpans(pumpModeRaw, StateSpanCategory.PumpMode)
             : [];
-        var profileSpans = context.StateSpans.TryGetValue(StateSpanCategory.Profile, out var profileRaw)
-            ? MapStateSpans(profileRaw, StateSpanCategory.Profile)
-            : [];
+        var profileSpans = MapProfileSegments(context.ProfileSegments);
         var overrideSpans = context.StateSpans.TryGetValue(StateSpanCategory.Override, out var overrideRaw)
             ? MapStateSpans(overrideRaw, StateSpanCategory.Override)
             : [];
@@ -65,6 +64,7 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
         activitySpans.AddRange(MapSleepSessions(context.SleepSessions));
 
         var basalDeliverySpans = ChartDataService.MapBasalDeliverySpans(context.DisplayTempBasals.ToList());
+        var lastPumpSyncMills = ChartDataService.LastPumpSyncMills(context.DisplayTempBasals, context.LatestPumpSnapshot);
         var tempBasalSpans = ChartDataService.MapTempBasalSpans(context.DisplayTempBasals.ToList());
         var systemEventMarkers = ChartDataService.MapSystemEvents(context.SystemEvents);
         var basalInjectionMarkers = context.BasalInjectionList
@@ -109,6 +109,7 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
             OverrideSpans = overrideSpans,
             ActivitySpans = activitySpans,
             BasalDeliverySpans = basalDeliverySpans,
+            LastPumpSyncMills = lastPumpSyncMills,
             TempBasalSpans = tempBasalSpans,
             SystemEventMarkers = systemEventMarkers,
             TrackerMarkers = trackerMarkers,
@@ -131,7 +132,6 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
                 {
                     StateSpanCategory.PumpMode => ChartColorMapper.FromPumpMode(span.State ?? ""),
                     StateSpanCategory.Override => ChartColorMapper.FromOverride(span.State ?? ""),
-                    StateSpanCategory.Profile => ChartColor.Profile,
                     StateSpanCategory.Exercise
                     or StateSpanCategory.Illness
                     or StateSpanCategory.Travel => ChartColorMapper.FromActivity(category),
@@ -141,6 +141,24 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
             })
             .ToList();
     }
+
+    /// <remarks>
+    /// One activation can apply over several stretches, as a permanent one does either side of a
+    /// temporary one, so each stretch is keyed by its activation and start.
+    /// </remarks>
+    private static List<ChartStateSpanDto> MapProfileSegments(IReadOnlyList<ResolvedProfileSegment> segments) =>
+        segments
+            .Select(segment => new ChartStateSpanDto
+            {
+                Id = $"{segment.Active.Activation.Id}:{segment.StartMills}",
+                Category = StateSpanCategory.Profile,
+                State = segment.Active.Activation.Phase.ToString(),
+                StartMills = segment.StartMills,
+                EndMills = segment.EndMills,
+                Color = ChartColor.Profile,
+                ProfileActivation = ProfileActivationDto.From(segment.Active.Activation),
+            })
+            .ToList();
 
     /// <summary>
     /// Projects sleep sessions into activity-span DTOs so they appear on the chart's activity layer.

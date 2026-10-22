@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.API.Services.Caching;
 
 namespace Nocturne.API.Tests.Services.Analytics;
 
@@ -26,10 +27,9 @@ public class DataOverviewServiceTests : IDisposable
 {
     private readonly NocturneDbContext _dbContext;
     private readonly DataOverviewService _service;
-    private readonly Mock<ICacheService> _cacheService = new();
+    private readonly Mock<ITenantCache> _cacheService = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
-    private readonly Mock<ITenantDbContextFactory> _factory = new();
-    private readonly CategoryReadContext _categoryReadContext = new();
+    private readonly Mock<INocturneDbContextFactory> _factory = new();
     private readonly ListLogger<DataOverviewService> _logger = new();
     private IInterceptor[] _interceptors = [];
     private readonly string _dbName = $"data_overview_{Guid.NewGuid()}";
@@ -53,7 +53,7 @@ public class DataOverviewServiceTests : IDisposable
     {
         // Seed via a long-lived context; the service leases its own contexts from the factory.
         // Both share the same named InMemory store and tenant, so the service sees seeded data —
-        // mirroring production, where the service queries through ITenantDbContextFactory.
+        // mirroring production, where the service queries through INocturneDbContextFactory.
         _dbContext = TestDbContextFactory.CreateInMemoryContext(_dbName);
         _dbContext.TenantId = TenantId;
 
@@ -67,15 +67,11 @@ public class DataOverviewServiceTests : IDisposable
 
         _therapySettings.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         var mockStatisticsService = new Mock<IStatisticsService>();
-        var mockTenantAccessor = new Mock<ITenantAccessor>();
-        mockTenantAccessor.SetupGet(a => a.Context).Returns(new TenantContext(TenantId, "test-tenant", "Test Tenant", true, false));
         _service = new DataOverviewService(
             _factory.Object,
             _therapySettings.Object,
             mockStatisticsService.Object,
             _cacheService.Object,
-            mockTenantAccessor.Object,
-            _categoryReadContext,
             _logger
         );
     }
@@ -1645,7 +1641,7 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetEHbA1cTimelineAsync_Unclamped_ServesTheTenantCache()
+    public async Task GetEHbA1cTimelineAsync_ServesTheTenantCache()
     {
         var cached = new EHbA1cTimelineResponse { Year = 2024 };
         _cacheService
@@ -1655,27 +1651,6 @@ public class DataOverviewServiceTests : IDisposable
         var result = await _service.GetEHbA1cTimelineAsync(2024);
 
         result.Should().BeSameAs(cached);
-    }
-
-    [Theory]
-    [Trait("Category", "Unit")]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task GetEHbA1cTimelineAsync_HistoryClamped_NeitherReadsNorWritesTheCache(bool share)
-    {
-        // The cache holds a full-history timeline an unclamped reader loaded; a clamped reader
-        // must not be served it, nor leave its own narrowed timeline for the next reader.
-        _cacheService
-            .Setup(c => c.GetAsync<EHbA1cTimelineResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new EHbA1cTimelineResponse { Year = 2024 });
-        if (share)
-            _categoryReadContext.MarkShare();
-        else
-            _categoryReadContext.ClampMemberHistory();
-
-        await _service.GetEHbA1cTimelineAsync(2024);
-
-        _cacheService.Invocations.Should().BeEmpty();
     }
 
     [Fact]

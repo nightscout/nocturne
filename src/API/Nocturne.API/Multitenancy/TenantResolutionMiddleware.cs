@@ -3,8 +3,8 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Multitenancy;
@@ -14,7 +14,6 @@ namespace Nocturne.API.Multitenancy;
 /// Tenants are resolved by subdomain: <c>{slug}.{BaseDomain}</c>.
 /// Requests on the apex domain (no subdomain) are either tenantless-allowed
 /// cross-tenant paths or 404/503 depending on whether any tenants exist.
-/// Must run before AuthenticationMiddleware in the pipeline.
 /// </summary>
 public class TenantResolutionMiddleware
 {
@@ -53,7 +52,7 @@ public class TenantResolutionMiddleware
     /// <c>{slug}.{BaseDomain}</c> would. Set on paths scoped to the caller, which already run on
     /// every tenant host; leave it off for cross-tenant and platform paths, and for any that
     /// carries the resolved slug into an OIDC <c>state</c>, since
-    /// <see cref="Middleware.OidcCallbackRedirectMiddleware"/> would then bounce the callback to a
+    /// <see cref="Middleware.ApexCallbackRelayMiddleware"/> would then bounce the callback to a
     /// subdomain the install may not serve.
     /// </param>
     public readonly record struct TenantlessPath(
@@ -94,7 +93,7 @@ public class TenantResolutionMiddleware
         "/api/v4/me/tenants/validate-slug",
         // Cross-tenant caregiver overview: aggregates across the subject's tenants,
         // so it must be reachable from the apex in multi-tenant deployments. The
-        // service pins each tenant itself and never uses the request-scoped context.
+        // service pins each tenant itself and never reads as the request's tenant.
         "/api/v4/me/tenants/overview",
         // The subject's tenant list, which drives the tenantless dashboard's navigation
         // and the tenant switcher. Keyed on SubjectId alone, like the overview above.
@@ -132,7 +131,7 @@ public class TenantResolutionMiddleware
         // set; the providers themselves are not tenant-scoped. GET is the only verb served.
         new TenantlessPath("/api/auth/oidc/providers", HttpMethods.Get),
         // The OIDC callback is the registered redirect_uri (apex). For apex-initiated
-        // logins the state carries no TenantSlug, so OidcCallbackRedirectMiddleware
+        // logins the state carries no TenantSlug, so ApexCallbackRelayMiddleware
         // can't bounce it to a subdomain and it must process here. The session it
         // issues is subject-scoped (no tenant needed). Subdomain-originated callbacks
         // are already redirected to their subdomain before reaching this point.
@@ -158,10 +157,9 @@ public class TenantResolutionMiddleware
         // subject_avatars) carry no tenant column — one person's credential is the same credential
         // in every tenant they belong to, so managing it from a tenant subdomain was arbitrary.
         //
-        // The sign-in ceremonies are deliberately absent. TotpController.Login gates on membership
-        // of the resolved tenant and the passkey login/* paths likewise, so authenticating on a
-        // tenantless host remains identity-provider-only; these enrol and revoke factors for a
-        // caller who is already authenticated.
+        // The passkey sign-in ceremonies are deliberately absent: they gate on membership of the
+        // resolved tenant, so a primary factor on a tenantless host is identity-provider-only.
+        // These enrol and revoke factors for a caller who is already authenticated.
         new TenantlessPath("/api/auth/passkey/register/options", HttpMethods.Post, SoleTenantAtApex: true),
         new TenantlessPath("/api/auth/passkey/register/complete", HttpMethods.Post, SoleTenantAtApex: true),
         new TenantlessPath("/api/auth/passkey/recovery/status", HttpMethods.Get, SoleTenantAtApex: true),
@@ -169,10 +167,12 @@ public class TenantResolutionMiddleware
         new TenantlessPath("/api/auth/totp/setup", HttpMethods.Post, SoleTenantAtApex: true),
         new TenantlessPath("/api/auth/totp/verify-setup", HttpMethods.Post, SoleTenantAtApex: true),
         new TenantlessPath("/api/auth/totp", HttpMethods.Get, SoleTenantAtApex: true),
+        // The authenticator step after an identity-provider sign-in on a tenantless host. Served
+        // as the sole tenant like the passkey ceremonies it also follows; TotpController.Login
+        // matches a token the tenantless OIDC callback minted at that same apex.
+        new TenantlessPath("/api/auth/totp/login", HttpMethods.Post, SoleTenantAtApex: true),
         // Revoking one authenticator, whose route carries its id. Narrowed to DELETE so the sibling
-        // /login, which gates on membership of the resolved tenant, is not admitted under the POST
-        // it is served on. Asked without a method this prefix answers for its own DELETE, so a
-        // coverage sweep sees /login as reachable; routing has no DELETE there to reach.
+        // /login is admitted only by its own entry above. Routing has no DELETE beneath /login.
         new TenantlessPath("/api/auth/totp/", HttpMethods.Delete, Prefix: true, SoleTenantAtApex: true),
         // GET the list and DELETE one by id; nothing else is routed beneath either.
         new TenantlessPath("/api/auth/passkey/credentials", Prefix: true, SoleTenantAtApex: true),
@@ -293,10 +293,7 @@ public class TenantResolutionMiddleware
             tenantAccessor.SetTenant(shareTenant);
             context.SetTenantContext(shareTenant);
             context.SetShareAccess();
-            // Mark the share before pinning the scoped context so the carrier is in place
-            // for both the scoped-direct and the factory DbContext paths.
             context.RequestServices.GetRequiredService<ICategoryReadContext>().MarkShare();
-            PinTenantOnScopedDbContext(context, shareTenant.TenantId);
             await _next(context);
             return;
         }
@@ -312,7 +309,6 @@ public class TenantResolutionMiddleware
             {
                 tenantAccessor.SetTenant(soleApexTenant);
                 context.SetTenantContext(soleApexTenant);
-                PinTenantOnScopedDbContext(context, soleApexTenant.TenantId);
                 await _next(context);
                 return;
             }
@@ -356,7 +352,6 @@ public class TenantResolutionMiddleware
             // Single tenant: auto-resolve from the apex domain.
             tenantAccessor.SetTenant(soleTenant);
             context.SetTenantContext(soleTenant);
-            PinTenantOnScopedDbContext(context, soleTenant.TenantId);
             await _next(context);
             return;
         }
@@ -394,35 +389,9 @@ public class TenantResolutionMiddleware
 
         tenantAccessor.SetTenant(tenantContext);
         context.SetTenantContext(tenantContext);
-        PinTenantOnScopedDbContext(context, tenantContext.TenantId);
 
         await _next(context);
     }
-
-    /// <summary>
-    /// Pins the resolved tenant onto the request-scoped <see cref="NocturneDbContext"/>.
-    /// The scoped context's <c>TenantId</c> defaults to <c>Guid.Empty</c>, so without this a
-    /// directly-injected context has no tenant set. The <c>TenantConnectionInterceptor</c>
-    /// reads <c>TenantId</c> to scope Row-Level Security on connection open, so any
-    /// directly-injected context (e.g. connector-configuration reads) would otherwise run under
-    /// an empty tenant — most visibly on unauthenticated flows (setup/onboarding) that have no
-    /// auth handler to set it.
-    /// </summary>
-    private static void PinTenantOnScopedDbContext(HttpContext context, Guid tenantId)
-    {
-        var db = context.RequestServices.GetService<NocturneDbContext>();
-        if (db is null)
-            return;
-        db.TenantId = tenantId;
-        // Set the share carrier unconditionally so a directly-injected context never carries
-        // unintended share state. The scoped-direct context carries only the marker (known
-        // pre-auth) and leaves the CSV null, so a share reading PHI on this path is denied.
-        db.IsShareContext = context.RequestServices.GetService<ICategoryReadContext>()?.IsShare == true;
-        db.VisibleCategories = null;
-        db.ShareFullHistory = false;
-        db.HistoryClamped = false;
-    }
-
 
     /// <summary>Cache key holding the resolved <see cref="TenantContext"/> for a slug.</summary>
     public static string TenantCacheKey(string slug) => $"tenant:{slug}";
@@ -460,12 +429,6 @@ public class TenantResolutionMiddleware
     /// the columns <see cref="TenantContext"/> carries — an install that gains a second tenant
     /// otherwise keeps serving the first one from its apex.
     /// </para>
-    /// <para>
-    /// Both caches are per-process, so on a deployment running more than one API replica
-    /// (<c>api.autoscaling</c> in the Helm chart) this reaches only the replica that handled the
-    /// write; the others carry the previous answer until it expires. Staleness is bounded by
-    /// <see cref="CacheDuration"/> on every replica.
-    /// </para>
     /// </remarks>
     public static void EvictTenant(IMemoryCache cache, string slug)
     {
@@ -483,8 +446,8 @@ public class TenantResolutionMiddleware
         if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
             return cached;
 
-        var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var context = await factory.CreateDbContextAsync();
+        var factory = services.GetRequiredService<INocturneDbContextFactory>();
+        await using var context = await factory.CreatePlatformAsync();
 
         var tenant = await context.Tenants.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Slug == slug);
@@ -506,12 +469,11 @@ public class TenantResolutionMiddleware
     /// <para>
     /// The fresh-install answer — no tenant exists at all — is deliberately not cached, and is the
     /// one answer worth a query per request. It is true only until an install's first tenant is
-    /// created, and every way of holding it stale ends in an instance that answers
-    /// <c>setup_required</c> at its apex while its database has a tenant: a create on another
-    /// replica never reaches this process, and the setup page's own <c>/api/v4/status</c> poll can
-    /// read zero tenants, lose the race to the create, and then write the answer it read. Every
-    /// other answer changes only when a tenant is created, removed or toggled, all of which call
-    /// <see cref="EvictTenant"/>.
+    /// created, and a cached copy can outlive that: the setup page's own <c>/api/v4/status</c> poll
+    /// can read zero tenants, lose the race to the create, and then write the answer it read,
+    /// leaving an instance that answers <c>setup_required</c> at its apex while its database has a
+    /// tenant. Every other answer changes only when a tenant is created, removed or toggled, all of
+    /// which call <see cref="EvictTenant"/>.
     /// </para>
     /// </remarks>
     private async Task<ApexTenants> GetApexTenantsAsync(IServiceProvider services)
@@ -519,8 +481,8 @@ public class TenantResolutionMiddleware
         if (_cache.TryGetValue(SoleTenantCacheKey, out ApexTenants? cached) && cached is not null)
             return cached;
 
-        var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var context = await factory.CreateDbContextAsync();
+        var factory = services.GetRequiredService<INocturneDbContextFactory>();
+        await using var context = await factory.CreatePlatformAsync();
 
         var tenant = await context.Tenants.SoleTenantAsync();
 

@@ -50,7 +50,6 @@ public class LegacyPostBodyTests
         "v1 devicestatus",
         "v1 activity",
         "v1 entries",
-        "v1 entries async",
         "v3 food",
         "v3 profile",
         "v3 settings",
@@ -163,8 +162,7 @@ public class LegacyPostBodyTests
         "v1 profile" => V1ProfileHandler(),
         "v1 devicestatus" or "v3 devicestatus" => DeviceStatusHandler(name),
         "v1 activity" => ActivityHandler(),
-        "v1 entries" => EntriesHandler(false),
-        "v1 entries async" => EntriesHandler(true),
+        "v1 entries" => EntriesHandler(),
         "v3 food" => V3FoodHandler(),
         "v3 profile" => V3ProfileHandler(),
         "v3 settings" => SettingsHandler(),
@@ -275,7 +273,7 @@ public class LegacyPostBodyTests
             () => activities.All(a => a.Duration == 30));
     }
 
-    private static Handler EntriesHandler(bool async)
+    private static Handler EntriesHandler()
     {
         var entries = new List<Entry>();
         var service = new Mock<IEntryService>();
@@ -292,15 +290,13 @@ public class LegacyPostBodyTests
         var controller = WithContext(new LegacyV1.EntriesController(
             service.Object,
             Passthrough(),
-            Mock.Of<IProcessingStatusService>(),
             Mock.Of<ICanonicalAlertEvaluator>(),
+            TimeProvider.System,
             NullLogger<LegacyV1.EntriesController>.Instance));
         return new Handler(
             $$"""{"Type":"sgv","Sgv":"120","Mills":{{Millis}}}""",
             """{"type":{}}""",
-            async body => async
-                ? Unwrap(await controller.CreateEntriesAsync(Json(body)))
-                : Unwrap(await controller.CreateEntries(Json(body))),
+            async body => Unwrap(await controller.CreateEntries(Json(body))),
             () => entries.Count,
             () => entries.All(e => e.Sgv == 120));
     }
@@ -332,6 +328,7 @@ public class LegacyPostBodyTests
                 decomposer.Object,
                 Mock.Of<IWriteSideEffects>(),
                 Mock.Of<IDataEventSink<DeviceStatus>>(),
+                TimeProvider.System,
                 NullLogger<LegacyV1.DeviceStatusController>.Instance));
             return new Handler(single, malformed, async body => Unwrap(await v1.CreateDeviceStatus(Json(body))), () => statuses.Count, () => statuses.All(s => s.Device == "openaps://phone"));
         }

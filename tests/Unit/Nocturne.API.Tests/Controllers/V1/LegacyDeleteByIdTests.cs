@@ -195,23 +195,15 @@ public class LegacyDeleteByIdTests
     }
 
     [Theory]
-    [InlineData("?find[created_at][$lte]=2020-01-02")]
-    [InlineData("?find[device]=openaps://rig&token=x")]
-    public async Task DeleteDeviceStatus_AnyIdWithFind_DeletesTheMatches(string queryString)
+    [InlineData("?find[created_at][$lte]=2020-01-02", true)]
+    [InlineData("?find[device]=openaps://rig&token=x", false)]
+    public async Task DeleteDeviceStatus_AnyIdWithFind_DeletesTheMatches(string queryString, bool old)
     {
+        var at = old ? new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var aps = new Mock<IApsSnapshotRepository>();
-        var groups = new Mock<IDeviceStatusGroupRepository>();
-        groups.Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([
-                new DeviceStatusGroup(
-                    new ApsSnapshot { Id = Guid.CreateVersion7(), LegacyId = StoredId, Timestamp = DateTime.UtcNow },
-                    null, null, null, DateTime.UtcNow),
-                new DeviceStatusGroup(
-                    new ApsSnapshot { Id = Guid.CreateVersion7(), LegacyId = "5f8d0c1e8a7b4c3d9e5f0002", Timestamp = DateTime.UtcNow },
-                    null, null, null, DateTime.UtcNow),
-            ]);
+        var groups = ReturningGroups(
+            new ApsSnapshot { Id = Guid.CreateVersion7(), LegacyId = StoredId, Timestamp = at, Device = "openaps://rig" },
+            new ApsSnapshot { Id = Guid.CreateVersion7(), LegacyId = "5f8d0c1e8a7b4c3d9e5f0002", Timestamp = at, Device = "openaps://rig" });
         var decomposer = new Mock<IDeviceStatusDecomposer>();
         decomposer
             .Setup(d => d.DeleteStoredAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -225,14 +217,75 @@ public class LegacyDeleteByIdTests
     }
 
     [Theory]
+    [InlineData("?find[_id][$nin]=" + StoredId, "5f8d0c1e8a7b4c3d9e5f0002")]
+    [InlineData("?find[device][$ne]=loop://iPhone", StoredId)]
+    [InlineData("?find[loop][$exists]=true", "5f8d0c1e8a7b4c3d9e5f0002")]
+    [InlineData("?find[device]=openaps://rig&find[uploader]=x", "")]
+    [InlineData("?find[created_at][$ne]=2020-01-02", StoredId + ",5f8d0c1e8a7b4c3d9e5f0002")]
+    public async Task DeleteDeviceStatus_AnyIdWithFieldConditions_DeletesOnlyTheStatusesTheyMatch(
+        string queryString, string expected)
+    {
+        var groups = ReturningGroups(
+            new ApsSnapshot
+            {
+                Id = Guid.CreateVersion7(), LegacyId = StoredId, Timestamp = DateTime.UtcNow,
+                Device = "openaps://rig", AidAlgorithm = AidAlgorithm.OpenAps,
+            },
+            new ApsSnapshot
+            {
+                Id = Guid.CreateVersion7(), LegacyId = "5f8d0c1e8a7b4c3d9e5f0002", Timestamp = DateTime.UtcNow,
+                Device = "loop://iPhone", AidAlgorithm = AidAlgorithm.Loop, LoopJson = "{}",
+            });
+        var deleted = new List<string>();
+        var decomposer = new Mock<IDeviceStatusDecomposer>();
+        decomposer
+            .Setup(d => d.DeleteStoredAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((string id, WriteOrigin _, CancellationToken _) => deleted.Add(id))
+            .ReturnsAsync(1);
+
+        await NewDeviceStatusController(
+                new Mock<IApsSnapshotRepository>(), decomposer.Object, queryString, Scope.FullAccess, groups)
+            .DeleteDeviceStatus(LegacyDeleteStatus.AnyId);
+
+        deleted.Should().Equal(expected.Split(',', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public async Task DeleteDeviceStatus_AnyIdWithAnIdFind_DeletesThatStatusOnly()
+    {
+        var aps = new Mock<IApsSnapshotRepository>();
+        aps.Setup(r => r.GetByLegacyIdAsync(StoredId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApsSnapshot { Id = Guid.CreateVersion7(), LegacyId = StoredId, Timestamp = DateTime.UtcNow });
+        var decomposer = new Mock<IDeviceStatusDecomposer>();
+        decomposer.Setup(d => d.DeleteStoredAsync(StoredId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var result = await NewDeviceStatusController(
+                aps, decomposer.Object, $"?find[_id]={StoredId}", Scope.FullAccess)
+            .DeleteDeviceStatus(LegacyDeleteStatus.AnyId);
+
+        AssertDeleteStatus(result, 1);
+        decomposer.Verify(
+            d => d.DeleteStoredAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("?token=x")]
     [InlineData("?count=10")]
-    [InlineData("?find[_id]=5f8d0c1e8a7b4c3d9e5f0001")]
     [InlineData("?find[created_at][$lte]=garbage")]
     [InlineData("?find[created_at][$lte]=")]
-    [InlineData("?find[device]=openaps://rig&find[uploader]=x")]
-    [InlineData("?find[created_at][$ne]=2020-01-02")]
+    [InlineData("?find[device]=openaps://rig&find[created_at][]=")]
+    [InlineData("?find[device]=openaps://rig&find[created_at][$gte]=true")]
+    [InlineData("?find[device]=openaps://rig&find[pump][$where]=1")]
+    [InlineData("?find[device]=openaps://rig&find[pump=1")]
+    [InlineData("?find[device]=openaps://rig&find[$or][x][pump]=1")]
+    [InlineData("?find[device][$options]=i&find[created_at][$lte]=2026-10-02T00:00:00Z")]
+    [InlineData("?find[device]=openaps://rig&find[device][$options]=i")]
+    [InlineData("?find[device][$regex]=loop&find[uploader][$options]=i")]
+    [InlineData("?find[loop][$exists]=yes&find[created_at][$gte]=2020-01-01T00:00:00Z")]
+    [InlineData("?find[device]=openaps://rig&find[loop][$exists]=")]
     public async Task DeleteDeviceStatus_AnyIdWithoutAFindItCanApply_IsRefused(string queryString)
     {
         var decomposer = new Mock<IDeviceStatusDecomposer>();
@@ -252,7 +305,6 @@ public class LegacyDeleteByIdTests
     [InlineData("?find={}")]
     [InlineData("?find=%7B%7D")]
     [InlineData("?token=x")]
-    [InlineData("?find[_id]=5f8d0c1e8a7b4c3d9e5f0001")]
     public async Task BulkDeleteDeviceStatus_WithoutAFindItCanApply_IsRefused(string queryString)
     {
         var decomposer = new Mock<IDeviceStatusDecomposer>();
@@ -288,6 +340,16 @@ public class LegacyDeleteByIdTests
         body.GetProperty("n").GetInt64().Should().Be(count);
     }
 
+    private static Mock<IDeviceStatusGroupRepository> ReturningGroups(params ApsSnapshot[] statuses)
+    {
+        var groups = new Mock<IDeviceStatusGroupRepository>();
+        groups.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(statuses.Select(aps => new DeviceStatusGroup(aps, null, null, null, aps.Timestamp)).ToList());
+        return groups;
+    }
+
     private static DefaultHttpContext NewHttpContext(string queryString, string scope)
     {
         var httpContext = new DefaultHttpContext();
@@ -309,7 +371,7 @@ public class LegacyDeleteByIdTests
         Mock<IDeviceStatusGroupRepository>? groups = null) =>
         new(CountControllerTests.DeviceStatusProjection(groups ?? new Mock<IDeviceStatusGroupRepository>(), aps),
             decomposer, Mock.Of<IWriteSideEffects>(), Mock.Of<IDataEventSink<DeviceStatus>>(),
-            NullLogger<DeviceStatusController>.Instance)
+            TimeProvider.System, NullLogger<DeviceStatusController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = NewHttpContext(queryString, scope) },
         };

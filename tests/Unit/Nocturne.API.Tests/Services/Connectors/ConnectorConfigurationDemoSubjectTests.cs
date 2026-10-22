@@ -62,7 +62,7 @@ public class ConnectorConfigurationDemoSubjectTests : IDisposable
             .Returns<Dictionary<string, string>>(d => d);
 
         _service = new ConnectorConfigurationService(
-            _dbContext,
+            _dbContext.AsFactory(),
             encryption.Object,
             Mock.Of<ISignalRBroadcastService>(),
             _auditContext.Object,

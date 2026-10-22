@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.ProfileActivations;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Infrastructure.Data;
@@ -19,6 +20,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -41,7 +43,9 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     private readonly IHeartRateService _heartRateService;
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
     private readonly ITenantAccessor _tenantAccessor;
-    private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _contexts;
+    private readonly IProfileActivationRepository _profileActivations;
+    private readonly ProfileActivationWriter _profileActivationWriter;
 
     public MetadataPublisher(
         IProfileWriteService profileWriteService,
@@ -56,12 +60,16 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         IHeartRateService heartRateService,
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
-        NocturneDbContext db,
+        INocturneDbContextFactory contexts,
+        IProfileActivationRepository profileActivations,
+        ProfileActivationWriter profileActivationWriter,
         IAuditContext auditContext,
         PublishSkipTally skips,
         ILogger<MetadataPublisher> logger)
         : base(auditContext, skips, logger)
     {
+        _profileActivations = profileActivations ?? throw new ArgumentNullException(nameof(profileActivations));
+        _profileActivationWriter = profileActivationWriter ?? throw new ArgumentNullException(nameof(profileActivationWriter));
         _profileWriteService = profileWriteService ?? throw new ArgumentNullException(nameof(profileWriteService));
         _foodService = foodService ?? throw new ArgumentNullException(nameof(foodService));
         _connectorFoodEntryService = connectorFoodEntryService ?? throw new ArgumentNullException(nameof(connectorFoodEntryService));
@@ -74,7 +82,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         _heartRateService = heartRateService ?? throw new ArgumentNullException(nameof(heartRateService));
         _tenantOwnerResolver = tenantOwnerResolver ?? throw new ArgumentNullException(nameof(tenantOwnerResolver));
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
-        _db = db ?? throw new ArgumentNullException(nameof(db));
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <summary>
@@ -232,20 +240,38 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             activities, a => a.Id,
             unheld => WriteActivityAsync(unheld, source, cancellationToken),
             source,
-            ids => _db.GetHeldOriginalIdsAsync<StateSpanEntity>(ids, cancellationToken),
-            ids => _db.GetHeldOriginalIdsAsync<HeartRateEntity>(ids, cancellationToken),
-            ids => _db.GetHeldOriginalIdsAsync<StepCountEntity>(ids, cancellationToken),
-            ids => _db.GetHeldOriginalIdsAsync<SleepSessionEntity>(
-                ids, s => s.Source == ActivityStateSpanMapper.SleepSessionSource, cancellationToken));
+            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<StateSpanEntity>(ids, cancellationToken), cancellationToken),
+            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<HeartRateEntity>(ids, cancellationToken), cancellationToken),
+            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<StepCountEntity>(ids, cancellationToken), cancellationToken),
+            ids => HeldAsync(db => db.GetHeldOriginalIdsAsync<SleepSessionEntity>(
+                ids, s => s.Source == ActivityStateSpanMapper.SleepSessionSource, cancellationToken), cancellationToken));
 
+    private async Task<IReadOnlySet<string>> HeldAsync(
+        Func<NocturneDbContext, Task<IReadOnlySet<string>>> held, CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        return await held(db);
+    }
+
+    /// <remarks>
+    /// A Profile span, as an instance before profile activations replays it, is published as the
+    /// effective activation it records (<see cref="PublishProfileActivationsAsync"/>).
+    /// </remarks>
     public async Task<bool> PublishStateSpansAsync(
         IEnumerable<StateSpan> stateSpans,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
     {
+        var spans = stateSpans.ToList();
+        var profileSpans = spans.Where(s => s.Category == StateSpanCategory.Profile).ToList();
+        if (profileSpans.Count > 0
+            && !await PublishProfileActivationsAsync(
+                profileSpans.Select(ConnectorProfileActivations.FromSpan), source, origin, cancellationToken))
+            return false;
+
         try
         {
-            foreach (var span in stateSpans)
+            foreach (var span in spans.Where(s => s.Category != StateSpanCategory.Profile))
             {
                 // Source is the connector writing the row here, not one carried in the payload:
                 // NocturneRemote replays another instance's spans verbatim, and honouring their
@@ -266,6 +292,47 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to publish state spans for {Source}", source);
+            return false;
+        }
+    }
+
+    /// <remarks>
+    /// Each activation is written oldest first and settled against its neighbours, so one published
+    /// after an earlier sync's still-open activation ends it. One the user deleted stays deleted.
+    /// </remarks>
+    public async Task<bool> PublishProfileActivationsAsync(
+        IEnumerable<ProfileActivation> activations,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            foreach (var activation in activations.OrderBy(a => a.StartTimestamp))
+            {
+                activation.DataSource = source;
+                activation.Phase = ProfileActivationPhase.Effective;
+                activation.Origin = ProfileActivationOrigin.Connector;
+                var stored = string.IsNullOrEmpty(activation.SyncIdentifier)
+                    ? null
+                    : await _profileActivations.FindBySyncIdentifierAsync(source, activation.SyncIdentifier, cancellationToken);
+
+                await _profileActivationWriter.WriteAsync(activation, stored, async settled =>
+                {
+                    try
+                    {
+                        return (await _profileActivations.UpsertAsync(settled, origin, cancellationToken)).Record;
+                    }
+                    catch (RecreationBlockedException)
+                    {
+                        return null;
+                    }
+                }, cancellationToken);
+            }
+            return true;
+        }
+        catch (DbUpdateException ex)
+        {
+            Logger.LogError(ex, "Failed to publish profile activations for {Source}", source);
             return false;
         }
     }
@@ -421,7 +488,8 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         string collection,
         CancellationToken cancellationToken = default)
     {
-        var config = await FindConnectorConfigurationAsync(source, cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var config = await FindConnectorConfigurationAsync(db, source, cancellationToken);
         if (config?.BackfillLowWaterMarks is null)
             return null;
 
@@ -446,7 +514,8 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         DateTime? lowWaterMark,
         CancellationToken cancellationToken = default)
     {
-        var config = await FindConnectorConfigurationAsync(source, cancellationToken);
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var config = await FindConnectorConfigurationAsync(db, source, cancellationToken);
         if (config is null)
         {
             Logger.LogWarning(
@@ -455,11 +524,11 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             return;
         }
 
-        if (_db.Database.IsNpgsql())
+        if (db.Database.IsNpgsql())
         {
             if (lowWaterMark is null)
             {
-                await _db.Database.ExecuteSqlAsync(
+                await db.Database.ExecuteSqlAsync(
                     $"""
                      UPDATE connector_configurations
                      SET backfill_low_water_marks =
@@ -473,7 +542,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
                 // Serialized as an ISO-8601 UTC string ("...Z"), matching what
                 // System.Text.Json writes so Get round-trips without a timezone shift.
                 var value = lowWaterMark.Value.ToString("O");
-                await _db.Database.ExecuteSqlAsync(
+                await db.Database.ExecuteSqlAsync(
                     $"""
                      UPDATE connector_configurations
                      SET backfill_low_water_marks =
@@ -496,7 +565,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             marks[collection] = lowWaterMark.Value;
 
         config.BackfillLowWaterMarks = marks.Count == 0 ? null : JsonSerializer.Serialize(marks);
-        await _db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
@@ -507,6 +576,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
     /// jsonb-path updates, and a stale tracked snapshot must never flow back into the row.
     /// </summary>
     private async Task<ConnectorConfigurationEntity?> FindConnectorConfigurationAsync(
+        NocturneDbContext db,
         string source,
         CancellationToken cancellationToken)
     {
@@ -516,9 +586,9 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             ? canonicalSource[..^suffix.Length]
             : canonicalSource;
 
-        var query = _db.Database.IsNpgsql()
-            ? _db.ConnectorConfigurations.AsNoTracking()
-            : _db.ConnectorConfigurations;
+        var query = db.Database.IsNpgsql()
+            ? db.ConnectorConfigurations.AsNoTracking()
+            : db.ConnectorConfigurations;
 
         return await query
             .FirstOrDefaultAsync(

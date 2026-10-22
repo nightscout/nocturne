@@ -86,6 +86,11 @@ internal static class ChartDataReadScopeGuard
             data.PumpModeSpans = [];
         }
 
+        // Read off both the basal delivery spans and the pump status, so it needs both scopes.
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead)
+            || !AnalyticsReadScopes.Allows(grantedScopes, Scope.DevicesRead))
+            data.LastPumpSyncMills = null;
+
         if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.TherapyRead))
             data.ProfileSpans = [];
 
@@ -303,4 +308,85 @@ internal static class CurrentTherapyStateReadScopeGuard
 
         return data;
     }
+}
+
+/// <summary>
+/// Per-category read scopes for the statistics admitted on <c>glucose.read</c> alone that also
+/// summarise insulin and carbs, and count sensor sessions from device events. Category row level
+/// security hides those categories only from shares, so for a member, guest, OAuth client or token
+/// the narrowing has to happen here.
+/// </summary>
+/// <remarks>
+/// <c>GET /periods</c> is served from <see cref="Nocturne.API.Services.Caching.ITenantCache"/>,
+/// whose value holds every category; <see cref="Redact"/> narrows a copy and never the cached
+/// instance. The treatment and device narrowings are independent.
+/// </remarks>
+/// <seealso cref="AnalyticsReadScopes"/>
+internal static class StatisticsReadScopeGuard
+{
+    public static bool AllowsTreatments(IReadOnlySet<string> grantedScopes) =>
+        AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead);
+
+    public static bool AllowsDevices(IReadOnlySet<string> grantedScopes) =>
+        AnalyticsReadScopes.Allows(grantedScopes, Scope.DevicesRead);
+
+    public static MultiPeriodStatistics Redact(
+        MultiPeriodStatistics data,
+        IReadOnlySet<string> grantedScopes)
+    {
+        var treatments = AllowsTreatments(grantedScopes);
+        var devices = AllowsDevices(grantedScopes);
+
+        if (treatments && devices)
+            return data;
+
+        return new MultiPeriodStatistics
+        {
+            LastDay = Narrow(data.LastDay, treatments, devices),
+            Last3Days = Narrow(data.Last3Days, treatments, devices),
+            LastWeek = Narrow(data.LastWeek, treatments, devices),
+            LastMonth = Narrow(data.LastMonth, treatments, devices),
+            Last90Days = Narrow(data.Last90Days, treatments, devices),
+            LastUpdated = data.LastUpdated,
+        };
+    }
+
+    private static PeriodStatistics Narrow(PeriodStatistics period, bool treatments, bool devices) => new()
+    {
+        PeriodDays = period.PeriodDays,
+        StartDate = period.StartDate,
+        EndDate = period.EndDate,
+        Analytics = devices ? period.Analytics : WithoutSensorWarmups(period.Analytics),
+        TreatmentSummary = treatments ? period.TreatmentSummary : null,
+        InsulinDelivery = treatments ? period.InsulinDelivery : null,
+        HasSufficientData = period.HasSufficientData,
+        Gmi = period.Gmi,
+        Reliability = period.Reliability,
+        EntryCount = period.EntryCount,
+        TreatmentCount = treatments ? period.TreatmentCount : 0,
+    };
+
+    private static GlucoseAnalytics? WithoutSensorWarmups(GlucoseAnalytics? analytics) =>
+        analytics is null
+            ? null
+            : new GlucoseAnalytics
+            {
+                BasicStats = analytics.BasicStats,
+                TimeInRange = analytics.TimeInRange,
+                GlycemicVariability = analytics.GlycemicVariability,
+                DataQuality = new DataQuality
+                {
+                    TotalReadings = analytics.DataQuality.TotalReadings,
+                    MissingReadings = analytics.DataQuality.MissingReadings,
+                    DataCompleteness = analytics.DataQuality.DataCompleteness,
+                    CgmActivePercent = analytics.DataQuality.CgmActivePercent,
+                    GapAnalysis = analytics.DataQuality.GapAnalysis,
+                    NoiseLevel = analytics.DataQuality.NoiseLevel,
+                    CalibrationEvents = analytics.DataQuality.CalibrationEvents,
+                    SensorWarmups = 0,
+                },
+                Reliability = analytics.Reliability,
+                Time = analytics.Time,
+                ClinicalAssessment = analytics.ClinicalAssessment,
+            };
 }

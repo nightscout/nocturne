@@ -31,20 +31,24 @@
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import ProfileSchedules from "$lib/components/schedule/ProfileSchedules.svelte";
+  import ProfileSwitchDialog from "$lib/components/profile/ProfileSwitchDialog.svelte";
+  import ActiveProfileActivation from "$lib/components/profile/ActiveProfileActivation.svelte";
 
   type Summary = Awaited<ReturnType<typeof getProfileSummary>>;
 
-  let switchingProfile = $state<string | null>(null);
   let confirmingDelete = $state(false);
   let deleting = $state(false);
   let deleteError = $state<string | null>(null);
+  let defaultingProfile = $state<string | null>(null);
+  let switchDialogOpen = $state(false);
+  let switchProfileName = $state("");
 
-  async function handleSetActive(profileName: string) {
-    switchingProfile = profileName;
+  async function handleMakeDefault(profileName: string) {
+    defaultingProfile = profileName;
     try {
       await setDefaultProfile(profileName);
     } finally {
-      switchingProfile = null;
+      defaultingProfile = null;
     }
   }
 
@@ -70,13 +74,18 @@
    */
   function deleteBlockedReason(
     profileNames: string[],
-    isActive: boolean
+    isDefault: boolean
   ): string | null {
     if (profileNames.length <= 1)
       return "This is your only profile. Deleting it would leave your therapy settings with nothing to fall back on.";
-    if (isActive)
-      return "This is your active profile. Set another profile as active first, then delete this one.";
+    if (isDefault)
+      return "This is your default profile. Make another profile the default first, then delete this one.";
     return null;
+  }
+
+  function openSwitch(profileName: string) {
+    switchProfileName = profileName;
+    switchDialogOpen = true;
   }
 
   // Query for profile summary data. Read reactively via .current/.loading/.error
@@ -231,6 +240,8 @@
         {/snippet}
       </EmptyState>
     {:else}
+      <ActiveProfileActivation />
+
       <!-- Profile Name Tabs (when multiple profiles exist) -->
       {#if profileNames.length > 1}
         <Card>
@@ -284,18 +295,25 @@
                       </span>
                       {#if isDefault}
                         <Badge variant="success">
-                          Active
+                          Default
                         </Badge>
                       {:else}
                         <Button
                           variant="subtle"
                           size="inline-xs"
-                          onclick={(e: MouseEvent) => { e.preventDefault(); handleSetActive(profileName); }}
-                          disabled={switchingProfile !== null}
+                          onclick={(e: MouseEvent) => { e.preventDefault(); handleMakeDefault(profileName); }}
+                          disabled={defaultingProfile !== null}
                         >
-                          {switchingProfile === profileName ? "Switching..." : "Set as active"}
+                          {defaultingProfile === profileName ? "Saving..." : "Make default"}
                         </Button>
                       {/if}
+                      <Button
+                        variant="subtle"
+                        size="inline-xs"
+                        onclick={(e: MouseEvent) => { e.preventDefault(); openSwitch(profileName); }}
+                      >
+                        Switch…
+                      </Button>
                       {#if isExternal}
                         <Badge variant="outline">
                           <Lock class="h-3 w-3" />
@@ -344,7 +362,7 @@
                   {selectedProfileName}
                   {#if therapy.isDefault}
                     <Badge variant="success">
-                      Active
+                      Default
                     </Badge>
                   {/if}
                   {#if therapy.isExternallyManaged}
@@ -367,18 +385,23 @@
                 {/if}
               </div>
               <div class="flex flex-col items-end gap-1 shrink-0">
-                <Button
-                  variant="ghost-destructive"
-                  size="sm"
-                  disabled={blockedReason !== null || deleting}
-                  onclick={() => {
-                    deleteError = null;
-                    confirmingDelete = true;
-                  }}
-                >
-                  <Trash2 class="h-4 w-4 mr-2" />
-                  Delete
-                </Button>
+                <div class="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onclick={() => openSwitch(selectedProfileName)}>
+                    Switch…
+                  </Button>
+                  <Button
+                    variant="ghost-destructive"
+                    size="sm"
+                    disabled={blockedReason !== null || deleting}
+                    onclick={() => {
+                      deleteError = null;
+                      confirmingDelete = true;
+                    }}
+                  >
+                    <Trash2 class="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                </div>
                 {#if blockedReason}
                   <p class="text-xs text-muted-foreground max-w-56 text-right">
                     {blockedReason}
@@ -512,3 +535,4 @@
   </div>
 {/if}
 
+<ProfileSwitchDialog bind:open={switchDialogOpen} profileName={switchProfileName} />

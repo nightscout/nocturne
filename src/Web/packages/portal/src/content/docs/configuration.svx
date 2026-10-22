@@ -52,7 +52,7 @@ These have no default and must be set before the first start:
   `example.com`, or `nocturne.example.com` if Nocturne itself lives under a
   subdomain). At least two labels, and not an IP address. Each tenant gets a
   subdomain generated from this.
-- **`INSTANCE_KEY`**: minimum 12 characters. Used for JWT signing and
+- **`INSTANCE_KEY`**: minimum 32 characters. Used for JWT signing and
   service-to-service authentication. Treat it like a password and keep it stable;
   changing it invalidates existing sessions.
 - **The four PostgreSQL passwords**: `POSTGRES_PASSWORD`,
@@ -93,13 +93,15 @@ roles yourself and point Nocturne at them with connection strings.
 |-------|-----------|-----------------|
 | **Telemetry** | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` | Export metrics, traces, and logs to an OTLP collector. Off while the endpoint is empty. See [Observability](/docs/observability). |
 | **CDN** | `TRUSTED_PROXIES` | Space-separated CIDRs of a CDN in front of the deployment (for example Cloudflare's published ranges). Decides whose `CF-Connecting-IP` header the bundled Caddy believes when recording client addresses. Leave at the default `127.0.0.1/32` unless a CDN is present, and never set it empty. |
+| **Embedding** | `ALLOWED_FRAME_ANCESTORS` | Space-separated origins allowed to show the signed-in app in an iframe, for example `https://ha.example.com:8123` for a Home Assistant dashboard. Empty (the default) forbids it. Share links and the glucose clock can be embedded anywhere regardless. |
 | **Discord** | `DISCORD_*` | The Discord bot. See [Discord](/docs/bots/discord). |
 | **Slack** | `SLACK_*` | The Slack bot. See [Slack](/docs/bots/slack). |
 | **Telegram** | `TELEGRAM_*` | The Telegram bot. See [Telegram](/docs/bots/telegram). |
 | **WhatsApp** | `WHATSAPP_*` | The WhatsApp bot. See [WhatsApp](/docs/bots/whatsapp). |
+| **Google Health** | `GOOGLE_HEALTH_*` | The Google OAuth client every tenant connects Google Health through. See [Google Health](/docs/data-sources/google-health). |
 | **PostgreSQL storage** | `POSTGRES_DATA_PATH` | Optional Docker Compose bind-data override only. See [Docker Compose installation](/docs/installation/docker-compose). Portainer's stack editor does not apply Compose override files. |
 
-Leave any bot variables blank or commented out if you don't use that platform;
+Leave any of these blank or commented out if you don't use them;
 nothing here is required for a working install.
 
 ### Loop remote commands

@@ -60,6 +60,7 @@ public static class ParityDivergences
 
     public static readonly IReadOnlyList<Divergence> All =
     [
+        new("V1.AlexaParityTests.PostAlexa_InvalidRequest_ReturnsSameShape", "POST /api/v1/alexa", 200, JsonValueKind.Object, UndefinedPropertyCrash),
         new("V1.CountParityTests.CountActivity_Empty_ReturnsSameShape", "GET /api/v1/count/activity/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountDeviceStatus_Empty_ReturnsSameShape", "GET /api/v1/count/devicestatus/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountDeviceStatus_WithData_ReturnsSameShape", "GET /api/v1/count/devicestatus/where", 200, JsonValueKind.Array, CountCrashes),
@@ -146,11 +147,11 @@ public static class ParityDivergences
         new("V3.EntriesParityTests.Create_WithAllFields_ReturnsSameShape", "POST /api/v3/entries", 201, JsonValueKind.Object, V3Tolerant),
         new("V3.EntriesParityTests.Search_InvalidSkip_ReturnsSameShape", "GET /api/v3/entries", 200, JsonValueKind.Object, V3TolerantSkip),
         new("V3.EntriesParityTests.Update_NotFound_ReturnsSameShape", "PUT /api/v3/entries/nonexistent123456789012", 404, JsonValueKind.Object, V3Tolerant),
-        new("V3.ProfileParityTests.Create_Empty_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Array, V3Tolerant),
-        new("V3.ProfileParityTests.Create_MissingStore_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Array, V3Tolerant),
-        new("V3.ProfileParityTests.Create_Simple_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Array, V3Tolerant),
-        new("V3.ProfileParityTests.Create_WithMmol_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Array, V3Tolerant),
-        new("V3.ProfileParityTests.Create_WithMultipleTimePeriods_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Array, V3Tolerant),
+        new("V3.ProfileParityTests.Create_Empty_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Object, V3Tolerant),
+        new("V3.ProfileParityTests.Create_MissingStore_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Object, V3Tolerant),
+        new("V3.ProfileParityTests.Create_Simple_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Object, V3Tolerant),
+        new("V3.ProfileParityTests.Create_WithMmol_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Object, V3Tolerant),
+        new("V3.ProfileParityTests.Create_WithMultipleTimePeriods_ReturnsSameShape", "POST /api/v3/profile", 201, JsonValueKind.Object, V3Tolerant),
         new("V3.ProfileParityTests.Search_MultipleProfiles_ReturnsSameShape", "GET /api/v3/profile", 200, JsonValueKind.Object, V3RejectedSeed),
         new("V3.ProfileParityTests.Search_WithData_ReturnsSameShape", "GET /api/v3/profile", 200, JsonValueKind.Object, V3RejectedSeed),
         new("V3.ProfileParityTests.Search_WithLimit_ReturnsSameShape", "GET /api/v3/profile", 200, JsonValueKind.Object, V3RejectedSeed),

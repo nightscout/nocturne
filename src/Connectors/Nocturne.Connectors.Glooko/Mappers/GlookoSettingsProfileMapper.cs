@@ -73,7 +73,7 @@ public class GlookoSettingsProfileMapper
         || (settings.BolusSettings?.Any(b => b.Current) ?? false);
 
     private static DateTime? ParseTimestamp(string? timestamp) =>
-        DateTime.TryParse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
+        DateTime.TryParse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)
             ? parsed
             : null;
 

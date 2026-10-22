@@ -46,7 +46,7 @@ public class ConnectorEffectiveConfigurationTests : IDisposable
 
     private ConnectorConfigurationService CreateService(IConfiguration configuration) =>
         new(
-            _dbContext,
+            _dbContext.AsFactory(),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IAuditContext>(),

@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.SetupHub;
 
@@ -31,7 +32,7 @@ public sealed class DeviceSetupConflictException(string message) : Exception(mes
 /// It takes back only the insulins and trackers it added itself (<see cref="SetupHubAdditionEntity"/>).
 /// </summary>
 public partial class DeviceSetupService(
-    NocturneDbContext db,
+    INocturneDbContextFactory contexts,
     IPatientDeviceRepository devices,
     IPatientInsulinRepository insulins,
     IDeviceReattributionService reattribution,
@@ -101,8 +102,7 @@ public partial class DeviceSetupService(
             }).ToList()))
             .ToList();
 
-        var takesNoInsulin = currentInsulins.Count == 0
-            && await db.PatientRecords.AnyAsync(r => r.TakesNoInsulin, ct);
+        var takesNoInsulin = currentInsulins.Count == 0 && await TakesNoInsulinAsync(ct);
 
         return new DeviceSetup(
             slots,
@@ -282,15 +282,25 @@ public partial class DeviceSetupService(
         return (offer, offer.WearDays * 24 + offer.WearHours);
     }
 
-    private async Task<HashSet<Guid>> AdditionsAsync(SetupHubRecordKind kind, CancellationToken ct) =>
-        (await db.SetupHubAdditions
-            .Where(a => a.ItemKey == SetupHubItemKey.Devices && a.RecordKind == kind)
-            .Select(a => a.RecordId)
-            .ToListAsync(ct))
-        .ToHashSet();
+    private async Task<bool> TakesNoInsulinAsync(CancellationToken ct)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        return await db.PatientRecords.AnyAsync(r => r.TakesNoInsulin, ct);
+    }
+
+    private async Task<HashSet<Guid>> AdditionsAsync(SetupHubRecordKind kind, CancellationToken ct)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        return (await db.SetupHubAdditions
+                .Where(a => a.ItemKey == SetupHubItemKey.Devices && a.RecordKind == kind)
+                .Select(a => a.RecordId)
+                .ToListAsync(ct))
+            .ToHashSet();
+    }
 
     private async Task RecordAdditionAsync(SetupHubRecordKind kind, Guid recordId, CancellationToken ct)
     {
+        await using var db = await contexts.CreateAsync(ct);
         db.SetupHubAdditions.Add(new SetupHubAdditionEntity
         {
             Id = Guid.CreateVersion7(), ItemKey = SetupHubItemKey.Devices, RecordKind = kind, RecordId = recordId,
@@ -300,6 +310,7 @@ public partial class DeviceSetupService(
 
     private async Task ForgetAdditionAsync(Guid recordId, CancellationToken ct)
     {
+        await using var db = await contexts.CreateAsync(ct);
         db.SetupHubAdditions.RemoveRange(
             await db.SetupHubAdditions.Where(a => a.ItemKey == SetupHubItemKey.Devices && a.RecordId == recordId).ToListAsync(ct));
         await db.SaveChangesAsync(ct);
@@ -307,6 +318,7 @@ public partial class DeviceSetupService(
 
     private async Task SetTakesNoInsulinFlagAsync(bool value, CancellationToken ct)
     {
+        await using var db = await contexts.CreateAsync(ct);
         var record = await db.PatientRecords.FirstOrDefaultAsync(ct);
         if (record is null)
         {
@@ -348,7 +360,7 @@ public partial class DeviceSetupService(
         {
             var entry = pump.CatalogId is null ? null : DeviceCatalog.GetById(pump.CatalogId);
             var name = entry?.Name ?? pump.Model;
-            if (entry?.Pump is { IsPatchPump: true } patch)
+            if (entry?.Pump is { IsPatch: true } patch)
             {
                 offers.Add((TrackerOfferKind.Pod, name, patch.SiteDurationHours));
             }
@@ -363,6 +375,7 @@ public partial class DeviceSetupService(
             return [];
 
         var added = await AdditionsAsync(SetupHubRecordKind.Tracker, ct);
+        await using var db = await contexts.CreateAsync(ct);
         var existing = (await db.TrackerDefinitions
                 .Where(d => d.UserId == userId)
                 .Select(d => new { d.Id, d.Category, d.TriggerEventTypes })
@@ -432,6 +445,7 @@ public partial class DeviceSetupService(
     /// </summary>
     private async Task<Evidence> GatherEvidenceAsync(CancellationToken ct)
     {
+        await using var db = await contexts.CreateAsync(ct);
         var since = DateTime.UtcNow - EvidenceWindow;
         var found = new List<DeviceEvidence>();
 

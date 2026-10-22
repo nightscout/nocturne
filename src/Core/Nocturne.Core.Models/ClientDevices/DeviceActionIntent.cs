@@ -49,7 +49,6 @@ public class DeviceActionIntent
     /// </summary>
     public bool? AcknowledgesForEveryone { get; set; }
 
-    /// <summary>When the excursion started.</summary>
     public DateTime StartedAt { get; set; }
 
     /// <summary>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import Actogram from "./Actogram.svelte";
-  import { MS_PER_HOUR, type GlucoseThresholds } from "./actogram";
+  import { MS_PER_HOUR } from "./actogram";
+  import type { ChartThresholds } from "$lib/constants/glucose-thresholds";
 
   let {
     metric,
@@ -22,7 +23,7 @@
     sgv: 120,
     color: "var(--glucose-in-range)",
   }));
-  const thresholds: GlucoseThresholds = $derived({
+  const thresholds: ChartThresholds = $derived({
     low: 70,
     high: 180,
     veryLow: 54,
