@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Controllers;
-using Nocturne.API.Services.Analytics;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Constants;
