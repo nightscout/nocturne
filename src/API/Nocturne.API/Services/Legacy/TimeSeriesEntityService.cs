@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Legacy;
 
@@ -15,16 +16,48 @@ namespace Nocturne.API.Services.Legacy;
 /// <typeparam name="TDomain">The domain model type.</typeparam>
 /// <typeparam name="TEntity">The EF Core entity type stored in the database.</typeparam>
 public abstract class TimeSeriesEntityService<TDomain, TEntity>(
-    NocturneDbContext dbContext,
+    INocturneDbContextFactory contexts,
     IDocumentProcessingService documentProcessingService,
     ISignalRBroadcastService signalRBroadcastService,
     ILogger logger
-) : SimpleEntityService<TDomain, TEntity>(dbContext, documentProcessingService, signalRBroadcastService, logger)
+) : SimpleEntityService<TDomain, TEntity>(contexts, documentProcessingService, signalRBroadcastService, logger)
     where TDomain : class, IProcessableDocument
     where TEntity : class, IOriginalIdentified, IObservationTimestamped, ISyncDedupable
 {
     protected sealed override IOrderedQueryable<TEntity> OrderByTimestamp(IQueryable<TEntity> query) =>
         query.OrderByDescending(e => e.Timestamp);
+
+    /// <summary>
+    /// Retrieves a page of records newest first, optionally limited to those observed in
+    /// <c>[from, to]</c>.
+    /// </summary>
+    /// <param name="count">Maximum number of records to return.</param>
+    /// <param name="skip">Number of records to skip for pagination.</param>
+    /// <param name="from">Inclusive lower bound, or <see langword="null"/> for none.</param>
+    /// <param name="to">Inclusive upper bound, or <see langword="null"/> for none.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    protected async Task<IEnumerable<TDomain>> GetNewestFirstAsync(
+        int count,
+        int skip,
+        DateTime? from,
+        DateTime? to,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await Contexts.CreateAsync(cancellationToken);
+        var query = EntitySet(db).AsNoTracking();
+        if (from is { } fromValue)
+            query = query.Where(e => e.Timestamp >= fromValue);
+        if (to is { } toValue)
+            query = query.Where(e => e.Timestamp <= toValue);
+
+        var entities = await OrderByTimestamp(query)
+            .Skip(skip)
+            .Take(count)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(ToDomainModel);
+    }
 
     /// <summary>
     /// Retrieves records observed in <c>[from, to)</c>, oldest first. A <see langword="null"/>
@@ -38,7 +71,8 @@ public abstract class TimeSeriesEntityService<TDomain, TEntity>(
         CancellationToken cancellationToken = default
     )
     {
-        var query = EntitySet
+        await using var db = await Contexts.CreateAsync(cancellationToken);
+        var query = EntitySet(db)
             .AsNoTracking()
             .Where(e => e.Timestamp >= from && e.Timestamp < to)
             .OrderBy(e => e.Timestamp)
@@ -56,12 +90,15 @@ public abstract class TimeSeriesEntityService<TDomain, TEntity>(
     /// Returns the latest timestamp written by <paramref name="source"/> (a connector's resume
     /// watermark), or <see langword="null"/> when that source has written none.
     /// </summary>
-    public Task<DateTime?> GetLatestTimestampAsync(
+    public async Task<DateTime?> GetLatestTimestampAsync(
         string source,
         CancellationToken cancellationToken = default
-    ) =>
-        EntitySet
+    )
+    {
+        await using var db = await Contexts.CreateAsync(cancellationToken);
+        return await EntitySet(db)
             .AsNoTracking()
             .Where(e => e.DataSource == source)
             .MaxAsync(e => (DateTime?)e.Timestamp, cancellationToken);
+    }
 }

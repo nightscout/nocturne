@@ -5,6 +5,9 @@ namespace Nocturne.Core.Models.V4;
 /// </summary>
 public static class DeviceCatalog
 {
+    private static readonly PumpProperties Patch = new() { IsPatch = true, SiteDurationHours = 72 };
+    private static readonly PumpProperties Tubed = new() { IsPatch = false, SiteDurationHours = 72, ReservoirDurationHours = 72 };
+
     private static readonly IReadOnlyList<DeviceCatalogEntry> _entries =
     [
         // CGMs — Dexcom
@@ -22,20 +25,35 @@ public static class DeviceCatalog
         new() { Id = "medtronic-guardian-4", Name = "Guardian 4", Manufacturer = "Medtronic", Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 7, WarmupMinutes = 120, UpdateIntervalMinutes = 5, HasSeparateTransmitter = false } },
         new() { Id = "medtronic-guardian-3", Name = "Guardian 3", Manufacturer = "Medtronic", Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 7, WarmupMinutes = 120, UpdateIntervalMinutes = 5, HasSeparateTransmitter = true, TransmitterDurationDays = 365 } },
 
+        // CGMs — Others
+        new() { Id = "libre-1",              Name = "FreeStyle Libre",       Manufacturer = "Abbott",    Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 14, WarmupMinutes = 60,   UpdateIntervalMinutes = 5,  HasSeparateTransmitter = false } },
+        new() { Id = "medtrum-nano-cgm",     Name = "TouchCare Nano CGM",    Manufacturer = "Medtrum",   Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 14, WarmupMinutes = 120,  UpdateIntervalMinutes = 2, HasSeparateTransmitter = true, TransmitterDurationDays = 365 } },
+        new() { Id = "sibionics-gs1",        Name = "Sibionics GS1",         Manufacturer = "Sibionics", Category = DeviceCategory.CGM, Cgm = new() { SensorDurationDays = 14, WarmupMinutes = 60,   UpdateIntervalMinutes = 5, HasSeparateTransmitter = false } },
+
         // CGMs — Custom
         new() { Id = "custom-cgm", Name = "Custom CGM", Manufacturer = "Custom", Category = DeviceCategory.CGM },
 
-        // Pumps
-        new() { Id = "omnipod-5",        Name = "Omnipod 5",     Manufacturer = "Insulet",    Category = DeviceCategory.InsulinPump },
-        new() { Id = "omnipod-dash",     Name = "Omnipod DASH",  Manufacturer = "Insulet",    Category = DeviceCategory.InsulinPump },
-        new() { Id = "tandem-tslim-x2",  Name = "t:slim X2",    Manufacturer = "Tandem",     Category = DeviceCategory.InsulinPump },
-        new() { Id = "tandem-mobi",      Name = "t:slim Mobi",   Manufacturer = "Tandem",     Category = DeviceCategory.InsulinPump },
-        new() { Id = "medtronic-780g",   Name = "MiniMed 780G",  Manufacturer = "Medtronic",  Category = DeviceCategory.InsulinPump },
-        new() { Id = "medtronic-770g",   Name = "MiniMed 770G",  Manufacturer = "Medtronic",  Category = DeviceCategory.InsulinPump },
-        new() { Id = "ypsopump",         Name = "YpsoPump",      Manufacturer = "Ypsomed",    Category = DeviceCategory.InsulinPump },
-        new() { Id = "dana-i",           Name = "Dana-i",        Manufacturer = "SOOIL",      Category = DeviceCategory.InsulinPump },
-        new() { Id = "dana-rs",          Name = "Dana RS",       Manufacturer = "SOOIL",      Category = DeviceCategory.InsulinPump },
-        new() { Id = "custom-pump",      Name = "Custom Pump",   Manufacturer = "Custom",     Category = DeviceCategory.InsulinPump },
+        // Pumps — patch
+        new() { Id = "omnipod-5",           Name = "Omnipod 5",             Manufacturer = "Insulet",   Category = DeviceCategory.InsulinPump, Pump = Patch },
+        new() { Id = "omnipod-dash",        Name = "Omnipod DASH",          Manufacturer = "Insulet",   Category = DeviceCategory.InsulinPump, Pump = Patch },
+        new() { Id = "omnipod-eros",        Name = "Omnipod Eros",          Manufacturer = "Insulet",   Category = DeviceCategory.InsulinPump, Pump = Patch },
+        new() { Id = "medtrum-nano",        Name = "TouchCare Nano",        Manufacturer = "Medtrum",   Category = DeviceCategory.InsulinPump, Pump = Patch },
+        new() { Id = "equil",               Name = "Equil",                 Manufacturer = "MicroTech", Category = DeviceCategory.InsulinPump, Pump = Patch },
+
+        // Pumps — tubed
+        new() { Id = "tandem-tslim-x2",     Name = "t:slim X2",             Manufacturer = "Tandem",    Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "tandem-mobi",         Name = "t:slim Mobi",           Manufacturer = "Tandem",    Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "medtronic-780g",      Name = "MiniMed 780G",          Manufacturer = "Medtronic", Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "medtronic-770g",      Name = "MiniMed 770G",          Manufacturer = "Medtronic", Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "medtronic-paradigm",  Name = "MiniMed Paradigm / Veo", Manufacturer = "Medtronic", Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "ypsopump",            Name = "YpsoPump",              Manufacturer = "Ypsomed",   Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "dana-i",              Name = "Dana-i",                Manufacturer = "SOOIL",     Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "dana-rs",             Name = "Dana RS",               Manufacturer = "SOOIL",     Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "dana-r",              Name = "Dana R",                Manufacturer = "SOOIL",     Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "accu-chek-combo",     Name = "Accu-Chek Combo",       Manufacturer = "Roche",     Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "accu-chek-insight",   Name = "Accu-Chek Insight",     Manufacturer = "Roche",     Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "diaconn-g8",          Name = "Diaconn G8",            Manufacturer = "G2e",       Category = DeviceCategory.InsulinPump, Pump = Tubed },
+        new() { Id = "custom-pump",         Name = "Custom Pump",           Manufacturer = "Custom",    Category = DeviceCategory.InsulinPump },
     ];
 
     /// <summary>

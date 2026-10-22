@@ -34,7 +34,7 @@ public class WidgetSummaryService : IWidgetSummaryService
     private readonly ITrackerRepository _trackerRepository;
     private readonly INotificationV1Service _notificationService;
     private readonly IGlucoseStatusClassifier _statusClassifier;
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
     private readonly ILogger<WidgetSummaryService> _logger;
 
     /// <summary>
@@ -53,7 +53,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         ITrackerRepository trackerRepository,
         INotificationV1Service notificationService,
         IGlucoseStatusClassifier statusClassifier,
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         ILogger<WidgetSummaryService> logger
     )
     {

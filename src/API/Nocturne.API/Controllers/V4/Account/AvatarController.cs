@@ -5,6 +5,9 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Storage;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.Processing;
 
@@ -19,9 +22,22 @@ namespace Nocturne.API.Controllers.V4.Account;
 [Route("api/v4/me/avatar")]
 public class AvatarController(IAvatarStore avatarStore, ILogger<AvatarController> logger) : ControllerBase
 {
-    private static readonly HashSet<string> AllowedContentTypes = ["image/png", "image/jpeg", "image/webp"];
     private const int MaxUploadBytes = 5 * 1024 * 1024; // 5 MB
     private const int OutputSize = 256;
+    private const long MaxSourcePixels = 40_000_000;
+
+    /// <summary>
+    /// Decodes PNG, JPEG and WebP only, recognised by their bytes, so no other ImageSharp decoder ever
+    /// parses an upload whatever content type the client claimed.
+    /// </summary>
+    private static readonly DecoderOptions Decoding = new()
+    {
+        Configuration = new SixLabors.ImageSharp.Configuration(
+            new PngConfigurationModule(),
+            new JpegConfigurationModule(),
+            new WebpConfigurationModule()),
+        MaxFrames = 1,
+    };
 
     /// <summary>
     /// Upload or replace the current subject's avatar. Image is resized to 256x256 WebP.
@@ -40,12 +56,9 @@ public class AvatarController(IAvatarStore avatarStore, ILogger<AvatarController
         if (file.Length > MaxUploadBytes)
             return Problem(detail: "File exceeds 5 MB limit", statusCode: 400, title: "Bad Request");
 
-        if (!AllowedContentTypes.Contains(file.ContentType))
-            return Problem(detail: "File must be PNG, JPEG, or WebP", statusCode: 400, title: "Bad Request");
-
-        // Process image: resize to 256x256, convert to WebP, strip EXIF
-        using var input = file.OpenReadStream();
-        using var image = await Image.LoadAsync(input, ct);
+        using var image = await DecodeAsync(file, ct);
+        if (image is null)
+            return Problem(detail: "File must be a PNG, JPEG, or WebP image of at most 40 megapixels", statusCode: 400, title: "Bad Request");
 
         image.Mutate(x => x
             .AutoOrient()
@@ -56,6 +69,11 @@ public class AvatarController(IAvatarStore avatarStore, ILogger<AvatarController
                 Position = AnchorPositionMode.Center,
             }));
 
+        // The avatar is served anonymously; the source's camera and location metadata must not travel with it.
+        image.Metadata.ExifProfile = null;
+        image.Metadata.XmpProfile = null;
+        image.Metadata.IptcProfile = null;
+
         using var output = new MemoryStream();
         await image.SaveAsWebpAsync(output, new WebpEncoder { Quality = 80 }, ct);
         output.Position = 0;
@@ -65,6 +83,28 @@ public class AvatarController(IAvatarStore avatarStore, ILogger<AvatarController
         logger.LogInformation("Avatar uploaded for subject {SubjectId}", subjectId.Value);
 
         return Ok(new AvatarUploadResponse { AvatarUrl = avatarUrl });
+    }
+
+    private static async Task<Image?> DecodeAsync(IFormFile file, CancellationToken ct)
+    {
+        using var input = new MemoryStream();
+        await file.CopyToAsync(input, ct);
+        input.Position = 0;
+
+        try
+        {
+            // The header alone gives the dimensions, so an oversized image is refused before its pixels are allocated.
+            var info = await Image.IdentifyAsync(Decoding, input, ct);
+            if ((long)info.Width * info.Height > MaxSourcePixels)
+                return null;
+
+            input.Position = 0;
+            return await Image.LoadAsync(Decoding, input, ct);
+        }
+        catch (ImageFormatException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Platform;
@@ -9,6 +10,8 @@ using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Models.V4;
+using Nocturne.Core.Models.Queries;
 using Xunit;
 using TimePatternQuery = Nocturne.Core.Contracts.Legacy.TimePatternQuery;
 
@@ -34,6 +37,10 @@ public class TimeQueryServiceTests
         _mockLogger = new Mock<ILogger<TimeQueryService>>();
 
         var projectionService = new DeviceStatusProjectionService(
+            Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())
+                == Task.FromResult<IReadOnlyList<DeviceStatusGroup>>(Array.Empty<DeviceStatusGroup>())),
             new Mock<IApsSnapshotRepository>().Object,
             new Mock<IPumpSnapshotRepository>().Object,
             new Mock<IUploaderSnapshotRepository>().Object,
@@ -85,12 +92,7 @@ public class TimeQueryServiceTests
         };
         _mockEntryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(expectedEntries);
 
@@ -107,109 +109,7 @@ public class TimeQueryServiceTests
         result.Should().HaveCount(2);
         _mockEntryService.Verify(
             x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteTimeQueryAsync_WithOptimizedSinglePattern_UsesRegexFilter()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var fieldName = "dateString";
-        var singleRegexPattern = "^2024-01T13:00:00";
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            SingleRegexPattern = singleRegexPattern,
-            CanOptimizeWithIndex = true,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteTimeQueryAsync(prefix, regex, "entries", fieldName);
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteTimeQueryAsync_WithMultiplePatterns_UsesInFilter()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T{13..15}:00:00";
-        var fieldName = "dateString";
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00", "2024-01T14:00:00", "2024-01T15:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00", "2024-01T14:00:00", "2024-01T15:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteTimeQueryAsync(prefix, regex, "entries", fieldName);
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
+                x.QueryEntriesAsync(It.Is<EntryQuery>(q => q.Type == null && q.Count == 1000 && q.Skip == 0 && q.DateString == null && !q.ReverseResults), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -242,24 +142,13 @@ public class TimeQueryServiceTests
 
         _mockEntryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Entry>());
 
         _mockTreatmentService
             .Setup(x =>
-                x.GetTreatmentsWithAdvancedFilterAsync(
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<bool>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryTreatmentsAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Treatment>());
 
@@ -272,25 +161,14 @@ public class TimeQueryServiceTests
             case "entries":
                 _mockEntryService.Verify(
                     x =>
-                        x.GetEntriesWithAdvancedFilterAsync(
-                            It.IsAny<string>(),
-                            It.IsAny<int>(),
-                            It.IsAny<int>(),
-                            It.IsAny<CancellationToken>()
-                        ),
+                        x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()),
                     Times.Once
                 );
                 break;
             case "treatments":
                 _mockTreatmentService.Verify(
                     x =>
-                        x.GetTreatmentsWithAdvancedFilterAsync(
-                            It.IsAny<int>(),
-                            It.IsAny<int>(),
-                            It.IsAny<string?>(),
-                            It.IsAny<bool>(),
-                            It.IsAny<CancellationToken>()
-                        ),
+                        x.QueryTreatmentsAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()),
                     Times.Once
                 );
                 break;
@@ -333,65 +211,6 @@ public class TimeQueryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Parity]
-    public async Task ExecuteTimeQueryAsync_WithAdditionalQueryParameters_AppliesFilters()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var fieldName = "dateString";
-        var queryParameters = new Dictionary<string, object>
-        {
-            { "type", "sgv" },
-            { "device", "test-device" },
-        };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteTimeQueryAsync(
-            prefix,
-            regex,
-            "entries",
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
     public async Task ExecuteTimeQueryAsync_WithNullPrefix_HandlesGracefully()
     {
         // Arrange
@@ -412,12 +231,7 @@ public class TimeQueryServiceTests
 
         _mockEntryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Entry>());
 
@@ -454,12 +268,7 @@ public class TimeQueryServiceTests
 
         _mockEntryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Entry>());
 
@@ -502,12 +311,7 @@ public class TimeQueryServiceTests
 
         _mockEntryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Entry>());
 
@@ -517,56 +321,6 @@ public class TimeQueryServiceTests
         // Assert
         _mockBraceExpansionService.Verify(
             x => x.PrepareTimePatterns(prefix, regex, field),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteSliceQueryAsync_WithTypeFilter_AppliesTypeFilter()
-    {
-        // Arrange
-        var storage = "entries";
-        var field = "dateString";
-        var type = "sgv";
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = field,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, field))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteSliceQueryAsync(storage, field, type, prefix, regex);
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
             Times.Once
         );
     }
@@ -596,12 +350,7 @@ public class TimeQueryServiceTests
 
         _mockEntryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Entry>());
 
@@ -611,12 +360,7 @@ public class TimeQueryServiceTests
         // Assert
         _mockEntryService.Verify(
             x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
+                x.QueryEntriesAsync(It.Is<EntryQuery>(q => q.Find != null && !q.Find.Contains("find[type]")), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -650,24 +394,13 @@ public class TimeQueryServiceTests
 
         _mockEntryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Entry>());
 
         _mockTreatmentService
             .Setup(x =>
-                x.GetTreatmentsWithAdvancedFilterAsync(
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<bool>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryTreatmentsAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Treatment>());
 
@@ -680,25 +413,14 @@ public class TimeQueryServiceTests
             case "entries":
                 _mockEntryService.Verify(
                     x =>
-                        x.GetEntriesWithAdvancedFilterAsync(
-                            It.IsAny<string>(),
-                            It.IsAny<int>(),
-                            It.IsAny<int>(),
-                            It.IsAny<CancellationToken>()
-                        ),
+                        x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()),
                     Times.Once
                 );
                 break;
             case "treatments":
                 _mockTreatmentService.Verify(
                     x =>
-                        x.GetTreatmentsWithAdvancedFilterAsync(
-                            It.IsAny<int>(),
-                            It.IsAny<int>(),
-                            It.IsAny<string?>(),
-                            It.IsAny<bool>(),
-                            It.IsAny<CancellationToken>()
-                        ),
+                        x.QueryTreatmentsAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()),
                     Times.Once
                 );
                 break;
@@ -746,444 +468,84 @@ public class TimeQueryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Parity]
-    public void GenerateTimeQueryEcho_WithValidParams_ReturnsCorrectEcho()
+    public void GenerateTimeQueryEcho_WithMultiplePatterns_MatchesRegexAlternatives()
     {
         // Arrange
-        var prefix = "2024-01";
-        var regex = "T{13..15}:00:00";
-        var storage = "entries";
-        var fieldName = "dateString";
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00", "2024-01T14:00:00", "2024-01T15:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00", "2024-01T14:00:00", "2024-01T15:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
+        var patterns = new[] { "^2024-01T13:00:00", "^2024-01T14:00:00" };
         _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
+            .Setup(x => x.PrepareTimePatterns("2024-01", "T{13..14}:00:00", "dateString"))
+            .Returns(
+                new TimePatternQuery
+                {
+                    Patterns = patterns,
+                    InPatterns = patterns,
+                    CanOptimizeWithIndex = false,
+                }
+            );
 
         // Act
-        var result = _timeQueryService.GenerateTimeQueryEcho(prefix, regex, storage, fieldName);
+        var result = _timeQueryService.GenerateTimeQueryEcho("2024-01", "T{13..14}:00:00");
+        var echoConditions = FindQuery.Parse(JsonSerializer.Serialize(result.Query));
 
         // Assert
-        result.Should().NotBeNull();
-        result.Req.Should().NotBeNull();
-        result.Req.Params.Should().ContainKey("prefix").WhoseValue.Should().Be(prefix);
-        result.Req.Params.Should().ContainKey("regex").WhoseValue.Should().Be(regex);
-        result.Req.Params.Should().ContainKey("storage").WhoseValue.Should().Be(storage);
-        result.Req.Params.Should().ContainKey("field").WhoseValue.Should().Be(fieldName);
-        result.Pattern.Should().BeEquivalentTo(expectedPatterns.Patterns);
-        result.Query.Should().ContainKey(fieldName);
+        echoConditions.Matches(new Entry { DateString = "2024-01T13:00:00.000Z" }).Should().BeTrue();
+        echoConditions.Matches(new Entry { DateString = "2024-01T14:00:00.000Z" }).Should().BeTrue();
+        echoConditions.Matches(new Entry { DateString = "2024-01T15:00:00.000Z" }).Should().BeFalse();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Parity]
-    public void GenerateTimeQueryEcho_WithOptimizedPattern_UsesRegexQuery()
+    public void GenerateTimeQueryEcho_KeepsRawParametersSeparateFromAppliedFind()
     {
         // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var storage = "entries";
-        var fieldName = "dateString";
-        var singleRegexPattern = "^2024-01T13:00:00";
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            SingleRegexPattern = singleRegexPattern,
-            CanOptimizeWithIndex = true,
-        };
-
         _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
+            .Setup(x => x.PrepareTimePatterns(null, null, "dateString"))
+            .Returns(new TimePatternQuery { Patterns = [], InPatterns = [] });
+        const string query = "?storage=entries&field=dateString&type=mbg&device=ignored"
+            + "&token=x&secret=y&_=1&count=10&sort=dateString"
+            + "&find[type]=sgv&find[device]=001";
 
         // Act
-        var result = _timeQueryService.GenerateTimeQueryEcho(prefix, regex, storage, fieldName);
+        var result = _timeQueryService.GenerateTimeQueryEcho(null, null, queryString: query);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Query.Should().ContainKey(fieldName);
-        var fieldQuery = result.Query[fieldName] as Dictionary<string, object>;
-        fieldQuery.Should().NotBeNull();
-        fieldQuery.Should().ContainKey("$regex").WhoseValue.Should().Be(singleRegexPattern);
+        result.Req.Query["token"].Should().Be("x");
+        result.Req.Query["secret"].Should().Be("y");
+        var echoConditions = FindQuery.Parse(JsonSerializer.Serialize(result.Query));
+        echoConditions.Matches(new Entry { Type = "sgv", Device = "001" }).Should().BeTrue();
+        echoConditions.Matches(new Entry { Type = "sgv", Device = "1" }).Should().BeFalse();
+        echoConditions.Matches(new Entry { Type = "mbg", Device = "001" }).Should().BeFalse();
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    [Parity]
-    public void GenerateTimeQueryEcho_WithMultiplePatterns_UsesInQuery()
+    public void GenerateTimeQueryEcho_UnsupportedOrBranchFailsClosedWithoutRequiringAnId()
     {
         // Arrange
-        var prefix = "2024-01";
-        var regex = "T{13..15}:00:00";
-        var storage = "entries";
-        var fieldName = "dateString";
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00", "2024-01T14:00:00", "2024-01T15:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00", "2024-01T14:00:00", "2024-01T15:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
         _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        // Act
-        var result = _timeQueryService.GenerateTimeQueryEcho(prefix, regex, storage, fieldName);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Query.Should().ContainKey(fieldName);
-        var fieldQuery = result.Query[fieldName] as Dictionary<string, object>;
-        fieldQuery.Should().NotBeNull();
-        fieldQuery.Should().ContainKey("$in");
-        var inValues = fieldQuery!["$in"] as IEnumerable<string>;
-        inValues.Should().BeEquivalentTo(expectedPatterns.InPatterns);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public void GenerateTimeQueryEcho_WithQueryParameters_IncludesInResult()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var storage = "entries";
-        var fieldName = "dateString";
-        var queryParameters = new Dictionary<string, object>
-        {
-            { "type", "sgv" },
-            { "device", "test-device" },
-        };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
+            .Setup(x => x.PrepareTimePatterns(null, null, "dateString"))
+            .Returns(new TimePatternQuery { Patterns = [], InPatterns = [] });
 
         // Act
         var result = _timeQueryService.GenerateTimeQueryEcho(
-            prefix,
-            regex,
-            storage,
-            fieldName,
-            queryParameters
+            null,
+            null,
+            queryString: "?find[$or][0][sgv][$unknown]=100&find[$or][1][type]=mbg"
         );
+        var echoConditions = FindQuery.Parse(JsonSerializer.Serialize(result.Query));
 
         // Assert
-        result.Should().NotBeNull();
-        result.Req.Query.Should().BeEquivalentTo(queryParameters);
-        result.Query.Should().ContainKey("type").WhoseValue.Should().Be("sgv");
-        result.Query.Should().ContainKey("device").WhoseValue.Should().Be("test-device");
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public void GenerateTimeQueryEcho_WithFindParameters_ProcessesFindDict()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var storage = "entries";
-        var fieldName = "dateString";
-        var findDict = new Dictionary<string, object>
-        {
-            {
-                "sgv",
-                new Dictionary<string, object> { { "$gte", 100 } }
-            },
-        };
-        var queryParameters = new Dictionary<string, object> { { "find", findDict } };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        // Act
-        var result = _timeQueryService.GenerateTimeQueryEcho(
-            prefix,
-            regex,
-            storage,
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Query.Should().ContainKey("sgv");
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public void GenerateTimeQueryEcho_ExcludesSpecialQueryParameters()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var storage = "entries";
-        var fieldName = "dateString";
-        var queryParameters = new Dictionary<string, object>
-        {
-            { "find", new Dictionary<string, object>() },
-            { "count", 10 },
-            { "sort", "dateString" },
-            { "type", "sgv" },
-        };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        // Act
-        var result = _timeQueryService.GenerateTimeQueryEcho(
-            prefix,
-            regex,
-            storage,
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Query.Should().NotContainKey("count");
-        result.Query.Should().NotContainKey("sort");
-        result.Query.Should().ContainKey("type").WhoseValue.Should().Be("sgv");
+        echoConditions.Matches(new { type = "sgv" }).Should().BeFalse();
+        echoConditions.Matches(new { _id = "a", type = "sgv" }).Should().BeFalse();
+        echoConditions.Matches(new { _id = (string?)null, type = "sgv" }).Should().BeFalse();
+        echoConditions.Matches(new { type = "mbg" }).Should().BeTrue();
+        echoConditions.Matches(new { _id = "f", type = "mbg" }).Should().BeTrue();
     }
 
     #endregion
 
     #region Query Parameter Processing Tests
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteTimeQueryAsync_WithJsonElementValues_ConvertsCorrectly()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var fieldName = "dateString";
-
-        // Create JsonElement values to test conversion logic
-        var jsonDoc = JsonDocument.Parse(
-            """
-            {
-                "numValue": 123,
-                "stringValue": "test",
-                "boolValue": true,
-                "arrayValue": [1, 2, 3]
-            }
-            """
-        );
-
-        var queryParameters = new Dictionary<string, object>
-        {
-            { "numParam", jsonDoc.RootElement.GetProperty("numValue") },
-            { "stringParam", jsonDoc.RootElement.GetProperty("stringValue") },
-            { "boolParam", jsonDoc.RootElement.GetProperty("boolValue") },
-            { "arrayParam", jsonDoc.RootElement.GetProperty("arrayValue") },
-        };
-
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteTimeQueryAsync(
-            prefix,
-            regex,
-            "entries",
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteTimeQueryAsync_WithMongoOperators_BuildsCorrectFilters()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var fieldName = "dateString";
-        var queryParameters = new Dictionary<string, object>
-        {
-            {
-                "sgv",
-                new Dictionary<string, object> { { "$gte", 100 }, { "$lte", 200 } }
-            },
-            {
-                "type",
-                new Dictionary<string, object> { { "$in", new[] { "sgv", "mbg" } } }
-            },
-        };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteTimeQueryAsync(
-            prefix,
-            regex,
-            "entries",
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteTimeQueryAsync_WithInvalidFilterValue_HandlesGracefully()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var fieldName = "dateString";
-        var queryParameters = new Dictionary<string, object>
-        {
-            {
-                "invalidField",
-                new Dictionary<string, object> { { "$invalidOp", "value" } }
-            },
-        };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteTimeQueryAsync(
-            prefix,
-            regex,
-            "entries",
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
 
     #endregion
 
@@ -1212,12 +574,7 @@ public class TimeQueryServiceTests
 
         _mockEntryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Entry>());
 
@@ -1227,12 +584,7 @@ public class TimeQueryServiceTests
         // Assert
         _mockEntryService.Verify(
             x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -1261,12 +613,7 @@ public class TimeQueryServiceTests
 
         _mockEntryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    cancellationToken
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), cancellationToken)
             )
             .ReturnsAsync(new List<Entry>());
 
@@ -1283,12 +630,7 @@ public class TimeQueryServiceTests
         // Assert
         _mockEntryService.Verify(
             x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    cancellationToken
-                ),
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), cancellationToken),
             Times.Once
         );
     }
@@ -1319,12 +661,7 @@ public class TimeQueryServiceTests
 
         _mockEntryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    cancellationToken
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), cancellationToken)
             )
             .ReturnsAsync(new List<Entry>());
 
@@ -1342,12 +679,7 @@ public class TimeQueryServiceTests
         // Assert
         _mockEntryService.Verify(
             x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    cancellationToken
-                ),
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), cancellationToken),
             Times.Once
         );
     }
@@ -1376,12 +708,7 @@ public class TimeQueryServiceTests
 
         _mockEntryService
             .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Entry>());
 
@@ -1391,12 +718,7 @@ public class TimeQueryServiceTests
         // Assert
         _mockEntryService.Verify(
             x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
+                x.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -1426,13 +748,7 @@ public class TimeQueryServiceTests
 
         _mockTreatmentService
             .Setup(x =>
-                x.GetTreatmentsWithAdvancedFilterAsync(
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<bool>(),
-                    It.IsAny<CancellationToken>()
-                )
+                x.QueryTreatmentsAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new List<Treatment>());
 
@@ -1442,394 +758,7 @@ public class TimeQueryServiceTests
         // Assert
         _mockTreatmentService.Verify(
             x =>
-                x.GetTreatmentsWithAdvancedFilterAsync(
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<string?>(),
-                    It.IsAny<bool>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    #endregion
-
-    #region Additional Coverage Tests for Uncovered Code Paths
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteTimeQueryAsync_WithFindParameters_ProcessesFindDict()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var fieldName = "dateString";
-        var findDict = new Dictionary<string, object>
-        {
-            {
-                "sgv",
-                new Dictionary<string, object> { { "$gte", 100 }, { "$lte", 200 } }
-            },
-        };
-        var queryParameters = new Dictionary<string, object> { { "find", findDict } };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteTimeQueryAsync(
-            prefix,
-            regex,
-            "entries",
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteSliceQueryAsync_WithFindParameters_ProcessesFindDict()
-    {
-        // Arrange
-        var storage = "entries";
-        var field = "dateString";
-        var type = "sgv";
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var findDict = new Dictionary<string, object>
-        {
-            {
-                "mgdl",
-                new Dictionary<string, object> { { "$gte", 80 } }
-            },
-        };
-        var queryParameters = new Dictionary<string, object> { { "find", findDict } };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = field,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, field))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteSliceQueryAsync(
-            storage,
-            field,
-            type,
-            prefix,
-            regex,
-            queryParameters
-        );
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteTimeQueryAsync_WithComplexQueryParameters_BuildsAndFilters()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var fieldName = "dateString";
-        var queryParameters = new Dictionary<string, object>
-        {
-            {
-                "type",
-                new Dictionary<string, object> { { "$ne", "cal" } }
-            },
-            {
-                "sgv",
-                new Dictionary<string, object> { { "$gt", 50 }, { "$lt", 400 } }
-            },
-            { "device", "test-device" },
-        };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteTimeQueryAsync(
-            prefix,
-            regex,
-            "entries",
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteTimeQueryAsync_WithRegexOperator_BuildsCorrectFilter()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var fieldName = "dateString";
-        var queryParameters = new Dictionary<string, object>
-        {
-            {
-                "notes",
-                new Dictionary<string, object> { { "$regex", "test.*pattern" } }
-            },
-        };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteTimeQueryAsync(
-            prefix,
-            regex,
-            "entries",
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteTimeQueryAsync_WithNinOperator_BuildsCorrectFilter()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var fieldName = "dateString";
-        var queryParameters = new Dictionary<string, object>
-        {
-            {
-                "type",
-                new Dictionary<string, object> { { "$nin", new[] { "cal", "mbg" } } }
-            },
-        };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteTimeQueryAsync(
-            prefix,
-            regex,
-            "entries",
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    [Parity]
-    public async Task ExecuteTimeQueryAsync_WithSingleValueForArray_ConvertsCorrectly()
-    {
-        // Arrange
-        var prefix = "2024-01";
-        var regex = "T13:00:00";
-        var fieldName = "dateString";
-        // This will test the ConvertArray fallback path for non-array values
-        var queryParameters = new Dictionary<string, object>
-        {
-            {
-                "type",
-                new Dictionary<string, object> { { "$in", "sgv" } }
-            }, // Single value instead of array
-        };
-        var expectedPatterns = new TimePatternQuery
-        {
-            Patterns = new[] { "2024-01T13:00:00" },
-            FieldName = fieldName,
-            InPatterns = new[] { "2024-01T13:00:00" },
-            CanOptimizeWithIndex = false,
-        };
-
-        _mockBraceExpansionService
-            .Setup(x => x.PrepareTimePatterns(prefix, regex, fieldName))
-            .Returns(expectedPatterns);
-
-        _mockEntryService
-            .Setup(x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(new List<Entry>());
-
-        // Act
-        await _timeQueryService.ExecuteTimeQueryAsync(
-            prefix,
-            regex,
-            "entries",
-            fieldName,
-            queryParameters
-        );
-
-        // Assert
-        _mockEntryService.Verify(
-            x =>
-                x.GetEntriesWithAdvancedFilterAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<int>(),
-                    It.IsAny<int>(),
-                    It.IsAny<CancellationToken>()
-                ),
+                x.QueryTreatmentsAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }

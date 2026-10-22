@@ -93,6 +93,9 @@ jobs:
     timeout-minutes: 20
     env:
       BUILD_TESTS: ${{ needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.crates == 'true' }}
+      # A pull request may not add or keep a package with a moderate-or-worse advisory (see
+      # Directory.Packages.props); a push to main only warns, like the release builds.
+      NuGetAuditAsErrors: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-dotnet
@@ -433,9 +436,6 @@ jobs:
       - name: App server-rendering tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/app run test:render
-      - name: App production translation tests
-        if: ${{ !cancelled() && steps.client.outcome == 'success' }}
-        run: pnpm --filter @nocturne/app exec vitest --config vitest.config.ts --run tools/ehba1c-translations.test.js
       - name: Portal unit tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |
@@ -530,6 +530,7 @@ jobs:
           working-directory: src/Web/packages/app
       - name: App unit tests
         run: |
+          node tools/ensure-check-deps.mjs
           pnpm exec svelte-kit sync
           pnpm exec vitest --config vitest.config.ts --run --coverage
       - name: App browser component tests

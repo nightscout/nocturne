@@ -217,18 +217,14 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                     _ => Task.CompletedTask
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                result.Success = false;
-                result.Errors.Add($"Failed to sync {type}: {ex.Message}");
-                _logger.LogError(ex, "Failed to sync {DataType} for {Connector}", type, ConnectorSource);
+                RecordTypeSyncError(result, type.ToString(), ex);
             }
         }
 
         return result;
     }
-
-    #region V4 Data Type Sync Methods
 
     private async Task SyncSensorGlucoseAsync(
         DateTime? from, DateTime? to, NocturneRemoteConnectorConfiguration config, SyncResult result,
@@ -307,10 +303,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             ImportHelper.PrepareForImport(records), PublishDeviceEventDataAsync, config, ct);
     }
 
-    #endregion
-
-    #region Legacy Model Sync Methods
-
     private async Task SyncStateSpansAsync(
         DateTime? from, DateTime? to, NocturneRemoteConnectorConfiguration config, SyncResult result,
         HashSet<SyncDataType> activeTypes, CancellationToken ct)
@@ -320,7 +312,62 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
         await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
             records, PublishStateSpanDataAsync, config, ct);
+
+        if (await FetchAppliedProfileActivationsAsync(from, to, config, ct) is { } activations)
+            await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
+                activations.Select(ToProfileActivation).ToList(), PublishProfileActivationDataAsync, config, ct,
+                "profile activations");
     }
+
+    /// <summary>
+    ///     The activations in force on the remote during the window, or null from a remote that predates
+    ///     them, whose profile switches arrive as the Profile spans <see cref="SyncStateSpansAsync"/>
+    ///     already replayed.
+    /// </summary>
+    private async Task<List<ProfileActivationDto>?> FetchAppliedProfileActivationsAsync(
+        DateTime? from, DateTime? to, NocturneRemoteConnectorConfiguration config, CancellationToken ct)
+    {
+        var url = $"{NocturneRemoteConstants.ProfileActivations}?applied=true";
+        if (from.HasValue)
+            url += $"&from={from.Value.ToUniversalTime():o}";
+        if (to.HasValue)
+            url += $"&to={to.Value.ToUniversalTime():o}";
+
+        try
+        {
+            using var response = await GetWithHeadersAsync(BuildAbsoluteUrl(url), _authHeaders, ct);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return null;
+            if (response.IsSuccessStatusCode
+                && await DeserializeResponseAsync<List<ProfileActivationDto>>(response, ct) is { } activations)
+                return activations;
+        }
+        catch (Exception ex) when (IsTransportFailure(ex))
+        {
+            _logger.LogDebug(ex, "[{ConnectorSource}] Retrying the profile activation fetch", ConnectorSource);
+        }
+
+        return await FetchOrFailAsync<List<ProfileActivationDto>>(
+            url, NocturneRemoteConstants.ProfileActivations, config, ct);
+    }
+
+    /// <summary>
+    ///     A remote activation as this instance stores it: keyed by the remote's id, with the end the
+    ///     remote settled it with, and a temporary one's length.
+    /// </summary>
+    private static ProfileActivation ToProfileActivation(ProfileActivationDto remote) => new()
+    {
+        StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(remote.StartMills).UtcDateTime,
+        EndTimestamp = remote.EndMills is { } end ? DateTimeOffset.FromUnixTimeMilliseconds(end).UtcDateTime : null,
+        RequestedDurationMs = remote.IsTemporary && remote.EndMills is { } temporaryEnd
+            ? temporaryEnd - remote.StartMills
+            : null,
+        BaseProfileName = remote.BaseProfileName,
+        Percentage = remote.Percentage,
+        TimeshiftMs = (long)Math.Round(remote.TimeshiftHours * 3_600_000),
+        App = remote.App,
+        SyncIdentifier = remote.Id.ToString(),
+    };
 
     private async Task SyncProfilesAsync(
         NocturneRemoteConnectorConfiguration config, SyncResult result,
@@ -369,10 +416,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         await PublishRecordTypeAsync(result, SyncDataType.Food, activeTypes,
             foods.ToList(), PublishFoodDataAsync, config, ct);
     }
-
-    #endregion
-
-    #region Fetch Helpers
 
     /// <summary>
     ///     One payload from the remote instance, fetched under the tenant's retry budget, raising
@@ -473,10 +516,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
         return body.Length <= maxQuotedBody ? body : body[..maxQuotedBody] + "...";
     }
-
-    #endregion
-
-    #region Pagination Helpers
 
     /// <summary>
     ///     Fetches every page of a V4 paginated endpoint. <typeparamref name="T"/> spans both the V4
@@ -588,10 +627,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             .Min();
     }
 
-    #endregion
-
-    #region URL Builders
-
     private static string BuildPaginatedUrl(
         string endpoint, DateTime? from, DateTime? to, int limit, int offset)
     {
@@ -620,8 +655,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
         return url;
     }
-
-    #endregion
 
     private void ResolveConfiguration(NocturneRemoteConnectorConfiguration config)
     {

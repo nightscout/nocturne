@@ -1,4 +1,5 @@
 import type { ScaleTime } from 'd3-scale';
+import type { ChartThresholds } from '$lib/constants/glucose-thresholds';
 
 export const MS_PER_HOUR = 3_600_000;
 export const MS_PER_DAY = 86_400_000;
@@ -21,23 +22,12 @@ export interface GlucosePoint extends ActogramPoint {
 	color: string;
 }
 
-export interface GlucoseThresholds {
-	low: number;
-	high: number;
-	veryLow: number;
-	veryHigh: number;
-	glucoseYMax: number;
-	/** Personal target from the active profile; absent when no profile exists. */
-	targetLow?: number | null;
-	targetHigh?: number | null;
-}
-
 /**
  * The band the target key and limit lines draw: the personal target when the
  * profile supplies one, else the clinical in-range band. Dot colouring stays on
  * `low`/`high` regardless.
  */
-export function resolveTargetRange(thresholds: GlucoseThresholds): {
+export function resolveTargetRange(thresholds: ChartThresholds): {
 	low: number;
 	high: number;
 } {

@@ -14,12 +14,24 @@ public class PunchCardDay
     /// <summary>Approximate count of CGM readings for the day (5-min cadence assumed).</summary>
     public int TotalReadings { get; set; }
     public int InRangeCount { get; set; }
+    public int VeryLowCount { get; set; }
     public int LowCount { get; set; }
     public int HighCount { get; set; }
+    public int VeryHighCount { get; set; }
 
     public double InRangePercent { get; set; }
+
+    /// <summary>Share of readings below the very-low threshold.</summary>
+    public double VeryLowPercent { get; set; }
+
+    /// <summary>Share of readings from the very-low threshold up to the low threshold.</summary>
     public double LowPercent { get; set; }
+
+    /// <summary>Share of readings above the high threshold up to the very-high threshold.</summary>
     public double HighPercent { get; set; }
+
+    /// <summary>Share of readings above the very-high threshold.</summary>
+    public double VeryHighPercent { get; set; }
 
     /// <summary>Mean of every reading that day, mg/dL.</summary>
     public double AverageGlucose { get; set; }
@@ -47,9 +59,23 @@ public class PunchCardMonthSummary
     public int DayCount { get; set; }
     public int TotalReadings { get; set; }
     public double InRangePercent { get; set; }
+    public double VeryLowPercent { get; set; }
     public double LowPercent { get; set; }
     public double HighPercent { get; set; }
+    public double VeryHighPercent { get; set; }
     public double AvgGlucose { get; set; }
+
+    /// <summary>
+    /// Total daily dose in units: the month's insulin over the calendar days the requested range
+    /// covers in it up to and including the tenant's today, whether or not the sensor read on those
+    /// days. Null when no insulin was recorded. Absent with the whole summary for a month with no readings.
+    /// </summary>
+    public double? Tdd { get; set; }
+
+    /// <summary>
+    /// Carbs per calendar day over the same days as <see cref="Tdd"/>. Null when no carbs were recorded.
+    /// </summary>
+    public double? AvgDailyCarbs { get; set; }
 }
 
 /// <summary>One month bucket within a punch-card response — days plus per-month maxes for chart scaling.</summary>

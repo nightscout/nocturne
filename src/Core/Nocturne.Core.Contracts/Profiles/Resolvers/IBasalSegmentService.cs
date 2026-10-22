@@ -21,7 +21,6 @@ public interface IBasalSegmentService
     /// </summary>
     /// <param name="fromMills">Window start, Unix ms, inclusive.</param>
     /// <param name="toMills">Window end, Unix ms, exclusive.</param>
-    /// <param name="ct">Cancellation token.</param>
     IAsyncEnumerable<BasalSegment> GetSegmentsAsync(
         long fromMills,
         long toMills,

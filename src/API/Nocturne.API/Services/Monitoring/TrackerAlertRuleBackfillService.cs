@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Services.Audit;
+using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -45,11 +45,11 @@ public sealed class TrackerAlertRuleBackfillService : BackgroundService
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+            var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
 
             // Tenants are not RLS-scoped, so this list read is safe without a tenant context.
             List<(Guid TenantId, string? Slug, string? DisplayName)> tenants;
-            await using (var lookup = await factory.CreateDbContextAsync(stoppingToken))
+            await using (var lookup = await factory.CreatePlatformAsync(stoppingToken))
             {
                 tenants = (await lookup.Tenants
                     .AsNoTracking()
@@ -64,9 +64,8 @@ public sealed class TrackerAlertRuleBackfillService : BackgroundService
             foreach (var (tenantId, slug, displayName) in tenants)
             {
                 List<Guid> definitionIds;
-                await using (var db = await factory.CreateDbContextAsync(stoppingToken))
+                await using (var db = await factory.CreateForTenantAsync(tenantId, stoppingToken))
                 {
-                    db.TenantId = tenantId;
                     definitionIds = await db.TrackerNotificationThresholds
                         .AsNoTracking()
                         .Where(t => t.AlertRuleId == null)
@@ -77,17 +76,10 @@ public sealed class TrackerAlertRuleBackfillService : BackgroundService
 
                 if (definitionIds.Count == 0) continue;
 
-                // The sync service resolves its db context through the ambient tenant
-                // accessor, so give each tenant its own scope with the tenant set.
-                using var tenantScope = _serviceProvider.CreateScope();
-                var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(new TenantContext(
-                    tenantId, slug ?? string.Empty, displayName ?? string.Empty, true, IsDemo: false));
-
-                // Attribute the backfill's rule writes to the service rather than to whoever last
-                // held the scope's audit context.
-                using var systemScope = SystemAuditScope.PushForScope(
-                    tenantScope.ServiceProvider, AuditEndpoint);
+                await using var tenantScope = TenantJobScope.Open(
+                    _serviceProvider,
+                    new TenantContext(tenantId, slug ?? string.Empty, displayName ?? string.Empty, true, IsDemo: false),
+                    AuditEndpoint);
 
                 var sync = tenantScope.ServiceProvider.GetRequiredService<ITrackerAlertRuleSyncService>();
 

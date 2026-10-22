@@ -87,7 +87,7 @@ public class ConnectorFoodEntryEntity : ITenantScoped, ISystemTimestamped
     public decimal Fat { get; set; }
 
     /// <summary>
-    /// Total energy (calories) for the entry
+    /// Energy in kilojoules for the consumed serving
     /// </summary>
     [Column("energy")]
     public decimal Energy { get; set; }

@@ -5,12 +5,16 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// <summary>
 /// Scoped, request-lifetime implementation of <see cref="ICategoryReadContext"/>.
 /// A plain mutable holder: the middleware pipeline writes it (share marker pre-auth,
-/// CSV and history clamp post-auth) and the DbContext factory reads it during query execution. There is
-/// no concurrent access within a request: every write happens in the middleware pipeline
-/// before any controller or repository runs.
+/// CSV and history clamp post-auth) and <see cref="TenantReadContext"/> reads it when a connection
+/// opens. There is no concurrent access within a request: every write happens in the middleware
+/// pipeline before any controller or repository runs.
 /// </summary>
 public sealed class CategoryReadContext : ICategoryReadContext
 {
+    internal CategoryReadContext()
+    {
+    }
+
     public bool IsShare { get; private set; }
 
     public string? VisibleCategoriesCsv { get; private set; }

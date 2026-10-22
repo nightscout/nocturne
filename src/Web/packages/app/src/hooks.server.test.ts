@@ -254,3 +254,21 @@ describe("hooks — the status probe", () => {
     expect(response.status).toBe(200);
   });
 });
+
+describe("hooks — response headers", () => {
+  it("puts the security headers on a page and on a redirect", async () => {
+    getStatus.mockResolvedValue(ready);
+    const page = await run(requestEvent(freshHost(), "/", signedIn));
+
+    getStatus.mockRejectedValue({
+      status: 503,
+      response: JSON.stringify({ error: "recovery_mode_active", recoveryMode: true }),
+    });
+    const redirect = await run(requestEvent(freshHost(), "/", signedIn));
+
+    for (const { response } of [page, redirect]) {
+      expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+      expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    }
+  });
+});

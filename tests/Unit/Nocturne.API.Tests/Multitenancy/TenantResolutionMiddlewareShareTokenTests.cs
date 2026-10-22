@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Security;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Multitenancy;
@@ -41,9 +42,10 @@ public sealed class TenantResolutionMiddlewareShareTokenTests : TenantResolution
         nextCalled.Should().BeTrue();
         ((bool)ctx.Items["ShareAccess"]!).Should().BeTrue();
         (ctx.Items["TenantContext"] as TenantContext)!.TenantId.Should().Be(_tenantId);
-        // The RLS carrier is marked pre-auth on both the request context and the pinned DbContext.
+        // Marked pre-auth, so a context the scope opens reads as a share.
         Resolve<ICategoryReadContext>(ctx).IsShare.Should().BeTrue();
-        Resolve<NocturneDbContext>(ctx).IsShareContext.Should().BeTrue();
+        await using var db = await Resolve<INocturneDbContextFactory>(ctx).CreateAsync();
+        db.IsShareContext.Should().BeTrue();
     }
 
     [Fact]
@@ -64,9 +66,10 @@ public sealed class TenantResolutionMiddlewareShareTokenTests : TenantResolution
         nextCalled.Should().BeTrue();
         ctx.Items.ContainsKey("ShareAccess").Should().BeFalse();
         (ctx.Items["TenantContext"] as TenantContext)!.TenantId.Should().Be(_tenantId);
-        // A bare slug host is not a share: the carrier stays off, so RLS opens for the owner.
+        // A bare slug host is not a share, so RLS opens for the owner.
         Resolve<ICategoryReadContext>(ctx).IsShare.Should().BeFalse();
-        Resolve<NocturneDbContext>(ctx).IsShareContext.Should().BeFalse();
+        await using var db = await Resolve<INocturneDbContextFactory>(ctx).CreateAsync();
+        db.IsShareContext.Should().BeFalse();
     }
 
     [Fact]

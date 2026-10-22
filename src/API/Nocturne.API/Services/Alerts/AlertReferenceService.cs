@@ -4,7 +4,7 @@ using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -40,7 +40,7 @@ public interface IAlertReferenceService
 }
 
 internal sealed class AlertReferenceService(
-    IDbContextFactory<NocturneDbContext> contextFactory,
+    INocturneDbContextFactory contextFactory,
     ITenantAccessor tenantAccessor,
     ILogger<AlertReferenceService> logger)
     : IAlertReferenceService
@@ -111,8 +111,7 @@ internal sealed class AlertReferenceService(
                 "AlertReferenceService requires a resolved tenant context.");
         }
 
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantAccessor.TenantId;
+        await using var db = await contextFactory.CreateAsync(ct);
 
         var rows = await db.AlertRules
             .AsNoTracking()

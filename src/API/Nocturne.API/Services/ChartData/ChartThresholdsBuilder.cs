@@ -50,10 +50,7 @@ internal static class ChartThresholdsBuilder
         if (!hasProfile)
             return thresholds;
 
-        return thresholds with
-        {
-            TargetLow = await targetRangeResolver.GetLowBGTargetAsync(atMills, ct: cancellationToken),
-            TargetHigh = await targetRangeResolver.GetHighBGTargetAsync(atMills, ct: cancellationToken),
-        };
+        var (targetLow, targetHigh) = await targetRangeResolver.GetBGTargetRangeAsync(atMills, ct: cancellationToken);
+        return thresholds with { TargetLow = targetLow, TargetHigh = targetHigh };
     }
 }

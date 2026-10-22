@@ -48,7 +48,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
 
     /// <summary>Runs <paramref name="edit"/> once, before the first transition lock is taken.</summary>
     private sealed class EditBeforeLockRepository(NocturneDbContext context, Func<Task> edit)
-        : AlertTrackerRepository(context)
+        : AlertTrackerRepository(DbUnitOfWork.Own(context))
     {
         private Func<Task>? _edit = edit;
 
@@ -131,12 +131,12 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
     /// <summary>The conditions edit an alert rule editor saves, with its own lease, on another replica.</summary>
     private Func<Task> EditOnAnotherReplica(Guid tenant, Guid rule) => async () =>
     {
-        await using var db = Context(tenant);
-        var stored = await db.AlertRules.SingleAsync(r => r.Id == rule);
+        await using var unit = DbUnitOfWork.Own(Context(tenant));
+        var stored = await unit.Context.AlertRules.SingleAsync(r => r.Id == rule);
         stored.ConditionParams = EditedBody;
         stored.UpdatedAt = DateTime.UtcNow;
-        await new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(db))
-            .SaveAndClearAsync(db, rule, CancellationToken.None);
+        await new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(unit))
+            .SaveAndClearAsync(unit, rule, CancellationToken.None);
     };
 
     private static ExcursionTracker Tracker(AlertTrackerRepository repository) =>
@@ -155,7 +155,7 @@ public class StaleRuleDecisionPostgresTests(StaleRuleDecisionPostgresTests.Datab
     {
         var (tenant, rule, excursionId) = await SeedAsync(active: true);
         await using var db = Context(tenant);
-        // The evaluating context already holds the rule row, as a scoped context can.
+        // The evaluating context already holds the rule row, as a caller-owned unit can.
         await db.AlertRules.SingleAsync(r => r.Id == rule.Id);
 
         var transition = await Tracker(new EditBeforeLockRepository(db, EditOnAnotherReplica(tenant, rule.Id)))

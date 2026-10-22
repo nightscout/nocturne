@@ -42,6 +42,5 @@ public enum GlucoseTrend
     /// <summary>Not computable.</summary>
     NotComputable = 8,
 
-    /// <summary>Rate out of range.</summary>
     RateOutOfRange = 9
 }

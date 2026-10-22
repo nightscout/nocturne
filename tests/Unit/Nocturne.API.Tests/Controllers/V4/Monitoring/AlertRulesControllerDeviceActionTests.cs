@@ -34,7 +34,7 @@ public class AlertRulesControllerDeviceActionTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var ctx = new NocturneDbContext(options) { TenantId = Tenant };
-        var factory = new TestTenantDbContextFactory(ctx);
+        var factory = new TestNocturneDbContextFactory(ctx);
 
         return new AlertRulesController(
             factory,
@@ -43,7 +43,7 @@ public class AlertRulesControllerDeviceActionTests
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx)),
+            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx.AsFactory())),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
             Mock.Of<ILogger<AlertRulesController>>());
     }

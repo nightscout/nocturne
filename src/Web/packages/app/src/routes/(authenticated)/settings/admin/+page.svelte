@@ -18,6 +18,7 @@
   import OidcProvidersTabContent from "$lib/components/admin/OidcProvidersTabContent.svelte";
   import OidcProviderDialog from "$lib/components/admin/OidcProviderDialog.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import { withLockoutOverride } from "$lib/components/admin/lockout-override";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import type {
     TenantRoleDto,
@@ -80,8 +81,15 @@
 
   async function saveProvider(providerData: CreateOidcProviderRequest) {
     try {
-      if (editingProvider?.id) {
-        await oidcRemote.update({ id: editingProvider.id, request: providerData });
+      const id = editingProvider?.id;
+      if (id) {
+        // The generated update takes no force flag, so an override switches the provider off
+        // through disable first; the update that follows then no longer turns it off.
+        const saved = await withLockoutOverride(editingProvider?.name, async (force) => {
+          if (force) await oidcRemote.disable({ id, force });
+          await oidcRemote.update({ id, request: providerData });
+        });
+        if (!saved) return;
       } else {
         await oidcRemote.create(providerData);
       }
@@ -94,10 +102,11 @@
   }
 
   async function deleteProvider(p: OidcProviderResponse) {
-    if (!p.id) return;
+    const id = p.id;
+    if (!id) return;
     if (!confirm(`Delete provider "${p.name}"?`)) return;
     try {
-      await oidcRemote.remove(p.id);
+      await withLockoutOverride(p.name, (force) => oidcRemote.remove({ id, force }));
       await loadOidcData();
     } catch (err: unknown) {
       oidcError = describeSubmitError(err, "Failed to delete provider.");
@@ -105,12 +114,13 @@
   }
 
   async function toggleProvider(p: OidcProviderResponse) {
-    if (!p.id) return;
+    const id = p.id;
+    if (!id) return;
     try {
       if (p.isEnabled) {
-        await oidcRemote.disable(p.id);
+        await withLockoutOverride(p.name, (force) => oidcRemote.disable({ id, force }));
       } else {
-        await oidcRemote.enable(p.id);
+        await oidcRemote.enable(id);
       }
       await loadOidcData();
     } catch (err: unknown) {

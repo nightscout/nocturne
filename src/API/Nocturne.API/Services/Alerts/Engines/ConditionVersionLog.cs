@@ -10,17 +10,32 @@ namespace Nocturne.API.Services.Alerts.Engines;
 internal sealed class ConditionVersionLog
 {
     private readonly ConcurrentDictionary<Guid, (AlertConditionType Type, string Params)> _logged = new();
+    private readonly ConcurrentDictionary<Guid, (AlertConditionType Type, string Params)> _issuesChecked = new();
 
     /// <summary>
     /// True the first time it is asked about this rule with this condition, and again after the
     /// condition changes.
     /// </summary>
-    public bool FirstFor(Guid ruleId, AlertConditionType conditionType, string conditionParams)
+    public bool FirstFor(Guid ruleId, AlertConditionType conditionType, string conditionParams) =>
+        First(_logged, ruleId, conditionType, conditionParams);
+
+    /// <summary>
+    /// <see cref="FirstFor"/> for the orchestrator's check of a rule's conditions against what a
+    /// save rejects, kept apart so that check never takes the engines' one report of a failure.
+    /// </summary>
+    public bool FirstIssueCheckFor(Guid ruleId, AlertConditionType conditionType, string conditionParams) =>
+        First(_issuesChecked, ruleId, conditionType, conditionParams);
+
+    private static bool First(
+        ConcurrentDictionary<Guid, (AlertConditionType Type, string Params)> seen,
+        Guid ruleId,
+        AlertConditionType conditionType,
+        string conditionParams)
     {
         var version = (conditionType, conditionParams);
-        if (_logged.TryGetValue(ruleId, out var seen) && seen == version)
+        if (seen.TryGetValue(ruleId, out var last) && last == version)
             return false;
-        _logged[ruleId] = version;
+        seen[ruleId] = version;
         return true;
     }
 }

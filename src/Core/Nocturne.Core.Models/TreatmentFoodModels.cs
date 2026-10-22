@@ -3,14 +3,13 @@ using System.Text.Json.Serialization;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a food attribution entry linked to a carb intake record.
+/// Food attribution entry linked to a carb intake record.
 /// </summary>
 /// <seealso cref="Food"/>
 /// <seealso cref="TreatmentFoodBreakdown"/>
 [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
 public class TreatmentFood
 {
-    /// <summary>Unique identifier for this food attribution.</summary>
     [JsonPropertyName("id")]
     public Guid Id { get; set; }
 
@@ -22,7 +21,6 @@ public class TreatmentFood
     [JsonPropertyName("foodId")]
     public Guid? FoodId { get; set; }
 
-    /// <summary>Number of portions consumed.</summary>
     [JsonPropertyName("portions")]
     public decimal Portions { get; set; }
 
@@ -61,7 +59,6 @@ public class TreatmentFood
 /// <seealso cref="Food"/>
 public class UserFoodFavorite
 {
-    /// <summary>Unique identifier for this favorite.</summary>
     [JsonPropertyName("id")]
     public Guid Id { get; set; }
 
@@ -95,7 +92,6 @@ public class FoodAttributionCount
 [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
 public class TreatmentFoodBreakdown
 {
-    /// <summary>The carb intake record this breakdown is for.</summary>
     [JsonPropertyName("carbIntakeId")]
     public Guid CarbIntakeId { get; set; }
 

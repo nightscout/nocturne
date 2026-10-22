@@ -26,7 +26,7 @@ public class RlsShareCategoryTests
     // simple NOT NULL columns. The rules are about category gating, not the data itself.
     private const string GovernedTable = "step_counts";
     private const string GovernedScope = "stepcount.read";
-    private const string HiddenTable = "body_weights";
+    private const string HiddenTable = "clock_faces";
     // boluses/treatments.read is the category that originally leaked to glucose-only shares.
     private const string TreatmentTable = "boluses";
 
@@ -280,6 +280,82 @@ public class RlsShareCategoryTests
             "state_spans has no governing scope, so no share sees it, running or not");
     }
 
+    /// <summary>
+    /// Profile activations are clamped by overlap as spans are: a permanent switch still running from
+    /// three days ago is what a clamped member's profile resolves to.
+    /// </summary>
+    [Fact]
+    public async Task NonShare_HistoryClamped_SeesProfileActivationsOverlappingTheLast24Hours()
+    {
+        var tenant = Guid.NewGuid();
+        await SeedProfileActivationsAsync(tenant);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: false, visibleCategories: string.Empty,
+            historyClamped: "true");
+        (await ProfileActivationNamesAsync(conn, tenant)).Should().BeEquivalentTo(
+            new[] { "running-since-3-days", "ended-1-hour-ago" });
+
+        await SetShareContextAsync(conn, tenant, isShare: false, visibleCategories: string.Empty,
+            historyClamped: "false");
+        (await ProfileActivationNamesAsync(conn, tenant)).Should().HaveCount(3);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Share_SeesNoProfileActivations(bool fullHistory)
+    {
+        var tenant = Guid.NewGuid();
+        await SeedProfileActivationsAsync(tenant);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: true,
+            visibleCategories: "glucose.read,treatments.read,stepcount.read,devices.read", fullHistory: fullHistory);
+
+        (await ProfileActivationNamesAsync(conn, tenant)).Should().BeEmpty(
+            "profile_activations has no governing scope, so no share sees it");
+    }
+
+    [Fact]
+    public async Task ProfileActivations_AreIsolatedPerTenant()
+    {
+        var tenant = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        await SeedProfileActivationsAsync(tenant);
+        await SeedProfileActivationsAsync(other);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: false, visibleCategories: string.Empty);
+        (await ProfileActivationNamesAsync(conn, other)).Should().BeEmpty("one tenant never reads another's activations");
+        (await ProfileActivationNamesAsync(conn, tenant)).Should().HaveCount(3);
+    }
+
+    private async Task SeedProfileActivationsAsync(Guid tenantId)
+    {
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+        await InsertTenantAsync(conn, tenantId);
+        await SetCurrentTenantAsync(conn, tenantId);
+        await ExecuteAsync(conn,
+            "INSERT INTO profile_activations (id, tenant_id, start_timestamp, end_timestamp, phase, origin, base_profile_name, percentage, timeshift_ms, snapshot_is_customized) VALUES " +
+            "(gen_random_uuid(), @tid, now() - interval '3 days', NULL, 'Requested', 'User', 'running-since-3-days', 100, 0, false), " +
+            "(gen_random_uuid(), @tid, now() - interval '4 days', now() - interval '2 days', 'Requested', 'User', 'ended-2-days-ago', 100, 0, false), " +
+            "(gen_random_uuid(), @tid, now() - interval '30 hours', now() - interval '1 hour', 'Effective', 'Connector', 'ended-1-hour-ago', 100, 0, false)",
+            tenantId);
+    }
+
+    private static async Task<List<string>> ProfileActivationNamesAsync(NpgsqlConnection conn, Guid tenantId)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT base_profile_name FROM profile_activations WHERE tenant_id = @tid";
+        AddParam(cmd, "@tid", tenantId);
+        var names = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            names.Add(reader.GetString(0));
+        return names;
+    }
+
     private async Task SeedStateSpansAsync(Guid tenantId)
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
@@ -344,10 +420,20 @@ public class RlsShareCategoryTests
                     usingExpr.Should().Contain($"{end} IS NULL",
                         $"{table} is clamped by overlap, so a span still running stays visible");
                 }
-                else if (ShareDataCategories.RecencyColumnFor(table) is not null)
+                else if (ShareDataCategories.RecencyColumnFor(table) is { } recency)
                 {
                     usingExpr.Should().Contain("history_clamped",
                         $"{table} is hidden from shares but clamps a history-clamped member to 24 hours");
+                    usingExpr.Should().Contain(recency, $"{table} is clamped by {recency}");
+                    if (ShareDataCategories.RecencyIsUnixMillis(table))
+                        usingExpr.Should().Contain("epoch", $"{table}'s {recency} holds Unix milliseconds");
+                }
+                else if (ShareDataCategories.ParentRecencyFor(table) is { } parent)
+                {
+                    usingExpr.Should().Contain("history_clamped",
+                        $"{table} is hidden from shares but clamps a history-clamped member to 24 hours");
+                    usingExpr.Should().Contain("EXISTS", $"{table} is clamped through its parent row");
+                    usingExpr.Should().Contain(parent.Table, $"{table} is clamped by its {parent.Table} row's time");
                 }
                 else
                 {
@@ -407,8 +493,8 @@ public class RlsShareCategoryTests
             $"INSERT INTO {GovernedTable} (id, tenant_id, timestamp, metric, source, sys_created_at, sys_updated_at) " +
             "VALUES (gen_random_uuid(), @tid, now(), 0, 0, now(), now())", tenantId);
         await ExecuteAsync(conn,
-            $"INSERT INTO {HiddenTable} (id, tenant_id, mills, weight_kg, sys_created_at, sys_updated_at) " +
-            "VALUES (gen_random_uuid(), @tid, 0, 0, now(), now())", tenantId);
+            $"INSERT INTO {HiddenTable} (id, tenant_id, user_id, name, config, created_at, sys_created_at, sys_updated_at) " +
+            "VALUES (gen_random_uuid(), @tid, 'owner', 'face', '{}', now() - interval '30 days', now(), now())", tenantId);
         await ExecuteAsync(conn,
             $"INSERT INTO {TreatmentTable} (id, tenant_id, timestamp, insulin, automatic, bolus_kind, sys_created_at, sys_updated_at) " +
             "VALUES (gen_random_uuid(), @tid, now(), 1.0, false, 'Manual', now(), now())", tenantId);

@@ -1,7 +1,11 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Extensions;
+using Nocturne.API.Filters;
+using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 
@@ -18,11 +22,20 @@ namespace Nocturne.API.Controllers.V3;
 /// <seealso cref="V3CollectionResponse{T}"/>
 /// <seealso cref="V3FilterCriteria"/>
 [ApiController]
+[V3ParameterExceptionFilter]
 public abstract class BaseV3Controller<T> : ControllerBase
     where T : class
 {
     protected readonly IDocumentProcessingService _documentProcessingService;
     protected readonly ILogger _logger;
+
+    /// <summary>
+    /// The most documents a V3 search returns, and the page size when no <c>limit</c> is given,
+    /// as Nightscout's <c>API3_MAX_LIMIT</c> does.
+    /// </summary>
+    protected const int MaxLimit = 1_000;
+
+    private static readonly JsonSerializerOptions DocumentOptions = NightscoutJsonOptions.Create();
 
     /// <summary>
     /// Initializes the base V3 controller with shared services.
@@ -43,14 +56,16 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// </summary>
     /// <returns>Parsed <see cref="V3QueryParameters"/> populated from the current request's query string.</returns>
     /// <exception cref="V3ParameterOutOfToleranceException">Thrown when limit is negative, matching Nightscout V3 behavior.</exception>
-    protected V3QueryParameters ParseV3QueryParameters()
+    /// <exception cref="V3SortConflictException">Thrown when both <c>sort</c> and <c>sort$desc</c> are given and <paramref name="readSort"/> is set.</exception>
+    /// <param name="readSort">Whether the request's sort and limit are read; a read of one document by identifier ignores both, as Nightscout does.</param>
+    protected V3QueryParameters ParseV3QueryParameters(bool readSort = true)
     {
         var query = HttpContext.Request.Query;
 
-        var rawLimit = ParseIntParameter(query, "limit", 100);
+        var rawLimit = ParseIntParameter(query, "limit", MaxLimit);
 
         // Nightscout V3 API returns 400 for negative limit with "Parameter limit out of tolerance"
-        if (rawLimit < 0)
+        if (readSort && rawLimit < 0)
         {
             throw new V3ParameterOutOfToleranceException("limit");
         }
@@ -60,7 +75,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
             Limit = rawLimit,
             Offset = ParseIntParameter(query, "offset", 0),
             Fields = ParseStringArrayParameter(query, "fields"),
-            Sort = ParseStringParameter(query, "sort"),
+            Sort = readSort ? ParseSort(query) : V3Sort.Default,
             Filter = ParseJsonParameter(query, "filter"),
             IfModifiedSince = ParseDateTimeParameter(query, "if-modified-since"),
             IfNoneMatch = ParseStringParameter(query, "if-none-match"),
@@ -75,30 +90,14 @@ public abstract class BaseV3Controller<T> : ControllerBase
         }
 
         // Validate limits to prevent abuse
-        const int MaxEntriesLimit = 1_000; // Align with Nightscout API v3 legacy limit
         if (parameters.Limit < 1)
             parameters.Limit = 1;
-        if (parameters.Limit > MaxEntriesLimit)
-            parameters.Limit = MaxEntriesLimit;
+        if (parameters.Limit > MaxLimit)
+            parameters.Limit = MaxLimit;
         if (parameters.Offset < 0)
             parameters.Offset = 0;
 
         return parameters;
-    }
-
-    /// <summary>
-    /// Exception thrown when a V3 API parameter is out of tolerance.
-    /// Matches the Nightscout V3 API behavior of returning 400 with "Parameter {name} out of tolerance".
-    /// </summary>
-    public class V3ParameterOutOfToleranceException : Exception
-    {
-        public string ParameterName { get; }
-
-        public V3ParameterOutOfToleranceException(string parameterName)
-            : base($"Parameter {parameterName} out of tolerance")
-        {
-            ParameterName = parameterName;
-        }
     }
 
     /// <summary>
@@ -259,6 +258,22 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
+    /// Serializes <paramref name="document"/> as the Nightscout wire shape and stamps the v3
+    /// <c>identifier</c>, also served as <c>_id</c>, as the 24-hex ObjectId a by-id read resolves.
+    /// </summary>
+    protected static JsonObject ToV3Document<TDocument>(TDocument document, string? id)
+    {
+        var node = JsonSerializer.SerializeToNode(document, DocumentOptions)!.AsObject();
+        if (MongoObjectId.Coerce(id) is { } identifier)
+        {
+            node["_id"] = identifier;
+            node["identifier"] = identifier;
+        }
+
+        return node;
+    }
+
+    /// <summary>
     /// Apply field selection to a collection of objects
     /// </summary>
     /// <param name="data">Data to filter</param>
@@ -307,15 +322,13 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// </summary>
     /// <param name="data">Response data</param>
     /// <param name="parameters">Query parameters</param>
-    /// <param name="totalCount">Total count of items (for pagination)</param>
     /// <param name="lastModified">
     /// Newest record timestamp when the caller already knows it (e.g. computed from domain
     /// models before mapping to DTOs the timestamp reflection can't read).
     /// </param>
     protected void SetV3ResponseHeaders<TItem>(
-        IEnumerable<TItem> data,
+        IReadOnlyCollection<TItem> data,
         V3QueryParameters parameters,
-        long totalCount,
         DateTimeOffset? lastModified = null
     )
     {
@@ -327,8 +340,6 @@ public abstract class BaseV3Controller<T> : ControllerBase
             effectiveLastModified.ToUnixTimeMilliseconds()
         );
 
-        // Set pagination headers
-        Response.Headers["X-Total-Count"] = totalCount.ToString();
         Response.Headers["X-Limit"] = parameters.Limit.ToString();
         Response.Headers["X-Offset"] = parameters.Offset.ToString();
 
@@ -342,7 +353,8 @@ public abstract class BaseV3Controller<T> : ControllerBase
             links.Add($"<{baseUrl}?limit={parameters.Limit}&offset={prevOffset}>; rel=\"prev\"");
         }
 
-        if (parameters.Offset + parameters.Limit < totalCount)
+        // A search does not count the collection; a full page is the only sign of another.
+        if (data.Count >= parameters.Limit)
         {
             var nextOffset = parameters.Offset + parameters.Limit;
             links.Add($"<{baseUrl}?limit={parameters.Limit}&offset={nextOffset}>; rel=\"next\"");
@@ -451,8 +463,116 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <returns>Nightscout-compatible success response</returns>
     protected ActionResult CreateV3SuccessResponse(object result)
     {
-        return Ok(new { status = 200, result });
+        return Ok(new V3Envelope<object> { Result = result });
     }
+
+    /// <summary>
+    /// Create the V3 success response for a delete: <c>{"status": 200}</c> with no result.
+    /// AAPS treats any other success status on DELETE as unknown and stops syncing the collection.
+    /// </summary>
+    protected ActionResult CreateV3DeleteResponse()
+    {
+        return Ok(new { status = 200 });
+    }
+
+    /// <summary>
+    /// The V3 answer to a create that stored a new document: 201 with the document's wire
+    /// identifier and the server's write time as <c>lastModified</c>, <c>Location</c> pointing at
+    /// <paramref name="getAction"/>, and <c>Last-Modified</c>.
+    /// </summary>
+    /// <param name="getAction">Name of the action that reads one document of the collection.</param>
+    /// <param name="storedId">Stored id of the created document.</param>
+    protected ActionResult V3Created(string getAction, string? storedId) =>
+        V3Inserted(getAction, MongoObjectId.Coerce(storedId));
+
+    /// <summary>
+    /// The V3 answer to a write that stored a new document under <paramref name="identifier"/>,
+    /// already in its wire form: 201 with the identifier and the server's write time as
+    /// <c>lastModified</c>, <c>Location</c> pointing at <paramref name="getAction"/>, and
+    /// <c>Last-Modified</c>.
+    /// </summary>
+    protected ActionResult V3Inserted(string getAction, string? identifier)
+    {
+        var lastModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
+        return CreatedAtAction(
+            getAction,
+            new { id = identifier },
+            new V3CreateResponse { Status = 201, Identifier = identifier, LastModified = lastModified }
+        );
+    }
+
+    /// <summary>
+    /// The V3 answer to a PUT that replaced a stored document: 200 with the server's write time as
+    /// <c>lastModified</c>, and <c>Last-Modified</c>.
+    /// </summary>
+    protected ActionResult V3Replaced()
+    {
+        var lastModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
+        return Ok(new { status = 200, lastModified });
+    }
+
+    /// <summary>
+    /// Validates common V3 fields as per Nightscout API behavior.
+    /// Nightscout validates these fields before checking if the document exists.
+    /// </summary>
+    /// <param name="jsonData">The JSON data to validate</param>
+    /// <returns>ActionResult with error if validation fails, null if validation passes</returns>
+    protected ActionResult? ValidateV3CommonFields(JsonElement jsonData)
+    {
+        const long MinTimestamp = 946684800000; // Year 2000 in milliseconds
+
+        // A document is an object; any other body has no fields to read, and upstream refuses it.
+        if (jsonData.ValueKind != JsonValueKind.Object)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing request body");
+        }
+
+        // Check for 'date' field - Nightscout requires this for all V3 operations
+        if (!jsonData.TryGetProperty("date", out var dateProperty))
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        // Date must be a number greater than MIN_TIMESTAMP
+        if (dateProperty.ValueKind != JsonValueKind.Number)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        if (!dateProperty.TryGetInt64(out var dateValue) || dateValue <= MinTimestamp)
+        {
+            return CreateV3ErrorResponse(400, "Bad or missing date field");
+        }
+
+        return null; // Validation passed
+    }
+
+    /// <summary>
+    /// The V3 answer to a create that matched a document already stored: 200 with
+    /// <c>isDeduplication</c>, the stored document's identifier, which a v3 read by id resolves, and
+    /// its <c>lastModified</c>. The stored document is left as it was.
+    /// </summary>
+    /// <param name="storedId">Stored id of the existing document.</param>
+    /// <param name="srvModified">The existing document's <c>srvModified</c>, in Unix milliseconds.</param>
+    protected ActionResult V3Deduplicated(string? storedId, long? srvModified)
+    {
+        var lastModified = srvModified ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
+        return Ok(
+            new V3CreateResponse
+            {
+                Status = 200,
+                Identifier = MongoObjectId.Coerce(storedId),
+                IsDeduplication = true,
+                LastModified = lastModified,
+            }
+        );
+    }
+
+    private static string FormatHttpDate(long mills) =>
+        DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime.ToString("R");
 
     /// <summary>
     /// Set <c>Last-Modified</c> and <c>ETag</c> on a V3 <c>history/{lastModified}</c> response.
@@ -462,8 +582,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <param name="maxMills">Highest record timestamp in the response, in Unix milliseconds.</param>
     protected void SetHistoryCursorHeaders(long maxMills)
     {
-        var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(maxMills).UtcDateTime;
-        Response.Headers["Last-Modified"] = lastModified.ToString("R");
+        Response.Headers["Last-Modified"] = FormatHttpDate(maxMills);
         Response.Headers["ETag"] = FormatCursorETag(maxMills);
     }
 
@@ -472,35 +591,19 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// Returns the Nightscout V3-compatible envelope: <c>{"status": 200, "result": [...]}</c>.
     /// </summary>
     /// <typeparam name="TItem">The type of items in the collection.</typeparam>
-    /// <returns>A <see cref="V3CollectionResponse{T}"/> wrapped in the Nightscout V3 envelope.</returns>
+    /// <returns>The Nightscout V3 envelope around <paramref name="data"/>.</returns>
     protected IActionResult CreateV3CollectionResponse<TItem>(
-        IEnumerable<TItem> data,
+        IReadOnlyCollection<TItem> data,
         V3QueryParameters parameters,
-        long totalCount,
         DateTimeOffset? lastModified = null
     )
     {
-        // Apply field selection
         var responseData =
             parameters.Fields != null
                 ? ApplyFieldSelection(data, parameters.Fields)
                 : data.Cast<object>();
 
-        var response = new V3CollectionResponse<object>
-        {
-            Data = responseData.ToList(),
-            Meta = new V3ResponseMetadata
-            {
-                TotalCount = (int)totalCount,
-                Limit = parameters.Limit,
-                Offset = parameters.Offset,
-                Timestamp = DateTimeOffset.UtcNow,
-                Version = "3.0",
-            },
-        };
-
-        // Set response headers
-        SetV3ResponseHeaders(data, parameters, totalCount, lastModified);
+        SetV3ResponseHeaders(data, parameters, lastModified);
 
         // Nightscout V3 API returns {"status": 200, "result": [...]}
         return Ok(
@@ -521,6 +624,28 @@ public abstract class BaseV3Controller<T> : ControllerBase
         }
         return defaultValue;
     }
+
+    private V3Sort ParseSort(IQueryCollection query)
+    {
+        var ascending = ParseStringParameter(query, "sort");
+        var descending = ParseStringParameter(query, "sort$desc");
+
+        return (ascending, descending) switch
+        {
+            ({ Length: > 0 }, { Length: > 0 }) => throw new V3SortConflictException(),
+            (_, { Length: > 0 }) => new V3Sort(descending, true),
+            ({ Length: > 0 }, _) => new V3Sort(ascending, false),
+            _ => V3Sort.Default,
+        };
+    }
+
+    /// <summary>The read-side sort field a request names; any field a store cannot order by is time.</summary>
+    protected static ReadSortField ReadSortFieldOf(V3Sort sort) => sort.Field switch
+    {
+        "srvModified" => ReadSortField.SrvModified,
+        "sgv" => ReadSortField.Sgv,
+        _ => ReadSortField.Time,
+    };
 
     private string? ParseStringParameter(IQueryCollection query, string key)
     {
@@ -593,46 +718,12 @@ public abstract class BaseV3Controller<T> : ControllerBase
     #region Protected Helper Methods
 
     /// <summary>
-    /// Convert V3 filter to V1 find query string
+    /// The V3 JSON filter as a find query. The find parser reads the JSON form directly, so the
+    /// operator and value structure passes through untouched.
     /// </summary>
     /// <param name="filter">V3 filter object</param>
-    /// <returns>V1 find query string</returns>
-    protected string? ConvertV3FilterToV1Find(JsonElement? filter)
-    {
-        if (filter == null || !filter.HasValue)
-            return null;
-
-        try
-        {
-            // Convert JSON filter to MongoDB query string
-            return filter.Value.GetRawText();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to convert V3 filter to V1 find query");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Extract sort direction from V3 sort parameter
-    /// </summary>
-    /// <param name="sort">V3 sort parameter</param>
-    /// <returns>True for reverse sorting (ascending), false for default (descending)</returns>
-    protected bool ExtractSortDirection(string? sort)
-    {
-        if (string.IsNullOrEmpty(sort))
-            return true; // Nightscout defaults to Ascending (Oldest first)
-
-        // Check if sort starts with '-' (descending) or 'desc' (descending)
-        if (sort.StartsWith('-') || sort.StartsWith("desc", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        // Default to ascending (true) if just field name is provided
-        return true;
-    }
+    /// <returns>The filter's JSON text, or null when there is no filter</returns>
+    protected static string? ConvertV3FilterToV1Find(JsonElement? filter) => filter?.GetRawText();
 
     /// <summary>
     /// Extract type filter from V3 filter
@@ -641,22 +732,13 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <returns>Type value or null</returns>
     protected string? ExtractTypeFromFilter(JsonElement? filter)
     {
-        if (filter == null || !filter.HasValue)
-            return null;
-
-        try
+        if (
+            filter is { ValueKind: JsonValueKind.Object } value
+            && value.TryGetProperty("type", out var typeProperty)
+            && typeProperty.ValueKind == JsonValueKind.String
+        )
         {
-            if (
-                filter.Value.ValueKind == JsonValueKind.Object
-                && filter.Value.TryGetProperty("type", out var typeProperty)
-            )
-            {
-                return typeProperty.GetString();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to extract type from V3 filter");
+            return typeProperty.GetString();
         }
 
         return null;
@@ -690,12 +772,14 @@ public abstract class BaseV3Controller<T> : ControllerBase
                     itemModified = DateTimeOffset.FromUnixTimeMilliseconds(mills);
                 }
 
-                // Check for SrvModified property
-                var srvModifiedProperty = itemType.GetProperty("SrvModified");
-                if (
-                    srvModifiedProperty != null
-                    && srvModifiedProperty.GetValue(item) is DateTimeOffset srvModified
-                )
+                // Check for SrvModified property (DateTimeOffset or Unix milliseconds)
+                var srvModified = itemType.GetProperty("SrvModified")?.GetValue(item) switch
+                {
+                    DateTimeOffset dto => dto,
+                    long srvMills => DateTimeOffset.FromUnixTimeMilliseconds(srvMills),
+                    _ => (DateTimeOffset?)null,
+                };
+                if (srvModified != null)
                 {
                     itemModified = srvModified;
                 }
@@ -725,37 +809,6 @@ public abstract class BaseV3Controller<T> : ControllerBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to get last modified timestamp");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Parse create request from request body
-    /// </summary>
-    /// <typeparam name="TRequest">Type of the request object</typeparam>
-    /// <returns>Parsed request object or null</returns>
-    protected async Task<TRequest?> ParseCreateRequest<TRequest>()
-        where TRequest : class
-    {
-        try
-        {
-            if (Request.ContentLength == 0)
-                return null;
-
-            using var reader = new StreamReader(Request.Body);
-            var body = await reader.ReadToEndAsync();
-
-            if (string.IsNullOrEmpty(body))
-                return null;
-
-            return JsonSerializer.Deserialize<TRequest>(
-                body,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to parse create request");
             return null;
         }
     }

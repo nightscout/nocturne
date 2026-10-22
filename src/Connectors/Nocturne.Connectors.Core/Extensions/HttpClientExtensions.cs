@@ -100,7 +100,6 @@ public static class HttpClientExtensions
         /// <summary>
         ///     Adds a Bearer Authorization header to all requests made by the HttpClient.
         /// </summary>
-        /// <param name="accessToken">The bearer token value</param>
         public IHttpClientBuilder AddBearerAuthorization(string accessToken)
         {
             if (!string.IsNullOrEmpty(accessToken))

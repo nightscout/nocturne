@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Demo;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -10,20 +11,20 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EfFirstPartyTokenRepository"/> class.
     /// </summary>
-    /// <param name="context">The database context.</param>
-    public EfFirstPartyTokenRepository(NocturneDbContext context)
+    public EfFirstPartyTokenRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <inheritdoc />
     public async Task CreateAsync(RefreshTokenRecord record, CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         // A demo tenant's visitor account is shared: anyone can obtain a session for it without
         // signing up, and GET /api/v4/account/sessions lists every session for the subject —
         // including IpAddress — to any member of it. Recording the caller's address would show
@@ -36,7 +37,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         // app's first automatic token refresh put the real client address back within one
         // access-token lifetime of any visit. Scrubbing at the single row-creating sink means no
         // path can repopulate them, including one added later.
-        var isDemoSubject = await _context.Subjects
+        var isDemoSubject = await db.Subjects
             .AsNoTracking()
             .Where(s => s.Id == record.SubjectId)
             .Select(s => (bool?)s.IsDemoSubject)
@@ -45,7 +46,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         var scrub = isDemoSubject is true;
 
         if (scrub)
-            await TrimDemoSessionsAsync(record.SubjectId, ct);
+            await TrimDemoSessionsAsync(db, record.SubjectId, ct);
 
         var entity = new RefreshTokenEntity
         {
@@ -60,8 +61,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             ExpiresAt = record.ExpiresAt,
         };
 
-        _context.RefreshTokens.Add(entity);
-        await _context.SaveChangesAsync(ct);
+        db.RefreshTokens.Add(entity);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>
@@ -81,14 +82,14 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
     /// which is the property being bought here.
     /// </para>
     /// </remarks>
-    private async Task TrimDemoSessionsAsync(Guid subjectId, CancellationToken ct)
+    private static async Task TrimDemoSessionsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
 
         // Ordered newest-first with a tiebreaker, so "which rows are surplus" does not depend on
         // how the provider breaks ties between rows issued in the same instant — which visitors
         // arriving together routinely are.
-        var rows = await _context.RefreshTokens
+        var rows = await db.RefreshTokens
             .Where(t => t.SubjectId == subjectId)
             .OrderByDescending(t => t.IssuedAt)
             .ThenByDescending(t => t.Id)
@@ -111,17 +112,18 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         // inside the same SaveChanges as the insert, so the trim and the new row commit together,
         // and it does not depend on a provider that implements bulk delete. The set it loads is
         // bounded by the cap.
-        var entities = await _context.RefreshTokens
+        var entities = await db.RefreshTokens
             .Where(t => doomed.Contains(t.Id))
             .ToListAsync(ct);
 
-        _context.RefreshTokens.RemoveRange(entities);
+        db.RefreshTokens.RemoveRange(entities);
     }
 
     /// <inheritdoc />
     public async Task<RefreshTokenRecord?> FindByHashAsync(string tokenHash, CancellationToken ct = default)
     {
-        var entity = await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        var entity = await db.RefreshTokens
             .AsNoTracking()
             .Where(t => t.TokenHash == tokenHash)
             .FirstOrDefaultAsync(ct);
@@ -139,7 +141,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         Guid? replacedByTokenId = null,
         CancellationToken ct = default)
     {
-        var entity = await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        var entity = await db.RefreshTokens
             .Where(t => t.Id == tokenId)
             .FirstOrDefaultAsync(ct);
 
@@ -151,7 +154,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         entity.ReplacedByTokenId = replacedByTokenId;
         entity.UpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
@@ -160,12 +163,13 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         Guid replacedByTokenId,
         CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var now = DateTime.UtcNow;
 
         // Single atomic UPDATE ... WHERE id = @id AND revoked_at IS NULL. The database admits
         // exactly one concurrent caller while the row is still active, so parallel refresh
         // requests cannot each mint a successor and fork the token chain.
-        var affected = await _context.RefreshTokens
+        var affected = await db.RefreshTokens
             .Where(t => t.Id == tokenId && t.RevokedAt == null)
             .ExecuteUpdateAsync(
                 s => s
@@ -187,7 +191,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         string reason,
         CancellationToken ct = default)
     {
-        var tokens = await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        var tokens = await db.RefreshTokens
             .Where(t => t.SubjectId == subjectId && t.RevokedAt == null)
             .ToListAsync(ct);
 
@@ -199,7 +204,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             token.UpdatedAt = now;
         }
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return tokens.Count;
     }
@@ -210,7 +215,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         string reason,
         CancellationToken ct = default)
     {
-        var tokens = await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        var tokens = await db.RefreshTokens
             .Where(t => t.OidcSessionId == oidcSessionId && t.RevokedAt == null)
             .ToListAsync(ct);
 
@@ -222,7 +228,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             token.UpdatedAt = now;
         }
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return tokens.Count;
     }
@@ -234,9 +240,10 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         string reason,
         CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         Guid.TryParse(sessionId, out var legacyTokenId);
 
-        var tokens = await _context.RefreshTokens
+        var tokens = await db.RefreshTokens
             .Where(t => t.SubjectId == subjectId
                 && t.RevokedAt == null
                 && (t.OidcSessionId == sessionId
@@ -251,7 +258,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             token.UpdatedAt = now;
         }
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return tokens.Count;
     }
@@ -263,9 +270,10 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         string reason,
         CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         Guid.TryParse(currentSessionId, out var legacyTokenId);
 
-        var tokens = await _context.RefreshTokens
+        var tokens = await db.RefreshTokens
             .Where(t => t.SubjectId == subjectId && t.RevokedAt == null)
             .ToListAsync(ct);
 
@@ -284,7 +292,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             count++;
         }
 
-        await _context.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return count;
     }
@@ -292,7 +300,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
     /// <inheritdoc />
     public async Task UpdateLastUsedAsync(string tokenHash, CancellationToken ct = default)
     {
-        await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        await db.RefreshTokens
             .Where(t => t.TokenHash == tokenHash)
             .ExecuteUpdateAsync(
                 s => s
@@ -304,7 +313,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
     /// <inheritdoc />
     public async Task<int> PruneExpiredAsync(DateTime cutoff, CancellationToken ct = default)
     {
-        return await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        return await db.RefreshTokens
             .Where(t => t.ExpiresAt < cutoff || (t.RevokedAt != null && t.RevokedAt < cutoff))
             .ExecuteDeleteAsync(ct);
     }
@@ -314,7 +324,8 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         Guid subjectId,
         CancellationToken ct = default)
     {
-        return await _context.RefreshTokens
+        await using var db = await _contexts.CreateAsync(ct);
+        return await db.RefreshTokens
             .AsNoTracking()
             .Where(t => t.SubjectId == subjectId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
             .OrderByDescending(t => t.LastUsedAt ?? t.IssuedAt)

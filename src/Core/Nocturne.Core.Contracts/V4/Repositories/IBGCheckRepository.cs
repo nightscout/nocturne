@@ -19,14 +19,13 @@ public interface IBGCheckRepository : ILegacyKeyedRepository<BGCheck>, ISyncKeye
     /// Retrieve a page of <see cref="BGCheck"/> records filtered by time range, device, source, and origin.
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end of the time window, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
     /// <param name="device">Optional device identifier filter.</param>
     /// <param name="source">Optional data source filter.</param>
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
     /// <param name="nativeOnly">When <c>true</c>, excludes records projected from legacy V1/V2/V3 entries.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<BGCheck>> GetAsync(
         DateTime? from,
         DateTime? to,
@@ -50,12 +49,10 @@ public interface IBGCheckRepository : ILegacyKeyedRepository<BGCheck>, ISyncKeye
     /// </summary>
     /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>Retrieve all <see cref="BGCheck"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<BGCheck>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default

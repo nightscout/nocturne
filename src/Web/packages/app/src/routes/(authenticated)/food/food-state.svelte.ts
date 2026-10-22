@@ -2,8 +2,8 @@ import { toast } from 'svelte-sonner';
 import { SvelteSet } from 'svelte/reactivity';
 import { distinct } from '$lib/utils/collections';
 import type { Food } from '$api';
-import type { GiLevel, SortMode } from './types.js';
-import { giFromInt } from './types.js';
+import type { SortMode } from './types.js';
+import { foodCategoryMap, giFromInt, type GiLevel } from '$lib/components/food';
 import {
   getFoods,
   createFood as createFoodRemote,
@@ -31,6 +31,8 @@ export class FoodState {
 
   /** Unique category names derived from the food list */
   categories = $derived(distinct(this.foods.map((f) => f.category || null)).sort());
+
+  categoryMap = $derived(foodCategoryMap(this.foods));
 
   /** Filtered + sorted food list */
   filteredFoods = $derived.by(() => {

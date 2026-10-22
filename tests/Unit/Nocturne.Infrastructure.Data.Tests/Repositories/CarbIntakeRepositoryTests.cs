@@ -37,7 +37,7 @@ public class CarbIntakeRepositoryTests : IDisposable
         _mockDeduplicationService = new Mock<IDeduplicationService>();
 
         _repo = new CarbIntakeRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             _mockDeduplicationService.Object,
             new Mock<IAuditContext>().Object,
             NullLogger<CarbIntakeRepository>.Instance);

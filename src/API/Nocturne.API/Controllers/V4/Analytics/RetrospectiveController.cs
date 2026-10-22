@@ -6,6 +6,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.API.Services.Devices;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -102,14 +103,9 @@ public class RetrospectiveController : ControllerBase
         var fromMills = time - (30 * 60 * 1000); // 30 minutes before
         var toMills = time + (5 * 60 * 1000);    // 5 minutes after
         var findQuery = $"{{\"mills\":{{\"$gte\":{fromMills},\"$lte\":{toMills}}}}}";
-        var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
-            type: "sgv",
-            count: 50,
-            skip: 0,
-            findQuery: findQuery,
-            dateString: null,
-            reverseResults: false,
-            cancellationToken: cancellationToken
+        var entries = await _entryService.QueryEntriesAsync(
+            new EntryQuery { Type = "sgv", Count = 50, Find = findQuery },
+            cancellationToken
         );
         var entryList = entries?.ToList() ?? new List<Entry>();
         _logger.LogDebug("GetRetrospectiveData: Found {Count} entries for time {Time} (range: {From} to {To})",
@@ -239,10 +235,8 @@ public class RetrospectiveController : ControllerBase
         var fetchFrom = dayStart.UtcDateTime.AddHours(-8);
         var fetchTo = dayEnd.UtcDateTime;
         // Get entries for the day
-        var entries = await _entryService.GetEntriesAsync(
-            $"find[date][$gte]={startMills}&find[date][$lte]={endMills}",
-            count: 5000,
-            skip: 0,
+        var entries = await _entryService.QueryEntriesAsync(
+            new EntryQuery { Count = 5000, Find = $"find[date][$gte]={startMills}&find[date][$lte]={endMills}" },
             cancellationToken
         );
         var entryList = entries?.ToList() ?? new List<Entry>();
@@ -488,12 +482,12 @@ public class RetrospectiveController : ControllerBase
         {
             var startTime = tb.StartMills;
             var endTime = tb.EndMills;
-            if (endTime == null) continue;
+            if (endTime == null || tb.Rate is not { } rate) continue;
             if (targetTime >= startTime && targetTime < endTime)
             {
                 return new BasalData
                 {
-                    Rate = tb.Rate,
+                    Rate = rate,
                     IsTemp = true
                 };
             }
@@ -529,8 +523,8 @@ public class RetrospectiveController : ControllerBase
     {
         foreach (var tb in tempBasals.Where(tb => tb.EndMills is not null))
         {
-            if (targetTime >= tb.StartMills && targetTime < tb.EndMills)
-                return new BasalData { Rate = tb.Rate, IsTemp = true };
+            if (targetTime >= tb.StartMills && targetTime < tb.EndMills && tb.Rate is { } rate)
+                return new BasalData { Rate = rate, IsTemp = true };
         }
         return new BasalData { Rate = scheduledRateAt(targetTime), IsTemp = false };
     }

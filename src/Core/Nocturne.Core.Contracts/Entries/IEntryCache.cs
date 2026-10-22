@@ -17,7 +17,6 @@ public interface IEntryCache
     /// </summary>
     /// <param name="query">The <see cref="EntryQuery"/> that determines the cache key and filter parameters.</param>
     /// <param name="compute">Factory invoked on cache miss to produce the result that will be stored.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>
     /// The cached or freshly computed list of <see cref="Entry"/> records, or <c>null</c> if
     /// the query cannot be served from cache.
@@ -31,7 +30,6 @@ public interface IEntryCache
     /// Get the cached current entry, or compute and cache it.
     /// </summary>
     /// <param name="compute">Factory invoked on cache miss to fetch the latest <see cref="Entry"/>.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The current <see cref="Entry"/>, or <c>null</c> if no entries exist.</returns>
     Task<Entry?> GetOrComputeCurrentAsync(
         Func<Task<Entry?>> compute,
@@ -40,6 +38,5 @@ public interface IEntryCache
     /// <summary>
     /// Invalidate all cached entry data for the current tenant.
     /// </summary>
-    /// <param name="ct">Cancellation token.</param>
     Task InvalidateAsync(CancellationToken ct = default);
 }

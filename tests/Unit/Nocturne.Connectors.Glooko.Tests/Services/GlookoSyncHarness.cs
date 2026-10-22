@@ -72,7 +72,7 @@ internal sealed class FakeCursorStore : IConnectorSyncCursorStore
 public enum PublishKind
 {
     StateSpans,
-    ProfileStateSpans,
+    ProfileActivations,
     TempBasals,
     DeviceEvents,
     SystemEvents,
@@ -104,15 +104,13 @@ internal sealed class RecordingGlookoConnectorService : GlookoConnectorService
 
     public List<PublishKind> Published { get; } = [];
 
-    // Profile state spans reach the same publish as the chunks' spans; the profile mapper's
-    // OriginalId prefix is what tells the two batches apart.
     protected override Task<bool> PublishStateSpanDataAsync(
         IEnumerable<StateSpan> stateSpans, GlookoConnectorConfiguration config,
-        CancellationToken cancellationToken = default) =>
-        Record(stateSpans.All(s =>
-            s.OriginalId?.StartsWith("glooko_active_profile_", StringComparison.Ordinal) == true)
-            ? PublishKind.ProfileStateSpans
-            : PublishKind.StateSpans);
+        CancellationToken cancellationToken = default) => Record(PublishKind.StateSpans);
+
+    protected override Task<bool> PublishProfileActivationDataAsync(
+        IEnumerable<ProfileActivation> activations, GlookoConnectorConfiguration config,
+        CancellationToken cancellationToken = default) => Record(PublishKind.ProfileActivations);
 
     protected override Task<bool> PublishTempBasalDataAsync(
         IEnumerable<TempBasal> records, GlookoConnectorConfiguration config,

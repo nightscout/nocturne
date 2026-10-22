@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
 
@@ -14,14 +15,14 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 public static class GlucoseBucketResolver
 {
     /// <summary>Default VeryLow boundary (mg/dL) when the schedule entry has none.</summary>
-    public const short DefaultVeryLow = 54;
+    public const short DefaultVeryLow = (short)GlucoseConstants.VeryLowMgdl;
     /// <summary>Default TightLow boundary (mg/dL) when the schedule entry has none — also doubles
     /// as the in-range "Low" boundary in legacy schedules without VeryLow/TightLow set.</summary>
-    public const short DefaultTightLow = 70;
+    public const short DefaultTightLow = (short)GlucoseConstants.TargetBottomMgdl;
     /// <summary>Default TightHigh boundary (mg/dL) when the schedule entry has none.</summary>
-    public const short DefaultTightHigh = 140;
+    public const short DefaultTightHigh = (short)GlucoseConstants.TightTargetTopMgdl;
     /// <summary>Default VeryHigh boundary (mg/dL) when the schedule entry has none.</summary>
-    public const short DefaultVeryHigh = 250;
+    public const short DefaultVeryHigh = (short)GlucoseConstants.VeryHighMgdl;
 
     /// <summary>
     /// Computes the bucket for <paramref name="glucoseMgdl"/> using the provided boundaries.

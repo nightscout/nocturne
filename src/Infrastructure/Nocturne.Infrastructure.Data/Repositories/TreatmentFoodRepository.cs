@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -11,15 +12,14 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class TreatmentFoodRepository : ITreatmentFoodRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TreatmentFoodRepository"/> class.
     /// </summary>
-    /// <param name="context">The database context.</param>
-    public TreatmentFoodRepository(NocturneDbContext context)
+    public TreatmentFoodRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <summary>
@@ -33,7 +33,8 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entities = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await db
             .Set<TreatmentFoodEntity>()
             .AsNoTracking()
             .Include(tf => tf.Food)
@@ -57,13 +58,14 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var ids = carbIntakeIds.ToList();
         if (ids.Count == 0)
         {
             return Array.Empty<TreatmentFood>();
         }
 
-        var entities = await _context
+        var entities = await db
             .Set<TreatmentFoodEntity>()
             .AsNoTracking()
             .Include(tf => tf.Food)
@@ -87,12 +89,13 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
         CancellationToken cancellationToken = default
     )
     {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
         var entity = TreatmentFoodMapper.ToEntity(entry);
-        _context.Set<TreatmentFoodEntity>().Add(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        db.Set<TreatmentFoodEntity>().Add(entity);
+        await db.SaveChangesAsync(cancellationToken);
 
         var food = entity.FoodId.HasValue
-            ? await _context
+            ? await db
                 .Foods.AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == entity.FoodId.Value, cancellationToken)
             : null;
@@ -111,7 +114,8 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db
             .Set<TreatmentFoodEntity>()
             .FirstOrDefaultAsync(tf => tf.Id == entry.Id, cancellationToken);
 
@@ -121,10 +125,10 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
         }
 
         TreatmentFoodMapper.UpdateEntity(entity, entry);
-        await _context.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
 
         var food = entity.FoodId.HasValue
-            ? await _context
+            ? await db
                 .Foods.AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == entity.FoodId.Value, cancellationToken)
             : null;
@@ -140,7 +144,8 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
     /// <returns>True if the entry was deleted, otherwise false.</returns>
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var entity = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entity = await db
             .Set<TreatmentFoodEntity>()
             .FirstOrDefaultAsync(tf => tf.Id == id, cancellationToken);
 
@@ -149,8 +154,8 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
             return false;
         }
 
-        _context.Set<TreatmentFoodEntity>().Remove(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        db.Set<TreatmentFoodEntity>().Remove(entity);
+        await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 
@@ -165,7 +170,8 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        return await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db
             .Set<TreatmentFoodEntity>()
             .AsNoTracking()
             .CountAsync(tf => tf.FoodId == foodId, cancellationToken);
@@ -182,7 +188,8 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        return await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db
             .Set<TreatmentFoodEntity>()
             .Where(tf => tf.FoodId == foodId)
             .ExecuteUpdateAsync(
@@ -202,7 +209,8 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        return await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db
             .Set<TreatmentFoodEntity>()
             .Where(tf => tf.FoodId == foodId)
             .ExecuteDeleteAsync(cancellationToken);
@@ -219,7 +227,8 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var recentFoodIds = await _context
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var recentFoodIds = await db
             .Set<TreatmentFoodEntity>()
             .AsNoTracking()
             .Where(tf => tf.FoodId != null)
@@ -231,7 +240,7 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
 
         var ids = recentFoodIds.Select(x => x.FoodId).ToList();
 
-        var foods = await _context.Foods
+        var foods = await db.Foods
             .AsNoTracking()
             .Where(f => ids.Contains(f.Id))
             .ToListAsync(cancellationToken);

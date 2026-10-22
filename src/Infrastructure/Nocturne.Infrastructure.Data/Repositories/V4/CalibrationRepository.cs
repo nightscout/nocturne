@@ -24,7 +24,7 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// Initializes a new instance of the <see cref="CalibrationRepository"/> class.
     /// </summary>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public CalibrationRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger, IV4RecordBroadcaster<Calibration>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
+    public CalibrationRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger, IV4RecordBroadcaster<Calibration>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
         : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
     }
@@ -75,7 +75,7 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// Deletes all calibration records within the given time range.
     /// </summary>
     /// <param name="from">Inclusive start, or null for no lower bound.</param>
-    /// <param name="to">Exclusive end, or null for no upper bound.</param>
+    /// <param name="to">Inclusive end, or null for no upper bound.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
@@ -86,7 +86,7 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
         if (from.HasValue)
             query = query.Where(e => e.Timestamp >= from.Value);
         if (to.HasValue)
-            query = query.Where(e => e.Timestamp < to.Value);
+            query = query.Where(e => e.Timestamp <= to.Value);
 
         return await ctx.AuditedSoftDeleteAsync(query, AuditContext, $"timestamp={from:O}..{to:O}", ct);
     }

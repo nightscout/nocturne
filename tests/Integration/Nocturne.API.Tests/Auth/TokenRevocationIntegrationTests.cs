@@ -40,6 +40,7 @@ public class TokenRevocationIntegrationTests : ApiIntegrationTestBase
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Revocation Test User");
+        _accessToken = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _subjectId);
 
         Log($"Seeded tenant {_tenantId}, subject {_subjectId}");
     }
@@ -158,6 +159,7 @@ public class TokenRevocationIntegrationTests : ApiIntegrationTestBase
         body.GetProperty("active").GetBoolean().Should().BeTrue();
         body.TryGetProperty("sub", out _).Should().BeTrue("introspection response should include sub claim");
         body.TryGetProperty("exp", out _).Should().BeTrue("introspection response should include exp claim");
+        body.TryGetProperty("client_id", out _).Should().BeTrue("introspection response should include client_id");
         body.TryGetProperty("token_type", out _).Should().BeTrue("introspection response should include token_type");
     }
 

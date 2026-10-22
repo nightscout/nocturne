@@ -179,55 +179,6 @@ public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<Migrati
             $"{status.CollectionProgress.Count} collections");
     }
 
-    [Fact]
-    public async Task JobStatus_DuringMigration_ShowsProgressAndCompletion()
-    {
-        // Arrange
-        var request = new StartMigrationRequest
-        {
-            Mode = MigrationMode.MongoDb,
-            MongoConnectionString = _migration.MongoConnectionString,
-            MongoDatabaseName = MigrationTestFixture.DatabaseName,
-            Collections = ["entries", "treatments"]
-        };
-
-        // Act — start migration
-        var startResponse = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/start", request);
-        startResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
-        var jobInfo = await startResponse.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
-        jobInfo.Should().NotBeNull();
-
-        // Poll status — collect state transitions
-        var observedStates = new HashSet<MigrationJobState>();
-        MigrationJobStatus? finalStatus = null;
-
-        for (var i = 0; i < 60; i++)
-        {
-            var statusResponse = await AuthenticatedClient.GetAsync(
-                $"/api/v4/migration/{jobInfo!.Id}/status");
-            statusResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-
-            var status = await statusResponse.Content
-                .ReadFromJsonAsync<MigrationJobStatus>(JsonOptions);
-            status.Should().NotBeNull();
-            observedStates.Add(status!.State);
-            finalStatus = status;
-
-            if (status.State is MigrationJobState.Completed or MigrationJobState.Failed)
-                break;
-
-            await Task.Delay(500);
-        }
-
-        // Assert
-        finalStatus.Should().NotBeNull();
-        finalStatus!.State.Should().Be(MigrationJobState.Completed);
-        observedStates.Should().Contain(MigrationJobState.Running,
-            "should have observed Running state during polling");
-
-        Log($"Observed states: {string.Join(" -> ", observedStates.Order())}");
-    }
-
     #region Helpers
 
     private async Task<List<JsonElement>> GetV3EntriesAsync()

@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -27,7 +28,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 public class AlertSnoozeEndpointTests
 {
     private readonly DbContextOptions<NocturneDbContext> _options;
-    private readonly Mock<ITenantDbContextFactory> _contextFactory = new();
+    private readonly Mock<INocturneDbContextFactory> _contextFactory = new();
     private readonly Guid _tenantId = Guid.NewGuid();
 
     private sealed class InMemoryFactory(DbContextOptions<NocturneDbContext> options) : IDbContextFactory<NocturneDbContext>
@@ -57,7 +58,7 @@ public class AlertSnoozeEndpointTests
         tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
 
         var snoozeService = new AlertSnoozeService(
-            new InMemoryFactory(_options),
+            (new InMemoryFactory(_options)).AsNocturneFactory(_tenantId),
             tenantAccessor.Object,
             Mock.Of<IAlertRepository>(),
             Mock.Of<IAlertDeliveryService>(),

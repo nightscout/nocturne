@@ -258,4 +258,36 @@ public class StateSpanMetadataExtensionsTests
     {
         Treatment("Custom Override", 0.8).IsSameOverrideAs(Snapshot(null, 0.8)).Should().BeFalse();
     }
+
+    [Fact]
+    public void IsSamePresetAs_matches_two_records_of_one_collection()
+    {
+        Treatment("N Night").IsSamePresetAs(Treatment("N Night")).Should().BeTrue();
+        Snapshot(null, 0.8).IsSamePresetAs(Snapshot(null, 0.8)).Should().BeTrue();
+        Treatment("N Night").IsSamePresetAs(Treatment("X Exercise")).Should().BeFalse();
+        Snapshot(null, 0.8).IsSamePresetAs(Snapshot(null, 0.6)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsSamePresetAs_compares_profile_spans_by_profile_name()
+    {
+        Dictionary<string, object> Profile(string name) => new()
+        {
+            [StateSpanMetadataExtensions.ProfileNameKey] = name, ["reason"] = "Profile switch",
+        };
+
+        Profile("Weekday").IsSamePresetAs(Profile("Weekday")).Should().BeTrue();
+        Profile("Weekday").IsSamePresetAs(Profile("Weekend")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsSamePresetAs_reads_missing_metadata_as_an_unnamed_preset_at_full_strength()
+    {
+        Dictionary<string, object>? none = null;
+
+        none.IsSamePresetAs(null).Should().BeTrue();
+        none.IsSamePresetAs(Treatment(null, factor: null)).Should().BeTrue();
+        none.IsSamePresetAs(Treatment("N Night")).Should().BeFalse();
+        Treatment(null, 0.8).IsSamePresetAs(none).Should().BeFalse();
+    }
 }

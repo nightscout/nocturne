@@ -1,3 +1,4 @@
+using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -94,7 +95,7 @@ public class CompressionLowServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var context = new NocturneDbContext(options) { TenantId = TenantId };
-        var uiSettings = new UISettingsService(context, NullLogger<UISettingsService>.Instance);
+        var uiSettings = new UISettingsService(context.AsFactory(), NullLogger<UISettingsService>.Instance);
         await context.DisposeAsync();
 
         var sut = new CompressionLowService(
@@ -151,6 +152,27 @@ public class CompressionLowServiceTests
         await _sut.AcceptSuggestionAsync(suggestion.Id, suggestion.StartMills, suggestion.EndMills);
 
         VerifyArchivedUnder(OwnerSubjectId);
+    }
+
+    [Fact]
+    public async Task AcceptSuggestionAsync_DemoSeedTagsTheCreatedExclusionSpan()
+    {
+        var suggestion = PendingSuggestion(stillPendingAfterReview: 1);
+        StateSpan? captured = null;
+        _stateSpanService
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .Callback<StateSpan, CancellationToken>((span, _) => captured = span)
+            .ReturnsAsync((StateSpan span, CancellationToken _) =>
+            {
+                span.Id = Guid.NewGuid().ToString();
+                return span;
+            });
+
+        await _sut.AcceptSuggestionAsync(
+            suggestion.Id, suggestion.StartMills, suggestion.EndMills, demoSeed: true);
+
+        captured!.Metadata.Should().ContainKey("DemoSeed").WhoseValue.Should().Be(true);
+        captured.Metadata.Should().ContainKey("SuggestionId").WhoseValue.Should().Be(suggestion.Id.ToString());
     }
 
     [Fact]

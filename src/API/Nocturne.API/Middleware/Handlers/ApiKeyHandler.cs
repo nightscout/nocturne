@@ -1,12 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
+using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Middleware.Handlers;
@@ -23,12 +26,12 @@ public class ApiKeyHandler : IAuthHandler
 
     public string Name => "ApiKeyHandler";
 
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ApiKeyHandler> _logger;
 
     public ApiKeyHandler(
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        INocturneDbContextFactory dbContextFactory,
         TimeProvider timeProvider,
         ILogger<ApiKeyHandler> logger)
     {
@@ -82,8 +85,7 @@ public class ApiKeyHandler : IAuthHandler
         }
 
         // 5. Query for matching grant
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
-        dbContext.TenantId = tenantCtx.TenantId;
+        await using var dbContext = await _dbContextFactory.CreateForTenantAsync(tenantCtx.TenantId);
 
         var activeGrants = DirectGrantTokenHandler.ActiveDirectGrants(
             dbContext.OAuthGrants.AsNoTracking(),
@@ -114,7 +116,7 @@ public class ApiKeyHandler : IAuthHandler
             var scopeFactory = context.RequestServices?.GetService<IServiceScopeFactory>();
             if (scopeFactory != null)
             {
-                _ = SendRotationNudgeAsync(scopeFactory, grant);
+                _ = SendRotationNudgeAsync(scopeFactory, tenantCtx, grant);
             }
         }
 
@@ -134,15 +136,37 @@ public class ApiKeyHandler : IAuthHandler
         });
     }
 
-    private async Task SendRotationNudgeAsync(IServiceScopeFactory scopeFactory, OAuthGrantEntity grant)
+    /// <remarks>
+    /// Runs after the request may have ended, on a scope of its own opened on the grant's tenant: the
+    /// notification is tenant-scoped, and a fresh scope carries no tenant until one is set. A site
+    /// secret held by the device subject has no person behind it to read the nudge, so it goes to
+    /// the tenant's owner.
+    /// </remarks>
+    private async Task SendRotationNudgeAsync(
+        IServiceScopeFactory scopeFactory, TenantContext tenant, OAuthGrantEntity grant)
     {
         try
         {
-            using var scope = scopeFactory.CreateScope();
+            await using var scope = TenantJobScope.Open(scopeFactory, tenant, "api-key-handler");
             var notificationService = scope.ServiceProvider.GetRequiredService<IInAppNotificationService>();
 
+            string? recipient = grant.SubjectId.ToString();
+            await using (var db = await _dbContextFactory.CreateForTenantAsync(tenant.TenantId))
+            {
+                if (await db.FindDeviceSubjectOf(tenant.TenantId) == grant.SubjectId)
+                {
+                    recipient = await scope.ServiceProvider.GetRequiredService<ITenantOwnerResolver>()
+                        .GetOwnerSubjectIdAsync(tenant.TenantId);
+                }
+            }
+
+            if (recipient is null)
+            {
+                return;
+            }
+
             await notificationService.CreateNotificationAsync(
-                userId: grant.SubjectId.ToString(),
+                userId: recipient,
                 type: "api-key-rotation",
                 title: "Rotate your API key",
                 category: NotificationCategory.ActionRequired,

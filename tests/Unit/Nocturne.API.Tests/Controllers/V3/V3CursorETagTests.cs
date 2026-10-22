@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -61,7 +62,7 @@ public class V3CursorETagTests
 
         var projectionService = new Mock<IProfileProjectionService>();
         projectionService
-            .Setup(s => s.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { new Profile { Mills = mills } });
         projectionService
             .Setup(s => s.CountProfilesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
@@ -78,7 +79,7 @@ public class V3CursorETagTests
     {
         var projectionService = new Mock<IProfileProjectionService>();
         projectionService
-            .Setup(s => s.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { new Profile { Mills = 1 } });
         projectionService
             .Setup(s => s.CountProfilesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
@@ -102,7 +103,7 @@ public class V3CursorETagTests
 
         var projectionService = new Mock<IProfileProjectionService>();
         projectionService
-            .Setup(s => s.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { new Profile { Mills = mills } });
         projectionService
             .Setup(s => s.CountProfilesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
@@ -141,13 +142,11 @@ public class V3CursorETagTests
         controller.Response.Headers["ETag"].ToString().Should().Be($"W/\"{newer}\"");
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        var envelope = okResult.Value!;
-        var resultProperty = envelope.GetType().GetProperty("result");
-        var profiles = resultProperty!.GetValue(envelope)
-            .Should().BeAssignableTo<IEnumerable<Profile>>().Subject.ToList();
+        var profiles = okResult.Value.Should().BeOfType<V3Envelope<object>>().Subject.Result
+            .Should().BeAssignableTo<IEnumerable<JsonObject>>().Subject.ToList();
 
         // Ascending order matters: AAPS activates the LAST element of the page.
-        profiles.Select(p => p.SrvModified).Should().Equal(older, newer);
+        profiles.Select(p => p["srvModified"]!.GetValue<long>()).Should().Equal(older, newer);
     }
 
     [Fact]
@@ -201,10 +200,9 @@ public class V3CursorETagTests
         controller.Response.Headers["ETag"].ToString().Should().Be($"W/\"{modified}\"");
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        var resultProperty = okResult.Value!.GetType().GetProperty("result");
-        var returned = resultProperty!.GetValue(okResult.Value)
-            .Should().BeAssignableTo<IEnumerable<Food>>().Subject.ToList();
-        returned.Should().ContainSingle().Which.Name.Should().Be("edited");
+        var returned = okResult.Value.Should().BeOfType<V3Envelope<object>>().Subject.Result
+            .Should().BeAssignableTo<IEnumerable<JsonObject>>().Subject.ToList();
+        returned.Should().ContainSingle().Which["name"]!.GetValue<string>().Should().Be("edited");
     }
 
     [Fact]
@@ -218,7 +216,6 @@ public class V3CursorETagTests
             .ReturnsAsync(new Treatment { EventType = "Note", SrvModified = mills });
 
         var controller = new TreatmentsController(
-            Mock.Of<ITreatmentStore>(),
             Mock.Of<IDocumentProcessingService>(),
             treatmentService.Object,
             NullLogger<TreatmentsController>.Instance)

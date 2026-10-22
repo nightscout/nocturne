@@ -8,20 +8,11 @@ namespace Nocturne.Core.Contracts.Profiles;
 /// </summary>
 public interface IPropertiesService
 {
-    /// <summary>
-    /// Get all properties from the sandbox
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>All available properties</returns>
     Task<Dictionary<string, object>> GetAllPropertiesAsync(
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>
-    /// Get specific properties by names
-    /// </summary>
-    /// <param name="propertyNames">List of property names to retrieve</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Selected properties</returns>
     Task<Dictionary<string, object>> GetPropertiesAsync(
         IEnumerable<string> propertyNames,

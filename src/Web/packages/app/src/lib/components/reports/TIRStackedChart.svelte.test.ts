@@ -42,4 +42,56 @@ describe("TIRStackedChart", () => {
     // render logic fires: the inset exists in the DOM whenever tightTarget is present.
     await expect.element(page.getByTestId("tight-range-inset")).toBeInTheDocument();
   });
+
+  describe("horizontal band key", () => {
+    const percentages = { veryLow: 2, low: 3, target: 70, tightTarget: 40, high: 15, veryHigh: 10 };
+
+    it("shows six labelled percentages on screen when keyOnScreen is set", async () => {
+      render(TIRStackedChart, {
+        props: { percentages, orientation: "horizontal", compact: true, keyOnScreen: true },
+      });
+
+      const key = page.getByTestId("band-key");
+      await expect.element(key).toBeVisible();
+      for (const text of [
+        "2% Very Low",
+        "3% Low",
+        "70% In Range",
+        "40% in tight range",
+        "15% High",
+        "10% Very High",
+      ]) {
+        await expect.element(key.getByText(text)).toBeVisible();
+      }
+    });
+
+    it("keeps the key off screen for a default horizontal bar", async () => {
+      render(TIRStackedChart, {
+        props: { percentages, orientation: "horizontal", compact: true },
+      });
+
+      await expect.element(page.getByTestId("band-key")).not.toBeVisible();
+    });
+
+    it("wraps the key onto more than one line inside a 440px container", async () => {
+      const target = document.body.appendChild(document.createElement("div"));
+      target.style.width = "440px";
+      try {
+        render(TIRStackedChart, {
+          props: { percentages, orientation: "horizontal", compact: true, keyOnScreen: true },
+          target,
+        });
+
+        const key = page.getByTestId("band-key");
+        await expect.element(key).toBeVisible();
+        const keyEl = key.element() as HTMLElement;
+        const rowHeight = (keyEl.firstElementChild as HTMLElement).offsetHeight;
+        expect(keyEl.offsetWidth).toBeLessThanOrEqual(440);
+        expect(keyEl.scrollWidth).toBeLessThanOrEqual(440);
+        expect(keyEl.offsetHeight).toBeGreaterThan(rowHeight * 1.5);
+      } finally {
+        target.remove();
+      }
+    });
+  });
 });

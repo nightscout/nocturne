@@ -42,7 +42,7 @@ public class PasskeyCeremonyHostExtensionsTests
         };
 
         return new PasskeyService(
-            TestDbContextFactory.CreateInMemoryContext(),
+            TestDbContextFactory.CreateInMemoryContext().AsFactory(),
             new Fido2(fido2Config),
             new EphemeralDataProtectionProvider(),
             Options.Create(fido2Config),

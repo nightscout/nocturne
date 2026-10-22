@@ -16,7 +16,7 @@
   import { getFood as getFoodById, getFoods as getAllFoods } from "$api/generated/foods.generated.remote";
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";
-  import { AddFoodDialog } from "$lib/components/food";
+  import { AddFoodDialog, foodCategoryMap, type FoodCategoryMap } from "$lib/components/food";
 
   interface Props {
     /** Whether the dialog is open */
@@ -58,7 +58,7 @@
   let showEditFoodDialog = $state(false);
   let foodToEdit = $state<Food | null>(null);
   let isLoadingFood = $state(false);
-  let categories = $state<Record<string, Record<string, boolean>>>({});
+  let categories = $state<FoodCategoryMap>({});
 
   const submission = useToastSubmission("Failed to update food entry");
 
@@ -141,19 +141,7 @@
 
       foodToEdit = food;
 
-      // Build categories from all foods
-      const catMap: Record<string, Record<string, boolean>> = {};
-      for (const f of allFoods) {
-        if (f.category) {
-          if (!catMap[f.category]) {
-            catMap[f.category] = {};
-          }
-          if (f.subcategory) {
-            catMap[f.category][f.subcategory] = true;
-          }
-        }
-      }
-      categories = catMap;
+      categories = foodCategoryMap(allFoods);
 
       showEditFoodDialog = true;
     } catch (err) {

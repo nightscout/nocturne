@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
@@ -35,7 +35,7 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// </summary>
     public string Name => "DirectGrantTokenHandler";
 
-    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<DirectGrantTokenHandler> _logger;
 
@@ -43,7 +43,7 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// Creates a new instance of DirectGrantTokenHandler
     /// </summary>
     public DirectGrantTokenHandler(
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        INocturneDbContextFactory dbContextFactory,
         TimeProvider timeProvider,
         ILogger<DirectGrantTokenHandler> logger)
     {
@@ -129,7 +129,7 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// parsing as one once a prefix is prepended.
     /// </param>
     internal static async Task<OAuthGrantEntity?> FindActiveGrantAsync(
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        INocturneDbContextFactory dbContextFactory,
         string token,
         Guid tenantId,
         DateTime now,
@@ -152,8 +152,7 @@ public class DirectGrantTokenHandler : IAuthHandler
         // a LIKE pattern below.
         var digestPrefix = LegacyNightscoutToken.ExtractDigestPrefix(legacyToken ?? token);
 
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync(ct);
-        dbContext.TenantId = tenantId;
+        await using var dbContext = await dbContextFactory.CreateForTenantAsync(tenantId, ct);
 
         var grants = ActiveDirectGrants(dbContext.OAuthGrants.AsNoTracking(), tenantId, now);
 
@@ -256,7 +255,7 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// <param name="ipAddress">The caller's address, when the connection has one.</param>
     /// <param name="userAgent">The caller's user-agent, when it sent one.</param>
     internal static async Task RecordLastUsedAsync(
-        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        INocturneDbContextFactory dbContextFactory,
         ILogger logger,
         Guid grantId,
         Guid tenantId,
@@ -265,8 +264,7 @@ public class DirectGrantTokenHandler : IAuthHandler
     {
         try
         {
-            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            dbContext.TenantId = tenantId;
+            await using var dbContext = await dbContextFactory.CreateForTenantAsync(tenantId);
             await dbContext.OAuthGrants
                 .IgnoreQueryFilters()
                 .Where(g => g.Id == grantId)

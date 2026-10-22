@@ -8,6 +8,7 @@
 @import "./styles/trio-theme.css";
 @import "./styles/aaps-theme.css";
 @import "./styles/classic-theme.css";
+@import "./styles/range-palette.css";
 
 @custom-variant dark (&:is(.dark *));
 

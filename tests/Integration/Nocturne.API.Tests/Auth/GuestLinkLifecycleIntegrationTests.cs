@@ -41,6 +41,7 @@ public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
 
         _tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectId, _accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Guest Link Test User");
+        _accessToken = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _subjectId);
 
         Log($"Seeded tenant {_tenantId}, subject {_subjectId}");
     }
@@ -260,6 +261,32 @@ public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
     #endregion
 
     #region Guest Session Access
+
+    [Fact]
+    public async Task GuestSession_RedeemedOnASingleTenantApex_SurvivesTheSessionCheck()
+    {
+        // #2072: the redemption resolved the sole tenant but the session check on the next page
+        // did not, so the guest landed on the login page and the cookie was cleared.
+        var code = await CreateGuestLinkCodeAsync();
+        using var apex = Fixture.CreateHttpClient(new HttpClientHandler { UseCookies = false });
+        apex.DefaultRequestHeaders.Host = AuthTestHelpers.GetBaseDomain(ApiClient);
+
+        var activateResponse = await apex.PostAsJsonAsync("/api/v4/guest-links/activate", new { code });
+        activateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var guestCookie = activateResponse.Headers.GetValues("Set-Cookie")
+            .Single(c => c.StartsWith("nocturne-guest-session=", StringComparison.Ordinal))
+            .Split(';')[0];
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/auth/oidc/session");
+        request.Headers.Add("Cookie", guestCookie);
+        var response = await apex.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+        body.GetProperty("isAuthenticated").GetBoolean().Should().BeTrue();
+        response.Headers.TryGetValues("Set-Cookie", out var cleared);
+        (cleared ?? []).Should().NotContain(c => c.StartsWith("nocturne-guest-session=", StringComparison.Ordinal));
+    }
 
     [Fact]
     public async Task GuestSession_CanReadEntries()

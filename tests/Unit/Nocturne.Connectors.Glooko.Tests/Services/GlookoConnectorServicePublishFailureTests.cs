@@ -21,13 +21,13 @@ public class GlookoConnectorServicePublishFailureTests
     // Device and system events come from the V3 graph series; the V2 endpoints carry neither.
     [Theory]
     [InlineData(true, PublishKind.StateSpans)]
-    [InlineData(true, PublishKind.ProfileStateSpans)]
+    [InlineData(true, PublishKind.ProfileActivations)]
     [InlineData(true, PublishKind.TempBasals)]
     [InlineData(true, PublishKind.DeviceEvents)]
     [InlineData(true, PublishKind.SystemEvents)]
     [InlineData(true, PublishKind.Profiles)]
     [InlineData(false, PublishKind.StateSpans)]
-    [InlineData(false, PublishKind.ProfileStateSpans)]
+    [InlineData(false, PublishKind.ProfileActivations)]
     [InlineData(false, PublishKind.TempBasals)]
     [InlineData(false, PublishKind.Profiles)]
     public async Task SyncDataAsync_WhenOnePublishIsRejected_ReportsFailure(
@@ -70,7 +70,7 @@ public class GlookoConnectorServicePublishFailureTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task SyncDataAsync_WhenStateSpansAreNotRequested_DoesNotPublishProfileStateSpans(
+    public async Task SyncDataAsync_WhenStateSpansAreNotRequested_DoesNotPublishProfileActivations(
         bool useV3Api)
     {
         var service = BuildService(rejected: null);
@@ -81,7 +81,7 @@ public class GlookoConnectorServicePublishFailureTests
 
         result.Success.Should().BeTrue();
         service.Published.Should().Contain(PublishKind.Profiles);
-        service.Published.Should().NotContain(PublishKind.ProfileStateSpans);
+        service.Published.Should().NotContain(PublishKind.ProfileActivations);
         result.ItemsSynced.Should().NotContainKey(SyncDataType.StateSpans);
     }
 

@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Services.Demo.Services;
@@ -13,7 +14,10 @@ public static class DemoLifestyleSeeds
     /// <summary>A food library item; carbs/fat/protein per portion in grams.</summary>
     public sealed record FoodSeed(
         string Name, string Category, string Subcategory,
-        double Portion, string Unit, double Carbs, double Protein, double Fat, double Energy);
+        double Portion, string Unit, double Carbs, double Protein, double Fat, double EnergyKcal)
+    {
+        public double EnergyKilojoules => Math.Round(EnergyKcal * NutritionConstants.KilojoulesPerKilocalorie);
+    }
 
     /// <summary>Foods referenced by generated meals, plus a few browsables.</summary>
     public static readonly IReadOnlyList<FoodSeed> FoodLibrary =
@@ -89,13 +93,6 @@ public static class DemoLifestyleSeeds
         var spans = new List<SpanSeed>();
         var windowStart = localToday.AddDays(-days);
         var now = DateTime.Now;
-
-        // Profile: the seeded therapy profile is active for the whole window.
-        // Resolvers read the name from metadata, not from State (which is the
-        // ProfileState enum name).
-        spans.Add(new SpanSeed(
-            StateSpanCategory.Profile, nameof(ProfileState.Active), windowStart, null,
-            new Dictionary<string, object> { ["profileName"] = DemoTherapyProfile.ProfileName }));
 
         // Pump mode: Automatic, interrupted by occasional Manual windows and
         // by Exercise mode during workouts on exercise days.

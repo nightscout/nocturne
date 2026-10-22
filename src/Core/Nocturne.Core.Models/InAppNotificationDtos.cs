@@ -11,9 +11,6 @@ namespace Nocturne.Core.Models;
 /// <seealso cref="NotificationTemplate"/>
 public class InAppNotificationDto
 {
-    /// <summary>
-    /// Unique identifier for the notification
-    /// </summary>
     public Guid Id { get; set; }
 
     /// <summary>
@@ -41,9 +38,6 @@ public class InAppNotificationDto
     /// </summary>
     public string? Subtitle { get; set; }
 
-    /// <summary>
-    /// When the notification was created
-    /// </summary>
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
@@ -66,9 +60,6 @@ public class InAppNotificationDto
     /// </summary>
     public string? SourceId { get; set; }
 
-    /// <summary>
-    /// Optional metadata containing notification-specific data
-    /// </summary>
     public Dictionary<string, object>? Metadata { get; set; }
 
     /// <summary>
@@ -78,13 +69,10 @@ public class InAppNotificationDto
 }
 
 /// <summary>
-/// Represents an action button available on a notification
+/// Action button available on a notification
 /// </summary>
 public class NotificationActionDto
 {
-    /// <summary>
-    /// Unique identifier for the action within the notification
-    /// </summary>
     public string ActionId { get; set; } = string.Empty;
 
     /// <summary>
@@ -92,9 +80,6 @@ public class NotificationActionDto
     /// </summary>
     public string Label { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Optional icon identifier for the action button
-    /// </summary>
     public string? Icon { get; set; }
 
     /// <summary>
@@ -146,27 +131,6 @@ public class GlucoseCondition
 }
 
 /// <summary>
-/// Real-time notification event for SignalR broadcasting
-/// </summary>
-public class NotificationEvent
-{
-    /// <summary>
-    /// Type of event: "created", "archived", or "updated"
-    /// </summary>
-    public string EventType { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The notification data (for created/updated events)
-    /// </summary>
-    public InAppNotificationDto? Notification { get; set; }
-
-    /// <summary>
-    /// Why the notification was archived (for archived events)
-    /// </summary>
-    public NotificationArchiveReason? ArchiveReason { get; set; }
-}
-
-/// <summary>
 /// Request to create a notification programmatically (for third-party integrations).
 /// If a <see cref="NotificationTemplate"/> is registered for the given <see cref="Type"/>,
 /// its defaults are merged with the values provided here.
@@ -181,9 +145,6 @@ public class CreateNotificationRequest
     [Required]
     public string Type { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Notification title
-    /// </summary>
     [Required]
     public string Title { get; set; } = string.Empty;
 

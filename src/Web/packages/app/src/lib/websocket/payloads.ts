@@ -1,6 +1,7 @@
-import type { InAppNotificationDto } from "$lib/api/generated/nocturne-api-client";
+import { TrackerRealtimeAction, type InAppNotificationDto } from "$lib/api/generated/nocturne-api-client";
 import { isOneOf, isRecord, nonEmptyString } from "$lib/utils/type-guards";
 import { isoNow } from "$lib/utils/now";
+import { toIsoString } from "$lib/utils/api-date";
 import type {
   AlarmEvent,
   AnnouncementEvent,
@@ -30,6 +31,18 @@ export function isEntryDocument(value: unknown): value is Entry {
   );
 }
 
+/** A native record document: the id the realtime store keys on is a string, and
+ *  the mills it sorts on, where present, a number. */
+export function isRecordDocument<T extends { id?: string; mills?: number }>(
+  value: unknown
+): value is T {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    (value.mills === undefined || value.mills === null || typeof value.mills === "number")
+  );
+}
+
 export function parseDataUpdate(data: unknown): Entry[] {
   return (Array.isArray(data) ? data : [data]).filter(isEntryDocument);
 }
@@ -39,27 +52,37 @@ export function parseStorageEvent(data: unknown): StorageEvent {
   return {
     colName: nonEmptyString(fields.colName) ?? nonEmptyString(fields.collection) ?? "entries",
     doc: fields.doc || fields.document || data,
+    recordType: nonEmptyString(fields.recordType),
+    id: nonEmptyString(fields.id),
   };
 }
+
+const NUMERIC_LEVELS: Readonly<Record<number, string>> = { 2: "urgent", 1: "warn", 0: "info" };
+
+const levelOf = (value: unknown): string | undefined =>
+  typeof value === "number" ? NUMERIC_LEVELS[value] : nonEmptyString(value);
+
+const timestampOf = (value: unknown): string | undefined =>
+  typeof value === "number" ? (toIsoString(new Date(value)) ?? undefined) : nonEmptyString(value);
 
 export function parseAnnouncement(data: unknown): AnnouncementEvent {
   const fields = fieldsOf(data);
   return {
     message: nonEmptyString(fields.message) ?? nonEmptyString(fields.text) ?? String(data),
     title: nonEmptyString(fields.title) ?? "Announcement",
-    level: nonEmptyString(fields.level) ?? "info",
-    timestamp: nonEmptyString(fields.timestamp) ?? isoNow(),
+    level: levelOf(fields.level) ?? "info",
+    timestamp: timestampOf(fields.timestamp) ?? isoNow(),
   };
 }
 
 export function parseAlarm(data: unknown): AlarmEvent {
   const fields = fieldsOf(data);
   return {
-    level: nonEmptyString(fields.level) ?? "warn",
+    level: levelOf(fields.level) ?? "warn",
     title: nonEmptyString(fields.title) ?? "Alarm",
     message: nonEmptyString(fields.message),
     plugin: nonEmptyString(fields.plugin) ?? nonEmptyString(fields.source),
-    timestamp: nonEmptyString(fields.timestamp) ?? isoNow(),
+    timestamp: timestampOf(fields.timestamp) ?? isoNow(),
     key: nonEmptyString(fields.key) ?? nonEmptyString(fields.id),
   };
 }
@@ -71,7 +94,7 @@ export function parseUrgentAlarm(data: unknown): AlarmEvent {
     title: nonEmptyString(fields.title),
     message: nonEmptyString(fields.message),
     plugin: nonEmptyString(fields.plugin),
-    timestamp: nonEmptyString(fields.timestamp),
+    timestamp: timestampOf(fields.timestamp),
     key: nonEmptyString(fields.key),
     level: "urgent",
   };
@@ -92,18 +115,11 @@ export function parseNotification(data: unknown): InAppNotificationDto | null {
   return isRecord(data) && typeof data.id === "string" ? data : null;
 }
 
-const TRACKER_ACTIONS = [
-  "create",
-  "delete",
-  "complete",
-  "ack",
-] as const satisfies readonly TrackerUpdateEvent["action"][];
-
 /** A tracker event needs both a known action and an identifiable instance, since
  *  the store keys every action on `instance.id`. */
 export function parseTrackerUpdate(data: unknown): TrackerUpdateEvent | null {
   const fields = fieldsOf(data);
-  if (!isOneOf(TRACKER_ACTIONS, fields.action)) return null;
+  if (!isOneOf(Object.values(TrackerRealtimeAction), fields.action)) return null;
 
   const instance = fields.instance;
   if (!isRecord(instance) || nonEmptyString(instance.id) === undefined) return null;

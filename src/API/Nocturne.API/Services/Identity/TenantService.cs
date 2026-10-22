@@ -12,6 +12,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 
@@ -31,11 +32,12 @@ namespace Nocturne.API.Services.Identity;
 /// <seealso cref="AuthorizationSeedService"/>
 public partial class TenantService : ITenantService
 {
-    private readonly IDbContextFactory<NocturneDbContext> _factory;
+    private readonly INocturneDbContextFactory _factory;
     private readonly IMemoryCache _cache;
     private readonly OperatorConfiguration _config;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantRoleService _roleService;
+    private readonly GrantRevocationService _grantRevocation;
     private readonly ILogger<TenantService> _logger;
 
     private static readonly HashSet<string> ReservedSlugs =
@@ -76,11 +78,12 @@ public partial class TenantService : ITenantService
     /// <param name="roleService">Role service for seeding default roles on new tenant creation.</param>
     /// <param name="logger">The logger instance.</param>
     public TenantService(
-        IDbContextFactory<NocturneDbContext> factory,
+        INocturneDbContextFactory factory,
         IMemoryCache cache,
         IOptions<OperatorConfiguration> config,
         IHttpClientFactory httpClientFactory,
         ITenantRoleService roleService,
+        GrantRevocationService grantRevocation,
         ILogger<TenantService> logger)
     {
         _factory = factory;
@@ -88,13 +91,14 @@ public partial class TenantService : ITenantService
         _config = config.Value;
         _httpClientFactory = httpClientFactory;
         _roleService = roleService;
+        _grantRevocation = grantRevocation;
         _logger = logger;
     }
 
     public async Task<TenantCreatedDto> CreateAsync(
         string slug, string displayName, Guid creatorSubjectId, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
+        await using var context = await _factory.CreatePlatformAsync(ct);
 
         var tenant = new TenantEntity
         {
@@ -106,10 +110,8 @@ public partial class TenantService : ITenantService
         context.Tenants.Add(tenant);
         await context.SaveChangesAsync(ct);
 
-        // Set the RLS tenant context so subsequent writes to tenant-scoped
-        // tables (roles, members, OAuth clients) are permitted. The factory-
-        // created context has no TenantId, so the connection interceptor
-        // won't set the GUC automatically.
+        // The tenant's id exists only once the row is saved, so the platform context is pinned
+        // to it here for the tenant-scoped writes (roles, members, OAuth clients) that follow.
         await context.PinTenantAsync(tenant.Id, ct);
 
         // Seed default roles for this tenant
@@ -133,7 +135,7 @@ public partial class TenantService : ITenantService
     public async Task<TenantCreatedDto> CreateWithoutOwnerAsync(
         string slug, string displayName, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
+        await using var context = await _factory.CreatePlatformAsync(ct);
 
         var tenant = new TenantEntity
         {
@@ -145,8 +147,6 @@ public partial class TenantService : ITenantService
         context.Tenants.Add(tenant);
         await context.SaveChangesAsync(ct);
 
-        // Set the RLS tenant context so subsequent writes to tenant-scoped
-        // tables (roles, members, OAuth clients) are permitted.
         await context.PinTenantAsync(tenant.Id, ct);
 
         // Seed default roles for this tenant (but don't assign an owner)
@@ -168,8 +168,7 @@ public partial class TenantService : ITenantService
     /// </summary>
     public async Task SeedAfterResetAsync(Guid tenantId, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
-        await context.PinTenantAsync(tenantId, ct);
+        await using var context = await _factory.CreateForTenantAsync(tenantId, ct);
 
         await _roleService.SeedRolesForTenantAsync(tenantId, ct);
         await CreatePublicSubjectMembershipAsync(context, tenantId, ct);
@@ -178,7 +177,7 @@ public partial class TenantService : ITenantService
 
     public async Task<List<TenantDto>> GetAllAsync(CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
+        await using var context = await _factory.CreatePlatformAsync(ct);
         return await context.Tenants.AsNoTracking()
             .Select(t => new TenantDto(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt))
             .ToListAsync(ct);
@@ -189,7 +188,7 @@ public partial class TenantService : ITenantService
         // Pinned to the tenant asked about — the member list this returns is an authorization
         // primitive (TenantController.IsCallerTenantOwnerAsync reads it), so it must not depend
         // on whatever tenant the caller's context happened to carry.
-        await using var context = await _factory.CreateTenantPinnedContextAsync(id, ct);
+        await using var context = await _factory.CreateForTenantAsync(id, ct);
         var tenant = await context.Tenants.AsNoTracking()
             .Include(t => t.Members)
                 .ThenInclude(m => m.Subject)
@@ -222,7 +221,7 @@ public partial class TenantService : ITenantService
     public async Task<TenantDto> UpdateAsync(
         Guid id, string displayName, bool isActive, bool? allowAccessRequests = null, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
+        await using var context = await _factory.CreatePlatformAsync(ct);
         var tenant = await context.Tenants.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"Tenant {id} not found");
 
@@ -240,7 +239,7 @@ public partial class TenantService : ITenantService
 
     public async Task<TenantSettingsDto> GetSettingsAsync(Guid id, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
+        await using var context = await _factory.CreatePlatformAsync(ct);
         var settings = await context.Tenants
             .AsNoTracking()
             .Where(t => t.Id == id)
@@ -253,7 +252,7 @@ public partial class TenantService : ITenantService
     public async Task<TenantSettingsDto> SetAllowPublicDocsAsync(
         Guid id, bool allowPublicDocs, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
+        await using var context = await _factory.CreatePlatformAsync(ct);
         var tenant = await context.Tenants.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"Tenant {id} not found");
 
@@ -269,7 +268,7 @@ public partial class TenantService : ITenantService
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
+        await using var context = await _factory.CreatePlatformAsync(ct);
         var tenant = await context.Tenants.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"Tenant {id} not found");
 
@@ -284,7 +283,7 @@ public partial class TenantService : ITenantService
         Guid tenantId, Guid subjectId, List<Guid> roleIds, List<string>? directPermissions = null,
         string? label = null, bool limitTo24Hours = false, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateTenantPinnedContextAsync(tenantId, ct);
+        await using var context = await _factory.CreateForTenantAsync(tenantId, ct);
 
         // Check if already a member
         var exists = await context.TenantMembers
@@ -329,7 +328,7 @@ public partial class TenantService : ITenantService
     public async Task<MemberRemovalResult> RemoveMemberAsync(
         Guid tenantId, Guid subjectId, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateTenantPinnedContextAsync(tenantId, ct);
+        await using var context = await _factory.CreateForTenantAsync(tenantId, ct);
         var member = await context.TenantMembers
             .Include(tm => tm.Subject)
             .FirstOrDefaultAsync(tm => tm.TenantId == tenantId && tm.SubjectId == subjectId, ct);
@@ -343,13 +342,8 @@ public partial class TenantService : ITenantService
         if (member.Subject?.IsSystemSubject == true)
             return new MemberRemovalResult(false, "Cannot remove system subject memberships");
 
-        var isOwner = await context.TenantMemberRoles
-            .AnyAsync(mr => mr.TenantMemberId == member.Id
-                && mr.TenantRole!.Slug == RoleSeeds.Owner, ct);
-
-        // A deactivated or system-subject peer is not a remaining owner.
-        if (isOwner && !await context.TenantMembers.OwnersOf(tenantId).AnyAsync(m => m.Id != member.Id, ct))
-            return new MemberRemovalResult(false, "Cannot remove the last owner of a tenant");
+        if (await context.TenantMembers.IsLastOwnerAsync(tenantId, member.Id, ct))
+            return new MemberRemovalResult(false, TenantOwnerFilter.LastOwnerRefusal);
 
         // Chat identity directory rows are global and carry no membership join, so a link left
         // behind here would keep answering bot commands for this tenant. It goes in the same
@@ -359,9 +353,15 @@ public partial class TenantService : ITenantService
             .Where(d => d.TenantId == tenantId && d.NocturneUserId == subjectId)
             .ToListAsync(ct);
 
+        // Grants carry no membership join either; left live, every one would work again the moment
+        // the subject is re-added. The revocation's save commits the removal with them.
+        var grants = await context.OAuthGrants
+            .Where(g => g.TenantId == tenantId && g.SubjectId == subjectId && g.RevokedAt == null)
+            .ToListAsync(ct);
+
         context.TenantMembers.Remove(member);
         context.ChatIdentityDirectory.RemoveRange(chatLinks);
-        await context.SaveChangesAsync(ct);
+        await _grantRevocation.RevokeAllAsync(context, grants, ct);
 
         return new MemberRemovalResult(true);
     }
@@ -371,7 +371,7 @@ public partial class TenantService : ITenantService
     {
         // Genuinely cross-tenant: the answer is the set of tenants this person belongs to, which
         // no single tenant pin can express. The subject pin gives reach over their own rows only.
-        await using var context = await _factory.CreateSubjectPinnedContextAsync(subjectId, ct);
+        await using var context = await _factory.CreateForSubjectAsync(subjectId, ct);
         return await context.TenantMembers.AsNoTracking()
             .Where(tm => tm.SubjectId == subjectId)
             .OrderByDescending(tm => tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))
@@ -393,7 +393,7 @@ public partial class TenantService : ITenantService
         if (ReservedSlugs.Contains(normalized))
             return new SlugValidationResult(false, "This name is reserved");
 
-        await using var context = await _factory.CreateDbContextAsync(ct);
+        await using var context = await _factory.CreatePlatformAsync(ct);
         var exists = await context.Tenants.AsNoTracking()
             .AnyAsync(t => t.Slug == normalized, ct);
 
@@ -431,7 +431,7 @@ public partial class TenantService : ITenantService
         ProvisionCredentialData? credential, ProvisionOidcIdentityData? oidcIdentity,
         CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateDbContextAsync(ct);
+        await using var context = await _factory.CreatePlatformAsync(ct);
         var provisioned = await context.ExecuteInTransactionAsync(async token =>
         {
             // 1. Create tenant
@@ -491,14 +491,10 @@ public partial class TenantService : ITenantService
             // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
             await SeedKnownOAuthClientsAsync(context, tenant.Id, token);
 
-            // 2. Resolve the owner subject.
-            // An OAuth account maps to a single subject reused across tenants, so if
-            // this OIDC identity is already linked (a prior signup with the same
-            // account), that subject IS the owner — even when the checkout email
-            // differs from the OAuth email (e.g. a differing Apple Pay email).
-            // Resolving by email first would create a fresh, credential-less owner
-            // and leave the tenant inaccessible. Fall back to an existing subject
-            // with the owner email, then to a new subject.
+            // 2. Resolve the owner subject. An OIDC account maps to one subject reused across
+            // tenants, so an already-linked identity names the owner even when the checkout email
+            // differs. Nothing else does: the owner email is never matched to an existing subject,
+            // since a subject's email proves nothing about who holds the new credential.
             var normalizedIssuer = oidcIdentity?.Issuer.TrimEnd('/');
             var existingIdentity = oidcIdentity is null
                 ? null
@@ -506,16 +502,21 @@ public partial class TenantService : ITenantService
                     x.OidcSubjectId == oidcIdentity.OidcSubjectId
                     && x.Issuer == normalizedIssuer, token);
 
-            var identitySubject = existingIdentity is null
+            var subject = existingIdentity is null
                 ? null
                 : await context.Subjects.FirstOrDefaultAsync(s => s.Id == existingIdentity.SubjectId, token);
-            var emailSubject = await context.Subjects.FirstOrDefaultAsync(s => s.Email == ownerEmail, token);
-            var subject = ChooseOwnerSubject(identitySubject, emailSubject);
             if (subject is null)
             {
+                var ownerId = credential?.SubjectId ?? oidcIdentity?.SubjectId ?? Guid.CreateVersion7();
+                if (await context.Subjects.AnyAsync(s => s.Id == ownerId, token))
+                {
+                    throw new ProvisionConflictException(
+                        $"Subject {ownerId} already exists; a provisioned owner is always a new subject.");
+                }
+
                 subject = new SubjectEntity
                 {
-                    Id = credential?.SubjectId ?? oidcIdentity?.SubjectId ?? Guid.CreateVersion7(),
+                    Id = ownerId,
                     Name = ownerUsername,
                     Username = ownerUsername.ToLowerInvariant(),
                     Email = ownerEmail,
@@ -631,22 +632,6 @@ public partial class TenantService : ITenantService
             _logger.LogWarning("Public system subject not found — skipping public access membership for tenant {TenantId}", tenantId);
         }
     }
-
-
-    /// <summary>
-    /// Chooses the owner subject for a provision from the candidates already resolved
-    /// from the database. An OAuth account maps to a single subject reused across
-    /// tenants, so a subject that already owns the incoming OIDC identity wins over one
-    /// merely matching the owner email — the two can differ (e.g. the checkout uses an
-    /// Apple Pay email while the OAuth account uses another). Preferring the email match
-    /// here would make the tenant owner a fresh, credential-less subject and lock the
-    /// user out of their own instance. Returns null when neither exists, i.e. the caller
-    /// must create a new subject.
-    /// </summary>
-    public static SubjectEntity? ChooseOwnerSubject(
-        SubjectEntity? existingOidcIdentitySubject,
-        SubjectEntity? existingEmailSubject)
-        => existingOidcIdentitySubject ?? existingEmailSubject;
 
     private static TenantDto ToDto(TenantEntity t) =>
         new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt);

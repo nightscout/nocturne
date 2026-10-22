@@ -19,7 +19,7 @@ public class PatientInsulinRepositoryTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        var factory = new TestTenantDbContextFactory(_context);
+        var factory = new TestNocturneDbContextFactory(_context);
         _repository = new PatientInsulinRepository(
             factory, NullLogger<PatientInsulinRepository>.Instance);
     }

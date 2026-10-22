@@ -54,6 +54,7 @@ public class LoopService : ILoopService, IDisposable
         LoopNotificationData data,
         LoopProfileSettings? loopSettings,
         string remoteAddress,
+        bool? isApnsProduction,
         CancellationToken cancellationToken = default
     )
     {
@@ -88,6 +89,7 @@ public class LoopService : ILoopService, IDisposable
                 data,
                 loopSettings!, // Validation ensures this is not null
                 remoteAddress,
+                isApnsProduction,
                 cancellationToken
             );
 
@@ -142,7 +144,7 @@ public class LoopService : ILoopService, IDisposable
         {
             return (
                 false,
-                "Loop notification failed: Invalid configuration - LOOP_APNS_KEY not set."
+                "Loop notification failed: Invalid configuration - set Loop:ApnsKey (or LOOP_APNS_KEY)."
             );
         }
 
@@ -150,7 +152,7 @@ public class LoopService : ILoopService, IDisposable
         {
             return (
                 false,
-                "Loop notification failed: Invalid configuration - LOOP_APNS_KEY_ID not set."
+                "Loop notification failed: Invalid configuration - set Loop:ApnsKeyId (or LOOP_APNS_KEY_ID)."
             );
         }
 
@@ -161,7 +163,7 @@ public class LoopService : ILoopService, IDisposable
         {
             return (
                 false,
-                "Loop notification failed: Invalid configuration - LOOP_DEVELOPER_TEAM_ID not set."
+                "Loop notification failed: Invalid configuration - set Loop:DeveloperTeamId (or LOOP_DEVELOPER_TEAM_ID)."
             );
         }
 
@@ -198,6 +200,7 @@ public class LoopService : ILoopService, IDisposable
         LoopNotificationData data,
         LoopProfileSettings loopSettings,
         string remoteAddress,
+        bool? isApnsProduction,
         CancellationToken cancellationToken
     )
     {
@@ -220,9 +223,12 @@ public class LoopService : ILoopService, IDisposable
         var push = new ApplePush(ApplePushType.Alert)
             .AddAlert(alert)
             .AddToken(loopSettings.DeviceToken!)
-            .AddContentAvailable();
+            .AddContentAvailable()
+            .AddCustomProperty("interruption-level", "time-sensitive", addToApsDict: true);
 
-        if (string.Equals(_configuration.PushServerEnvironment, "development", StringComparison.OrdinalIgnoreCase))
+        var production = isApnsProduction
+            ?? !string.Equals(_configuration.PushServerEnvironment, "development", StringComparison.OrdinalIgnoreCase);
+        if (!production)
         {
             push.SendToDevelopmentServer();
         }

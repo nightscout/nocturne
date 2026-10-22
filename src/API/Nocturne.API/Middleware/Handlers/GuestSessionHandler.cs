@@ -73,11 +73,12 @@ public class GuestSessionHandler : IAuthHandler
         }
 
         // A guest grant belongs to exactly one tenant, so a session cannot be validated
-        // without a resolved tenant to validate it against.
+        // without a resolved tenant to validate it against. The cookie is kept: a host-only
+        // cookie on a single-tenant apex reaches that apex's cross-tenant paths too, and saying
+        // nothing about the grant is no reason to end it.
         if (context.GetTenantContext() is not { } tenantCtx)
         {
-            _logger.LogDebug("Guest session {GrantId} presented with no resolved tenant, clearing cookie", grantId);
-            ClearGuestSessionCookie(context);
+            _logger.LogDebug("Guest session {GrantId} presented with no resolved tenant", grantId);
             return AuthResult.Failure(InvalidSessionError);
         }
 
@@ -87,7 +88,7 @@ public class GuestSessionHandler : IAuthHandler
             using var scope = _scopeFactory.CreateScope();
 
             // Propagate tenant context into the child scope so RLS allows
-            // the oauth_grants query. Without this, the scoped DbContext has
+            // the oauth_grants query. Without this, a context created in the scope has
             // TenantId = Guid.Empty and RLS silently filters out the row.
             var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
             tenantAccessor.SetTenant(tenantCtx);

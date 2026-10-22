@@ -183,8 +183,10 @@
                       Status unavailable
                     {:else if googleHealthLoading}
                       Loading...
+                    {:else if googleHealth && !googleHealth.available}
+                      Unavailable
                     {:else}
-                      Not Configured
+                      Not connected
                     {/if}
                   </Badge>
                 </div>
@@ -232,6 +234,7 @@
               : mapConnectorStatus(connectorStatus)}
             syncProgress={syncProgressByConnector[connector.id ?? ""] ?? null}
             totalEntries={connectorStatus.totalEntries}
+            totalEntriesWindowDays={connectorStatus.totalEntriesWindowDays}
             entriesLast24h={connectorStatus.entriesLast24Hours}
             lastSeen={connectorStatus.lastEntryTime}
             lastSyncAttempt={connectorStatus.lastSyncAttempt}
@@ -264,9 +267,9 @@
           </DataSourceRow>
         {:else if hasData || isDisabled}
           <!-- Has data but not connected/disabled -->
-          {@const entryCount = isDisabled
-            ? 0
-            : (connectorDataSource?.totalEntries ?? 0)}
+          {@const countSource = isDisabled
+            ? connectorStatusInfo
+            : connectorDataSource}
           {@const entries24h = isDisabled
             ? 0
             : (connectorDataSource?.entriesLast24h ?? 0)}
@@ -278,8 +281,8 @@
             icon={connector.icon}
             status={isDisabled ? "disabled" : "offline"}
             syncProgress={syncProgressByConnector[connector.id ?? ""] ?? null}
-            totalEntries={entryCount}
-            totalCoversLast30Days
+            totalEntries={countSource?.totalEntries}
+            totalEntriesWindowDays={countSource?.totalEntriesWindowDays}
             entriesLast24h={entries24h}
             lastSeen={lastSeenDate}
             onclick={() => {
@@ -288,7 +291,8 @@
                 id: connector.id,
                 name: connector.name ?? connector.id,
                 description: connector.description,
-                totalEntries: dataSource?.totalEntries ?? 0,
+                totalEntries: countSource?.totalEntries,
+                totalEntriesWindowDays: countSource?.totalEntriesWindowDays,
                 lastEntryTime: dataSource?.lastSeen,
                 entriesLast24Hours: dataSource?.entriesLast24h ?? 0,
                 state:

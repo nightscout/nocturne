@@ -212,7 +212,7 @@ public sealed class ShareLinkControllerTests
         _service.Setup(s => s.SetScopesAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ShareLinkDto { Enabled = true, Scopes = [Scope.GlucoseRead] });
-        var controller = BuildController(Scope.SharingManage);
+        var controller = BuildController(Scope.SharingManage, Scope.GlucoseRead);
 
         var result = await controller.SetShareLinkScopes(
             new SetShareScopesRequest([Scope.GlucoseRead]), CancellationToken.None);
@@ -220,6 +220,20 @@ public sealed class ShareLinkControllerTests
         result.Result.Should().BeOfType<OkObjectResult>();
         _service.Verify(s => s.SetScopesAsync(
             It.IsAny<Guid>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetShareLinkScopes_beyond_what_the_caller_can_read_is_refused()
+    {
+        var controller = BuildController(Scope.SharingManage, Scope.GlucoseRead);
+
+        var result = await controller.SetShareLinkScopes(
+            new SetShareScopesRequest([Scope.GlucoseRead, Scope.TreatmentsRead]), CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        _service.Verify(s => s.SetScopesAsync(
+            It.IsAny<Guid>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

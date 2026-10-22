@@ -6,7 +6,7 @@ using Nocturne.Core.Models.Serializers;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents an entry for glucose readings, similar to the legacy sgv collection.
+/// Entry for glucose readings, similar to the legacy sgv collection.
 /// </summary>
 /// <remarks>
 /// Follows the mills-first timestamp pattern: <see cref="Mills"/> is the source of truth.
@@ -21,14 +21,14 @@ namespace Nocturne.Core.Models;
 public class Entry : ProcessableDocumentBase
 {
     /// <summary>
-    /// Gets or sets the MongoDB ObjectId
+    /// MongoDB ObjectId
     /// </summary>
     [JsonPropertyName("_id")]
     [JsonConverter(typeof(ObjectIdJsonConverter))]
     public override string? Id { get; set; }
 
     /// <summary>
-    /// Gets or sets the time in milliseconds since the Unix epoch
+    /// Time in milliseconds since the Unix epoch
     /// If not set but DateString is available, will be calculated from DateString
     /// Nightscout returns both "date" and "mills" on GET requests (same value).
     /// </summary>
@@ -79,7 +79,7 @@ public class Entry : ProcessableDocumentBase
     private long _dateMills;
 
     /// <summary>
-    /// Gets or sets the date and time when this glucose reading was taken.
+    /// Date and time when this glucose reading was taken.
     /// If not set but Mills or DateString is available, will be calculated.
     /// </summary>
     [JsonIgnore]
@@ -102,7 +102,7 @@ public class Entry : ProcessableDocumentBase
     private DateTime? _date;
 
     /// <summary>
-    /// Gets or sets the date and time as an ISO 8601 string
+    /// Date and time as an ISO 8601 string
     /// If not set but Date or Mills is available, will be calculated
     /// </summary>
     [JsonPropertyName("dateString")]
@@ -129,33 +129,33 @@ public class Entry : ProcessableDocumentBase
     private string? _dateString;
 
     /// <summary>
-    /// Gets or sets the glucose value in mg/dL
+    /// Glucose value in mg/dL
     /// </summary>
     [JsonPropertyName("mgdl")]
     public double Mgdl { get; set; }
 
     /// <summary>
-    /// Gets or sets the meter blood glucose in mg/dL
+    /// Meter blood glucose in mg/dL
     /// </summary>
     [JsonPropertyName("mbg")]
     [JsonConverter(typeof(FlexibleNullableDoubleConverter))]
     public double? Mbg { get; set; }
 
     /// <summary>
-    /// Gets or sets the glucose value in mmol/L
+    /// Glucose value in mmol/L
     /// </summary>
     [JsonPropertyName("mmol")]
     public double? Mmol { get; set; }
 
     /// <summary>
-    /// Gets or sets the sensor glucose value in mg/dL
+    /// Sensor glucose value in mg/dL
     /// </summary>
     [JsonPropertyName("sgv")]
     [JsonConverter(typeof(FlexibleNullableDoubleConverter))]
     public double? Sgv { get; set; }
 
     /// <summary>
-    /// Gets or sets the direction of glucose trend as string for legacy compatibility
+    /// Direction of glucose trend as string for legacy compatibility
     /// Common values: Flat, SingleUp, DoubleUp, SingleDown, DoubleDown, FortyFiveUp, FortyFiveDown
     /// </summary>
     [JsonPropertyName("direction")]
@@ -172,127 +172,100 @@ public class Entry : ProcessableDocumentBase
     public int? Trend { get; set; }
 
     /// <summary>
-    /// Gets or sets the rate of glucose change in mg/dL per minute
+    /// Rate of glucose change in mg/dL per minute
     /// Positive values indicate rising glucose, negative values indicate falling
     /// </summary>
     [JsonPropertyName("trendRate")]
     public double? TrendRate { get; set; }
 
-    /// <summary>
-    /// Gets or sets whether this entry is a calibration reading
-    /// </summary>
     [JsonPropertyName("isCalibration")]
     public bool IsCalibration { get; set; }
 
     /// <summary>
-    /// Gets the direction as a strongly-typed enum value
+    /// Direction as a strongly-typed enum value
     /// </summary>
     [JsonIgnore]
     public Models.Direction DirectionEnum => DirectionExtensions.Parse(Direction);
 
     /// <summary>
-    /// Gets or sets the entry type (e.g., "sgv", "cal", "mbg")
+    /// Entry type (e.g., "sgv", "cal", "mbg")
     /// </summary>
     [JsonPropertyName("type")]
     [Sanitizable]
     public string Type { get; set; } = "sgv";
 
-    /// <summary>
-    /// Gets or sets the device identifier
-    /// </summary>
     [JsonPropertyName("device")]
     [Sanitizable]
     public string? Device { get; set; }
 
-    /// <summary>
-    /// Gets or sets any additional notes or comments
-    /// </summary>
     [JsonPropertyName("notes")]
     public string? Notes { get; set; }
 
     /// <summary>
-    /// Gets or sets the delta (change) from the previous reading
+    /// Delta (change) from the previous reading
     /// </summary>
     [JsonPropertyName("delta")]
     public double? Delta { get; set; }
 
-    /// <summary>
-    /// Gets or sets the scaled glucose value
-    /// </summary>
     [JsonPropertyName("scaled")]
     public object? Scaled { get; set; }
 
     /// <summary>
-    /// Gets or sets the system time when the entry was processed.
+    /// System time when the entry was processed.
     /// </summary>
     [JsonPropertyName("sysTime")]
     public string? SysTime { get; set; }
 
     /// <summary>
-    /// Gets or sets UTC offset information
+    /// UTC offset information
     /// </summary>
     [JsonPropertyName("utcOffset")]
     public override int? UtcOffset { get; set; }
 
     /// <summary>
-    /// Gets or sets the noise level (0-4)
+    /// Noise level (0-4)
     /// </summary>
     [JsonPropertyName("noise")]
     [JsonConverter(typeof(FlexibleNullableIntConverter))]
     public int? Noise { get; set; }
 
     /// <summary>
-    /// Gets or sets whether this entry has been filtered.
+    /// Whether this entry has been filtered.
     /// Nightscout only includes this field when it has a value.
     /// </summary>
     [JsonPropertyName("filtered")]
     public double? Filtered { get; set; }
 
     /// <summary>
-    /// Gets or sets the unfiltered value.
+    /// Unfiltered value.
     /// Nightscout only includes this field when it has a value.
     /// </summary>
     [JsonPropertyName("unfiltered")]
     public double? Unfiltered { get; set; }
 
     /// <summary>
-    /// Gets or sets the RSSI signal strength
+    /// RSSI signal strength
     /// </summary>
     [JsonPropertyName("rssi")]
     public int? Rssi { get; set; }
 
-    /// <summary>
-    /// Gets or sets the slope value
-    /// </summary>
     [JsonPropertyName("slope")]
     public double? Slope { get; set; }
 
-    /// <summary>
-    /// Gets or sets the intercept value
-    /// </summary>
     [JsonPropertyName("intercept")]
     public double? Intercept { get; set; }
 
-    /// <summary>
-    /// Gets or sets the scale value
-    /// </summary>
     [JsonPropertyName("scale")]
     public double? Scale { get; set; }
 
-    /// <summary>
-    /// Gets or sets when this entry was created
-    /// </summary>
     [JsonPropertyName("created_at")]
     public override string? CreatedAt { get; set; }
 
-    /// <summary>
-    /// Gets or sets when this entry was last modified
-    /// </summary>
     [JsonPropertyName("modified_at")]
     public DateTime? ModifiedAt { get; set; }
 
     /// <summary>
-    /// Gets or sets the data source identifier indicating where this entry originated from.
+    /// Data source identifier indicating where this entry originated from.
     /// Use constants from <see cref="Core.Constants.DataSources"/> for consistent values.
     /// </summary>
     /// <example>
@@ -302,15 +275,12 @@ public class Entry : ProcessableDocumentBase
     [NocturneOnly]
     public string? DataSource { get; set; }
 
-    /// <summary>
-    /// Gets or sets additional metadata for the entry
-    /// </summary>
     [JsonPropertyName("meta")]
     [NocturneOnly]
     public Dictionary<string, object>? Meta { get; set; }
 
     /// <summary>
-    /// Gets or sets the canonical group ID for deduplication.
+    /// Canonical group ID for deduplication.
     /// Records with the same CanonicalId represent the same underlying event from different sources.
     /// </summary>
     [JsonPropertyName("canonicalId")]
@@ -318,46 +288,43 @@ public class Entry : ProcessableDocumentBase
     public Guid? CanonicalId { get; set; }
 
     /// <summary>
-    /// Gets or sets the list of data sources that contributed to this unified record.
+    /// List of data sources that contributed to this unified record.
     /// Only populated when returning merged/unified DTOs.
     /// </summary>
     [JsonPropertyName("sources")]
     [NocturneOnly]
     public string[]? Sources { get; set; }
 
-    /// <summary>
-    /// Gets or sets the application identifier that created this entry.
-    /// </summary>
     [JsonPropertyName("app")]
     public string? App { get; set; }
 
     /// <summary>
-    /// Gets or sets the glucose units (e.g., "mg/dl", "mmol"). V3 compatibility field.
+    /// Glucose units (e.g., "mg/dl", "mmol"). V3 compatibility field.
     /// </summary>
     [JsonPropertyName("units")]
     public string? Units { get; set; }
 
     /// <summary>
-    /// Gets or sets whether this entry is valid. V3 compatibility field.
+    /// Whether this entry is valid. V3 compatibility field.
     /// </summary>
     [JsonPropertyName("isValid")]
     public bool? IsValid { get; set; }
 
     /// <summary>
-    /// Gets or sets whether this entry is read-only. V3 compatibility field.
+    /// Whether this entry is read-only. V3 compatibility field.
     /// </summary>
     [JsonPropertyName("isReadOnly")]
     public bool? IsReadOnly { get; set; }
 
     /// <summary>
-    /// Gets the V3 API identifier - alias for <see cref="ProcessableDocumentBase.Id"/>.
+    /// V3 API identifier - alias for <see cref="ProcessableDocumentBase.Id"/>.
     /// </summary>
     [JsonPropertyName("identifier")]
     [JsonConverter(typeof(ObjectIdJsonConverter))]
     public string? Identifier => Id;
 
     /// <summary>
-    /// Gets or sets the server-modified timestamp (Unix milliseconds). V3 compatibility field.
+    /// Server-modified timestamp (Unix milliseconds). V3 compatibility field.
     /// Falls back to <see cref="FallbackTimestampMills"/>; see <see cref="V3Timestamps"/> for
     /// why it may never serialize as null.
     /// </summary>
@@ -372,7 +339,7 @@ public class Entry : ProcessableDocumentBase
     }
 
     /// <summary>
-    /// Gets or sets the server-created timestamp (Unix milliseconds). V3 compatibility field.
+    /// Server-created timestamp (Unix milliseconds). V3 compatibility field.
     /// </summary>
     private long? _srvCreated;
 
@@ -392,7 +359,7 @@ public class Entry : ProcessableDocumentBase
     private long? FallbackTimestampMills() => V3Timestamps.Resolve(Mills, CreatedAt);
 
     /// <summary>
-    /// Gets or sets the subject identifier. V3 compatibility field.
+    /// Subject identifier. V3 compatibility field.
     /// </summary>
     [JsonPropertyName("subject")]
     public string? Subject { get; set; }

@@ -70,6 +70,8 @@ public class BotHealthServiceTests
 
         statuses.First(s => s.ChannelType == ChannelType.Telegram).Offered.Should().BeFalse();
         statuses.First(s => s.ChannelType == ChannelType.WhatsApp).Offered.Should().BeFalse();
+        statuses.First(s => s.ChannelType == ChannelType.WebPush).Offered.Should().BeFalse();
+        statuses.First(s => s.ChannelType == ChannelType.InApp).Offered.Should().BeTrue();
     }
 
     [Fact]

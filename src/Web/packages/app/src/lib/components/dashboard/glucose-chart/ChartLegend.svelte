@@ -3,6 +3,7 @@
   import type { Snippet } from "svelte";
   import { cn } from "$lib/utils";
   import { bg } from "$lib/utils/formatting";
+  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {
     SystemEventIcon,
     PumpModeIcon,
@@ -43,6 +44,7 @@
   }
 
   interface Props {
+    glucoseUnits?: GlucoseUnits;
     // Glucose range indicators
     glucoseData: GlucoseDataPoint[];
     highThreshold: number;
@@ -138,6 +140,7 @@
     hasScheduledBasal = false,
     targetLow = null,
     targetHigh = null,
+    glucoseUnits,
   }: Props = $props();
 
   // Event icons in their own colours print grey; on paper their shape carries them.
@@ -148,8 +151,8 @@
     targetLow == null
       ? null
       : targetHigh == null || targetHigh === targetLow
-        ? bg(targetLow)
-        : `${bg(targetLow)}–${bg(targetHigh)}`
+        ? bg(targetLow, glucoseUnits)
+        : `${bg(targetLow, glucoseUnits)}–${bg(targetHigh, glucoseUnits)}`
   );
 </script>
 
@@ -254,20 +257,20 @@
   class="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs @md:gap-4 @md:text-sm text-muted-foreground pt-2"
 >
   <!-- Glucose range indicators -->
-  {@render glucoseRangeIndicator("bg-glucose-in-range", "In Range", `${bg(lowThreshold)}–${bg(highThreshold)}`)}
+  {@render glucoseRangeIndicator("bg-glucose-in-range", "In Range", `${bg(lowThreshold, glucoseUnits)}–${bg(highThreshold, glucoseUnits)}`)}
   {#if glucoseData.some((d) => d.sgv > veryHighThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-very-high", "Very High", `>${bg(veryHighThreshold)}`)}
+    {@render glucoseRangeIndicator("bg-glucose-very-high", "Very High", `>${bg(veryHighThreshold, glucoseUnits)}`)}
   {/if}
   {#if glucoseData.some((d) => d.sgv > highThreshold && d.sgv <= veryHighThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-high", "High", `>${bg(highThreshold)}`)}
+    {@render glucoseRangeIndicator("bg-glucose-high", "High", `>${bg(highThreshold, glucoseUnits)}`)}
   {/if}
   {#if glucoseData.some((d) => d.sgv < lowThreshold && d.sgv >= veryLowThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-low", "Low", `<${bg(lowThreshold)}`)}
+    {@render glucoseRangeIndicator("bg-glucose-low", "Low", `<${bg(lowThreshold, glucoseUnits)}`)}
   {/if}
   {#if glucoseData.some((d) => d.sgv < veryLowThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-very-low", "Very Low", `<${bg(veryLowThreshold)}`)}
+    {@render glucoseRangeIndicator("bg-glucose-very-low", "Very Low", `<${bg(veryLowThreshold, glucoseUnits)}`)}
   {/if}
-  {@render printKey(rangeLimitSwatch, `Range limits ${bg(lowThreshold)} / ${bg(highThreshold)}`)}
+  {@render printKey(rangeLimitSwatch, `Range limits ${bg(lowThreshold, glucoseUnits)} / ${bg(highThreshold, glucoseUnits)}`)}
   {#if targetLabel}
     {@render printKey(targetSwatch, `Target ${targetLabel}`)}
   {/if}

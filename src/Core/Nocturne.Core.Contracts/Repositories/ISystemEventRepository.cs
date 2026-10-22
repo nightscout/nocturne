@@ -10,9 +10,6 @@ namespace Nocturne.Core.Contracts.Repositories;
 /// <seealso cref="SystemEventCategory"/>
 public interface ISystemEventRepository
 {
-    /// <summary>
-    /// Get system events with optional filtering.
-    /// </summary>
     Task<IEnumerable<SystemEvent>> GetSystemEventsAsync(
         SystemEventType? eventType = null,
         SystemEventCategory? category = null,
@@ -23,9 +20,6 @@ public interface ISystemEventRepository
         int skip = 0,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Get a specific system event by ID.
-    /// </summary>
     Task<SystemEvent?> GetSystemEventByIdAsync(
         string id,
         CancellationToken cancellationToken = default);
@@ -44,16 +38,10 @@ public interface ISystemEventRepository
         IEnumerable<SystemEvent> events,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Delete a system event.
-    /// </summary>
     Task<bool> DeleteSystemEventAsync(
         string id,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Delete all system events with the specified data source.
-    /// </summary>
     Task<long> DeleteBySourceAsync(
         string source,
         CancellationToken cancellationToken = default);

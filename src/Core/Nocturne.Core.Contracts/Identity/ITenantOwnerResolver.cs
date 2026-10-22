@@ -15,6 +15,5 @@ public interface ITenantOwnerResolver
     /// Returns the subject id of the tenant's owner, or <c>null</c> when the tenant has none.
     /// </summary>
     /// <param name="tenantId">The tenant whose owner is wanted.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task<string?> GetOwnerSubjectIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
 }

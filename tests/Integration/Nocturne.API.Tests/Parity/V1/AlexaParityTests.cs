@@ -104,9 +104,26 @@ public class AlexaParityTests : ParityTestBase
                 intent = new
                 {
                     name = "MetricNow",
+                    // Alexa resolves the spoken value to a slot type entry; both servers read
+                    // the resolved name, and Nightscout answers "unknown" without one.
                     slots = new
                     {
-                        metric = new { value = "bg" }
+                        metric = new
+                        {
+                            name = "metric",
+                            value = "blood sugar",
+                            resolutions = new
+                            {
+                                resolutionsPerAuthority = new[]
+                                {
+                                    new
+                                    {
+                                        status = new { code = "ER_SUCCESS_MATCH" },
+                                        values = new[] { new { value = new { name = "bg", id = "bg" } } },
+                                    },
+                                },
+                            },
+                        },
                     }
                 }
             }

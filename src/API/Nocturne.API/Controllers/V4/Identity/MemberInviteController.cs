@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
@@ -12,6 +13,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -34,7 +36,7 @@ public class MemberInviteController : ControllerBase
     private readonly ITenantRoleService _tenantRoleService;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly ITenantAccessor _tenantAccessor;
-    private readonly NocturneDbContext _dbContext;
+    private readonly INocturneDbContextFactory _contexts;
 
     /// <summary>
     /// Initializes a new instance of <see cref="MemberInviteController"/>.
@@ -44,25 +46,25 @@ public class MemberInviteController : ControllerBase
     /// <param name="tenantRoleService">Service for member role assignment.</param>
     /// <param name="tenantMemberService">Service for membership lookups.</param>
     /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
-    /// <param name="dbContext">Database context for direct entity access.</param>
     public MemberInviteController(
         IMemberInviteService memberInviteService,
         ITenantService tenantService,
         ITenantRoleService tenantRoleService,
         ITenantMemberService tenantMemberService,
         ITenantAccessor tenantAccessor,
-        NocturneDbContext dbContext)
+        INocturneDbContextFactory contexts)
     {
         _memberInviteService = memberInviteService;
         _tenantService = tenantService;
         _tenantRoleService = tenantRoleService;
         _tenantMemberService = tenantMemberService;
         _tenantAccessor = tenantAccessor;
-        _dbContext = dbContext;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <inheritdoc cref="IMemberInviteService.CreateInviteAsync"/>
     [HttpPost]
+    [RequireInteractiveSession]
     [RemoteCommand(Invalidates = ["ListInvites"])]
     [ProducesResponseType(typeof(MemberInviteResult), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -154,6 +156,9 @@ public class MemberInviteController : ControllerBase
         if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
+        if (IsCallersOwnMembership(subjectId))
+            return Problem(detail: SelfRemovalDetail, statusCode: 400);
+
         var result = await _tenantService.RemoveMemberAsync(_tenantAccessor.TenantId, subjectId, ct);
         return result.Ok
             ? NoContent()
@@ -182,7 +187,7 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(typeof(JoinInviteInfo), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetInviteInfo(string token, CancellationToken ct)
+    public async Task<IActionResult> GetInviteInfo([CredentialRouteValue] string token, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
         var invite = await _memberInviteService.GetInviteByTokenAsync(token, tenantId);
@@ -239,7 +244,7 @@ public class MemberInviteController : ControllerBase
     [RemoteCommand]
     [ProducesResponseType(typeof(AcceptMemberInviteResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> AcceptInvite(string token)
+    public async Task<IActionResult> AcceptInvite([CredentialRouteValue] string token)
     {
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId == null)
@@ -307,11 +312,12 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
-        var member = await _dbContext.TenantMembers
+        var member = await db.TenantMembers
             .Include(m => m.MemberRoles)
             .Include(m => m.Subject)
             .Where(m => m.Id == id && m.TenantId == tenantId)
@@ -320,7 +326,7 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
-        if (IsCallersOwnMembership(member))
+        if (IsCallersOwnMembership(member.SubjectId))
             return Problem(detail: SelfEditDetail, statusCode: 400);
 
         if (DeviceHolderDetail(member) is { } deviceHolder)
@@ -337,18 +343,23 @@ public class MemberInviteController : ControllerBase
         if (!roleGrant.Ok)
             return RoleGrantProblem(roleGrant);
 
+        var keepsOwner = await db.TenantRoles.AnyAsync(
+            r => r.TenantId == tenantId && request.RoleIds.Contains(r.Id) && r.Slug == RoleSeeds.Owner, ct);
+        if (!keepsOwner && await db.TenantMembers.IsLastOwnerAsync(tenantId, member.Id, ct))
+            return Problem(detail: TenantOwnerFilter.LastOwnerRefusal, statusCode: 400);
+
         var rolesAfter = await _tenantRoleService.GetRolePermissionsAsync(tenantId, request.RoleIds, ct);
         if (await WouldExemptAClampedMemberAsync(member, rolesAfter.Concat(member.DirectPermissions ?? []), ct))
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
         // Remove existing role assignments
-        _dbContext.TenantMemberRoles.RemoveRange(member.MemberRoles);
+        db.TenantMemberRoles.RemoveRange(member.MemberRoles);
 
         // Add new role assignments
         var now = DateTime.UtcNow;
         foreach (var roleId in request.RoleIds)
         {
-            _dbContext.TenantMemberRoles.Add(new TenantMemberRoleEntity
+            db.TenantMemberRoles.Add(new TenantMemberRoleEntity
             {
                 Id = Guid.CreateVersion7(),
                 TenantMemberId = member.Id,
@@ -357,7 +368,7 @@ public class MemberInviteController : ControllerBase
         }
 
         member.SysUpdatedAt = now;
-        await _dbContext.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         if (member.Subject?.IsSystemSubject == true && member.Subject.Name == "Public")
             publicAccessCache.Evict(tenantId);
@@ -380,11 +391,12 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
-        var member = await _dbContext.TenantMembers
+        var member = await db.TenantMembers
             .Include(m => m.MemberRoles)
             .Include(m => m.Subject)
             .Where(m => m.Id == id && m.TenantId == tenantId)
@@ -393,7 +405,7 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
-        if (IsCallersOwnMembership(member))
+        if (IsCallersOwnMembership(member.SubjectId))
             return Problem(detail: SelfEditDetail, statusCode: 400);
 
         if (DeviceHolderDetail(member) is { } deviceHolder)
@@ -437,7 +449,7 @@ public class MemberInviteController : ControllerBase
 
         member.DirectPermissions = request.DirectPermissions;
         member.SysUpdatedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         if (member.Subject?.IsSystemSubject == true && member.Subject.Name == "Public")
             publicAccessCache.Evict(tenantId);
@@ -455,11 +467,12 @@ public class MemberInviteController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetEffectivePermissions(Guid id, CancellationToken ct)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
-        var member = await _dbContext.TenantMembers
+        var member = await db.TenantMembers
             .Where(m => m.Id == id && m.TenantId == tenantId)
             .FirstOrDefaultAsync(ct);
 
@@ -484,11 +497,12 @@ public class MemberInviteController : ControllerBase
         [FromServices] PublicAccessCacheService publicAccessCache,
         CancellationToken ct)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         if (!HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
         var tenantId = _tenantAccessor.TenantId;
-        var member = await _dbContext.TenantMembers
+        var member = await db.TenantMembers
             .Include(m => m.Subject)
             .Where(m => m.Id == id && m.TenantId == tenantId)
             .FirstOrDefaultAsync(ct);
@@ -498,7 +512,7 @@ public class MemberInviteController : ControllerBase
 
         // The clamp is enforced in RLS via app.history_clamped, so lifting your own is a
         // self-widening edit — the same class the role and permission editors refuse.
-        if (IsCallersOwnMembership(member))
+        if (IsCallersOwnMembership(member.SubjectId))
             return Problem(detail: SelfEditDetail, statusCode: 400);
 
         if (DeviceHolderDetail(member) is { } deviceHolder)
@@ -514,7 +528,7 @@ public class MemberInviteController : ControllerBase
 
         member.LimitTo24Hours = request.LimitTo24Hours;
         member.SysUpdatedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         if (member.Subject?.IsSystemSubject == true && member.Subject.Name == "Public")
             publicAccessCache.Evict(tenantId);
@@ -525,6 +539,9 @@ public class MemberInviteController : ControllerBase
 
     private const string SelfEditDetail =
         "Cannot change your own roles or permissions; ask another member with members.manage.";
+
+    private const string SelfRemovalDetail =
+        "Cannot remove your own membership; ask another member with members.manage.";
 
     /// <summary>
     /// True when a history-clamped caller's edit would leave a clamped member holding permissions
@@ -543,10 +560,12 @@ public class MemberInviteController : ControllerBase
     /// True when the target membership belongs to the calling subject. Role and permission
     /// edits are routed away from the caller's own membership: a self-edit is the only way a
     /// grant decision can widen the granter's own ceiling within a request, and it is also the
-    /// path by which a sole owner can strip their own administrative access.
+    /// path by which a sole owner can strip their own administrative access. Removal is refused
+    /// too: it signs the caller out of the tenant with no way back in, and it
+    /// passes the last-owner check whenever another owner row exists, whether or not that owner can sign in.
     /// </summary>
-    private bool IsCallersOwnMembership(TenantMemberEntity member)
-        => HttpContext.GetSubjectId() is { } subjectId && member.SubjectId == subjectId;
+    private bool IsCallersOwnMembership(Guid targetSubjectId)
+        => HttpContext.GetSubjectId() is { } subjectId && targetSubjectId == subjectId;
 
     /// <summary>
     /// An unknown permission is malformed input; exceeding the ceiling is a refusal. Either way the

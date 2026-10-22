@@ -10,9 +10,9 @@ import supportedLocales from "./supportedLocales.json" with { type: 'json' };
 // resolves references against the directory of the loading config, so loaded from another
 // package, that package's strings match no reference and compile to empty.
 //
-// Both packages' files are listed so one extraction writes the complete shared catalogue.
+// Every package's files are listed so one extraction writes the complete shared catalogue.
 // An extraction that saw only one package would obsolete the other's messages.
-const PACKAGES = ['app', 'portal']
+const PACKAGES = ['app', 'portal', 'cms']
 
 const globs = (patterns) =>
     PACKAGES.flatMap(pkg =>

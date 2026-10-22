@@ -60,7 +60,12 @@ describe("createStaticChartEngine", () => {
   it("clips spans to the window and drops those outside it", () => {
     const engine = engineFor({
       profileSpans: [
-        { startMills: at(-60), endMills: at(30), state: "fallback", metadata: { profileName: "Weekday" } },
+        {
+          startMills: at(-60),
+          endMills: at(30),
+          state: "fallback",
+          profileActivation: { baseProfileName: "Weekday", percentage: 110, timeshiftHours: 1 },
+        },
         { startMills: at(30), state: "Weekend" },
         { startMills: at(-120), endMills: at(-60), state: "Gone" },
       ],
@@ -72,7 +77,7 @@ describe("createStaticChartEngine", () => {
 
     const [weekday, weekend] = engine.displayProfileSpans;
     expect(engine.displayProfileSpans).toHaveLength(2);
-    expect(weekday).toMatchObject({ profileName: "Weekday" });
+    expect(weekday).toMatchObject({ profileName: "Weekday 110% +1h" });
     expect(weekday.displayStart.getTime()).toBe(FROM);
     expect(weekend).toMatchObject({ profileName: "Weekend" });
     expect(weekend.displayEnd.getTime()).toBe(TO);
@@ -124,19 +129,23 @@ describe("createStaticChartEngine", () => {
     expect(engine.scheduledBasalData.map((p) => p.rate)).toEqual([0.8, 1.2]);
   });
 
-  it("marks basal stale from its last delivery to the end of the window", () => {
-    const lastEnd = TO - STALE_THRESHOLD_MS - 10 * MINUTE;
-    const engine = engineFor({
-      basalDeliverySpans: [
-        { startMills: at(0), endMills: at(30), rate: 1 },
-        { startMills: at(30), endMills: lastEnd, rate: 1 },
-      ],
-    });
+  it("marks basal stale from the last pump sync to the end of the window", () => {
+    const lastSync = TO - STALE_THRESHOLD_MS - 10 * MINUTE;
+    const engine = engineFor({ lastPumpSyncMills: lastSync });
 
-    expect(engine.staleBasalData?.start.getTime()).toBe(lastEnd);
+    expect(engine.staleBasalData?.start.getTime()).toBe(lastSync);
     expect(engine.finders.isStaleBasalTime(new Date(TO))).toBe(true);
     expect(engine.finders.isStaleBasalTime(date(10))).toBe(false);
     expect(engineFor({}).finders.isStaleBasalTime(date(10))).toBe(false);
+  });
+
+  it("does not mark basal stale while the pump keeps syncing on its scheduled basal", () => {
+    const engine = engineFor({
+      basalDeliverySpans: [{ startMills: at(0), endMills: at(30), rate: 1 }],
+      lastPumpSyncMills: TO - 2 * MINUTE,
+    });
+
+    expect(engine.staleBasalData).toBeNull();
   });
 
   it("reads the pump mode of the latest span when none is active now", () => {

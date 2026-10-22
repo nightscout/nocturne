@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
 
@@ -72,7 +73,7 @@ public class GlookoSettingsProfileMapper
         || (settings.BolusSettings?.Any(b => b.Current) ?? false);
 
     private static DateTime? ParseTimestamp(string? timestamp) =>
-        DateTime.TryParse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
+        DateTime.TryParse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)
             ? parsed
             : null;
 
@@ -81,9 +82,8 @@ public class GlookoSettingsProfileMapper
         var store = new Dictionary<string, ProfileData>();
         var dia = settings.ActiveInsulinTime > 0 ? settings.ActiveInsulinTime / 3600.0 : 3.0;
 
-        // Basal programs
         if (settings.BasalSettings != null)
-            foreach (var basal in settings.BasalSettings)
+            foreach (var basal in ConnectorFaults.NonNullRecords(settings.BasalSettings, _logger, _connectorSource, "SSV2 basal setting"))
             {
                 if (basal.Segments is not { Length: > 0 })
                     continue;
@@ -95,9 +95,8 @@ public class GlookoSettingsProfileMapper
                     .ToList();
             }
 
-        // Bolus programs (ISF, ICR, target BG)
         if (settings.BolusSettings != null)
-            foreach (var bolus in settings.BolusSettings)
+            foreach (var bolus in ConnectorFaults.NonNullRecords(settings.BolusSettings, _logger, _connectorSource, "SSV2 bolus setting"))
             {
                 var name = ResolveName(bolus.ProfileName, bolus.ProfileId);
 

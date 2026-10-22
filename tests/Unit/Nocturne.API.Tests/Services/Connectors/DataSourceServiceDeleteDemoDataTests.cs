@@ -52,12 +52,14 @@ public class DataSourceServiceDeleteDemoDataTests : IDisposable
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
-        context,
+        context.AsFactory(),
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,
         Mock.Of<IAuditContext>(),
         _connectorConfig.Object,
+        Mock.Of<Nocturne.Core.Contracts.V4.ITreatmentDecomposer>(),
+        Nocturne.API.Tests.Infrastructure.ProfileActivationTestDeps.Writer(context),
         NullLogger<DataSourceService>.Instance);
 
     /// <summary>One already-soft-deleted demo record of every type the purge covers.</summary>

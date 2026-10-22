@@ -4,7 +4,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { BolusKind, type Bolus, type CarbIntake } from "$lib/api";
+  import type { Bolus, CarbIntake } from "$lib/api";
   import type { EntryRecord } from "$lib/constants/entry-categories";
   import { cn } from "$lib/utils";
   import * as Card from "$lib/components/ui/card";
@@ -151,16 +151,6 @@
 
     return result;
   });
-
-  // Insulin delivery values for the donut chart. All come from the delivery stats, which
-  // already folds algorithm micro-boluses into additional basal, so the donut draws only
-  // manual boluses to keep its arcs equal to the total it prints.
-  const scheduledBasal = $derived(delivery?.scheduledBasal ?? 0);
-  const additionalBasal = $derived(delivery?.additionalBasal ?? 0);
-  const totalInsulin = $derived(delivery?.totalInsulin ?? 0);
-  const manualBoluses = $derived(
-    (dayData?.boluses ?? []).filter((b) => b.kind !== BolusKind.Algorithm)
-  );
 
   // === Treatment Edit Dialog ===
   let editDialogOpen = $state(false);
@@ -320,6 +310,7 @@
         <TIRStackedChart
           percentages={analysis?.timeInRange?.percentages}
           orientation="horizontal"
+          keyOnScreen
           compact
         />
         <div class="grid grid-cols-2 @lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
@@ -373,14 +364,20 @@
 
       <Card.Root>
       <Card.Content class="p-4 flex flex-col items-center gap-4">
-        <InsulinDonutChart
-          boluses={manualBoluses}
-          {scheduledBasal}
-          {additionalBasal}
-          {totalInsulin}
-          carbIntakes={dayData?.carbIntakes ?? []}
-          onBolusClick={openBolusDialog}
-        />
+        {#key dateParam}
+          <InsulinDonutChart
+            boluses={delivery?.manualBoluses ?? []}
+            totalBasal={delivery?.totalBasal ?? 0}
+            totalBolus={delivery?.totalBolus ?? 0}
+            manualBolus={delivery?.manualBolus ?? 0}
+            automaticBolus={delivery?.automaticBolus ?? 0}
+            scheduledBasal={delivery?.scheduledBasal ?? 0}
+            additionalBasal={delivery?.additionalBasal ?? 0}
+            totalInsulin={delivery?.totalInsulin ?? 0}
+            carbIntakes={dayData?.carbIntakes ?? []}
+            onBolusClick={openBolusDialog}
+          />
+        {/key}
         <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm w-full">
           <div>
             <div class="text-muted-foreground">Total Carbs</div>
@@ -391,13 +388,13 @@
           <div>
             <div class="text-muted-foreground">Manual boluses</div>
             <div class="font-medium tabular-nums">
-              {delivery?.bolusCount ?? 0}
+              {delivery?.manualBolusCount ?? 0}
             </div>
           </div>
           <div>
             <div class="text-muted-foreground">Automatic boluses</div>
             <div class="font-medium tabular-nums">
-              {delivery?.microBolusCount ?? 0}
+              {delivery?.automaticBolusCount ?? 0}
             </div>
           </div>
         </div>

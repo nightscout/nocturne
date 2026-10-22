@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Services;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace Nocturne.API.Tests.GoldenFiles.Infrastructure;
@@ -72,8 +73,8 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
     protected async Task SeedSensorGlucose(params SensorGlucoseEntity[] entities)
     {
         using var scope = Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(Guid.Parse("00000000-0000-0000-0000-000000000001"));
         db.SensorGlucose.AddRange(entities);
         await db.SaveChangesAsync();
     }
@@ -84,8 +85,8 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
     protected async Task SeedMeterGlucose(params MeterGlucoseEntity[] entities)
     {
         using var scope = Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(Guid.Parse("00000000-0000-0000-0000-000000000001"));
         db.MeterGlucose.AddRange(entities);
         await db.SaveChangesAsync();
     }
@@ -97,8 +98,8 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
     protected async Task SeedFoods(params FoodEntity[] foods)
     {
         using var scope = Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>()
+            .CreateForTenantAsync(Guid.Parse("00000000-0000-0000-0000-000000000001"));
         db.Foods.AddRange(foods);
         await db.SaveChangesAsync();
     }

@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Services.Auth;
@@ -8,8 +7,8 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -149,6 +148,7 @@ public class TenantController : ControllerBase
     [RemoteCommand(Invalidates = ["GetAll"])]
     [ProducesResponseType(typeof(ProvisionResult), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Provision(
         [FromBody] ProvisionRequest request, CancellationToken ct)
     {
@@ -157,16 +157,23 @@ public class TenantController : ControllerBase
         if (request.Credential is not null && request.OidcIdentity is not null)
             return Problem(detail: "Provide either Credential or OidcIdentity, not both", statusCode: 400, title: "Bad Request");
 
-        var result = await _tenantService.ProvisionWithOwnerAsync(
-            request.Slug,
-            request.DisplayName,
-            request.OwnerUsername,
-            request.OwnerEmail,
-            request.Credential,
-            request.OidcIdentity,
-            ct);
+        try
+        {
+            var result = await _tenantService.ProvisionWithOwnerAsync(
+                request.Slug,
+                request.DisplayName,
+                request.OwnerUsername,
+                request.OwnerEmail,
+                request.Credential,
+                request.OidcIdentity,
+                ct);
 
-        return StatusCode(StatusCodes.Status201Created, result);
+            return StatusCode(StatusCodes.Status201Created, result);
+        }
+        catch (ProvisionConflictException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: 409, title: "Conflict");
+        }
     }
 
     // ── Credential management (admin proxy for account portal) ──────────
@@ -229,6 +236,8 @@ public class TenantController : ControllerBase
     [RemoteCommand(Invalidates = ["GetMemberCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemovePasskeyCredential(
         Guid id, Guid subjectId, Guid credentialId,
         [FromServices] ISubjectService subjectService,
@@ -238,7 +247,7 @@ public class TenantController : ControllerBase
             return Forbid();
 
         var result = await subjectService.TryRemovePasskeyCredentialAsync(subjectId, credentialId);
-        return result == FactorRemovalResult.Removed ? NoContent() : FactorRemovalRefusal(result, "Passkey");
+        return result == FactorRemovalResult.Removed ? NoContent() : this.FactorRemovalRefusal(result, "Passkey");
     }
 
     /// <summary>Removes an OIDC identity from a member subject.</summary>
@@ -246,6 +255,8 @@ public class TenantController : ControllerBase
     [RemoteCommand(Invalidates = ["GetMemberCredentials"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemoveOidcIdentity(
         Guid id, Guid subjectId, Guid identityId,
         [FromServices] ISubjectService subjectService,
@@ -255,7 +266,7 @@ public class TenantController : ControllerBase
             return Forbid();
 
         var result = await subjectService.TryRemoveOidcIdentityAsync(subjectId, identityId);
-        return result == FactorRemovalResult.Removed ? NoContent() : FactorRemovalRefusal(result, "OIDC identity");
+        return result == FactorRemovalResult.Removed ? NoContent() : this.FactorRemovalRefusal(result, "OIDC identity");
     }
 
     /// <summary>
@@ -274,10 +285,43 @@ public class TenantController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> IssueLoginCode(
+    public Task<IActionResult> IssueLoginCode(
         Guid id, Guid subjectId,
-        [FromServices] IDbContextFactory<NocturneDbContext> dbContextFactory,
+        [FromServices] INocturneDbContextFactory dbContextFactory,
         [FromServices] ILoginCodeService loginCodeService,
+        CancellationToken ct) =>
+        IssueCodeAsync(id, subjectId, LoginCodePurpose.Login, dbContextFactory, loginCodeService, null, ct);
+
+    /// <summary>
+    /// Mints a single-use recovery code that lets a member enrol a passkey at
+    /// <c>POST /api/auth/passkey/recovery-mode/redeem</c> on the tenant's host.
+    /// </summary>
+    /// <remarks>
+    /// The operator's way to recover a member nobody on the tenant may recover: the only owner, a
+    /// platform admin, or a member of another tenant
+    /// (<see cref="Identity.MemberRecoveryController.IssueRecoveryCode"/>).
+    /// </remarks>
+    [HttpPost("{id:guid}/members/{subjectId:guid}/recovery-code")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(LoginCode), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public Task<IActionResult> IssueRecoveryCode(
+        Guid id, Guid subjectId,
+        [FromServices] INocturneDbContextFactory dbContextFactory,
+        [FromServices] ILoginCodeService loginCodeService,
+        [FromServices] MemberRecoveryEligibility eligibility,
+        CancellationToken ct) =>
+        IssueCodeAsync(
+            id, subjectId, LoginCodePurpose.OperatorRecovery, dbContextFactory, loginCodeService, eligibility, ct);
+
+    /// <param name="eligibility">For a recovery code: refuses a member who can still sign in.</param>
+    private async Task<IActionResult> IssueCodeAsync(
+        Guid id, Guid subjectId, LoginCodePurpose purpose,
+        INocturneDbContextFactory dbContextFactory,
+        ILoginCodeService loginCodeService,
+        MemberRecoveryEligibility? eligibility,
         CancellationToken ct)
     {
         if (!await IsCallerTenantOwnerAsync(id, ct))
@@ -290,10 +334,14 @@ public class TenantController : ControllerBase
         if (!tenant.IsActive)
             return Problem(detail: "Tenant is not active", statusCode: 409, title: "Conflict");
 
-        await using var dbContext = await dbContextFactory.CreateTenantPinnedContextAsync(id, ct);
+        await using var dbContext = await dbContextFactory.CreateForTenantAsync(id, ct);
+
+        if (eligibility is not null
+            && await eligibility.CheckAsync(dbContext, id, subjectId, ct) == RecoveryEligibility.NotLockedOut)
+            return Problem(detail: "This member can still sign in", statusCode: 409, title: "Conflict");
 
         var issued = await loginCodeService.IssueAsync(
-            dbContext, subjectId,
+            dbContext, subjectId, purpose,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             AuthAuditActor.From(HttpContext.GetAuthContext()),
@@ -301,17 +349,6 @@ public class TenantController : ControllerBase
 
         return Ok(issued);
     }
-
-    private ObjectResult FactorRemovalRefusal(FactorRemovalResult result, string factor) =>
-        Problem(
-            detail: result switch
-            {
-                FactorRemovalResult.NotFound => $"{factor} not found.",
-                FactorRemovalResult.LastPrimaryFactor => "Cannot remove the member's only remaining sign-in method.",
-                _ => throw new InvalidOperationException($"Unexpected FactorRemovalResult: {result}"),
-            },
-            statusCode: 400,
-            title: "Bad Request");
 
     /// <summary>
     /// Verifies the authenticated caller is a member of the specified tenant

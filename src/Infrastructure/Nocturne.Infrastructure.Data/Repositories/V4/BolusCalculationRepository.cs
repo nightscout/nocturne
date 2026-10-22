@@ -30,7 +30,7 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
     /// Initializes a new instance of the <see cref="BolusCalculationRepository"/> class.
     /// </summary>
     public BolusCalculationRepository(
-        ITenantDbContextFactory contextFactory,
+        INocturneDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<BolusCalculationRepository> logger,

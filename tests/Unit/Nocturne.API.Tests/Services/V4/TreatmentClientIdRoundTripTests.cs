@@ -1,9 +1,15 @@
+using Nocturne.API.Tests.Infrastructure;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.API.Controllers.V1;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
@@ -11,6 +17,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
@@ -64,7 +71,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
         };
 
         var dedup = new Mock<IDeduplicationService>().Object;
-        var ctxFactory = new TestTenantDbContextFactory(_context);
+        var ctxFactory = new TestNocturneDbContextFactory(_context);
         var bolusRepo = new BolusRepository(ctxFactory, dedup, apiSecretCaller, NullLogger<BolusRepository>.Instance);
         var carbRepo = _carbRepo = new CarbIntakeRepository(ctxFactory, dedup, apiSecretCaller, NullLogger<CarbIntakeRepository>.Instance);
         var bgCheckRepo = new BGCheckRepository(ctxFactory, dedup, apiSecretCaller, NullLogger<BGCheckRepository>.Instance);
@@ -92,25 +99,27 @@ public class TreatmentClientIdRoundTripTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         var decomposer = new TreatmentDecomposer(
-            _context,
+            _context.AsFactory(),
             bolusRepo, tempBasalRepo.Object,
             carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             Mock.Of<IStateSpanService>(),
+            ProfileActivationTestDeps.Repository(_context),
+            ProfileActivationTestDeps.Writer(_context),
             foods.Object,
             devices.Object,
             Mock.Of<IPatientDeviceStamper>(),
             Mock.Of<IProfileDecomposer>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
+            TempBasalTestDeps.Unscheduled(),
             apiSecretCaller,
             NullLogger<TreatmentDecomposer>.Instance);
 
         var projection = new V4ToLegacyProjectionService(
-            Mock.Of<ISensorGlucoseRepository>(),
             bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo,
             tempBasalRepo.Object, bolusCalcRepo,
             foods.Object,
-            _context,
+            _context.AsFactory(),
             NullLogger<V4ToLegacyProjectionService>.Instance);
 
         var pipeline = new DecompositionPipeline(
@@ -120,6 +129,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
         var store = new TreatmentReadService(
             projection, decomposer, pipeline,
             tempBasalRepo.Object, bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
+            Mock.Of<IProfileActivationRepository>(),
             Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
 
@@ -166,6 +176,34 @@ public class TreatmentClientIdRoundTripTests : IDisposable
         (await UploadAsync(TrioCarb(EditedCarbId, 45))).SkippedDeleted.Should().Be(0);
 
         (await CarbsAsync()).Should().ContainSingle().Which.Should().Be((45d, EditedCarbId, 1767268800000L));
+    }
+
+    /// <summary>
+    /// Trio builds its delete with <c>URLComponents</c>, which percent-encodes the brackets of
+    /// <c>find[id][$eq]</c>.
+    /// </summary>
+    [Fact]
+    public async Task Edit_ThroughTheV1BulkDeleteAsTrioEncodesIt_LeavesOneMeal()
+    {
+        await UploadAsync(TrioCarb(CarbId, 30));
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.QueryString = new QueryString($"?find%5Bid%5D%5B$eq%5D={CarbId}");
+        var controller = new TreatmentsController(
+            _service, Mock.Of<IDocumentProcessingService>(),
+            new FakeTimeProvider(DateTimeOffset.Parse(MealTime).AddHours(1)),
+            NullLogger<TreatmentsController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
+        (await controller.BulkDeleteTreatments()).Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeEquivalentTo(LegacyDeleteStatus.For(1));
+
+        await UploadAsync(TrioCarb(EditedCarbId, 45));
+
+        (await CarbsAsync()).Should().ContainSingle().Which.Should().Be((45d, EditedCarbId, 1767268800000L));
+        await using var ctx = _db.CreateContext();
+        ctx.CarbIntakes.Where(c => c.Carbs > 0).Select(c => c.Carbs).Should().Equal(45d);
     }
 
     /// <summary>

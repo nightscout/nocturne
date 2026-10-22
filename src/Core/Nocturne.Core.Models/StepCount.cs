@@ -4,7 +4,7 @@ using Nocturne.Core.Models.Attributes;
 namespace Nocturne.Core.Models;
 
 /// <summary>
-/// Represents a step count (PebbleMovement) record, compatible with xDrip step count uploads.
+/// Step count (PebbleMovement) record, compatible with xDrip step count uploads.
 /// Step count data is time-series movement data typically sourced from wearable devices via xDrip.
 /// </summary>
 /// <seealso cref="HeartRate"/>
@@ -12,20 +12,20 @@ namespace Nocturne.Core.Models;
 public class StepCount : ProcessableDocumentBase
 {
     /// <summary>
-    /// Gets or sets the MongoDB ObjectId
+    /// MongoDB ObjectId
     /// </summary>
     [JsonPropertyName("_id")]
     public override string? Id { get; set; }
 
     /// <summary>
-    /// Gets or sets the ISO 8601 formatted creation timestamp
+    /// ISO 8601 formatted creation timestamp
     /// </summary>
     [JsonPropertyName("created_at")]
     public override string? CreatedAt { get; set; } =
         DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
     /// <summary>
-    /// Gets or sets the timestamp in milliseconds since Unix epoch.
+    /// Timestamp in milliseconds since Unix epoch.
     /// Setting Mills converts the value to Timestamp internally (v1 compatibility).
     /// </summary>
     [JsonPropertyName("mills")]
@@ -42,20 +42,20 @@ public class StepCount : ProcessableDocumentBase
     public DateTime Timestamp { get; set; }
 
     /// <summary>
-    /// Gets or sets the UTC offset in minutes
+    /// UTC offset in minutes
     /// </summary>
     [JsonPropertyName("utcOffset")]
     public override int? UtcOffset { get; set; }
 
     /// <summary>
-    /// Gets or sets the step count or movement metric value.
+    /// Step count or movement metric value.
     /// May be an absolute total or a delta depending on <see cref="Source"/>.
     /// </summary>
     [JsonPropertyName("metric")]
     public int Metric { get; set; }
 
     /// <summary>
-    /// Gets or sets the source bitmask.
+    /// Source bitmask.
     /// Bit 0 (value 1) indicates an absolute step count total; otherwise the value is a delta.
     /// Either way, step totals and chart bubbles add the metric up. Bit 1
     /// (<see cref="PossibleRunningTotalFlag"/>) marks a metric they leave out.
@@ -86,21 +86,18 @@ public class StepCount : ProcessableDocumentBase
     public string? Type { get; set; }
 
     /// <summary>
-    /// Gets or sets the device identifier that recorded this reading
+    /// Device identifier that recorded this reading
     /// </summary>
     [JsonPropertyName("device")]
     [Sanitizable]
     public string? Device { get; set; }
 
-    /// <summary>
-    /// Gets or sets who entered this record
-    /// </summary>
     [JsonPropertyName("enteredBy")]
     [Sanitizable]
     public string? EnteredBy { get; set; }
 
     /// <summary>
-    /// Gets or sets the data source identifier indicating where this reading originated from
+    /// Data source identifier indicating where this reading originated from
     /// </summary>
     [JsonPropertyName("data_source")]
     [NocturneOnly]

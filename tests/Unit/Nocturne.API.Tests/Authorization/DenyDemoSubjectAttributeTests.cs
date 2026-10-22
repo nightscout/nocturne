@@ -100,7 +100,7 @@ public class DenyDemoSubjectAttributeTests : IDisposable
             .ReturnsAsync(() => _db.CreateContext());
 
         var services = new ServiceCollection();
-        services.AddSingleton(dbFactory.Object);
+        services.AddSingleton(dbFactory.Object.AsNocturneFactory());
 
         var httpContext = new DefaultHttpContext
         {

@@ -39,7 +39,7 @@
   const hourlyDeliveryQuery = getHourlyInsulinDelivery(analysisDates);
   const analysisQuery = getBasalAnalysis(analysisDates);
 
-  const hourlyDelivery = $derived(hourlyDeliveryQuery.current?.hours ?? []);
+  const hourlyDelivery = $derived(hourlyDeliveryQuery.current);
 
   const basalStats = $derived.by(() => {
     const s = analysisQuery.current?.stats;
@@ -184,7 +184,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <InsulinDeliveryChart data={hourlyDelivery} showStacked={false} />
+        <InsulinDeliveryChart delivery={hourlyDelivery} showStacked={false} />
       </CardContent>
     </Card>
 

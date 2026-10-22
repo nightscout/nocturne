@@ -32,6 +32,7 @@ public class OidcAuthService : IOidcAuthService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantMemberService _tenantMemberService;
     private readonly IMemberInviteService _memberInviteService;
+    private readonly ITotpService _totpService;
     private readonly IDataProtector _stateProtector;
     private readonly OidcOptions _options;
     private readonly BaseDomainOptions _baseDomain;
@@ -48,6 +49,7 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="httpClientFactory">Factory for the <c>OidcProvider</c> named HTTP client.</param>
     /// <param name="tenantMemberService">Service for verifying tenant membership before issuing a login session.</param>
     /// <param name="memberInviteService">Service for accepting an invite named by the login's return URL.</param>
+    /// <param name="totpService">Service that withholds the session behind an authenticator code when one is enrolled.</param>
     /// <param name="dataProtectionProvider">Provider for the protector that authenticates the state parameter.</param>
     /// <param name="options">OIDC session and state configuration options.</param>
     /// <param name="baseDomainOptions">Base domain configuration for building the public redirect URIs.</param>
@@ -61,6 +63,7 @@ public class OidcAuthService : IOidcAuthService
         IHttpClientFactory httpClientFactory,
         ITenantMemberService tenantMemberService,
         IMemberInviteService memberInviteService,
+        ITotpService totpService,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> options,
         IOptions<BaseDomainOptions> baseDomainOptions,
@@ -75,6 +78,7 @@ public class OidcAuthService : IOidcAuthService
         _httpClientFactory = httpClientFactory;
         _tenantMemberService = tenantMemberService;
         _memberInviteService = memberInviteService;
+        _totpService = totpService;
         _stateProtector = dataProtectionProvider.CreateProtector("Nocturne.Oidc.State");
         _options = options.Value;
         _baseDomain = baseDomainOptions.Value;
@@ -248,7 +252,8 @@ public class OidcAuthService : IOidcAuthService
             }
             else
             {
-                idTokenClaims = ParseIdToken(providerTokens.IdToken);
+                idTokenClaims = ParseIdToken(
+                    providerTokens.IdToken, provider, discoveryDoc.Issuer, DateTimeOffset.UtcNow);
 
                 // Required, not conditional: every state this service issues carries a nonce, so
                 // an absent one means the ID token cannot be bound to this authorization request.
@@ -295,12 +300,6 @@ public class OidcAuthService : IOidcAuthService
     /// issued — otherwise any external identity could mint a session on any tenant's subdomain.
     /// Extracted from <see cref="HandleCallbackAsync"/> so the membership gate can be unit-tested
     /// without exercising the OIDC code exchange.
-    /// <para>
-    /// No TOTP second-factor gate here. <c>PasskeyController.LoginComplete</c> withholds the session
-    /// when the subject has an authenticator enrolled; this path issues one regardless, so a subject
-    /// with TOTP and a linked provider signs in through the provider without a code. Adding the gate
-    /// needs a pending-second-factor state that survives the provider redirect.
-    /// </para>
     /// </summary>
     internal async Task<OidcCallbackResult> CompleteLoginAsync(
         OidcStateData stateData,
@@ -316,6 +315,7 @@ public class OidcAuthService : IOidcAuthService
             idTokenClaims.Sub,
             provider.IssuerUrl,
             idTokenClaims.Email,
+            idTokenClaims.EmailVerified == true,
             idTokenClaims.Name ?? idTokenClaims.PreferredUsername,
             provider.DefaultRoles
         );
@@ -336,16 +336,21 @@ public class OidcAuthService : IOidcAuthService
         // minted by a tenant login and must have been bounced to that subdomain, so an
         // unresolved tenant means something upstream failed — and treating that as "nothing to
         // check" is how the gate silently disappeared when the state encoding changed.
+        var admittedByInvite = false;
         if (currentTenantId is { } tenantId)
         {
-            if (!await _tenantMemberService.IsMemberAsync(subject.Id, tenantId)
-                && !await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
+            if (!await _tenantMemberService.IsMemberAsync(subject.Id, tenantId))
             {
-                _logger.LogWarning(
-                    "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
-                    subject.Id,
-                    tenantId);
-                return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
+                if (!await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
+                {
+                    _logger.LogWarning(
+                        "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
+                        subject.Id,
+                        tenantId);
+                    return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
+                }
+
+                admittedByInvite = true;
             }
         }
         else if (!string.IsNullOrEmpty(stateData.TenantSlug))
@@ -357,6 +362,15 @@ public class OidcAuthService : IOidcAuthService
             return OidcCallbackResult.Failed(
                 "invalid_state",
                 "The login could not be completed against the tenant it was started from.");
+        }
+
+        if (await _totpService.GetCredentialCountAsync(subject.Id) > 0)
+        {
+            return OidcCallbackResult.SecondFactorRequired(
+                subject.Id,
+                await _totpService.CreateStepUpTokenAsync(subject.Id, currentTenantId, admittedByInvite),
+                stateData.ReturnUrl,
+                provider.Id);
         }
 
         // Update last login
@@ -483,8 +497,8 @@ public class OidcAuthService : IOidcAuthService
                 return null;
 
             // Resolve subject ID from the new refresh token for the response
-            var rotatedSubjectId = await _refreshTokenService.ValidateRefreshTokenAsync(session.RefreshToken);
-            if (!rotatedSubjectId.HasValue)
+            var rotated = await _refreshTokenService.ValidateRefreshTokenAsync(session.RefreshToken);
+            if (rotated is null)
                 return null;
 
             return new OidcTokenResponse
@@ -495,26 +509,26 @@ public class OidcAuthService : IOidcAuthService
                 ExpiresIn = session.ExpiresInSeconds,
                 RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
                 ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
-                SubjectId = rotatedSubjectId.Value,
+                SubjectId = rotated.SubjectId,
             };
         }
 
         // Non-rotation path: validate and re-mint access token without creating a new refresh token
-        var subjectId = await _refreshTokenService.ValidateRefreshTokenAsync(refreshToken);
-        if (!subjectId.HasValue)
+        if (await _refreshTokenService.ValidateRefreshTokenAsync(refreshToken) is not { } owner)
             return null;
 
         await _refreshTokenService.UpdateLastUsedAsync(refreshToken);
 
-        var subject = await _subjectService.GetSubjectByIdAsync(subjectId.Value);
+        var subjectId = owner.SubjectId;
+        var subject = await _subjectService.GetSubjectByIdAsync(subjectId);
         if (subject == null || !subject.IsActive)
         {
             await _refreshTokenService.RevokeRefreshTokenAsync(refreshToken, "Subject inactive");
             return null;
         }
 
-        var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId.Value);
-        var roles = await _subjectService.GetSubjectRolesAsync(subjectId.Value);
+        var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId);
+        var roles = await _subjectService.GetSubjectRolesAsync(subjectId);
 
         var accessTokenLifetime = _options.Session.AccessTokenLifetime;
         var accessToken = _jwtService.GenerateAccessToken(
@@ -526,6 +540,7 @@ public class OidcAuthService : IOidcAuthService
             },
             permissions,
             roles,
+            owner.SessionId,
             accessTokenLifetime
         );
 
@@ -537,7 +552,7 @@ public class OidcAuthService : IOidcAuthService
             ExpiresIn = (int)accessTokenLifetime.TotalSeconds,
             RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
             ExpiresAt = DateTimeOffset.UtcNow.Add(accessTokenLifetime),
-            SubjectId = subjectId.Value,
+            SubjectId = subjectId,
         };
     }
 
@@ -619,7 +634,7 @@ public class OidcAuthService : IOidcAuthService
     /// <inheritdoc />
     public async Task<Guid?> ValidateSessionAsync(string refreshToken)
     {
-        return await _refreshTokenService.ValidateRefreshTokenAsync(refreshToken);
+        return (await _refreshTokenService.ValidateRefreshTokenAsync(refreshToken))?.SubjectId;
     }
 
     /// <inheritdoc />
@@ -935,18 +950,21 @@ public class OidcAuthService : IOidcAuthService
         return tokens ?? throw new InvalidOperationException("Empty token response");
     }
 
+    /// <summary>How far past its <c>exp</c> an ID token is still accepted, for clock drift.</summary>
+    private static readonly TimeSpan IdTokenClockSkew = TimeSpan.FromMinutes(2);
+
     /// <summary>
-    /// Parses the payload claims from a JWT ID token without validating the signature.
+    /// Decodes the ID token from a token-endpoint response and checks that <paramref name="provider"/>
+    /// issued it, for this client, and that it has not expired.
     /// </summary>
     /// <remarks>
-    /// Full signature validation is performed by the OIDC token handler when the token is
-    /// subsequently used. This method is intentionally minimal — it only decodes the Base64url
-    /// payload and deserialises the JSON claims.
+    /// The signature is not checked. The token came over TLS straight from the provider's token
+    /// endpoint, which OpenID Connect Core 3.1.3.7 accepts in place of a signature check; the claims
+    /// still have to name this provider and this client.
     /// </remarks>
-    /// <param name="idToken">The raw JWT ID token string.</param>
-    /// <returns>Deserialised <see cref="OidcIdTokenClaims"/> from the token payload.</returns>
-    /// <exception cref="InvalidOperationException">Thrown for malformed token format or empty claims.</exception>
-    private static OidcIdTokenClaims ParseIdToken(string idToken)
+    /// <exception cref="InvalidOperationException">The token is malformed or fails a check.</exception>
+    internal static OidcIdTokenClaims ParseIdToken(
+        string idToken, OidcProvider provider, string? discoveryIssuer, DateTimeOffset now)
     {
         var parts = idToken.Split('.');
         if (parts.Length != 3)
@@ -954,17 +972,41 @@ public class OidcAuthService : IOidcAuthService
             throw new InvalidOperationException("Invalid ID token format");
         }
 
-        var payload = parts[1];
-
-        var json = Encoding.UTF8.GetString(Base64Url.Decode(payload));
+        var json = Encoding.UTF8.GetString(Base64Url.Decode(parts[1]));
 
         var claims = JsonSerializer.Deserialize<OidcIdTokenClaims>(
             json,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-        );
+        ) ?? throw new InvalidOperationException("Invalid ID token claims");
 
-        return claims ?? throw new InvalidOperationException("Invalid ID token claims");
+        if (!OidcIssuer.Matches(claims.Iss, claims.Tid, provider.IssuerUrl, discoveryIssuer))
+        {
+            throw new InvalidOperationException("ID token was not issued by the provider");
+        }
+
+        if (!NamesAudience(claims.Aud, provider.ClientId))
+        {
+            throw new InvalidOperationException("ID token was not issued for this client");
+        }
+
+        if (claims.Exp is not { } exp || DateTimeOffset.FromUnixTimeSeconds(exp) + IdTokenClockSkew <= now)
+        {
+            throw new InvalidOperationException("ID token has expired");
+        }
+
+        return claims;
     }
+
+    /// <summary>
+    /// Whether an <c>aud</c> claim, a string or an array of strings, names <paramref name="clientId"/>.
+    /// </summary>
+    private static bool NamesAudience(JsonElement? aud, string clientId) => aud switch
+    {
+        { ValueKind: JsonValueKind.String } single => single.GetString() == clientId,
+        { ValueKind: JsonValueKind.Array } many => many.EnumerateArray()
+            .Any(a => a.ValueKind == JsonValueKind.String && a.GetString() == clientId),
+        _ => false,
+    };
 
     private const string SubClaim = "sub";
     private const string EmailClaim = "email";
@@ -1254,11 +1296,24 @@ public class OidcAuthService : IOidcAuthService
     internal class OidcIdTokenClaims
     {
         public string Sub { get; set; } = string.Empty;
+        public string? Iss { get; set; }
+        public JsonElement? Aud { get; set; }
+        public string? Tid { get; set; }
         public string? Email { get; set; }
+
+        [JsonPropertyName("email_verified")]
+        [JsonConverter(typeof(LenientBooleanConverter))]
         public bool? EmailVerified { get; set; }
+
         public string? Name { get; set; }
+
+        [JsonPropertyName("preferred_username")]
         public string? PreferredUsername { get; set; }
+
+        [JsonPropertyName("given_name")]
         public string? GivenName { get; set; }
+
+        [JsonPropertyName("family_name")]
         public string? FamilyName { get; set; }
         public string? Picture { get; set; }
         public string? Nonce { get; set; }
@@ -1266,6 +1321,34 @@ public class OidcAuthService : IOidcAuthService
         public string? SessionId => Sid;
         public long? Iat { get; set; }
         public long? Exp { get; set; }
+    }
+
+    /// <summary>
+    /// Reads a boolean claim sent as a JSON boolean or as the string <c>"true"</c>/<c>"false"</c>
+    /// (Amazon Cognito and older ADFS send <c>email_verified</c> as a string). Anything else reads
+    /// as absent rather than failing the login.
+    /// </summary>
+    internal sealed class LenientBooleanConverter : JsonConverter<bool?>
+    {
+        public override bool? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            switch (reader.TokenType)
+            {
+                case JsonTokenType.True:
+                    return true;
+                case JsonTokenType.False:
+                    return false;
+                case JsonTokenType.String:
+                    return bool.TryParse(reader.GetString(), out var parsed) ? parsed : null;
+                default:
+                    reader.Skip();
+                    return null;
+            }
+        }
+
+        /// <summary>Claims are only ever read.</summary>
+        public override void Write(Utf8JsonWriter writer, bool? value, JsonSerializerOptions options) =>
+            throw new NotSupportedException();
     }
 
     #endregion

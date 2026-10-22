@@ -59,12 +59,14 @@ public class DataSourceServiceDiscoveryTests : IDisposable
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
-        context,
+        context.AsFactory(),
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,
         Mock.Of<IAuditContext>(),
         _connectorConfig.Object,
+        Mock.Of<Nocturne.Core.Contracts.V4.ITreatmentDecomposer>(),
+        Nocturne.API.Tests.Infrastructure.ProfileActivationTestDeps.Writer(context),
         NullLogger<DataSourceService>.Instance);
 
     private async Task<List<DataSourceInfo>> DiscoverAsync()
@@ -107,6 +109,31 @@ public class DataSourceServiceDiscoveryTests : IDisposable
             Id = Guid.CreateVersion7(), TenantId = TenantId,
             DataSource = dataSource, Device = device, Timestamp = timestamp, Insulin = 1.5,
         }));
+
+    [Fact]
+    public async Task Discovery_ReportsTheWindowItsCountsCover()
+    {
+        SeedSensorGlucose(null, RigA, DateTime.UtcNow);
+        SeedSnapshot(null, RigB, DateTime.UtcNow);
+        SeedStateSpan("pump-only", DateTime.UtcNow);
+
+        var sources = await DiscoverAsync();
+
+        sources.Should().HaveCount(3);
+        sources.Should().OnlyContain(s => s.TotalEntriesWindowDays == DataSourceService.DiscoveryWindowDays);
+    }
+
+    [Fact]
+    public async Task Discovery_CountsNothingOlderThanTheWindowItReports()
+    {
+        var edge = DateTime.UtcNow.AddDays(-DataSourceService.DiscoveryWindowDays);
+        SeedSensorGlucose(null, RigA, edge.AddHours(-1));
+        SeedSensorGlucose(null, RigB, edge.AddHours(1));
+
+        var sources = await DiscoverAsync();
+
+        sources.Should().ContainSingle().Which.DeviceId.Should().Be(RigB);
+    }
 
     [Fact]
     public async Task Discovery_CountsASnapshotOnlySource()

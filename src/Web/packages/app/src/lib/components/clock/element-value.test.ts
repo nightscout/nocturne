@@ -4,6 +4,7 @@ import type {
   GlucoseUnits,
   TimeFormat,
 } from "$lib/stores/appearance-store.svelte";
+import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
 import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
 
 // formatting.ts pulls in appearance-store, which pulls in mode-watcher (no node
@@ -37,6 +38,7 @@ const glucose = {
   direction: "Flat",
   lastUpdated: now.getTime() - 7 * 60_000,
   demoMode: false,
+  thresholds: resolveChartThresholds(),
 };
 
 /**
@@ -49,6 +51,7 @@ const noReading = {
   direction: "",
   lastUpdated: null,
   demoMode: false,
+  thresholds: resolveChartThresholds(),
 };
 
 const el = (element: ClockElement): ClockElement => element;

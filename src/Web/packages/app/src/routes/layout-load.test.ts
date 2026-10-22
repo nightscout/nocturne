@@ -5,6 +5,8 @@ vi.mock("$app/environment", () => ({ browser: true, building: false, dev: false 
 const registerPreferenceCookieDomain = vi.fn();
 const registerPreferencesWriteThrough = vi.fn();
 const reconcilePreferences = vi.fn();
+const applyTenantPresentation = vi.fn();
+const presentOwnerPreferences = vi.fn();
 
 vi.mock("$lib/stores/appearance-store.svelte", () => ({
   registerPreferenceCookieDomain: (...args: unknown[]) =>
@@ -12,6 +14,8 @@ vi.mock("$lib/stores/appearance-store.svelte", () => ({
   registerPreferencesWriteThrough: (...args: unknown[]) =>
     registerPreferencesWriteThrough(...args),
   reconcilePreferences: (...args: unknown[]) => reconcilePreferences(...args),
+  applyTenantPresentation: (...args: unknown[]) => applyTenantPresentation(...args),
+  presentOwnerPreferences: (...args: unknown[]) => presentOwnerPreferences(...args),
   preferredLanguage: { current: "en" },
   isSupportedLocale: (locale: string) => locale === "en",
   setLanguage: vi.fn(),
@@ -44,9 +48,11 @@ describe("root layout universal load", () => {
     registerPreferenceCookieDomain.mockClear();
     registerPreferencesWriteThrough.mockClear();
     reconcilePreferences.mockClear();
+    applyTenantPresentation.mockClear();
+    presentOwnerPreferences.mockClear();
   });
 
-  it("hydrates a share viewer from the link owner's preferences", async () => {
+  it("draws a share viewer with the link owner's preferences, not reconciling them as the viewer's", async () => {
     await runLoad({
       isShareHost: true,
       isAuthenticated: false,
@@ -54,7 +60,8 @@ describe("root layout universal load", () => {
       serverPreferences: { glucoseUnits: "mmol" },
     });
 
-    expect(reconcilePreferences).toHaveBeenCalledWith({ glucoseUnits: "mmol" });
+    expect(presentOwnerPreferences).toHaveBeenCalledWith({ glucoseUnits: "mmol" });
+    expect(reconcilePreferences).not.toHaveBeenCalled();
   });
 
   it("never widens the preference cookie or writes back from a share host", async () => {
@@ -81,5 +88,20 @@ describe("root layout universal load", () => {
     expect(registerPreferenceCookieDomain).toHaveBeenCalledWith("nocturne.run");
     expect(registerPreferencesWriteThrough).toHaveBeenCalled();
     expect(reconcilePreferences).toHaveBeenCalledWith({ glucoseUnits: "mg/dl" });
+  });
+
+  it("falls a guest back to the tenant's presentation after reconciling the guest's own", async () => {
+    await runLoad({
+      isShareHost: false,
+      isAuthenticated: true,
+      baseDomain: "nocturne.run",
+      serverPreferences: null,
+      tenantPreferences: { glucoseUnits: "mmol" },
+    });
+
+    expect(applyTenantPresentation).toHaveBeenCalledWith({ glucoseUnits: "mmol" });
+    expect(reconcilePreferences.mock.invocationCallOrder[0]).toBeLessThan(
+      applyTenantPresentation.mock.invocationCallOrder[0]
+    );
   });
 });

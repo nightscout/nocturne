@@ -51,6 +51,26 @@ public class TempBasalMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void Percent_RoundTripsThroughEntity()
+    {
+        var model = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Rate = 0.4,
+            ScheduledRate = 0.8,
+            Percent = -50,
+        };
+
+        var entity = TempBasalMapper.ToEntity(model);
+        entity.Percent.Should().Be(-50);
+        TempBasalMapper.ToDomainModel(entity).Percent.Should().Be(-50);
+
+        TempBasalMapper.UpdateEntity(entity, new TempBasal { StartTimestamp = model.StartTimestamp, Rate = 1.0 });
+        entity.Percent.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void ToEntity_EmptyGuid_GeneratesNewId()
     {
         var model = new TempBasal { StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime, Rate = 1.0 };

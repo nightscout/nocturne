@@ -9,9 +9,12 @@
     </PropertyGroup>
     <ItemGroup>
         <InternalsVisibleTo Include="Nocturne.Infrastructure.Data.Tests" />
+        <!-- Tests build contexts directly and pin their tenant (NocturneDbContext.TenantId). -->
+        <InternalsVisibleTo Include="Nocturne.API.Tests" />
+        <InternalsVisibleTo Include="Nocturne.Tests.Shared" />
+        <InternalsVisibleTo Include="Nocturne.Infrastructure.Data.Performance.Tests" />
     </ItemGroup>
     <ItemGroup>
-        <!-- IHttpContextAccessor, for the reason given on MutationAuditInterceptor. -->
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
     <ItemGroup>

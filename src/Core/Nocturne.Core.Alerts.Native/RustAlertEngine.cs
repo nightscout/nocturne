@@ -20,7 +20,6 @@ public sealed class RustAlertEngineException : Exception
     {
     }
 
-    /// <param name="message">The exception message.</param>
     /// <param name="rejection">The <c>error</c> of the engine's <c>ok: false</c> envelope.</param>
     public RustAlertEngineException(string message, string? rejection) : base(message)
     {

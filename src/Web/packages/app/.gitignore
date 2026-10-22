@@ -21,3 +21,7 @@ Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .fallow/
+
+# Vitest browser-mode failure output
+.vitest-attachments/
+__screenshots__/

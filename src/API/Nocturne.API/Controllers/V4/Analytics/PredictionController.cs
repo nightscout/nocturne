@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
@@ -13,7 +12,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <summary>
 /// Controller for glucose forecast predictions.
 /// Supports multiple prediction sources: <c>DeviceStatus</c> (AAPS/Trio/Loop loop data)
-/// or <c>OrefWasm</c> (server-side oref0 WASM calculation).
+/// or <c>OrefWasm</c> (server-side oref calculation).
 /// </summary>
 /// <remarks>
 /// The active prediction source is determined at startup from <c>Predictions:Source</c>
@@ -151,60 +150,6 @@ public class PredictionController : ControllerBase
 }
 
 /// <summary>
-/// Response containing glucose predictions.
-/// </summary>
-public class GlucosePredictionResponse
-{
-    /// <summary>Timestamp when predictions were calculated</summary>
-    public DateTimeOffset Timestamp { get; set; }
-
-    /// <summary>Current blood glucose (mg/dL)</summary>
-    public double CurrentBg { get; set; }
-
-    /// <summary>Rate of glucose change (mg/dL per 5 min)</summary>
-    public double Delta { get; set; }
-
-    /// <summary>Eventual blood glucose if trend continues (mg/dL)</summary>
-    public double EventualBg { get; set; }
-
-    /// <summary>Current insulin on board (U)</summary>
-    public double Iob { get; set; }
-
-    /// <summary>Current carbs on board (g)</summary>
-    public double Cob { get; set; }
-
-    /// <summary>Sensitivity ratio used (1.0 = normal)</summary>
-    public double? SensitivityRatio { get; set; }
-
-    /// <summary>Prediction interval in minutes</summary>
-    public int IntervalMinutes { get; set; } = 5;
-
-    /// <summary>Prediction curves with different scenarios</summary>
-    public PredictionCurves Predictions { get; set; } = new();
-}
-
-/// <summary>
-/// Different prediction curves for visualization.
-/// </summary>
-public class PredictionCurves
-{
-    /// <summary>Main prediction curve (mg/dL values at 5-min intervals)</summary>
-    public List<double>? Default { get; set; }
-
-    /// <summary>IOB-only prediction (ignoring COB)</summary>
-    public List<double>? IobOnly { get; set; }
-
-    /// <summary>UAM (Unannounced Meal) prediction</summary>
-    public List<double>? Uam { get; set; }
-
-    /// <summary>COB-based prediction</summary>
-    public List<double>? Cob { get; set; }
-
-    /// <summary>Zero-temp prediction (what happens if basal stops)</summary>
-    public List<double>? ZeroTemp { get; set; }
-}
-
-/// <summary>
 /// Status of the prediction service.
 /// </summary>
 public class PredictionStatusResponse
@@ -214,62 +159,4 @@ public class PredictionStatusResponse
 
     /// <summary>Configured prediction source (None, DeviceStatus, OrefWasm)</summary>
     public string Source { get; set; } = "None";
-}
-
-/// <summary>
-/// Pre-resolved therapy profile flattened into contiguous absolute-time segments covering
-/// <c>[now, now+24h)</c> for on-device oref prediction. Property names are pinned to snake_case
-/// with <see cref="JsonPropertyNameAttribute"/> so the wire contract is independent of any ambient
-/// serializer naming policy, and every field is emitted (including zeros) so the client's strict
-/// decoder never sees a missing key.
-/// </summary>
-/// <remarks>
-/// Clients must additionally apply the fixed oref constants <c>max_iob=10</c>, <c>max_basal=4</c>,
-/// <c>max_daily_basal=2</c> (see <c>PredictionService.GetProfileAsync</c>) to match a server-side run.
-/// </remarks>
-public sealed class ProfileSnapshotResponse
-{
-    /// <summary>When the snapshot was resolved (Unix ms); equals the window start.</summary>
-    [JsonPropertyName("fetched_at_mills")]
-    public long FetchedAtMills { get; set; }
-
-    /// <summary>Ascending, contiguous, gap/overlap-free segments covering [now, now+24h).</summary>
-    [JsonPropertyName("segments")]
-    public List<ProfileSnapshotSegment> Segments { get; set; } = new();
-}
-
-/// <summary>
-/// One flat segment of the resolved profile: all scalars are constant over <c>[start, end)</c>.
-/// </summary>
-public sealed class ProfileSnapshotSegment
-{
-    /// <summary>Segment start (Unix ms, inclusive).</summary>
-    [JsonPropertyName("start_mills")] public long StartMills { get; set; }
-
-    /// <summary>Segment end (Unix ms, exclusive).</summary>
-    [JsonPropertyName("end_mills")] public long EndMills { get; set; }
-
-    /// <summary>Duration of insulin action (hours).</summary>
-    [JsonPropertyName("dia")] public double Dia { get; set; }
-
-    /// <summary>Scheduled basal rate (U/hr).</summary>
-    [JsonPropertyName("basal")] public double Basal { get; set; }
-
-    /// <summary>Insulin sensitivity (mg/dL per U).</summary>
-    [JsonPropertyName("sens")] public double Sens { get; set; }
-
-    /// <summary>Carb ratio (g/U).</summary>
-    [JsonPropertyName("carb_ratio")] public double CarbRatio { get; set; }
-
-    /// <summary>Low BG target (mg/dL).</summary>
-    [JsonPropertyName("min_bg")] public double MinBg { get; set; }
-
-    /// <summary>High BG target (mg/dL).</summary>
-    [JsonPropertyName("max_bg")] public double MaxBg { get; set; }
-
-    /// <summary>Insulin activity peak (minutes).</summary>
-    [JsonPropertyName("peak")] public int Peak { get; set; }
-
-    /// <summary>Insulin activity curve model name (e.g. "rapid-acting").</summary>
-    [JsonPropertyName("curve")] public string Curve { get; set; } = "rapid-acting";
 }

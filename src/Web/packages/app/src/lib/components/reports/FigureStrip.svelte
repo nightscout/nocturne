@@ -7,6 +7,8 @@
     unit?: string;
     /** A reference or caption under the figure, e.g. a consensus target. */
     note?: string;
+    /** A second caption line under the note, e.g. a breakdown of the figure. */
+    detail?: string;
   }
 
   interface Props {
@@ -42,6 +44,9 @@
         </dd>
         {#if figure.note}
           <p class="mt-0.5 text-2xs text-muted-foreground">{figure.note}</p>
+        {/if}
+        {#if figure.detail}
+          <p class="text-2xs text-muted-foreground">{figure.detail}</p>
         {/if}
       </div>
     {/each}

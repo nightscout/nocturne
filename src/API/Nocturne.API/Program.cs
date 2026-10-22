@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Audit;
+using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.DevOnly;
@@ -26,10 +28,12 @@ using Nocturne.API.OpenApi;
 using Scalar.AspNetCore;
 using Nocturne.Aspire.Scalar;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Extensions;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -79,6 +83,7 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 builder.AddServiceDefaults();
+builder.Services.AddRequestPathRedactor<CredentialPathRedactor>();
 
 builder.Host.UseDefaultServiceProvider(options =>
 {
@@ -131,7 +136,7 @@ builder.Services.AddDataProtection()
 // Add compatibility proxy services
 builder.Services.AddCompatibilityProxyServices(builder.Configuration);
 
-// In-process, so each replica caches independently and entries are lost on restart.
+// In-process, so entries are lost on restart.
 builder.Services.AddNocturneMemoryCache();
 
 // Add response caching for GET endpoints
@@ -141,18 +146,23 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddHostedService<AuditRetentionService>();
 builder.Services.AddHostedService<SoftDeleteCleanupService>();
+builder.Services.AddSingleton<IGoogleHealthCoordinatorStore, PostgresGoogleHealthCoordinatorStore>();
 builder.Services.AddSingleton<GoogleHealthCoordinator>();
+builder.Services.AddSingleton<IGoogleHealthGrantHolders, PostgresGoogleHealthGrantHolders>();
 builder.Services.AddSingleton<IGoogleHealthSyncCoordinator>(provider =>
     provider.GetRequiredService<GoogleHealthCoordinator>());
 builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
+builder.Services.AddGoogleHealthPlatform();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHostedService<GoogleHealthWorker>();
 builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);
+builder.Services.AddDevOnlyEversenseMock(builder.Environment, builder.Configuration);
 
 // Consumed by the dev-only admin controllers (Development) and the demo admin
 // controller's seed-extras endpoint (demo container, all environments).
 builder.Services.AddScoped<SampleDataSeeder>();
 
+builder.Services.AddSingleton<ReadAccessLogWriter>();
 builder.Services.AddScoped<ReadAccessAuditFilter>();
 builder.Services.AddControllers(options =>
 {
@@ -213,10 +223,11 @@ builder.Services.AddMigrationServices();
 
 
 // Configure JWT authentication - derive signing key from instance key
-var secretKey =
-    builder.Configuration[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
-    ?? builder.Configuration[ServiceNames.ConfigKeys.InstanceKey]
-    ?? (isTesting ? "test-instance-key-for-unit-tests-minimum-length" : throw new InvalidOperationException("Instance key must be configured for JWT signing. Set Parameters:instance-key or INSTANCE_KEY."));
+var secretKey = isTesting
+    ? InstanceKeyDigest.ResolveKey(builder.Configuration) is { Length: > 0 } configuredKey
+        ? configuredKey
+        : "test-instance-key-for-unit-tests-minimum-length"
+    : InstanceKeyDigest.RequireKey(builder.Configuration);
 var key = Encoding.UTF8.GetBytes(secretKey);
 
 builder
@@ -282,11 +293,13 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowAnyHeader();
     });
+
+    options.AddPolicy(LegacyApiCorsPolicy.Name, LegacyApiCorsPolicy.Configure);
 });
 
 var app = builder.Build();
 
-var loopApnsKeyId = app.Configuration["Loop:ApnsKeyId"];
+var loopApnsKeyId = app.Services.GetRequiredService<IOptions<LoopConfiguration>>().Value.ApnsKeyId;
 app.Logger.LogInformation(
     "Loop configuration loaded - APNS Key ID: {LoopApnsKeyId}",
     string.IsNullOrEmpty(loopApnsKeyId) ? "Not configured" : $"{loopApnsKeyId[..Math.Min(4, loopApnsKeyId.Length)]}****");
@@ -329,15 +342,22 @@ else
 }
 
 // Configure middleware pipeline
+app.UseSecurityHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-// Documentation paths get the any-origin policy, everything else the credentialed default.
-// The two branches are complementary so exactly one CORS middleware ever runs per request —
-// chaining both would emit conflicting Access-Control-Allow-Origin headers. Both sit ahead of
+// Documentation paths get the any-origin policy, foreign origins on the legacy API get
+// LegacyApiCorsPolicy when the instance enables cors, everything else the credentialed default.
+// The branches are complementary so exactly one CORS middleware ever runs per request:
+// chaining two would emit conflicting Access-Control-Allow-Origin headers. All sit ahead of
 // UseStaticFiles so the Scalar assets under wwwroot/scalar are covered, and ahead of
 // UseRouting so preflights short-circuit.
+bool UsesLegacyApiCors(HttpContext context) =>
+    LegacyApiCorsPolicy.Applies(context, app.Configuration, corsBaseDomain, corsAllowLocalhost);
 app.UseWhen(PublicDocsMiddleware.IsPublicDocsPath, branch => branch.UseCors(PublicDocsCorsPolicy));
-app.UseWhen(context => !PublicDocsMiddleware.IsPublicDocsPath(context), branch => branch.UseCors());
+app.UseWhen(UsesLegacyApiCors, branch => branch.UseCors(LegacyApiCorsPolicy.Name));
+app.UseWhen(
+    context => !PublicDocsMiddleware.IsPublicDocsPath(context) && !UsesLegacyApiCors(context),
+    branch => branch.UseCors());
 app.UseStaticFiles();
 app.UseNocturneForwardedHeaders(builder.Configuration);
 
@@ -347,47 +367,29 @@ app.UseNocturneForwardedHeaders(builder.Configuration);
 // this keeps tenant-scoped responses isolated per tenant and per credential in the shared cache.
 app.UseResponseCaching();
 
-// Strip .json suffixes before routing so /api/v1/treatments.json matches
-// the TreatmentsController route /api/v1/treatments. Must run before
-// UseRouting so the rewritten path is what the router sees.
 app.UseMiddleware<JsonExtensionMiddleware>();
-
-// Serve v1 under /api/v2 wherever v2 has no route of its own, as Nightscout does. After the
-// .json strip so /api/v2/entries.json is judged as /api/v2/entries, and before UseRouting so
-// the rewritten path is what the router sees.
 app.UseMiddleware<V2FallbackMiddleware>();
 
-// Routing must run here, not where minimal hosting would insert it, so that
-// TenantSetupMiddleware below can read endpoint metadata such as [AllowDuringSetup].
+// Here rather than where minimal hosting would insert it, so the middleware below see the
+// matched endpoint.
 app.UseRouting();
 
-// Ahead of the documentation branch below, which jumps straight to its endpoint and would
-// otherwise skip the limiter entirely; the policies are attached to endpoints, so this needs
-// UseRouting to have run. Everything without a policy passes through untouched, and no policy
-// partitions on anything this position withholds: all but one partition on pre-auth request data
-// (the remote address or the Host), and translation-drafts partitions on the raw credential
-// because HttpContext.Items["AuthContext"] is not populated until AuthenticationMiddleware,
-// further down.
+// The policies are attached to endpoints, so this needs UseRouting to have run. Everything
+// without a policy passes through untouched, and no policy partitions on anything this position
+// withholds: all but one partition on pre-auth request data (the remote address or the Host),
+// and translation-drafts partitions on the raw credential because HttpContext.Items["AuthContext"]
+// is not populated until AuthenticationMiddleware, further down.
 app.UseRateLimiter();
 
 app.UseMiddleware<PublicDocsMiddleware>();
-
-// Redirect OIDC callbacks from apex to the originating tenant subdomain
-app.UseMiddleware<OidcCallbackRedirectMiddleware>();
-
-// Resolve tenant from subdomain (must run before authentication)
+app.UseMiddleware<ApexCallbackRelayMiddleware>();
 app.UseMiddleware<TenantResolutionMiddleware>();
-
-// Block API traffic for freshly provisioned tenants with no passkey credentials
 app.UseMiddleware<TenantSetupMiddleware>();
-
-// Add Nightscout authentication middleware
 app.UseMiddleware<AuthenticationMiddleware>();
-
-// Add member scope middleware (resolves membership role and restricts scopes)
 app.UseMiddleware<MemberScopeMiddleware>();
-
-// Add audit context middleware (captures actor metadata for mutation audit log)
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments("/hubs"),
+    hubs => hubs.UseMiddleware<ReaderRecordingMiddleware>());
 app.UseMiddleware<AuditContextMiddleware>();
 
 // There is no app.UseAuthentication() call here, and adding one would be a security regression.
@@ -409,7 +411,6 @@ app.UseMiddleware<AuditContextMiddleware>();
 // directly.
 app.UseAuthorization();
 
-// Add compatibility proxy middleware (background comparison against Nightscout for v1/v2/v3 GET requests)
 app.UseMiddleware<CompatibilityProxyMiddleware>();
 
 // Map native API controllers
@@ -519,7 +520,7 @@ app.MapGet(
             new
             {
                 name = "Nocturne API",
-                version = "1.0.0",
+                version = AppVersion.Current,
                 description = "Modern C# rewrite of Nightscout API",
                 api_documentation = "/openapi/v1.json",
                 aspire_dashboard_note = "API documentation is available via Scalar in the Aspire dashboard",
@@ -539,6 +540,9 @@ app.MapGet(
 );
 
 app.MapDefaultEndpoints();
+
+app.Services.GetRequiredService<CredentialPathRedactor>()
+    .Load(((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints));
 
 // Skip database migrations when running in NSwag/OpenAPI generation mode
 // NSwag launches the app to extract the OpenAPI schema, but we don't need DB access for that
@@ -574,7 +578,8 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 
         // Background job records left Pending/Running by a previous process are orphans —
         // the detached tasks died with it. Mark them Interrupted so polls report the truth.
-        await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(migratorConnectionString, logger);
+        await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(
+            migratorConnectionString, Nocturne.API.Services.BackgroundJobLiveStates.ByTable, logger);
     }
 
     // Validate RLS, ownership, default privileges, and pool reset-on-close under the app role.
@@ -617,7 +622,7 @@ if (!app.Environment.IsDevelopment() && DevOnlyEndpoints.IsOptedIn(app.Configura
 if (app.Environment.IsDevelopment() && !isNSwagGeneration)
 {
     using var devSeedScope = app.Services.CreateScope();
-    var devSeedDb = devSeedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+    await using var devSeedDb = await devSeedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
     var devSeedLogger = devSeedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await DevIdentityFixtureSeeder.SeedAsync(
         devSeedDb, app.Configuration, devSeedLogger, CancellationToken.None);

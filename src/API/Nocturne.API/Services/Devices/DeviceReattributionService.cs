@@ -38,6 +38,7 @@ internal sealed class DeviceReattributionService : IDeviceReattributionService
     private readonly ITempBasalRepository _tempBasals;
     private readonly IBasalInjectionRepository _basalInjections;
     private readonly IDeviceEventRepository _deviceEvents;
+    private readonly IProfileActivationRepository _profileActivations;
     private readonly IPatientDeviceStamper _stamper;
     private readonly ILogger<DeviceReattributionService> _logger;
 
@@ -48,6 +49,7 @@ internal sealed class DeviceReattributionService : IDeviceReattributionService
         ITempBasalRepository tempBasals,
         IBasalInjectionRepository basalInjections,
         IDeviceEventRepository deviceEvents,
+        IProfileActivationRepository profileActivations,
         IPatientDeviceStamper stamper,
         ILogger<DeviceReattributionService> logger)
     {
@@ -57,6 +59,7 @@ internal sealed class DeviceReattributionService : IDeviceReattributionService
         _tempBasals = tempBasals;
         _basalInjections = basalInjections;
         _deviceEvents = deviceEvents;
+        _profileActivations = profileActivations;
         _stamper = stamper;
         _logger = logger;
     }
@@ -66,8 +69,8 @@ internal sealed class DeviceReattributionService : IDeviceReattributionService
     {
         // Device usage dates are local; pad ±1 day for local/UTC skew, matching the ingest stamper's
         // candidate window. Null bounds mean the device has an open-ended window.
-        var from = device.StartDate is { } start ? start.ToDateTime(TimeOnly.MinValue).AddDays(-1) : (DateTime?)null;
-        var to = device.EndDate is { } end ? end.ToDateTime(TimeOnly.MaxValue).AddDays(1) : (DateTime?)null;
+        var from = device.StartDate is { } start ? start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddDays(-1) : (DateTime?)null;
+        var to = device.EndDate is { } end ? end.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc).AddDays(1) : (DateTime?)null;
 
         // A record type is in scope when the registered category is one of the categories ingest
         // lets own that type — the same map, so back-stamping and live stamping cannot diverge.
@@ -88,6 +91,9 @@ internal sealed class DeviceReattributionService : IDeviceReattributionService
 
         if (DeviceAttributionCategories.BasalInjection.Contains(category))
             updated += await BackStampAsync(_basalInjections, DeviceAttributionCategories.BasalInjection, from, to, ct);
+
+        if (DeviceAttributionCategories.ProfileActivation.Contains(category))
+            updated += await BackStampAsync(_profileActivations, DeviceAttributionCategories.ProfileActivation, from, to, ct);
 
         if (DeviceAttributionCategories.SensorDeviceEvent.Contains(category))
             updated += await BackStampDeviceEventsAsync(

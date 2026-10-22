@@ -26,6 +26,7 @@
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
+  import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
   import QRCode from "qrcode";
 
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
@@ -55,7 +56,6 @@
     userCode: string;
     clientId: string;
     displayName: string | null;
-    isKnown: boolean;
     scopes: string[];
   } | null>(null);
   let deviceApproveLoading = $state(false);
@@ -130,7 +130,6 @@
         userCode: info.userCode ?? code,
         clientId: info.clientId ?? "",
         displayName: info.clientDisplayName ?? null,
-        isKnown: info.isKnownClient ?? false,
         scopes: (info.scopes ?? []).filter(Boolean),
       };
     } catch (err) {
@@ -320,20 +319,10 @@
               <Shield class="h-6 w-6 text-primary" />
             </div>
             <Card.Title class="text-lg">Authorize Application</Card.Title>
-            <Card.Description>
-              <span class="font-semibold text-foreground">{deviceInfo.displayName ?? deviceInfo.clientId}</span>
-              wants to access your Nocturne data.
-            </Card.Description>
+            <Card.Description>A device wants to access your Nocturne data.</Card.Description>
           </Card.Header>
           <Card.Content class="space-y-4">
-            {#if !deviceInfo.isKnown}
-              <div class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3">
-                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                <p class="text-sm text-warning">
-                  This application is not in the Nocturne known app directory. Only approve if you trust it.
-                </p>
-              </div>
-            {/if}
+            <DeviceAppClaimNotice claimedName={deviceInfo.displayName ?? deviceInfo.clientId} />
 
             <Separator />
 

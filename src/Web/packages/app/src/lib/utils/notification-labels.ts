@@ -21,6 +21,9 @@ const LABEL_MAP: Record<string, string> = {
   device_clock_deviation_subtitle:
     "A connected account's device clock ran at a different offset from its timezone for a while. Affected timestamps are adjusted as that data syncs, so some historical entries may shift.",
   declared_zone_changed: "Timezone updated from your connected account",
+  rejected_uploads: "Some uploads could not be stored",
+  rejected_uploads_subtitle:
+    "An uploader sent a record Nocturne could not store. Most uploaders treat it as saved, so it is kept under Data Quality for you to review or export.",
   declared_zone_changed_subtitle:
     "Your connected account now reports a different timezone, so a matching entry was added to your timezone timeline. You can review or edit it in settings.",
 };

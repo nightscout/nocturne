@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import Harness from "./OverlayContinuityHarness.test.svelte";
@@ -47,12 +47,12 @@ function expectUninterrupted(watch: BackdropWatch, backdrop: Element): void {
 }
 
 describe("coach mark overlay continuity", () => {
-  // Unmounting the overlay pops its sentinel history entry, and the popstate
-  // that follows is a task of its own. Let the previous test's land before
-  // rendering, or the next provider sees a still-marked history entry and pops
-  // a second time — which in the runner's iframe walks off the test page.
+  // Unmounting the overlay pops its sentinel history entry, and the traversal
+  // completes in a task of its own. Wait for the previous test's entry to go
+  // before rendering, or the next provider sees a still-marked history entry and
+  // pops a second time, which in the runner's iframe walks off the test page.
   beforeEach(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await vi.waitFor(() => expect(history.state?.__coachMark).not.toBe(true), { timeout: 5_000 });
   });
 
   it("keeps the same backdrop across an organic sequence advance", async () => {

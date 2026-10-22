@@ -16,8 +16,9 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// retry, and when the call fails, every entity first tracked during the call is detached and every
 /// entity tracked before it is put back to the state, original values and current values it had at
 /// the call. Each retry then starts from the caller's view and the work applies its edits once, and
-/// a call that fails leaves the context as the caller left it. The context may be the scope's, so
-/// its entities are restored rather than detached. Only scalar tracker state is restored: work must
+/// a call that fails leaves the context as the caller left it. The context may be a
+/// <see cref="DbUnitOfWork"/>'s, shared with writers that ran before the call, so its entities are
+/// restored rather than detached. Only scalar tracker state is restored: work must
 /// not change the collection or reference navigations of an entity tracked before the call.
 /// </remarks>
 public static class RetryingTransactionExtensions

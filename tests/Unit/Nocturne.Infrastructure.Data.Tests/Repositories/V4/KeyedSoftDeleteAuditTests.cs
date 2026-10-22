@@ -128,7 +128,7 @@ public class CarbRatioScheduleRepositoryPrefixDeleteTests
 
     protected override string AuditEntityType => "CarbRatioSchedule";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new CarbRatioScheduleRepository(
             contextFactory, auditContext, Logger<CarbRatioScheduleRepository>());
 
@@ -155,7 +155,7 @@ public class SensitivityScheduleRepositoryPrefixDeleteTests
 
     protected override string AuditEntityType => "SensitivitySchedule";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new SensitivityScheduleRepository(
             contextFactory, auditContext, Logger<SensitivityScheduleRepository>());
 
@@ -182,7 +182,7 @@ public class TargetRangeScheduleRepositoryPrefixDeleteTests
 
     protected override string AuditEntityType => "TargetRangeSchedule";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new TargetRangeScheduleRepository(
             contextFactory, auditContext, Logger<TargetRangeScheduleRepository>());
 
@@ -209,7 +209,7 @@ public class TherapySettingsRepositoryPrefixDeleteTests
 
     protected override string AuditEntityType => "TherapySettings";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new TherapySettingsRepository(
             contextFactory, auditContext, Logger<TherapySettingsRepository>());
 
@@ -300,7 +300,7 @@ public class NoteRepositorySyncIdentifierDeleteTests : SyncIdentifierDeleteAudit
 
     protected override string AuditEntityType => "Note";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new NoteRepository(
             contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<NoteRepository>(), Broadcaster);
 
@@ -327,7 +327,7 @@ public class BolusRepositorySyncIdentifierDeleteTests : SyncIdentifierDeleteAudi
 
     protected override string AuditEntityType => "Bolus";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new BolusRepository(
             contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<BolusRepository>(), Broadcaster);
 
@@ -354,7 +354,7 @@ public class CarbIntakeRepositorySyncIdentifierDeleteTests : SyncIdentifierDelet
 
     protected override string AuditEntityType => "CarbIntake";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new CarbIntakeRepository(
             contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<CarbIntakeRepository>(), Broadcaster);
 
@@ -381,7 +381,7 @@ public class DeviceEventRepositorySyncIdentifierDeleteTests : SyncIdentifierDele
 
     protected override string AuditEntityType => "DeviceEvent";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new DeviceEventRepository(
             contextFactory, new Mock<IDeduplicationService>().Object, auditContext, Logger<DeviceEventRepository>(), Broadcaster);
 
@@ -413,7 +413,7 @@ public class DeviceStatusExtrasRepositoryCorrelationDeleteTests
 
     protected override string ExpectedScope => $"correlation_id={CorrelationId}";
 
-    protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
+    protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
         _repository = new DeviceStatusExtrasRepository(
             contextFactory, auditContext, NullLogger<DeviceStatusExtrasRepository>.Instance);
 

@@ -1,3 +1,4 @@
+using Nocturne.Infrastructure.Data.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -29,20 +30,20 @@ namespace Nocturne.API.Controllers.V4.DevOnly;
 [Produces("application/json")]
 public class DevAuthController : ControllerBase
 {
-    private readonly NocturneDbContext _db;
+    private readonly INocturneDbContextFactory _dbFactory;
     private readonly ISessionService _sessionService;
     private readonly IOptions<OidcOptions> _oidcOptions;
     private readonly IOptions<BaseDomainOptions> _baseDomainOptions;
     private readonly ILogger<DevAuthController> _logger;
 
     public DevAuthController(
-        NocturneDbContext db,
+        INocturneDbContextFactory dbFactory,
         ISessionService sessionService,
         IOptions<OidcOptions> oidcOptions,
         IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<DevAuthController> logger)
     {
-        _db = db;
+        _dbFactory = dbFactory;
         _sessionService = sessionService;
         _oidcOptions = oidcOptions;
         _baseDomainOptions = baseDomainOptions;
@@ -69,7 +70,8 @@ public class DevAuthController : ControllerBase
         [FromQuery] string? format,
         CancellationToken ct)
     {
-        var (error, response) = await IssueSessionAsync(tenant, username, ct);
+        await using var db = await _dbFactory.CreateAsync(ct);
+        var (error, response) = await IssueSessionAsync(db, tenant, username, ct);
         if (error != null)
             return error;
 
@@ -88,7 +90,8 @@ public class DevAuthController : ControllerBase
     public async Task<ActionResult<DevLoginResponse>> LoginJson(
         [FromBody] DevLoginRequest request, CancellationToken ct)
     {
-        var (error, response) = await IssueSessionAsync(request.Tenant, request.Username, ct);
+        await using var db = await _dbFactory.CreateAsync(ct);
+        var (error, response) = await IssueSessionAsync(db, request.Tenant, request.Username, ct);
         if (error != null)
             return error;
         return Ok(response);
@@ -105,7 +108,8 @@ public class DevAuthController : ControllerBase
     public async Task<ActionResult<DevIdentityFixtureFile>> ExportPasskeyFixture(
         [FromQuery] string? username, CancellationToken ct)
     {
-        var credentials = await _db.PasskeyCredentials
+        await using var db = await _dbFactory.CreateAsync(ct);
+        var credentials = await db.PasskeyCredentials
             .AsNoTracking()
             .Include(c => c.Subject)
             .Where(c => c.Subject != null && !c.Subject.IsSystemSubject && c.Subject.IsActive)
@@ -142,6 +146,7 @@ public class DevAuthController : ControllerBase
     }
 
     private async Task<(ActionResult? Error, DevLoginResponse? Response)> IssueSessionAsync(
+        NocturneDbContext db,
         string? tenantSlug, string? username, CancellationToken ct)
     {
         var slug = tenantSlug;
@@ -153,14 +158,14 @@ public class DevAuthController : ControllerBase
         TenantEntity? tenant;
         if (!string.IsNullOrWhiteSpace(slug))
         {
-            tenant = await _db.Tenants.AsNoTracking()
+            tenant = await db.Tenants.AsNoTracking()
                 .FirstOrDefaultAsync(t => t.Slug == slug, ct);
             if (tenant == null)
                 return (NotFound(new { error = $"No tenant with slug '{slug}'" }), null);
         }
         else
         {
-            tenant = await _db.Tenants.SoleTenantAsync(ct);
+            tenant = await db.Tenants.SoleTenantAsync(ct);
             if (tenant is null)
                 return (BadRequest(new
                 {
@@ -168,12 +173,9 @@ public class DevAuthController : ControllerBase
                 }), null);
         }
 
-        // tenant_members/tenant_roles carry no RLS policies today, but set the
-        // context's TenantId so the connection interceptor pins the GUC on every
-        // open (a raw set_config would be reset when EF closes the connection).
-        _db.TenantId = tenant.Id;
-
-        var members = await _db.TenantMembers
+        // ?tenant= may name a tenant other than the host's.
+        await using var tenantDb = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
+        var members = await tenantDb.TenantMembers
             .AsNoTracking()
             .Include(m => m.Subject)
             .Include(m => m.MemberRoles).ThenInclude(mr => mr.TenantRole)

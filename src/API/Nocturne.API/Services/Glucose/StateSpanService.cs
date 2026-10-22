@@ -2,7 +2,9 @@ using Nocturne.API.Services.Health;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Glucose;
@@ -57,6 +59,15 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
+    public Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
+        StateSpanCategory category,
+        string? source,
+        DateTime from,
+        int count,
+        CancellationToken cancellationToken = default)
+        => _repository.GetStateSpansStartingFromAsync(category, source, from, count, cancellationToken);
+
+    /// <inheritdoc />
     public Task<PumpModeState?> GetCurrentPumpModeAsync(CancellationToken cancellationToken = default)
         => _repository.GetCurrentPumpModeAsync(cancellationToken);
 
@@ -107,6 +118,24 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyDictionary<Guid, DeletedStateSpan>> ResolveDeletedAsync(
+        IReadOnlyCollection<string> ids,
+        CancellationToken cancellationToken = default)
+        => _repository.ResolveDeletedAsync(ids, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<StateSpan> RestoreStateSpanAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => _repository.RestoreAsync(id, WriteOrigin.Live, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<BulkRestoreResult<StateSpan>> BulkRestoreStateSpansAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default)
+        => _repository.BulkRestoreAsync(ids, WriteOrigin.Live, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<StateSpan?> UpdateStateSpanAsync(
         string id,
         StateSpan stateSpan,
@@ -136,6 +165,8 @@ public class StateSpanService : IStateSpanService
         string? type = null,
         int count = 10,
         int skip = 0,
+        DateTime? from = null,
+        DateTime? to = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -147,6 +178,8 @@ public class StateSpanService : IStateSpanService
             type: type,
             count: count,
             skip: skip,
+            from: from,
+            to: to,
             cancellationToken: cancellationToken);
 
         // Convert each StateSpan to an Activity using the mapper

@@ -87,10 +87,8 @@ public class LegacyJwtHandlerTests
     }
 
     [Fact]
-    public async Task AuthenticateAsync_ScopedJwtWithoutOAuthClaims_ParsesScopes()
+    public async Task AuthenticateAsync_ScopelessJwtWithNoGrantPins_Succeeds()
     {
-        // A tenant-pinned scoped token with no scopes granted carries neither scope nor
-        // client_id, so OAuthAccessTokenHandler skips it and it lands here.
         var token = _jwtService.GenerateAccessToken(
             TestSubject,
             permissions: [],
@@ -104,24 +102,34 @@ public class LegacyJwtHandlerTests
         Assert.Empty(result.AuthContext.Scopes);
     }
 
+    /// <summary>
+    /// A token minted from a grant carries the grant's pins even when its scope list is empty, so
+    /// OAuthAccessTokenHandler passes it over. Accepted here it would read as an unscoped session.
+    /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task AuthenticateAsync_UnscopedJwt_CarriesItsHistoryLimit(bool limitTo24Hours)
+    [InlineData("tenant")]
+    [InlineData("grant")]
+    [InlineData("limit")]
+    [InlineData("platform")]
+    public async Task AuthenticateAsync_GrantShapedJwtWithNoScopes_Fails(string pin)
     {
-        // A limited token that reaches this handler must stay limited, whatever claim shape led
-        // OAuthAccessTokenHandler to pass it over.
         var token = _jwtService.GenerateAccessToken(
             TestSubject,
             permissions: [],
-            roles: ["readable"],
+            roles: [],
             scopes: [],
-            limitTo24Hours: limitTo24Hours);
+            tenantId: pin == "tenant" ? _tenantId : null,
+            grantId: pin == "grant" ? Guid.CreateVersion7() : null,
+            limitTo24Hours: pin == "limit",
+            platformAccess: pin == "platform");
 
-        var result = await _handler.AuthenticateAsync(CreateHttpContext(token));
+        var context = CreateHttpContext(token);
+        context.Items["TenantContext"] = new TenantContext(_tenantId, "default", "Default", true, IsDemo: false);
 
-        Assert.True(result.Succeeded);
-        Assert.Equal(limitTo24Hours, result.AuthContext!.LimitTo24Hours);
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.False(result.Succeeded);
+        Assert.False(result.ShouldSkip);
     }
 
     [Fact]
@@ -203,25 +211,6 @@ public class LegacyJwtHandlerTests
 
         Assert.False(result.Succeeded);
         Assert.False(result.ShouldSkip);
-    }
-
-    [Fact]
-    public async Task AuthenticateAsync_TenantPinnedToken_MatchingTenant_Succeeds()
-    {
-        var token = _jwtService.GenerateAccessToken(
-            TestSubject,
-            permissions: [],
-            roles: [],
-            scopes: [],
-            tenantId: _tenantId);
-
-        var context = CreateHttpContext(token);
-        context.Items["TenantContext"] = new TenantContext(_tenantId, "default", "Default", true, IsDemo: false);
-
-        var result = await _handler.AuthenticateAsync(context);
-
-        Assert.True(result.Succeeded);
-        Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
     }
 
     [Fact]

@@ -184,6 +184,24 @@ describe("ConnectorDetailsDialog", () => {
       .toBeVisible();
   });
 
+  // A refused record was answered but not stored; without the count the sync reads as clean.
+  it("says how many records could not be stored and where they are kept", async () => {
+    await syncReturning({
+      success: true,
+      message: "",
+      errors: [],
+      itemsSynced: { Boluses: 40 },
+      itemsRefused: 2,
+    });
+
+    await expect
+      .element(page.getByText(/2 records could not be stored/))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("link", { name: "Rejected Uploads" }))
+      .toBeVisible();
+  });
+
   it("mentions no skipped records when nothing was skipped", async () => {
     await syncReturning({
       success: true,

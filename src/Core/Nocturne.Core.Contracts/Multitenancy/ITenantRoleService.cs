@@ -8,7 +8,6 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 /// <seealso cref="IMemberInviteService"/>
 public interface ITenantRoleService
 {
-    /// <summary>Returns all roles defined for the specified tenant.</summary>
     Task<List<TenantRoleDto>> GetRolesAsync(Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
@@ -68,7 +67,6 @@ public interface ITenantRoleService
     /// to name the authority it is acting on. <see cref="Scope"/> atoms are a subset of
     /// the member-grantable scope vocabulary, so a resolved scope set is a valid granter set.
     /// </param>
-    /// <param name="ct">A cancellation token.</param>
     Task<RoleGrantValidation> ValidateRoleGrantAsync(
         Guid tenantId,
         IReadOnlyCollection<Guid> roleIds,

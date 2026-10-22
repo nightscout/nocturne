@@ -20,14 +20,13 @@ public interface INoteRepository : ILegacyKeyedRepository<Note>, ISyncKeyedRepos
     /// Retrieve a page of <see cref="Note"/> records filtered by time range, device, source, and origin.
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
-    /// <param name="to">Exclusive end of the time window, or <c>null</c> for no upper bound.</param>
+    /// <param name="to">Inclusive end of the time window, or <c>null</c> for no upper bound.</param>
     /// <param name="device">Optional device identifier filter.</param>
     /// <param name="source">Optional data source filter.</param>
     /// <param name="limit">Maximum number of records to return (default 100).</param>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
     /// <param name="nativeOnly">When <c>true</c>, excludes records projected from legacy V1/V2/V3 treatments.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<Note>> GetAsync(
         DateTime? from,
         DateTime? to,
@@ -49,7 +48,6 @@ public interface INoteRepository : ILegacyKeyedRepository<Note>, ISyncKeyedRepos
     /// <summary>Delete <see cref="Note"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>
     /// <param name="syncIdentifier">The external sync identifier (e.g., UUID from the uploading system).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
 
@@ -58,12 +56,10 @@ public interface INoteRepository : ILegacyKeyedRepository<Note>, ISyncKeyedRepos
     /// </summary>
     /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
     /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>Retrieve all <see cref="Note"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<Note>> GetByCorrelationIdAsync(
         Guid correlationId,
         CancellationToken ct = default

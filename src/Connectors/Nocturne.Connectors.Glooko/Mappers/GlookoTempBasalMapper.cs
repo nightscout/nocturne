@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models.V4;
 
@@ -32,7 +33,7 @@ public class GlookoTempBasalMapper
 
         // SuspendBasal -> TempBasal with rate=0, origin=Suspended
         if (series.SuspendBasal != null)
-            foreach (var suspend in series.SuspendBasal)
+            foreach (var suspend in ConnectorFaults.NonNullRecords(series.SuspendBasal, _logger, _connectorSource, "V3 suspendBasal"))
             {
                 var startTimestamp = _timeMapper.GetCorrectedGlookoTime(suspend.X);
                 var durationSeconds = suspend.Duration ?? 0;
@@ -62,7 +63,7 @@ public class GlookoTempBasalMapper
 
         // LgsPlgs -> TempBasal with rate=0, origin=Algorithm or Suspended
         if (series.LgsPlgs != null)
-            foreach (var lgsEvent in series.LgsPlgs)
+            foreach (var lgsEvent in ConnectorFaults.NonNullRecords(series.LgsPlgs, _logger, _connectorSource, "V3 lgsPlgs"))
             {
                 var startTimestamp = _timeMapper.GetCorrectedGlookoTime(lgsEvent.X);
                 var durationSeconds = lgsEvent.Duration ?? 0;
@@ -96,7 +97,7 @@ public class GlookoTempBasalMapper
 
         // TemporaryBasal -> TempBasal with actual rate, origin=Manual
         if (series.TemporaryBasal != null)
-            foreach (var tempBasal in series.TemporaryBasal)
+            foreach (var tempBasal in ConnectorFaults.NonNullRecords(series.TemporaryBasal, _logger, _connectorSource, "V3 temporaryBasal"))
             {
                 var startTimestamp = _timeMapper.GetCorrectedGlookoTime(tempBasal.X);
                 var durationSeconds = tempBasal.Duration ?? 0;
@@ -134,7 +135,7 @@ public class GlookoTempBasalMapper
         // ScheduledRate when the delivered rate diverges from the programmed schedule, so we
         // leave ScheduledRate null here rather than asserting "delivered == scheduled".
         if (series.ScheduledBasal != null)
-            foreach (var basal in series.ScheduledBasal.Where(b => !b.Interpolated))
+            foreach (var basal in ConnectorFaults.NonNullRecords(series.ScheduledBasal, _logger, _connectorSource, "V3 scheduledBasal").Where(b => !b.Interpolated))
             {
                 var startTimestamp = _timeMapper.GetCorrectedGlookoTime(basal.X);
                 var durationSeconds = basal.Duration ?? 0;
@@ -182,7 +183,7 @@ public class GlookoTempBasalMapper
 
         // TempBasals -> origin=Manual
         if (batchData.TempBasals != null)
-            foreach (var tempBasal in batchData.TempBasals)
+            foreach (var tempBasal in ConnectorFaults.NonNullRecords(batchData.TempBasals, _logger, _connectorSource, "V2 temp basal"))
             {
                 if (string.IsNullOrWhiteSpace(tempBasal.Timestamp))
                 {
@@ -232,7 +233,7 @@ public class GlookoTempBasalMapper
         // ScheduledRate is left null so the publisher can resolve it from the user's
         // programmed basal_schedules and reclassify algorithm-driven adjustments.
         if (batchData.ScheduledBasals != null)
-            foreach (var basal in batchData.ScheduledBasals)
+            foreach (var basal in ConnectorFaults.NonNullRecords(batchData.ScheduledBasals, _logger, _connectorSource, "V2 scheduled basal"))
             {
                 if (string.IsNullOrWhiteSpace(basal.Timestamp))
                 {
@@ -280,7 +281,7 @@ public class GlookoTempBasalMapper
 
         // SuspendBasals -> rate=0, origin=Suspended
         if (batchData.SuspendBasals != null)
-            foreach (var suspend in batchData.SuspendBasals)
+            foreach (var suspend in ConnectorFaults.NonNullRecords(batchData.SuspendBasals, _logger, _connectorSource, "V2 suspend basal"))
             {
                 if (string.IsNullOrWhiteSpace(suspend.Timestamp))
                 {

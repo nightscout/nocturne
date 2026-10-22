@@ -64,7 +64,7 @@ the new C# codebase maintains 1:1 functionality with the original implementation
 [x] - ar2.test.js (? COVERED - AR2 forecasting algorithm with cone generation, notifications, and virtual assistant
 support tested in Ar2Tests and Ar2Service)
 [x] - basalprofileplugin.test.js (ProfileServiceTests)
-[x] - bgnow.test.js (BgNowTests)
+[x] - bgnow.test.js (DirectionServiceTests, PropertiesServiceTests)
 [x] - boluswizardpreview.test.js (BolusWizardServiceTests)
 [ ] - bridge.test.js
 [x] - cannulaage.test.js (CannulaAgeServiceTests, LegacyDeviceAgeServiceThresholdTests)

@@ -9,7 +9,7 @@
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
   import { reachedUrgency } from "$lib/components/trackers/schedule";
   import { Button } from "$lib/components/ui/button";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { calendarShowTirPercent, glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getUnitLabel, formatLocale, formatMediumDateTime, time } from "$lib/utils/formatting";
   import {
     leadingBlankDays,
@@ -212,37 +212,11 @@
     goto(resolve(`/reports/day-in-review?date=${day.date}`));
   }
 
-  const monthSummary = $derived.by(() => {
-    const currentData = punchCardQuery.current;
-    const monthData = currentData?.months?.find(
+  const monthSummary = $derived(
+    punchCardQuery.current?.months?.find(
       (m) => m.year === currentYear && m.month === currentMonth
-    );
-    const summary = monthData?.summary;
-    const days = monthData?.days ?? [];
-
-    // Each per-day average divides by the days that carry that kind of data.
-    // Dividing both by the days with CGM readings overstated TDD and carbs by the
-    // whole sensor-outage share of the month — a month with 10 outage days but
-    // complete pump data read about 50% high.
-    const withCarbs = days.filter((d) => (d.totalCarbs ?? 0) > 0);
-    const withInsulin = days.filter((d) => (d.totalInsulin ?? 0) > 0);
-    const sum = (
-      entries: typeof days,
-      read: (day: (typeof days)[number]) => number | undefined
-    ) => entries.reduce((total, day) => total + (read(day) ?? 0), 0);
-
-    return {
-      totalReadings: summary?.totalReadings ?? 0,
-      inRangePercent: summary?.inRangePercent ?? 0,
-      avgGlucose: summary?.avgGlucose ?? 0,
-      avgDailyCarbs:
-        withCarbs.length > 0 ? sum(withCarbs, (d) => d.totalCarbs) / withCarbs.length : 0,
-      tdd:
-        withInsulin.length > 0
-          ? sum(withInsulin, (d) => d.totalInsulin) / withInsulin.length
-          : 0,
-    };
-  });
+    )?.summary
+  );
 
   function getDefinition(
     instance: TrackerInstanceDto,
@@ -393,6 +367,8 @@
         {nextMonth}
         {goToToday}
         {setViewMode}
+        showTirPercent={calendarShowTirPercent.current}
+        setShowTirPercent={(show) => (calendarShowTirPercent.current = show)}
       />
     </div>
 
@@ -441,6 +417,7 @@
                       <CalendarDayCell
                       {day}
                       {viewMode}
+                      showTirPercent={calendarShowTirPercent.current}
                       {currentYear}
                       {currentMonth}
                       {trackerEvents}

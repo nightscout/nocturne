@@ -21,7 +21,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 [Tags("TenantAdmin")]
 [Route("api/v4/nightscout-transition")]
 [Produces("application/json")]
-[RequireAdmin]
+[RequireSuperuser]
 public class NightscoutTransitionController : ControllerBase
 {
     private readonly NightscoutConnectorConfiguration? _nightscoutConfig;

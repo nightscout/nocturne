@@ -31,14 +31,8 @@ public class OpenApsPreferences
     /// </summary>
     public int Urgent { get; set; } = 60;
 
-    /// <summary>
-    /// Whether alerts are enabled
-    /// </summary>
     public bool EnableAlerts { get; set; }
 
-    /// <summary>
-    /// Whether to color prediction lines
-    /// </summary>
     public bool ColorPredictionLines { get; set; } = true;
 }
 
@@ -52,14 +46,8 @@ public class OpenApsPreferences
 /// <seealso cref="OpenApsLoopStatus"/>
 public class OpenApsAnalysisResult
 {
-    /// <summary>
-    /// Dictionary of seen devices by URI
-    /// </summary>
     public Dictionary<string, OpenApsDevice> SeenDevices { get; set; } = new();
 
-    /// <summary>
-    /// Last enacted command
-    /// </summary>
     public OpenApsCommand? LastEnacted { get; set; }
 
     /// <summary>
@@ -67,19 +55,10 @@ public class OpenApsAnalysisResult
     /// </summary>
     public OpenApsCommand? LastNotEnacted { get; set; }
 
-    /// <summary>
-    /// Last suggested command
-    /// </summary>
     public OpenApsCommand? LastSuggested { get; set; }
 
-    /// <summary>
-    /// Last IOB data
-    /// </summary>
     public OpenApsIob? LastIob { get; set; }
 
-    /// <summary>
-    /// Last MM tune data
-    /// </summary>
     public OpenApsMmTune? LastMmTune { get; set; }
 
     /// <summary>
@@ -87,40 +66,19 @@ public class OpenApsAnalysisResult
     /// </summary>
     public OpenApsPredBg? LastPredBgs { get; set; }
 
-    /// <summary>
-    /// Timestamp of last loop moment
-    /// </summary>
     public DateTime? LastLoopMoment { get; set; }
 
-    /// <summary>
-    /// Last eventual BG value
-    /// </summary>
     public double? LastEventualBg { get; set; }
 
-    /// <summary>
-    /// Overall loop status
-    /// </summary>
     public OpenApsLoopStatus Status { get; set; } = new();
 }
 
-/// <summary>
-/// OpenAPS device information
-/// </summary>
 public class OpenApsDevice
 {
-    /// <summary>
-    /// Device display name
-    /// </summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Device URI
-    /// </summary>
     public string Uri { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Device status
-    /// </summary>
     public OpenApsLoopStatus? Status { get; set; }
 
     /// <summary>
@@ -128,15 +86,9 @@ public class OpenApsDevice
     /// </summary>
     public DateTime? When { get; set; }
 
-    /// <summary>
-    /// MM tune information
-    /// </summary>
     public OpenApsMmTune? MmTune { get; set; }
 }
 
-/// <summary>
-/// OpenAPS loop status
-/// </summary>
 public class OpenApsLoopStatus
 {
     /// <summary>
@@ -172,15 +124,9 @@ public class OpenApsCommand
     [JsonPropertyName("temp")]
     public string? Temp { get; set; }
 
-    /// <summary>
-    /// Snooze BG value
-    /// </summary>
     [JsonPropertyName("snoozeBG")]
     public double? SnoozeBg { get; set; }
 
-    /// <summary>
-    /// Timestamp of the command
-    /// </summary>
     [JsonPropertyName("timestamp")]
     public string? Timestamp { get; set; }
 
@@ -190,21 +136,12 @@ public class OpenApsCommand
     [JsonPropertyName("mills")]
     public long? Mills { get; set; }
 
-    /// <summary>
-    /// Basal rate
-    /// </summary>
     [JsonPropertyName("rate")]
     public double? Rate { get; set; }
 
-    /// <summary>
-    /// Reason for the command
-    /// </summary>
     [JsonPropertyName("reason")]
     public string? Reason { get; set; }
 
-    /// <summary>
-    /// Eventual BG prediction
-    /// </summary>
     [JsonPropertyName("eventualBG")]
     public double? EventualBg { get; set; }
 
@@ -233,9 +170,6 @@ public class OpenApsCommand
     [JsonPropertyName("recieved")]
     public bool? Recieved { get; set; }
 
-    /// <summary>
-    /// Meal assist information
-    /// </summary>
     [JsonPropertyName("mealAssist")]
     public string? MealAssist { get; set; }
 
@@ -245,26 +179,14 @@ public class OpenApsCommand
     [JsonPropertyName("predBGs")]
     public OpenApsPredBg? PredBgs { get; set; }
 
-    /// <summary>
-    /// DateTime moment for calculations
-    /// </summary>
     public DateTime? Moment { get; set; }
 }
 
-/// <summary>
-/// OpenAPS IOB data
-/// </summary>
 public class OpenApsIob
 {
-    /// <summary>
-    /// Timestamp
-    /// </summary>
     [JsonPropertyName("timestamp")]
     public string? Timestamp { get; set; }
 
-    /// <summary>
-    /// Bolus IOB
-    /// </summary>
     [JsonPropertyName("bolusiob")]
     public double? BolusIob { get; set; }
 
@@ -274,39 +196,21 @@ public class OpenApsIob
     [JsonPropertyName("iob")]
     public double? Iob { get; set; }
 
-    /// <summary>
-    /// Activity level
-    /// </summary>
     [JsonPropertyName("activity")]
     public double? Activity { get; set; }
 
-    /// <summary>
-    /// Basal IOB
-    /// </summary>
     [JsonPropertyName("basaliob")]
     public double? BasalIob { get; set; }
 
-    /// <summary>
-    /// Net basal insulin
-    /// </summary>
     [JsonPropertyName("netbasalinsulin")]
     public double? NetBasalInsulin { get; set; }
 
-    /// <summary>
-    /// High temp insulin
-    /// </summary>
     [JsonPropertyName("hightempinsulin")]
     public double? HighTempInsulin { get; set; }
 
-    /// <summary>
-    /// Micro bolus insulin
-    /// </summary>
     [JsonPropertyName("microBolusInsulin")]
     public double? MicroBolusInsulin { get; set; }
 
-    /// <summary>
-    /// Micro bolus IOB
-    /// </summary>
     [JsonPropertyName("microBolusIOB")]
     public double? MicroBolusIob { get; set; }
 
@@ -322,9 +226,6 @@ public class OpenApsIob
     [JsonPropertyName("time")]
     public string? Time { get; set; }
 
-    /// <summary>
-    /// DateTime moment for calculations
-    /// </summary>
     public DateTime? Moment { get; set; }
 }
 
@@ -333,15 +234,9 @@ public class OpenApsIob
 /// </summary>
 public class OpenApsPredBg
 {
-    /// <summary>
-    /// IOB predictions
-    /// </summary>
     [JsonPropertyName("IOB")]
     public List<double>? Iob { get; set; }
 
-    /// <summary>
-    /// COB predictions
-    /// </summary>
     [JsonPropertyName("COB")]
     public List<double>? Cob { get; set; }
 
@@ -357,9 +252,6 @@ public class OpenApsPredBg
     [JsonPropertyName("ZT")]
     public List<double>? Zt { get; set; }
 
-    /// <summary>
-    /// UAM predictions
-    /// </summary>
     [JsonPropertyName("UAM")]
     public List<double>? Uam { get; set; }
 
@@ -369,32 +261,17 @@ public class OpenApsPredBg
     [JsonPropertyName("values")]
     public List<double>? Values { get; set; }
 
-    /// <summary>
-    /// DateTime moment for calculations
-    /// </summary>
     public DateTime? Moment { get; set; }
 }
 
-/// <summary>
-/// OpenAPS MM tune data
-/// </summary>
 public class OpenApsMmTune
 {
-    /// <summary>
-    /// Scan details array
-    /// </summary>
     [JsonPropertyName("scanDetails")]
     public List<List<object>>? ScanDetails { get; set; }
 
-    /// <summary>
-    /// Set frequency
-    /// </summary>
     [JsonPropertyName("setFreq")]
     public double? SetFreq { get; set; }
 
-    /// <summary>
-    /// Timestamp
-    /// </summary>
     [JsonPropertyName("timestamp")]
     public string? Timestamp { get; set; }
 
@@ -404,15 +281,9 @@ public class OpenApsMmTune
     [JsonPropertyName("usedDefault")]
     public bool? UsedDefault { get; set; }
 
-    /// <summary>
-    /// DateTime moment for calculations
-    /// </summary>
     public DateTime? Moment { get; set; }
 }
 
-/// <summary>
-/// OpenAPS forecast point for visualization
-/// </summary>
 public class OpenApsForecastPoint
 {
     /// <summary>
@@ -425,9 +296,6 @@ public class OpenApsForecastPoint
     /// </summary>
     public double Y { get; set; }
 
-    /// <summary>
-    /// Color for this point
-    /// </summary>
     public string Color { get; set; } = string.Empty;
 
     /// <summary>
@@ -436,23 +304,11 @@ public class OpenApsForecastPoint
     public string Type { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// OpenAPS event information for visualization
-/// </summary>
 public class OpenApsEvent
 {
-    /// <summary>
-    /// Event timestamp
-    /// </summary>
     public DateTime Time { get; set; }
 
-    /// <summary>
-    /// Event value/description
-    /// </summary>
     public string Value { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Event label for display
-    /// </summary>
     public string Label { get; set; } = string.Empty;
 }

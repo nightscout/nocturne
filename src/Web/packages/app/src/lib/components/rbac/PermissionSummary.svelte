@@ -1,76 +1,37 @@
 <script lang="ts">
+  import { scopeCategories } from "$lib/constants/scope-labels.svelte";
+
   interface SummaryEntry {
     name: string;
     level: string;
+    scope: string;
   }
 
   let { permissions = [] }: { permissions: string[] } = $props();
 
   const entries = $derived.by(() => {
     const set = new Set(permissions);
-    const result: SummaryEntry[] = [];
 
-    if (set.has("*")) {
-      return [{ name: "All permissions", level: "Full access" }];
+    const categories = scopeCategories();
+    const fullAccess = categories.find((cat) => cat.full === "*");
+    if (fullAccess && set.has("*")) {
+      return [{ name: fullAccess.label, level: "Full access", scope: "*" }];
     }
 
-    // Data categories (readwrite takes precedence over read)
-    const dataCategories: { name: string; read: string; readwrite: string }[] = [
-      { name: "Blood Glucose", read: "glucose.read", readwrite: "glucose.readwrite" },
-      { name: "Treatments", read: "treatments.read", readwrite: "treatments.readwrite" },
-      { name: "Device Status", read: "devices.read", readwrite: "devices.readwrite" },
-      { name: "Heart Rate", read: "heartrate.read", readwrite: "heartrate.readwrite" },
-      { name: "Step Count", read: "stepcount.read", readwrite: "stepcount.readwrite" },
-      { name: "Sleep", read: "sleep.read", readwrite: "sleep.readwrite" },
-      { name: "Food & Meals", read: "food.read", readwrite: "food.readwrite" },
-      { name: "Treatment Profile", read: "therapy.read", readwrite: "therapy.readwrite" },
-      { name: "Alerts", read: "alerts.read", readwrite: "alerts.readwrite" },
-    ];
-
-    for (const cat of dataCategories) {
-      if (set.has(cat.readwrite)) {
-        result.push({ name: cat.name, level: "Read & Write" });
-      } else if (set.has(cat.read)) {
-        result.push({ name: cat.name, level: "Read" });
+    const held: SummaryEntry[] = [];
+    const covered: string[] = [];
+    for (const cat of categories.filter((c) => c.group !== "oauth")) {
+      if (cat.full && set.has(cat.full)) {
+        held.push({ name: cat.label, level: "Full access", scope: cat.full });
+        covered.push(...(cat.alsoGrants ?? []));
+      } else if (cat.readwrite && set.has(cat.readwrite)) {
+        held.push({ name: cat.label, level: "Read & Write", scope: cat.readwrite });
+      } else if (cat.read && set.has(cat.read)) {
+        held.push({ name: cat.label, level: "Read", scope: cat.read });
       }
     }
 
-    // Read-only categories
-    const readOnlyCategories: { name: string; atom: string }[] = [
-      { name: "Reports", atom: "reports.read" },
-      { name: "Identity", atom: "identity.read" },
-    ];
-
-    for (const cat of readOnlyCategories) {
-      if (set.has(cat.atom)) {
-        result.push({ name: cat.name, level: "Read" });
-      }
-    }
-
-    // Admin permissions
-    const adminPermissions: { name: string; atom: string }[] = [
-      { name: "Manage Roles", atom: "roles.manage" },
-      { name: "Invite Members", atom: "members.invite" },
-      { name: "Manage Members", atom: "members.manage" },
-      { name: "Tenant Settings", atom: "tenant.settings" },
-      { name: "Manage Sharing", atom: "sharing.manage" },
-      { name: "Guest Links", atom: "sharing.guest" },
-    ];
-
-    for (const perm of adminPermissions) {
-      if (set.has(perm.atom)) {
-        result.push({ name: perm.name, level: "Full access" });
-      }
-    }
-
-    // Audit (manage takes precedence over read)
-    if (set.has("audit.manage")) {
-      result.push({ name: "Manage Audit Settings", level: "Full access" });
-    } else if (set.has("audit.read")) {
-      result.push({ name: "View Audit Logs", level: "Full access" });
-    }
-
-    return result;
+    return held.filter((entry) => !covered.includes(entry.scope));
   });
 </script>
 

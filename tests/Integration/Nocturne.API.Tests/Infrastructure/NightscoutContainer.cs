@@ -44,6 +44,19 @@ public class NightscoutContainer : IAsyncDisposable
     /// </summary>
     public HttpClient Client => _httpClient ?? throw new InvalidOperationException("Container not started");
 
+    /// <summary>
+    /// Nightscout's <c>ENABLE</c>. Nightscout mounts <c>/api/v1/alexa</c> only when <c>alexa</c> is
+    /// enabled. It reports this list, followed by the defaults it adds, as <c>settings.enable</c>.
+    /// </summary>
+    public const string Enable = "careportal basal iob cob bwp cage sage iage bage pump openaps loop alexa";
+
+    /// <summary>
+    /// The <c>settings.enable</c> Nightscout reports for <see cref="Enable"/>, given to Nocturne as
+    /// <c>Features:Enable</c> so status compares like for like.
+    /// </summary>
+    public const string ReportedEnable = Enable
+        + " treatmentnotify bgnow delta direction timeago devicestatus upbat errorcodes profile bolus dbsize runtimestate ar2";
+
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         using var measurement = TestPerformanceTracker.MeasureTest("NightscoutContainer.Start");
@@ -84,7 +97,7 @@ public class NightscoutContainer : IAsyncDisposable
             .WithEnvironment("MONGO_CONNECTION", internalMongoUri)
             .WithEnvironment("API_SECRET", ApiSecret)
             .WithEnvironment("DISPLAY_UNITS", "mg/dl")
-            .WithEnvironment("ENABLE", "careportal basal iob cob bwp cage sage iage bage pump openaps loop")
+            .WithEnvironment("ENABLE", Enable)
             .WithEnvironment("AUTH_DEFAULT_ROLES", "readable")
             .WithEnvironment("INSECURE_USE_HTTP", "true")
             .WithEnvironment("SECURE_HSTS_HEADER", "false")

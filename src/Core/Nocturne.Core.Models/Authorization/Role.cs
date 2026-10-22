@@ -8,9 +8,6 @@ namespace Nocturne.Core.Models.Authorization;
 /// <seealso cref="Scope"/>
 public class Role
 {
-    /// <summary>
-    /// Unique identifier
-    /// </summary>
     public Guid Id { get; set; }
 
     /// <summary>
@@ -33,13 +30,7 @@ public class Role
     /// </summary>
     public bool IsSystemRole { get; set; }
 
-    /// <summary>
-    /// When the role was created
-    /// </summary>
     public DateTime CreatedAt { get; set; }
 
-    /// <summary>
-    /// When the role was last updated
-    /// </summary>
     public DateTime? UpdatedAt { get; set; }
 }

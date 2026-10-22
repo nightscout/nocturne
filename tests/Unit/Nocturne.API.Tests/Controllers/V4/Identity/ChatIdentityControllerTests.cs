@@ -38,10 +38,10 @@ public class ChatIdentityControllerTests : IDisposable
         _db = TestDbContextFactory.CreateSqlite();
         _service = new ChatIdentityService(
             new ChatIdentityDirectoryService(
-                _db.ContextFactory, Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityDirectoryService>>()),
             new ChatIdentityPendingLinkService(
-                _db.ContextFactory, Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
-            _db.ContextFactory,
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
+            _db.ContextFactory.AsNocturneFactory(),
             Mock.Of<ILogger<ChatIdentityService>>());
 
         _tenantId = NewTenant();
@@ -107,9 +107,9 @@ public class ChatIdentityControllerTests : IDisposable
     }
 
     /// <summary>
-    /// Issues a pending link token with no tenant slug hint, which any tenant may claim.
+    /// Issues a pending link token, by default with no tenant slug hint, which any tenant may claim.
     /// </summary>
-    private string InsertPendingToken(string platformUserId)
+    private string InsertPendingToken(string platformUserId, string? tenantSlug = null)
     {
         var token = Convert.ToHexString(Guid.CreateVersion7().ToByteArray());
         using var db = _db.CreateContext();
@@ -118,7 +118,7 @@ public class ChatIdentityControllerTests : IDisposable
             Token = token,
             Platform = Platform,
             PlatformUserId = platformUserId,
-            TenantSlug = null,
+            TenantSlug = tenantSlug,
             Source = "connect-slash",
             ExpiresAt = DateTime.UtcNow.AddMinutes(10),
         });
@@ -155,6 +155,21 @@ public class ChatIdentityControllerTests : IDisposable
     {
         await using var db = _db.CreateContext();
         return await db.ChatIdentityDirectory.AsNoTracking().SingleAsync(d => d.Id == id);
+    }
+
+    private async Task<List<ChatIdentityDirectoryEntry>> LinksFor(string platformUserId)
+    {
+        await using var db = _db.CreateContext();
+        return await db.ChatIdentityDirectory.AsNoTracking()
+            .Where(d => d.PlatformUserId == platformUserId)
+            .ToListAsync();
+    }
+
+    private static void AssertProblem(ActionResult<ChatIdentityLinkResponse> result, int status)
+    {
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(status);
+        problem.Value.Should().BeOfType<ProblemDetails>();
     }
 
     private static ChatIdentityLinkResponse OkLink(ActionResult<ChatIdentityLinkResponse> result)
@@ -258,6 +273,21 @@ public class ChatIdentityControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task GetPending_names_the_chat_account_the_token_would_link()
+    {
+        var token = await new ChatIdentityPendingLinkService(
+                _db.ContextFactory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityPendingLinkService>>())
+            .CreateAsync(Platform, CallerChatUser, "sam_t", null, "connect-slash", CancellationToken.None);
+
+        var result = await CreateController().GetPending(token, CancellationToken.None);
+
+        var pending = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<PendingLinkViewResponse>().Subject;
+        pending.PlatformUserName.Should().Be("sam_t");
+        pending.PlatformUserId.Should().Be(CallerChatUser);
+    }
+
+    [Fact]
     public async Task ClaimLink_reports_the_new_link_as_owned()
     {
         var token = InsertPendingToken(CallerChatUser);
@@ -272,19 +302,51 @@ public class ChatIdentityControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task ClaimLink_reports_a_pre_existing_co_members_row_as_not_owned()
+    public async Task ClaimLink_answers_conflict_when_the_chat_account_is_linked_to_a_co_member()
     {
-        InsertLink(_tenantId, _coMemberSubjectId, "oliver", isDefault: true);
+        var coMemberLink = InsertLink(_tenantId, _coMemberSubjectId, "oliver", isDefault: true);
+        var token = InsertPendingToken(CallerChatUser);
+
+        var result = await CreateController().ClaimLink(
+            new ClaimChatIdentityLinkRequest { Token = token }, CancellationToken.None);
+
+        AssertProblem(result, StatusCodes.Status409Conflict);
+        (await Reload(coMemberLink)).NocturneUserId.Should().Be(_coMemberSubjectId);
+    }
+
+    [Fact]
+    public async Task ClaimLink_answers_bad_request_for_a_token_that_was_never_issued()
+    {
+        var result = await CreateController().ClaimLink(
+            new ClaimChatIdentityLinkRequest { Token = "never-issued" }, CancellationToken.None);
+
+        AssertProblem(result, StatusCodes.Status400BadRequest);
+    }
+
+    [Fact]
+    public async Task ClaimLink_answers_bad_request_for_a_token_issued_for_another_tenant()
+    {
+        var token = InsertPendingToken(CallerChatUser, tenantSlug: "someone-else");
+
+        var result = await CreateController().ClaimLink(
+            new ClaimChatIdentityLinkRequest { Token = token }, CancellationToken.None);
+
+        AssertProblem(result, StatusCodes.Status400BadRequest);
+        (await LinksFor(CallerChatUser)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ClaimLink_returns_the_callers_existing_link_again()
+    {
+        var existing = InsertLink(_tenantId, _callerSubjectId, "lily", isDefault: true);
         var token = InsertPendingToken(CallerChatUser);
 
         var result = await CreateController().ClaimLink(
             new ClaimChatIdentityLinkRequest { Token = token }, CancellationToken.None);
 
         var link = OkLink(result);
-        link.NocturneUserId.Should().Be(_coMemberSubjectId,
-            "a chat account already linked to this tenant keeps the link it has");
-        link.IsOwnedByCaller.Should().BeFalse(
-            "the by-id endpoints refuse this row, so the settings page must not offer them");
+        link.Id.Should().Be(existing);
+        link.IsOwnedByCaller.Should().BeTrue();
     }
 
     [Fact]

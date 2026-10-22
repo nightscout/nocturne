@@ -124,17 +124,12 @@ public class AlertSweepServiceSnoozeTests
                     if (_resumeThrowsFor(id)) throw new InvalidOperationException("resume failed");
                     _resumed.Add((id,
                         sp.GetRequiredService<ITenantAccessor>().TenantId,
-                        sp.GetRequiredService<NocturneDbContext>().AuditContext?.Endpoint));
+                        sp.GetRequiredService<IAuditContext>().Endpoint));
                     return true;
                 });
             return snooze.Object;
         });
         services.AddScoped<IAuditContext, AuditContext>();
-        services.AddScoped(_ => new NocturneDbContext(
-            new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseSqlite("DataSource=:memory:")
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-                .Options));
         services.AddAlertEvaluators();
         services.AddScoped<ConditionEvaluatorRegistry>();
         services.AddSingleton<ConditionVersionLog>();

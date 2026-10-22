@@ -56,6 +56,15 @@ public interface IMetadataPublisher
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Upserts the active-program readings a connector reports as effective
+    /// <see cref="ProfileActivation"/>s, keyed by their <see cref="ProfileActivation.SyncIdentifier"/>.
+    /// </summary>
+    Task<bool> PublishProfileActivationsAsync(
+        IEnumerable<ProfileActivation> activations,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default);
+
     Task<bool> PublishSystemEventsAsync(
         IEnumerable<SystemEvent> systemEvents,
         string source,
@@ -99,7 +108,6 @@ public interface IMetadataPublisher
     /// or <c>null</c> when this source has written none.
     /// </summary>
     /// <param name="source">The connector data source (e.g. <c>nightscout-connector</c>).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task<DateTime?> GetLatestActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default);
@@ -110,7 +118,6 @@ public interface IMetadataPublisher
     /// spans share the table but not this watermark; see <see cref="GetLatestActivityTimestampAsync"/>.
     /// </summary>
     /// <param name="source">The connector data source (e.g. <c>nocturne-remote-connector</c>).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task<DateTime?> GetLatestStateSpanTimestampAsync(
         string source,
         CancellationToken cancellationToken = default);
@@ -123,7 +130,6 @@ public interface IMetadataPublisher
     /// </summary>
     /// <param name="source">The connector data source (e.g. <c>nightscout-connector</c>).</param>
     /// <param name="collection">The data collection key (e.g. <c>Glucose</c>, <c>Treatments</c>).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task<DateTime?> GetBackfillLowWaterMarkAsync(
         string source,
         string collection,
@@ -139,7 +145,6 @@ public interface IMetadataPublisher
     /// <param name="source">The connector data source (e.g. <c>nightscout-connector</c>).</param>
     /// <param name="collection">The data collection key (e.g. <c>Glucose</c>, <c>Treatments</c>).</param>
     /// <param name="lowWaterMark">The oldest successfully published record time, or <c>null</c> once the crawl reaches the source's beginning.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     Task SetBackfillLowWaterMarkAsync(
         string source,
         string collection,

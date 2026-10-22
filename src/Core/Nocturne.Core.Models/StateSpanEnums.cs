@@ -15,14 +15,8 @@ public enum StateSpanCategory
     /// </summary>
     PumpMode,
 
-    /// <summary>
-    /// Pump connectivity status
-    /// </summary>
     PumpConnectivity,
 
-    /// <summary>
-    /// Active override configuration
-    /// </summary>
     Override,
 
     /// <summary>
@@ -53,12 +47,14 @@ public enum StateSpanCategory
     /// <summary>
     /// AAPS temporary glucose target (Eating Soon, Activity, Manual)
     /// </summary>
-    TemporaryTarget
+    TemporaryTarget,
+
+    /// <summary>
+    /// Detected motion class from xDrip (walking, still, in vehicle), held until the next one
+    /// </summary>
+    Motion
 }
 
-/// <summary>
-/// Pump operational mode states
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<PumpModeState>))]
 public enum PumpModeState
 {
@@ -92,9 +88,6 @@ public enum PumpModeState
     /// </summary>
     Sleep,
 
-    /// <summary>
-    /// Exercise/activity mode
-    /// </summary>
     Exercise,
 
     /// <summary>
@@ -107,15 +100,9 @@ public enum PumpModeState
     /// </summary>
     Suspended,
 
-    /// <summary>
-    /// Pump powered off
-    /// </summary>
     Off
 }
 
-/// <summary>
-/// Pump connectivity states
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<PumpConnectivityState>))]
 public enum PumpConnectivityState
 {
@@ -134,15 +121,9 @@ public enum PumpConnectivityState
     /// </summary>
     Removed,
 
-    /// <summary>
-    /// Bluetooth disabled
-    /// </summary>
     BluetoothOff
 }
 
-/// <summary>
-/// Override states
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<OverrideState>))]
 public enum OverrideState
 {
@@ -157,26 +138,14 @@ public enum OverrideState
     Custom
 }
 
-/// <summary>
-/// Temporary target states
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<TemporaryTargetState>))]
 public enum TemporaryTargetState
 {
-    /// <summary>
-    /// Temporary target is active
-    /// </summary>
     Active,
 
-    /// <summary>
-    /// Temporary target was cancelled
-    /// </summary>
     Cancelled
 }
 
-/// <summary>
-/// Profile states
-/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<ProfileState>))]
 public enum ProfileState
 {

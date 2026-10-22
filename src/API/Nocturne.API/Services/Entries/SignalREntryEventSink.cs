@@ -1,7 +1,7 @@
 using Nocturne.Core.Contracts.Events;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Cache.Keys;
+using Nocturne.API.Services.Analytics;
+using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Realtime;
 
@@ -13,7 +13,8 @@ namespace Nocturne.API.Services.Entries;
 /// and <see cref="ISignalRBroadcastService"/> broadcasts via <see cref="IWriteSideEffects"/>.
 /// </summary>
 /// <remarks>
-/// Cache invalidation removes the per-tenant current-entry key and clears recent-entry cache patterns.
+/// Cache invalidation clears the <see cref="EntryCacheAdapter.CacheFamily"/> family, and the eHbA1c
+/// years a written reading reaches (<see cref="OnWrittenAsync"/>), or all of them after a bulk delete.
 /// V4 decomposition is disabled here because <see cref="EntryService"/> writes directly to V4 tables
 /// via <see cref="Nocturne.Core.Contracts.V4.IEntryDecomposer"/> before side effects fire.
 /// <c>dataUpdate</c> broadcasts are suppressed on single-record updates to avoid duplicate client refreshes.
@@ -24,49 +25,39 @@ namespace Nocturne.API.Services.Entries;
 public class SignalREntryEventSink : IDataEventSink<Entry>
 {
     private readonly IWriteSideEffects _sideEffects;
-    private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<SignalREntryEventSink> _logger;
     private const string CollectionName = "entries";
-
-    private string TenantCacheId => _tenantAccessor.Context?.TenantId.ToString()
-        ?? throw new InvalidOperationException("Tenant context is not resolved");
 
     /// <summary>
     /// Initializes a new instance of <see cref="SignalREntryEventSink"/>.
     /// </summary>
     /// <param name="sideEffects">Orchestrates cache invalidation, broadcasting, and V4 decomposition.</param>
-    /// <param name="tenantAccessor">Provides the current tenant context for scoping cache keys.</param>
     /// <param name="logger">The logger instance.</param>
     public SignalREntryEventSink(
         IWriteSideEffects sideEffects,
-        ITenantAccessor tenantAccessor,
         ILogger<SignalREntryEventSink> logger)
     {
         _sideEffects = sideEffects;
-        _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
 
     private WriteEffectOptions BuildWriteOptions() => new()
     {
-        CacheKeysToRemove = [CacheKeyBuilder.BuildCurrentEntriesKey(TenantCacheId)],
-        CachePatternsToClear = [CacheKeyBuilder.BuildRecentEntriesPattern(TenantCacheId)],
+        CacheFamiliesToClear = [EntryCacheAdapter.CacheFamily],
         DecomposeToV4 = false,
         BroadcastDataUpdate = true,
     };
 
     private WriteEffectOptions BuildWriteOptionsNoBroadcastDataUpdate() => new()
     {
-        CacheKeysToRemove = [CacheKeyBuilder.BuildCurrentEntriesKey(TenantCacheId)],
-        CachePatternsToClear = [CacheKeyBuilder.BuildRecentEntriesPattern(TenantCacheId)],
+        CacheFamiliesToClear = [EntryCacheAdapter.CacheFamily],
         DecomposeToV4 = false,
         BroadcastDataUpdate = false,
     };
 
     private WriteEffectOptions BuildCacheOnlyOptions() => new()
     {
-        CacheKeysToRemove = [CacheKeyBuilder.BuildCurrentEntriesKey(TenantCacheId)],
-        CachePatternsToClear = [CacheKeyBuilder.BuildRecentEntriesPattern(TenantCacheId)],
+        CacheFamiliesToClear = [EntryCacheAdapter.CacheFamily, TenantCacheFamily.EHbA1c],
     };
 
     public async Task OnCreatedAsync(IReadOnlyList<Entry> entries, CancellationToken ct = default)
@@ -78,6 +69,32 @@ public class SignalREntryEventSink : IDataEventSink<Entry>
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to process create side effects for {Count} entries", entries.Count);
+        }
+    }
+
+    /// <summary>
+    /// Clears the eHbA1c years the written readings feed, for every write origin: a completed year's
+    /// timeline is cached for weeks, and a backfill or import is the write most likely to land in one.
+    /// </summary>
+    public async Task OnWrittenAsync(IReadOnlyList<Entry> entries, CancellationToken ct = default)
+    {
+        try
+        {
+            var readings = entries
+                .Where(e => e.Type is "sgv" or "mbg")
+                .Select(e => e.Date)
+                .OfType<DateTime>()
+                .ToList();
+            if (readings.Count == 0)
+                return;
+
+            await _sideEffects.InvalidateCacheAsync(
+                new WriteEffectOptions { CacheFamiliesToClear = DataOverviewService.EHbA1cCacheFamilies(readings) },
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to clear eHbA1c cache for {Count} written entries", entries.Count);
         }
     }
 

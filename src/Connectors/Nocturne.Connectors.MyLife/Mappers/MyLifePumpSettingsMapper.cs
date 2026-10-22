@@ -2,6 +2,7 @@ using System.Globalization;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.MyLife.Mappers;
 
@@ -63,17 +64,17 @@ internal static class MyLifePumpSettingsMapper
     }
 
     /// <summary>
-    /// Maps MyLife pump settings readouts to Profile state_spans tracking the active basal program
-    /// over time. Readouts are grouped by device serial number and sorted chronologically;
-    /// consecutive readouts produce abutting spans, with the most recent left open-ended.
+    /// Maps MyLife pump settings readouts to effective profile activations tracking the active basal
+    /// program over time. Readouts are grouped by device serial number and sorted chronologically;
+    /// consecutive readouts produce abutting activations, with the most recent left open-ended.
     /// Readouts with a null/empty ActiveBasalProgramName are skipped (the next readout still
-    /// closes the prior span).
+    /// ends the prior activation).
     /// </summary>
-    internal static List<StateSpan> MapToStateSpans(
+    internal static List<ProfileActivation> MapToProfileActivations(
         IReadOnlyList<MyLifePumpSettingsReadout> readouts,
         string connectorSource)
     {
-        var stateSpans = new List<StateSpan>();
+        var activations = new List<ProfileActivation>();
 
         var byDevice = readouts.GroupBy(r => r.DeviceSerialNumber ?? string.Empty);
 
@@ -99,23 +100,20 @@ internal static class MyLifePumpSettingsMapper
                 }
 
                 var deviceKey = string.IsNullOrEmpty(device.Key) ? "unknown" : device.Key;
-                stateSpans.Add(new StateSpan
+                activations.Add(new ProfileActivation
                 {
-                    OriginalId = $"mylife_active_profile_{deviceKey}_{startMills}",
-                    Category = StateSpanCategory.Profile,
-                    State = ProfileState.Active.ToString(),
+                    SyncIdentifier = $"mylife_active_profile_{deviceKey}_{startMills}",
                     StartTimestamp = startTimestamp,
                     EndTimestamp = endTimestamp,
-                    Source = connectorSource,
-                    Metadata = new Dictionary<string, object>
-                    {
-                        { "profileName", profileName }
-                    }
+                    Phase = ProfileActivationPhase.Effective,
+                    Origin = ProfileActivationOrigin.Connector,
+                    BaseProfileName = profileName,
+                    DataSource = connectorSource,
                 });
             }
         }
 
-        return stateSpans;
+        return activations;
     }
 
     private static List<TimeValue> MapBasalEntries(List<MyLifeBasalProgramEntry>? entries)

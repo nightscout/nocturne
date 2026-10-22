@@ -28,6 +28,7 @@ export const DOCS_SECTION_IDS = [
   'trackers',
   'alerts',
   'bots',
+  'data-sources',
   'configuration',
   'observability',
   'windows-widget',

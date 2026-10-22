@@ -24,17 +24,16 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
         SyncIntervalMinutes = 15;
     }
 
-    [ConnectorProperty(ConnectorPropertyKey.ClientId, Required = true)]
-    public string ClientId { get; set; } = string.Empty;
-
-    [ConnectorProperty(ConnectorPropertyKey.ClientSecret, Required = true, Secret = true)]
-    public string? ClientSecret { get; set; }
-
     [ConnectorProperty(ConnectorPropertyKey.RefreshToken, Secret = true, Hidden = true)]
     public string? RefreshToken { get; set; }
 
-    [ConnectorProperty(ConnectorPropertyKey.CallbackUrl, Required = true, Format = "uri")]
-    public string CallbackUrl { get; set; } = string.Empty;
+    /// <summary>
+    /// The client <see cref="RefreshToken"/> was issued to, under the <c>clientId</c> key a former
+    /// per-tenant client was stored under, so such a session is checked against the instance client
+    /// like any other (<see cref="Services.GoogleHealthSessionStore.IssuedToAnotherClient"/>).
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.ClientId, Secret = true, Hidden = true)]
+    public string? SessionClientId { get; set; }
 
     [ConnectorProperty(ConnectorPropertyKey.LookbackDays, DefaultValue = "7", MinValue = 1, MaxValue = 90)]
     public int HistoryDays { get; set; } = 7;
@@ -47,6 +46,11 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
 
     [ConnectorProperty(ConnectorPropertyKey.GrantedScopes, Hidden = true)]
     public string? GrantedScopes { get; set; }
+
+    public string[] ParsedGrantedScopes() => (GrantedScopes ?? string.Empty)
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
 
     [ConnectorProperty(ConnectorPropertyKey.SyncSteps, DefaultValue = "true")]
     public bool SyncSteps { get; set; } = true;
@@ -76,12 +80,6 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
 
     protected override void ValidateSourceSpecificConfiguration()
     {
-        if (!IsValidClientId(ClientId))
-            throw new ArgumentException("Google Health ClientId is invalid.");
-
-        if (!IsValidCallbackUrl(CallbackUrl))
-            throw new ArgumentException("Google Health CallbackUrl is invalid.");
-
         if (HistoryDays is < 1 or > 90)
             throw new ArgumentException("Google Health LookbackDays must be between 1 and 90.");
 

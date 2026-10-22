@@ -1,7 +1,9 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -30,9 +32,9 @@ public class GlookoStateSpanMapper
 
         var series = graphData.Series;
 
-        // SuspendBasal -> PumpMode StateSpan only (BasalDelivery now handled by GlookoTempBasalMapper)
+        // Pump mode only: the zero-rate delivery is a TempBasal from GlookoTempBasalMapper.
         if (series.SuspendBasal != null)
-            foreach (var suspend in series.SuspendBasal)
+            foreach (var suspend in ConnectorFaults.NonNullRecords(series.SuspendBasal, _logger, _connectorSource, "V3 suspendBasal"))
             {
                 var startTimestamp = _timeMapper.GetCorrectedGlookoTime(suspend.X);
                 var durationSeconds = suspend.Duration ?? 0;
@@ -59,9 +61,9 @@ public class GlookoStateSpanMapper
                 );
             }
 
-        // LgsPlgs -> PumpMode StateSpan only (BasalDelivery now handled by GlookoTempBasalMapper)
+        // Pump mode only: the zero-rate delivery is a TempBasal from GlookoTempBasalMapper.
         if (series.LgsPlgs != null)
-            foreach (var lgsEvent in series.LgsPlgs)
+            foreach (var lgsEvent in ConnectorFaults.NonNullRecords(series.LgsPlgs, _logger, _connectorSource, "V3 lgsPlgs"))
             {
                 var startTimestamp = _timeMapper.GetCorrectedGlookoTime(lgsEvent.X);
                 var durationSeconds = lgsEvent.Duration ?? 0;
@@ -97,40 +99,6 @@ public class GlookoStateSpanMapper
                 );
             }
 
-        // ProfileChange -> Profile StateSpan (unchanged)
-        if (series.ProfileChange != null)
-        {
-            var profileChanges = series.ProfileChange.OrderBy(p => p.X).ToList();
-            for (var i = 0; i < profileChanges.Count; i++)
-            {
-                var change = profileChanges[i];
-                var startTimestamp = _timeMapper.GetCorrectedGlookoTime(change.X);
-
-                DateTime? endTimestamp = null;
-                if (i < profileChanges.Count - 1)
-                    endTimestamp = _timeMapper.GetCorrectedGlookoTime(profileChanges[i + 1].X);
-
-                stateSpans.Add(
-                    new StateSpan
-                    {
-                        OriginalId = $"glooko_profile_{change.X}",
-                        Category = StateSpanCategory.Profile,
-                        State = ProfileState.Active.ToString(),
-                        StartTimestamp = startTimestamp,
-                        EndTimestamp = endTimestamp,
-                        Source = _connectorSource,
-                        Metadata = new Dictionary<string, object>
-                        {
-                            { "profileName", change.ProfileName ?? change.Label ?? "Unknown" }
-                        }
-                    }
-                );
-            }
-        }
-
-        // TemporaryBasal and ScheduledBasal BasalDelivery spans removed -
-        // now produced as TempBasal records by GlookoTempBasalMapper
-
         _logger.LogInformation(
             "[{ConnectorSource}] Transformed {Count} state spans from v3 data",
             _connectorSource,
@@ -138,6 +106,39 @@ public class GlookoStateSpanMapper
         );
 
         return stateSpans;
+    }
+
+    /// <summary>
+    ///     The v3 <c>profileChange</c> series as the profile the pump ran from each change until the next.
+    /// </summary>
+    public List<ProfileActivation> TransformV3ToProfileActivations(GlookoV3GraphResponse graphData)
+    {
+        var activations = new List<ProfileActivation>();
+        if (graphData?.Series?.ProfileChange == null)
+            return activations;
+
+        var profileChanges = ConnectorFaults
+            .NonNullRecords(graphData.Series.ProfileChange, _logger, _connectorSource, "V3 profileChange")
+            .OrderBy(p => p.X)
+            .ToList();
+        for (var i = 0; i < profileChanges.Count; i++)
+        {
+            var change = profileChanges[i];
+            activations.Add(new ProfileActivation
+            {
+                SyncIdentifier = $"glooko_profile_{change.X}",
+                StartTimestamp = _timeMapper.GetCorrectedGlookoTime(change.X),
+                EndTimestamp = i < profileChanges.Count - 1
+                    ? _timeMapper.GetCorrectedGlookoTime(profileChanges[i + 1].X)
+                    : null,
+                Phase = ProfileActivationPhase.Effective,
+                Origin = ProfileActivationOrigin.Connector,
+                BaseProfileName = change.ProfileName ?? change.Label ?? "Unknown",
+                DataSource = _connectorSource,
+            });
+        }
+
+        return activations;
     }
 
     public List<StateSpan> TransformV3PumpModeToStateSpans(GlookoV3GraphResponse graphData)
@@ -192,7 +193,7 @@ public class GlookoStateSpanMapper
         if (dataPoints == null)
             return;
 
-        foreach (var point in dataPoints)
+        foreach (var point in ConnectorFaults.NonNullRecords(dataPoints, _logger, _connectorSource, $"V3 {glookoType}"))
         {
             if (point.Interpolated)
                 continue;
@@ -233,7 +234,7 @@ public class GlookoStateSpanMapper
         if (dataPoints == null)
             return;
 
-        foreach (var point in dataPoints)
+        foreach (var point in ConnectorFaults.NonNullRecords(dataPoints, _logger, _connectorSource, $"V3 {glookoType}"))
         {
             if (point.Interpolated)
                 continue;
@@ -272,12 +273,9 @@ public class GlookoStateSpanMapper
         if (batchData == null)
             return stateSpans;
 
-        // TempBasals and ScheduledBasals BasalDelivery spans removed -
-        // now produced as TempBasal records by GlookoTempBasalMapper
-
-        // SuspendBasals -> PumpMode StateSpan only (BasalDelivery now handled by GlookoTempBasalMapper)
+        // Pump mode only: the zero-rate delivery is a TempBasal from GlookoTempBasalMapper.
         if (batchData.SuspendBasals != null)
-            foreach (var suspend in batchData.SuspendBasals)
+            foreach (var suspend in ConnectorFaults.NonNullRecords(batchData.SuspendBasals, _logger, _connectorSource, "V2 suspend basal"))
             {
                 if (string.IsNullOrWhiteSpace(suspend.Timestamp))
                 {

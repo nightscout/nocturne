@@ -27,6 +27,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Base;
@@ -524,7 +525,7 @@ public class V4BulkValidationTests
             Mock.Of<IBolusRepository>(),
             Mock.Of<ITreatmentFoodService>(),
             Mock.Of<IDemoModeService>(),
-            context: null!));
+            contexts: Mock.Of<INocturneDbContextFactory>()));
 
     private static TempBasalController TempBasals() =>
         WithContext(new TempBasalController(Mock.Of<ITempBasalRepository>(), Mock.Of<IPatientDeviceStamper>()));

@@ -7,30 +7,43 @@
 
   interface Props {
     /** Percentages for each glucose range */
+    veryLowPercent: number;
     lowPercent: number;
     inRangePercent: number;
     highPercent: number;
+    veryHighPercent: number;
     /** Click handler */
     onclick?: () => void;
   }
 
-  let { lowPercent, inRangePercent, highPercent, onclick }: Props = $props();
+  let {
+    veryLowPercent,
+    lowPercent,
+    inRangePercent,
+    highPercent,
+    veryHighPercent,
+    onclick,
+  }: Props = $props();
 
   // Transform data for layerchart stacked bar format
   const chartData = $derived([
     {
       category: "tir",
+      veryLow: veryLowPercent,
       low: lowPercent,
       inRange: inRangePercent,
       high: highPercent,
+      veryHigh: veryHighPercent,
     },
   ]);
 
-  // Series configuration for stacking (bottom to top: low, in-range, high)
+  // Series configuration for stacking (bottom to top: very low to very high)
   const series = [
+    { key: "veryLow", color: "var(--glucose-very-low)" },
     { key: "low", color: "var(--glucose-low)" },
     { key: "inRange", color: "var(--glucose-in-range)" },
     { key: "high", color: "var(--glucose-high)" },
+    { key: "veryHigh", color: "var(--glucose-very-high)" },
   ];
 </script>
 

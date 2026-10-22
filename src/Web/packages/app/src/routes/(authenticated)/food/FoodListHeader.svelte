@@ -2,6 +2,8 @@
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import type { SortMode } from './types';
 	import { Button } from '$lib/components/ui/button';
+	import { FOOD_COLUMNS } from './food-columns';
+	import { getEnergyUnit } from '$lib/stores/appearance-store.svelte';
 
 	interface Props {
 		sort: SortMode;
@@ -11,7 +13,7 @@
 	const { sort, onsort }: Props = $props();
 </script>
 
-<div class="header-row grid grid-cols-[24px_1fr_72px_24px] sm:grid-cols-[24px_1fr_110px_130px_90px_70px_24px]">
+<div class="header-row grid {FOOD_COLUMNS}">
 	<span></span>
 
 	<Button variant="subtle" size="inline-xs" onclick={() => onsort('name')}>
@@ -36,7 +38,9 @@
 
 	<span class="col-label text-xs max-sm:hidden">GI</span>
 
-	<span class="col-label text-right text-xs max-sm:hidden">Energy</span>
+	<span class="col-label text-right text-xs max-sm:hidden">
+		Energy <span class="normal-case">{getEnergyUnit()}</span>
+	</span>
 
 	<span></span>
 </div>

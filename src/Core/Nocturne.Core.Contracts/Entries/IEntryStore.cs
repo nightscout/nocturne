@@ -18,22 +18,16 @@ public interface IEntryStore
     /// merging legacy and V4-projected entries behind the scenes.
     /// </summary>
     /// <param name="query">The <see cref="EntryQuery"/> filter and pagination parameters.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>A read-only list of <see cref="Entry"/> records matching the query.</returns>
     Task<IReadOnlyList<Entry>> QueryAsync(EntryQuery query, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the most recent entry for the current tenant.
     /// </summary>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The current <see cref="Entry"/>, or <c>null</c> if no entries exist.</returns>
     Task<Entry?> GetCurrentAsync(CancellationToken ct = default);
 
-    /// <summary>
-    /// Returns a single entry by its identifier.
-    /// </summary>
     /// <param name="id">The entry identifier (GUID or legacy MongoDB ObjectId).</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The <see cref="Entry"/> if found, or <c>null</c>.</returns>
     Task<Entry?> GetByIdAsync(string id, CancellationToken ct = default);
 
@@ -42,7 +36,6 @@ public interface IEntryStore
     /// <see cref="SensorGlucose"/>, <see cref="MeterGlucose"/> or <see cref="Calibration"/>.
     /// </summary>
     /// <param name="id">The entry identifier, resolved exactly as <see cref="GetByIdAsync"/> resolves it.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The stored record, or <c>null</c>.</returns>
     Task<IV4Record?> GetStoredByIdAsync(string id, CancellationToken ct = default);
 
@@ -58,7 +51,6 @@ public interface IEntryStore
     /// <param name="device">Device identifier to match, or <c>null</c> to match any device.</param>
     /// <param name="type">Entry type (e.g., "sgv", "mbg", "cal").</param>
     /// <param name="mills">Timestamp in Unix milliseconds.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>The existing <see cref="Entry"/> if a duplicate is found, or <c>null</c>.</returns>
     Task<Entry?> CheckDuplicateAsync(string? device, string type, long mills, CancellationToken ct = default);
 
@@ -74,7 +66,6 @@ public interface IEntryStore
     /// and plan. Other types are probed one at a time.
     /// </remarks>
     /// <param name="probes">The entries to classify, in submission order.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Positionally aligned results: the stored <see cref="Entry"/>, or <c>null</c>.</returns>
     Task<IReadOnlyList<Entry?>> CheckDuplicatesAsync(
         IReadOnlyList<EntryDuplicateProbe> probes, CancellationToken ct = default);
@@ -84,7 +75,6 @@ public interface IEntryStore
     /// </summary>
     /// <param name="find">Optional MongoDB-style find query for time-range extraction.</param>
     /// <param name="type">Optional entry type filter ("sgv", "mbg", "cal").</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>Total count of matching entries across all V4 repositories.</returns>
     Task<long> CountAsync(string? find = null, string? type = null, CancellationToken ct = default);
 
@@ -95,6 +85,5 @@ public interface IEntryStore
     /// </summary>
     /// <param name="cursorMills">The client's cursor, in Unix milliseconds.</param>
     /// <param name="limit">The page size; a page may exceed it to finish its last millisecond.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task<ModifiedSincePage<Entry>> GetModifiedSinceAsync(long cursorMills, int limit, CancellationToken ct = default);
 }

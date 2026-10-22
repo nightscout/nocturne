@@ -43,11 +43,8 @@ public class ProfileLoadStageTests
             .Setup(s => s.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync("America/New_York");
         _targetRangeResolver
-            .Setup(s => s.GetLowBGTargetAsync(endTime, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(80.0);
-        _targetRangeResolver
-            .Setup(s => s.GetHighBGTargetAsync(endTime, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(160.0);
+            .Setup(s => s.GetBGTargetRangeAsync(endTime, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((80.0, 160.0));
         _basalRateResolver
             .Setup(s => s.GetBasalRateAsync(endTime, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(0.8);
@@ -81,11 +78,8 @@ public class ProfileLoadStageTests
             .Setup(s => s.HasDataAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         _targetRangeResolver
-            .Setup(s => s.GetLowBGTargetAsync(endTime, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(95.0);
-        _targetRangeResolver
-            .Setup(s => s.GetHighBGTargetAsync(endTime, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(95.0);
+            .Setup(s => s.GetBGTargetRangeAsync(endTime, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((95.0, 95.0));
 
         var stage = CreateStage();
         var context = CreateContext(endTime);

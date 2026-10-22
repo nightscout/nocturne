@@ -1,100 +1,28 @@
 <script lang="ts">
-  import * as Popover from "$lib/components/ui/popover";
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import * as Command from "$lib/components/ui/command";
   import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import Check from "@lucide/svelte/icons/check";
-  import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
   import Star from "@lucide/svelte/icons/star";
-  import ChevronDown from "@lucide/svelte/icons/chevron-down";
-  import { cn } from "$lib/utils";
-  import { tick } from "svelte";
-  import { CategorySubcategoryCombobox } from "$lib/components/food";
+  import { FoodFields, type FoodCategoryMap } from "$lib/components/food";
   import type { Food } from "$lib/api";
 
   interface Props {
-    foodName: string;
-    foodCategory: string;
-    foodSubcategory: string;
-    foodPortion: number | null;
-    foodUnit: string;
-    foodCarbs: number | null;
-    foodFat: number | null;
-    foodProtein: number | null;
-    foodEnergy: number | null;
-    foodGi: number;
+    draft: Food;
     selectedFood: Food | null;
     favorites: Food[];
-    nutritionDetailsOpen: boolean;
-    categories: Record<string, Record<string, boolean>>;
+    categories: FoodCategoryMap;
     isCreatingNew: boolean;
     onToggleFavorite: () => void;
     onsubmit?: (event: SubmitEvent) => void;
   }
 
   let {
-    foodName = $bindable(),
-    foodCategory = $bindable(),
-    foodSubcategory = $bindable(),
-    foodPortion = $bindable(),
-    foodUnit = $bindable(),
-    foodCarbs = $bindable(),
-    foodFat = $bindable(),
-    foodProtein = $bindable(),
-    foodEnergy = $bindable(),
-    foodGi = $bindable(),
+    draft = $bindable(),
     selectedFood,
     favorites,
-    nutritionDetailsOpen = $bindable(),
     categories,
     isCreatingNew,
     onToggleFavorite,
     onsubmit,
   }: Props = $props();
-
-  // Unit combobox state
-  let unitOpen = $state(false);
-  let unitTriggerRef = $state<HTMLButtonElement>(null!);
-
-  // GI combobox state
-  let giOpen = $state(false);
-  let giTriggerRef = $state<HTMLButtonElement>(null!);
-
-  // Constants
-  const foodUnits = ["g", "ml", "pcs", "oz"];
-  const giOptions = [
-    { value: 1, label: "Low" },
-    { value: 2, label: "Medium" },
-    { value: 3, label: "High" },
-  ];
-
-  // Derived: display labels
-  const selectedUnitLabel = $derived(foodUnit || "Select unit...");
-  const selectedGiLabel = $derived(
-    giOptions.find((opt) => opt.value === foodGi)?.label || "Select GI..."
-  );
-
-  function closeUnitAndFocus() {
-    unitOpen = false;
-    tick().then(() => unitTriggerRef?.focus());
-  }
-
-  function closeGiAndFocus() {
-    giOpen = false;
-    tick().then(() => giTriggerRef?.focus());
-  }
-
-  function selectUnit(unit: string) {
-    foodUnit = unit;
-    closeUnitAndFocus();
-  }
-
-  function selectGi(gi: number) {
-    foodGi = gi;
-    closeGiAndFocus();
-  }
 </script>
 
 <form
@@ -102,58 +30,21 @@
   class="@container border-t pt-4 space-y-4"
   {onsubmit}
 >
-  <!-- Hidden fields for food record -->
-  <input type="hidden" name="type" value="food" />
-  {#if selectedFood?._id}
-    <input type="hidden" name="_id" value={selectedFood._id} />
-  {/if}
-  <input type="hidden" name="hideafteruse" value="false" />
-  <input type="hidden" name="hidden" value="false" />
-  <input type="hidden" name="position" value="0" />
-
-  <!-- Name and Category row -->
-  <div class="grid gap-4 @lg:grid-cols-3">
-    <div class="space-y-2">
-      <Label for="food-name">Name</Label>
-      <Input id="food-name" name="name" bind:value={foodName} />
-    </div>
-    <div class="space-y-2 col-span-2">
-      <Label>Category & Subcategory</Label>
-      <CategorySubcategoryCombobox
-        bind:category={foodCategory}
-        bind:subcategory={foodSubcategory}
-        {categories}
-        onCategoryChange={(cat) => (foodCategory = cat)}
-        onSubcategoryChange={(sub) => (foodSubcategory = sub)}
-        onCategoryCreate={(_cat) => {
-          // Category will be created when food is saved
-        }}
-        onSubcategoryCreate={(_cat, _sub) => {
-          // Subcategory will be created when food is saved
-        }}
-      />
-    </div>
-  </div>
-  <!-- Hidden inputs for category/subcategory since combobox doesn't render native inputs -->
-  <input type="hidden" name="category" value={foodCategory} />
-  <input type="hidden" name="subcategory" value={foodSubcategory} />
-
-  <!-- Quick summary of selected food -->
   {#if selectedFood && !isCreatingNew}
     <div
       class="flex items-center justify-between rounded-lg border bg-muted/30 p-3"
     >
       <div class="flex items-center gap-4">
         <div class="text-sm">
-          <span class="font-medium">{foodPortion}{foodUnit}</span>
+          <span class="font-medium">{draft.portion}{draft.unit}</span>
           <span class="text-muted-foreground">=</span>
           <span class="font-semibold text-success">
-            {foodCarbs}g carbs
+            {draft.carbs}g carbs
           </span>
         </div>
-        {#if (foodFat ?? 0) > 0 || (foodProtein ?? 0) > 0}
+        {#if (draft.fat ?? 0) > 0 || (draft.protein ?? 0) > 0}
           <div class="text-xs text-muted-foreground">
-            {foodFat}g fat • {foodProtein}g protein
+            {draft.fat ?? 0}g fat • {draft.protein ?? 0}g protein
           </div>
         {/if}
       </div>
@@ -172,157 +63,5 @@
     </div>
   {/if}
 
-  <!-- Collapsible nutritional details -->
-  <Collapsible.Root bind:open={nutritionDetailsOpen}>
-    <Collapsible.Trigger>
-      {#snippet child({ props }: { props: Record<string, unknown> })}
-        <Button {...props} variant="outline" class="w-full justify-between">
-          <span>Nutritional Details</span>
-          <ChevronDown
-            class={cn(
-              "h-4 w-4 transition-transform",
-              nutritionDetailsOpen && "rotate-180"
-            )}
-          />
-        </Button>
-      {/snippet}
-    </Collapsible.Trigger>
-    <Collapsible.Content class="pt-3 space-y-4">
-      <!-- Portion and unit row -->
-      <div class="grid gap-4 @lg:grid-cols-4">
-        <div class="space-y-2">
-          <Label for="food-portion">Portion Size</Label>
-          <Input
-            id="food-portion"
-            name="portion"
-            type="number"
-            bind:value={foodPortion}
-          />
-        </div>
-        <div class="space-y-2">
-          <Label for="food-unit">Unit</Label>
-          <input type="hidden" name="unit" value={foodUnit} />
-          <Popover.Root bind:open={unitOpen}>
-            <Popover.Trigger bind:ref={unitTriggerRef}>
-              {#snippet child({ props }: { props: Record<string, unknown> })}
-                <Button
-                  variant="combobox"
-                  class="w-full justify-between"
-                  {...props}
-                  role="combobox"
-                  aria-expanded={unitOpen}
-                >
-                  {selectedUnitLabel}
-                  <ChevronsUpDown class="ml-2 size-4 shrink-0 opacity-50" />
-                </Button>
-              {/snippet}
-            </Popover.Trigger>
-            <Popover.Content class="w-(--bits-popover-anchor-width) p-0">
-              <Command.Root>
-                <Command.Input placeholder="Search units..." />
-                <Command.List>
-                  <Command.Empty>No unit found.</Command.Empty>
-                  <Command.Group>
-                    {#each foodUnits as unit (unit)}
-                      <Command.Item
-                        value={unit}
-                        onSelect={() => selectUnit(unit)}
-                      >
-                        <Check
-                          class={cn(
-                            "mr-2 size-4",
-                            foodUnit !== unit && "text-transparent"
-                          )}
-                        />
-                        {unit}
-                      </Command.Item>
-                    {/each}
-                  </Command.Group>
-                </Command.List>
-              </Command.Root>
-            </Popover.Content>
-          </Popover.Root>
-        </div>
-        <div class="space-y-2">
-          <Label for="food-carbs">Carbs (g)</Label>
-          <Input
-            id="food-carbs"
-            name="carbs"
-            type="number"
-            bind:value={foodCarbs}
-          />
-        </div>
-        <div class="space-y-2">
-          <Label for="food-gi">GI</Label>
-          <input type="hidden" name="gi" value={foodGi} />
-          <Popover.Root bind:open={giOpen}>
-            <Popover.Trigger bind:ref={giTriggerRef}>
-              {#snippet child({ props }: { props: Record<string, unknown> })}
-                <Button
-                  variant="combobox"
-                  class="w-full justify-between"
-                  {...props}
-                  role="combobox"
-                  aria-expanded={giOpen}
-                >
-                  {selectedGiLabel}
-                  <ChevronsUpDown class="ml-2 size-4 shrink-0 opacity-50" />
-                </Button>
-              {/snippet}
-            </Popover.Trigger>
-            <Popover.Content class="w-(--bits-popover-anchor-width) p-0">
-              <Command.Root>
-                <Command.Input placeholder="Search GI..." />
-                <Command.List>
-                  <Command.Empty>No GI found.</Command.Empty>
-                  <Command.Group>
-                    {#each giOptions as option (option.value)}
-                      <Command.Item
-                        value={option.label}
-                        onSelect={() => selectGi(option.value)}
-                      >
-                        <Check
-                          class={cn(
-                            "mr-2 size-4",
-                            foodGi !== option.value && "text-transparent"
-                          )}
-                        />
-                        {option.label}
-                      </Command.Item>
-                    {/each}
-                  </Command.Group>
-                </Command.List>
-              </Command.Root>
-            </Popover.Content>
-          </Popover.Root>
-        </div>
-      </div>
-
-      <!-- Additional nutrients row -->
-      <div class="grid gap-4 @lg:grid-cols-3">
-        <div class="space-y-2">
-          <Label for="food-fat">Fat (g)</Label>
-          <Input id="food-fat" name="fat" type="number" bind:value={foodFat} />
-        </div>
-        <div class="space-y-2">
-          <Label for="food-protein">Protein (g)</Label>
-          <Input
-            id="food-protein"
-            name="protein"
-            type="number"
-            bind:value={foodProtein}
-          />
-        </div>
-        <div class="space-y-2">
-          <Label for="food-energy">Energy (kJ)</Label>
-          <Input
-            id="food-energy"
-            name="energy"
-            type="number"
-            bind:value={foodEnergy}
-          />
-        </div>
-      </div>
-    </Collapsible.Content>
-  </Collapsible.Root>
+  <FoodFields bind:draft {categories} collapseDetails />
 </form>

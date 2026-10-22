@@ -16,8 +16,6 @@ public static partial class OrefInterop
 {
     private const string LibraryName = "oref";
 
-    #region Memory Management
-
     /// <summary>
     /// Free a string that was returned by an oref function.
     /// </summary>
@@ -25,13 +23,6 @@ public static partial class OrefInterop
     [LibraryImport(LibraryName, EntryPoint = "oref_free_string")]
     public static partial void FreeString(IntPtr ptr);
 
-    #endregion
-
-    #region Version and Health Check
-
-    /// <summary>
-    /// Get the oref library version.
-    /// </summary>
     /// <returns>Pointer to version string. Must be freed with FreeString.</returns>
     [LibraryImport(LibraryName, EntryPoint = "oref_version")]
     private static partial IntPtr VersionNative();
@@ -76,10 +67,6 @@ public static partial class OrefInterop
         }
     }
 
-    #endregion
-
-    #region IOB Calculation
-
     /// <summary>
     /// Calculate Insulin on Board (IOB) from treatment history.
     /// </summary>
@@ -116,10 +103,6 @@ public static partial class OrefInterop
         }
     }
 
-    #endregion
-
-    #region COB Calculation
-
     /// <summary>
     /// Calculate Carbs on Board (COB) from glucose and treatment history.
     /// </summary>
@@ -151,10 +134,6 @@ public static partial class OrefInterop
         }
     }
 
-    #endregion
-
-    #region Autosens Calculation
-
     /// <summary>
     /// Calculate autosens ratio from glucose and treatment history.
     /// </summary>
@@ -181,10 +160,6 @@ public static partial class OrefInterop
             FreeString(ptr);
         }
     }
-
-    #endregion
-
-    #region Determine Basal (Main Algorithm)
 
     /// <summary>
     /// Run the determine-basal algorithm.
@@ -250,19 +225,9 @@ public static partial class OrefInterop
         }
     }
 
-    #endregion
-
-    #region Glucose Status
-
-    /// <summary>
-    /// Calculate glucose status from readings.
-    /// </summary>
     [LibraryImport(LibraryName, EntryPoint = "oref_calculate_glucose_status", StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr CalculateGlucoseStatusNative(string glucoseJson);
 
-    /// <summary>
-    /// Calculate glucose status from readings.
-    /// </summary>
     /// <param name="glucoseJson">JSON string containing array of GlucoseReading objects (most recent first)</param>
     /// <returns>JSON string containing GlucoseStatus with delta, short_avgdelta, long_avgdelta.</returns>
     public static string CalculateGlucoseStatus(string glucoseJson)
@@ -277,10 +242,6 @@ public static partial class OrefInterop
             FreeString(ptr);
         }
     }
-
-    #endregion
-
-    #region Library Loading Helpers
 
     /// <summary>
     /// Check if the native oref library can be loaded.
@@ -302,6 +263,4 @@ public static partial class OrefInterop
             return false;
         }
     }
-
-    #endregion
 }

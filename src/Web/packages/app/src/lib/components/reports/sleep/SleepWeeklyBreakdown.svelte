@@ -6,6 +6,8 @@
   import { resolve } from "$app/paths";
   import type { SleepNightSummary, SleepWeekSummary } from "$lib/api";
   import { formatMinutesDuration } from "$lib/utils/duration";
+  import { parseCalendarDate, weekdayIndex, weekdayLabels } from "$lib/components/calendar/calendar-date";
+  import { formatLocale } from "$lib/utils/formatting";
 
   interface Props {
     weeks: SleepWeekSummary[];
@@ -15,7 +17,6 @@
 
   let { weeks, nights }: Props = $props();
 
-  const WEEKDAY_INITIALS = ["M", "T", "W", "T", "F", "S", "S"];
 
   const nightsBySessionId = $derived(
     new Map(nights.filter((n) => n.sessionId).map((n) => [n.sessionId!, n]))
@@ -33,22 +34,19 @@
     cells: WeekdayCell[];
   }
 
-  /** Weekday index (Mon = 0) for a local YYYY-MM-DD display date. */
-  function weekdayIndex(dateStr: string): number {
-    const [y, m, d] = dateStr.split("-").map(Number);
-    return (new Date(y, m - 1, d).getDay() + 6) % 7;
-  }
-
-  // Most recent week first; weekday cells Mon–Sun linking where a night exists.
+  // Most recent week first; weekday cells linking where a night exists.
   const rows = $derived.by<WeekRow[]>(() =>
     weeks
       .map((week) => {
-        const cells: WeekdayCell[] = WEEKDAY_INITIALS.map((initial) => ({ initial }));
+        const firstDay = parseCalendarDate((week.weekStart ?? "").slice(0, 10)).getDay();
+        const cells: WeekdayCell[] = weekdayLabels(formatLocale(), "narrow", undefined, firstDay).map(
+          (initial) => ({ initial })
+        );
         for (const id of week.sessionIds ?? []) {
           const night = nightsBySessionId.get(id);
           if (!night?.displayDate) continue;
           const dateStr = night.displayDate;
-          const idx = weekdayIndex(dateStr);
+          const idx = weekdayIndex(parseCalendarDate(dateStr), firstDay);
           // First night wins on a shared display day — same tie-break as the
           // composition chart's day mapping.
           if (cells[idx].date) continue;

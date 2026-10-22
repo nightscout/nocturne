@@ -105,6 +105,17 @@
       return;
     }
 
+    if (notification.type === "data.rejected_uploads" && actionId === "review") {
+      if (notification.id) {
+        realtimeStore?.markNotificationRead(notification.id);
+        markAsRead(notification.id).catch((err) =>
+          console.error("Failed to mark notification read:", err)
+        );
+      }
+      goto(resolve("/reports/data-quality/rejected-uploads"));
+      return;
+    }
+
     try {
       await executeAction({
         id: notification.id!,

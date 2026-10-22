@@ -362,6 +362,13 @@ export class WebSocketClient {
       this.reconnectAttempts++;
     });
 
+    // The bridge asks for a fresh ticket as the one it admitted this socket on
+    // lapses. A denial ends the admission; a transient failure leaves the bridge
+    // to ask again.
+    this.socket.on("realtime_ticket", (ack: (reply: TicketResult) => void) => {
+      void this.fetchTicket().then(ack);
+    });
+
     this.socket.on("connect_ack", (info: ConnectionInfo) => {
       this.eventHandlers.connect_ack?.(info);
     });

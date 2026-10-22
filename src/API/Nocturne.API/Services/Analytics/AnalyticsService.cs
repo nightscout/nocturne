@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
+using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
 
@@ -399,14 +399,11 @@ public class AnalyticsService : IAnalyticsService
 
     private SystemInfo BuildSystemInfo()
     {
-        var assembly = Assembly.GetExecutingAssembly();
-        var version = assembly.GetName().Version?.ToString() ?? "unknown";
-
         return new SystemInfo
         {
             Platform = RuntimeInformation.OSDescription,
             RuntimeVersion = RuntimeInformation.FrameworkDescription,
-            NocturneVersion = version,
+            NocturneVersion = AppVersion.Current,
             DeploymentType = DetectDeploymentType(),
             DemoModeEnabled = false, // Will be set from configuration
             EnabledConnectors = new List<string>(), // Will be populated from configuration

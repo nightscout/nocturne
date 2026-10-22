@@ -141,7 +141,7 @@ public class WidgetSummaryServiceStatusTests
         trackers.Setup(t => t.GetActiveInstancesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var contextFactory = new Mock<ITenantDbContextFactory>();
+        var contextFactory = new Mock<INocturneDbContextFactory>();
         contextFactory.Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .Returns(() => failingContext
                 ? ValueTask.FromException<NocturneDbContext>(new InvalidOperationException("boom"))

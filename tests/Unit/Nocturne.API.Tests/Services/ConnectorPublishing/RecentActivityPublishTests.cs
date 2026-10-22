@@ -1,3 +1,6 @@
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.ProfileActivations;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -207,7 +210,9 @@ public class RecentActivityPublishTests : IDisposable
         Mock.Of<IHeartRateService>(),
         Mock.Of<ITenantOwnerResolver>(),
         Mock.Of<ITenantAccessor>(),
-        _context,
+        _context.AsFactory(),
+        Mock.Of<IProfileActivationRepository>(),
+        new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
         Mock.Of<IAuditContext>(),
         new PublishSkipTally(),
         NullLogger<MetadataPublisher>.Instance);

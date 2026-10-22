@@ -48,13 +48,6 @@ public interface ICacheService
         where T : class;
 
     /// <summary>
-    /// Removes a cached item
-    /// </summary>
-    /// <param name="key">Cache key</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    Task RemoveAsync(string key, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Removes multiple cached items by pattern
     /// </summary>
     /// <param name="pattern">Key pattern (supports wildcards)</param>

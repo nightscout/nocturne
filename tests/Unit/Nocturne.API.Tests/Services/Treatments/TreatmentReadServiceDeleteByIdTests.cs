@@ -43,6 +43,7 @@ public class TreatmentReadServiceDeleteByIdTests
             _noteRepo.Object,
             _deviceEventRepo.Object,
             _bolusCalcRepo.Object,
+            Mock.Of<IProfileActivationRepository>(),
             _stateSpans.Object,
             NullLogger<TreatmentReadService>.Instance);
     }

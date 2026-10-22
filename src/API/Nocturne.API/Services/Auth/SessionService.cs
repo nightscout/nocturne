@@ -49,7 +49,7 @@ public class SessionService : ISessionService
             ? Guid.CreateVersion7().ToString("N")
             : context.OidcSessionId;
 
-        var accessToken = _jwtService.GenerateAccessToken(subjectInfo, permissions, roles);
+        var accessToken = _jwtService.GenerateAccessToken(subjectInfo, permissions, roles, oidcSessionId);
         var refreshToken = await _refreshTokenService.CreateRefreshTokenAsync(
             subjectId, oidcSessionId, context.DeviceDescription,
             context.IpAddress, context.UserAgent);
@@ -68,16 +68,14 @@ public class SessionService : ISessionService
         if (newRefreshToken is null)
             return null;
 
-        var subjectId = await _refreshTokenService.ValidateRefreshTokenAsync(newRefreshToken);
-
-        if (subjectId is null)
+        if (await _refreshTokenService.ValidateRefreshTokenAsync(newRefreshToken) is not { } owner)
             return null;
 
-        var subject = await _subjectService.GetSubjectByIdAsync(subjectId.Value)
-            ?? throw new InvalidOperationException($"Subject {subjectId} not found.");
+        var subject = await _subjectService.GetSubjectByIdAsync(owner.SubjectId)
+            ?? throw new InvalidOperationException($"Subject {owner.SubjectId} not found.");
 
-        var roles = await _subjectService.GetSubjectRolesAsync(subjectId.Value);
-        var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId.Value);
+        var roles = await _subjectService.GetSubjectRolesAsync(owner.SubjectId);
+        var permissions = await _subjectService.GetSubjectPermissionsAsync(owner.SubjectId);
 
         var subjectInfo = new SubjectInfo
         {
@@ -86,7 +84,7 @@ public class SessionService : ISessionService
             Email = subject.Email,
         };
 
-        var accessToken = _jwtService.GenerateAccessToken(subjectInfo, permissions, roles);
+        var accessToken = _jwtService.GenerateAccessToken(subjectInfo, permissions, roles, owner.SessionId);
         var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
 
         return new SessionTokenPair(accessToken, newRefreshToken, expiresIn);

@@ -1,6 +1,18 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Nocturne.Core.Models;
+
+/// <summary>
+/// The order a V3 search asks for: <c>sort=field</c> ascending or <c>sort$desc=field</c> descending.
+/// </summary>
+/// <param name="Field">The field named by the request, or <c>null</c> when it named none.</param>
+/// <param name="Descending">Whether the order is descending. Nightscout's default is ascending.</param>
+public sealed record V3Sort(string? Field, bool Descending)
+{
+    /// <summary>No field named, ascending: Nightscout's order when a request gives neither parameter.</summary>
+    public static V3Sort Default { get; } = new(null, false);
+}
 
 /// <summary>
 /// V3 API query parameters for filtering and field selection.
@@ -15,10 +27,7 @@ public class V3QueryParameters
     /// </summary>
     public string[]? Fields { get; set; }
 
-    /// <summary>
-    /// Maximum number of records to return
-    /// </summary>
-    public int Limit { get; set; } = 100;
+    public int Limit { get; set; }
 
     /// <summary>
     /// Number of records to skip (offset)
@@ -28,7 +37,7 @@ public class V3QueryParameters
     /// <summary>
     /// Sort field and direction
     /// </summary>
-    public string? Sort { get; set; }
+    public V3Sort Sort { get; set; } = V3Sort.Default;
 
     /// <summary>
     /// Filter criteria as JsonElement (legacy)
@@ -56,9 +65,6 @@ public class V3QueryParameters
 /// </summary>
 public class V3FilterCriteria
 {
-    /// <summary>
-    /// Field name to filter on
-    /// </summary>
     public string Field { get; set; } = string.Empty;
 
     /// <summary>
@@ -75,19 +81,12 @@ public class V3FilterCriteria
 /// <summary>
 /// V3 API collection response wrapper for paginated data.
 /// </summary>
-/// <typeparam name="T">Type of data being returned</typeparam>
 /// <seealso cref="V3ResponseMetadata"/>
 /// <seealso cref="V3ErrorResponse"/>
 public class V3CollectionResponse<T>
 {
-    /// <summary>
-    /// Status of the response
-    /// </summary>
     public string Status { get; set; } = "ok";
 
-    /// <summary>
-    /// Array of data items
-    /// </summary>
     public List<T> Data { get; set; } = new();
 
     /// <summary>
@@ -95,20 +94,35 @@ public class V3CollectionResponse<T>
     /// </summary>
     public int? Total { get; set; }
 
-    /// <summary>
-    /// Number of items skipped
-    /// </summary>
     public int? Skip { get; set; }
 
-    /// <summary>
-    /// Maximum number of items returned
-    /// </summary>
     public int? Limit { get; set; }
 
-    /// <summary>
-    /// Response metadata
-    /// </summary>
     public V3ResponseMetadata Meta { get; set; } = new();
+}
+
+/// <summary>
+/// What a V3 create answers: 201 for a stored document, 200 with <see cref="IsDeduplication"/> when
+/// the document matched one already stored.
+/// </summary>
+public class V3CreateResponse
+{
+    /// <summary>HTTP status of the answer, repeated in the body.</summary>
+    [JsonPropertyName("status")]
+    public int Status { get; set; }
+
+    /// <summary>Wire identifier of the stored document, which a v3 read by id resolves.</summary>
+    [JsonPropertyName("identifier")]
+    public string? Identifier { get; set; }
+
+    /// <summary>Set on a create that matched a stored document, which it left unchanged.</summary>
+    [JsonPropertyName("isDeduplication")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsDeduplication { get; set; }
+
+    /// <summary>Modification time of the stored document, in Unix milliseconds.</summary>
+    [JsonPropertyName("lastModified")]
+    public long LastModified { get; set; }
 }
 
 /// <summary>
@@ -121,9 +135,6 @@ public class V3ErrorResponse
     /// </summary>
     public string Status { get; set; } = "error";
 
-    /// <summary>
-    /// Error message
-    /// </summary>
     public string Message { get; set; } = string.Empty;
 
     /// <summary>
@@ -131,19 +142,10 @@ public class V3ErrorResponse
     /// </summary>
     public string? Code { get; set; }
 
-    /// <summary>
-    /// Timestamp when the error occurred
-    /// </summary>
     public DateTimeOffset? Timestamp { get; set; }
 
-    /// <summary>
-    /// Request path that caused the error
-    /// </summary>
     public string? Path { get; set; }
 
-    /// <summary>
-    /// Additional error details
-    /// </summary>
     public Dictionary<string, object>? Details { get; set; }
 }
 
@@ -152,14 +154,8 @@ public class V3ErrorResponse
 /// </summary>
 public class V3ResponseMetadata
 {
-    /// <summary>
-    /// Timestamp when the response was generated
-    /// </summary>
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.UtcNow;
 
-    /// <summary>
-    /// Version of the API
-    /// </summary>
     public string Version { get; set; } = "3.0";
 
     /// <summary>
@@ -167,19 +163,10 @@ public class V3ResponseMetadata
     /// </summary>
     public long? ExecutionTime { get; set; }
 
-    /// <summary>
-    /// Request ID for tracking
-    /// </summary>
     public string? RequestId { get; set; }
 
-    /// <summary>
-    /// ETag for caching
-    /// </summary>
     public string? ETag { get; set; }
 
-    /// <summary>
-    /// Last modified timestamp
-    /// </summary>
     public DateTimeOffset? LastModified { get; set; }
 
     /// <summary>
@@ -187,13 +174,7 @@ public class V3ResponseMetadata
     /// </summary>
     public int TotalCount { get; set; }
 
-    /// <summary>
-    /// Maximum number of items returned
-    /// </summary>
     public int Limit { get; set; }
 
-    /// <summary>
-    /// Number of items skipped
-    /// </summary>
     public int Offset { get; set; }
 }

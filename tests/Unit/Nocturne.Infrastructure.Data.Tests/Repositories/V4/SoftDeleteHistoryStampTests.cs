@@ -1,6 +1,3 @@
-using System.Data.Common;
-using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
@@ -8,7 +5,6 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -33,7 +29,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
     public SoftDeleteHistoryStampTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-            TenantId, "test", _statements, new MutationAuditInterceptor(Mock.Of<IHttpContextAccessor>()));
+            TenantId, "test", _statements, new MutationAuditInterceptor());
         _context = _db.CreateContext();
     }
 
@@ -77,7 +73,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
     {
         await SeedAsync(1, legacyId: "65f000000000000000000aaa");
         var repository = new ApsSnapshotRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             new SystemAuditContext(),
             NullLogger<ApsSnapshotRepository>.Instance);
         var cursor = new DateTimeOffset(Written, TimeSpan.Zero).ToUnixTimeMilliseconds();
@@ -297,7 +293,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
             context.SensorGlucose.FromSource("source-a"), SystemAuditContext.ForService("test"), "data_source=source-a");
 
         deleted.Should().Be(count);
-        _statements.Count("SELECT", "linked_records").Should().Be(1 + 3, "one lookup of the groups, then one read per chunk");
+        _statements.Count("SELECT", s => s.Contains("FROM \"linked_records\"", StringComparison.Ordinal)).Should().Be(1 + 3, "one lookup of the groups, then one read per chunk");
         await using var verify = _db.CreateContext();
         (await verify.LinkedRecords.Where(l => l.IsPrimary).Select(l => l.RecordId).ToListAsync())
             .Should().BeEquivalentTo(copies);
@@ -312,13 +308,13 @@ public class SoftDeleteHistoryStampTests : IDisposable
 
         await using var context = _db.CreateContext();
         var rows = context.SensorGlucose.FromSource("source-a");
-        _statements.FailOnLinkPromote = true;
+        _statements.FailOn(s => s.StartsWith("UPDATE \"linked_records\"", StringComparison.Ordinal), ordinal: 2);
         Func<Task> act = withEntities
             ? () => context.AuditedSoftDeleteWithEntitiesAsync(rows, new UserAuditContext(), "data_source=source-a")
             : () => context.AuditedSoftDeleteAsync(rows, new UserAuditContext(), "data_source=source-a");
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("injected*");
-        _statements.LinkUpdates.Should().Be(2, "the demote ran and the promote failed, inside the delete's transaction");
+        _statements.Count("UPDATE", s => s.StartsWith("UPDATE \"linked_records\"", StringComparison.Ordinal)).Should().Be(2, "the demote ran and the promote failed, inside the delete's transaction");
         await AssertUntouchedAsync<SensorGlucoseEntity>(primaries[0], copies[0]);
     }
 
@@ -331,7 +327,8 @@ public class SoftDeleteHistoryStampTests : IDisposable
         await _context.Notes.Where(n => n.Id == primary)
             .ExecuteUpdateAsync(s => s.SetProperty(n => n.LegacyId, "65f000000000000000000ccc"));
         var repository = NotesAs(new UserAuditContext());
-        _statements.FailOn = bulk ? "UPDATE \"notes\"" : "INSERT INTO \"mutation_audit_log\"";
+        var failing = bulk ? "UPDATE \"notes\"" : "INSERT INTO \"mutation_audit_log\"";
+        _statements.FailOn(s => s.Contains(failing, StringComparison.Ordinal));
 
         Func<Task> act = bulk
             ? () => repository.DeleteByLegacyIdAsync("65f000000000000000000ccc", WriteOrigin.Live)
@@ -366,7 +363,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
         _context.ChangeTracker.Clear();
 
         var repository = new StateSpanRepository(
-            _context, Mock.Of<Core.Contracts.Infrastructure.IDeduplicationService>(),
+            _context.AsFactory(), Mock.Of<Core.Contracts.Infrastructure.IDeduplicationService>(),
             new SystemAuditContext(), NullLogger<StateSpanRepository>.Instance);
 
         var deleted = activity
@@ -441,12 +438,12 @@ public class SoftDeleteHistoryStampTests : IDisposable
     }
 
     /// <summary>Hands out fresh contexts carrying a user's audit context, as a request's factory does.</summary>
-    private sealed class AuditedFactory(SqliteTestDatabase db, IAuditContext audit) : ITenantDbContextFactory
+    private sealed class AuditedFactory(SqliteTestDatabase db, IAuditContext audit) : SingleReaderDbContextFactory
     {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
         {
             var ctx = db.CreateContext();
-            ctx.AuditContext = audit;
+            ctx.AttributedTo(audit);
             return ValueTask.FromResult(ctx);
         }
     }
@@ -474,58 +471,6 @@ public class SoftDeleteHistoryStampTests : IDisposable
         Id = Guid.CreateVersion7(), TenantId = TenantId, CanonicalId = canonical,
         RecordType = RecordTypeKeys.Key(type), RecordId = recordId, DataSource = source, IsPrimary = isPrimary,
     };
-
-    /// <summary>
-    /// Counts the statements the connection runs, by leading keyword. Armed, it fails the second
-    /// <c>UPDATE</c> of <c>linked_records</c> (a repoint's promote, after its demote), or the first
-    /// statement starting with <see cref="FailOn"/>.
-    /// </summary>
-    private sealed class StatementRecorder : DbCommandInterceptor
-    {
-        private readonly List<string> _statements = [];
-
-        public bool FailOnLinkPromote { get; set; }
-        public string? FailOn { get; set; }
-        public int LinkUpdates { get; private set; }
-
-        public void Clear() => _statements.Clear();
-
-        public int Count(string keyword) =>
-            _statements.Count(s => s.StartsWith(keyword, StringComparison.OrdinalIgnoreCase));
-
-        public int Count(string keyword, string table) =>
-            _statements.Count(s => s.StartsWith(keyword, StringComparison.OrdinalIgnoreCase)
-                && s.Contains($"FROM \"{table}\"", StringComparison.Ordinal));
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
-            CancellationToken cancellationToken = default)
-        {
-            Record(command);
-            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
-        }
-
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
-            CancellationToken cancellationToken = default)
-        {
-            Record(command);
-            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
-        }
-
-        private void Record(DbCommand command)
-        {
-            var text = command.CommandText.TrimStart();
-            _statements.Add(text);
-            if (FailOn is { } prefix && text.Contains(prefix, StringComparison.Ordinal))
-                throw new InvalidOperationException("injected write failure");
-            if (!text.StartsWith("UPDATE \"linked_records\"", StringComparison.Ordinal))
-                return;
-            LinkUpdates++;
-            if (FailOnLinkPromote && LinkUpdates == 2)
-                throw new InvalidOperationException("injected repoint failure");
-        }
-    }
 
     private async Task<List<Guid>> SeedAsync(int count, string? legacyId)
     {

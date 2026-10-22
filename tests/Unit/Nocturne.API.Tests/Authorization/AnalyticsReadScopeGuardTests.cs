@@ -10,6 +10,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -58,6 +59,7 @@ public class AnalyticsReadScopeGuardTests
         BasalInjectionMarkers = [new BasalInjectionMarkerDto { Id = "i", Time = 1 }],
         TempBasalSpans = [new ChartStateSpanDto { Id = "tb" }],
         BasalDeliverySpans = [new BasalDeliverySpanDto { Id = "bd" }],
+        LastPumpSyncMills = 1,
         DefaultBasalRate = 0.9,
         MaxBasalRate = 1.2,
         MaxIob = 4,
@@ -141,6 +143,17 @@ public class AnalyticsReadScopeGuardTests
         var sleep = ChartDataReadScopeGuard.Redact(
             OneRecordPerCategory(), Granted(Scope.SleepRead));
         sleep.ActivitySpans.Should().ContainSingle().Which.Id.Should().Be("sl");
+    }
+
+    [Fact]
+    public void ChartData_LastPumpSync_NeedsBothTheBasalAndThePumpStatusScopes()
+    {
+        ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.TreatmentsRead))
+            .LastPumpSyncMills.Should().BeNull();
+        ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.DevicesRead))
+            .LastPumpSyncMills.Should().BeNull();
+        ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.TreatmentsRead, Scope.DevicesRead))
+            .LastPumpSyncMills.Should().Be(1);
     }
 
     [Fact]
@@ -347,9 +360,7 @@ public class AnalyticsReadScopeGuardTests
     {
         var entries = new Mock<IEntryService>();
         entries
-            .Setup(s => s.GetEntriesWithAdvancedFilterAsync(
-                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.QueryEntriesAsync(It.IsAny<EntryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new Entry { Mills = 1_000, Sgv = 120, Direction = "Flat" }]);
 
         var boluses = new Mock<IBolusRepository>();
@@ -840,5 +851,200 @@ public class AnalyticsReadScopeGuardTests
                 RoleSeeds.Permissions[RoleSeeds.Admin]),
             Scope.TenantSettings)
             .Should().BeTrue("an administrator must keep managing analytics collection");
+    }
+
+    // ── Multi-period statistics ─────────────────────────────────────────────────────────────
+
+    private static PeriodStatistics PeriodWithTreatments(int days) => new()
+    {
+        PeriodDays = days,
+        Analytics = new GlucoseAnalytics
+        {
+            BasicStats = new BasicGlucoseStats { Count = 500, Mean = 7.4, Median = 7.1 },
+            TimeInRange = new TimeInRangeMetrics { Percentages = new TimeInRangePercentages { Low = 4.5 } },
+            GlycemicVariability = new GlycemicVariability { CoefficientOfVariation = 31.5, StandardDeviation = 2.3 },
+            DataQuality = new DataQuality
+            {
+                TotalReadings = 500,
+                MissingReadings = 12,
+                DataCompleteness = 97.5,
+                CgmActivePercent = 95.5,
+                GapAnalysis = new GapAnalysis { LongestGap = 45, AverageGap = 20 },
+                NoiseLevel = 0.25,
+                CalibrationEvents = 4,
+                SensorWarmups = 3,
+            },
+            Reliability = new StatisticReliability { MeetsReliabilityCriteria = true, DaysOfData = days, ReadingCount = 500 },
+            Time = new AnalysisTime { Start = 1_000, End = 2_000, TimeOfAnalysis = 3_000 },
+            ClinicalAssessment = new ClinicalTargetAssessment { TargetsMet = 2, TotalTargets = 5 },
+        },
+        TreatmentSummary = new TreatmentSummary(),
+        InsulinDelivery = new InsulinDeliveryStatistics(),
+        HasSufficientData = true,
+        EntryCount = 12,
+        TreatmentCount = 2,
+    };
+
+    private static MultiPeriodStatistics AllPeriodsWithTreatments() => new()
+    {
+        LastDay = PeriodWithTreatments(1),
+        Last3Days = PeriodWithTreatments(3),
+        LastWeek = PeriodWithTreatments(7),
+        LastMonth = PeriodWithTreatments(30),
+        Last90Days = PeriodWithTreatments(90),
+    };
+
+    [Fact]
+    public void MultiPeriod_GlucoseOnlyGrant_DropsTreatmentFieldsFromACopy()
+    {
+        var cached = AllPeriodsWithTreatments();
+
+        var redacted = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.GlucoseRead));
+
+        var periods = new[] { redacted.LastDay, redacted.Last3Days, redacted.LastWeek, redacted.LastMonth, redacted.Last90Days };
+        periods.Should().OnlyContain(p =>
+            p.TreatmentSummary == null && p.InsulinDelivery == null && p.TreatmentCount == 0
+            && p.Analytics != null && p.EntryCount == 12 && p.HasSufficientData);
+        cached.LastDay.TreatmentSummary.Should().NotBeNull("the cached instance is shared by every reader");
+        cached.Last90Days.InsulinDelivery.Should().NotBeNull();
+        cached.LastWeek.TreatmentCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void MultiPeriod_TreatmentsGrant_KeepsTreatmentFields()
+    {
+        var cached = AllPeriodsWithTreatments();
+
+        var result = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.GlucoseRead, Scope.TreatmentsReadWrite));
+
+        result.LastDay.TreatmentSummary.Should().NotBeNull();
+        result.LastDay.InsulinDelivery.Should().NotBeNull();
+        result.LastDay.TreatmentCount.Should().Be(2);
+    }
+
+    private static PeriodStatistics[] Periods(MultiPeriodStatistics data) =>
+        [data.LastDay, data.Last3Days, data.LastWeek, data.LastMonth, data.Last90Days];
+
+    [Fact]
+    public void MultiPeriod_GlucoseOnlyGrant_NarrowsTreatmentsAndWarmupsTogetherFromACopy()
+    {
+        var cached = AllPeriodsWithTreatments();
+
+        var redacted = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.GlucoseRead));
+
+        Periods(redacted).Should().OnlyContain(p =>
+            p.Analytics!.DataQuality.SensorWarmups == 0
+            && p.TreatmentSummary == null && p.InsulinDelivery == null && p.TreatmentCount == 0);
+        foreach (var (narrowed, original) in Periods(redacted).Zip(Periods(cached)))
+        {
+            narrowed.Analytics.Should().BeEquivalentTo(
+                original.Analytics, o => o.Excluding(a => a!.DataQuality.SensorWarmups));
+        }
+        Periods(cached).Should().OnlyContain(p =>
+            p.Analytics!.DataQuality.SensorWarmups == 3 && p.TreatmentSummary != null && p.TreatmentCount == 2);
+    }
+
+    [Fact]
+    public void GlucoseAnalytics_CarriesOnlyThePropertiesTheGuardCopies()
+    {
+        PropertyNames<GlucoseAnalytics>().Should().BeEquivalentTo(
+        [
+            nameof(GlucoseAnalytics.BasicStats),
+            nameof(GlucoseAnalytics.TimeInRange),
+            nameof(GlucoseAnalytics.GlycemicVariability),
+            nameof(GlucoseAnalytics.DataQuality),
+            nameof(GlucoseAnalytics.Reliability),
+            nameof(GlucoseAnalytics.Time),
+            nameof(GlucoseAnalytics.ClinicalAssessment),
+        ]);
+    }
+
+    [Fact]
+    public void DataQuality_CarriesOnlyThePropertiesTheGuardCopies()
+    {
+        PropertyNames<DataQuality>().Should().BeEquivalentTo(
+        [
+            nameof(DataQuality.TotalReadings),
+            nameof(DataQuality.MissingReadings),
+            nameof(DataQuality.DataCompleteness),
+            nameof(DataQuality.CgmActivePercent),
+            nameof(DataQuality.GapAnalysis),
+            nameof(DataQuality.NoiseLevel),
+            nameof(DataQuality.CalibrationEvents),
+            nameof(DataQuality.SensorWarmups),
+        ]);
+    }
+
+    [Fact]
+    public void PeriodStatistics_CarriesOnlyThePropertiesTheGuardCopies()
+    {
+        PropertyNames<PeriodStatistics>().Should().BeEquivalentTo(
+        [
+            nameof(PeriodStatistics.PeriodDays),
+            nameof(PeriodStatistics.StartDate),
+            nameof(PeriodStatistics.EndDate),
+            nameof(PeriodStatistics.Analytics),
+            nameof(PeriodStatistics.TreatmentSummary),
+            nameof(PeriodStatistics.InsulinDelivery),
+            nameof(PeriodStatistics.HasSufficientData),
+            nameof(PeriodStatistics.Gmi),
+            nameof(PeriodStatistics.Reliability),
+            nameof(PeriodStatistics.EntryCount),
+            nameof(PeriodStatistics.TreatmentCount),
+        ]);
+    }
+
+    private static IEnumerable<string> PropertyNames<T>() => typeof(T).GetProperties().Select(p => p.Name);
+
+    [Fact]
+    public void MultiPeriod_DevicesGrant_KeepsSensorWarmupsAndNarrowsTreatments()
+    {
+        var cached = AllPeriodsWithTreatments();
+
+        var result = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.GlucoseRead, Scope.DevicesRead));
+
+        Periods(result).Should().OnlyContain(p =>
+            p.Analytics!.DataQuality.SensorWarmups == 3
+            && p.TreatmentSummary == null && p.InsulinDelivery == null && p.TreatmentCount == 0);
+    }
+
+    [Fact]
+    public void MultiPeriod_TreatmentsGrantWithoutDevices_WithholdsOnlySensorWarmups()
+    {
+        var cached = AllPeriodsWithTreatments();
+
+        var result = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.GlucoseRead, Scope.TreatmentsRead));
+
+        Periods(result).Should().OnlyContain(p =>
+            p.Analytics!.DataQuality.SensorWarmups == 0
+            && p.TreatmentSummary != null && p.InsulinDelivery != null && p.TreatmentCount == 2);
+    }
+
+    [Fact]
+    public void MultiPeriod_BothGrants_ReturnsTheCachedInstance()
+    {
+        var cached = AllPeriodsWithTreatments();
+
+        var result = StatisticsReadScopeGuard.Redact(
+            cached, Granted(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead));
+
+        result.Should().BeSameAs(cached);
+    }
+
+    [Fact]
+    public void MultiPeriod_APeriodWithoutAnalytics_StaysWithoutAnalytics()
+    {
+        var cached = new MultiPeriodStatistics
+        {
+            LastDay = new PeriodStatistics { PeriodDays = 1, Analytics = null },
+            Last3Days = new PeriodStatistics { PeriodDays = 3 },
+            LastWeek = new PeriodStatistics { PeriodDays = 7 },
+            LastMonth = new PeriodStatistics { PeriodDays = 30 },
+            Last90Days = new PeriodStatistics { PeriodDays = 90 },
+        };
+
+        var redacted = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.GlucoseRead));
+
+        redacted.LastDay.Analytics.Should().BeNull();
     }
 }

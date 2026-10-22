@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Caching;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
@@ -25,6 +26,9 @@ namespace Nocturne.API.Controllers.V4.Base;
 /// Create and update methods are annotated with <see cref="RemoteFormAttribute"/>;
 /// delete uses <see cref="RemoteCommandAttribute"/>.
 /// Every write action is gated on <see cref="WriteScope"/>, which derived controllers must declare.
+/// Each derived controller names the cache families its records feed with
+/// <see cref="ClearsTenantCacheAttribute"/>; the write actions record their timestamps in the
+/// request's <see cref="TenantCacheWriteFootprint"/> when it has one.
 /// </remarks>
 /// <seealso cref="V4ReadOnlyControllerBase{TModel, TRepository}"/>
 /// <seealso cref="IV4Record"/>
@@ -95,7 +99,10 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         if (await OnBeforeCreateAsync(model, request, ct) is { } result)
             return result;
 
+        var footprint = TenantCacheWriteFootprint.Of(HttpContext);
+        await RecordUpsertTargetsAsync(footprint, [model], ct);
         var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
+        footprint?.Add(created.Timestamp);
         created = await OnAfterCreateAsync(created, ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
@@ -136,7 +143,10 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         if (await OnBeforeBulkCreateAsync(models, requests, ct) is { } error)
             return error;
 
+        var footprint = TenantCacheWriteFootprint.Of(HttpContext);
+        await RecordUpsertTargetsAsync(footprint, models, ct);
         var written = (await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct)).ToArray();
+        footprint?.AddRange(written.Select(w => w.Timestamp));
         return StatusCode(StatusCodes.Status201Created, await OnAfterBulkCreateAsync(written, ct));
     }
 
@@ -173,6 +183,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         try
         {
             var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
+            TenantCacheWriteFootprint.Of(HttpContext)?.AddRange([existing.Timestamp, updated.Timestamp]);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -253,6 +264,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         try
         {
             var restored = await Repository.RestoreAsync(id, WriteOrigin.Live, ct);
+            TenantCacheWriteFootprint.Of(HttpContext)?.Add(restored.Timestamp);
             await OnAfterRestoreAsync(restored, ct);
             return Ok(restored);
         }
@@ -282,7 +294,19 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         [FromBody] Guid[] ids, CancellationToken ct = default)
     {
         var result = await Repository.BulkRestoreAsync(ids, WriteOrigin.Live, ct);
+        TenantCacheWriteFootprint.Of(HttpContext)?.AddRange(result.Restored.Select(r => r.Timestamp));
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Records in <paramref name="footprint"/> the stored timestamps of the rows a create of
+    /// <paramref name="models"/> will move, for a type whose creates upsert on the sync key.
+    /// </summary>
+    private async Task RecordUpsertTargetsAsync(
+        TenantCacheWriteFootprint? footprint, IReadOnlyCollection<TModel> models, CancellationToken ct)
+    {
+        if (footprint is not null && Repository is ISyncKeyedRepository<TModel> keyed)
+            footprint.AddRange(await keyed.GetUpsertTargetTimestampsAsync(models, ct));
     }
 
     /// <summary>

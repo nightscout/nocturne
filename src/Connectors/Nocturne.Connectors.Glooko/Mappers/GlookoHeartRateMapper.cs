@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Core.Models;
+using Nocturne.Connectors.Core.Utilities;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -22,7 +23,7 @@ public class GlookoHeartRateMapper(string connectorSource, GlookoTimeMapper time
     {
         var results = new List<HeartRate>();
 
-        foreach (var m in measurements)
+        foreach (var m in ConnectorFaults.NonNullRecords(measurements, _logger, _connectorSource, "SSV2 biometric measurement"))
         {
             try
             {
@@ -47,9 +48,9 @@ public class GlookoHeartRateMapper(string connectorSource, GlookoTimeMapper time
                     DataSource = _connectorSource,
                 });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ConnectorFaults.IsMalformedRecord(ex))
             {
-                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping SSV2 biometric measurement", _connectorSource);
+                _logger.LogWarning(ex, "[{ConnectorSource}] Skipped malformed SSV2 biometric measurement {Guid}", _connectorSource, m.Guid);
             }
         }
 

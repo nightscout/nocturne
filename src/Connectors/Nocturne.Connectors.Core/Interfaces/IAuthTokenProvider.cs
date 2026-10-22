@@ -20,7 +20,6 @@ public interface IAuthTokenProvider
     ///     Gets a valid authentication token, refreshing if expired.
     ///     This method is thread-safe and will only perform one token refresh at a time.
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>A valid token, or null if authentication fails</returns>
     Task<string?> GetValidTokenAsync(CancellationToken cancellationToken = default);
 

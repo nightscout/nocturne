@@ -452,7 +452,7 @@ public class PasskeyServiceTests
         var logger = NullLogger<PasskeyService>.Instance;
 
         var environment = Mock.Of<IHostEnvironment>(e => e.EnvironmentName == environmentName);
-        return new PasskeyService(_dbContext, fido2, dataProtectionProvider, fido2Options, logger, environment);
+        return new PasskeyService(_dbContext.AsFactory(), fido2, dataProtectionProvider, fido2Options, logger, environment);
     }
 
     private static PasskeyCredentialEntity CreateCredentialEntity(

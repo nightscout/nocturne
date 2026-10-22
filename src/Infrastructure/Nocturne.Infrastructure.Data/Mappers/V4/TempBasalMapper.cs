@@ -29,7 +29,10 @@ public static class TempBasalMapper
             LegacyId = model.LegacyId,
             Rate = model.Rate,
             ScheduledRate = model.ScheduledRate,
+            Percent = model.Percent,
+            RateFromSchedule = model.RateFromSchedule,
             Origin = model.Origin.ToString(),
+            OriginEvidence = model.OriginEvidence?.ToString(),
             DeviceId = model.DeviceId,
             PatientDeviceId = model.PatientDeviceId,
             PumpRecordId = model.PumpRecordId,
@@ -66,9 +69,14 @@ public static class TempBasalMapper
             ModifiedAt = entity.SysUpdatedAt,
             Rate = entity.Rate,
             ScheduledRate = entity.ScheduledRate,
+            Percent = entity.Percent,
+            RateFromSchedule = entity.RateFromSchedule,
             Origin = Enum.TryParse<TempBasalOrigin>(entity.Origin, out var origin)
                 ? origin
                 : TempBasalOrigin.Inferred,
+            OriginEvidence = Enum.TryParse<TempBasalOriginEvidence>(entity.OriginEvidence, out var evidence)
+                ? evidence
+                : null,
             DeviceId = entity.DeviceId,
             PatientDeviceId = entity.PatientDeviceId,
             PumpRecordId = entity.PumpRecordId,
@@ -100,7 +108,10 @@ public static class TempBasalMapper
         entity.LegacyId = model.LegacyId;
         entity.Rate = model.Rate;
         entity.ScheduledRate = model.ScheduledRate;
+        entity.Percent = model.Percent;
+        entity.RateFromSchedule = model.RateFromSchedule;
         entity.Origin = model.Origin.ToString();
+        entity.OriginEvidence = model.OriginEvidence?.ToString();
         entity.DeviceId = model.DeviceId;
         entity.PatientDeviceId = model.PatientDeviceId;
         entity.PumpRecordId = model.PumpRecordId;

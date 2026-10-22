@@ -8,9 +8,6 @@ namespace Nocturne.Core.Models;
 /// <seealso cref="StatusResponse"/>
 public class VersionResponse
 {
-    /// <summary>
-    /// Server version
-    /// </summary>
     public string Version { get; set; } = string.Empty;
 
     /// <summary>
@@ -23,9 +20,6 @@ public class VersionResponse
     /// </summary>
     public DateTime ServerTime { get; set; }
 
-    /// <summary>
-    /// Head of repository
-    /// </summary>
     public string Head { get; set; } = string.Empty;
 
     /// <summary>

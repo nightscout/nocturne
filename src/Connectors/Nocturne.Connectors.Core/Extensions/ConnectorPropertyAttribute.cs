@@ -98,40 +98,27 @@ public class ConnectorPropertyAttribute : Attribute
     /// </summary>
     public string? Format { get; set; }
 
-    /// <summary>
-    ///     Gets the property key name as a string (enum name).
-    /// </summary>
     public string GetKeyName() => Key.ToString();
 
     /// <summary>
-    ///     Gets the environment variable suffix in SCREAMING_SNAKE_CASE.
-    ///     Derives from Key enum name if EnvVarSuffix is not explicitly set.
+    ///     <see cref="EnvVarSuffix"/> when set, else <see cref="Key"/> in SCREAMING_SNAKE_CASE.
     /// </summary>
     public string GetEnvVarSuffix()
     {
         if (!string.IsNullOrEmpty(EnvVarSuffix))
             return EnvVarSuffix;
 
-        // Convert Key enum name to SCREAMING_SNAKE_CASE
-        // e.g., "Username" -> "USERNAME", "PatientId" -> "PATIENT_ID"
         return ToScreamingSnakeCase(Key.ToString());
     }
 
-    /// <summary>
-    ///     Gets the full environment variable name given a connector prefix.
-    /// </summary>
-    /// <param name="connectorPrefix">The connector prefix (e.g., "DEXCOM", "LIBRE")</param>
-    /// <returns>Full environment variable name (e.g., "CONNECT_DEXCOM_USERNAME")</returns>
+    /// <returns>e.g. <c>CONNECT_DEXCOM_USERNAME</c> for <c>DEXCOM</c>.</returns>
     public string GetFullEnvVarName(string connectorPrefix)
     {
         return $"CONNECT_{connectorPrefix}_{GetEnvVarSuffix()}";
     }
 
-    /// <summary>
-    ///     Gets the Aspire parameter name given a connector prefix.
-    /// </summary>
-    /// <param name="connectorPrefix">The connector prefix in lowercase (e.g., "dexcom", "librelinkup")</param>
-    /// <returns>Aspire parameter name (e.g., "dexcom-username")</returns>
+    /// <param name="connectorPrefix">Lowercase, e.g. <c>dexcom</c>.</param>
+    /// <returns>e.g. <c>dexcom-username</c>.</returns>
     public string GetAspireParameterName(string connectorPrefix)
     {
         return $"{connectorPrefix}-{Key.ToString().ToLowerInvariant()}";

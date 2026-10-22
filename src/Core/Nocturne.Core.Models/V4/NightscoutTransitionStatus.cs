@@ -47,9 +47,6 @@ public class CompatibilityInfo
     /// </summary>
     public double? CompatibilityScore { get; set; }
 
-    /// <summary>
-    /// Total number of field comparisons performed.
-    /// </summary>
     public int TotalComparisons { get; set; }
 
     /// <summary>

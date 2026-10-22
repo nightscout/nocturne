@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
@@ -20,10 +21,10 @@ namespace Nocturne.API.Services.Glucose;
 /// <seealso cref="IEntryCache"/>
 public class EntryService : IEntryService
 {
-    private static readonly HashSet<string> ValidEntryTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "sgv", "mbg", "cal"
-    };
+    private static readonly HashSet<string> ValidEntryTypes = new(
+        LegacyEntryTypes.All,
+        StringComparer.OrdinalIgnoreCase
+    );
 
     private readonly IEntryStore _store;
     private readonly IEntryDecomposer _decomposer;
@@ -139,44 +140,9 @@ public class EntryService : IEntryService
         _store.GetModifiedSinceAsync(cursorMills, limit, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<IEnumerable<Entry>> GetEntriesWithAdvancedFilterAsync(
-        string find,
-        int count,
-        int skip,
-        CancellationToken cancellationToken = default)
-    {
-        var query = new EntryQuery
-        {
-            Find = find,
-            Count = count,
-            Skip = skip
-        };
-
-        return await _store.QueryAsync(query, cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<Entry>> GetEntriesWithAdvancedFilterAsync(
-        string? type,
-        int count,
-        int skip,
-        string? findQuery,
-        string? dateString,
-        bool reverseResults,
-        CancellationToken cancellationToken = default)
-    {
-        var query = new EntryQuery
-        {
-            Type = type,
-            Find = findQuery,
-            Count = count,
-            Skip = skip,
-            DateString = dateString,
-            ReverseResults = reverseResults
-        };
-
-        return await _store.QueryAsync(query, cancellationToken);
-    }
+    public async Task<IEnumerable<Entry>> QueryEntriesAsync(
+        EntryQuery query, CancellationToken cancellationToken = default) =>
+        await _store.QueryAsync(query, cancellationToken);
 
     /// <inheritdoc />
     /// <remarks>

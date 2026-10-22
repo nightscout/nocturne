@@ -12,13 +12,13 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// </summary>
 public class DeviceRepository : IDeviceRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly INocturneDbContextFactory _contextFactory;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeviceRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
-    public DeviceRepository(ITenantDbContextFactory contextFactory)
+    public DeviceRepository(INocturneDbContextFactory contextFactory)
     {
         _contextFactory = contextFactory;
     }

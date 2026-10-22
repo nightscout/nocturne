@@ -16,6 +16,7 @@ export {
 } from "./lib/request-context.js";
 export type { BotRequestContext, ResolvedLink } from "./lib/request-context.js";
 export { requireLink, requireLinkForAction } from "./lib/require-link.js";
+export { platformHandle } from "./lib/platform-handle.js";
 export { formatGlucose, trendArrow, TREND_ARROWS } from "./lib/format.js";
 export type {
   ActiveExcursion,

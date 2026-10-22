@@ -20,6 +20,5 @@ public class LabHbA1cResult
     /// <summary>Optional free-text note (e.g. lab name).</summary>
     public string? Note { get; set; }
 
-    /// <summary>When this row was created.</summary>
     public DateTime CreatedAt { get; set; }
 }

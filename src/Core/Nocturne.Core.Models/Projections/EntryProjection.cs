@@ -28,6 +28,7 @@ public static class EntryProjection
         entry.Filtered = sg.Filtered;
         entry.Unfiltered = sg.Unfiltered;
         entry.Delta = sg.Delta;
+        entry.Rssi = sg.Rssi;
         return entry;
     }
 

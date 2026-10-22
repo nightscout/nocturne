@@ -20,6 +20,8 @@ namespace Nocturne.API.Services.Legacy;
 /// <seealso cref="IDDataService"/>
 public class DDataService : IDDataService
 {
+    private const long DeviceStatusWindowMills = 24L * 60 * 60 * 1000;
+
     private readonly IEntryStore _store;
     private readonly ITreatmentService _treatments;
     private readonly IProfileProjectionService _profiles;
@@ -64,9 +66,7 @@ public class DDataService : IDDataService
     {
         var ddata = new DData { LastUpdated = timestamp };
 
-        // Load data from various collections based on timestamp.
-        // Fetched sequentially — the underlying service shares a scoped DbContext
-        // which is not thread-safe for concurrent access.
+        // Sequential: see INocturneDbContextFactory.
         await LoadSgvsAsync(ddata, timestamp, cancellationToken);
         await LoadTreatmentsAsync(ddata, timestamp, cancellationToken);
         await LoadMbgsAsync(ddata, timestamp, cancellationToken);
@@ -121,25 +121,12 @@ public class DDataService : IDDataService
     {
         var ddata = await GetDDataAsync(timestamp, cancellationToken);
 
-        // Clone profiles and filter out temporary profile switches (containing "@@@@@")
-        var profiles =
-            JsonSerializer.Deserialize<List<Profile>>(JsonSerializer.Serialize(ddata.Profiles))
-            ?? new();
-        if (profiles.Count > 0 && profiles[0].Store != null)
-        {
-            var keysToRemove = profiles[0].Store.Keys.Where(k => k.Contains("@@@@@")).ToList();
-            foreach (var key in keysToRemove)
-            {
-                profiles[0].Store.Remove(key);
-            }
-        }
-
         return new DDataResponse
         {
             DeviceStatus = GetRecentDeviceStatus(ddata.DeviceStatus, timestamp),
             Sgvs = ddata.Sgvs,
             Cals = ddata.Cals,
-            Profiles = profiles,
+            Profiles = ddata.Profiles,
             Mbgs = ddata.Mbgs,
             Food = ddata.Food,
             Treatments = ddata.Treatments,
@@ -722,10 +709,18 @@ public class DDataService : IDDataService
     {
         try
         {
+            var window = new Dictionary<string, object>
+            {
+                ["created_at"] = new Dictionary<string, string>
+                {
+                    ["$gte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp - DeviceStatusWindowMills).UtcDateTime.ToString("o"),
+                    ["$lte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime.ToString("o"),
+                },
+            };
             var deviceStatuses = await _projectionService.GetAsync(
                 count: 1000,
                 skip: 0,
-                find: null,
+                find: JsonSerializer.Serialize(window),
                 ct: cancellationToken
             );
             ddata.DeviceStatus = deviceStatuses.ToList();

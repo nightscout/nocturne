@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -11,18 +12,19 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// </summary>
 public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
 {
-    private readonly NocturneDbContext _context;
+    private readonly INocturneDbContextFactory _contexts;
 
     /// <inheritdoc cref="IConnectorFoodEntryRepository" />
-    public ConnectorFoodEntryRepository(NocturneDbContext context)
+    public ConnectorFoodEntryRepository(INocturneDbContextFactory contexts)
     {
-        _context = context;
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
     }
 
     /// <inheritdoc />
     public async Task<ConnectorFoodEntry?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        var entity = await _context.ConnectorFoodEntries
+        await using var db = await _contexts.CreateAsync(ct);
+        var entity = await db.ConnectorFoodEntries
             .Include(e => e.Food)
             .FirstOrDefaultAsync(e => e.Id == id, ct);
 
@@ -35,7 +37,8 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         DateTimeOffset to,
         CancellationToken ct = default)
     {
-        var entities = await _context.ConnectorFoodEntries
+        await using var db = await _contexts.CreateAsync(ct);
+        var entities = await db.ConnectorFoodEntries
             .Include(e => e.Food)
             .Where(e => e.Status == ConnectorFoodEntryStatus.Pending)
             .Where(e => e.ConsumedAt >= from && e.ConsumedAt <= to)
@@ -50,8 +53,9 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         IEnumerable<Guid> ids,
         CancellationToken ct = default)
     {
+        await using var db = await _contexts.CreateAsync(ct);
         var idList = ids.ToList();
-        var entities = await _context.ConnectorFoodEntries
+        var entities = await db.ConnectorFoodEntries
             .Include(e => e.Food)
             .Where(e => idList.Contains(e.Id))
             .ToListAsync(ct);
@@ -65,14 +69,15 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         ConnectorFoodEntryStatus status,
         CancellationToken ct = default)
     {
-        var entity = await _context.ConnectorFoodEntries
+        await using var db = await _contexts.CreateAsync(ct);
+        var entity = await db.ConnectorFoodEntries
             .FirstOrDefaultAsync(e => e.Id == id, ct);
 
         if (entity != null)
         {
             entity.Status = status;
             entity.ResolvedAt = DateTimeOffset.UtcNow;
-            await _context.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
         }
     }
 

@@ -18,7 +18,6 @@ public interface IAlertDeliveryService
     /// <param name="alertInstanceId">The alert instance the deliveries belong to.</param>
     /// <param name="channels">The rule's channel list (typically empty when the rule was created with no opt-in delivery surface).</param>
     /// <param name="payload">The <see cref="AlertPayload"/> rendered into each delivery.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task DispatchAsync(
         Guid alertInstanceId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
@@ -35,7 +34,6 @@ public interface IAlertDeliveryService
     /// <param name="alertRuleId">The rule whose channels are being tested.</param>
     /// <param name="channels">Channels to fire through (typically the rule's saved channels; for dry-run flows the editor passes its in-memory list).</param>
     /// <param name="payload">A <see cref="AlertPayload"/> rendered by the caller — name is conventionally prefixed with <c>"[Test] "</c>.</param>
-    /// <param name="ct">Cancellation token.</param>
     Task TestFireAsync(
         Guid alertRuleId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,

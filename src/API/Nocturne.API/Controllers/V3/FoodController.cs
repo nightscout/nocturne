@@ -2,10 +2,12 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Controllers.V3;
@@ -64,19 +66,12 @@ public class FoodController : BaseV3Controller<Food>
             );
             var type = typeFilter?.Value?.ToString();
 
-            // Determine sort direction from sort$desc query parameter
-            // Nightscout V3: sort$desc=field means descending (newest first)
-            // reverseResults=false means descending, reverseResults=true means ascending
-            var hasSortDesc = HttpContext?.Request.Query.ContainsKey("sort$desc") ?? false;
-            var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
-
             // Get all food records - we'll apply V3 filtering in memory
             var foodRecords = await _foods.GetFoodWithAdvancedFilterAsync(
                 count: int.MaxValue, // Get all, filter later
                 skip: 0,
                 findQuery: null,
                 type: type,
-                reverseResults: reverseResults,
                 cancellationToken: cancellationToken
             );
 
@@ -84,9 +79,7 @@ public class FoodController : BaseV3Controller<Food>
 
             // Apply V3 filter criteria
             foodList = ApplyV3FilterCriteria(foodList, parameters.FilterCriteria);
-
-            // Get total count before pagination
-            var totalCount = foodList.Count;
+            foodList = OrderFood(foodList, parameters.Sort);
 
             // Apply pagination
             foodList = foodList.Skip(parameters.Offset).Take(parameters.Limit).ToList();
@@ -105,12 +98,11 @@ public class FoodController : BaseV3Controller<Food>
             );
 
             // CreateV3CollectionResponse returns the properly formatted IActionResult
-            return (ActionResult)CreateV3CollectionResponse(foodList, parameters, totalCount);
-        }
-        catch (V3ParameterOutOfToleranceException ex)
-        {
-            _logger.LogWarning(ex, "V3 parameter out of tolerance: {Parameter}", ex.ParameterName);
-            return CreateV3ErrorResponse(400, $"Parameter {ex.ParameterName} out of tolerance");
+            return (ActionResult)CreateV3CollectionResponse(
+                foodList.Select(f => ToV3Document(f, f.Id)).ToList(),
+                parameters,
+                lastModified
+            );
         }
         catch (ArgumentException ex)
         {
@@ -157,12 +149,61 @@ public class FoodController : BaseV3Controller<Food>
 
         SetHistoryCursorHeaders(page.CursorMills ?? lastModified);
 
-        return CreateV3SuccessResponse(page.Records);
+        return CreateV3SuccessResponse(page.Records.Select(f => ToV3Document(f, f.Id)).ToList());
     }
 
     /// <summary>
     /// Apply V3 filter criteria to a list of food records
     /// </summary>
+    private static readonly IReadOnlyDictionary<string, Func<Food, object?>> SortKeys =
+        new Dictionary<string, Func<Food, object?>>
+        {
+            ["name"] = f => f.Name,
+            ["category"] = f => f.Category,
+            ["subcategory"] = f => f.Subcategory,
+            ["type"] = f => f.Type,
+            ["unit"] = f => f.Unit,
+            ["portion"] = f => f.Portion,
+            ["carbs"] = f => f.Carbs,
+            ["fat"] = f => f.Fat,
+            ["protein"] = f => f.Protein,
+            ["energy"] = f => f.Energy,
+            ["gi"] = f => f.Gi,
+            ["position"] = f => f.Position,
+            ["created_at"] = f => f.CreatedAt,
+            ["srvModified"] = f => f.SrvModified,
+            ["srvCreated"] = f => f.SrvCreated,
+        };
+
+    /// <summary>
+    /// Orders the filtered foods by the sort field when it is one of <see cref="SortKeys"/>, and by
+    /// name otherwise, breaking ties by name then identifier in the same direction.
+    /// </summary>
+    private static List<Food> OrderFood(List<Food> foods, V3Sort sort)
+    {
+        var key = SortKeys.GetValueOrDefault(sort.Field ?? string.Empty, SortKeys["name"]);
+        var comparer = Comparer<object?>.Create(CompareSortKeys);
+
+        return (sort.Descending
+                ? foods.OrderByDescending(key, comparer)
+                    .ThenByDescending(f => f.Name, StringComparer.Ordinal)
+                    .ThenByDescending(f => f.Id, StringComparer.Ordinal)
+                : foods.OrderBy(key, comparer)
+                    .ThenBy(f => f.Name, StringComparer.Ordinal)
+                    .ThenBy(f => f.Id, StringComparer.Ordinal))
+            .ToList();
+    }
+
+    private static int CompareSortKeys(object? left, object? right) =>
+        (left, right) switch
+        {
+            (null, null) => 0,
+            (null, _) => -1,
+            (_, null) => 1,
+            (string a, string b) => string.CompareOrdinal(a, b),
+            _ => ((IComparable)left).CompareTo(right),
+        };
+
     private List<Food> ApplyV3FilterCriteria(List<Food> foods, List<V3FilterCriteria> criteria)
     {
         if (criteria == null || criteria.Count == 0)
@@ -174,7 +215,10 @@ public class FoodController : BaseV3Controller<Food>
             if (filter.Field.Equals("type", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            foods = foods.Where(f => MatchesFilter(f, filter)).ToList();
+            var regex = filter is { Operator: "re", Value: string pattern } ? BoundedRegex.Create(pattern) : null;
+            foods = foods.Where(f => MatchesFilter(f, filter, regex)).ToList();
+            if (regex?.Abandoned == true)
+                _logger.LogWarning("A food $re filter ran out of its time budget; matches may be incomplete");
         }
 
         return foods;
@@ -183,7 +227,7 @@ public class FoodController : BaseV3Controller<Food>
     /// <summary>
     /// Check if a food record matches a filter criterion
     /// </summary>
-    private bool MatchesFilter(Food food, V3FilterCriteria filter)
+    private bool MatchesFilter(Food food, V3FilterCriteria filter, BoundedRegex? regex)
     {
         var fieldValue = GetFieldValue(food, filter.Field);
         if (fieldValue == null && filter.Value == null)
@@ -201,11 +245,7 @@ public class FoodController : BaseV3Controller<Food>
             "lte" => CompareValues(fieldValue, filter.Value) <= 0,
             "in" => filter.Value is string s && s.Split(',').Contains(fieldValue.ToString()),
             "nin" => filter.Value is string s2 && !s2.Split(',').Contains(fieldValue.ToString()),
-            "re" => filter.Value is string pattern
-                && System.Text.RegularExpressions.Regex.IsMatch(
-                    fieldValue.ToString() ?? "",
-                    pattern
-                ),
+            "re" => regex?.IsMatch(fieldValue.ToString() ?? "") == true,
             _ => true,
         };
     }
@@ -215,10 +255,13 @@ public class FoodController : BaseV3Controller<Food>
     /// </summary>
     private object? GetFieldValue(Food food, string fieldName)
     {
+        if (fieldName.Equals("_id", StringComparison.OrdinalIgnoreCase)
+            || fieldName.Equals("identifier", StringComparison.OrdinalIgnoreCase))
+            return MongoObjectId.Coerce(food.Id);
+
         // Map lowercase field names to property names
         var propertyMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["_id"] = "Id",
             ["type"] = "Type",
             ["category"] = "Category",
             ["subcategory"] = "Subcategory",
@@ -295,8 +338,9 @@ public class FoodController : BaseV3Controller<Food>
             );
         }
 
-        var parameters = ParseV3QueryParameters(); // Apply field selection if specified
-        var result = ApplyFieldSelection(new[] { food }, parameters.Fields).FirstOrDefault();
+        var parameters = ParseV3QueryParameters(readSort: false); // Apply field selection if specified
+        var result = ApplyFieldSelection(new[] { ToV3Document(food, food.Id) }, parameters.Fields)
+            .FirstOrDefault();
 
         _logger.LogDebug("Successfully returned food with ID {Id}", id);
 
@@ -309,12 +353,12 @@ public class FoodController : BaseV3Controller<Food>
     /// </summary>
     /// <param name="foodData">Food data to create (single object or array)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created food records</returns>
+    /// <returns>The <see cref="V3CreateResponse"/> for one document; the created records for an array.</returns>
     [HttpPost]
     [Authorize]
     [RequireScope(Scope.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food")]
-    [ProducesResponseType(typeof(Food[]), 201)]
+    [ProducesResponseType(typeof(V3CreateResponse), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -382,7 +426,18 @@ public class FoodController : BaseV3Controller<Food>
 
             _logger.LogDebug("Successfully created {Count} food records", createdRecords.Count());
 
-            return StatusCode(201, createdRecords.ToArray());
+            if (foodData.ValueKind == JsonValueKind.Array)
+            {
+                return StatusCode(201, createdRecords.ToArray());
+            }
+
+            var created = createdRecords.FirstOrDefault();
+            if (created == null)
+            {
+                return CreateV3ErrorResponse(500, "Failed to create food", "Food creation failed");
+            }
+
+            return V3Created(nameof(GetFoodById), created.Id);
         }
         catch (ArgumentException ex)
         {
@@ -430,10 +485,7 @@ public class FoodController : BaseV3Controller<Food>
                 return validationError;
             }
 
-            var food = JsonSerializer.Deserialize<Food>(
-                foodData.GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-            );
+            var food = NightscoutJsonBody.ReadObject<Food>(foodData);
 
             if (food == null)
             {
@@ -460,6 +512,11 @@ public class FoodController : BaseV3Controller<Food>
             _logger.LogDebug("Successfully updated food with ID {Id}", id);
 
             return Ok(updatedFood);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Invalid JSON in V3 food update request for ID {Id}", id);
+            return CreateV3ErrorResponse(400, "Invalid request data", ex.Message);
         }
         catch (ArgumentException ex)
         {
@@ -498,46 +555,16 @@ public class FoodController : BaseV3Controller<Food>
     }
 
     /// <summary>
-    /// Validates common V3 fields as per Nightscout API behavior.
-    /// Nightscout validates these fields before checking if the document exists.
-    /// </summary>
-    /// <param name="jsonData">The JSON data to validate</param>
-    /// <returns>ActionResult with error if validation fails, null if validation passes</returns>
-    private ActionResult? ValidateV3CommonFields(JsonElement jsonData)
-    {
-        const long MinTimestamp = 946684800000; // Year 2000 in milliseconds
-
-        // Check for 'date' field - Nightscout requires this for all V3 operations
-        if (!jsonData.TryGetProperty("date", out var dateProperty))
-        {
-            return CreateV3ErrorResponse(400, "Bad or missing date field");
-        }
-
-        // Date must be a number greater than MIN_TIMESTAMP
-        if (dateProperty.ValueKind != JsonValueKind.Number)
-        {
-            return CreateV3ErrorResponse(400, "Bad or missing date field");
-        }
-
-        if (!dateProperty.TryGetInt64(out var dateValue) || dateValue <= MinTimestamp)
-        {
-            return CreateV3ErrorResponse(400, "Bad or missing date field");
-        }
-
-        return null; // Validation passed
-    }
-
-    /// <summary>
     /// Delete a food record by ID
     /// </summary>
     /// <param name="id">Food ID to delete</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>No content on success</returns>
+    /// <returns><c>{"status": 200}</c> on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
     [RequireScope(Scope.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food/{id}")]
-    [ProducesResponseType(204)]
+    [ProducesResponseType(200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
     [ErrorEnvelope]
@@ -565,7 +592,7 @@ public class FoodController : BaseV3Controller<Food>
 
         _logger.LogDebug("Successfully deleted food with ID {Id}", id);
 
-        return NoContent();
+        return CreateV3DeleteResponse();
     }
 
     /// <summary>
@@ -632,67 +659,15 @@ public class FoodController : BaseV3Controller<Food>
     /// <returns>Collection of Food objects</returns>
     private IEnumerable<Food> ParseCreateRequestFromJsonElement(JsonElement jsonElement)
     {
-        var foodRecords = new List<Food>();
-
         try
         {
-            if (jsonElement.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var element in jsonElement.EnumerateArray())
-                {
-                    var food = JsonSerializer.Deserialize<Food>(
-                        element.GetRawText(),
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                    );
-                    if (food != null)
-                    {
-                        foodRecords.Add(food);
-                    }
-                }
-            }
-            else if (jsonElement.ValueKind == JsonValueKind.Object)
-            {
-                var food = JsonSerializer.Deserialize<Food>(
-                    jsonElement.GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                );
-                if (food != null)
-                {
-                    foodRecords.Add(food);
-                }
-            }
+            return NightscoutJsonBody.ReadObjects<Food>(jsonElement) ?? [];
         }
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Failed to parse food data from JsonElement");
             throw new ArgumentException("Invalid food data format", ex);
         }
-
-        return foodRecords;
     }
 
-    /// <summary>
-    /// Get total count for pagination support
-    /// </summary>
-    private async Task<long> GetTotalCountAsync(
-        string? type,
-        string? findQuery,
-        CancellationToken cancellationToken,
-        string collection = "food"
-    )
-    {
-        try
-        {
-            return await _foods.CountFoodAsync(findQuery, type, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Could not get total count for {Collection}, using approximation",
-                collection
-            );
-            return 0; // Return 0 for count errors to maintain API functionality
-        }
-    }
 }
