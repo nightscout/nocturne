@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using System.Reflection;
+using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Core.Constants;
 using Nocturne.API.Services.ChartData;
 using Nocturne.Connectors.GoogleHealth.Configurations;
 using Nocturne.Connectors.GoogleHealth.Services;
