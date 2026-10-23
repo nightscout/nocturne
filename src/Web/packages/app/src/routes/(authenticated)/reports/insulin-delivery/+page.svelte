@@ -21,6 +21,7 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
   import {
     getInsulinDeliveryStatistics,
@@ -74,14 +75,21 @@
     () => getHourlyInsulinDelivery(statisticsDates),
     { errorTitle: "Error Loading Insulin Delivery Data" }
   );
-  const hourlyDelivery = $derived(hourlyDeliveryResource.current?.hours ?? []);
+  const hourlyDelivery = $derived(hourlyDeliveryResource.current);
+  const timeZoneReason = $derived(
+    dailyRatiosResource.current?.timeZoneUnavailableReason ??
+      hourlyDelivery?.timeZoneUnavailableReason
+  );
 
   const emptyStats: InsulinDeliveryStatistics = {
     totalBolus: 0,
     totalBasal: 0,
     totalInsulin: 0,
     totalCarbs: 0,
-    bolusCount: 0,
+    manualBolus: 0,
+    automaticBolus: 0,
+    manualBolusCount: 0,
+    automaticBolusCount: 0,
     basalCount: 0,
     basalPercent: 0,
     bolusPercent: 0,
@@ -165,7 +173,8 @@
         </li>
         <li>
           <strong>Bolus insulin:</strong>
-          Insulin taken for meals and to correct high glucose
+          Insulin taken for meals and to correct high glucose, plus automatic
+          boluses delivered by a loop
         </li>
       </ul>
       <p class="text-muted-foreground">
@@ -179,11 +188,19 @@
     figures={[
       { label: "Avg TDD", value: (insulinStats.tdd ?? 0).toFixed(1), unit: "units/day" },
       { label: "Basal", value: (insulinStats.basalPercent ?? 0).toFixed(0), unit: "%", note: `${(insulinStats.totalBasal ?? 0).toFixed(1)}U total` },
-      { label: "Bolus", value: (insulinStats.bolusPercent ?? 0).toFixed(0), unit: "%", note: `${(insulinStats.totalBolus ?? 0).toFixed(1)}U total` },
+      { label: "Bolus", value: (insulinStats.bolusPercent ?? 0).toFixed(0), unit: "%", note: `${(insulinStats.totalBolus ?? 0).toFixed(1)}U total`, detail: `manual ${(insulinStats.manualBolus ?? 0).toFixed(1)} U / automatic ${(insulinStats.automaticBolus ?? 0).toFixed(1)} U` },
       { label: "Boluses/Day", value: (insulinStats.bolusesPerDay ?? 0).toFixed(1), note: `avg ${(insulinStats.avgBolus ?? 0).toFixed(1)}U each` },
       { label: "Avg I:C", value: (insulinStats.icRatio ?? 0) > 0 ? `1:${(insulinStats.icRatio ?? 0).toFixed(0)}` : "–", note: `${(insulinStats.totalCarbs ?? 0).toFixed(0)}g carbs` },
     ]}
   />
+
+  {#if timeZoneReason}
+    <p class="text-sm text-muted-foreground">
+      <TimeZoneNote reason={timeZoneReason}>
+        This report cannot show insulin by local day or hour of day.
+      </TimeZoneNote>
+    </p>
+  {/if}
 
   <Card>
     <CardHeader>
@@ -191,7 +208,9 @@
         <PieChart class="h-5 w-5 text-muted-foreground" />
         Daily Basal/Bolus Breakdown
       </CardTitle>
-      <CardDescription>See how your insulin was split each day</CardDescription>
+      <CardDescription>
+        See how your insulin was split each day, against the carbs you logged
+      </CardDescription>
     </CardHeader>
     <CardContent>
       <BasalBolusRatioChart
@@ -208,15 +227,15 @@
         Hourly Insulin Delivery
       </CardTitle>
       <CardDescription>
-        Average insulin delivered by hour of day, split by basal and bolus
+        Average insulin delivered by hour of day, split by basal, manual bolus and automatic bolus
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <InsulinDeliveryChart data={hourlyDelivery} showStacked={true} />
+      <InsulinDeliveryChart delivery={hourlyDelivery} showStacked={true} />
     </CardContent>
   </Card>
 
-  {#if (insulinStats.bolusCount ?? 0) > 0}
+  {#if (insulinStats.manualBolusCount ?? 0) > 0}
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
@@ -232,7 +251,7 @@
           <div class="flex flex-wrap items-baseline justify-between gap-x-4 py-2 first:pt-0">
             <dt class="text-sm font-medium text-muted-foreground">Total Boluses</dt>
             <dd class="m-0 flex items-baseline gap-2">
-              <span class="text-lg font-semibold tabular-nums">{insulinStats.bolusCount ?? 0}</span>
+              <span class="text-lg font-semibold tabular-nums">{insulinStats.manualBolusCount ?? 0}</span>
               <span class="text-xs text-muted-foreground">Over {dayCount} days</span>
             </dd>
           </div>
@@ -241,9 +260,9 @@
             <dd class="m-0 flex items-baseline gap-2">
               <span class="text-lg font-semibold tabular-nums">{insulinStats.mealBoluses ?? 0}</span>
               <span class="text-xs text-muted-foreground">
-                {(insulinStats.bolusCount ?? 0) > 0
+                {(insulinStats.manualBolusCount ?? 0) > 0
                   ? (
-                      ((insulinStats.mealBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) *
+                      ((insulinStats.mealBoluses ?? 0) / (insulinStats.manualBolusCount ?? 1)) *
                       100
                     ).toFixed(0)
                   : 0}% of boluses
@@ -255,9 +274,9 @@
             <dd class="m-0 flex items-baseline gap-2">
               <span class="text-lg font-semibold tabular-nums">{insulinStats.correctionBoluses ?? 0}</span>
               <span class="text-xs text-muted-foreground">
-                {(insulinStats.bolusCount ?? 0) > 0
+                {(insulinStats.manualBolusCount ?? 0) > 0
                   ? (
-                      ((insulinStats.correctionBoluses ?? 0) / (insulinStats.bolusCount ?? 1)) *
+                      ((insulinStats.correctionBoluses ?? 0) / (insulinStats.manualBolusCount ?? 1)) *
                       100
                     ).toFixed(0)
                   : 0}% of boluses
@@ -316,7 +335,7 @@
 
   <div class="space-y-1 text-center text-xs text-muted-foreground">
     <p class="print:hidden">
-      Report generated from {formatNumber(insulinStats.bolusCount)} boluses between
+      Report generated from {formatNumber(insulinStats.manualBolusCount)} manual boluses between
       {formatNumericDate(startDate)} and {formatNumericDate(endDate)}
     </p>
     <p class="text-muted-foreground/60">

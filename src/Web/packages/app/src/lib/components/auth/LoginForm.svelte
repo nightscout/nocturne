@@ -552,6 +552,7 @@
       <form
         bind:this={totpFormEl}
         class="space-y-3"
+        data-testid="authenticator-step"
         {...signInWithAuthenticator.enhance(async ({ submit }) => {
           await authenticator.run(submit, onSuccess);
         })}

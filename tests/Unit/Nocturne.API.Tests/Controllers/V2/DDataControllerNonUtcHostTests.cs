@@ -51,12 +51,12 @@ public sealed class DDataControllerNonUtcHostTests : IDisposable
     public async Task GetDDataAt_OffsetTimestamp_QueriesThatInstant()
     {
         _service
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DData());
+            .Setup(x => x.GetDDataFrameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DDataFrame());
 
         await _controller.GetDDataAt(OffsetTimestamp, CancellationToken.None);
 
-        _service.Verify(x => x.GetDDataAsync(ExpectedMills, It.IsAny<CancellationToken>()));
+        _service.Verify(x => x.GetDDataFrameAsync(ExpectedMills, It.IsAny<CancellationToken>()));
     }
 
     [Fact]

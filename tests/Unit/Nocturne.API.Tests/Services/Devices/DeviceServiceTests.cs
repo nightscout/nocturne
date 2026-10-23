@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Moq;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Tests.Shared.Mocks;
@@ -23,7 +24,7 @@ public class DeviceServiceTests
     {
         _mockRepository = new Mock<IDeviceRepository>();
         _mockPatientDeviceRepository = new Mock<IPatientDeviceRepository>();
-        _service = new DeviceService(_mockRepository.Object, _mockPatientDeviceRepository.Object, MockTenantAccessor.Create().Object);
+        _service = new DeviceService(_mockRepository.Object, _mockPatientDeviceRepository.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc());
         _mockRepository
             .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback((Guid id, DateTime t, WriteOrigin _, CancellationToken _) => _updates.Add((id, t)))

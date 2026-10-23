@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { CoachGates, CoachMarkAdapter, CoachRouter, SequenceConfig } from "./types.js";
+  import type { CoachGates, CoachLabels, CoachMarkAdapter, CoachRouter, SequenceConfig } from "./types.js";
   import { createCoachMarkContext } from "./context.svelte.js";
   import { setCoachMarkContextRef } from "./coachmark.svelte.js";
   import { HistorySentinel } from "./history-sentinel.js";
@@ -9,6 +9,7 @@
 
   let {
     adapter,
+    labels,
     sequences = {},
     gates = {},
     settleDelay = 500,
@@ -17,6 +18,7 @@
     children,
   }: {
     adapter: CoachMarkAdapter;
+    labels: CoachLabels;
     sequences?: SequenceConfig;
     gates?: CoachGates;
     settleDelay?: number;
@@ -27,8 +29,12 @@
   } = $props();
 
   // svelte-ignore state_referenced_locally
-  const ctx = createCoachMarkContext(adapter, sequences, settleDelay, seenDwellMs, () => gates);
+  const ctx = createCoachMarkContext(adapter, labels, sequences, settleDelay, seenDwellMs, () => gates);
   setCoachMarkContextRef(ctx);
+
+  $effect.pre(() => {
+    ctx.labels = labels;
+  });
 
   // The back button dismisses quietly, so no follow-on sequence appears.
   const sentinel = new HistorySentinel(() => {

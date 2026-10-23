@@ -78,16 +78,17 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         {
             var parameters = ParseV3QueryParameters();
 
-            // Convert V3 filter criteria (field$op=value) to MongoDB-style JSON query
-            var findQuery =
-                ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
-                ?? ConvertV3FilterToV1Find(parameters.Filter);
+            var find = DeviceStatusProjectionService
+                .ParseFind(
+                    ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
+                        ?? ConvertV3FilterToV1Find(parameters.Filter))
+                .WithFieldRenamed("identifier", "_id");
 
             var deviceStatusList = (
-                await _projection.GetAsync(
+                await _projection.GetMatchingAsync(
+                    find,
                     parameters.Limit,
                     parameters.Offset,
-                    findQuery,
                     cancellationToken,
                     parameters.Sort.Descending,
                     ReadSortFieldOf(parameters.Sort)

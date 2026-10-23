@@ -44,6 +44,20 @@ export const ReportsParamsSchema = z.object({
 
 export type ReportsParams = z.infer<typeof ReportsParamsSchema>;
 
+/** A write of the range parameters, as the setters below make it. */
+export type RangeWrite = DateRangeInput & { isDefault: boolean };
+
+/** `search` with `write` in it, as the setters would write it, for a navigation that carries more. */
+export function withRange(search: URLSearchParams, write: RangeWrite): URLSearchParams {
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a value built and returned, never state
+  const next = new URLSearchParams(search);
+  for (const [name, value] of Object.entries(write)) {
+    if (value == null) next.delete(name);
+    else next.set(name, String(value));
+  }
+  return next;
+}
+
 /**
  * Input type for remote functions - just the date range fields without isDefault.
  * Uses null | undefined to match both the schema (nullable) and common JS patterns.
@@ -166,7 +180,11 @@ export function useDateParams(defaultDays = 7) {
    * be preserved when navigating between reports.
    */
   function setDayRange(daysCount: number) {
-    params.update({ ...defaultRange(daysCount), isDefault: false });
+    params.update(dayRangeWrite(daysCount));
+  }
+
+  function dayRangeWrite(daysCount: number): RangeWrite {
+    return { ...defaultRange(daysCount), isDefault: false };
   }
 
   /**
@@ -174,7 +192,11 @@ export function useDateParams(defaultDays = 7) {
    * Marks as NOT default so it's preserved when navigating to other reports.
    */
   function setCustomRange(from: string, to: string) {
-    params.update({ days: null, from, to, isDefault: false });
+    params.update(customRangeWrite(from, to));
+  }
+
+  function customRangeWrite(from: string, to: string): RangeWrite {
+    return { days: null, from, to, isDefault: false };
   }
 
   /**
@@ -182,7 +204,11 @@ export function useDateParams(defaultDays = 7) {
    * This marks as default again so it can be auto-adjusted when navigating to other reports.
    */
   function reset() {
-    params.update({ ...defaultRange(reportDefaultDays), isDefault: true });
+    params.update(resetWrite());
+  }
+
+  function resetWrite(): RangeWrite {
+    return { ...defaultRange(reportDefaultDays), isDefault: true };
   }
 
   /**
@@ -265,6 +291,10 @@ export function useDateParams(defaultDays = 7) {
     setCustomRange,
     reset,
     getDateRange,
+    /** What the setter of the same name writes, for {@link withRange}. */
+    dayRangeWrite,
+    customRangeWrite,
+    resetWrite,
 
     /** The default window of the report currently on screen. */
     get reportDefaultDays(): number {
@@ -313,10 +343,7 @@ export function useDateParams(defaultDays = 7) {
 
 export type ReportsParamsReturn = ReturnType<typeof useDateParams>;
 
-/**
- * Context key for shared date params instance.
- */
-const DATE_PARAMS_CONTEXT_KEY = Symbol("date-params");
+const DATE_PARAMS_CONTEXT_KEY = "nocturne:app:date-params";
 
 /**
  * Set the date params instance in Svelte context.
@@ -364,7 +391,7 @@ export class SharedRangeUse {
   }
 }
 
-const SHARED_RANGE_USE_KEY = Symbol("shared-range-use");
+const SHARED_RANGE_USE_KEY = "nocturne:app:shared-range-use";
 
 /** Create and provide the shared-range-use flag. Call this in the reports layout. */
 export function createSharedRangeUse(): SharedRangeUse {

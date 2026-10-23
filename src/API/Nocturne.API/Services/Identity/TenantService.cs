@@ -1,6 +1,5 @@
 using Nocturne.API.Multitenancy;
 using System.Net.Http.Json;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -121,9 +120,6 @@ public partial class TenantService : ITenantService
         // Create Public subject membership (no roles = private by default)
         await CreatePublicSubjectMembershipAsync(context, tenant.Id, ct);
 
-        // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
-        await SeedKnownOAuthClientsAsync(context, tenant.Id, ct);
-
         // Assign creator as owner
         var ownerRole = await context.TenantRoles
             .FirstAsync(r => r.TenantId == tenant.Id && r.Slug == "owner", ct);
@@ -156,15 +152,12 @@ public partial class TenantService : ITenantService
         // Create Public subject membership (no roles = private by default)
         await CreatePublicSubjectMembershipAsync(context, tenant.Id, ct);
 
-        // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
-        await SeedKnownOAuthClientsAsync(context, tenant.Id, ct);
-
         TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
         return ToCreatedDto(tenant);
     }
 
     /// <summary>
-    /// Re-seeds roles, public membership, and OAuth clients for an existing
+    /// Re-seeds roles and public membership for an existing
     /// tenant after its data has been purged. Used by the dev-only reset flow.
     /// </summary>
     public async Task SeedAfterResetAsync(Guid tenantId, CancellationToken ct = default)
@@ -173,7 +166,6 @@ public partial class TenantService : ITenantService
 
         await _roleService.SeedRolesForTenantAsync(tenantId, ct);
         await CreatePublicSubjectMembershipAsync(context, tenantId, ct);
-        await SeedKnownOAuthClientsAsync(context, tenantId, ct);
     }
 
     public async Task<List<TenantDto>> GetAllAsync(CancellationToken ct = default)
@@ -533,9 +525,6 @@ public partial class TenantService : ITenantService
                 _logger.LogWarning("Public system subject not found — skipping public access membership for tenant {TenantId}", tenant.Id);
             }
 
-            // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
-            await SeedKnownOAuthClientsAsync(context, tenant.Id, token);
-
             // 2. Resolve the owner subject. An OIDC account maps to one subject reused across
             // tenants, so an already-linked identity names the owner even when the checkout email
             // differs. Nothing else does: the owner email is never matched to an existing subject,
@@ -683,43 +672,4 @@ public partial class TenantService : ITenantService
 
     private static TenantCreatedDto ToCreatedDto(TenantEntity t) =>
         new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt);
-
-    /// <summary>
-    /// Seed the bundled known-app directory into a tenant's oauth_clients.
-    /// Idempotent: existing rows for the same software_id are left untouched.
-    /// </summary>
-    private static async Task SeedKnownOAuthClientsAsync(
-        NocturneDbContext context, Guid tenantId, CancellationToken ct)
-    {
-        var existingSoftwareIds = await context.OAuthClients
-            .IgnoreQueryFilters()
-            .Where(c => c.TenantId == tenantId && c.SoftwareId != null)
-            .Select(c => c.SoftwareId!)
-            .ToListAsync(ct);
-        var existingSet = new HashSet<string>(existingSoftwareIds, StringComparer.Ordinal);
-
-        var added = 0;
-        foreach (var entry in KnownOAuthClients.Entries.Where(e => !existingSet.Contains(e.SoftwareId)))
-        {
-            context.OAuthClients.Add(new OAuthClientEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
-                ClientId = Guid.CreateVersion7().ToString(),
-                SoftwareId = entry.SoftwareId,
-                ClientName = entry.DisplayName,
-                ClientUri = entry.Homepage,
-                LogoUri = entry.LogoUri,
-                DisplayName = entry.DisplayName,
-                IsKnown = true,
-                RedirectUris = JsonSerializer.Serialize(entry.RedirectUris),
-            });
-            added++;
-        }
-
-        if (added > 0)
-        {
-            await context.SaveChangesAsync(ct);
-        }
-    }
 }

@@ -985,9 +985,9 @@ public class DataSourceService : IDataSourceService
     )
     {
         // Glucose: audited soft-delete, user-attributed (via the V4 repositories).
-        var sensorGlucoseDeleted = await _sensorGlucose.DeleteBySourceAsync(source, cancellationToken);
-        var meterGlucoseDeleted = await _meterGlucose.DeleteBySourceAsync(source, cancellationToken);
-        var calibrationsDeleted = await _calibrations.DeleteBySourceAsync(source, cancellationToken);
+        var sensorGlucoseDeleted = await _sensorGlucose.DeleteBySourceAsync(source, WriteOrigin.Live, cancellationToken);
+        var meterGlucoseDeleted = await _meterGlucose.DeleteBySourceAsync(source, WriteOrigin.Live, cancellationToken);
+        var calibrationsDeleted = await _calibrations.DeleteBySourceAsync(source, WriteOrigin.Live, cancellationToken);
 
         // Auditable + soft-deletable records: audited soft-delete, user-attributed.
         var scope = $"data_source={source}";

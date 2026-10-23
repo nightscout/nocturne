@@ -13,9 +13,9 @@ namespace Nocturne.API.Services.Compatibility;
 public interface IDiscrepancyPersistenceService
 {
     /// <summary>
-    /// Persists a <see cref="ResponseComparisonResult"/> to the database and fires a fire-and-forget
-    /// task to forward it via <see cref="IDiscrepancyForwardingService"/> so the calling request
-    /// path is not blocked by the forwarding HTTP call.
+    /// Persists a <see cref="ResponseComparisonResult"/> to the database, then forwards it via
+    /// <see cref="IDiscrepancyForwardingService"/> before returning. The forwarder logs its own
+    /// I/O, timeout and serialisation failures.
     /// </summary>
     Task<Guid> StoreAnalysisAsync(
         ResponseComparisonResult comparisonResult,
@@ -54,10 +54,8 @@ public interface IDiscrepancyPersistenceService
 /// <see cref="Infrastructure.Data.Abstractions.IDiscrepancyAnalysisRepository"/>.
 /// </summary>
 /// <remarks>
-/// After each successful database write, forwarding is kicked off as a fire-and-forget
-/// <c>Task.Run</c> so that remote forwarding latency does not affect the response time of
-/// the mirrored request. Forwarding failures are logged as warnings and do not surface to
-/// callers.
+/// After each successful database write, the discrepancy is forwarded in the caller's scope
+/// and awaited. The forwarder logs its own I/O, timeout and serialisation failures.
 /// </remarks>
 /// <seealso cref="IDiscrepancyPersistenceService"/>
 public class DiscrepancyPersistenceService : IDiscrepancyPersistenceService
@@ -150,27 +148,12 @@ public class DiscrepancyPersistenceService : IDiscrepancyPersistenceService
                 comparisonResult.TraceId
             );
 
-            // Forward to remote endpoint if configured (fire-and-forget, don't block)
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _forwardingService.ForwardDiscrepancyAsync(
-                        comparisonResult,
-                        requestMethod,
-                        requestPath,
-                        CancellationToken.None
-                    );
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Error forwarding discrepancy {CorrelationId} to remote endpoint",
-                        comparisonResult.TraceId
-                    );
-                }
-            });
+            await _forwardingService.ForwardDiscrepancyAsync(
+                comparisonResult,
+                requestMethod,
+                requestPath,
+                cancellationToken
+            );
 
             return analysisId;
         }

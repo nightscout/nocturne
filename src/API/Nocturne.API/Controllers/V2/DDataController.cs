@@ -95,11 +95,11 @@ public class DDataController : ControllerBase
     /// <response code="400">If the timestamp parameter is invalid</response>
     /// <response code="500">If there was an internal server error</response>
     [HttpGet("at/{timestamp?}")]
-    [ProducesResponseType(typeof(DData), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(DDataFrame), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     [RequireScope(Scope.GlucoseRead)]
-    public async Task<ActionResult<DData>> GetDDataAt(
+    public async Task<ActionResult<DDataFrame>> GetDDataAt(
         string? timestamp = null,
         CancellationToken cancellationToken = default
     )
@@ -111,7 +111,7 @@ public class DDataController : ControllerBase
                 return BadRequest(error);
             }
 
-            var result = await _ddataService.GetDDataAsync(unixTimestamp, cancellationToken);
+            var result = await _ddataService.GetDDataFrameAsync(unixTimestamp, cancellationToken);
             return Ok(WithReadableActivity(result));
         }
         catch (Exception ex)
@@ -158,7 +158,7 @@ public class DDataController : ControllerBase
         }
     }
 
-    private DData WithReadableActivity(DData ddata)
+    private T WithReadableActivity<T>(T ddata) where T : DData
     {
         ddata.Activity = ActivityReadScopeGuard.Filter(
             ddata.Activity,

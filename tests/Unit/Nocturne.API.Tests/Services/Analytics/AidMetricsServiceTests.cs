@@ -80,7 +80,7 @@ public class AidMetricsServiceTests
         var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var end = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc);
 
-        var snapshots = Enumerable.Range(0, 12).Select(i => new ApsSnapshot
+        var snapshots = Enumerable.Range(0, 12).Select(i => new ApsLoopCycle
         {
             Timestamp = start.AddMinutes(i * 5),
             Enacted = true,
@@ -92,7 +92,7 @@ public class AidMetricsServiceTests
             Algorithm = AidAlgorithm.Trio,
             StartDate = start,
             EndDate = end,
-            ApsSnapshots = snapshots
+            LoopCycles = snapshots
         };
 
         var metrics = strategy.CalculateMetrics(context);
@@ -109,7 +109,7 @@ public class AidMetricsServiceTests
         var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var end = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc);
 
-        var snapshots = Enumerable.Range(0, 12).Select(i => new ApsSnapshot
+        var snapshots = Enumerable.Range(0, 12).Select(i => new ApsLoopCycle
         {
             Timestamp = start.AddMinutes(i * 5),
             Enacted = i % 2 == 0,
@@ -121,7 +121,7 @@ public class AidMetricsServiceTests
             Algorithm = AidAlgorithm.Loop,
             StartDate = start,
             EndDate = end,
-            ApsSnapshots = snapshots
+            LoopCycles = snapshots
         };
 
         var metrics = strategy.CalculateMetrics(context);
@@ -129,6 +129,106 @@ public class AidMetricsServiceTests
         metrics.PumpUsePercent.Should().Be(100.0);
         metrics.LoopCycleCount.Should().Be(12);
         metrics.EnactedCount.Should().Be(6);
+    }
+
+    private static AidSegmentMetrics ApsMetrics(DateTime start, DateTime end, IEnumerable<ApsLoopCycle> snapshots) =>
+        new ApsSnapshotStrategy().CalculateMetrics(new AidDetectionContext
+        {
+            Algorithm = AidAlgorithm.Trio,
+            StartDate = start,
+            EndDate = end,
+            LoopCycles = snapshots.ToList()
+        });
+
+    private static IEnumerable<ApsLoopCycle> Cycles(DateTime start, TimeSpan cadence, int count, bool enacted = true) =>
+        Enumerable.Range(0, count).Select(i => new ApsLoopCycle
+        {
+            Timestamp = start + cadence * i,
+            Enacted = enacted,
+            AidAlgorithm = AidAlgorithm.Trio
+        });
+
+    [Fact]
+    public void ApsSnapshotStrategy_EveryCycleUploadedTwiceThirtySecondsApart_CoversHalfADayOnce()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var halfDay = Cycles(start, TimeSpan.FromMinutes(5), 144);
+        var repeats = Cycles(start.AddSeconds(30), TimeSpan.FromMinutes(5), 144);
+
+        var metrics = ApsMetrics(start, start.AddDays(1), halfDay.Concat(repeats));
+
+        // The last repeat carries the covered time thirty seconds past twelve hours.
+        var covered = 720.5 / 1440 * 100;
+        metrics.AidActivePercent.Should().BeApproximately(covered, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(covered, 0.001);
+        metrics.LoopCycleCount.Should().Be(288);
+    }
+
+    [Fact]
+    public void ApsSnapshotStrategy_OneMinuteCadence_CreditsEachCycleOneMinute()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var metrics = ApsMetrics(start, start.AddDays(1), Cycles(start, TimeSpan.FromMinutes(1), 720));
+
+        metrics.AidActivePercent.Should().BeApproximately((719 + 5) / 1440.0 * 100, 0.001);
+    }
+
+    [Fact]
+    public void ApsSnapshotStrategy_ThirtyNineHourGap_IsNotCredited()
+    {
+        // Two days with dense one-minute looping for nine hours, then nothing for thirty-nine:
+        // enough cycles to fill the window at five minutes each, but under a fifth of it covered.
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var metrics = ApsMetrics(start, start.AddDays(2), Cycles(start, TimeSpan.FromMinutes(1), 540));
+
+        metrics.AidActivePercent.Should().BeApproximately((539 + 5) / 2880.0 * 100, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately((539 + 5) / 2880.0 * 100, 0.001);
+    }
+
+    [Fact]
+    public void ApsSnapshotStrategy_UnenactedCycleCutsShortTheEnactedOneBeforeIt()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var snapshots = new[]
+        {
+            new ApsLoopCycle { Timestamp = start, Enacted = true },
+            new ApsLoopCycle { Timestamp = start.AddMinutes(1), Enacted = false },
+        };
+
+        var metrics = ApsMetrics(start, start.AddMinutes(10), snapshots);
+
+        metrics.AidActivePercent.Should().BeApproximately(10.0, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(60.0, 0.001);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ApsSnapshotStrategy_EnactedAndUnenactedCopiesOfOneCycle_CreditTheEnactedOneInEitherOrder(bool enactedFirst)
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var enacted = new ApsLoopCycle { Timestamp = start, Enacted = true };
+        var unenacted = new ApsLoopCycle { Timestamp = start, Enacted = false };
+
+        var metrics = ApsMetrics(
+            start,
+            start.AddMinutes(10),
+            enactedFirst ? [enacted, unenacted] : [unenacted, enacted]);
+
+        metrics.AidActivePercent.Should().BeApproximately(50.0, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(50.0, 0.001);
+    }
+
+    [Fact]
+    public void ApsSnapshotStrategy_LastCycleRunsNoFurtherThanTheWindow()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var metrics = ApsMetrics(start, start.AddMinutes(2), Cycles(start, TimeSpan.FromMinutes(5), 1));
+
+        metrics.AidActivePercent.Should().BeApproximately(100.0, 0.001);
     }
 
     [Fact]
@@ -143,7 +243,7 @@ public class AidMetricsServiceTests
             Algorithm = AidAlgorithm.Trio,
             StartDate = start,
             EndDate = end,
-            ApsSnapshots = []
+            LoopCycles = []
         };
 
         var metrics = strategy.CalculateMetrics(context);
@@ -179,6 +279,32 @@ public class AidMetricsServiceTests
         metrics.PumpUsePercent.Should().Be(100.0);
         metrics.LoopCycleCount.Should().BeNull();
         metrics.EnactedCount.Should().BeNull();
+    }
+
+    [Fact]
+    public void TbrBasedStrategy_OverlappingTempBasals_CoverTheirSharedTimeOnce()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var end = start.AddHours(1);
+
+        var tempBasals = new List<TempBasal>
+        {
+            new() { StartTimestamp = start, EndTimestamp = start.AddMinutes(30), Origin = TempBasalOrigin.Algorithm, Rate = 0.5 },
+            new() { StartTimestamp = start.AddMinutes(10), EndTimestamp = start.AddMinutes(40), Origin = TempBasalOrigin.Algorithm, Rate = 0.6 },
+            new() { StartTimestamp = start.AddMinutes(15), EndTimestamp = start.AddMinutes(20), Origin = TempBasalOrigin.Algorithm, Rate = 0.7 },
+            new() { StartTimestamp = start.AddMinutes(35), EndTimestamp = start.AddMinutes(50), Origin = TempBasalOrigin.Manual, Rate = 1.0 },
+        };
+
+        var metrics = new TbrBasedStrategy().CalculateMetrics(new AidDetectionContext
+        {
+            Algorithm = AidAlgorithm.ControlIQ,
+            StartDate = start,
+            EndDate = end,
+            TempBasals = tempBasals
+        });
+
+        metrics.AidActivePercent.Should().BeApproximately(40 / 60.0 * 100, 0.001);
+        metrics.PumpUsePercent.Should().BeApproximately(50 / 60.0 * 100, 0.001);
     }
 
     [Fact]
@@ -266,7 +392,7 @@ public class AidMetricsServiceTests
         };
 
         // 288 snapshots = 24 hours * 12 per hour, all enacted
-        var snapshots = Enumerable.Range(0, 288).Select(i => new ApsSnapshot
+        var snapshots = Enumerable.Range(0, 288).Select(i => new ApsLoopCycle
         {
             Timestamp = start.AddMinutes(i * 5),
             Enacted = true,
@@ -301,7 +427,7 @@ public class AidMetricsServiceTests
         };
 
         // 144 snapshots for first 12 hours, all enacted
-        var snapshots = Enumerable.Range(0, 144).Select(i => new ApsSnapshot
+        var snapshots = Enumerable.Range(0, 144).Select(i => new ApsLoopCycle
         {
             Timestamp = start.AddMinutes(i * 5),
             Enacted = true,
@@ -356,7 +482,7 @@ public class AidMetricsServiceTests
         };
 
         // 288 snapshots within report bounds
-        var snapshots = Enumerable.Range(0, 288).Select(i => new ApsSnapshot
+        var snapshots = Enumerable.Range(0, 288).Select(i => new ApsLoopCycle
         {
             Timestamp = start.AddMinutes(i * 5),
             Enacted = true,

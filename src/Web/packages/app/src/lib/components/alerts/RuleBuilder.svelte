@@ -9,6 +9,7 @@
   import { drag } from "./dragState.svelte";
   import { sendRow, receiveRow } from "./transitions";
   import { flip } from "svelte/animate";
+  import { Key } from "@nocturne/ui/keys";
 
   interface AvailableRule {
     id: string;
@@ -46,10 +47,10 @@
 
 <svelte:window
   onkeydown={(e) => {
-    if (e.key === "Shift") shiftHeld = true;
+    if (e.key === Key.Shift) shiftHeld = true;
   }}
   onkeyup={(e) => {
-    if (e.key === "Shift") shiftHeld = false;
+    if (e.key === Key.Shift) shiftHeld = false;
   }}
   onblur={() => (shiftHeld = false)}
 />

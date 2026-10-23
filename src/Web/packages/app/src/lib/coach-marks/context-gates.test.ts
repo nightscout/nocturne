@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CoachMarkContext, selectActiveMark } from "@nocturne/coach";
 import type { CoachGates, CoachMarkAdapter, MarkRegistration, MarkState } from "@nocturne/coach";
 import { ONBOARDING_CORE_GATE, sequences } from "./sequences";
+import { coachLabels } from "./copy.svelte";
 
 const SETTLE = 10;
 
@@ -15,7 +16,7 @@ function stored(markKey: string, status: MarkState["status"]): MarkState {
 
 async function started(gates: CoachGates, states: MarkState[] = []) {
   const adapter: CoachMarkAdapter = { fetchAll: async () => states, update: async () => {} };
-  const context = new CoachMarkContext(adapter, sequences, SETTLE, 2000, () => gates);
+  const context = new CoachMarkContext(adapter, coachLabels(), sequences, SETTLE, 2000, () => gates);
   await context.initialize();
   return context;
 }

@@ -73,6 +73,9 @@
   --pred-acob: rgb(255, 240, 23);       /* Lemon/Carbs yellow */
   --pred-zt: rgb(113, 97, 239);         /* Purple */
   --pred-uam: rgb(255, 132, 69);        /* Orange UAM */
+  /* Prediction bias: a prediction that ran high or low, as the Loop Analysis heatmap tints it. */
+  --bias-high: #3b7fd1;
+  --bias-low: #d04a3c;
 
   /* Status Colors. Chat cards and e-mail use the default theme's values
      (see @nocturne/ui/tokens); overrides here apply in-browser only. */
@@ -123,6 +126,9 @@
 /* Dark mode - applied when both .trio-theme and .dark are on document */
 :root.trio-theme.dark,
 .trio-theme .dark {
+  /* Prediction bias: a prediction that ran high or low, as the Loop Analysis heatmap tints it. */
+  --bias-high: #5b97e0;
+  --bias-low: #e0665a;
   /* shadcn/ui Base Colors - Trio Dark Mode */
   --background: oklch(0.15 0.02 264);
   --foreground: oklch(0.98 0.005 264);

@@ -34,6 +34,7 @@ export function scopeLabels(): Record<Scope, string> {
     "therapy.readwrite": "View, update and remove treatment profile",
     "alerts.read": "View alerts",
     "alerts.readwrite": "Manage alerts",
+    "alerts.acknowledge": "Silence an alarm for all members for a time",
     "reports.read": "View reports and analytics",
     "identity.read": "View basic account info",
     "sharing.readwrite": "Manage sharing settings",
@@ -133,6 +134,12 @@ export function scopeCategories(): ScopeCategory[] {
       group: "therapy",
       read: "alerts.read",
       readwrite: "alerts.readwrite",
+    },
+    {
+      label: "Silence Alarms",
+      description: labels["alerts.acknowledge"],
+      group: "therapy",
+      full: "alerts.acknowledge",
     },
     {
       label: "Identity",

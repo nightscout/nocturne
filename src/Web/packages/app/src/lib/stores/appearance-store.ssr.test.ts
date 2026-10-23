@@ -64,6 +64,16 @@ describe("appearance-store SSR resolution", () => {
     expect(body).toContain(">24<");
   });
 
+  it("renders the energy unit the backend resolved for the request", async () => {
+    const [resolved, unresolved] = await Promise.all([
+      ssr([{ regionFormat: "en-AU", effectiveEnergyUnit: "kJ" }]),
+      ssr([]),
+    ]);
+
+    expect(resolved).toContain("energy:kJ");
+    expect(unresolved).toContain("energy:kcal");
+  });
+
   it("applies every preference layer's own fields, not just the first layer's", async () => {
     const body = await ssr([{ glucoseUnits: "mmol" }, { timeFormat: "24" }]);
 
@@ -122,8 +132,8 @@ describe("resolveLanguage", () => {
 });
 
 it("keeps year color preferences scoped to the SSR request", async () => {
-  const first = await ssr([{ yearOverviewColors: { tdd: [10, 70] } }]);
-  const second = await ssr([{ yearOverviewColors: { tdd: [20, 60] } }]);
+  const first = await ssr([{ yearOverviewColors: { tddBand: [10, 70] } }]);
+  const second = await ssr([{ yearOverviewColors: { tddBand: [20, 60] } }]);
   expect(first).toContain('[10,70]');
   expect(second).toContain('[20,60]');
   expect(second).not.toContain('[10,70]');

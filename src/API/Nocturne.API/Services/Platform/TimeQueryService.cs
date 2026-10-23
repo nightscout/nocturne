@@ -169,10 +169,12 @@ public class TimeQueryService : ITimeQueryService
 
         var requestQuery = new Dictionary<string, object>();
         foreach (var parameter in queryParameters) {
-            if (parameter.Key != "storage" && parameter.Key != "field") {
+            if (parameter.Key != "storage" && parameter.Key != "field"
+                && !parameter.Key.StartsWith("find[", StringComparison.OrdinalIgnoreCase)) {
                 requestQuery[parameter.Key] = parameter.Value.ToString();
             }
         }
+        requestQuery["find"] = BuildRequestFind(findParameters, fieldName, timePatterns);
 
         return new TimeQueryEcho {
             Req = new TimeQueryRequest {
@@ -190,6 +192,70 @@ public class TimeQueryService : ITimeQueryService
     }
 
     /// <summary>
+    /// The <c>find</c> object upstream's <c>req.query</c> holds once the time pattern is merged in.
+    /// A RegExp serialises as an empty object there, so each pattern is echoed as one.
+    /// </summary>
+    private static Dictionary<string, object> BuildRequestFind(
+        IEnumerable<KeyValuePair<string, Microsoft.Extensions.Primitives.StringValues>> findParameters,
+        string field,
+        TimePatternQuery timePatterns
+    )
+    {
+        var find = new Dictionary<string, object>();
+        foreach (var (key, values) in findParameters)
+        {
+            if (FindQuery.SplitFindKey(key) is not { } path)
+                continue;
+
+            var isArray = path[^1].Length == 0;
+            if (isArray)
+                path.RemoveAt(path.Count - 1);
+            if (path.Count == 0)
+                continue;
+
+            var node = find;
+            foreach (var segment in path[..^1])
+            {
+                if (!node.TryGetValue(segment, out var child) || child is not Dictionary<string, object> next)
+                    node[segment] = next = new Dictionary<string, object>();
+                node = next;
+            }
+            node[path[^1]] = isArray || values.Count > 1 ? values.ToArray() : values[0]!;
+        }
+
+        if (find.GetValueOrDefault(field) is Dictionary<string, object> condition)
+        {
+            condition["$in"] = InPatternEcho(timePatterns);
+        }
+        else
+        {
+            condition = new Dictionary<string, object> { ["$in"] = InPatternEcho(timePatterns) };
+            if (timePatterns.CanOptimizeWithIndex)
+                condition["$regex"] = new Dictionary<string, object>();
+            find[field] = condition;
+        }
+
+        return find.ToDictionary(e => e.Key, e => IndexedKeysToArrays(e.Value));
+    }
+
+    private static object[] InPatternEcho(TimePatternQuery timePatterns) =>
+        (timePatterns.InPatterns ?? []).Select(_ => (object)new Dictionary<string, object>()).ToArray();
+
+    private const int MaxQsArrayIndex = 20;
+
+    private static object IndexedKeysToArrays(object node)
+    {
+        if (node is not Dictionary<string, object> map)
+            return node;
+
+        var converted = map.ToDictionary(e => e.Key, e => IndexedKeysToArrays(e.Value));
+        return converted.Count > 0
+            && converted.Keys.All(k => k.Length > 0 && k.All(char.IsAsciiDigit) && int.TryParse(k, out var i) && i <= MaxQsArrayIndex)
+            ? converted.OrderBy(e => int.Parse(e.Key)).Select(e => e.Value).ToArray()
+            : converted;
+    }
+
+    /// <summary>
     /// Merges the time pattern and slice type with the caller's <c>find[...]</c> keys into one
     /// querystring-form find, the shape every read service parses. A single prefix is ANDed with
     /// the expanded patterns, as upstream does. Expanded patterns become one alternation because
@@ -202,7 +268,7 @@ public class TimeQueryService : ITimeQueryService
     private static string BuildFind(
         string? find,
         string field,
-        Nocturne.Core.Contracts.Legacy.TimePatternQuery timePatterns,
+        TimePatternQuery timePatterns,
         string? type
     )
     {

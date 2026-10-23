@@ -4,7 +4,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import { getFoodState } from './food-context.js';
 	import { Button } from '$lib/components/ui/button';
-	import FoodFields from './FoodFields.svelte';
+	import { FoodFields } from '$lib/components/food';
 
 	interface Props {
 		food: Food;
@@ -59,7 +59,7 @@
 		</div>
 	{/if}
 
-	<FoodFields bind:draft>
+	<FoodFields bind:draft categories={foodState.categoryMap}>
 		{#snippet actions()}
 			<Button variant="ghost-destructive" size="sm" onclick={handleDeleteClick}><Trash2 class="h-3.5 w-3.5" /> Delete</Button>
 			<Button variant="outline" size="sm" onclick={oncancel}>Cancel</Button>

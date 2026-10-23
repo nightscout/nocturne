@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Models;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using V4BolusType = Nocturne.Core.Models.V4.BolusType;
@@ -233,7 +234,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                     Carbs = (decimal)carbValue,
                     Protein = (decimal)(food.Protein ?? 0),
                     Fat = (decimal)(food.Fat ?? 0),
-                    Energy = (decimal)(food.Calories ?? 0),
+                    Energy = ToKilojoules(food.Calories),
                     Servings = (decimal)portions,
                     ServingDescription = BuildServingDescription(food),
                     Food = BuildFoodImport(food, externalFoodId),
@@ -266,11 +267,14 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             Carbs = (decimal)carbValue,
             Protein = (decimal)(food.Protein ?? 0),
             Fat = (decimal)(food.Fat ?? 0),
-            Energy = (decimal)(food.Calories ?? 0),
+            Energy = ToKilojoules(food.Calories),
             Portion = (decimal)(food.ServingQuantity ?? 1),
             Unit = food.ServingUnit,
         };
     }
+
+    private static decimal ToKilojoules(double? kilocalories) =>
+        (decimal)((kilocalories ?? 0) * NutritionConstants.KilojoulesPerKilocalorie);
 
     /// <summary>
     /// Builds a human-readable serving description from Glooko food data.
@@ -639,7 +643,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
                             Carbs = (decimal)carbValue,
                             Protein = (decimal)(food.Protein ?? 0),
                             Fat = (decimal)(food.Fat ?? 0),
-                            Energy = (decimal)(food.Calories ?? 0),
+                            Energy = ToKilojoules(food.Calories),
                             Servings = (decimal)portions,
                             ServingDescription = BuildV3ServingDescription(food),
                             Food = BuildMergedFoodImport(food, v2Match, externalFoodId),
@@ -684,7 +688,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             Carbs = (decimal)(food.Carbs ?? 0),
             Protein = (decimal)(food.Protein ?? 0),
             Fat = (decimal)(food.Fat ?? 0),
-            Energy = (decimal)(food.Calories ?? 0),
+            Energy = ToKilojoules(food.Calories),
             Portion = (decimal)(food.ServingQuantity ?? 1),
             Unit = food.ServingUnit,
         };

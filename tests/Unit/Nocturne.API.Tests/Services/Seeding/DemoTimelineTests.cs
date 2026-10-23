@@ -302,6 +302,28 @@ public class DemoTimelineTests
         }
     }
 
+    /// <summary>
+    /// The realtime loop sets a temp in range too, as the seeded history does, so the days after the
+    /// seed keep a temp basal record often enough for their delivery to be known.
+    /// </summary>
+    [Fact]
+    public void RealtimeTreatments_SetATempWhileInRange()
+    {
+        var now = DateTime.UtcNow;
+        var entry = new Entry
+        {
+            Type = "sgv",
+            Mills = new DateTimeOffset(now).ToUnixTimeMilliseconds(),
+            Date = now,
+            Sgv = 110,
+            Mgdl = 110,
+        };
+
+        var treatments = CreateGenerator().GenerateCurrentTreatments(entry).ToList();
+
+        treatments.Should().ContainSingle(t => t.EventType == "Temp Basal" && t.Rate > 0);
+    }
+
     [Fact]
     public void RealtimeDeviceStatus_TracksTreatmentsAcrossTicks()
     {

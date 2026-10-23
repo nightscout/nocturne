@@ -420,7 +420,7 @@ public sealed class ShareLinkServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SharedAppearance_is_the_owners_presentation_settings()
+    public async Task TenantAppearance_is_the_owners_presentation_settings()
     {
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences
         {
@@ -432,7 +432,7 @@ public sealed class ShareLinkServiceTests : IDisposable
             Prediction = new PredictionPreferences { Enabled = true, Minutes = 45 },
         });
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().Be("mmol");
         appearance.TimeFormat.Should().Be("24");
@@ -444,7 +444,7 @@ public sealed class ShareLinkServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SharedAppearance_withholds_what_the_owner_does_rather_than_how_it_looks()
+    public async Task TenantAppearance_withholds_what_the_owner_does_rather_than_how_it_looks()
     {
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences
         {
@@ -453,7 +453,7 @@ public sealed class ShareLinkServiceTests : IDisposable
             NightModeSchedule = true,
         });
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().Be("mmol");
         appearance.DashboardTopWidgets.Should().BeNull(
@@ -463,7 +463,7 @@ public sealed class ShareLinkServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SharedAppearance_is_empty_when_the_tenant_has_no_owner_left()
+    public async Task TenantAppearance_is_empty_when_the_tenant_has_no_owner_left()
     {
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
 
@@ -471,36 +471,49 @@ public sealed class ShareLinkServiceTests : IDisposable
         _db.TenantMembers.Remove(owner);
         await _db.SaveChangesAsync();
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().BeNull("a removed member no longer speaks for the tenant");
     }
 
     [Fact]
-    public async Task SharedAppearance_ignores_another_tenants_owner()
+    public async Task TenantAppearance_ignores_another_tenants_owner()
     {
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
 
-        var appearance = await _service.GetSharedAppearanceAsync(Guid.NewGuid());
+        var appearance = await _service.GetTenantAppearanceAsync(Guid.NewGuid());
 
         appearance.GlucoseUnits.Should().BeNull();
     }
 
     [Fact]
-    public async Task SharedAppearance_settles_on_the_longest_standing_of_several_owners()
+    public async Task TenantAppearance_settles_on_the_longest_standing_of_several_owners()
     {
         var seededJoined = await BackdateTheSeededOwnerAsync();
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
         await AddOwnerAsync(
             new UserDisplayPreferences { GlucoseUnits = "mg/dl" }, seededJoined.AddYears(1));
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().Be("mmol", "a later co-owner does not restyle the link");
     }
 
     [Fact]
-    public async Task SharedAppearance_ignores_a_system_subject_holding_the_owner_role()
+    public async Task TenantAppearance_follows_join_time_rather_than_the_order_owners_were_written()
+    {
+        var seededJoined = await BackdateTheSeededOwnerAsync();
+        await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mg/dl" });
+        await AddOwnerAsync(
+            new UserDisplayPreferences { GlucoseUnits = "mmol" }, seededJoined.AddYears(-1));
+
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
+
+        appearance.GlucoseUnits.Should().Be("mmol", "the co-owner written second joined first");
+    }
+
+    [Fact]
+    public async Task TenantAppearance_ignores_a_system_subject_holding_the_owner_role()
     {
         var seededJoined = await BackdateTheSeededOwnerAsync();
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
@@ -509,13 +522,13 @@ public sealed class ShareLinkServiceTests : IDisposable
             seededJoined.AddYears(-1),
             isSystemSubject: true);
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().Be("mmol", "no person is behind a system subject");
     }
 
     [Fact]
-    public async Task SharedAppearance_ignores_an_owner_whose_subject_is_deactivated()
+    public async Task TenantAppearance_ignores_an_owner_whose_subject_is_deactivated()
     {
         var seededJoined = await BackdateTheSeededOwnerAsync();
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
@@ -524,7 +537,7 @@ public sealed class ShareLinkServiceTests : IDisposable
             seededJoined.AddYears(-1),
             isActiveSubject: false);
 
-        var appearance = await _service.GetSharedAppearanceAsync(TenantId);
+        var appearance = await _service.GetTenantAppearanceAsync(TenantId);
 
         appearance.GlucoseUnits.Should().Be("mmol", "a deactivated subject cannot sign in either");
     }

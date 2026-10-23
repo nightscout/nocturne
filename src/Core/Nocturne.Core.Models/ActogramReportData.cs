@@ -29,6 +29,12 @@ public class ActogramReportData
     /// </summary>
     public Dictionary<string, int> StepDayTotals { get; set; } = new();
 
+    /// <summary>
+    /// Why <see cref="StepDayTotals"/> is empty: the tenant time zone did not resolve.
+    /// Null when the totals use that zone.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
+
     /// <summary>Sleep spans within the requested window.</summary>
     public List<ActogramSleepSpan> SleepSpans { get; set; } = new();
 }

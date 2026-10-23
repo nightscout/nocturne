@@ -201,7 +201,7 @@ public sealed class DemoTenantService
         // serving the data it just deleted until each entry's TTL expires.
         await _cache.RemoveTenantAsync(tenantId.Value, ct);
 
-        // Re-seed roles, the Public membership and the bundled OAuth clients, then
+        // Re-seed roles and the Public membership, then
         // re-apply the demo tenant's own grants on top.
         await _tenantService.SeedAfterResetAsync(tenantId.Value, ct);
         await ConfigureAccessAsync(tenantId.Value, ct);

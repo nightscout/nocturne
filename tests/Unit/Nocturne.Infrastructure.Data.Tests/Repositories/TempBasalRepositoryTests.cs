@@ -244,4 +244,23 @@ public class TempBasalRepositoryTests : IDisposable
             "one text[] parameter keeps one statement for every kept-id count");
         sql.Should().NotContain("IN (");
     }
+
+    [Fact]
+    public async Task GetByLegacyIdsAsync_ReturnsTheLiveRowsUnderThoseIdsWhateverTheirRateKind()
+    {
+        var ids = await SeedAsync(TenantA,
+            (new DateTime(2026, 9, 20, 12, 0, 0, DateTimeKind.Utc), null, 0.5),
+            (new DateTime(2026, 9, 20, 13, 0, 0, DateTimeKind.Utc), null, 0.6),
+            (new DateTime(2026, 9, 20, 14, 0, 0, DateTimeKind.Utc), null, 0.7));
+        var rows = _context.TempBasals.Where(t => ids.Contains(t.Id)).OrderBy(t => t.Timestamp).ToList();
+        rows[0].LegacyId = "absolute";
+        rows[1].LegacyId = "percent";
+        rows[1].Percent = -20;
+        rows[2].LegacyId = "other";
+        await _context.SaveChangesAsync();
+
+        var found = await _repository.GetByLegacyIdsAsync(["absolute", "percent"]);
+
+        found.Select(t => t.LegacyId).Should().BeEquivalentTo("absolute", "percent");
+    }
 }

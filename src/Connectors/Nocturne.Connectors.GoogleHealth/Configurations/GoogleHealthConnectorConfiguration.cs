@@ -29,7 +29,7 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
     /// <summary>
     /// The client <see cref="RefreshToken"/> was issued to, under the <c>clientId</c> key a former
     /// per-tenant client was stored under, so such a session is checked against the instance client
-    /// like any other (<see cref="Services.GoogleHealthSessionStore.IssuedToAnotherClient"/>).
+    /// like any other (<see cref="IssuedToAnotherClient"/>).
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.ClientId, Secret = true, Hidden = true)]
     public string? SessionClientId { get; set; }
@@ -45,6 +45,16 @@ public sealed class GoogleHealthConnectorConfiguration : BaseConnectorConfigurat
 
     [ConnectorProperty(ConnectorPropertyKey.GrantedScopes, Hidden = true)]
     public string? GrantedScopes { get; set; }
+
+    /// <summary>
+    /// Whether the stored refresh token belongs to a client other than the instance's: a former
+    /// per-tenant client, or one the operator replaced. Google refuses it, so only a new sign-in
+    /// recovers.
+    /// </summary>
+    public bool IssuedToAnotherClient(GoogleHealthPlatformOptions platform) =>
+        platform.IsConfigured &&
+        !string.IsNullOrWhiteSpace(RefreshToken) &&
+        !string.Equals(SessionClientId, platform.ClientId, StringComparison.Ordinal);
 
     public string[] ParsedGrantedScopes() => (GrantedScopes ?? string.Empty)
         .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

@@ -206,6 +206,27 @@ public class DirectionServiceTests
         Assert.Equal($"+{expectedDelta}", result.Display);
     }
 
+    [Theory]
+    [InlineData(7)]
+    [InlineData(9)]
+    public void CalculateDelta_ShouldNotInterpolateWhenAtMostNineMinutesApart(int gapMinutes)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var entries = new List<Entry>
+        {
+            new() { Mills = now - (gapMinutes * 60 * 1000), Mgdl = 100 },
+            new() { Mills = now, Mgdl = 100 + gapMinutes },
+        };
+
+        var result = DirectionService.CalculateDelta(entries, "mg/dl");
+
+        Assert.NotNull(result);
+        Assert.False(result.Interpolated);
+        Assert.Equal(gapMinutes, result.Mgdl);
+        Assert.Equal($"+{gapMinutes}", result.Display);
+        Assert.Equal(100, result.Mean5MinsAgo);
+    }
+
     [Fact]
     public void CalculateDelta_ShouldConvertToMmolL()
     {
@@ -228,6 +249,23 @@ public class DirectionServiceTests
         Assert.NotNull(result.Scaled);
         Assert.Equal(1.0, result.Scaled.Value, precision: 1); // Converted to mmol/L (18/18)
         Assert.Equal("+1.0", result.Display);
+    }
+
+    [Fact]
+    public void CalculateDelta_ScaledRoundsAtTheBoundaryWithTheCoreFactor()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var entries = new List<Entry>
+        {
+            new() { Mills = now - (5 * 60 * 1000), Mgdl = 100 },
+            new() { Mills = now, Mgdl = 209 },
+        };
+
+        var result = DirectionService.CalculateDelta(entries, "mmol");
+
+        Assert.NotNull(result);
+        Assert.Equal(6.0, result.Scaled);
+        Assert.Equal("+6.0", result.Display);
     }
 
     [Fact]

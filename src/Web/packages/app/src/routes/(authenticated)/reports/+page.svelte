@@ -107,6 +107,7 @@
     patterns: "text-report-patterns",
     lifestyle: "text-report-lifestyle",
     treatment: "text-report-treatment",
+    loop: "text-report-treatment",
   } as const;
 </script>
 

@@ -18,8 +18,8 @@ public class GlucoseStatisticsCharacterisationTests
 
     /// <summary>
     /// A day's worth of readings that rises through the target band into hyperglycaemia and falls
-    /// back through hypoglycaemia, so mean, both variance divisors, MAGE's turning points and the
-    /// log-transformed metrics all have something to bite on.
+    /// back through hypoglycaemia, so mean, variance, MAGE's turning points and the risk metrics
+    /// all have something to bite on.
     /// </summary>
     private static readonly double[] DayCurve =
     [
@@ -79,17 +79,19 @@ public class GlucoseStatisticsCharacterisationTests
     [Fact]
     public void CalculateGlycemicVariability_PinsSampleStandardDeviationAndDerivedMetrics()
     {
-        var result = _service.CalculateGlycemicVariability(DayCurve, EntriesEveryFiveMinutes(DayCurve))!;
+        var result = _service.CalculateGlycemicVariability(
+            DayCurve, EntriesEveryFiveMinutes(DayCurve), timeZone: null)!;
 
         // Unlike CalculateBasicStats this centres on the unrounded mean 114.375, giving
         // sqrt(sum((v - 114.375)^2) / 23) = 44.19109933990741.
         result.StandardDeviation.Should().Be(44.2);
         result.CoefficientOfVariation.Should().Be(38.6);
 
-        // Population divisor: the two excursions exceeding sqrt(sum(dev^2) / 24) = 43.260656 are
-        // 106 and 149.
+        // The two excursions exceeding the sample SD 44.191099 are 106 and 149.
         result.MeanAmplitudeGlycemicExcursions.Should().Be(127.5);
-        result.AverageDailyRiskRange.Should().Be(39.2);
+
+        // One UTC day: the low risk of 52 plus the high risk of 201.
+        result.AverageDailyRiskRange.Should().Be(Math.Round(Risk(52) + Risk(201), 1));
         result.EstimatedA1c.Should().BeApproximately(5.612369337979094, 1e-12);
     }
 
@@ -104,7 +106,7 @@ public class GlucoseStatisticsCharacterisationTests
     {
         var values = DayCurve.Take(readingCount).ToArray();
 
-        _service.CalculateGlycemicVariability(values, EntriesEveryFiveMinutes(values))
+        _service.CalculateGlycemicVariability(values, EntriesEveryFiveMinutes(values), timeZone: null)
             .Should().BeNull();
     }
 
@@ -115,12 +117,13 @@ public class GlucoseStatisticsCharacterisationTests
     [Fact]
     public void CalculateGlycemicVariability_PinsTheTimestampedMetricsWithoutEntries()
     {
-        var result = _service.CalculateGlycemicVariability([100d, 120d], []);
+        var result = _service.CalculateGlycemicVariability([100d, 120d], [], timeZone: null);
 
         result.Should().NotBeNull();
         Metrics(result!).Should().HaveCount(MetricCount)
             .And.NotContain(metric => double.IsNaN(metric.Value));
         result!.LabilityIndex.Should().Be(0);
+        result.AverageDailyRiskRange.Should().Be(0);
         result.MeanTotalDailyChange.Should().Be(0);
         result.TimeInFluctuation.Should().Be(0);
 
@@ -138,18 +141,23 @@ public class GlucoseStatisticsCharacterisationTests
     private static IEnumerable<KeyValuePair<string, double>> Metrics(GlycemicVariability variability) =>
         typeof(GlycemicVariability)
             .GetProperties()
-            .Where(property => property.PropertyType == typeof(double))
+            .Where(property => property.PropertyType == typeof(double) && !property.Name.EndsWith("Target"))
             .Select(property =>
                 KeyValuePair.Create(property.Name, (double)property.GetValue(variability)!));
 
     #endregion
 
-    #region Population-divisor standard deviation
+    #region Sample-divisor variability metrics
 
+    /// <summary>
+    /// The mean is 117 and the squared deviations sum to 2780, so the sample SD is sqrt(695) =
+    /// 26.36 and the population SD sqrt(556) = 23.58. The two 25 mg/dL excursions fall between
+    /// them, so only the 60 mg/dL rise clears the sample threshold.
+    /// </summary>
     [Fact]
-    public void CalculateMage_PinsThePopulationStandardDeviationThreshold()
+    public void CalculateMage_UsesTheSampleStandardDeviationAsTheExcursionThreshold()
     {
-        _service.CalculateMAGE(DayCurve).Should().BeApproximately(127.5, 1e-12);
+        _service.CalculateMAGE([100d, 125d, 100d, 160d, 100d]).Should().Be(60);
     }
 
     [Fact]
@@ -166,40 +174,19 @@ public class GlucoseStatisticsCharacterisationTests
         _service.CalculateMAGE(values).Should().Be(0);
     }
 
-    [Fact]
-    public void CalculateAdrr_PinsThePopulationStandardDeviationOfLogGlucose()
-    {
-        _service.CalculateADRR(DayCurve).Should().BeApproximately(39.17853755994654, 1e-12);
-    }
-
-    [Fact]
-    public void CalculateAdrr_PinsZeroForIdenticalReadings()
-    {
-        _service.CalculateADRR([100d, 100d, 100d]).Should().BeApproximately(0, 1e-12);
-    }
-
     /// <summary>
-    /// An unguarded ADRR reaches <see cref="GlucoseStatistics.StandardDeviation(IReadOnlyCollection{double}, VarianceMode)"/>,
-    /// whose mean of an empty series throws.
+    /// Mean 120, sample SD sqrt(800 / 2) = 20, so J = 0.001 * 140^2. The population SD
+    /// sqrt(800 / 3) would give 18.59.
     /// </summary>
     [Fact]
-    public void CalculateAdrr_PinsZeroForAnEmptySeries()
+    public void CalculateJIndex_IsWojcickiWithTheSampleStandardDeviation()
     {
-        _service.CalculateADRR([]).Should().Be(0);
-    }
-
-    [Fact]
-    public void CalculateJIndex_PinsThePopulationVarianceComponent()
-    {
-        var mean = DayCurve.Average();
-
-        // 0.324 * (114.375 - 112)^2 + 0.0018 * (sum(dev^2) / 24)
-        _service.CalculateJIndex(DayCurve, mean).Should().BeApproximately(5.1962343749999995, 1e-12);
+        _service.CalculateJIndex([100d, 120d, 140d], 120).Should().BeApproximately(19.6, 1e-9);
     }
 
     /// <summary>
-    /// An empty series has no mean to measure against the J-Index target, so it reports zero
-    /// rather than the mean component of whatever mean the caller passed.
+    /// An empty series has no mean or spread, so it reports zero rather than a J-Index of
+    /// whatever mean the caller passed.
     /// </summary>
     [Fact]
     public void CalculateJIndex_PinsZeroForAnEmptySeries()
@@ -208,7 +195,7 @@ public class GlucoseStatisticsCharacterisationTests
     }
 
     [Fact]
-    public void CalculateSiteChangeImpact_PinsThePopulationStandardDeviationPerBucket()
+    public void CalculateSiteChangeImpact_PinsTheSampleStandardDeviationPerBucket()
     {
         var siteChange = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
         var deviceEvents = new[]
@@ -240,9 +227,73 @@ public class GlucoseStatisticsCharacterisationTests
         bucket.Count.Should().Be(3);
         bucket.AverageGlucose.Should().Be(140);
 
-        // sqrt(sum((v - 140)^2) / 3) = 37.416573867739416, rounded to one decimal.
-        bucket.StdDev.Should().Be(37.4);
+        // sqrt((1600 + 100 + 2500) / 2) = 45.8257569495584, rounded to one decimal.
+        bucket.StdDev.Should().Be(45.8);
     }
+
+    #endregion
+
+    #region Average daily risk range
+
+    private static readonly TimeZoneInfo PlusTen =
+        TimeZoneInfo.CreateCustomTimeZone("UTC+10", TimeSpan.FromHours(10), "UTC+10", "UTC+10");
+
+    /// <summary>
+    /// Three days at UTC+10. The first local day runs from 14:00 UTC on 28 February to 14:00 UTC on
+    /// 1 March, so its low and its high fall on different UTC days.
+    /// </summary>
+    private static readonly SensorGlucose[] ThreeLocalDays =
+    [
+        Reading(60, new DateTime(2026, 2, 28, 20, 0, 0, DateTimeKind.Utc)),
+        Reading(90, new DateTime(2026, 2, 28, 23, 30, 0, DateTimeKind.Utc)),
+        Reading(250, new DateTime(2026, 3, 1, 3, 0, 0, DateTimeKind.Utc)),
+        Reading(70, new DateTime(2026, 3, 1, 15, 0, 0, DateTimeKind.Utc)),
+        Reading(200, new DateTime(2026, 3, 1, 23, 0, 0, DateTimeKind.Utc)),
+        Reading(300, new DateTime(2026, 3, 2, 5, 0, 0, DateTimeKind.Utc)),
+        Reading(50, new DateTime(2026, 3, 2, 16, 0, 0, DateTimeKind.Utc)),
+        Reading(180, new DateTime(2026, 3, 3, 1, 0, 0, DateTimeKind.Utc)),
+    ];
+
+    [Fact]
+    public void CalculateAdrr_AveragesEachLocalDaysLargestLowAndHighRisk()
+    {
+        var expected = (
+            (Risk(60) + Risk(250))
+            + (Risk(70) + Risk(300))
+            + (Risk(50) + Risk(180))
+        ) / 3;
+
+        _service.CalculateADRR(ThreeLocalDays, PlusTen).Should().BeApproximately(expected, 1e-9);
+        expected.Should().BeApproximately(35.98125069865323, 1e-9);
+    }
+
+    /// <summary>
+    /// A day with no reading on one side of 112.5 mg/dL contributes no risk from that side.
+    /// </summary>
+    [Fact]
+    public void CalculateAdrr_BoundsDaysInUtcWithoutAZone()
+    {
+        var expected = (
+            Risk(60)
+            + (Risk(70) + Risk(250))
+            + (Risk(50) + Risk(300))
+            + Risk(180)
+        ) / 4;
+
+        _service.CalculateADRR(ThreeLocalDays, timeZone: null).Should().BeApproximately(expected, 1e-9);
+    }
+
+    [Fact]
+    public void CalculateAdrr_PinsZeroWithoutAReading()
+    {
+        _service.CalculateADRR([], PlusTen).Should().Be(0);
+    }
+
+    private static double Risk(double mgdl) =>
+        10 * Math.Pow(1.509 * (Math.Pow(Math.Log(mgdl), 1.084) - 5.381), 2);
+
+    private static SensorGlucose Reading(double mgdl, DateTime timestamp) =>
+        new() { Mgdl = mgdl, Timestamp = timestamp };
 
     #endregion
 

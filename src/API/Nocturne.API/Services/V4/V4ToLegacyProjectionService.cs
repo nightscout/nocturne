@@ -97,6 +97,17 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     }
 
     /// <inheritdoc />
+    public async Task<Treatment?> GetLatestProjectedTreatmentAsync(
+        string eventType, long fromMills, long toMills, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        var rows = await LegacyTreatmentTables.LatestOfTypeAsync(
+            _repositories, db, eventType, MillsToDateTime(fromMills)!.Value, MillsToDateTime(toMills)!.Value, ct);
+
+        return (await AssembleAsync(db, rows, ct)).FirstOrDefault();
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// Each table pages independently on a millisecond boundary; see <see cref="HistoryPage"/>.
     /// </remarks>

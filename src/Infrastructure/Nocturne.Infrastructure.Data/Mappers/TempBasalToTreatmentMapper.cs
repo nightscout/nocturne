@@ -49,10 +49,14 @@ public static class TempBasalToTreatmentMapper
             RawTimestamp = TreatmentUploadedTimestamp.Of(tempBasal.AdditionalProperties),
         };
 
-        // TreatmentDecomposer reads basalOrigin back when an edit re-decomposes;
+        TempBasalUploadedFields.Restore(treatment, tempBasal.AdditionalProperties);
+
+        // TreatmentDecomposer reads the origin and its evidence back when an edit re-decomposes;
         // the rest is for display
         treatment.AdditionalProperties ??= new Dictionary<string, object>();
-        treatment.AdditionalProperties["basalOrigin"] = tempBasal.Origin.ToString();
+        treatment.AdditionalProperties[TempBasalOriginProvenance.OriginField] = tempBasal.Origin.ToString();
+        treatment.AdditionalProperties[TempBasalOriginProvenance.EvidenceField] =
+            TempBasalOriginProvenance.EvidenceOf(tempBasal).ToString();
         if (tempBasal.ScheduledRate.HasValue)
             treatment.AdditionalProperties["scheduledRate"] = tempBasal.ScheduledRate.Value;
         if (!string.IsNullOrEmpty(tempBasal.Device))

@@ -8,6 +8,8 @@ import {
     registerPreferencesWriteThrough,
     reconcilePreferences,
     showTenantDefaultUnits,
+    presentOwnerPreferences,
+    applyTenantPresentation,
     setLanguage,
     type SupportedLocale,
 } from '$lib/stores/appearance-store.svelte'
@@ -29,14 +31,17 @@ export const load: LayoutLoad = async ({ url, data }) => {
     // Registering the backend write-through here keeps the store free of server-remote imports,
     // and the cookie domain must be registered before anything below writes a cookie.
     if (browser) {
-        // Neither is registered on a share host. The preference cookie spans the base domain,
-        // and the appearance rendered there is the link owner's rather than the viewer's, so a
-        // widened write would push it onto the viewer's own tenant; and the viewer is anonymous,
-        // so there is no account behind the link to write through to.
+        // The cookie domain is not registered on a share host. The preference cookie spans the
+        // base domain, and the appearance rendered there is the link owner's rather than the
+        // viewer's, so a widened write would push it onto the viewer's own tenant.
         if (!data?.isShareHost) {
             registerPreferenceCookieDomain(data?.baseDomain)
-            registerPreferencesWriteThrough((prefs) => updateDisplayPreferences(prefs))
         }
+        // Only a viewer with an account has a subject for the backend to save to; a layout
+        // reload that loses the account withdraws the callback rather than leaving it behind.
+        registerPreferencesWriteThrough(
+            data?.hasAccount ? (prefs) => updateDisplayPreferences(prefs) : null
+        )
     }
 
     if (queryLocale && isSupportedLocale(queryLocale)) {
@@ -55,13 +60,15 @@ export const load: LayoutLoad = async ({ url, data }) => {
         }
     }
 
-    if (browser && (data?.isAuthenticated || data?.isShareHost)) {
+    if (browser && data?.isShareHost) {
+        presentOwnerPreferences(data?.serverPreferences)
+    } else if (browser && data?.hasAccount) {
         // Server preferences win across devices; an empty server blob seeds from local once.
-        // On a share host they are the link owner's, and hydrating them here is what keeps the
-        // client from replacing the server-rendered view with this browser's defaults.
         reconcilePreferences(data?.serverPreferences)
         showTenantDefaultUnits(data?.user?.defaultGlucoseUnits)
     }
+
+    applyTenantPresentation(data?.tenantPreferences)
 
     if (browser && locales.includes(locale)) {
         await loadLocale(locale)

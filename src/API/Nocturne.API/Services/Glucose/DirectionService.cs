@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Glucose;
@@ -234,12 +235,9 @@ public static class DirectionService
         return $"&#{(int)character[0]};";
     }
 
-    /// <summary>
-    /// Scale mg/dL to mmol/L - exact legacy conversion
-    /// </summary>
     private static double ScaleMgdl(double mgdl)
     {
-        return mgdl / 18.0;
+        return mgdl / GlucoseConstants.MgdlPerMmol;
     }
 
     /// <summary>

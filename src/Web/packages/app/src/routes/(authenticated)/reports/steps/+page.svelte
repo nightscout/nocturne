@@ -6,6 +6,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import Footprints from "@lucide/svelte/icons/footprints";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import {
@@ -24,6 +25,7 @@
   const { params: reportsParams, resource: actogramResource } = report;
 
   const dayTotals = $derived(actogramResource.current?.stepDayTotals ?? {});
+  const noZoneReason = $derived(actogramResource.current?.timeZoneUnavailableReason);
 
   function formatDate(date: Date): string {
     return formatShortDate(date);
@@ -79,6 +81,14 @@
     ]}
   />
 
+  {#if noZoneReason}
+    <p class="text-sm text-muted-foreground">
+      <TimeZoneNote reason={noZoneReason}>
+        This report cannot calculate the total steps for each local day.
+      </TimeZoneNote>
+    </p>
+  {/if}
+
   <Card class="print:break-inside-auto!">
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
@@ -100,9 +110,11 @@
         {#snippet rowLabel({ day })}
           <div class="text-right pr-2">
             <div class="text-xs text-muted-foreground">{formatDate(day)}</div>
-            <div class="text-xs font-medium tabular-nums">
-              {formatNumber(dayTotals[toDayString(day)])} <span class="text-muted-foreground font-normal">steps</span>
-            </div>
+            {#if !noZoneReason}
+              <div class="text-xs font-medium tabular-nums" data-testid="day-total">
+                {formatNumber(dayTotals[toDayString(day)])} <span class="text-muted-foreground font-normal">steps</span>
+              </div>
+            {/if}
           </div>
         {/snippet}
         {#snippet tooltipValue({ point })}
@@ -116,6 +128,7 @@
             {@const barHeight = (steps / barScale) * ctx.height}
             {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
             <rect
+              data-testid="step-reading"
               {x}
               y={ctx.height - barHeight}
               width={3}

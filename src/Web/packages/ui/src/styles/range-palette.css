@@ -1,0 +1,14 @@
+/* Glucose range palette overrides. The html type selector adds specificity over every theme's
+   own token rules, so this wins whatever the theme and whether or not .dark is set.
+   In-range and tight-range keep the theme's own values. */
+html:root.range-palette-clarity {
+  --glucose-very-low: oklch(0.42 0.15 18);
+  --glucose-low: oklch(0.6 0.22 27);
+  --glucose-high: oklch(0.86 0.17 95);
+  --glucose-very-high: oklch(0.72 0.18 55);
+  /* Low takes the dark ink: no light ink reaches 4.5:1 on that red. */
+  --glucose-very-low-foreground: oklch(0.985 0.002 247.839);
+  --glucose-low-foreground: oklch(0.12 0.02 264);
+  --glucose-high-foreground: oklch(0.21 0.034 264.665);
+  --glucose-very-high-foreground: oklch(0.21 0.034 264.665);
+}

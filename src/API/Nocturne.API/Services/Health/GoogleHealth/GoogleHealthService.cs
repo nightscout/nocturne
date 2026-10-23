@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.GoogleHealth.Configurations;
+using Nocturne.Connectors.GoogleHealth.Models;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
@@ -53,7 +54,7 @@ public sealed class GoogleHealthService(
         await StoredConfigurationOrNullAsync(ct) ?? throw new GoogleHealthException("configure_first");
 
     private bool HasLiveSession(GoogleHealthConnectorConfiguration configuration) =>
-        !string.IsNullOrWhiteSpace(configuration.RefreshToken) && !sessions.IssuedToAnotherClient(configuration);
+        !string.IsNullOrWhiteSpace(configuration.RefreshToken) && !configuration.IssuedToAnotherClient(Platform);
 
     private static GoogleHealthOptions Options(GoogleHealthConnectorConfiguration configuration) => new()
     {
@@ -68,10 +69,9 @@ public sealed class GoogleHealthService(
     private async Task SaveOptionsAsync(GoogleHealthOptions options, Guid subject, CancellationToken ct)
     {
         var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
         var configuration = stored?.Configuration.RootElement.Deserialize<JsonObject>(Json) ?? new JsonObject();
         configuration.Remove("callbackUrl");
-        configuration["enabled"] = !string.IsNullOrWhiteSpace(secrets.GetValueOrDefault("refreshToken"));
+        configuration.Remove("enabled");
         configuration["lookbackDays"] = options.HistoryDays;
         configuration["importFrom"] = options.ImportFrom?.ToString("O", CultureInfo.InvariantCulture);
         configuration["previewOnly"] = options.PreviewOnly;
@@ -94,7 +94,7 @@ public sealed class GoogleHealthService(
 
             var configuration = await configurationLoader.LoadForTenantAsync(ct);
             var settings = Options(configuration);
-            var clientChanged = sessions.IssuedToAnotherClient(configuration);
+            var clientChanged = configuration.IssuedToAnotherClient(Platform);
             var session = clientChanged ? null : await sessions.CurrentAsync(configuration);
             var selected = settings.DataTypes
                 .Where(type => GoogleHealthClient.SupportedTypes.Contains(type, StringComparer.Ordinal))
@@ -188,7 +188,7 @@ public sealed class GoogleHealthService(
             throw new GoogleHealthException("platform_not_configured");
         await using var gate = await coordinator.AcquireAsync(TenantId, ct);
         var configuration = await StoredConfigurationAsync(ct);
-        if (sessions.IssuedToAnotherClient(configuration))
+        if (configuration.IssuedToAnotherClient(Platform))
             await sessions.ClearAsync(removeAccount: false, subject, revoke: true, ct);
         else if (!string.IsNullOrWhiteSpace(configuration.RefreshToken))
             throw new GoogleHealthException("disconnect_first");
@@ -259,14 +259,7 @@ public sealed class GoogleHealthService(
                 // tenant still relies on, and unrevoked it would stay live at Google.
                 if (!stored) await DiscardUnstoredGrantAsync(token.RefreshToken, account);
             }
-            await sessions.ActivateAsync(token, subject);
-            await ForgetInventoryAsync(ct);
-            await connectorConfigurations.UpdateHealthStateAsync(
-                ConnectorName,
-                lastErrorMessage: string.Empty,
-                lastErrorAt: DateTime.MinValue,
-                isHealthy: true,
-                ct: ct);
+            await ActivateAsync(token, ct);
         }
         catch (Exception ex) when (ex is GoogleHealthException or HttpRequestException or JsonException or TaskCanceledException)
         {
@@ -283,6 +276,35 @@ public sealed class GoogleHealthService(
                 isHealthy: false,
                 ct: CancellationToken.None);
             throw error;
+        }
+    }
+
+    /// <summary>
+    /// The work after the grant is stored. The tenant already syncs on the grant alone, so a
+    /// failure here is a warning and never a reason to revoke it.
+    /// </summary>
+    private async Task ActivateAsync(GoogleHealthTokenSession token, CancellationToken ct)
+    {
+        try
+        {
+            await sessions.CacheAsync(token);
+            await ForgetInventoryAsync(ct);
+            await connectorConfigurations.UpdateHealthStateAsync(
+                ConnectorName,
+                lastErrorMessage: string.Empty,
+                lastErrorAt: DateTime.MinValue,
+                isHealthy: true,
+                ct: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Google Health could not finish activating the stored grant of tenant {TenantId}", TenantId);
+            await connectorConfigurations.UpdateHealthStateAsync(
+                ConnectorName,
+                lastErrorMessage: GoogleHealthErrorCode.Encode("activation_failed"),
+                lastErrorAt: DateTime.UtcNow,
+                isHealthy: false,
+                ct: CancellationToken.None);
         }
     }
 

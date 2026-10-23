@@ -4,6 +4,7 @@ import { userEvent } from "vitest/browser";
 import { timeDay } from "d3-time";
 import type { DailySummaryDay } from "$api/generated/nocturne-api-client";
 import { PRINT_LAYOUT_CLASS } from "$lib/components/charts/print/print-mode.svelte";
+import { regionFormat, type RegionFormat } from "$lib/stores/appearance-store.svelte";
 import Harness from "./YearHeatmap.test-harness.svelte";
 
 const START_OF_2024 = new Date(2024, 0, 1);
@@ -64,9 +65,30 @@ async function waitForTooltip(): Promise<string> {
   return content.textContent ?? "";
 }
 
+const savedRegion = regionFormat.current;
+
 afterEach(() => {
   document.documentElement.classList.remove(PRINT_LAYOUT_CLASS);
+  regionFormat.current = savedRegion;
 });
+
+function weekLinks(container: HTMLElement) {
+  return Array.from(container.querySelectorAll("a[href^='/reports/week-to-week?']")).map(
+    (link) => {
+      const params = new URL(link.getAttribute("href") ?? "", "http://x").searchParams;
+      return {
+        from: params.get("from") ?? "",
+        to: params.get("to") ?? "",
+        label: link.textContent?.trim() ?? "",
+      };
+    }
+  );
+}
+
+function dayOfWeek(day: string): number {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y, m - 1, d).getDay();
+}
 
 describe("YearHeatmap", () => {
   it("lays out one cell per day of a leap year, including the leap day", async () => {
@@ -134,6 +156,51 @@ describe("YearHeatmap", () => {
       expect(href).toMatch(
         /^\/reports\/week-to-week\?from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}&isDefault=false$/
       );
+    }
+  });
+
+  it.each<[RegionFormat, number]>([
+    ["en-US", 0],
+    ["en-GB", 1],
+    ["de-DE", 1],
+  ])("runs %s week columns and their links from day %i for seven days", async (region, first) => {
+    regionFormat.current = region;
+    const { container } = render(Harness, { yearData });
+    await waitForCells(container, 366);
+
+    const links = weekLinks(container);
+    expect(links.length).toBeGreaterThan(50);
+    for (const { from, to } of links) {
+      expect(dayOfWeek(from)).toBe(first);
+      expect(dayOfWeek(to)).toBe((first + 6) % 7);
+    }
+  });
+
+  it.each<[RegionFormat, number]>([
+    ["en-US", 4],
+    ["en-GB", 3],
+  ])("puts Thursday 29 February in row %i under %s", async (region, row) => {
+    regionFormat.current = region;
+    const { container } = render(Harness, { yearData });
+    const cells = await waitForCells(container, 366);
+
+    const y = Number(cells[timeDay.count(START_OF_2024, FEB_29)].getAttribute("y"));
+    expect(y).toBe(row * 24 + 1);
+  });
+
+  it("labels each column with its start date, never repeating or going backwards", async () => {
+    regionFormat.current = "en-GB";
+    const { container } = render(Harness, { yearData });
+    await waitForCells(container, 366);
+
+    const links = weekLinks(container);
+    const labels = links.map((link) => link.label);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(links.map((link) => link.from)).toEqual(links.map((link) => link.from).toSorted());
+    expect(labels[0]).toBe("1 Jan");
+    for (const { from, label } of links) {
+      const [y, m, d] = from.split("-").map(Number);
+      expect(label).toBe(new Date(y, m - 1, d).toLocaleDateString("en-GB", { day: "numeric", month: "short" }));
     }
   });
 

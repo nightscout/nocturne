@@ -46,7 +46,7 @@ public class StatusService : IStatusService
     private readonly ITenantAccessor _tenantAccessor;
     private readonly PublicAccessCacheService _publicAccessCacheService;
     private readonly ITenantService _tenants;
-    private readonly IShareAppearanceReader _appearanceReader;
+    private readonly ITenantAppearanceReader _appearanceReader;
     private readonly IGlucoseStatusClassifier _thresholdClassifier;
     private readonly ICategoryReadContext _categoryReadContext;
     private readonly ILogger<StatusService> _logger;
@@ -80,7 +80,7 @@ public class StatusService : IStatusService
         ITenantAccessor tenantAccessor,
         PublicAccessCacheService publicAccessCacheService,
         ITenantService tenants,
-        IShareAppearanceReader appearanceReader,
+        ITenantAppearanceReader appearanceReader,
         IGlucoseStatusClassifier thresholdClassifier,
         ICategoryReadContext categoryReadContext,
         ILogger<StatusService> logger
@@ -425,7 +425,7 @@ public class StatusService : IStatusService
 
         // Core display settings. Units are the owner's own choice, else the tenant default chosen in
         // onboarding, which is what a Nightscout client reads as DISPLAY_UNITS.
-        var appearance = await _appearanceReader.GetSharedAppearanceAsync(_tenantAccessor.TenantId);
+        var appearance = await _appearanceReader.GetTenantAppearanceAsync(_tenantAccessor.TenantId);
         var tenantUnits = appearance.GlucoseUnits
             ?? (_tenantAccessor.Context is { } tenant
                 ? await _tenants.GetDefaultGlucoseUnitsAsync(tenant.TenantId)

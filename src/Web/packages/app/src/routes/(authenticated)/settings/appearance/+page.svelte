@@ -4,10 +4,14 @@
   import {
     getColorTheme,
     setColorTheme,
+    glucoseRangePalette,
+    setGlucoseRangePalette,
     type ColorTheme,
   } from "$lib/stores/appearance-store.svelte";
   import {
     glucoseUnits,
+    energyUnit,
+    getEnergyUnit,
     a1cName,
     a1cUnits,
     timeFormat,
@@ -30,9 +34,11 @@
     type ColorScheme,
     type RegionFormat,
   } from "$lib/stores/appearance-store.svelte";
+  import { ENERGY_UNITS } from "@nocturne/ui/energy";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import TitleFaviconSettings from "$lib/components/settings/TitleFaviconSettings.svelte";
   import DashboardWidgetConfigurator from "$lib/components/settings/DashboardWidgetConfigurator.svelte";
+  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
   import { updateLanguagePreference } from "$api/user-preferences.remote";
   import {
@@ -88,6 +94,7 @@
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
+  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
   const realtimeStore = getRealtimeStore();
@@ -393,6 +400,55 @@
 
         <Separator />
 
+        <div class="space-y-2">
+          <Label>Glucose range colors</Label>
+          <RadioGroup.Root
+            class="grid @xl:grid-cols-2"
+            aria-label="Glucose range colors"
+            value={glucoseRangePalette.current}
+            onValueChange={(palette) => {
+              if (palette === "theme" || palette === "clarity") setGlucoseRangePalette(palette);
+            }}
+          >
+            <RadioGroup.Card value="theme">
+              <div class="font-semibold">Theme</div>
+              <p class="text-sm text-muted-foreground">
+                The range colors of the selected color theme
+              </p>
+            </RadioGroup.Card>
+            <RadioGroup.Card value="clarity">
+              <div class="font-semibold">Distinct</div>
+              <p class="text-sm text-muted-foreground">
+                Maroon, red, yellow and orange for the four out-of-range bands on every theme
+              </p>
+            </RadioGroup.Card>
+          </RadioGroup.Root>
+          <ul class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" aria-label="Range color preview">
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="very-high" />
+              Very high
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="high" />
+              High
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="in-range" />
+              In range
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="low" />
+              Low
+            </li>
+            <li class="flex items-center gap-1.5">
+              <TextureSwatch texture="very-low" />
+              Very low
+            </li>
+          </ul>
+        </div>
+
+        <Separator />
+
         <div class="grid gap-4 @sm:grid-cols-2">
           <div class="space-y-2">
             <Label>Color scheme</Label>
@@ -570,6 +626,28 @@
               <SelectContent>
                 <SelectItem value="mg/dl">mg/dL</SelectItem>
                 <SelectItem value="mmol">mmol/L</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div class="space-y-2">
+            <Label for="energy-unit">Food energy units</Label>
+            <Select
+              type="single"
+              value={getEnergyUnit()}
+              onValueChange={(value) => {
+                const unit = ENERGY_UNITS.find((u) => u === value);
+                if (unit) energyUnit.current = unit;
+              }}
+            >
+              <SelectTrigger id="energy-unit">
+                <span>
+                  {getEnergyUnit() === "kJ" ? "Kilojoules (kJ)" : "Calories (kcal)"}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="kJ">Kilojoules (kJ)</SelectItem>
+                <SelectItem value="kcal">Calories (kcal)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -905,9 +983,7 @@
 
     <!-- Dashboard Widgets -->
     <div {@attach coachmark({
-      key: "feature-intro.appearance-widgets",
-      title: "Widget order",
-      description: "Drag to reorder your dashboard widgets.",
+      ...coachFor("feature-intro.appearance-widgets"),
       completeOn: { event: "dragend" },
     })}>
       <DashboardWidgetConfigurator

@@ -55,6 +55,12 @@ public interface ISignalRBroadcastService
     /// </summary>
     Task BroadcastClearAlarmAsync(NotificationBase clearAlarm);
 
+    /// <summary>
+    /// Broadcast an alert engine alarm or all-clear to alarm subscribers, as one of the
+    /// <see cref="Alerts.EngineAlarmEvents"/>.
+    /// </summary>
+    Task BroadcastEngineAlarmAsync(string eventName, NotificationBase notify);
+
     // Storage events
     /// <summary>
     /// Broadcast storage create event (replaces socket.io 'create' event in storage namespace)
@@ -115,8 +121,8 @@ public interface ISignalRBroadcastService
     Task BroadcastNotificationUpdatedAsync(string userId, InAppNotificationDto notification);
 
     /// <summary>
-    /// Broadcast an alert engine event (alert_dispatch, alert_resolved, alert_acknowledged)
-    /// to the tenant's alert subscribers group.
+    /// Broadcast an alert engine event to the tenant's alert subscribers group, and to the tenant's
+    /// Home Assistant instances when it is one of the events they take tenant-wide.
     /// </summary>
     /// <param name="eventName">The event name to broadcast</param>
     /// <param name="payload">The event payload</param>
@@ -382,6 +388,21 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     }
 
     /// <inheritdoc />
+    public async Task BroadcastEngineAlarmAsync(string eventName, NotificationBase notify)
+    {
+        try
+        {
+            await _alarmHubContext
+                .Clients.Group(TenantGroup("alarm-subscribers"))
+                .SendCoreAsync(eventName, new[] { notify });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting {EventName}", eventName);
+        }
+    }
+
+    /// <inheritdoc />
     public async Task BroadcastStorageCreateAsync(string collectionName, object data)
     {
         try
@@ -641,6 +662,11 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         }
     }
 
+    // alert_dispatch is absent: an instance receives it once, on its ha:{instance} group, from
+    // HomeAssistantProvider, which also records the delivery.
+    private static readonly HashSet<string> HomeAssistantAlertEvents =
+        ["alert_resolved", "alert_acknowledged"];
+
     /// <inheritdoc />
     public async Task BroadcastAlertEventAsync(string eventName, object payload)
     {
@@ -656,7 +682,9 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             _logger.LogError(ex, "Error broadcasting alert event {EventName}", eventName);
         }
 
-        // Also relay to Home Assistant subscribers
+        if (!HomeAssistantAlertEvents.Contains(eventName))
+            return;
+
         try
         {
             await _homeAssistantHubContext

@@ -159,7 +159,8 @@ public class TokenRevocationIntegrationTests : ApiIntegrationTestBase
         body.GetProperty("active").GetBoolean().Should().BeTrue();
         body.TryGetProperty("sub", out _).Should().BeTrue("introspection response should include sub claim");
         body.TryGetProperty("exp", out _).Should().BeTrue("introspection response should include exp claim");
-        body.TryGetProperty("token_type", out _).Should().BeTrue("introspection response should include token_type");
+        body.TryGetProperty("client_id", out _).Should().BeTrue("introspection response should include client_id");
+        body.GetProperty("token_type").GetString().Should().Be("Bearer");
     }
 
     [Fact]

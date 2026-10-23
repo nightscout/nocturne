@@ -48,11 +48,14 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
         var therapySettings = new Mock<ITherapySettingsResolver>();
         therapySettings
             .Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string?)null);
+            .ReturnsAsync("UTC");
 
         _service = new DataOverviewService(
             new TestNocturneDbContextFactory(_context),
-            therapySettings.Object,
+            new TenantClockResolver(
+                therapySettings.Object,
+                new CategoryReadContext(),
+                NullLogger<TenantClockResolver>.Instance),
             new Mock<IStatisticsService>().Object,
             Mock.Of<ITenantCache>(),
             NullLogger<DataOverviewService>.Instance);

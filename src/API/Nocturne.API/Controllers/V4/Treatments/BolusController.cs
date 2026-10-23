@@ -95,7 +95,7 @@ public class BolusController(
         Programmed = request.Programmed,
         Delivered = request.Delivered,
         BolusType = request.BolusType,
-        Kind = request.Kind,
+        Kind = request.Automatic ? BolusKind.Algorithm : request.Kind,
         Automatic = request.Automatic,
         Duration = request.Duration,
         SyncIdentifier = request.SyncIdentifier,

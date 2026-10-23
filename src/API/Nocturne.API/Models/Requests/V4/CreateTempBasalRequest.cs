@@ -70,8 +70,9 @@ public class CreateTempBasalRequest : IBulkUpsertRequest
     public double? ScheduledRate { get; set; }
 
     /// <summary>
-    /// Origin of this temp basal. Defaults to <see cref="TempBasalOrigin.Manual"/> when omitted;
-    /// AID uploaders should send <see cref="TempBasalOrigin.Algorithm"/>.
+    /// Origin of this temp basal. When omitted it defaults by <see cref="App"/>
+    /// (<see cref="TempBasalOriginProvenance.UploaderDefault"/>) and is corroborated against the APS
+    /// snapshots later; AID uploaders should send it.
     /// </summary>
     public TempBasalOrigin? Origin { get; set; }
 

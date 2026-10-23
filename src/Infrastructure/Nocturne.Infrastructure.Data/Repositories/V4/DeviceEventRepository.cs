@@ -259,6 +259,8 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
         if (asOf is { } cutoff)
             query = query.Where(e => e.Timestamp <= cutoff);
 
+        query = ApplyReadVisibility(query, ctx);
+
         var entity = await query
             .OrderByDescending(e => e.Timestamp)
             .FirstOrDefaultAsync(ct);

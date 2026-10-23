@@ -1,6 +1,7 @@
-// @nocturne/coach — Progressive disclosure system
+// @nocturne/coach: progressive disclosure system
 export type {
   CoachGates,
+  CoachLabels,
   CoachMarkAdapter,
   CoachMarkOptions,
   CoachMarkProviderOptions,

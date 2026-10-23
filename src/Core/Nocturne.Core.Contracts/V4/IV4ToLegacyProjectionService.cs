@@ -28,6 +28,18 @@ public interface IV4ToLegacyProjectionService
     );
 
     /// <summary>
+    /// The newest treatment of one legacy event type within the window, bounds inclusive, or
+    /// <c>null</c>. Served by an index seek, not a scan of the window. Only the types Nightscout's
+    /// dataloader looks up singly are served: a device event type, and a Profile Switch of zero duration.
+    /// </summary>
+    Task<Treatment?> GetLatestProjectedTreatmentAsync(
+        string eventType,
+        long fromMills,
+        long toMills,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
     /// Returns legacy <see cref="Treatment"/> objects synthesised from V4 records whose system
     /// update stamp is strictly after the given threshold, oldest first. Used for v3 incremental
     /// sync, and shaped exactly as <see cref="GetProjectedTreatmentsAsync"/> shapes a time range:

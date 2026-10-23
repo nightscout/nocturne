@@ -45,6 +45,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
 
     private readonly IDbContextFactory<NocturneDbContext> _factory = new SharedInMemoryFactory($"delivery_snooze_{Guid.NewGuid()}");
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
+    private readonly Mock<IEngineAlarmRelay> _alarmRelay = new();
     private readonly Mock<IInAppNotificationService> _inApp = new();
     private readonly Mock<IHttpClientFactory> _httpClientFactory = new();
     private readonly Mock<IHubContext<HomeAssistantHub>> _haHub = new();
@@ -79,6 +80,7 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
             _factory.AsNocturneFactory(),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             _broadcast.Object,
+            _alarmRelay.Object,
             provider,
             NullLogger<AlertDeliveryService>.Instance);
     }
@@ -158,6 +160,8 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
         _inApp.VerifyNoOtherCalls();
         _httpClientFactory.Verify(f => f.CreateClient(It.IsAny<string>()), Times.Never, "chat bot must not be called");
         _haHub.Verify(h => h.Clients, Times.Never, "Home Assistant must not be called");
+        _alarmRelay.Verify(r => r.RaiseAsync(It.IsAny<AlertPayload>(), It.IsAny<CancellationToken>()), Times.Never,
+            "no /alarm subscriber may hear a snoozed alarm");
     }
 
     [Fact]
@@ -182,6 +186,17 @@ public class AlertDeliveryServiceSnoozeTests : IDisposable
         deliveries.Select(d => d.ChannelType).Should().BeEquivalentTo(EveryChannel().Select(c => c.ChannelType));
         _broadcast.Verify(b => b.BroadcastAlertEventAsync("alert_dispatch", It.IsAny<object>()), Times.Once);
         _broadcast.Verify(b => b.BroadcastDeviceActionAsync(It.IsAny<DeviceActionIntent>()), Times.Once);
+        _alarmRelay.Verify(r => r.RaiseAsync(It.Is<AlertPayload>(p => p.InstanceId == instanceId), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_rule_with_no_channels_still_alarms()
+    {
+        var instanceId = await SeedInstanceAsync(snoozedUntil: null);
+
+        await CreateService().DispatchAsync(instanceId, [], Payload(instanceId), CancellationToken.None);
+
+        _alarmRelay.Verify(r => r.RaiseAsync(It.Is<AlertPayload>(p => p.InstanceId == instanceId), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

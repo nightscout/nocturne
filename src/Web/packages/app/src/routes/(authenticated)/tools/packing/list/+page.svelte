@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Key } from "@nocturne/ui/keys";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import {
@@ -219,7 +220,7 @@
                     updateUrl();
                   }
                 }}
-                onkeydown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                onkeydown={(e) => { if (e.key === Key.Enter) e.currentTarget.blur(); }}
               />
               <Button
                 variant="ghost-destructive"
@@ -250,7 +251,7 @@
                 placeholder="Item name..."
                 size="sm"
                 class="flex-1"
-                onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addItem()}
+                onkeydown={(e: KeyboardEvent) => e.key === Key.Enter && addItem()}
               />
               <Button size="sm" onclick={addItem} disabled={!newLabel.trim()}>
                 Add
@@ -291,7 +292,7 @@
               placeholder="Item name..."
               size="sm"
               class="flex-1"
-              onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addItem()}
+              onkeydown={(e: KeyboardEvent) => e.key === Key.Enter && addItem()}
             />
             <Button size="sm" onclick={addItem} disabled={!newLabel.trim()}>
               Add

@@ -85,11 +85,12 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
             if (existing != null)
             {
+                var before = ToDomain(existing);
                 ApplySyncUpsert(existing, model);
                 await ctx.SaveChangesAsync(ct);
                 var upserted = ToDomain(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
-                await RaiseBroadcastAsync([], [upserted], [], origin, ct);
+                await RaiseBroadcastAsync([], [upserted], [], origin, ct, vacated: [before]);
                 return new SyncUpsert<TModel>(upserted, Created: false);
             }
         }
@@ -178,8 +179,9 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
         var updatedEntities = new List<TEntity>();
         var materiallyChanged = new List<TEntity>();
+        var vacated = new List<TModel>();
         if (syncKeyed.Count == 0)
-            return new UpsertSplit(updatedEntities, materiallyChanged, entities, 0);
+            return new UpsertSplit(updatedEntities, materiallyChanged, vacated, entities, 0);
 
         var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
         var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
@@ -211,11 +213,15 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
                     continue;
                 }
 
+                var before = ToDomain(existing);
                 ApplySyncUpsert(existing, ToDomain(entity));
                 updatedEntities.Add(existing);
                 // Capture material changes now, before SaveChanges clears the modified flags.
                 if (HasMaterialChange(ctx, existing))
+                {
                     materiallyChanged.Add(existing);
+                    vacated.Add(before);
+                }
             }
             else
             {
@@ -229,6 +235,6 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             await ctx.SaveChangesAsync(ct);
         }
 
-        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert, skippedDeleted);
+        return new UpsertSplit(updatedEntities, materiallyChanged, vacated, toInsert, skippedDeleted);
     }
 }

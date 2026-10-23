@@ -202,9 +202,9 @@ public class StatusServiceTests
         tenantFactory
             .Setup(f => f.CreatePlatformAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => mockFactory.Object.CreateDbContextAsync().GetAwaiter().GetResult());
-        var appearanceReader = new Mock<IShareAppearanceReader>();
+        var appearanceReader = new Mock<ITenantAppearanceReader>();
         appearanceReader
-            .Setup(r => r.GetSharedAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences());
 
         var service = new StatusService(
@@ -1446,9 +1446,9 @@ public class StatusServiceTests
         mockTenantDbContextFactory
             .Setup(f => f.CreatePlatformAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(FactoryContext);
-        var appearanceReader = new Mock<IShareAppearanceReader>();
+        var appearanceReader = new Mock<ITenantAppearanceReader>();
         appearanceReader
-            .Setup(r => r.GetSharedAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(appearance ?? new UserDisplayPreferences());
         classifier ??= new GlucoseStatusClassifier(
             configuration, NullLogger<GlucoseStatusClassifier>.Instance);

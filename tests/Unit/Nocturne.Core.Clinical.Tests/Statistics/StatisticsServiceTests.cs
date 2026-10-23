@@ -147,7 +147,7 @@ public class StatisticsServiceTests
         );
 
         // Act
-        var result = _statisticsService.CalculateGlycemicVariability(values, entries)!;
+        var result = _statisticsService.CalculateGlycemicVariability(values, entries, timeZone: null)!;
 
         // Assert
         result.Should().NotBeNull();
@@ -1498,7 +1498,7 @@ public class StatisticsServiceTests
         );
 
         // Act
-        var result = _statisticsService.CalculateGlycemicVariability(values, entries)!;
+        var result = _statisticsService.CalculateGlycemicVariability(values, entries, timeZone: null)!;
 
         // Assert
         result.Should().NotBeNull();
@@ -1661,6 +1661,25 @@ public class StatisticsServiceTests
     }
 
     [Fact]
+    public void AnalyzeGlucoseData_ReadingsRepostedThirtySecondsLater_DoNotTurnTenMinutesIntoAGap()
+    {
+        // A five-minute sensor with every reading reposted half a minute later and one reading
+        // missed: the ten minutes it leaves are jitter at that cadence, not a gap.
+        var start = DateTime.UtcNow.AddHours(-4);
+        var readings = AtCadence(start, 5, 24).Where((_, i) => i != 12).ToArray();
+        var entries = readings
+            .Concat(readings.Select(r => new SensorGlucose { Mgdl = r.Mgdl, Timestamp = r.Timestamp.AddSeconds(30) }))
+            .OrderBy(r => r.Timestamp)
+            .ToArray();
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(), windowDays: 14);
+
+        result.DataQuality.GapAnalysis.Gaps.Should().BeEmpty();
+        result.DataQuality.MissingReadings.Should().Be(0);
+    }
+
+    [Fact]
     public void AnalyzeGlucoseData_SensorSwitchMidReport_ScoresEachStreamAtItsOwnCadence()
     {
         // Twelve hours of a one-minute Libre, then twelve of a five-minute Dexcom.
@@ -1691,18 +1710,18 @@ public class StatisticsServiceTests
     [Fact]
     public void CalculateCgmActivePercent_WithARegisteredDevice_CreditsTheCatalogueCadence()
     {
-        // The catalogue publishes five minutes and the device uploads every one: its 144 readings
-        // stand for twelve hours of the twenty-four hour report, not for 144 minutes of it.
+        // The catalogue publishes one minute and the day's readings arrive five minutes apart: each
+        // stands for one minute, not the five its spacing shows or the default five.
         var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
         var device = Guid.NewGuid();
 
         var result = _statisticsService.CalculateCgmActivePercent(
-            AtCadence(start, 1, 144, device),
+            AtCadence(start, 5, 288, device),
             start,
             start.AddDays(1),
-            new[] { new CgmDeviceWindow(device, start, start.AddDays(1), 5) });
+            new[] { new CgmDeviceWindow(device, start, start.AddDays(1), 1) });
 
-        result.Should().BeApproximately(50.0, 0.1);
+        result.Should().BeApproximately(20.0, 0.1);
     }
 
     [Fact]
@@ -1939,6 +1958,66 @@ public class StatisticsServiceTests
             });
 
         result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_TwoUploadersPostingTheSameReadings_CoverTheirTimeOnce()
+    {
+        // Twelve hours of readings arriving from two uploaders cover twelve hours, not twenty-four.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = AtCadence(start, 5, 144)
+            .Select(r => new SensorGlucose { Mgdl = r.Mgdl, Timestamp = r.Timestamp, Device = "xDrip" })
+            .Concat(AtCadence(start, 5, 144)
+                .Select(r => new SensorGlucose { Mgdl = r.Mgdl, Timestamp = r.Timestamp, Device = "AAPS" }))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(entries, start, start.AddDays(1));
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_ReadingsRepostedThirtySecondsLater_KeepTheSensorsCadence()
+    {
+        // Each reading repeated half a minute later in the same stream: the repeats neither add
+        // time nor make the stream look like a thirty-second sensor.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var readings = AtCadence(start, 5, 144);
+        var entries = readings
+            .Concat(readings.Select(r => new SensorGlucose { Mgdl = r.Mgdl, Timestamp = r.Timestamp.AddSeconds(30) }))
+            .OrderBy(r => r.Timestamp)
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(entries, start, start.AddDays(1));
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_ExactDuplicateReadings_CoverTheirTimeOnce()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var readings = AtCadence(start, 5, 144);
+        var entries = readings.Concat(AtCadence(start, 5, 144)).OrderBy(r => r.Timestamp).ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(entries, start, start.AddDays(1));
+
+        result.Should().BeApproximately(50.0, 0.1);
+    }
+
+    [Fact]
+    public void CalculateCgmActivePercent_ThirtyNineHourGap_IsNotCredited()
+    {
+        // Nine hours of readings, thirty-nine hours of nothing, then the sensor is back for the
+        // last instant of the two-day report.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = AtCadence(start, 5, 108)
+            .Concat(AtCadence(start.AddHours(48).AddMinutes(-5), 5, 1))
+            .ToArray();
+
+        var result = _statisticsService.CalculateCgmActivePercent(entries, start, start.AddDays(2));
+
+        result.Should().BeApproximately((9 * 60 + 5) / (48.0 * 60) * 100, 0.1);
     }
 
     [Fact]

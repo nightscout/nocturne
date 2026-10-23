@@ -3,7 +3,6 @@ using Moq;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Entries;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -20,7 +19,6 @@ public class EntryServiceTests
     private readonly Mock<IEntryStore> _store = new();
     private readonly Mock<IEntryDecomposer> _decomposer = new();
     private readonly Mock<IEntryCache> _cache = new();
-    private readonly Mock<IDataEventSink<Entry>> _events = new();
     private readonly EntryService _sut;
 
     public EntryServiceTests()
@@ -36,7 +34,6 @@ public class EntryServiceTests
             _store.Object,
             _decomposer.Object,
             _cache.Object,
-            _events.Object,
             Mock.Of<ILogger<EntryService>>());
     }
 
@@ -339,9 +336,6 @@ public class EntryServiceTests
             Times.Once);
         // Cache invalidation + broadcasting is handled by the chokepoint, not the service.
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
-        _events.Verify(
-            x => x.OnCreatedAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     [Fact]
@@ -539,7 +533,7 @@ public class EntryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task DeleteEntriesAsync_CallsStoreAndFiresEvent()
+    public async Task DeleteEntriesAsync_DelegatesToTheDecomposer_AndRaisesNoEventItself()
     {
         // Arrange
         var find = "{\"type\":\"sgv\"}";
@@ -556,15 +550,12 @@ public class EntryServiceTests
         _decomposer.Verify(x => x.BulkDeleteAsync(find, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
         // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
-        _events.Verify(
-            x => x.OnBulkDeletedAsync(5, It.IsAny<CancellationToken>()),
-            Times.Once);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task DeleteEntriesAsync_WithNoMatches_StillFiresEvent()
+    public async Task DeleteEntriesAsync_WithNoMatches_RaisesNoEventItself()
     {
         // Arrange
         var find = "{\"type\":\"nonexistent\"}";
@@ -580,9 +571,6 @@ public class EntryServiceTests
         Assert.Equal(0, result);
         // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
-        _events.Verify(
-            x => x.OnBulkDeletedAsync(0, It.IsAny<CancellationToken>()),
-            Times.Once);
     }
 
     [Fact]

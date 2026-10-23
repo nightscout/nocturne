@@ -1,3 +1,4 @@
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
@@ -268,7 +269,8 @@ public class TempBasalMapperTests
             SysCreatedAt = originalCreatedAt,
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1000).UtcDateTime,
             Rate = 0.5,
-            Origin = "Manual"
+            Origin = "Manual",
+            OriginEvidence = "Uncorroborated"
         };
 
         var newCorrelationId = Guid.NewGuid();
@@ -307,6 +309,141 @@ public class TempBasalMapperTests
         entity.Origin.Should().Be("Algorithm");
         entity.DeviceId.Should().Be(newDeviceId);
         entity.PumpRecordId.Should().Be("pump-rec-002");
+    }
+
+    [Theory]
+    [InlineData("Reported")]
+    [InlineData("Snapshot")]
+    [Trait("Category", "Unit")]
+    public void UpdateEntity_ReUploadWithDefaultEvidenceKeepsStoredOriginEvidenceAndSnapshot(string stored)
+    {
+        var snapshotId = Guid.NewGuid();
+        var start = DateTime.UtcNow;
+        var entity = new TempBasalEntity
+        {
+            Timestamp = start, Rate = 1.2, Origin = "Manual", OriginEvidence = stored, ApsSnapshotId = snapshotId,
+        };
+
+        TempBasalMapper.UpdateEntity(entity, new TempBasal
+        {
+            StartTimestamp = start,
+            Rate = 1.2,
+            Origin = TempBasalOrigin.Algorithm,
+            OriginEvidence = TempBasalOriginEvidence.Uploader,
+        });
+
+        entity.Origin.Should().Be("Manual");
+        entity.OriginEvidence.Should().Be(stored);
+        entity.ApsSnapshotId.Should().Be(snapshotId);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void UpdateEntity_ReUploadWithAChangedRateTakesTheIncomingDefaultOverAJudgement()
+    {
+        var start = DateTime.UtcNow;
+        var entity = new TempBasalEntity
+        {
+            Timestamp = start, Rate = 1.2, Origin = "Manual", OriginEvidence = "Snapshot", ApsSnapshotId = Guid.NewGuid(),
+        };
+
+        TempBasalMapper.UpdateEntity(entity, new TempBasal
+        {
+            StartTimestamp = start,
+            Rate = 0.4,
+            Origin = TempBasalOrigin.Algorithm,
+            OriginEvidence = TempBasalOriginEvidence.Uploader,
+        });
+
+        entity.Origin.Should().Be("Algorithm");
+        entity.OriginEvidence.Should().Be("Uploader");
+        entity.ApsSnapshotId.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void UpdateEntity_ReUploadKeepsAStoredStatementWhenTheRateChanges()
+    {
+        var start = DateTime.UtcNow;
+        var entity = new TempBasalEntity { Timestamp = start, Rate = 1.2, Origin = "Manual", OriginEvidence = "Reported" };
+
+        TempBasalMapper.UpdateEntity(entity, new TempBasal
+        {
+            StartTimestamp = start,
+            Rate = 0.4,
+            Origin = TempBasalOrigin.Algorithm,
+            OriginEvidence = TempBasalOriginEvidence.Uploader,
+        });
+
+        entity.Origin.Should().Be("Manual");
+        entity.OriginEvidence.Should().Be("Reported");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void UpdateEntity_ReUploadKeepsARowWithoutEvidenceThatInfersAsReported()
+    {
+        var start = DateTime.UtcNow;
+        var entity = new TempBasalEntity
+        {
+            Timestamp = start,
+            Rate = 1.2,
+            Origin = "Manual",
+            DataSource = DataSources.CareLinkConnector,
+        };
+
+        TempBasalMapper.UpdateEntity(entity, new TempBasal
+        {
+            StartTimestamp = start,
+            Rate = 1.2,
+            Origin = TempBasalOrigin.Algorithm,
+            OriginEvidence = TempBasalOriginEvidence.Uploader,
+        });
+
+        entity.Origin.Should().Be("Manual");
+        entity.OriginEvidence.Should().Be("Reported");
+    }
+
+    [Theory]
+    [InlineData("Reported")]
+    [InlineData("Snapshot")]
+    [Trait("Category", "Unit")]
+    public void UpdateEntity_IncomingStatementOverwritesStoredOriginEvidenceAndSnapshot(string stored)
+    {
+        var entity = new TempBasalEntity { Origin = "Algorithm", OriginEvidence = stored, ApsSnapshotId = Guid.NewGuid() };
+
+        TempBasalMapper.UpdateEntity(entity, new TempBasal
+        {
+            StartTimestamp = DateTime.UtcNow,
+            Origin = TempBasalOrigin.Manual,
+            OriginEvidence = TempBasalOriginEvidence.Reported,
+        });
+
+        entity.Origin.Should().Be("Manual");
+        entity.OriginEvidence.Should().Be("Reported");
+        entity.ApsSnapshotId.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("Uploader")]
+    [InlineData("Uncorroborated")]
+    [Trait("Category", "Unit")]
+    public void UpdateEntity_ReUploadOfAnUnsettledRowTakesTheIncomingOrigin(string stored)
+    {
+        var incomingLink = Guid.NewGuid();
+        var entity = new TempBasalEntity { Origin = "Manual", OriginEvidence = stored, ApsSnapshotId = Guid.NewGuid() };
+
+        TempBasalMapper.UpdateEntity(entity, new TempBasal
+        {
+            StartTimestamp = DateTime.UtcNow,
+            Origin = TempBasalOrigin.Algorithm,
+            OriginEvidence = TempBasalOriginEvidence.Uploader,
+            ApsSnapshotId = incomingLink,
+        });
+
+        entity.Origin.Should().Be("Algorithm");
+        entity.OriginEvidence.Should().Be("Uploader");
+        entity.ApsSnapshotId.Should().Be(incomingLink);
     }
 
     [Fact]

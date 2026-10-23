@@ -127,6 +127,11 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Tim
     [MaxLength(32)]
     public string Origin { get; set; } = null!;
 
+    /// <summary>See <see cref="Core.Models.V4.TempBasal.OriginEvidence"/>, stored as its name.</summary>
+    [Column("origin_evidence")]
+    [MaxLength(16)]
+    public string? OriginEvidence { get; set; }
+
     /// <summary>
     /// Foreign key to the Device table
     /// </summary>

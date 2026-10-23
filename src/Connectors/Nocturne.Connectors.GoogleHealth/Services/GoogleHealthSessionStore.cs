@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.Connectors.GoogleHealth.Configurations;
@@ -31,17 +29,6 @@ public sealed class GoogleHealthSessionStore(
     // Read back as GoogleHealthConnectorConfiguration.SessionClientId.
     private const string SessionClientIdKey = "clientId";
     private const string LegacyClientSecretKey = "clientSecret";
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
-    /// <summary>
-    /// Whether the stored refresh token belongs to a client other than the instance's: a former
-    /// per-tenant client, or one the operator replaced. Google refuses it, so only a new sign-in
-    /// recovers.
-    /// </summary>
-    public bool IssuedToAnotherClient(GoogleHealthConnectorConfiguration configuration) =>
-        platform.Value.IsConfigured &&
-        !string.IsNullOrWhiteSpace(configuration.RefreshToken) &&
-        !string.Equals(configuration.SessionClientId, platform.Value.ClientId, StringComparison.Ordinal);
 
     /// <summary>The stored session, with its cached access token when that is still current.</summary>
     public async Task<GoogleHealthTokenSession?> CurrentAsync(GoogleHealthConnectorConfiguration configuration)
@@ -68,7 +55,7 @@ public sealed class GoogleHealthSessionStore(
     {
         if (string.IsNullOrWhiteSpace(configuration.RefreshToken))
             throw new GoogleHealthException("reconnect_required", stage: "session_read");
-        if (IssuedToAnotherClient(configuration))
+        if (configuration.IssuedToAnotherClient(platform.Value))
             throw new GoogleHealthException("client_changed", stage: "session_read");
         await oauth.DiscardStaleCacheAsync(configuration);
         if (force) oauth.InvalidateToken();
@@ -149,14 +136,10 @@ public sealed class GoogleHealthSessionStore(
     }
 
     /// <summary>
-    /// Enables the connector and caches the access token of a session <see cref="StoreAsync"/> has
-    /// stored. Not cancellable: the stored session is already live.
+    /// Caches the access token of a session <see cref="StoreAsync"/> has stored. Not cancellable:
+    /// the stored session is already live.
     /// </summary>
-    public async Task ActivateAsync(GoogleHealthTokenSession session, Guid subject)
-    {
-        await SetEnabledAsync(true, subject.ToString(), CancellationToken.None);
-        await oauth.StoreSessionAsync(session);
-    }
+    public Task CacheAsync(GoogleHealthTokenSession session) => oauth.StoreSessionAsync(session);
 
     /// <param name="removeAccount">
     /// Also forget which Google account was connected, which is what lets a different account
@@ -166,7 +149,6 @@ public sealed class GoogleHealthSessionStore(
     public async Task ClearAsync(bool removeAccount, Guid? subject, bool revoke, CancellationToken ct)
     {
         oauth.InvalidateToken();
-        await SetEnabledAsync(false, subject?.ToString(), ct);
         var secrets = await configurations.GetSecretsAsync(ConnectorName, ct);
         var refreshToken = secrets.GetValueOrDefault(RefreshTokenKey);
         var account = secrets.GetValueOrDefault(AccountKey);
@@ -242,16 +224,6 @@ public sealed class GoogleHealthSessionStore(
 
     public async Task<string?> AccountKeyAsync(CancellationToken ct) =>
         (await configurations.GetSecretsAsync(ConnectorName, ct)).GetValueOrDefault(AccountKey);
-
-    private async Task SetEnabledAsync(bool enabled, string? modifiedBy, CancellationToken ct)
-    {
-        var stored = await configurations.GetConfigurationAsync(ConnectorName, ct);
-        if (stored?.Configuration is null) return;
-        var configuration = JsonNode.Parse(stored.Configuration.RootElement.GetRawText())!.AsObject();
-        configuration["enabled"] = enabled;
-        using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
-        await configurations.SaveConfigurationAsync(ConnectorName, document, modifiedBy, ct);
-    }
 }
 
 public enum GoogleHealthRevocation

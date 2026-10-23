@@ -6,6 +6,9 @@ import {
 import { createHash } from "crypto";
 import logger from "./logger.js";
 import MessageTranslator from "./message-translator.js";
+import { AlarmLevel, EngineAlarmEvents } from "../constants.js";
+import { fieldsOf, type Payload } from "./payload.js";
+import type { AlarmEvent } from "../types.js";
 
 interface SignalRConfig {
   hubUrl: string;
@@ -316,6 +319,18 @@ class SignalRClient {
       logger.debug("Received clear_alarm from SignalR:", clear);
       this.messageHandler.handleClearAlarm(clear);
     });
+
+    this.alarmConnection.on(EngineAlarmEvents.Alarm, (alarm: unknown) => {
+      this.messageHandler.handleEngineAlarm("alarm", alarm);
+    });
+
+    this.alarmConnection.on(EngineAlarmEvents.UrgentAlarm, (alarm: unknown) => {
+      this.messageHandler.handleEngineAlarm("urgent_alarm", alarm);
+    });
+
+    this.alarmConnection.on(EngineAlarmEvents.ClearAlarm, (clear: unknown) => {
+      this.messageHandler.handleEngineClearAlarm(clear);
+    });
   }
 
   private setupConfigEventHandlers(): void {
@@ -539,6 +554,20 @@ class SignalRClient {
         this.configConnection.state === "Connected");
 
     return dataConnected && alarmConnected && configConnected;
+  }
+
+  /** The tenant's alarm still sounding, from the API's AlarmHub, as an `/alarm`
+   *  subscriber hears it. Null when nothing sounds or the AlarmHub connection
+   *  isn't open. */
+  async currentAlarm(): Promise<{ event: AlarmEvent; alarm: Payload } | null> {
+    if (!this.alarmConnection || this.alarmConnection.state !== "Connected") {
+      logger.warn("Cannot replay the sounding alarm: AlarmHub connection not open");
+      return null;
+    }
+    const notify = await this.alarmConnection.invoke<unknown>("CurrentAlarm");
+    if (!notify) return null;
+    const event: AlarmEvent = fieldsOf(notify).level === AlarmLevel.Urgent ? "urgent_alarm" : "alarm";
+    return { event, alarm: this.messageHandler.translateAlarm(event, notify) };
   }
 
   /** Forward an alarm ack to the API's AlarmHub. The v3 `/alarm` namespace

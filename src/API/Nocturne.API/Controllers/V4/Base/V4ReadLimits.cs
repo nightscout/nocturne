@@ -14,7 +14,9 @@ namespace Nocturne.API.Controllers.V4.Base;
 /// Over-large values are clamped rather than rejected, matching the existing V4 paging behaviour
 /// in <c>ProfileController.GetProfileRecords</c>. An over-long date range is rejected instead, by
 /// <see cref="RejectDateSpan(ControllerBase, DateTime?, DateTime?, int)"/>: silently narrowing a
-/// range would answer a different question than the caller asked.
+/// range would answer a different question than the caller asked. Loop Analysis is the exception:
+/// it trims to the most recent <see cref="MaxAnalyticsSpanDays"/> local days and says so with an
+/// explicit <c>shortened</c> flag on the range it returns.
 /// </para>
 /// </remarks>
 public static class V4ReadLimits

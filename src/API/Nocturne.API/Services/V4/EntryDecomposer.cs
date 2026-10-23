@@ -275,8 +275,6 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     /// <inheritdoc />
     public async Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default)
     {
-        // origin is accepted for interface uniformity; bulk clear-by-time-range stays a coarse op that
-        // does NOT route through the per-record chokepoint (it fires EntryService's OnBulkDeletedAsync).
         var findQuery = Core.Models.Queries.FindQuery.Parse(find);
         var (fromMills, toMills) = (findQuery.FromMills, findQuery.ToMills);
 
@@ -319,11 +317,11 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             : null;
 
         var sgDeleted = typeFilter is null or "sgv"
-            ? await _sensorGlucoseRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
+            ? await _sensorGlucoseRepository.DeleteByTimeRangeAsync(from, to, origin, ct) : 0;
         var mgDeleted = typeFilter is null or "mbg"
-            ? await _meterGlucoseRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
+            ? await _meterGlucoseRepository.DeleteByTimeRangeAsync(from, to, origin, ct) : 0;
         var calDeleted = typeFilter is null or "cal"
-            ? await _calibrationRepository.DeleteByTimeRangeAsync(from, to, ct) : 0;
+            ? await _calibrationRepository.DeleteByTimeRangeAsync(from, to, origin, ct) : 0;
 
         var total = (long)sgDeleted + mgDeleted + calDeleted;
         Logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) from={From} to={To} type={Type}",

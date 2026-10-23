@@ -21,14 +21,32 @@
   const paint = $derived(color ?? ("color" in spec ? spec.color : undefined) ?? "currentColor");
 </script>
 
-<!-- A line swatch is wide enough to show two cycles of the longest dash. -->
+<!--
+  A line swatch is wide enough to show two cycles of the longest dash, but only while the
+  dashes show (printing, or patterns always on). On screen the line is solid, so it keeps
+  close to the fill swatches' width. The line stretches with the box without thickening.
+-->
 <svg
   viewBox={shape === "line" ? "0 0 44 12" : "0 0 16 12"}
+  preserveAspectRatio={shape === "line" ? "none" : undefined}
   aria-hidden="true"
-  class={cn("inline-block h-3 shrink-0", shape === "line" ? "w-11" : "w-4", className)}
+  class={cn(
+    "inline-block h-3 shrink-0",
+    shape === "line" ? "w-6 [.chart-patterns-on_&]:w-11" : "w-4",
+    className
+  )}
 >
   {#if shape === "line"}
-    <line x1="0" y1="6" x2="44" y2="6" stroke={paint} stroke-width="2.5" class={dashClass(texture)} />
+    <line
+      x1="0"
+      y1="6"
+      x2="44"
+      y2="6"
+      stroke={paint}
+      stroke-width="2.5"
+      vector-effect="non-scaling-stroke"
+      class={dashClass(texture)}
+    />
   {:else if shape === "dot"}
     <circle cx="8" cy="6" r="3" fill={paint} />
   {:else}

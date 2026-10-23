@@ -43,9 +43,11 @@
     showThresholds?: boolean;
     /**
      * Band labels: beside the bar when vertical; when horizontal, a key under the bar on paper
-     * only, where there is no tooltip to read the segments from (default: true).
+     * only unless keyOnScreen is set (default: true).
      */
     showLabels?: boolean;
+    /** Show the horizontal key on screen as well as on paper, so the segments read without hovering (default: false) */
+    keyOnScreen?: boolean;
     /** Compact mode - smaller text and tighter spacing */
     compact?: boolean;
     /**
@@ -71,6 +73,7 @@
     orientation = "vertical",
     showThresholds = false,
     showLabels = true,
+    keyOnScreen = false,
     compact = false,
     personalRange,
   }: Props = $props();
@@ -244,7 +247,7 @@
     </li>
     <!-- A compact bar on screen names the inset in its tooltip; paper has only this key. -->
     {#if isTarget && pct.tightTarget > 0}
-      <li class={["items-center gap-1.5 text-xs", compact ? "hidden print:flex" : "flex", vertical && "-mt-1 pl-5"]}>
+      <li class={["items-center gap-1.5 text-xs", compact && (vertical || !keyOnScreen) ? "hidden print:flex" : "flex", vertical && "-mt-1 pl-5"]}>
         <TextureSwatch texture="tight-range" />
         <span>{Math.round(pct.tightTarget)}% in tight range</span>
       </li>
@@ -301,7 +304,13 @@
       </Chart>
     </div>
     {#if showLabels}
-      <ul class="hidden flex-wrap items-center gap-x-4 gap-y-1 pt-2 text-xs tabular-nums text-muted-foreground print:flex">
+      <ul
+        class={[
+          "flex-wrap items-center gap-x-4 gap-y-1 pt-2 text-xs tabular-nums text-muted-foreground",
+          keyOnScreen ? "flex" : "hidden print:flex",
+        ]}
+        data-testid="band-key"
+      >
         {@render bandLabels()}
       </ul>
     {/if}

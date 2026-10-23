@@ -79,6 +79,8 @@ export const getDayInReviewData = query(
 			treatmentSummary,
 			insulinDelivery,
 			apsSnapshots,
+			/** The zone the day's boundaries were taken in; UTC when the patient has none, as they were. */
+			timeZone: timezone ?? 'UTC',
 			dateRange: {
 				from: dayStart,
 				to: dayEnd,

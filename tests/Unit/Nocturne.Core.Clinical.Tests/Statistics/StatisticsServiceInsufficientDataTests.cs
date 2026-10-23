@@ -16,13 +16,13 @@ public class StatisticsServiceInsufficientDataTests
     [Fact]
     public void GlycemicVariability_AllZeroValues_IsNullRatherThanNaN()
     {
-        _service.CalculateGlycemicVariability([0, 0], []).Should().BeNull();
+        _service.CalculateGlycemicVariability([0, 0], [], timeZone: null).Should().BeNull();
     }
 
     [Fact]
     public void GlycemicVariability_ImplausibleValuesAmongReadings_AreDroppedAndEveryMetricIsFinite()
     {
-        var result = _service.CalculateGlycemicVariability([0, -5, 100, 140, 180], []);
+        var result = _service.CalculateGlycemicVariability([0, -5, 100, 140, 180], [], timeZone: null);
 
         result.Should().NotBeNull();
         typeof(GlycemicVariability)
@@ -56,19 +56,17 @@ public class StatisticsServiceInsufficientDataTests
         SensorGlucose[] plausible = [At(0, 100), At(10, 140), At(15, 180)];
 
         var withImplausible = _service.CalculateGlycemicVariability(
-            values, [At(0, 100), At(5, 700), At(10, 140), At(15, 180)]);
-        var withoutImplausible = _service.CalculateGlycemicVariability(values, plausible);
+            values, [At(0, 100), At(5, 700), At(10, 140), At(15, 180)], timeZone: null);
+        var withoutImplausible = _service.CalculateGlycemicVariability(values, plausible, timeZone: null);
 
         withImplausible.Should().BeEquivalentTo(withoutImplausible);
     }
 
-    [Theory]
-    [InlineData(VarianceMode.Population)]
-    [InlineData(VarianceMode.Sample)]
-    public void Variance_EmptySeries_IsZero(VarianceMode mode)
+    [Fact]
+    public void Variance_EmptySeries_IsZero()
     {
-        GlucoseStatistics.Variance([], 0, mode).Should().Be(0);
-        GlucoseStatistics.StandardDeviation([], mode).Should().Be(0);
+        GlucoseStatistics.Variance([], 0).Should().Be(0);
+        GlucoseStatistics.StandardDeviation([]).Should().Be(0);
     }
 
     [Fact]

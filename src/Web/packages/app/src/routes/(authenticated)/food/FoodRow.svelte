@@ -1,12 +1,15 @@
 <script lang="ts">
+	import { Key } from '@nocturne/ui/keys';
 	import type { Food } from '$api';
 	import Star from '@lucide/svelte/icons/star';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import CarbPill from './CarbPill.svelte';
 	import GiChip from './GiChip.svelte';
-	import { giFromInt } from './types';
+	import { giFromInt } from '$lib/components/food';
 	import { Toggle } from '$lib/components/ui/toggle';
 	import { FOOD_COLUMNS } from './food-columns';
+	import { energyToDisplayUnits } from '@nocturne/ui/energy';
+	import { getEnergyUnit } from '$lib/stores/appearance-store.svelte';
 
 	interface Props {
 		food: Food;
@@ -17,6 +20,7 @@
 	}
 
 	const { food, expanded, favorite, ontoggle, onfavorite }: Props = $props();
+	const energyUnit = $derived(getEnergyUnit());
 </script>
 
 <div
@@ -26,7 +30,7 @@
 	role="button"
 	tabindex="0"
 	onclick={ontoggle}
-	onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ontoggle(); } }}
+	onkeydown={(e) => { if (e.key === Key.Enter || e.key === Key.Space) { e.preventDefault(); ontoggle(); } }}
 >
 	<span class="star-cell">
 		<Toggle
@@ -71,7 +75,7 @@
 	</span>
 
 	<span class="energy-cell max-sm:hidden">
-		{food.energy ?? 0} kcal
+		{energyToDisplayUnits(food.energy ?? 0, energyUnit)} {energyUnit}
 	</span>
 
 	<span class="chevron-cell">

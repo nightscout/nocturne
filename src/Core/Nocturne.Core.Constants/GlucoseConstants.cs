@@ -25,6 +25,12 @@ public static class GlucoseConstants
     public const double TargetTopMgdl = 180;
 
     /// <summary>
+    /// Top of the tight target band in mg/dL, which shares its bottom with
+    /// <see cref="TargetBottomMgdl"/>.
+    /// </summary>
+    public const double TightTargetTopMgdl = 140;
+
+    /// <summary>
     /// Clinically significant hypoglycaemia in mg/dL: the level-2 boundary the consensus reports
     /// time below, distinct from the level-1 boundary at <see cref="TargetBottomMgdl"/>.
     /// </summary>
@@ -40,6 +46,17 @@ public static class GlucoseConstants
     /// above anything a CGM reports as a number, so a larger value is a sentinel or a unit error.
     /// </summary>
     public const double MaxPlausibleMgdl = 600;
+
+    /// <summary>
+    /// Estimated A1c in NGSP percent below which the report counts the target as met. A care team
+    /// sets an individual target; this is the general one.
+    /// </summary>
+    public const double A1cTargetPercent = 7;
+
+    /// <summary>
+    /// Coefficient of variation in percent at or below which glucose counts as stable.
+    /// </summary>
+    public const double CoefficientOfVariationTargetPercent = 36;
 
     /// <summary>
     /// Tile fill per glucose status as <c>RRGGBB</c>, for the native surfaces that paint a reading

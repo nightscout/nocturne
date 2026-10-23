@@ -122,12 +122,14 @@ internal static class GlucoseCadence
 
     /// <summary>
     /// The cadence the series reports about itself: the median of its intervals, which a sensor
-    /// outage or a warmup cannot drag the way it would a mean. Intervals of no elapsed time are
-    /// excluded, and a series with none left falls back to <see cref="DefaultCadenceMinutes"/>.
+    /// outage or a warmup cannot drag the way it would a mean. Intervals shorter than
+    /// <see cref="MinCadenceEvidenceMinutes"/> are excluded, and a series with none left falls back
+    /// to <see cref="DefaultCadenceMinutes"/>.
     /// </summary>
     internal static double SeriesCadenceMinutes(IEnumerable<double> intervals)
     {
-        var elapsed = GlucoseStatistics.Ascending(intervals.Where(interval => interval > 0));
+        var elapsed = GlucoseStatistics.Ascending(
+            intervals.Where(interval => interval >= MinCadenceEvidenceMinutes));
         return elapsed.Length == 0 ? DefaultCadenceMinutes : GlucoseStatistics.Median(elapsed);
     }
 

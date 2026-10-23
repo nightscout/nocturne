@@ -123,13 +123,47 @@ public class DData
     /// Used by Loop and other clients for active profile determination.
     /// </summary>
     [JsonPropertyName("lastProfileFromSwitch")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public string? LastProfileFromSwitch { get; set; }
+}
+
+/// <summary>
+/// The <see cref="DData"/> Nightscout serves for a point in time (<c>dataloader.update</c> with
+/// <c>frame: true</c>): glucose oldest first, an empty <c>entries</c> list and the frame's
+/// <see cref="Page"/>.
+/// </summary>
+public class DDataFrame : DData
+{
+    [JsonPropertyName("entries")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public List<Entry> Entries { get; set; } = new();
+
+    [JsonPropertyName("page")]
+    public DDataFramePage? Page { get; set; }
+}
+
+public class DDataFramePage
+{
+    [JsonPropertyName("frame")]
+    public bool Frame { get; set; } = true;
+
+    /// <summary>
+    /// The frame's time (Unix milliseconds)
+    /// </summary>
+    [JsonPropertyName("after")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public long After { get; set; }
 }
 
 public class DbStats
 {
     [JsonPropertyName("dataSize")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public long DataSize { get; set; }
+
+    [JsonPropertyName("indexSize")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public long IndexSize { get; set; }
 
     [JsonPropertyName("collections")]
     public int Collections { get; set; }

@@ -1032,7 +1032,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     /// An OpenAPS/AAPS/Trio payload wins over a Loop one; <see langword="null"/> when the device
     /// status carries neither.
     /// </summary>
-    private static V4Models.ApsSnapshot? MapToApsSnapshot(
+    internal static V4Models.ApsSnapshot? MapToApsSnapshot(
         DeviceStatus ds, string? legacyId, string? source, Guid? correlationId)
     {
         if (ds.OpenAps != null)

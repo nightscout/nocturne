@@ -30,17 +30,17 @@
 		}
 	},
 	"alert-rule-channels": {
-		"alt": "The Channels card of an alert rule, listing where the alert is sent. An In-App entry notes it is routed to your account automatically, a Browser Push entry carries the label Bedroom laptop, and an Add channel button sits underneath.",
+		"alt": "The Channels card of an alert rule, listing where the alert is sent. An In-App entry shows the member it is sent to, a Webhook entry shows its web address, and an Add channel button sits underneath.",
 		"variants": {
 			"light": {
 				"file": "images/alert-rule-channels.light.webp",
 				"width": 1632,
-				"height": 872
+				"height": 1192
 			},
 			"dark": {
 				"file": "images/alert-rule-channels.dark.webp",
 				"width": 1632,
-				"height": 872
+				"height": 1192
 			}
 		}
 	},
@@ -177,7 +177,7 @@
 		}
 	},
 	"alerts-configuration": {
-		"alt": "The Alerts page of a newly created site. It has no alert rules yet, and offers a New rule button to add the first one.",
+		"alt": "The Alerts page. Three tiles across the top count how many rules are switched on, how many alerts are sounding right now, and how many fired this week. Below them sits the list of rules: an urgent low, a low, a high, and one for the sensor going quiet, each showing the reading it watches for, a switch to turn it off, and a button to send a test alert. A New rule button sits in the top corner.",
 		"variants": {
 			"light": {
 				"file": "images/alerts-configuration.light.webp",
@@ -242,12 +242,12 @@
 			"light": {
 				"file": "images/carb-entry-edit.light.webp",
 				"width": 1024,
-				"height": 1214
+				"height": 904
 			},
 			"dark": {
 				"file": "images/carb-entry-edit.dark.webp",
 				"width": 1024,
-				"height": 1214
+				"height": 904
 			}
 		}
 	},
@@ -271,13 +271,13 @@
 		"variants": {
 			"light": {
 				"file": "images/clock-example.light.webp",
-				"width": 158,
-				"height": 146
+				"width": 480,
+				"height": 172
 			},
 			"dark": {
 				"file": "images/clock-example.dark.webp",
-				"width": 158,
-				"height": 146
+				"width": 480,
+				"height": 172
 			}
 		}
 	},
@@ -317,24 +317,24 @@
 			"light": {
 				"file": "images/connector-dexcom-credentials.light.webp",
 				"width": 1488,
-				"height": 646
+				"height": 670
 			},
 			"dark": {
 				"file": "images/connector-dexcom-credentials.dark.webp",
 				"width": 1488,
-				"height": 646
+				"height": 670
 			}
 		},
 		"anchors": {
 			"username": {
 				"x": 50,
-				"y": 230,
+				"y": 242,
 				"width": 1388,
 				"height": 72
 			},
 			"password": {
 				"x": 50,
-				"y": 468,
+				"y": 492,
 				"width": 1300,
 				"height": 72
 			}
@@ -371,7 +371,7 @@
 		}
 	},
 	"deduplication-card": {
-		"alt": "The Deduplicate Records tool, under Data Maintenance on the Connectors and Apps settings page. It explains that it links records from different data sources that describe the same event, and offers a Run Deduplication button.",
+		"alt": "The Deduplicate Records tool, under Data Maintenance on the Data Quality settings page. It explains that it links records from different data sources that describe the same event, and offers a Run Deduplication button.",
 		"variants": {
 			"light": {
 				"file": "images/deduplication-card.light.webp",
@@ -417,21 +417,21 @@
 		"anchors": {
 			"search": {
 				"x": 586,
-				"y": 330,
-				"width": 1780,
-				"height": 76
+				"y": 368,
+				"width": 1740,
+				"height": 72
 			},
 			"favorites": {
-				"x": 2386,
-				"y": 336,
-				"width": 170,
+				"x": 2346,
+				"y": 372,
+				"width": 182,
 				"height": 64
 			},
 			"sort": {
-				"x": 2598,
-				"y": 332,
-				"width": 208,
-				"height": 72
+				"x": 2571,
+				"y": 372,
+				"width": 235,
+				"height": 64
 			}
 		}
 	},
@@ -441,12 +441,12 @@
 			"light": {
 				"file": "images/food-composer.light.webp",
 				"width": 2220,
-				"height": 442
+				"height": 778
 			},
 			"dark": {
 				"file": "images/food-composer.dark.webp",
 				"width": 2220,
-				"height": 442
+				"height": 778
 			}
 		}
 	},
@@ -456,12 +456,177 @@
 			"light": {
 				"file": "images/guest-code-entry.light.webp",
 				"width": 896,
-				"height": 680
+				"height": 692
 			},
 			"dark": {
 				"file": "images/guest-code-entry.dark.webp",
 				"width": 896,
-				"height": 680
+				"height": 692
+			}
+		}
+	},
+	"loop-analysis-daily-glucose": {
+		"alt": "The glucose chart of the Daily profile page, with the carbs chart under it. The carbs chart is the last chart on the page. Its axis shows the time of day for all the charts. On the glucose chart, a line shows the median glucose at each time of day. Two shaded bands around the line show the middle half and most of the readings. The target range is behind them. A key under the glucose chart gives the name of each band.",
+		"variants": {
+			"light": {
+				"file": "images/loop-analysis-daily-glucose.light.webp",
+				"width": 2272,
+				"height": 892
+			},
+			"dark": {
+				"file": "images/loop-analysis-daily-glucose.dark.webp",
+				"width": 2272,
+				"height": 892
+			}
+		}
+	},
+	"loop-analysis-daily-profile": {
+		"alt": "The row of tiles at the top of the Daily profile page. The tiles show the days with data, the total insulin each day, the basal and bolus split, automatic and manual boluses, delivered and scheduled basal, and the net loop correction each day. A link under the tiles opens the Insulin Delivery report.",
+		"variants": {
+			"light": {
+				"file": "images/loop-analysis-daily-profile.light.webp",
+				"width": 2272,
+				"height": 288
+			},
+			"dark": {
+				"file": "images/loop-analysis-daily-profile.dark.webp",
+				"width": 2272,
+				"height": 288
+			}
+		}
+	},
+	"loop-analysis-event-glucose-change": {
+		"alt": "The change in glucose chart of the Meals and events page, with the carbs on board chart under it. The carbs on board chart is the last chart on the page. Its axis shows the hours before and after the event for all the charts. Above the charts, a key gives the colour of the meals and the number of meals. All meals are aligned at zero, the time of the meal. A line shows the median change in glucose from the start, with shaded bands for the spread, from one hour before to five hours after. A note under the charts gives the meaning of the bands.",
+		"variants": {
+			"light": {
+				"file": "images/loop-analysis-event-glucose-change.light.webp",
+				"width": 2272,
+				"height": 1124
+			},
+			"dark": {
+				"file": "images/loop-analysis-event-glucose-change.dark.webp",
+				"width": 2272,
+				"height": 1124
+			}
+		}
+	},
+	"loop-analysis-event-metrics": {
+		"alt": "The table of what happened after each event, with one column for meals and one column for correction boluses. Each cell shows the median and the middle half. The meals column shows the rise figures. The corrections column shows the fall figures: the drop to the window end, the lowest glucose, the time to the lowest glucose, the drop for each unit above schedule, and how many events went below range.",
+		"variants": {
+			"light": {
+				"file": "images/loop-analysis-event-metrics.light.webp",
+				"width": 2272,
+				"height": 2116
+			},
+			"dark": {
+				"file": "images/loop-analysis-event-metrics.dark.webp",
+				"width": 2272,
+				"height": 2116
+			}
+		}
+	},
+	"loop-analysis-filter-bar": {
+		"alt": "The Loop Analysis filters, under the date range in the reports Filters panel. They hold a choice of period to compare with, a profile picker, buttons for the days of the week to include, and tick boxes that leave out the time of overrides, temporary targets, exercise, illness and time not in closed loop.",
+		"variants": {
+			"light": {
+				"file": "images/loop-analysis-filter-bar.light.webp",
+				"width": 670,
+				"height": 1078
+			},
+			"dark": {
+				"file": "images/loop-analysis-filter-bar.dark.webp",
+				"width": 670,
+				"height": 1078
+			}
+		}
+	},
+	"loop-analysis-loop-health": {
+		"alt": "The hourly charts of the Loop health page. Bar charts show the share of each hour of the day with the loop closed, the CGM active and the pump active. More bar charts show the algorithm zero temps and the time at max basal by hour. The last chart shows the sensitivity ratio of the loop by hour, with a line at 1.0.",
+		"variants": {
+			"light": {
+				"file": "images/loop-analysis-loop-health.light.webp",
+				"width": 2272,
+				"height": 2028
+			},
+			"dark": {
+				"file": "images/loop-analysis-loop-health.dark.webp",
+				"width": 2272,
+				"height": 2028
+			}
+		}
+	},
+	"loop-analysis-meals-events": {
+		"alt": "The Events to align box on the Meals and events page. Each row is one kind of event. A row has a kind of event, here meals, a start time and an end time of day, and a range of grams for meals. Under the rows are the time to show before and after each event, and a tick box for isolated events only.",
+		"variants": {
+			"light": {
+				"file": "images/loop-analysis-meals-events.light.webp",
+				"width": 2272,
+				"height": 488
+			},
+			"dark": {
+				"file": "images/loop-analysis-meals-events.dark.webp",
+				"width": 2272,
+				"height": 488
+			}
+		}
+	},
+	"loop-analysis-net-correction": {
+		"alt": "The net loop correction chart of the Daily profile page, with the carbs chart under it. The carbs chart is the last chart on the page. Its axis shows the time of day for all the charts. A line shows the mean insulin that the loop added or removed at each time of day, above or below zero. A band shows the middle half of the temp basal change. Under the net loop correction chart, switches add manual temps, suspends and inferred delivery as separate lines.",
+		"variants": {
+			"light": {
+				"file": "images/loop-analysis-net-correction.light.webp",
+				"width": 2272,
+				"height": 852
+			},
+			"dark": {
+				"file": "images/loop-analysis-net-correction.dark.webp",
+				"width": 2272,
+				"height": 852
+			}
+		}
+	},
+	"loop-analysis-prediction-detail": {
+		"alt": "The By hour and context box of the Prediction accuracy page. If there is more than one curve, buttons at the top select one. A heat map shows the bias of that curve at each hour of the day. A table under it shows the bias, the MAE and the number of predictions in each context, for example after a meal or fasting.",
+		"variants": {
+			"light": {
+				"file": "images/loop-analysis-prediction-detail.light.webp",
+				"width": 2272,
+				"height": 2106
+			},
+			"dark": {
+				"file": "images/loop-analysis-prediction-detail.dark.webp",
+				"width": 2272,
+				"height": 2106
+			}
+		}
+	},
+	"loop-analysis-predictions": {
+		"alt": "The Error by horizon chart of the Prediction accuracy page. There is one chart for each prediction curve of the loop. Each chart shows the spread of the prediction minus the reading at 30, 60, 90 and 120 minutes ahead. A bold line shows the bias. The MAE and the number of predictions are above each horizon.",
+		"variants": {
+			"light": {
+				"file": "images/loop-analysis-predictions.light.webp",
+				"width": 2272,
+				"height": 1380
+			},
+			"dark": {
+				"file": "images/loop-analysis-predictions.dark.webp",
+				"width": 2272,
+				"height": 1380
+			}
+		}
+	},
+	"loop-analysis-settings-evidence": {
+		"alt": "The insulin sensitivity (ISF) box of the Settings evidence page. A chart shows the ISF of the profile as a line. Each block of the day with enough episodes has a dot for the observed figure, with its spread. A hollow dot is a figure with low confidence. Under the chart is one row for each block, with the figure, the number of episodes and the confidence.",
+		"variants": {
+			"light": {
+				"file": "images/loop-analysis-settings-evidence.light.webp",
+				"width": 2272,
+				"height": 1020
+			},
+			"dark": {
+				"file": "images/loop-analysis-settings-evidence.dark.webp",
+				"width": 2272,
+				"height": 1020
 			}
 		}
 	},
@@ -546,27 +711,27 @@
 			"light": {
 				"file": "images/sharing-invite-card.light.webp",
 				"width": 1744,
-				"height": 1308
+				"height": 1354
 			},
 			"dark": {
 				"file": "images/sharing-invite-card.dark.webp",
 				"width": 1744,
-				"height": 1308
+				"height": 1354
 			}
 		}
 	},
 	"sharing-public-link": {
-		"alt": "The Public access card, switched on and holding a freshly minted link. The address is spelled out in full (the one time Nocturne shows it) with Copy and Regenerate beside it, then a tile for each kind of data you can share or keep back, a choice between all history and the last 24 hours, and a sentence spelling out what a viewer would see.",
+		"alt": "The Public access card, switched on. The address is hidden behind dots, with buttons to show it, copy it, and regenerate it beside them, then a tile for each kind of data you can share or keep back, a choice between all history and the last 24 hours, and a sentence spelling out what a viewer would see.",
 		"variants": {
 			"light": {
 				"file": "images/sharing-public-link.light.webp",
 				"width": 1744,
-				"height": 1616
+				"height": 1584
 			},
 			"dark": {
 				"file": "images/sharing-public-link.dark.webp",
 				"width": 1744,
-				"height": 1616
+				"height": 1584
 			}
 		},
 		"anchors": {
@@ -577,10 +742,10 @@
 				"height": 37
 			},
 			"time-window": {
-				"x": 1311,
-				"y": 1248,
-				"width": 383,
-				"height": 72
+				"x": 1335,
+				"y": 1220,
+				"width": 359,
+				"height": 64
 			}
 		}
 	},
@@ -605,12 +770,12 @@
 			"light": {
 				"file": "images/sign-in.light.webp",
 				"width": 896,
-				"height": 892
+				"height": 876
 			},
 			"dark": {
 				"file": "images/sign-in.dark.webp",
 				"width": 896,
-				"height": 892
+				"height": 876
 			}
 		},
 		"anchors": {
@@ -618,28 +783,28 @@
 				"x": 50,
 				"y": 362,
 				"width": 796,
-				"height": 96
+				"height": 80
 			},
 			"request-membership": {
 				"x": 288,
-				"y": 674,
+				"y": 658,
 				"width": 319,
 				"height": 72
 			}
 		}
 	},
 	"totp-challenge": {
-		"alt": "The second step of signing in on an account that uses an authenticator app. Nocturne says the passkey was accepted and asks for the current six-digit code before it will finish signing you in.",
+		"alt": "The second step of signing in on an account that uses an authenticator app. After the passkey, Nocturne asks for the current six-digit code from the authenticator app before it will finish signing you in.",
 		"variants": {
 			"light": {
 				"file": "images/totp-challenge.light.webp",
 				"width": 896,
-				"height": 1032
+				"height": 1044
 			},
 			"dark": {
 				"file": "images/totp-challenge.dark.webp",
 				"width": 896,
-				"height": 1032
+				"height": 1044
 			}
 		}
 	},
@@ -649,12 +814,12 @@
 			"light": {
 				"file": "images/totp-setup.light.webp",
 				"width": 1024,
-				"height": 1312
+				"height": 1336
 			},
 			"dark": {
 				"file": "images/totp-setup.dark.webp",
 				"width": 1024,
-				"height": 1312
+				"height": 1336
 			}
 		}
 	},
@@ -693,18 +858,18 @@
 		"variants": {
 			"light": {
 				"file": "images/tracker-pill-bar.light.webp",
-				"width": 1738,
+				"width": 1700,
 				"height": 184
 			},
 			"dark": {
 				"file": "images/tracker-pill-bar.dark.webp",
-				"width": 1738,
+				"width": 1700,
 				"height": 184
 			}
 		},
 		"anchors": {
 			"trackers": {
-				"x": 1002,
+				"x": 1028,
 				"y": 0,
 				"width": 206,
 				"height": 88
@@ -737,7 +902,7 @@
 			"dark": {
 				"file": "images/tracker-thresholds.dark.webp",
 				"width": 924,
-				"height": 984
+				"height": 1156
 			}
 		}
 	},

@@ -12,6 +12,7 @@
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { bg, bgLabel, formatShortDate, hourLabel } from "$lib/utils/formatting";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import { dashClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
 
   type Weekday = keyof typeof DayOfWeek;
@@ -68,7 +69,7 @@
   // x-axis reads as a time of day; each weekday's mean is shown in the display unit.
   const chartData = $derived.by(() => {
     const today = new Date();
-    return (weekdayResource.current ?? []).map((slot) => {
+    return (weekdayResource.current?.slots ?? []).map((slot) => {
       const row: { time: Date } & Partial<Record<Weekday, number>> = {
         time: new Date(
           today.getFullYear(),
@@ -146,6 +147,12 @@
           shape: "line",
         }))}
       />
+    {:else if weekdayResource.current?.timeZoneUnavailableReason}
+      <p class="text-sm text-muted-foreground">
+        <TimeZoneNote reason={weekdayResource.current.timeZoneUnavailableReason}>
+          This report cannot average glucose by weekday and time of day.
+        </TimeZoneNote>
+      </p>
     {:else}
       <div class="flex h-[280px] items-center justify-center @md:h-[360px]">
         <EmptyState

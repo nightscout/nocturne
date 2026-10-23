@@ -4,6 +4,7 @@ using Nocturne.API.Services.Notifications;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Tests.Services.Notifications;
 
@@ -18,6 +19,9 @@ public class NotificationV1ServiceTests
     private readonly Mock<IAuthorizationService> _mockAuthorizationService;
     private readonly Mock<ISignalRBroadcastService> _mockSignalRBroadcastService;
     private readonly Mock<IPushoverService> _mockPushoverService;
+    private readonly LegacyAlarmSnoozeStore _snoozes = new(TimeProvider.System);
+    private static readonly Guid TenantA = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private static readonly Guid TenantB = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     private readonly NotificationV1Service _service;
 
     public NotificationV1ServiceTests()
@@ -26,12 +30,41 @@ public class NotificationV1ServiceTests
         _mockAuthorizationService = new Mock<IAuthorizationService>();
         _mockSignalRBroadcastService = new Mock<ISignalRBroadcastService>();
         _mockPushoverService = new Mock<IPushoverService>();
-        _service = new NotificationV1Service(
+        _service = CreateService(TenantA, _mockPushoverService.Object);
+    }
+
+    private NotificationV1Service CreateService(Guid tenantId, IPushoverService? pushover = null) =>
+        new(
             _mockLogger.Object,
             _mockAuthorizationService.Object,
             _mockSignalRBroadcastService.Object,
-            _mockPushoverService.Object
+            Mock.Of<ITenantAccessor>(a => a.TenantId == tenantId),
+            _snoozes,
+            pushover
         );
+
+    [Fact]
+    public async Task AckNotificationAsync_SnoozeHoldsIntoTheNextRequest()
+    {
+        var request = new NotificationAckRequest { Level = 1, Group = "default", Time = 1800000 };
+
+        var first = await CreateService(TenantA).AckNotificationAsync(request, CancellationToken.None);
+        var second = await CreateService(TenantA).AckNotificationAsync(request, CancellationToken.None);
+
+        Assert.True(first.Success);
+        Assert.False(second.Success);
+        Assert.Contains("already been snoozed", second.Message);
+    }
+
+    [Fact]
+    public async Task AckNotificationAsync_SnoozeOfOneTenantLeavesAnotherTenantsAlarm()
+    {
+        var request = new NotificationAckRequest { Level = 1, Group = "default", Time = 1800000 };
+
+        await CreateService(TenantA).AckNotificationAsync(request, CancellationToken.None);
+        var other = await CreateService(TenantB).AckNotificationAsync(request, CancellationToken.None);
+
+        Assert.True(other.Success);
     }
 
     [Fact]
@@ -151,12 +184,7 @@ public class NotificationV1ServiceTests
     [Fact]
     public async Task SendPushoverNotificationAsync_WithNoPushoverService_ReturnsSuccess()
     { // Arrange
-        var serviceWithoutPushover = new NotificationV1Service(
-            _mockLogger.Object,
-            _mockAuthorizationService.Object,
-            _mockSignalRBroadcastService.Object,
-            null
-        );
+        var serviceWithoutPushover = CreateService(TenantA);
         var level = 1;
         var group = "test-group";
         var title = "Test Alert";

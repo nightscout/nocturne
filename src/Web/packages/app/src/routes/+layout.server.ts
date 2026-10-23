@@ -15,22 +15,20 @@ import {
 } from "$lib/stores/appearance-store.svelte";
 
 /**
- * The saved display preferences this viewer's page is rendered with. A signed-in member has
- * their own. A public share viewer has no account to have any, so the link owner's presentation
- * settings stand in: a share link should show its recipient the data the way its sender reads
- * it — their units, their clock, their colours — rather than the frontend's defaults. Only
- * presentation crosses; the owner's display language does not, because adopting it would rewrite
- * the viewer's own base-domain-wide language cookie. A refused call leaves the viewer on the
- * defaults instead of failing the page.
+ * The owner's presentation settings, for the viewers with no account of their own to save any: a
+ * public share and a guest link. They should see the data the way its owner reads it (their
+ * units, their clock, their colours) rather than the frontend's defaults. Only presentation
+ * crosses; the owner's display language does not, because adopting it would rewrite the viewer's
+ * own base-domain-wide language cookie. A refused call leaves the viewer on the defaults instead of
+ * failing the page.
  */
-async function resolveServerPreferences(
+async function resolveTenantPresentation(
   locals: App.Locals
 ): Promise<UserDisplayPreferences | null> {
-  if (locals.isAuthenticated) return locals.user?.preferences ?? null;
-  if (!locals.isShareHost) return null;
+  if (!locals.isShareHost && !locals.isGuestSession) return null;
 
   try {
-    return await locals.apiClient.shareAppearance.getShareAppearance();
+    return await locals.apiClient.tenantAppearance.getTenantAppearance();
   } catch {
     return null;
   }
@@ -64,18 +62,27 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies, depends
     kind === "apex" ? Boolean((await getRequestStatus(locals))?.tenantSlug) : false
   );
 
-  // Display preferences for SSR, in the same precedence the browser applies them
-  // (backend blob over the mirrored cookie) so the markup matches hydration. Together with the
-  // scopes because on a share host both are API round-trips and neither reads the other.
-  const [serverPrefs, permissions] = await Promise.all([
-    resolveServerPreferences(locals),
+  // Display preferences for SSR, in the same precedence the browser applies them so the markup
+  // matches hydration: a share is drawn as its owner draws it, the viewer's cookie left out;
+  // a member's backend blob wins over the cookie; a guest's own cookie wins field by field, and
+  // the tenant's presentation stands in only for the defaults. Together with the scopes because
+  // on a share host both are API round-trips and neither reads the other.
+  const [tenantPresentation, permissions] = await Promise.all([
+    resolveTenantPresentation(locals),
     resolvePermissions(locals),
   ]);
-  const cookiePrefs = parsePrefsCookie(cookies.get(PREFS_COOKIE_NAME));
+  const serverPrefs = locals.isShareHost
+    ? tenantPresentation
+    : locals.isAuthenticated
+      ? (locals.user?.preferences ?? null)
+      : null;
+  const tenantPreferences = locals.isGuestSession ? tenantPresentation : null;
+  const cookiePrefs = locals.isShareHost ? null : parsePrefsCookie(cookies.get(PREFS_COOKIE_NAME));
   const tenantDefault = locals.isAuthenticated ? locals.user?.defaultGlucoseUnits : undefined;
   const displayPreferences = [
     hasStoredPreferences(serverPrefs) ? serverPrefs : null,
     cookiePrefs,
+    hasStoredPreferences(tenantPreferences) ? tenantPreferences : null,
     tenantDefault ? { glucoseUnits: tenantDefault } : null,
   ].filter((prefs) => prefs !== null && prefs !== undefined);
   const displayLanguage = resolveLanguage(
@@ -83,12 +90,16 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies, depends
     cookies.get(LANGUAGE_COOKIE_NAME)
   );
 
+  const hasAccount = locals.isAuthenticated && !locals.isGuestSession;
+
   return {
     displayPreferences,
     displayLanguage,
     serverPreferences: serverPrefs,
+    tenantPreferences,
     user: locals.user,
     isAuthenticated: locals.isAuthenticated,
+    hasAccount,
     isShareHost: locals.isShareHost,
     effectivePermissions: permissions.scopes ?? [],
     limitTo24Hours: permissions.limitTo24Hours ?? false,

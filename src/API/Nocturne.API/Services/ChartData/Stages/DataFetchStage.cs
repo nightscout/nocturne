@@ -36,7 +36,7 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// basal IOB sees temp basals that began before the window, under the same cap as
 /// <see cref="Nocturne.API.Services.Analytics.ChartDataService"/> because the ascending read truncates the newest
 /// rows. Consumers sort for themselves. <see cref="ChartDataContext.DisplayTempBasals"/> is the
-/// subset overlapping the display window, chosen by
+/// delivered pieces of the whole fetch that overlap the display window, chosen by
 /// <see cref="Nocturne.API.Services.Analytics.ChartDataService.SelectDisplayTempBasals"/>.
 /// </para>
 /// <para>
@@ -65,7 +65,8 @@ internal sealed class DataFetchStage(
     ILogger<DataFetchStage> logger,
     IHeartRateService heartRateService,
     IStepCountService stepCountService,
-    ISleepService sleepService
+    ISleepService sleepService,
+    TimeProvider timeProvider
 ) : IChartDataStage
 {
     public async Task<ChartDataContext> ExecuteAsync(ChartDataContext context, CancellationToken cancellationToken)
@@ -299,8 +300,9 @@ internal sealed class DataFetchStage(
         var displayCarbIntakes = carbIntakeList
             .Where(c => c.Mills >= startTime && c.Mills <= endTime)
             .ToList();
+        var nowMills = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         var displayTempBasals = Nocturne.API.Services.Analytics.ChartDataService
-            .SelectDisplayTempBasals(tempBasalList, startTime, endTime);
+            .SelectDisplayTempBasals(tempBasalList, startTime, endTime, nowMills);
 
         logger.LogDebug(
             "DataFetchStage: fetched {Glucose} glucose, {Bolus} bolus, {Carb} carb, {BgCheck} bg-check, {DeviceEvent} device-event, {TempBasal} temp-basal, {HeartRate} heart-rate, {StepCount} step-count, {Sleep} sleep records",
@@ -326,6 +328,7 @@ internal sealed class DataFetchStage(
             DeviceEventList = deviceEventList,
             TempBasalList = tempBasalList,
             DisplayTempBasals = displayTempBasals,
+            NowMills = nowMills,
             ApsSnapshotList = apsSnapshotList,
             LatestPumpSnapshot = await latestPumpSnapshotTask,
             BasalInjectionList = basalInjectionList,

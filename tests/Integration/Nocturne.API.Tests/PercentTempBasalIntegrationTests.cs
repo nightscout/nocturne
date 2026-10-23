@@ -297,4 +297,28 @@ public class PercentTempBasalIntegrationTests : ApiIntegrationTestBase
         stored.Should().HaveCount(520);
         stored.Should().OnlyContain(t => t.Rate == 0.5 && t.RateFromSchedule);
     }
+
+    /// <summary>A temp judged while its rate was unknown is judged again once the rate resolves.</summary>
+    [Fact]
+    public async Task AnUnknownRateResolving_SendsAnUncorroboratedTempBackToBeJudged()
+    {
+        var start = DateTimeOffset.UtcNow.AddDays(-20);
+        await WithTenantScopeAsync(sp => sp.GetRequiredService<ITempBasalRepository>().BulkCreateAsync(
+            [new V4Models.TempBasal
+            {
+                LegacyId = ObjectIdFor("uncorroborated-percent"),
+                StartTimestamp = start.UtcDateTime,
+                EndTimestamp = start.AddMinutes(30).UtcDateTime,
+                Percent = -50,
+                Origin = V4Models.TempBasalOrigin.Algorithm,
+                OriginEvidence = V4Models.TempBasalOriginEvidence.Uncorroborated,
+            }],
+            WriteOrigin.Backfill, CancellationToken.None));
+
+        await PostAsync("/api/v1/profile", FlatProfile(StoreName(), 1.0, start.AddDays(-1)));
+
+        var stored = await StoredAtAsync(start.ToString("O"));
+        stored.Rate.Should().Be(0.5);
+        stored.OriginEvidence.Should().Be(V4Models.TempBasalOriginEvidence.Uploader);
+    }
 }

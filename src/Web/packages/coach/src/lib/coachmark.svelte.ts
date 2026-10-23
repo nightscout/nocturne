@@ -59,9 +59,11 @@ export function coachmark(options: CoachMarkOptions | CoachMarkOptions[]) {
     // tear down and re-run every time coach state mutates and triggering the
     // depth-exceeded guard. Untrack to keep the attachment effect's
     // dependency set bounded to the parent component's reactive inputs.
+    let showTipLabel = "";
     const registrations: { opts: CoachMarkOptions; reg: MarkRegistration; unregister: () => void }[] = [];
 
     untrack(() => {
+      showTipLabel = ctx.labels.showTip;
       for (const opts of optionsArray) {
         const reg = buildRegistration(opts, element);
         if (!reg) continue;
@@ -75,7 +77,7 @@ export function coachmark(options: CoachMarkOptions | CoachMarkOptions[]) {
     // Create ONE hotspot dot regardless of how many keys
     const dot = document.createElement("button");
     dot.className = "coach-hotspot";
-    dot.setAttribute("aria-label", "Show tip");
+    dot.setAttribute("aria-label", showTipLabel);
     dot.setAttribute("type", "button");
     dot.addEventListener("click", (e) => {
       e.stopPropagation();

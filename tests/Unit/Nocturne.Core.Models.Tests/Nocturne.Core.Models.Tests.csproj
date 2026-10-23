@@ -24,6 +24,9 @@
         <None Include="Analytics\SensorIntegrity\sensor_integrity_golden.json">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
+        <None Include="..\..\Fixtures\first-day-of-week.json" Link="first-day-of-week.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\..\src\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />

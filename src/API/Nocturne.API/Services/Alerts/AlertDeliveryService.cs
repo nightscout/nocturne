@@ -23,12 +23,14 @@ namespace Nocturne.API.Services.Alerts;
 /// already know the rule should reach the user. Snooze is enforced here instead, because it
 /// belongs to the instance rather than the rule: <see cref="DispatchAsync"/> sends nothing, on
 /// any channel, for an instance under <see cref="AlertSnooze"/>. Real-time
-/// <see cref="ISignalRBroadcastService"/> notifications are sent alongside channel deliveries.
+/// <see cref="ISignalRBroadcastService"/> notifications and the <see cref="IEngineAlarmRelay"/> alarm
+/// are sent alongside channel deliveries, whatever the channels.
 /// </remarks>
 internal sealed class AlertDeliveryService(
     INocturneDbContextFactory contextFactory,
     ITenantAccessor tenantAccessor,
     ISignalRBroadcastService broadcastService,
+    IEngineAlarmRelay alarmRelay,
     IServiceProvider serviceProvider,
     ILogger<AlertDeliveryService> logger)
     : IAlertDeliveryService
@@ -73,6 +75,8 @@ internal sealed class AlertDeliveryService(
         {
             logger.LogWarning(ex, "Failed to broadcast alert_dispatch for instance {InstanceId}", alertInstanceId);
         }
+
+        await alarmRelay.RaiseAsync(payload, ct);
 
         var payloadJson = JsonSerializer.Serialize(payload);
 

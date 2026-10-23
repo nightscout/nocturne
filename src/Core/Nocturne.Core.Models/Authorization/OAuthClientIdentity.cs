@@ -12,8 +12,8 @@ public enum OAuthClientIdentity
     SelfRegistered,
 
     /// <summary>
-    /// The client is in the known-app directory, but a device-code approval added to the grant,
-    /// so its tokens may belong to other software presenting the same <c>client_id</c>.
+    /// The client is in the known-app directory, but a device-code approval added to the grant; see
+    /// <c>OAuthGrantEntity.ApprovedByDeviceCode</c>.
     /// </summary>
     Unverified,
 

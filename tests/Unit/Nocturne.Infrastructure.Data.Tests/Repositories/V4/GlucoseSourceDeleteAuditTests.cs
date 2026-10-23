@@ -1,7 +1,11 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -20,9 +24,19 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
     /// <summary>A row of the repository's type, unsaved.</summary>
     protected abstract TEntity NewRow(Guid id, DateTime timestamp, string? dataSource, string? device);
 
-    protected abstract Task<int> DeleteBySourceAsync(string source);
+    protected abstract Task<int> DeleteBySourceAsync(string source, WriteOrigin origin);
 
-    protected abstract Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to);
+    protected abstract Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin);
+
+    private Mock<IDataEventSink<Entry>>? _entrySink;
+
+    // Read by CreateRepository from the base constructor, before this class's initialisers run.
+    protected Mock<IDataEventSink<Entry>> EntrySink => _entrySink ??= new();
+
+    private Task<int> DeleteBySourceAsync(string source) => DeleteBySourceAsync(source, WriteOrigin.Live);
+
+    private Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to) =>
+        DeleteByTimeRangeAsync(from, to, WriteOrigin.Live);
 
     private Guid Seed(DateTime timestamp, string? dataSource = null, string? device = null) =>
         Add(NewRow(Guid.CreateVersion7(), timestamp, dataSource, device));
@@ -43,7 +57,7 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
     }
 
     [Fact]
-    public async Task DeleteBySourceAsync_UserContext_StampsDeletedByUserAndWritesSummaryRow()
+    public async Task DeleteBySourceAsync_UserContext_StampsDeletedByUserAndWritesARowPerRecord()
     {
         Seed(new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc), dataSource: "dexcom");
         var byDevice = Seed(new DateTime(2026, 6, 1, 9, 0, 0, DateTimeKind.Utc), device: "dexcom");
@@ -53,12 +67,9 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
         deleted.Should().Be(2);
         (await ReadDeleteStateAsync(byDevice)).DeletedByUser.Should().BeTrue();
 
-        var log = (await ReadAuditLogAsync()).Should().ContainSingle().Subject;
-        log.Action.Should().Be("bulk_delete");
-        log.EntityType.Should().Be(AuditEntityType);
-        log.EntityId.Should().BeNull();
-        log.SubjectName.Should().Be("tester");
-        ReadSummary(log.ChangesJson).Should().Be((2, "data_source=dexcom"));
+        var log = await ReadAuditLogAsync();
+        log.Should().HaveCount(2).And.OnlyContain(l =>
+            l.Action == "delete" && l.EntityType == AuditEntityType && l.SubjectName == "tester");
     }
 
     [Fact]
@@ -97,7 +108,7 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
     }
 
     [Fact]
-    public async Task DeleteByTimeRangeAsync_UserContext_StampsDeletedByUserAndWritesSummaryRow()
+    public async Task DeleteByTimeRangeAsync_UserContext_StampsDeletedByUserAndWritesARowPerRecord()
     {
         var from = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
         var to = new DateTime(2026, 6, 2, 0, 0, 0, DateTimeKind.Utc);
@@ -116,10 +127,88 @@ public abstract class GlucoseSourceDeleteAuditTests<TEntity> : AuditedSoftDelete
         (await ReadDeleteStateAsync(atUpperBound)).DeletedAt.Should().NotBeNull("the upper bound is inclusive");
         (await ReadDeleteStateAsync(afterTo)).DeletedAt.Should().BeNull("rows after the window are out of scope");
 
+        var log = await ReadAuditLogAsync();
+        log.Should().HaveCount(3).And.OnlyContain(l =>
+            l.Action == "delete" && l.EntityType == AuditEntityType && l.SubjectName == "tester");
+    }
+
+    [Fact]
+    public async Task DeleteBySourceAsync_Live_TellsTheEntrySinkWhichReadingsWereDeleted()
+    {
+        var at = new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc);
+        Seed(at, dataSource: "dexcom");
+        Seed(at.AddMinutes(5), dataSource: "libre");
+
+        await DeleteBySourceAsync("dexcom", WriteOrigin.Live);
+
+        EntrySink.Verify(s => s.OnWrittenAsync(
+            It.Is<IReadOnlyList<Entry>>(e => e.Count == 1 && e[0].Mills == new DateTimeOffset(at).ToUnixTimeMilliseconds()),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteByTimeRangeAsync_Live_TellsTheEntrySinkWhichReadingsWereDeleted()
+    {
+        var at = new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc);
+        Seed(at, dataSource: "dexcom");
+        Seed(at.AddDays(2), dataSource: "dexcom");
+
+        await DeleteByTimeRangeAsync(at.AddHours(-1), at.AddHours(1), WriteOrigin.Live);
+
+        EntrySink.Verify(s => s.OnWrittenAsync(
+            It.Is<IReadOnlyList<Entry>>(e => e.Count == 1 && e[0].Mills == new DateTimeOffset(at).ToUnixTimeMilliseconds()),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteBySourceAsync_LiveBeyondTheBroadcastCap_RaisesTheBulkDeleteSignal()
+    {
+        SeedMany(AuditedBulkDeleteExtensions.BroadcastMaterializationCap + 1, "dexcom");
+
+        var deleted = await DeleteBySourceAsync("dexcom", WriteOrigin.Live);
+
+        EntrySink.Verify(s => s.OnBulkDeletedAsync(deleted, It.IsAny<CancellationToken>()), Times.Once);
         var log = (await ReadAuditLogAsync()).Should().ContainSingle().Subject;
         log.Action.Should().Be("bulk_delete");
-        log.EntityType.Should().Be(AuditEntityType);
-        ReadSummary(log.ChangesJson).Should().Be((3, $"timestamp={from:O}..{to:O}"));
+        ReadSummary(log.ChangesJson).Should().Be((deleted, "data_source=dexcom"));
+    }
+
+    [Fact]
+    public async Task DeleteByTimeRangeAsync_LiveBeyondTheBroadcastCap_RaisesTheBulkDeleteSignal()
+    {
+        SeedMany(AuditedBulkDeleteExtensions.BroadcastMaterializationCap + 1, "dexcom");
+
+        var deleted = await DeleteByTimeRangeAsync(null, null, WriteOrigin.Live);
+
+        EntrySink.Verify(s => s.OnBulkDeletedAsync(deleted, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteBySourceAsync_BackfillBeyondTheBroadcastCap_RaisesNoBulkDeleteSignal()
+    {
+        SeedMany(AuditedBulkDeleteExtensions.BroadcastMaterializationCap + 1, "dexcom");
+
+        await DeleteBySourceAsync("dexcom", WriteOrigin.Backfill);
+
+        EntrySink.Verify(s => s.OnBulkDeletedAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Deletes_MatchingNothing_RaiseNothing()
+    {
+        Seed(new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc), dataSource: "libre");
+
+        await DeleteBySourceAsync("dexcom", WriteOrigin.Live);
+        await DeleteByTimeRangeAsync(new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc), null, WriteOrigin.Live);
+
+        EntrySink.VerifyNoOtherCalls();
+    }
+
+    private void SeedMany(int count, string dataSource)
+    {
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < count; i++)
+            Seed(start.AddMinutes(i), dataSource);
     }
 }
 
@@ -132,7 +221,7 @@ public class CalibrationRepositorySourceDeleteTests : GlucoseSourceDeleteAuditTe
     protected override string AuditEntityType => "Calibration";
 
     protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
-        _repository = new CalibrationRepository(contextFactory, auditContext, Logger<CalibrationRepository>());
+        _repository = new CalibrationRepository(contextFactory, auditContext, Logger<CalibrationRepository>(), entrySink: EntrySink.Object);
 
     protected override CalibrationEntity NewRow(Guid id, DateTime timestamp, string? dataSource, string? device) =>
         new()
@@ -145,10 +234,11 @@ public class CalibrationRepositorySourceDeleteTests : GlucoseSourceDeleteAuditTe
             Slope = 1.0,
         };
 
-    protected override Task<int> DeleteBySourceAsync(string source) => _repository.DeleteBySourceAsync(source);
+    protected override Task<int> DeleteBySourceAsync(string source, WriteOrigin origin) =>
+        _repository.DeleteBySourceAsync(source, origin);
 
-    protected override Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to) =>
-        _repository.DeleteByTimeRangeAsync(from, to);
+    protected override Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin) =>
+        _repository.DeleteByTimeRangeAsync(from, to, origin);
 }
 
 [Trait("Category", "Unit")]
@@ -160,7 +250,7 @@ public class MeterGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAuditT
     protected override string AuditEntityType => "MeterGlucose";
 
     protected override void CreateRepository(INocturneDbContextFactory contextFactory, IAuditContext auditContext) =>
-        _repository = new MeterGlucoseRepository(contextFactory, auditContext, Logger<MeterGlucoseRepository>());
+        _repository = new MeterGlucoseRepository(contextFactory, auditContext, Logger<MeterGlucoseRepository>(), entrySink: EntrySink.Object);
 
     protected override MeterGlucoseEntity NewRow(Guid id, DateTime timestamp, string? dataSource, string? device) =>
         new()
@@ -173,10 +263,11 @@ public class MeterGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAuditT
             Mgdl = 120,
         };
 
-    protected override Task<int> DeleteBySourceAsync(string source) => _repository.DeleteBySourceAsync(source);
+    protected override Task<int> DeleteBySourceAsync(string source, WriteOrigin origin) =>
+        _repository.DeleteBySourceAsync(source, origin);
 
-    protected override Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to) =>
-        _repository.DeleteByTimeRangeAsync(from, to);
+    protected override Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin) =>
+        _repository.DeleteByTimeRangeAsync(from, to, origin);
 }
 
 [Trait("Category", "Unit")]
@@ -193,7 +284,8 @@ public class SensorGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAudit
             contextFactory,
             new Mock<IDeduplicationService>().Object,
             auditContext,
-            Logger<SensorGlucoseRepository>());
+            Logger<SensorGlucoseRepository>(),
+            entrySink: EntrySink.Object);
 
     protected override SensorGlucoseEntity NewRow(Guid id, DateTime timestamp, string? dataSource, string? device) =>
         new()
@@ -206,8 +298,9 @@ public class SensorGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAudit
             Mgdl = 120,
         };
 
-    protected override Task<int> DeleteBySourceAsync(string source) => _repository.DeleteBySourceAsync(source);
+    protected override Task<int> DeleteBySourceAsync(string source, WriteOrigin origin) =>
+        _repository.DeleteBySourceAsync(source, origin);
 
-    protected override Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to) =>
-        _repository.DeleteByTimeRangeAsync(from, to);
+    protected override Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin) =>
+        _repository.DeleteByTimeRangeAsync(from, to, origin);
 }

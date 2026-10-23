@@ -2,12 +2,10 @@ using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.AspNetCore.Routing;
 using Moq;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Monitoring;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -236,34 +234,10 @@ public class AlertReplayReadScopeTests
         AutoResolveEnabled: false,
         AutoResolveParams: null);
 
-    /// <summary>
-    /// Runs the authorization filters the action really answers to — MVC applies class-level
-    /// filters alongside the action's own, and the gate here is declared on the class.
-    /// </summary>
-    private static IActionResult? Evaluate(string actionName, bool authenticated, string[] grantedScopes)
-    {
-        var httpContext = new DefaultHttpContext();
-        if (authenticated)
-            httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true };
-        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes, StringComparer.Ordinal);
-
-        var action = typeof(AlertReplayController)
-            .GetMethod(actionName, BindingFlags.Public | BindingFlags.Instance)!;
-
-        var filters = typeof(AlertReplayController).GetCustomAttributes(inherit: true)
-            .Concat(action.GetCustomAttributes(inherit: true))
-            .OfType<IAuthorizationFilter>();
-
-        var actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
-
-        foreach (var filter in filters)
-        {
-            var context = new AuthorizationFilterContext(actionContext, new List<IFilterMetadata>());
-            filter.OnAuthorization(context);
-            if (context.Result is not null)
-                return context.Result;
-        }
-
-        return null;
-    }
+    private static IActionResult? Evaluate(string actionName, bool authenticated, string[] grantedScopes) =>
+        ActionGate.Evaluate(
+            typeof(AlertReplayController),
+            actionName,
+            new HashSet<string>(grantedScopes, StringComparer.Ordinal),
+            authenticated ? new AuthContext { IsAuthenticated = true } : null);
 }

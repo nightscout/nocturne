@@ -122,7 +122,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
             sensorGlucose, meterGlucose, calibration, TestDoubles.CanonicalGlucosePassThrough.Create(),
             Mock.Of<IDemoModeService>(), NullLogger<EntryReadService>.Instance);
         var service = new EntryService(
-            store, decomposer, Mock.Of<IEntryCache>(), events.Object, NullLogger<EntryService>.Instance);
+            store, decomposer, Mock.Of<IEntryCache>(), NullLogger<EntryService>.Instance);
 
         var documents = new Mock<IDocumentProcessingService>();
         documents.Setup(d => d.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))

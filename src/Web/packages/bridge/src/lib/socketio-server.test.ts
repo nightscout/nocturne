@@ -10,7 +10,7 @@ import MessageTranslator from './message-translator.js';
 const SECRET = 'test-instance-key-0123456789';
 
 function grant(tenantRelay: boolean, extra: Partial<RealtimeGrant> = {}): RealtimeGrant {
-  return { tenantRelay, categories: [], historyClamped: false, ...extra };
+  return { tenantRelay, categories: [], historyClamped: false, mayAck: false, ...extra };
 }
 
 describe('resolveTenantSlug', () => {
@@ -1075,6 +1075,49 @@ describe('SocketIOServer v3 /alarm namespace', () => {
     expect(socket.data.tenantSlug).toBe('rhys');
   });
 
+  it('sends a socket that subscribes after an alarm was raised the alarm still sounding', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: true })));
+    const server = makeAlarmServer();
+    const sounding = { level: 2, title: 'Urgent low', group: '0192a3b4-0000-7000-8000-000000000001' };
+    const currentAlarm = vi.fn().mockResolvedValue({ event: 'urgent_alarm', alarm: sounding });
+    server.currentAlarm = currentAlarm;
+    const socket = { ...alarmSocket('rhys'), emit: vi.fn() };
+    const ack = vi.fn();
+
+    await server.handleAlarmSubscribe(socket as never, { accessToken: 'aaps' }, ack);
+
+    expect(currentAlarm).toHaveBeenCalledExactlyOnceWith('rhys');
+    expect(socket.emit).toHaveBeenCalledExactlyOnceWith('urgent_alarm', sounding);
+    expect(ack.mock.invocationCallOrder[0]).toBeLessThan(socket.emit.mock.invocationCallOrder[0]);
+  });
+
+  it.each([
+    ['nothing sounds', () => Promise.resolve(null)],
+    ['the API cannot say', () => Promise.reject(new Error('AlarmHub down'))],
+  ])('sends a new subscriber no alarm when %s', async (_case, currentAlarm) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: true })));
+    const server = makeAlarmServer();
+    server.currentAlarm = currentAlarm;
+    const socket = { ...alarmSocket('rhys'), emit: vi.fn() };
+    const ack = vi.fn();
+
+    await server.handleAlarmSubscribe(socket as never, { accessToken: 'aaps' }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ success: true, message: 'Subscribed for alarms' });
+    expect(socket.emit).not.toHaveBeenCalled();
+  });
+
+  it('asks for no alarm for a socket it refuses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: false })));
+    const server = makeAlarmServer();
+    const currentAlarm = vi.fn().mockResolvedValue(null);
+    server.currentAlarm = currentAlarm;
+
+    await server.handleAlarmSubscribe(alarmSocket('rhys') as never, { accessToken: 'guest' });
+
+    expect(currentAlarm).not.toHaveBeenCalled();
+  });
+
   it('denies a restricted credential the API will not admit to the tenant relay', async () => {
     // An AAPS guest-style token can read entries, but it holds single
     // categories and must not receive the tenant's alarms.
@@ -1158,6 +1201,35 @@ describe('SocketIOServer v3 /alarm namespace', () => {
 
     expect(ack).toHaveBeenCalledWith({ success: false, message: 'no resolvable tenant' });
     expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('forwards an ack from a subscriber whose credential may silence alarms', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: true, mayAck: true })));
+    const server = makeAlarmServer();
+    const onAlarmAck = vi.fn();
+    server.onAlarmAck = onAlarmAck;
+    const socket = alarmSocket('rhys');
+    await server.handleAlarmSubscribe(socket as never, { accessToken: 'caregiver' });
+
+    server.handleAlarmAck(socket as never, 2, 'excursion-id', '1800000');
+
+    expect(onAlarmAck).toHaveBeenCalledExactlyOnceWith('rhys', 2, 'excursion-id', 1800000);
+  });
+
+  it.each([
+    ['says it may not', { tenantRelay: true, mayAck: false }],
+    ['does not say', { tenantRelay: true }],
+  ])('drops an ack from a subscriber whose admission %s silence alarms', async (_case, body) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission(body)));
+    const server = makeAlarmServer();
+    const onAlarmAck = vi.fn();
+    server.onAlarmAck = onAlarmAck;
+    const socket = alarmSocket('rhys');
+    await server.handleAlarmSubscribe(socket as never, { accessToken: 'follower' });
+
+    server.handleAlarmAck(socket as never, 2, 'excursion-id', 1800000);
+
+    expect(onAlarmAck).not.toHaveBeenCalled();
   });
 });
 
@@ -1248,6 +1320,42 @@ describe('SocketIOServer v3 /alarm broadcast fan-out', () => {
 
     expect(tenantEmit).toHaveBeenNthCalledWith(1, 'urgent_alarm', expect.objectContaining({ level: 2 }));
     expect(tenantEmit).toHaveBeenNthCalledWith(2, 'alarm', expect.objectContaining({ level: 1 }));
+    server.getIO()!.close();
+  });
+
+  const engineAlarm = {
+    level: 2,
+    title: 'Urgent low',
+    message: 'BG Now: 3.0 mmol/L',
+    group: '0192a3b4-0000-7000-8000-000000000001',
+    plugin: 'threshold',
+    eventName: 'threshold',
+    timestamp: 1700000000000,
+    clear: false,
+  };
+
+  it('relays an engine alarm to /alarm only, never the web tenant room', async () => {
+    const server = await startedServer();
+    const { translator, tenantEmit, alarmEmit } = relayTo(server);
+
+    translator.handleEngineAlarm('urgent_alarm', engineAlarm);
+    translator.handleEngineAlarm('alarm', { ...engineAlarm, level: 1 });
+
+    expect(alarmEmit).toHaveBeenNthCalledWith(1, 'urgent_alarm', expect.objectContaining(engineAlarm));
+    expect(alarmEmit).toHaveBeenNthCalledWith(2, 'alarm', expect.objectContaining({ level: 1, group: engineAlarm.group }));
+    expect(tenantEmit).not.toHaveBeenCalled();
+    server.getIO()!.close();
+  });
+
+  it('relays an engine all-clear to /alarm only, never the web tenant room', async () => {
+    const server = await startedServer();
+    const { translator, tenantEmit, alarmEmit } = relayTo(server);
+    const clear = { clear: true, title: 'All Clear', level: 0, group: 'default' };
+
+    translator.handleEngineClearAlarm(clear);
+
+    expect(alarmEmit).toHaveBeenCalledExactlyOnceWith('clear_alarm', clear);
+    expect(tenantEmit).not.toHaveBeenCalled();
     server.getIO()!.close();
   });
 

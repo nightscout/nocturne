@@ -325,7 +325,7 @@ public static class WidgetCatalog
             "Current time and date display",
             "Clock"),
         Top(WidgetId.Tdd, "Total Daily Dose",
-            "Today's insulin with basal/bolus breakdown",
+            "Last 24 hours of insulin with basal/bolus breakdown",
             "PieChart"),
         Main(WidgetId.GlucoseChart, "Glucose Chart",
             "Main glucose trend chart with treatments",

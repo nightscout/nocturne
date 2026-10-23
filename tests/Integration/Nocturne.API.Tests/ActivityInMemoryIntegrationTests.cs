@@ -680,46 +680,6 @@ public class ActivityInMemoryIntegrationTests : ApiIntegrationTestBase
         read.Should().BeEquivalentTo([(stillAt, "still", (JsonNode?)null), (walkingAt, "walking", (JsonNode?)null)]);
     }
 
-    [Fact]
-    public async Task CountAndBulkDelete_ByTypeMotionClass_MatchTheMotionSpansOnly()
-    {
-        var stillAt = DateTimeOffset.UtcNow.AddMinutes(-50).ToUnixTimeMilliseconds();
-        var walkingAt = stillAt + 600_000;
-        (await PostJsonAsync($"[{XDripMotionClass(stillAt, "still")},{XDripMotionClass(walkingAt, "walking")}]"))
-            .StatusCode.Should().Be(HttpStatusCode.OK);
-        (await PostJsonAsync($$"""[{"type":"exercise","mills":{{stillAt}},"duration":30}]"""))
-            .StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var counted = await WithTenantScopeAsync(services =>
-            services.GetRequiredService<IActivityService>().CountActivitiesAsync(ActivityStateSpanMapper.MotionClassType));
-        var deleted = await WithTenantScopeAsync(services =>
-            services.GetRequiredService<IActivityService>().DeleteMultipleActivitiesAsync(ActivityStateSpanMapper.MotionClassType));
-
-        counted.Should().Be(2);
-        deleted.Should().Be(2);
-        (await GetStateSpansAsync("Motion")).Should().BeEmpty();
-        (await GetStateSpansAsync("Exercise")).Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task CountAndBulkDelete_ByAnExerciseTypeThatIsAlsoAMotionClass_LeaveTheMotionSpan()
-    {
-        var at = DateTimeOffset.UtcNow.AddMinutes(-70).ToUnixTimeMilliseconds();
-        (await PostJsonAsync($"[{XDripMotionClass(at, "walking")}]")).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await PostJsonAsync($$"""[{"type":"walking","mills":{{at}},"duration":30}]"""))
-            .StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var counted = await WithTenantScopeAsync(services =>
-            services.GetRequiredService<IActivityService>().CountActivitiesAsync("walking"));
-        var deleted = await WithTenantScopeAsync(services =>
-            services.GetRequiredService<IActivityService>().DeleteMultipleActivitiesAsync("walking"));
-
-        counted.Should().Be(1);
-        deleted.Should().Be(1);
-        (await GetStateSpansAsync("Exercise")).Should().BeEmpty();
-        (await GetStateSpansAsync("Motion")).Should().ContainSingle().Which.State.Should().Be("walking");
-    }
-
     private static string XDripMotionClass(long at, string motionClass) =>
         $$"""{"type":"motion-class","timeStamp":{{at}},"created_at":"{{DateTimeOffset.FromUnixTimeMilliseconds(at):yyyy-MM-dd'T'HH:mm:ss'Z'}}","class":"{{motionClass}}"}""";
 

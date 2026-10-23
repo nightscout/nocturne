@@ -42,6 +42,8 @@ public class NotificationBase
 
     public string? Plugin { get; set; }
 
+    public string? EventName { get; set; }
+
     /// <summary>
     /// Indicates if this is an announcement notification
     /// </summary>
@@ -71,6 +73,9 @@ public class NotificationBase
 /// </summary>
 public class NotificationAckRequest
 {
+    /// <summary>Nightscout's silence time when an ack gives none.</summary>
+    public const int DefaultSilenceTimeMs = 30 * 60 * 1000;
+
     /// <summary>
     /// Level of the alarm to acknowledge (1=WARN, 2=URGENT)
     /// </summary>

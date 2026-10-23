@@ -8,10 +8,11 @@ namespace Nocturne.Core.Models;
 /// projected treatment returns it as Nightscout would, and returns none when the uploader sent none.
 /// </summary>
 /// <remarks>
-/// <see cref="V4.TempBasal.Origin"/> cannot stand in for it: a temp basal without the flag falls back
-/// to Manual, and Trio, iAPS and AAPS never send the flag, so deriving it from the origin would state
-/// <c>automatic: false</c> for temp basals whose algorithm set them. Where the origin is a reported fact
-/// (a connector, or a v4 request that names it) <see cref="Of(TempBasalOrigin)"/> gives the flag to keep.
+/// <see cref="V4.TempBasal.Origin"/> cannot stand in for it: an origin the upload did not state is a
+/// default or an inference (<see cref="V4.TempBasalOriginProvenance"/>), and deriving the flag from it
+/// would serve Nocturne's guess as the uploader's statement. Where the origin is a reported fact
+/// (a connector, a v4 request that names it, or an upload that states or echoes it)
+/// <see cref="Of(TempBasalOrigin)"/> gives the flag to keep.
 /// </remarks>
 public static class TempBasalAutomaticFlag
 {

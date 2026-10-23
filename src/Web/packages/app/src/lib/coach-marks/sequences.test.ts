@@ -9,9 +9,12 @@ const SRC = fileURLToPath(new URL("../..", import.meta.url));
 /** Keys attached with no sequence around them. Each one is eligible on every page load. */
 const STANDALONE_KEYS: readonly string[] = [];
 
+/** Its `coachmark` call attaches the key passed to `loopAnalysisMark`, so the scan reads those calls. */
+const KEY_FORWARDER = join("lib", "components", "reports", "loop-analysis", "loop-analysis-tour.svelte.ts");
+
 interface Attachment {
   file: string;
-  /** The literal `key:` of each option object in the call; null for one that is not a literal. */
+  /** The literal key of each attachment in the call, by `key:` or `coachFor`; null for one that is not a literal. */
   keys: (string | null)[];
 }
 
@@ -33,11 +36,15 @@ function callBody(source: string, open: number): string {
 
 export function findAttachments(source: string, file: string): Attachment[] {
   const attachments: Attachment[] = [];
-  for (const match of source.matchAll(/\bcoachmark\(/g)) {
+  for (const match of source.matchAll(/\b(coachmark|loopAnalysisMark)\(/g)) {
     const body = callBody(source, match.index + match[0].length - 1);
-    const keys = [...body.matchAll(/\bkey:\s*(?:"([^"]*)"|'([^']*)'|(\S))/g)].map(
+    const keyAt = match[1] === "coachmark" ? /\b(?:key:|coachFor\()\s*/ : /^\s*/;
+    const literal = /(?:"([^"]*)"|'([^']*)'|(\S))/;
+    const keys = [...body.matchAll(new RegExp(keyAt.source + literal.source, "g"))].map(
       ([, double, single]) => double ?? single ?? null,
     );
+    // The forwarder's own coachmark call, its signature and its doc comment carry the key by name.
+    if (file === KEY_FORWARDER && keys.every((key) => key === null)) continue;
     attachments.push({ file, keys: keys.length > 0 ? keys : [null] });
   }
   return attachments;
@@ -97,6 +104,16 @@ describe("the attachment scan", () => {
 
     expect(found).toEqual(["tour.one", "tour.two", "tour.three"]);
     expect(["tour.one", "tour.four"].filter((key) => !found.includes(key))).toEqual(["tour.four"]);
+  });
+
+  it("reads a key taken from the copy table or passed to the Loop Analysis helper", () => {
+    const found = findAttachments(
+      `<div {@attach coachmark({ ...coachFor("tour.one"), completeOn: { event: "click" } })}></div>
+       <div {@attach loopAnalysisMark("tour.two")}></div>`,
+      "fixture.svelte",
+    ).flatMap((a) => a.keys);
+
+    expect(found).toEqual(["tour.one", "tour.two"]);
   });
 
   it("flags a key it cannot read", () => {

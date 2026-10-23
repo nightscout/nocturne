@@ -1,4 +1,5 @@
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Contracts.Analytics;
@@ -108,13 +109,15 @@ public interface IStatisticsService
     /// </summary>
     /// <param name="values">Glucose values in mg/dL.</param>
     /// <param name="entries"><see cref="SensorGlucose"/> entries with timestamps for time-dependent metrics.</param>
+    /// <param name="timeZone">Tenant zone that bounds the days of <see cref="CalculateADRR"/>; null is UTC.</param>
     /// <returns>
     /// A <see cref="GlycemicVariability"/> containing all variability metrics, or null for fewer
     /// than two plausible glucose values.
     /// </returns>
     GlycemicVariability? CalculateGlycemicVariability(
         IEnumerable<double> values,
-        IEnumerable<SensorGlucose> entries
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo? timeZone
     );
 
     /// <summary>
@@ -132,14 +135,15 @@ public interface IStatisticsService
     double CalculateMAGE(IEnumerable<double> values);
 
     /// <summary>
-    /// Calculate Average Daily Risk Range (ADRR).
+    /// Calculate Average Daily Risk Range (ADRR) over tenant-local days.
     /// </summary>
-    /// <param name="values">Glucose values in mg/dL.</param>
-    /// <returns>ADRR value.</returns>
-    double CalculateADRR(IEnumerable<double> values);
+    /// <param name="entries"><see cref="SensorGlucose"/> entries with timestamps.</param>
+    /// <param name="timeZone">Tenant zone the days are bounded in; null is UTC.</param>
+    /// <returns>ADRR value, or 0 when no day has a plausible reading.</returns>
+    double CalculateADRR(IEnumerable<SensorGlucose> entries, TimeZoneInfo? timeZone);
 
     /// <summary>
-    /// Calculate the J-Index (combines mean and variability).
+    /// Calculate the J-Index (Wojcicki 1995), combining mean and sample standard deviation.
     /// </summary>
     /// <param name="values">Glucose values in mg/dL.</param>
     /// <param name="mean">Pre-calculated mean glucose in mg/dL.</param>
@@ -278,8 +282,9 @@ public interface IStatisticsService
 
     /// <summary>
     /// Calculate comprehensive insulin delivery statistics.
-    /// Basal data comes from TempBasals, algorithmBoluses, and basalInjections (MDI); pass empty collections if none are available.
+    /// Algorithm boluses count as bolus insulin. Basal data comes from TempBasals and basalInjections (MDI); pass empty collections if none are available.
     /// </summary>
+    /// <param name="untilMills">Where a temp basal still running stops: now, or the window end when that comes first.</param>
     InsulinDeliveryStatistics CalculateInsulinDeliveryStatistics(
         IEnumerable<Bolus> boluses,
         IEnumerable<Bolus> algorithmBoluses,
@@ -287,6 +292,7 @@ public interface IStatisticsService
         IEnumerable<CarbIntake> carbIntakes,
         DateTime startDate,
         DateTime endDate,
+        long untilMills,
         IEnumerable<BasalInjection>? basalInjections = null
     );
 
@@ -334,13 +340,15 @@ public interface IStatisticsService
 
     /// <summary>
     /// The share of a report period a CGM was delivering readings, from readings a canonical
-    /// selection has already reduced to one stream per instant. Where
+    /// selection has already reduced to one stream per instant. Each reading covers the time from
+    /// it to the next reading of its stream, up to one cadence: its device's catalogue cadence or,
+    /// for a reading no given device claims, the cadence its own stream keeps across all of its
+    /// readings. Covered time is counted once however many readings cover it. Where
     /// <paramref name="cgmDevices"/> is given the period is the union of their windows clipped to
-    /// the report — sensors worn at once are one stretch of time — and only readings falling
-    /// inside it count, at their device's catalogue cadence or, for a reading no given device
-    /// claims, at the cadence its own stream keeps across all of its readings. Where no devices
-    /// are given the period is the report itself, which runs from the first reading to the last where
-    /// <paramref name="reportStart"/> or <paramref name="reportEnd"/> is absent.
+    /// the report (sensors worn at once are one stretch of time), and only covered time inside it
+    /// counts. Where no devices are given the period is the report itself, which runs from the
+    /// first reading to the last where <paramref name="reportStart"/> or
+    /// <paramref name="reportEnd"/> is absent.
     /// </summary>
     /// <returns><c>null</c> without readings, or without a period to measure them against.</returns>
     double? CalculateCgmActivePercent(
@@ -371,45 +379,56 @@ public interface IStatisticsService
 
     /// <summary>
     /// Calculate daily basal/bolus ratio breakdown.
-    /// Basal data comes from TempBasals, algorithm boluses, and basalInjections (MDI); pass empty collections if none are available.
+    /// Algorithm boluses count as bolus insulin. Basal data comes from TempBasals and basalInjections (MDI); pass empty collections if none are available.
+    /// Carb intakes, when given, fill each day's <see cref="DailyBasalBolusRatioData.Carbs"/>. A day with carbs and no
+    /// insulin gets a row but is not counted in <see cref="DailyBasalBolusRatioResponse.DaysWithData"/>.
     /// </summary>
+    /// <param name="untilMills">As for <see cref="CalculateInsulinDeliveryStatistics"/>.</param>
     DailyBasalBolusRatioResponse CalculateDailyBasalBolusRatios(
         IEnumerable<Bolus> boluses,
         IEnumerable<Bolus> algorithmBoluses,
         IEnumerable<TempBasal> tempBasals,
-        TimeZoneInfo? userTimeZone = null,
-        IEnumerable<BasalInjection>? basalInjections = null);
+        long untilMills,
+        TimeZoneInfo userTimeZone,
+        IEnumerable<BasalInjection>? basalInjections = null,
+        IEnumerable<CarbIntake>? carbIntakes = null);
 
     /// <summary>
     /// Calculate comprehensive basal analysis statistics from TempBasals. Hourly percentiles are
     /// bucketed by <paramref name="userTimeZone"/>'s local hour-of-day (0–23) so the chart shows
-    /// rates against the user's wall clock, not UTC. Defaults to UTC when null.
+    /// rates against the user's wall clock, not UTC. Null leaves them empty, since there is no local
+    /// hour to bucket on.
     /// </summary>
+    /// <param name="untilMills">As for <see cref="CalculateInsulinDeliveryStatistics"/>.</param>
     BasalAnalysisResponse CalculateBasalAnalysis(
         IEnumerable<TempBasal> tempBasals,
-        IEnumerable<Bolus> algorithmBoluses,
         DateTime startDate,
         DateTime endDate,
+        long untilMills,
         TimeZoneInfo? userTimeZone = null);
 
     /// <summary>
     /// Calculate the average insulin delivered per hour of day, from pump-confirmed
-    /// delivery records only. Basal insulin is duration-weighted across the
+    /// delivery records only. Algorithm boluses are reported as automatic bolus, not basal. Basal insulin is duration-weighted across the
     /// <paramref name="userTimeZone"/>-local hours each TempBasal overlaps; averages
     /// divide by the number of distinct local days that have delivery data, so a
     /// period that extends beyond the available data does not distort the pattern.
-    /// Defaults to UTC hour-of-day when <paramref name="userTimeZone"/> is null.
     /// Long-acting basal injections (MDI) are spread evenly across the 24 hours
     /// following each injection and counted as scheduled basal.
+    /// <paramref name="profileBasalSegments"/> is the profile's schedule over the window; it fills
+    /// <see cref="HourlyInsulinDeliveryPoint.ProfileBasalRate"/> and is left at zero when absent.
     /// </summary>
+    /// <param name="untilMills">As for <see cref="CalculateInsulinDeliveryStatistics"/>.</param>
     HourlyInsulinDeliveryResponse CalculateHourlyInsulinDelivery(
         IEnumerable<TempBasal> tempBasals,
         IEnumerable<Bolus> boluses,
         IEnumerable<Bolus> algorithmBoluses,
         DateTime startDate,
         DateTime endDate,
-        TimeZoneInfo? userTimeZone = null,
-        IEnumerable<BasalInjection>? basalInjections = null);
+        long untilMills,
+        TimeZoneInfo userTimeZone,
+        IEnumerable<BasalInjection>? basalInjections = null,
+        IEnumerable<BasalSegment>? profileBasalSegments = null);
 }
 
 /// <summary>

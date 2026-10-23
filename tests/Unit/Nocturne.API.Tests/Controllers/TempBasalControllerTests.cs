@@ -81,16 +81,23 @@ public class TempBasalControllerTests
         TempBasalAutomaticFlag.Of(created[0].AdditionalProperties).Should().Be(expected);
     }
 
-    [Fact]
-    public async Task CreateTempBasals_LeavesAutomaticUnstamped_WhenOriginIsOmitted()
+    [Theory]
+    [InlineData("Trio", TempBasalOrigin.Algorithm)]
+    [InlineData("openaps://AndroidAPS", TempBasalOrigin.Algorithm)]
+    [InlineData("xdrip", TempBasalOrigin.Manual)]
+    [InlineData(null, TempBasalOrigin.Manual)]
+    public async Task CreateTempBasals_DefaultsAnOmittedOriginByUploaderAndLeavesAutomaticUnstamped(
+        string? app, TempBasalOrigin expected)
     {
         var request = Request();
         request.Origin = null;
+        request.App = app;
 
         var result = await _controller.CreateTempBasals([request], CancellationToken.None);
 
         var created = ((ObjectResult)result.Result!).Value.Should().BeOfType<TempBasal[]>().Subject;
-        created[0].Origin.Should().Be(TempBasalOrigin.Manual);
+        created[0].Origin.Should().Be(expected);
+        created[0].OriginEvidence.Should().Be(TempBasalOriginEvidence.Uploader);
         TempBasalAutomaticFlag.Of(created[0].AdditionalProperties).Should().BeNull();
     }
 

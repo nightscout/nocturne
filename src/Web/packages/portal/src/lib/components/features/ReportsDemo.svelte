@@ -277,6 +277,16 @@
                     <text x="220" y="116" fill={INK} font-size="12" font-family={SANS}>Bolus 54%</text>
                     <text x="220" y="130" fill={INK_SOFT} font-size="10" font-family={UI_FONT}>20.6u · 5.2 boluses a day</text>
 
+                {:else if current.preview === "loop"}
+                    <text x="16" y="24" fill={INK} font-size="13" font-weight="700" font-family={SANS}>Net loop correction by hour</text>
+                    <text x="16" y="40" fill={INK_SOFT} font-size="10" font-family={UI_FONT}>what the loop added or took away, above schedule</text>
+                    <line x1="16" y1="118" x2="384" y2="118" stroke={INK_FAINT}/>
+                    {#each [0.1, 0.2, 0.35, 0.5, 0.4, 0.15, -0.05, -0.2, -0.3, -0.25, -0.1, 0.05, 0.2, 0.3, 0.1, -0.05, -0.15, 0.25, 0.45, 0.35, 0.2, 0.05, -0.1, 0] as v, i (i)}
+                        <rect x={18 + i * 15.3} y={v >= 0 ? 118 - v * 110 : 118} width="11" height={Math.abs(v) * 110} rx="1.5"
+                              fill={INSULIN} opacity={v >= 0 ? 0.85 : 0.45}/>
+                    {/each}
+                    <text x="16" y="193" fill={INK_SOFT} font-size="10" font-family={UI_FONT}>03:00 runs 0.5 U/h above schedule, across 14 days</text>
+
                 {:else if current.preview === "site"}
                     {#each [[0, 74, 2.8], [1, 70, 3.1], [2, 61, 2.4], [3, 77, 3.0], [4, 68, 3.3]] as [i, tir, days] (i)}
                         <rect x="90" y={46 + i * 28} width={days * 60} height="16" rx="3" fill={tir >= 70 ? IN_RANGE : LOW} opacity="0.7"/>

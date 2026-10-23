@@ -6,7 +6,7 @@ namespace Nocturne.API.Extensions;
 
 /// <summary>
 /// The tenant's glucose units as the Nightscout compatibility endpoints resolve them: the owner's
-/// saved display preference, read through <see cref="IShareAppearanceReader"/>.
+/// saved display preference, read through <see cref="ITenantAppearanceReader"/>.
 /// </summary>
 internal static class GlucoseUnits
 {
@@ -14,12 +14,12 @@ internal static class GlucoseUnits
         units?.StartsWith("mmol", StringComparison.OrdinalIgnoreCase) == true;
 
     public static async Task<bool> UsesMmolAsync(
-        IShareAppearanceReader appearanceReader,
+        ITenantAppearanceReader appearanceReader,
         ITenantAccessor tenantAccessor,
         CancellationToken cancellationToken
     )
     {
-        var appearance = await appearanceReader.GetSharedAppearanceAsync(
+        var appearance = await appearanceReader.GetTenantAppearanceAsync(
             tenantAccessor.TenantId,
             cancellationToken
         );

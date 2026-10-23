@@ -41,8 +41,9 @@ public class ShareDataCategoriesGuardTests
         // The owner's onboarding state.
         "setup_hub_additions", "setup_hub_items",
 
-        // Time-series whose member clamp is not yet decided.
-        "alert_deliveries", "alert_excursion_mutes", "discrepancy_analyses", "discrepancy_details",
+        // Dedup links. Linking runs in the writer's own context, so clamped, a history-limited member's
+        // upload of older data would miss its group and start a duplicate one. A row holds only link
+        // metadata (record type, source, time), no values.
         "linked_records",
 
         // Owner/tenant.settings-only endpoint; history-clamped callers are refused.

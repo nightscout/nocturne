@@ -19,7 +19,9 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </summary>
 /// <remarks>
 /// Acknowledging, snoozing and recording a delivery outcome all silence or close an excursion, so
-/// every write action here requires <see cref="Scope.AlertsReadWrite"/>; the class-level
+/// every write action here requires <see cref="Scope.AlertsReadWrite"/>, as does
+/// <see cref="GetPendingDeliveries"/>, which returns other recipients' destinations and payloads
+/// to the delivery adapters; the class-level
 /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session,
 /// which holds <c>alerts.read</c>. <see cref="AcknowledgeExcursion"/> additionally accepts
 /// <see cref="Scope.DeviceNotify"/>, because for a caller without <c>alerts.readwrite</c> it mutes
@@ -285,9 +287,14 @@ public class AlertsController : ControllerBase
     /// <c>snooze.maxCount</c> (<see cref="Nocturne.API.Services.Alerts.SmartSnoozeConfig"/>), a count
     /// shared with the sweep's smart-snooze extensions.
     /// </summary>
+    /// <remarks>
+    /// Accepts <see cref="Scope.AlertsAcknowledge"/> as well as <see cref="Scope.AlertsReadWrite"/>:
+    /// a snooze silences the alert for everyone and changes nothing else, which is all a Nightscout
+    /// token holding <c>notifications:*:ack</c> may do.
+    /// </remarks>
     /// <seealso cref="AlertSnooze"/>
     [HttpPost("instances/{instanceId:guid}/snooze")]
-    [RequireScope(Scope.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite, Scope.AlertsAcknowledge)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -335,6 +342,7 @@ public class AlertsController : ControllerBase
     /// Used by bot/adapter services to poll for work.
     /// </summary>
     [HttpGet("deliveries/pending")]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<PendingDeliveryResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<PendingDeliveryResponse>>> GetPendingDeliveries(

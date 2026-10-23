@@ -57,11 +57,11 @@ public class ControllerAuthorizationCoverageTests
             // the share subject is unauthenticated, so [Authorize] would 401 every public share.
             ["Nocturne.API.Controllers.V4.Identity.MyPermissionsController"] = "returns the caller's own grant; fallback rejects an empty trie",
 
-            // The appearance the share renders with, for the anonymous share subject [Authorize]
-            // would 401. It answers only when the request arrived over a share token, and only
+            // The appearance a share or guest renders with, for the anonymous share subject [Authorize]
+            // would 401. It answers only a share token or a guest session, and only
             // with presentation fields — no identity, and nothing the viewer's own page does not
             // already display.
-            ["Nocturne.API.Controllers.V4.Identity.ShareAppearanceController"] = "presentation-only, share-host-only; fallback rejects an empty trie",
+            ["Nocturne.API.Controllers.V4.Identity.TenantAppearanceController"] = "presentation-only, share and guest only; fallback rejects an empty trie",
 
             // ── V3 status and lastModified ──────────────────────────────────────────────────
             // A share host reaches these with its public scopes and no authenticated user, so

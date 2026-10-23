@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Key } from "@nocturne/ui/keys";
   /**
    * Stacked sleep-stage composition chart for the trends page: one bar per
    * calendar day across the full selected range (gaps for days with no
@@ -105,7 +106,7 @@
 
   function handleKeydown(e: KeyboardEvent, row: DayRow) {
     if (!row.night) return;
-    if (e.key === "Enter" || e.key === " ") {
+    if (e.key === Key.Enter || e.key === Key.Space) {
       e.preventDefault();
       navigateToNight(row);
     }

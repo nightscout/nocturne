@@ -2,14 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Cookies } from "@sveltejs/kit";
 import type { UserDisplayPreferences } from "$lib/api";
 import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
+import { PREFS_COOKIE_NAME } from "$lib/stores/appearance-store.svelte";
 import { load } from "./+layout.server";
 
 /**
  * The root layout's load, exercised for the two decisions it makes on its own: which viewers get
  * their granted scopes resolved, and which saved preferences the page is drawn with. The UI
  * offers surfaces from those scopes, so a viewer resolved to nothing silently loses navigation
- * while every unit test around the filters stays green; and a share viewer left without the
- * owner's preferences reads their glucose in units the owner never chose.
+ * while every unit test around the filters stays green; and a share or guest viewer left without
+ * the owner's preferences reads their glucose in units the owner never chose.
  */
 
 type LoadEvent = Parameters<typeof load>[0];
@@ -27,10 +28,12 @@ interface Situation {
   resolvedLimit?: boolean;
   isShareHost?: boolean;
   isGuestSession?: boolean;
-  /** The share link owner's presentation settings; a thrown value stands for a refused call. */
+  /** The tenant owner's presentation settings; a thrown value stands for a refused call. */
   ownerAppearance?: UserDisplayPreferences | Error;
   /** A signed-in member's own saved preferences. */
   memberPreferences?: UserDisplayPreferences;
+  /** What the viewer's own `nocturne-prefs` cookie holds. */
+  prefsCookie?: UserDisplayPreferences;
 }
 
 /** The page data the load returned. */
@@ -39,6 +42,8 @@ type LoadedData = {
   limitTo24Hours: boolean;
   displayPreferences: UserDisplayPreferences[];
   serverPreferences: UserDisplayPreferences | null;
+  tenantPreferences: UserDisplayPreferences | null;
+  hasAccount: boolean;
 };
 
 function runLoad(situation: Situation) {
@@ -46,7 +51,7 @@ function runLoad(situation: Situation) {
     if (situation.reported instanceof Error) throw situation.reported;
     return { scopes: situation.reported ?? [], limitTo24Hours: situation.reportedLimit ?? false };
   });
-  const getShareAppearance = vi.fn(async () => {
+  const getTenantAppearance = vi.fn(async () => {
     if (situation.ownerAppearance instanceof Error) throw situation.ownerAppearance;
     return situation.ownerAppearance ?? {};
   });
@@ -54,8 +59,10 @@ function runLoad(situation: Situation) {
   const locals = {
     user: situation.memberPreferences
       ? { preferences: situation.memberPreferences, defaultGlucoseUnits: situation.tenantDefaultUnits }
-      : null,
-    isAuthenticated: situation.memberPreferences !== undefined,
+      : situation.isGuestSession
+        ? { subjectId: "guest", name: "Guest" }
+        : null,
+    isAuthenticated: situation.memberPreferences !== undefined || situation.isGuestSession === true,
     isPlatformAdmin: false,
     isShareHost: situation.isShareHost ?? false,
     isGuestSession: situation.isGuestSession ?? false,
@@ -64,11 +71,16 @@ function runLoad(situation: Situation) {
     apiClient: {
       status: { getStatus: async () => ({ tenantSlug: null }) },
       myPermissions: { getMyPermissions },
-      shareAppearance: { getShareAppearance },
+      tenantAppearance: { getTenantAppearance },
     },
   };
 
-  const cookies = { get: () => undefined } as unknown as Cookies;
+  const cookies = {
+    get: (name: string) =>
+      name === PREFS_COOKIE_NAME && situation.prefsCookie
+        ? encodeURIComponent(JSON.stringify(situation.prefsCookie))
+        : undefined,
+  } as unknown as Cookies;
 
   const depends = vi.fn();
   const event = {
@@ -81,7 +93,7 @@ function runLoad(situation: Situation) {
   };
 
   const data = load(event as unknown as LoadEvent) as unknown as Promise<LoadedData>;
-  return { data, getMyPermissions, getShareAppearance, depends };
+  return { data, getMyPermissions, getTenantAppearance, depends };
 }
 
 async function permissions(situation: Situation): Promise<string[]> {
@@ -213,8 +225,74 @@ describe("root layout load", () => {
     expect(loaded.serverPreferences).toBeNull();
   });
 
-  it("never asks for a share owner's appearance on a tenant host", async () => {
-    const { data, getShareAppearance } = runLoad({
+  it("keeps the owner's choices over a share viewer's own cookie", async () => {
+    const { data } = runLoad({
+      host: SHARE_HOST,
+      isShareHost: true,
+      ownerAppearance: { glucoseUnits: "mmol" },
+      prefsCookie: { glucoseUnits: "mg/dl", timeFormat: "24" },
+    });
+
+    const loaded = await data;
+    expect(loaded.displayPreferences).toEqual([{ glucoseUnits: "mmol" }]);
+  });
+
+  it("draws a field the share owner left unset with the default, not the viewer's cookie", async () => {
+    const { data } = runLoad({
+      host: SHARE_HOST,
+      isShareHost: true,
+      ownerAppearance: { colorTheme: "trio" },
+      prefsCookie: { glucoseUnits: "mmol" },
+    });
+
+    const loaded = await data;
+    expect(loaded.displayPreferences).toEqual([{ colorTheme: "trio" }]);
+  });
+
+  it("draws a guest with the tenant owner's units and clock when the guest set none", async () => {
+    const { data, getTenantAppearance } = runLoad({
+      host: TENANT_HOST,
+      isGuestSession: true,
+      ownerAppearance: { glucoseUnits: "mmol", timeFormat: "24" },
+    });
+
+    const loaded = await data;
+    expect(getTenantAppearance).toHaveBeenCalledOnce();
+    expect(loaded.displayPreferences).toEqual([{ glucoseUnits: "mmol", timeFormat: "24" }]);
+    // Not the guest's own, so the client must not reconcile it over the guest's cookie.
+    expect(loaded.serverPreferences).toBeNull();
+    expect(loaded.tenantPreferences).toEqual({ glucoseUnits: "mmol", timeFormat: "24" });
+  });
+
+  it("lets a guest's own cookie win over the tenant owner's presentation, field by field", async () => {
+    const { data } = runLoad({
+      host: TENANT_HOST,
+      isGuestSession: true,
+      ownerAppearance: { glucoseUnits: "mmol", timeFormat: "24" },
+      prefsCookie: { glucoseUnits: "mg/dl" },
+    });
+
+    const loaded = await data;
+    expect(loaded.displayPreferences).toEqual([
+      { glucoseUnits: "mg/dl" },
+      { glucoseUnits: "mmol", timeFormat: "24" },
+    ]);
+  });
+
+  it("leaves a guest on the frontend defaults when the appearance call is refused", async () => {
+    const { data } = runLoad({
+      host: TENANT_HOST,
+      isGuestSession: true,
+      ownerAppearance: new Error("404"),
+    });
+
+    const loaded = await data;
+    expect(loaded.displayPreferences).toEqual([]);
+    expect(loaded.tenantPreferences).toBeNull();
+  });
+
+  it("never asks for the owner's appearance on behalf of a signed-in member", async () => {
+    const { data, getTenantAppearance } = runLoad({
       host: TENANT_HOST,
       memberPreferences: { glucoseUnits: "mg/dl" },
     });
@@ -222,7 +300,7 @@ describe("root layout load", () => {
     await expect(data).resolves.toMatchObject({
       serverPreferences: { glucoseUnits: "mg/dl" },
     });
-    expect(getShareAppearance).not.toHaveBeenCalled();
+    expect(getTenantAppearance).not.toHaveBeenCalled();
   });
 
   // The tenant default renders a member's units until they choose, but only beneath anything
@@ -239,13 +317,22 @@ describe("root layout load", () => {
     expect(loaded.serverPreferences).toEqual({ timeFormat: "24" });
   });
 
-  it("asks for no owner's appearance on behalf of an anonymous tenant-host visitor", async () => {
-    const { data, getShareAppearance } = runLoad({
+  it("asks for no owner's appearance on behalf of an anonymous tenant-host visitor, who can read no data", async () => {
+    const { data, getTenantAppearance } = runLoad({
       host: TENANT_HOST,
       ownerAppearance: { glucoseUnits: "mmol" },
     });
 
     await expect(data).resolves.toMatchObject({ serverPreferences: null });
-    expect(getShareAppearance).not.toHaveBeenCalled();
+    expect(getTenantAppearance).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a signed-in member", { host: TENANT_HOST, memberPreferences: { glucoseUnits: "mg/dl" } }, true],
+    ["a guest", { host: TENANT_HOST, isGuestSession: true }, false],
+    ["an anonymous visitor", { host: TENANT_HOST }, false],
+    ["a share viewer", { host: SHARE_HOST, isShareHost: true }, false],
+  ] as [string, Situation, boolean][])("reports %s as having an account: %s", async (_, situation, hasAccount) => {
+    await expect(runLoad(situation).data).resolves.toMatchObject({ hasAccount });
   });
 });

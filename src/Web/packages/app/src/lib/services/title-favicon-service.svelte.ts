@@ -66,6 +66,8 @@ export class TitleFaviconService {
   private currentStatus: GlucoseTileVariant = "neutral";
   private currentTitle = "";
 
+  private lastFavicon: { bg: number | null; variant: GlucoseTileVariant; muted: boolean } | null = null;
+  private classObserver: MutationObserver | null = null;
   /** The favicon to draw once the engine boot in progress is over; see {@link paintFavicon}. */
   private pendingFavicon: (() => string) | null = null;
 
@@ -96,6 +98,9 @@ export class TitleFaviconService {
       document.head.appendChild(this.linkElement);
     }
 
+    this.classObserver = new MutationObserver(() => this.redrawFavicon());
+    this.classObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
     this.initialized = true;
   }
 
@@ -120,7 +125,9 @@ export class TitleFaviconService {
     isStale: boolean = false,
     timeSinceReading: string = ""
   ): void {
-    if (!browser || !this.initialized || !settings.enabled) {
+    if (!browser || !this.initialized) return;
+    if (!settings.enabled) {
+      this.lastFavicon = null;
       return;
     }
 
@@ -138,19 +145,26 @@ export class TitleFaviconService {
     }
 
     // Update favicon - use grey when disconnected or stale
-    if (settings.faviconEnabled && this.canvas && this.ctx && this.linkElement) {
-      let color: string;
-      if (isDisconnected || isStale) {
-        color = DISCONNECTED_COLOR();
-      } else {
-        color = settings.faviconColorCoded ? STATUS_COLORS[variant]() : resolveCssVar("--muted-foreground");
-      }
-      // Only update if not currently flashing
-      if (!this.flashInterval) {
-        const text = settings.faviconShowBg ? bg : null;
-        this.paintFavicon(() => this.generateFaviconDataUrl(text, color));
-      }
+    if (!settings.faviconEnabled) {
+      this.lastFavicon = null;
+    } else if (this.canvas && this.ctx && this.linkElement) {
+      this.lastFavicon = {
+        bg: settings.faviconShowBg ? bg : null,
+        variant,
+        muted: isDisconnected || isStale || !settings.faviconColorCoded,
+      };
+      this.redrawFavicon();
     }
+  }
+
+  /**
+   * Repaints the favicon from the last reading, resolving the CSS variables again.
+   */
+  private redrawFavicon(): void {
+    if (!this.lastFavicon || this.flashInterval || !this.linkElement) return;
+    const { bg, variant, muted } = this.lastFavicon;
+    const color = muted ? DISCONNECTED_COLOR() : STATUS_COLORS[variant]();
+    this.paintFavicon(() => this.generateFaviconDataUrl(bg, color));
   }
 
   /**
@@ -340,6 +354,7 @@ export class TitleFaviconService {
     if (!browser) return;
 
     this.stopFlashing();
+    this.lastFavicon = null;
 
     if (this.originalTitle) {
       document.title = this.originalTitle;
@@ -357,6 +372,9 @@ export class TitleFaviconService {
   destroy(): void {
     if (!browser) return;
     this.stopFlashing();
+    this.classObserver?.disconnect();
+    this.classObserver = null;
+    this.lastFavicon = null;
     this.pendingFavicon = null;
     this.canvas = null;
     this.ctx = null;

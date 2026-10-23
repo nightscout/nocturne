@@ -77,7 +77,7 @@ public class ConnectorFoodEntry
     [JsonPropertyName("fat")]
     public decimal Fat { get; set; }
 
-    /// <summary>Energy (calories or kilojoules) for the consumed serving</summary>
+    /// <summary>Energy in kilojoules for the consumed serving</summary>
     [JsonPropertyName("energy")]
     public decimal Energy { get; set; }
 
@@ -140,7 +140,7 @@ public class ConnectorFoodEntryImport
     [JsonPropertyName("fat")]
     public decimal Fat { get; set; }
 
-    /// <summary>Energy (calories or kilojoules) for the consumed serving</summary>
+    /// <summary>Energy in kilojoules for the consumed serving</summary>
     [JsonPropertyName("energy")]
     public decimal Energy { get; set; }
 
@@ -201,7 +201,7 @@ public class ConnectorFoodImport
     [JsonPropertyName("fat")]
     public decimal Fat { get; set; }
 
-    /// <summary>Energy (calories or kilojoules) per standard portion</summary>
+    /// <summary>Energy in kilojoules per standard portion</summary>
     [JsonPropertyName("energy")]
     public decimal Energy { get; set; }
 

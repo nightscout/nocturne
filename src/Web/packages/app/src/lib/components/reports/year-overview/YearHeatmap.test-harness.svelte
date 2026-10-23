@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { DailySummaryDay, YearCalendarDatum } from "./calendar-datum";
-  import { getWeekColumns } from "./week-columns";
   import YearHeatmap from "./YearHeatmap.svelte";
 
   let {
@@ -66,7 +65,6 @@
   {yearData}
   {transformYearData}
   {getCellFill}
-  {getWeekColumns}
   navigateToDayInReview={onNavigate}
   glucoseColorScale={() => "var(--fixture-glucose)"}
   units="mg/dl"

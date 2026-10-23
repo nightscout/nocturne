@@ -62,6 +62,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
   return {
     tenantless: true,
     isAuthenticated: true,
+    hasAccount: true,
     isShareHost: false,
     canViewRealtimeData: false,
     showBackupSignInPrompt: false,
@@ -82,6 +83,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     displayPreferences: [],
     displayLanguage: "en",
     serverPreferences: null,
+    tenantPreferences: null,
     user: {
       subjectId: "subject-1",
       name: "Test User",

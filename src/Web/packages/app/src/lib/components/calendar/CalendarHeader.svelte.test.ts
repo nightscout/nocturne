@@ -19,6 +19,8 @@ describe("CalendarHeader", () => {
 			nextMonth: () => {},
 			goToToday: () => {},
 			setViewMode: () => {},
+			showTirPercent: false,
+			setShowTirPercent: () => {},
 		});
 
 		await expect.element(page.getByText("Calendar")).toBeVisible();
@@ -34,6 +36,8 @@ describe("CalendarHeader", () => {
 			nextMonth: () => {},
 			goToToday: () => {},
 			setViewMode: () => {},
+			showTirPercent: false,
+			setShowTirPercent: () => {},
 		});
 
 		await expect.element(page.getByText(/June/)).toBeVisible();
@@ -50,6 +54,8 @@ describe("CalendarHeader", () => {
 			nextMonth: () => {},
 			goToToday: () => {},
 			setViewMode: () => {},
+			showTirPercent: false,
+			setShowTirPercent: () => {},
 		});
 
 		await expect
@@ -67,6 +73,8 @@ describe("CalendarHeader", () => {
 			nextMonth: () => {},
 			goToToday: () => {},
 			setViewMode: () => {},
+			showTirPercent: false,
+			setShowTirPercent: () => {},
 		});
 
 		await expect
@@ -86,6 +94,8 @@ describe("CalendarHeader", () => {
 			nextMonth: () => {},
 			goToToday: () => {},
 			setViewMode: () => {},
+			showTirPercent: false,
+			setShowTirPercent: () => {},
 		});
 
 		// Click the first icon button (left arrow)
@@ -104,9 +114,11 @@ describe("CalendarHeader", () => {
 			nextMonth: () => {},
 			goToToday: () => {},
 			setViewMode: () => {},
+			showTirPercent: false,
+			setShowTirPercent: () => {},
 		});
 
-		await expect.element(page.getByText("TIR")).toBeVisible();
+		await expect.element(page.getByText("TIR", { exact: true })).toBeVisible();
 		await expect.element(page.getByText("Profile")).toBeVisible();
 	});
 
@@ -120,11 +132,13 @@ describe("CalendarHeader", () => {
 			nextMonth: () => {},
 			goToToday: () => {},
 			setViewMode: () => {},
+			showTirPercent: false,
+			setShowTirPercent: () => {},
 		});
 
-		await expect.element(page.getByText("In Range")).toBeVisible();
-		await expect.element(page.getByText("Low")).toBeVisible();
-		await expect.element(page.getByText("High")).toBeVisible();
+		for (const label of ["Very High", "High", "In Range", "Low", "Very Low"]) {
+			await expect.element(page.getByText(label, { exact: true })).toBeVisible();
+		}
 	});
 
 	// The header is its own @container: the explanation needs @2xl (42rem) and the
@@ -150,6 +164,8 @@ describe("CalendarHeader", () => {
 				nextMonth: () => {},
 				goToToday: () => {},
 				setViewMode: () => {},
+				showTirPercent: false,
+				setShowTirPercent: () => {},
 			});
 
 			await expect.element(page.getByText("Daily glucose profile")).toBeVisible();
@@ -168,6 +184,8 @@ describe("CalendarHeader", () => {
 				nextMonth: () => {},
 				goToToday: () => {},
 				setViewMode: () => {},
+				showTirPercent: false,
+				setShowTirPercent: () => {},
 			});
 
 			await expect
@@ -187,6 +205,8 @@ describe("CalendarHeader", () => {
 				nextMonth: () => {},
 				goToToday: () => {},
 				setViewMode: () => {},
+				showTirPercent: false,
+				setShowTirPercent: () => {},
 			});
 
 			await expect.element(page.getByText("Calendar")).toBeVisible();
@@ -194,6 +214,70 @@ describe("CalendarHeader", () => {
 			await expect
 				.element(page.getByText("Click any day to view detailed report"))
 				.not.toBeVisible();
+		});
+	});
+	describe("Show TIR % toggle", () => {
+		const base = {
+			viewDate: new Date(2025, 5, 15),
+			isCurrentMonth: true,
+			MONTH_NAMES,
+			previousMonth: () => {},
+			nextMonth: () => {},
+			goToToday: () => {},
+			setViewMode: () => {},
+		};
+
+		it("is off when the preference is off", async () => {
+			render(CalendarHeader, {
+				...base,
+				viewMode: "tir",
+				showTirPercent: false,
+				setShowTirPercent: () => {},
+			});
+
+			await expect
+				.element(page.getByRole("switch", { name: "Show TIR %" }))
+				.not.toBeChecked();
+		});
+
+		it("reflects an enabled preference", async () => {
+			render(CalendarHeader, {
+				...base,
+				viewMode: "tir",
+				showTirPercent: true,
+				setShowTirPercent: () => {},
+			});
+
+			await expect
+				.element(page.getByRole("switch", { name: "Show TIR %" }))
+				.toBeChecked();
+		});
+
+		it("reports the new value when clicked", async () => {
+			const setShowTirPercent = vi.fn();
+			render(CalendarHeader, {
+				...base,
+				viewMode: "tir",
+				showTirPercent: false,
+				setShowTirPercent,
+			});
+
+			await page.getByRole("switch", { name: "Show TIR %" }).click();
+
+			expect(setShowTirPercent).toHaveBeenCalledWith(true);
+		});
+
+		it("is absent from the profile view, which has no bar to label", async () => {
+			render(CalendarHeader, {
+				...base,
+				viewMode: "profile",
+				showTirPercent: true,
+				setShowTirPercent: () => {},
+			});
+
+			await expect
+				.element(page.getByRole("switch", { name: "Show TIR %" }))
+				.not.toBeInTheDocument();
 		});
 	});
 });

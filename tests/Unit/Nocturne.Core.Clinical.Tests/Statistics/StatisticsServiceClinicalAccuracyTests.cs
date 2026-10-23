@@ -2,6 +2,7 @@ using FluentAssertions;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using static Nocturne.Core.Clinical.Tests.Statistics.WindowEnd;
 
 namespace Nocturne.Core.Clinical.Tests.Statistics;
 
@@ -598,7 +599,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new Bolus { Insulin = 1.5, Automatic = false, Timestamp = DateTimeOffset.Parse("2024-01-02T20:00:00Z").UtcDateTime },
         };
 
-        var result = _sut.CalculateInsulinDeliveryStatistics(boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), startDate, endDate);
+        var result = _sut.CalculateInsulinDeliveryStatistics(boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), startDate, endDate, Mills(endDate));
 
         // Bolus = 5 + 7 + 2 + 1.5 = 15.5
         result.TotalBolus.Should().Be(15.5);
@@ -607,7 +608,7 @@ public class StatisticsServiceClinicalAccuracyTests
         // Total = 15.5
         result.TotalInsulin.Should().Be(15.5);
         // 4 bolus records
-        result.BolusCount.Should().Be(4);
+        result.ManualBolusCount.Should().Be(4);
         // Day count = 7
         result.WindowDays.Should().Be(7);
         // TDD = 15.5 / 7 ≈ 2.2
@@ -623,13 +624,14 @@ public class StatisticsServiceClinicalAccuracyTests
             Array.Empty<TempBasal>(),
             Array.Empty<CarbIntake>(),
             new DateTime(2024, 1, 1),
-            new DateTime(2024, 1, 8)
+            new DateTime(2024, 1, 8),
+            Mills(new DateTime(2024, 1, 8))
         );
 
         result.TotalBolus.Should().Be(0);
         result.TotalBasal.Should().Be(0);
         result.TotalInsulin.Should().Be(0);
-        result.BolusCount.Should().Be(0);
+        result.ManualBolusCount.Should().Be(0);
         result.BasalPercent.Should().Be(0);
         result.BolusPercent.Should().Be(0);
     }
@@ -660,7 +662,8 @@ public class StatisticsServiceClinicalAccuracyTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             new DateTime(2024, 1, 1),
-            new DateTime(2024, 1, 2)
+            new DateTime(2024, 1, 2),
+            Mills(new DateTime(2024, 1, 2))
         );
 
         (result.BasalPercent + result.BolusPercent).Should().BeApproximately(100, 0.1);
@@ -683,10 +686,11 @@ public class StatisticsServiceClinicalAccuracyTests
             Array.Empty<TempBasal>(),
             Array.Empty<CarbIntake>(),
             new DateTime(2024, 1, 1),
-            new DateTime(2024, 1, 3)
+            new DateTime(2024, 1, 3),
+            Mills(new DateTime(2024, 1, 3))
         );
 
-        result.BolusCount.Should().Be(10);
+        result.ManualBolusCount.Should().Be(10);
         result.BasalCount.Should().Be(0);
         result.TotalBolus.Should().Be(10);
     }
@@ -1051,7 +1055,7 @@ public class StatisticsServiceClinicalAccuracyTests
             Timestamp = DateTimeOffset.UtcNow.AddMinutes(i * 5).UtcDateTime,
         });
 
-        var result = _sut.CalculateGlycemicVariability(values, entries)!;
+        var result = _sut.CalculateGlycemicVariability(values, entries, timeZone: null)!;
 
         // CV < 36% is the clinical target
         result.CoefficientOfVariation.Should().BeLessThan(36);
@@ -1069,7 +1073,7 @@ public class StatisticsServiceClinicalAccuracyTests
             Timestamp = DateTimeOffset.UtcNow.AddMinutes(i * 5).UtcDateTime,
         });
 
-        var result = _sut.CalculateGlycemicVariability(values, entries)!;
+        var result = _sut.CalculateGlycemicVariability(values, entries, timeZone: null)!;
 
         result.CoefficientOfVariation.Should().BeGreaterThan(50);
     }
@@ -1118,29 +1122,26 @@ public class StatisticsServiceClinicalAccuracyTests
     #region J-Index Tests
 
     [Fact]
-    public void CalculateJIndex_PerfectControl_ShouldBeVeryLow()
+    public void CalculateJIndex_ConstantReadings_IsTheMeanTermAlone()
     {
-        // Values all at 112 (target mean) → J-Index should be near 0
         var values = Enumerable.Repeat(112.0, 100).ToArray();
-        var mean = 112.0;
 
-        var result = _sut.CalculateJIndex(values, mean);
+        var result = _sut.CalculateJIndex(values, 112.0);
 
-        // Mean component: 0.324 * (112 - 112)^2 = 0
-        // Variability component: 0.0018 * 0 = 0
-        result.Should().Be(0);
+        // 0.001 * (112 + 0)^2
+        result.Should().BeApproximately(12.544, 1e-9);
     }
 
     [Fact]
-    public void CalculateJIndex_HighMeanAndVariability_ShouldBeElevated()
+    public void CalculateJIndex_HighMeanAndVariability_MatchesWojcicki()
     {
         var values = new double[] { 60, 100, 200, 250, 300 };
         var mean = values.Average(); // 182
 
         var result = _sut.CalculateJIndex(values, mean);
 
-        // Should be significantly elevated with high mean and high variance
-        result.Should().BeGreaterThan(10);
+        // Sample SD = sqrt(40480 / 4) = 100.598; 0.001 * (182 + 100.598)^2 = 79.862
+        result.Should().BeApproximately(79.86, 0.01);
     }
 
     #endregion
@@ -1197,7 +1198,7 @@ public class StatisticsServiceClinicalAccuracyTests
         }).ToArray();
 
         var basicStats = _sut.CalculateBasicStats(values);
-        var gv = _sut.CalculateGlycemicVariability(values, entries)!;
+        var gv = _sut.CalculateGlycemicVariability(values, entries, timeZone: null)!;
 
         // Both use sample SD (N-1): sqrt(Σ(x-mean)²/4) = sqrt(4000/4) = sqrt(1000) ≈ 31.6
         basicStats.StandardDeviation.Should().Be(

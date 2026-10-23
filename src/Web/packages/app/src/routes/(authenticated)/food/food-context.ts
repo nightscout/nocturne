@@ -2,7 +2,7 @@
 import { getContext, setContext } from 'svelte';
 import type { FoodState } from './food-state.svelte.js';
 
-const FOOD_STATE_KEY = Symbol('food-state');
+const FOOD_STATE_KEY = 'nocturne:app:food-state';
 
 export function setFoodState(store: FoodState) {
 	setContext(FOOD_STATE_KEY, store);

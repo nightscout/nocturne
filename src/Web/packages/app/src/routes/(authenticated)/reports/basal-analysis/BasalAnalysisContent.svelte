@@ -20,6 +20,7 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import {
     getBasalAnalysis,
     getHourlyInsulinDelivery,
@@ -39,7 +40,7 @@
   const hourlyDeliveryQuery = getHourlyInsulinDelivery(analysisDates);
   const analysisQuery = getBasalAnalysis(analysisDates);
 
-  const hourlyDelivery = $derived(hourlyDeliveryQuery.current?.hours ?? []);
+  const hourlyDelivery = $derived(hourlyDeliveryQuery.current);
 
   const basalStats = $derived.by(() => {
     const s = analysisQuery.current?.stats;
@@ -64,6 +65,10 @@
   });
 
   const hourlyPercentiles = $derived(analysisQuery.current?.hourlyPercentiles ?? []);
+
+  const timeZoneReason = $derived(
+    analysisQuery.current?.timeZoneUnavailableReason ?? hourlyDelivery?.timeZoneUnavailableReason
+  );
 </script>
 
 {#if hourlyDeliveryQuery.error || analysisQuery.error}
@@ -154,6 +159,14 @@
       ]}
     />
 
+    {#if timeZoneReason}
+      <p class="text-sm text-muted-foreground">
+        <TimeZoneNote reason={timeZoneReason}>
+          This report cannot show basal rates or insulin delivery by hour of day.
+        </TimeZoneNote>
+      </p>
+    {/if}
+
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
@@ -184,7 +197,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <InsulinDeliveryChart data={hourlyDelivery} showStacked={false} />
+        <InsulinDeliveryChart delivery={hourlyDelivery} showStacked={false} />
       </CardContent>
     </Card>
 

@@ -456,11 +456,11 @@ public static class SleepReportCalculator
             ? d.ToDateTime(TimeOnly.MinValue)
             : night.InBedAt.AddHours(-12).Date;
 
-    /// <summary>Monday on or before <paramref name="day"/>.</summary>
-    private static DateTime WeekStartOf(DateTime day) => day.AddDays(-(((int)day.DayOfWeek + 6) % 7));
+    /// <summary>The <paramref name="firstDay"/> on or before <paramref name="day"/>.</summary>
+    private static DateTime WeekStartOf(DateTime day, DayOfWeek firstDay) => day.AddDays(-(((int)day.DayOfWeek - (int)firstDay + 7) % 7));
 
     public static IReadOnlyList<SleepWeekSummary> ComputeWeekSummaries(
-        IReadOnlyList<SleepNightSummary> nights, DateTime from, DateTime to)
+        IReadOnlyList<SleepNightSummary> nights, DateTime from, DateTime to, DayOfWeek firstDay)
     {
         var rangeStart = from.Date;
         var rangeEnd   = to.Date;
@@ -468,14 +468,14 @@ public static class SleepReportCalculator
             return [];
 
         var nightsByWeek = nights
-            .GroupBy(n => WeekStartOf(DisplayDay(n)))
+            .GroupBy(n => WeekStartOf(DisplayDay(n), firstDay))
             .ToDictionary(g => g.Key, g => g.OrderBy(n => n.InBedAt).ToList());
 
         // A night starting shortly after midnight on the range's first day displays
         // under the previous day, which can fall in the week before the range —
         // widen the loop bounds to any such spillover weeks.
-        var firstWeek = WeekStartOf(rangeStart);
-        var lastWeek  = WeekStartOf(rangeEnd);
+        var firstWeek = WeekStartOf(rangeStart, firstDay);
+        var lastWeek  = WeekStartOf(rangeEnd, firstDay);
         if (nightsByWeek.Count > 0)
         {
             var minNightWeek = nightsByWeek.Keys.Min();

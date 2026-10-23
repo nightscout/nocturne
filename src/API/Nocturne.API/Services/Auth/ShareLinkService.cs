@@ -15,24 +15,24 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Services.Auth;
 
 /// <summary>
-/// The one member of <see cref="IShareLinkService"/> a public share viewer is allowed to reach, and
+/// The one member of <see cref="IShareLinkService"/> a share or guest viewer is allowed to reach, and
 /// the reader of the owner's display preferences for any caller that needs the tenant's units.
 /// </summary>
 /// <remarks>
-/// Separate so that <c>ShareAppearanceController</c>, which answers unauthenticated requests on a
-/// share host, does not depend on an interface carrying <see cref="IShareLinkService.RevealAsync"/>.
+/// Separate so that <c>TenantAppearanceController</c>, which answers share and guest viewers,
+/// does not depend on an interface carrying <see cref="IShareLinkService.RevealAsync"/>.
 /// Nothing routes an anonymous caller there today; the narrower seam is what keeps that true when
 /// someone adds the next member.
 /// </remarks>
-public interface IShareAppearanceReader
+public interface ITenantAppearanceReader
 {
     /// <summary>
-    /// The appearance an anonymous share viewer renders the tenant's data with: the owner's
-    /// display preferences, narrowed by <see cref="UserDisplayPreferences.ToPresentationOnly"/>.
+    /// The appearance a share or guest viewer renders the tenant's data with: the longest-standing
+    /// owner's display preferences, narrowed by <see cref="UserDisplayPreferences.ToPresentationOnly"/>.
     /// All-null when the tenant has no owner or the owner saved nothing, which leaves the viewer
     /// on the frontend's own defaults.
     /// </summary>
-    Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default);
+    Task<UserDisplayPreferences> GetTenantAppearanceAsync(Guid tenantId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -40,7 +40,7 @@ public interface IShareAppearanceReader
 /// the 24-hour/full-history scope. The membership tables are not RLS-scoped, so tenant isolation
 /// comes from the explicit tenant-id predicate on every query; those predicates must be preserved.
 /// </summary>
-public interface IShareLinkService : IShareAppearanceReader
+public interface IShareLinkService : ITenantAppearanceReader
 {
     /// <summary>
     /// Reports the link's state. <see cref="ShareLinkDto.Url"/> is always null, so the secret
@@ -249,7 +249,7 @@ public sealed class ShareLinkService : IShareLinkService
     }
 
     /// <inheritdoc />
-    public async Task<UserDisplayPreferences> GetSharedAppearanceAsync(Guid tenantId, CancellationToken ct = default)
+    public async Task<UserDisplayPreferences> GetTenantAppearanceAsync(Guid tenantId, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
         var ownerPreferences = await db.TenantMembers.AsNoTracking()

@@ -817,13 +817,11 @@ public class StateSpanRepository : IStateSpanRepository
     /// <summary>
     /// Get state spans that represent Activity records (Exercise, Sleep, Illness, Travel categories)
     /// </summary>
-    /// <param name="type">Optional specific activity type (state) filter.</param>
     /// <param name="count">The maximum number of spans to return.</param>
     /// <param name="skip">The number of spans to skip.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A collection of state spans representing activities.</returns>
     public async Task<IEnumerable<StateSpan>> GetActivityStateSpansAsync(
-        string? type = null,
         int count = 10,
         int skip = 0,
         DateTime? from = null,
@@ -838,12 +836,6 @@ public class StateSpanRepository : IStateSpanRepository
             query = query.Where(s => s.StartTimestamp >= fromValue);
         if (to is { } toValue)
             query = query.Where(s => s.StartTimestamp <= toValue);
-
-        // A Motion span's state is its class; its v1 type is the category, as ToActivity maps it.
-        if (string.Equals(type, ActivityStateSpanMapper.MotionClassType, StringComparison.Ordinal))
-            query = query.Where(s => s.Category == nameof(StateSpanCategory.Motion));
-        else if (!string.IsNullOrEmpty(type))
-            query = query.Where(s => s.State == type && s.Category != nameof(StateSpanCategory.Motion));
 
         query = query.ExcludeNonPrimary(db, RecordType.StateSpan);
 

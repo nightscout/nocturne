@@ -41,6 +41,7 @@ namespace Nocturne.Core.Constants.Tests;
 public class GlucoseMirrorTests
 {
     private const string UiGlucose = "@nocturne/ui glucose.ts";
+    private const string UiEnergy = "@nocturne/ui energy.ts";
     private const string TrayIcon = "desktop tray.rs";
     private const string GlucosePoll = "desktop glucose_poll.rs";
     private const string TaskbarMod = "taskbar mod.wh.cpp";
@@ -48,6 +49,7 @@ public class GlucoseMirrorTests
     private static readonly Dictionary<string, string> Sources = new()
     {
         [UiGlucose] = Path.Combine("src", "Web", "packages", "ui", "src", "lib", "glucose.ts"),
+        [UiEnergy] = Path.Combine("src", "Web", "packages", "ui", "src", "lib", "energy.ts"),
         [TrayIcon] = Path.Combine("src", "Web", "packages", "desktop", "src-tauri", "src", "tray.rs"),
         [GlucosePoll] =
             Path.Combine("src", "Web", "packages", "desktop", "src-tauri", "src", "glucose_poll.rs"),
@@ -96,6 +98,17 @@ public class GlucoseMirrorTests
     public void MirroredFactorMatchesTheBackend(string source, string pattern)
     {
         ReadNumber(source, pattern).Should().Be(GlucoseConstants.MgdlPerMmol);
+    }
+
+    /// <summary>
+    /// Food energy is stored in kilojoules and converted for display on the frontend, so a drifted
+    /// factor shows every food at a different energy than the backend stored.
+    /// </summary>
+    [Fact]
+    public void MirroredEnergyFactorMatchesTheBackend()
+    {
+        ReadNumber(UiEnergy, @"export const KJ_PER_KCAL = ([0-9.]+);")
+            .Should().Be(NutritionConstants.KilojoulesPerKilocalorie);
     }
 
     public static TheoryData<string, string, string> PaletteDeclarations() => new()

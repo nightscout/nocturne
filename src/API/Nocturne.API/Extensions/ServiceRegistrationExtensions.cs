@@ -306,6 +306,7 @@ public static class ServiceRegistrationExtensions
 
         services.AddScoped<IDDataService, DDataService>();
         services.AddScoped<IPropertiesService, PropertiesService>();
+        services.AddScoped<ICurrentIobCobReader, CurrentIobCobReader>();
         services.AddScoped<ISummaryService, SummaryService>();
         // Prediction service — configurable via Predictions:Source (None, DeviceStatus, OrefWasm)
         var predictionSource = PredictionOptions.ResolveSource(configuration);
@@ -418,7 +419,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IShareTokenResolver>(sp => sp.GetRequiredService<ShareTokenCacheService>());
         services.AddSingleton<IShareTokenGenerator, ShareTokenGenerator>();
         services.AddScoped<IShareLinkService, ShareLinkService>();
-        services.AddScoped<IShareAppearanceReader>(sp => sp.GetRequiredService<IShareLinkService>());
+        services.AddScoped<ITenantAppearanceReader>(sp => sp.GetRequiredService<IShareLinkService>());
         // Singleton because its consumer runs at startup outside any request scope; it creates its
         // own scope per notification.
         services.AddSingleton<IShareLinkRotatedNotifier, ShareLinkRotatedNotifier>();
@@ -738,6 +739,7 @@ public static class ServiceRegistrationExtensions
         // Device resolution
         services.AddScoped<IDeviceService, DeviceService>();
         services.AddScoped<IPatientDeviceStamper, PatientDeviceStamper>();
+        services.AddScoped<DeviceDateClockResolver>();
         services.AddScoped<IDeviceReattributionService, DeviceReattributionService>();
         services.AddScoped<IDeviceTrackerProvisioner, DeviceTrackerProvisioner>();
 
@@ -793,6 +795,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IChartDataAssembler, DashboardChartDataAssembler>();
         services.AddScoped<IChartDataService, ChartDataService>();
         services.AddScoped<IActogramReportService, ActogramReportService>();
+        services.AddScoped<TenantClockResolver>();
+        services.AddScoped<ILoopAnalysisService, LoopAnalysisService>();
         services.AddScoped<IDataOverviewService, DataOverviewService>();
 
         return services;
@@ -850,6 +854,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IAidDetectionStrategy, TbrBasedStrategy>();
         services.AddSingleton<IAidDetectionStrategy, NoAidStrategy>();
         services.AddScoped<IAidMetricsService, AidMetricsService>();
+        services.AddScoped<AidSystemMetricsReader>();
 
         // V4 Decomposers
         services.AddScoped<IEntryDecomposer, EntryDecomposer>();
@@ -859,6 +864,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITreatmentDecomposer, TreatmentDecomposer>();
         services.AddScoped<IDeviceStatusDecomposer, DeviceStatusDecomposer>();
         services.AddHostedService<ApsSnapshotCurvesBackfillService>();
+        services.AddHostedService<TempBasalOriginCorroborationService>();
         services.AddScoped<IActivityDecomposer, ActivityDecomposer>();
         services.AddScoped<IProfileDecomposer, ProfileDecomposer>();
 
@@ -924,6 +930,7 @@ public static class ServiceRegistrationExtensions
         // Push notifications
         services.AddScoped<INotificationV2Service, NotificationV2Service>();
         services.AddScoped<INotificationV1Service, NotificationV1Service>();
+        services.AddSingleton<LegacyAlarmSnoozeStore>();
         services.AddScoped<IApnsClientFactory, ApnsClientFactory>();
         services.AddHttpClient(
             "dotAPNS",
@@ -1024,6 +1031,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAlertAcknowledgementService, AlertAcknowledgementService>();
         services.AddScoped<IAlertSnoozeService, AlertSnoozeService>();
         services.AddScoped<IExcursionResolutionHandler, ExcursionResolutionHandler>();
+        services.AddScoped<IEngineAlarmRelay, EngineAlarmRelay>();
+        services.AddScoped<IAlarmAckHandler, AlarmAckHandler>();
         services.AddScoped<IAlertReferenceService, AlertReferenceService>();
         services.AddScoped<IAlertReplayService, AlertReplayService>();
         // Scope-class classification (scoped Do Not Disturb, ADR 0004): stateless over

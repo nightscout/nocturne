@@ -10,7 +10,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Entries;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -33,7 +32,6 @@ public class ServiceCacheTests
     private readonly Mock<IEntryStore> _mockEntryStore;
     private readonly Mock<IEntryDecomposer> _mockEntryDecomposer;
     private readonly Mock<IEntryCache> _mockEntryCache;
-    private readonly Mock<IDataEventSink<Entry>> _mockEntryEvents;
     private readonly Mock<ICacheService> _mockCacheService;
     private readonly Mock<ITenantService> _tenants = new();
     private readonly Mock<IDemoModeService> _mockDemoModeService;
@@ -46,7 +44,6 @@ public class ServiceCacheTests
         _mockEntryStore = new Mock<IEntryStore>();
         _mockEntryDecomposer = new Mock<IEntryDecomposer>();
         _mockEntryCache = new Mock<IEntryCache>();
-        _mockEntryEvents = new Mock<IDataEventSink<Entry>>();
         _mockCacheService = new Mock<ICacheService>();
         _mockDemoModeService = new Mock<IDemoModeService>();
         _mockEntryLogger = new Mock<ILogger<EntryService>>();
@@ -80,7 +77,6 @@ public class ServiceCacheTests
             _mockEntryStore.Object,
             _mockEntryDecomposer.Object,
             _mockEntryCache.Object,
-            _mockEntryEvents.Object,
             _mockEntryLogger.Object
         );
 
@@ -136,7 +132,6 @@ public class ServiceCacheTests
             _mockEntryStore.Object,
             _mockEntryDecomposer.Object,
             _mockEntryCache.Object,
-            _mockEntryEvents.Object,
             _mockEntryLogger.Object
         );
 
@@ -197,9 +192,9 @@ public class ServiceCacheTests
         tenantDbContextFactory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext());
-        var appearanceReader = new Mock<IShareAppearanceReader>();
+        var appearanceReader = new Mock<ITenantAppearanceReader>();
         appearanceReader
-            .Setup(r => r.GetSharedAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences());
         var statusService = new StatusService(
             mockConfiguration,
@@ -288,9 +283,9 @@ public class ServiceCacheTests
         tenantDbContextFactory
             .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext());
-        var appearanceReader = new Mock<IShareAppearanceReader>();
+        var appearanceReader = new Mock<ITenantAppearanceReader>();
         appearanceReader
-            .Setup(r => r.GetSharedAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences());
         var statusService = new StatusService(
             mockConfiguration,

@@ -38,9 +38,9 @@ public class ActivityServiceFindTests
     {
         _stateSpans
             .Setup(s => s.GetActivitiesAsync(
-                It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<int>(), It.IsAny<int>(),
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string? _, int count, int _, DateTime? from, DateTime? to, CancellationToken _) =>
+            .ReturnsAsync((int count, int _, DateTime? from, DateTime? to, CancellationToken _) =>
             {
                 _stateSpanFetchCount = count;
                 return (IEnumerable<Activity>)_stored
@@ -90,7 +90,7 @@ public class ActivityServiceFindTests
 
         result.Select(a => a.Id).Should().Equal("d1");
         _stateSpans.Verify(s => s.GetActivitiesAsync(
-            It.IsAny<string?>(), It.IsAny<int>(), 0, from, to, It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<int>(), 0, from, to, It.IsAny<CancellationToken>()), Times.Once);
         _heartRates.Verify(s => s.GetHeartRatesAsync(
             It.IsAny<int>(), 0, from, to, It.IsAny<CancellationToken>()), Times.Once);
         _stepCounts.Verify(s => s.GetStepCountsAsync(

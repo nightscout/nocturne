@@ -64,7 +64,8 @@ public sealed record DataNeedsSet(
 /// deserialised once per rule and the resulting <see cref="ConditionNode"/> tree is walked via
 /// <see cref="ConditionPath.Walk"/>. Malformed JSON is treated as "no needs" — rule evaluation
 /// will fail later with the same silent fail-mode used by the leaf evaluators, so the enricher
-/// must not re-throw here.
+/// must not re-throw here. An enabled <see cref="AlertRuleSnapshot.AutoResolveParams"/> tree is walked
+/// the same way; a disabled one contributes nothing.
 /// </remarks>
 public static class RuleDataNeeds
 {
@@ -81,6 +82,7 @@ public static class RuleDataNeeds
             try
             {
                 VisitTopLevel(rule, b);
+                VisitAutoResolve(rule, b);
             }
             catch (Exception ex)
             {
@@ -143,6 +145,12 @@ public static class RuleDataNeeds
                 ApplyLeaf(rule.ConditionType, b);
                 return;
         }
+    }
+
+    private static void VisitAutoResolve(AlertRuleSnapshot rule, NeedsBuilder b)
+    {
+        if (!rule.AutoResolveEnabled || string.IsNullOrWhiteSpace(rule.AutoResolveParams)) return;
+        VisitNode(TryDeserialize<ConditionNode>(rule.AutoResolveParams), b);
     }
 
     private static void VisitNode(ConditionNode? node, NeedsBuilder b)

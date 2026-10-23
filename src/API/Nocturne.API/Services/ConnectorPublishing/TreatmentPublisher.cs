@@ -197,8 +197,11 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
                 reclassifiedCount, recordList.Count, source);
 
         foreach (var record in recordList)
+        {
             record.AdditionalProperties = TempBasalAutomaticFlag.Keep(
                 record.AdditionalProperties, TempBasalAutomaticFlag.Of(record.Origin));
+            record.OriginEvidence = TempBasalOriginEvidence.Reported;
+        }
     }
 
     /// <summary>

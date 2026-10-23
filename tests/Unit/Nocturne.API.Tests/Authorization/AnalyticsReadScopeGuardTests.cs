@@ -3,20 +3,24 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Widget;
 using Xunit;
@@ -30,7 +34,7 @@ namespace Nocturne.API.Tests.Authorization;
 /// driven once to prove it actually calls the guard.
 /// </summary>
 [Trait("Category", "Unit")]
-public class AnalyticsReadScopeGuardTests
+public partial class AnalyticsReadScopeGuardTests
 {
     private static IReadOnlySet<string> Granted(params string[] scopes) => new HashSet<string>(scopes);
 
@@ -1046,5 +1050,1076 @@ public class AnalyticsReadScopeGuardTests
         var redacted = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.GlucoseRead));
 
         redacted.LastDay.Analytics.Should().BeNull();
+    }
+
+    // ── AID system metrics ──────────────────────────────────────────────────────────────────
+
+    private static AidSystemMetrics EveryAidFigure() => new()
+    {
+        CgmDeviceNames = "Dexcom G7",
+        PumpDeviceNames = "Omnipod 5",
+        PumpUsePercent = 98,
+        AidActivePercent = 91,
+        CgmActivePercent = 95,
+        TargetLow = 80,
+        TargetHigh = 140,
+        SiteChangeCount = 3,
+        Segments = [new AidTimeSegment { Algorithm = AidAlgorithm.Trio, DurationHours = 24 }],
+        TimeZoneUnavailableReason = TimeZoneUnavailableReason.NotConfigured,
+    };
+
+    [Fact]
+    public void AidSystemMetrics_EveryCategory_KeepsEveryFigure()
+    {
+        var redacted = AidSystemMetricsReadScopeGuard.Redact(
+            EveryAidFigure(),
+            Granted(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead, Scope.TherapyRead));
+
+        redacted.Should().BeEquivalentTo(EveryAidFigure());
+    }
+
+    [Fact]
+    public void AidSystemMetrics_WithholdingEveryCategory_LeavesNothingButTheAllowlist()
+    {
+        RedactionCoverage.AssertWithheld(
+            AidSystemMetricsReadScopeGuard.Redact(RedactionCoverage.Populated<AidSystemMetrics>(), Granted()),
+            [typeof(AidSystemMetrics)],
+            ["AidSystemMetrics.TimeZoneUnavailableReason"]);
+    }
+
+    [Theory]
+    [InlineData(Scope.GlucoseRead)]
+    [InlineData(Scope.TreatmentsRead)]
+    [InlineData(Scope.DevicesRead)]
+    [InlineData(Scope.TherapyRead)]
+    public void AidSystemMetrics_WithoutOneCategory_WithholdsOnlyTheFiguresDrawnFromIt(string missing)
+    {
+        string[] every = [Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead, Scope.TherapyRead];
+
+        var redacted = AidSystemMetricsReadScopeGuard.Redact(
+            EveryAidFigure(), Granted([.. every.Where(s => s != missing)]));
+
+        var loopActivity = missing is Scope.TreatmentsRead or Scope.DevicesRead;
+        (redacted.CgmActivePercent is null).Should().Be(missing == Scope.GlucoseRead);
+        (redacted.AidActivePercent is null).Should().Be(loopActivity);
+        (redacted.PumpUsePercent is null).Should().Be(loopActivity);
+        (redacted.Segments.Count == 0).Should().Be(loopActivity);
+        (redacted.TargetLow is null && redacted.TargetHigh is null).Should().Be(missing == Scope.TherapyRead);
+        (redacted.SiteChangeCount is null && redacted.CgmDeviceNames is null && redacted.PumpDeviceNames is null)
+            .Should().Be(missing == Scope.DevicesRead);
+    }
+
+    // ── Loop Analysis ───────────────────────────────────────────────────────────────────────
+
+    private static readonly string[] AllLoopAnalysisCategories =
+        [Scope.GlucoseRead, Scope.TreatmentsRead, Scope.TherapyRead, Scope.DevicesRead];
+
+    private static LoopAnalysisAggregate Aggregate(double value) => new() { P50 = value, Mean = value, N = 1 };
+
+    private static DailyProfileRange DailyProfileRange() => new()
+    {
+        Slots =
+        [
+            new DailyProfileSlot
+            {
+                Glucose = Aggregate(120),
+                ScheduledBasal = Aggregate(1),
+                DeliveredBasal = Aggregate(1.5),
+                NetLoopCorrection = new NetLoopCorrectionAggregate { Mean = 0.5, Rate = Aggregate(0.5) },
+                ManualTemp = Aggregate(0),
+                Suspend = Aggregate(0),
+                Inferred = Aggregate(0),
+                Iob = Aggregate(2),
+                IobSource = IobCobSource.Device,
+                Cob = Aggregate(10),
+                CobSource = IobCobSource.Calculated,
+                ManualBoluses = new DailyProfileEventSeries { MeanPerDay = 1, N = 1 },
+                Carbs = new DailyProfileEventSeries { MeanPerDay = 10, N = 1 },
+                TargetLow = 90,
+                TargetHigh = 140,
+            },
+        ],
+        HourlyNetLoopCorrection = [new LoopAnalysisHourlyValue { Hour = 0, Mean = 0.5, N = 1 }],
+        Days =
+        [
+            new DailyProfileDay
+            {
+                Date = "2024-06-03",
+                Coverage = new DailyProfileDayCoverage
+                {
+                    Analysed = "a", Glucose = "g", ScheduledBasal = "s", DeliveredBasal = "d",
+                    NetLoopCorrection = "n", IobCob = "i",
+                },
+                NetLoopCorrection = 12,
+                TotalInsulin = 40,
+                DeliveredBasal = 20,
+                AutomaticBolus = 5,
+                ManualBolus = 15,
+            },
+        ],
+        Summary = new DailyProfileSummary
+        {
+            DaysWithData = 1,
+            DeliveredToScheduledRatio = 1.2,
+            NetLoopCorrectionPerDay = 12,
+            NetLoopCorrectionTddPercent = 30,
+            NetLoopCorrectionDays = 1,
+            Insulin = new DailyInsulinSummary { Total = Aggregate(40), DeliveredBasal = 20 },
+        },
+    };
+
+    private static DailyProfileResponse DailyProfile() => new()
+    {
+        Primary = DailyProfileRange(),
+        Comparison = DailyProfileRange(),
+        ProfileNames = ["Default"],
+    };
+
+    private static readonly LoopAnalysisSeries[] TreatmentSeries =
+    [
+        LoopAnalysisSeries.DeliveredBasal, LoopAnalysisSeries.NetLoopCorrection,
+        LoopAnalysisSeries.NetLoopCorrectionComponents, LoopAnalysisSeries.HourlyNetLoopCorrection,
+        LoopAnalysisSeries.Iob, LoopAnalysisSeries.Cob, LoopAnalysisSeries.ManualBoluses, LoopAnalysisSeries.Carbs,
+        LoopAnalysisSeries.InsulinSummary, LoopAnalysisSeries.NetLoopCorrectionSummary,
+    ];
+
+    private static readonly LoopAnalysisSeries[] ScheduleSeries =
+        [LoopAnalysisSeries.ScheduledBasal, LoopAnalysisSeries.Target, LoopAnalysisSeries.DeliveredToScheduledRatio];
+
+    public static TheoryData<string[], LoopAnalysisSeries[]> LoopAnalysisScopeCombinations => new()
+    {
+        { AllLoopAnalysisCategories, [] },
+        { [Scope.GlucoseRead], [.. TreatmentSeries, .. ScheduleSeries, LoopAnalysisSeries.ProfileNames] },
+        { [Scope.GlucoseRead, Scope.TreatmentsRead], [.. ScheduleSeries, LoopAnalysisSeries.ProfileNames] },
+        { [Scope.GlucoseRead, Scope.TherapyRead], [.. TreatmentSeries, .. ScheduleSeries] },
+        { [Scope.TreatmentsRead, Scope.TherapyRead], [LoopAnalysisSeries.Glucose] },
+        { [], [LoopAnalysisSeries.Glucose, .. TreatmentSeries, .. ScheduleSeries, LoopAnalysisSeries.ProfileNames] },
+    };
+
+    [Theory]
+    [MemberData(nameof(LoopAnalysisScopeCombinations))]
+    public void LoopAnalysis_WithheldSeries_ListExactlyWhatIsEmptied(string[] scopes, LoopAnalysisSeries[] expected)
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(DailyProfile(), Granted(scopes));
+
+        data.WithheldSeries.Should().BeEquivalentTo(expected);
+        (data.ProfileNames.Count == 0).Should().Be(expected.Contains(LoopAnalysisSeries.ProfileNames));
+        foreach (var range in new[] { data.Primary, data.Comparison! })
+        {
+            var slot = range.Slots.Single();
+            var day = range.Days.Single();
+            bool Withheld(LoopAnalysisSeries series) => expected.Contains(series);
+
+            (slot.Glucose is null).Should().Be(Withheld(LoopAnalysisSeries.Glucose));
+            (day.Coverage.Glucose is null).Should().Be(Withheld(LoopAnalysisSeries.Glucose));
+            (slot.ScheduledBasal is null).Should().Be(Withheld(LoopAnalysisSeries.ScheduledBasal));
+            (day.Coverage.ScheduledBasal is null).Should().Be(Withheld(LoopAnalysisSeries.ScheduledBasal));
+            (slot.DeliveredBasal is null).Should().Be(Withheld(LoopAnalysisSeries.DeliveredBasal));
+            (slot.NetLoopCorrection is null).Should().Be(Withheld(LoopAnalysisSeries.NetLoopCorrection));
+            (slot.Inferred is null).Should().Be(Withheld(LoopAnalysisSeries.NetLoopCorrectionComponents));
+            (range.HourlyNetLoopCorrection.Count == 0).Should().Be(Withheld(LoopAnalysisSeries.HourlyNetLoopCorrection));
+            (slot.Iob is null).Should().Be(Withheld(LoopAnalysisSeries.Iob));
+            (slot.Cob is null).Should().Be(Withheld(LoopAnalysisSeries.Cob));
+            (slot.ManualBoluses is null).Should().Be(Withheld(LoopAnalysisSeries.ManualBoluses));
+            (slot.Carbs is null).Should().Be(Withheld(LoopAnalysisSeries.Carbs));
+            (slot.TargetLow is null).Should().Be(Withheld(LoopAnalysisSeries.Target));
+            (range.Summary.Insulin is null).Should().Be(Withheld(LoopAnalysisSeries.InsulinSummary));
+            (day.TotalInsulin is null).Should().Be(Withheld(LoopAnalysisSeries.InsulinSummary));
+            (range.Summary.NetLoopCorrectionPerDay is null).Should().Be(Withheld(LoopAnalysisSeries.NetLoopCorrectionSummary));
+            (range.Summary.DeliveredToScheduledRatio is null).Should().Be(Withheld(LoopAnalysisSeries.DeliveredToScheduledRatio));
+            day.Coverage.Analysed.Should().Be("a", "the masks a caller cannot read are dropped from its filter instead");
+        }
+    }
+
+    [Fact]
+    public void LoopAnalysis_WithholdingEveryCategory_LeavesNothingButTheAllowlist()
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(RedactionCoverage.Populated<DailyProfileResponse>(), Granted());
+
+        RedactionCoverage.AssertWithheld(
+            data,
+            [
+                typeof(DailyProfileRange), typeof(DailyProfileSlot), typeof(DailyProfileDay),
+                typeof(DailyProfileDayCoverage), typeof(DailyProfileSummary),
+            ],
+            [
+                "DailyProfileRange.From", "DailyProfileRange.To", "DailyProfileRange.SlotMinutes",
+                "DailyProfileRange.Slots", "DailyProfileRange.Days", "DailyProfileRange.Summary",
+                "DailyProfileSlot.Slot", "DailyProfileSlot.MinuteOfDay",
+                "DailyProfileDay.Date", "DailyProfileDay.DayOfWeek", "DailyProfileDay.Start", "DailyProfileDay.Complete",
+                "DailyProfileDay.Coverage",
+                "DailyProfileDayCoverage.Analysed",
+                "DailyProfileSummary.DaysWithData",
+            ]);
+    }
+
+    [Theory]
+    [InlineData(new[] { Scope.GlucoseRead }, 1)]
+    [InlineData(new[] { Scope.GlucoseRead, Scope.TreatmentsRead }, 2)]
+    [InlineData(new[] { Scope.TreatmentsRead }, 1)]
+    public void LoopAnalysis_DaysWithData_CountsOnlyTheDataTheCallerCanRead(string[] scopes, int expected)
+    {
+        var data = DailyProfile();
+        var glucoseDay = data.Primary.Days.Single();
+        glucoseDay.HasGlucose = true;
+        data.Primary.Days.Add(new DailyProfileDay { Date = "2024-06-04", HasTreatments = true });
+        data.Primary.Summary.DaysWithData = 2;
+
+        LoopAnalysisReadScopeGuard.Redact(data, Granted([.. scopes, Scope.TherapyRead]))
+            .Primary.Summary.DaysWithData.Should().Be(expected);
+    }
+
+    [Fact]
+    public void LoopAnalysis_EverySeriesCanBeWithheld_ByExactlyOneTabOrTheEnvelope()
+    {
+        var byOwner = LoopAnalysisReadScopeGuard.PageResponses
+            .ToDictionary(t => t.Name, t => LoopAnalysisReadScopeGuard.WithheldFrom(t, Granted()));
+        byOwner["envelope"] = LoopAnalysisReadScopeGuard.WithheldEnvelope(Granted());
+
+        foreach (var series in Enum.GetValues<LoopAnalysisSeries>())
+            byOwner.Where(t => t.Value.Contains(series)).Select(t => t.Key)
+                .Should().ContainSingle($"{series} is withheld by exactly one page or the envelope");
+    }
+
+    public static TheoryData<Type> LoopAnalysisPageResponses => [.. LoopAnalysisReadScopeGuard.PageResponses];
+
+    [Theory]
+    [MemberData(nameof(LoopAnalysisPageResponses))]
+    public void LoopAnalysis_WithholdingEveryCategory_LeavesTheEnvelopeOnlyWhatItSaysOfTheRequest(Type response)
+    {
+        var populated = typeof(RedactionCoverage).GetMethod(nameof(RedactionCoverage.Populated))!
+            .MakeGenericMethod(response).Invoke(null, null)!;
+        var redacted = typeof(LoopAnalysisReadScopeGuard).GetMethod(nameof(LoopAnalysisReadScopeGuard.Redact))!
+            .MakeGenericMethod(response).Invoke(null, [populated, Granted()])!;
+
+        RedactionCoverage.AssertWithheld(
+            redacted,
+            [response],
+            [
+                .. new[]
+                {
+                    "Primary", "Comparison", "HistoryClamped", "TimeZoneUnavailableReason", "PrimaryRange",
+                    "ComparisonRange", "AppliedFilters", "IgnoredFilters", "WithheldSeries", "UnavailableFilters",
+                    "Definition", "SlotMinutes", "BackToStartMgdl", "UnavailableAnchors", "WithheldReason", "Rules",
+                    "HistoryWindowHours", "Limits", "LoopGapMinutes", "ContextLookbackMs",
+                }.Select(p => $"{response.Name}.{p}"),
+            ]);
+    }
+
+    [Fact]
+    public void LoopAnalysis_EveryModelEnumGoesOutByName()
+    {
+        var enums = typeof(LoopAnalysisResponse).Assembly.GetTypes()
+            .Where(t => t.IsEnum && t.Namespace == typeof(LoopAnalysisResponse).Namespace)
+            .ToList();
+
+        enums.Should().NotBeEmpty();
+        foreach (var type in enums)
+            type.GetCustomAttribute<System.Text.Json.Serialization.JsonConverterAttribute>()?.ConverterType
+                .Should().Be(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<>).MakeGenericType(type),
+                    $"{type.Name} is read by name on the wire");
+    }
+
+    [Fact]
+    public void LoopAnalysis_EveryRouteIsARegisteredTab()
+    {
+        var responses = typeof(LoopAnalysisController).GetMethods()
+            .Where(m => m.GetCustomAttribute<HttpGetAttribute>() is not null)
+            .Select(m => m.ReturnType.GetGenericArguments().Single().GetGenericArguments().Single());
+
+        LoopAnalysisReadScopeGuard.PageResponses.Should().BeEquivalentTo(responses);
+    }
+
+    [Fact]
+    public void LoopAnalysis_FullAccess_KeepsEverything()
+    {
+        var original = DailyProfile();
+        var data = LoopAnalysisReadScopeGuard.Redact(original, Granted(AllLoopAnalysisCategories));
+
+        data.Should().BeSameAs(original);
+        data.WithheldSeries.Should().BeEmpty();
+        data.Primary.Slots.Single().ScheduledBasal.Should().NotBeNull();
+    }
+
+    private static LoopAnalysisMasks EveryMask() => new()
+    {
+        ProfileName = "Default",
+        ExcludeOverrides = true,
+        ExcludeTemporaryTargets = true,
+        ExcludeExercise = true,
+        ExcludeIllness = true,
+        ExcludeOpenLoop = true,
+    };
+
+    [Fact]
+    public void LoopAnalysis_Filter_WithoutTherapy_IgnoresTheProfileName()
+    {
+        var masks = EveryMask();
+
+        var ignored = LoopAnalysisReadScopeGuard.NarrowFilter(
+            masks, Granted(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead));
+
+        ignored.Should().Equal("profileName");
+        masks.ProfileName.Should().BeNull();
+        masks.ExcludeOverrides.Should().BeTrue();
+    }
+
+    [Fact]
+    public void LoopAnalysis_Filter_WithoutTreatments_IgnoresTheTreatmentMasks()
+    {
+        var masks = EveryMask();
+
+        var ignored = LoopAnalysisReadScopeGuard.NarrowFilter(
+            masks, Granted(Scope.GlucoseRead, Scope.TherapyRead, Scope.DevicesRead));
+
+        ignored.Should().Equal("excludeOverrides", "excludeTemporaryTargets", "excludeExercise", "excludeIllness");
+        masks.ExcludeOverrides.Should().BeFalse();
+        masks.ExcludeIllness.Should().BeFalse();
+        masks.ExcludeOpenLoop.Should().BeTrue();
+        masks.ProfileName.Should().Be("Default");
+    }
+
+    [Fact]
+    public void LoopAnalysis_Filter_WithoutDevices_IgnoresTheOpenLoopMask()
+    {
+        var masks = EveryMask();
+
+        var ignored = LoopAnalysisReadScopeGuard.NarrowFilter(
+            masks, Granted(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.TherapyRead));
+
+        ignored.Should().Equal("excludeOpenLoop");
+        masks.ExcludeOpenLoop.Should().BeFalse();
+    }
+
+    [Fact]
+    public void LoopAnalysis_Filter_WithEveryCategory_IgnoresNothing()
+    {
+        var masks = EveryMask();
+
+        LoopAnalysisReadScopeGuard.NarrowFilter(masks, Granted(AllLoopAnalysisCategories)).Should().BeEmpty();
+        masks.ProfileName.Should().Be("Default");
+    }
+
+    public static TheoryData<string[], string[]> LoopAnalysisUnavailableCombinations => new()
+    {
+        { AllLoopAnalysisCategories, [] },
+        { [Scope.GlucoseRead, Scope.TreatmentsRead, Scope.DevicesRead], ["profileName"] },
+        { [Scope.GlucoseRead, Scope.TreatmentsRead, Scope.TherapyRead], ["excludeOpenLoop"] },
+        {
+            [Scope.GlucoseRead],
+            ["profileName", "excludeOverrides", "excludeTemporaryTargets", "excludeExercise", "excludeIllness", "excludeOpenLoop"]
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(LoopAnalysisUnavailableCombinations))]
+    public void LoopAnalysis_UnavailableFilters_AreExactlyTheOnesNarrowingDrops(string[] scopes, string[] expected)
+    {
+        var granted = Granted(scopes);
+
+        var unavailable = LoopAnalysisReadScopeGuard.UnavailableFilters(granted);
+
+        unavailable.Select(f => f.Filter).Should().Equal(expected);
+        LoopAnalysisReadScopeGuard.NarrowFilter(EveryMask(), granted).Should().Equal(expected);
+    }
+
+    [Fact]
+    public void LoopAnalysis_Filter_WithNoCategory_LeavesNoMaskSet()
+    {
+        var masks = RedactionCoverage.Populated<LoopAnalysisMasks>();
+
+        LoopAnalysisReadScopeGuard.NarrowFilter(masks, Granted());
+
+        RedactionCoverage.AssertWithheld(masks, [typeof(LoopAnalysisMasks)], ["LoopAnalysisMasks.Days"]);
+    }
+
+    [Fact]
+    public void LoopAnalysis_FilterNames_AreTheQueryParametersTheBinderReads()
+    {
+        var parameters = typeof(LoopAnalysisQuery).GetProperties()
+            .Select(p => p.GetCustomAttribute<FromQueryAttribute>()?.Name)
+            .OfType<string>()
+            .ToHashSet();
+
+        LoopAnalysisReadScopeGuard.FilterNames.Should().OnlyContain(
+            name => parameters.Contains(name), "the response names filters by the parameter a client sends");
+    }
+
+    [Fact]
+    public void LoopAnalysis_UnavailableFilters_NameTheScopeEachNeeds()
+    {
+        LoopAnalysisReadScopeGuard.UnavailableFilters(Granted())
+            .ToDictionary(f => f.Filter, f => f.RequiredScope)
+            .Should().BeEquivalentTo(new Dictionary<string, string>
+            {
+                ["profileName"] = Scope.TherapyRead,
+                ["excludeOverrides"] = Scope.TreatmentsRead,
+                ["excludeTemporaryTargets"] = Scope.TreatmentsRead,
+                ["excludeExercise"] = Scope.TreatmentsRead,
+                ["excludeIllness"] = Scope.TreatmentsRead,
+                ["excludeOpenLoop"] = Scope.DevicesRead,
+            });
+    }
+
+    [Fact]
+    public void LoopAnalysis_GateIsReportsRead()
+    {
+        var gate = GateOn<LoopAnalysisController>(nameof(LoopAnalysisController.GetDailyProfile));
+
+        gate!.RequiredScopes.Should().BeEquivalentTo([LoopAnalysisReadScopeGuard.AdmissionScope]);
+        LoopAnalysisReadScopeGuard.AdmissionScope.Should().Be(Scope.ReportsRead);
+    }
+
+    // Noon in Sydney (UTC+10, no DST in June).
+    private static readonly DateTime LoopAnalysisNow = new(2024, 6, 8, 2, 0, 0, DateTimeKind.Utc);
+
+    private static (LoopAnalysisController Controller, Mock<ILoopAnalysisService> Service) LoopAnalysisHandler(
+        IReadOnlySet<string> scopes, bool historyClamped = false, string query = "", string? timezone = "Australia/Sydney")
+    {
+        var service = new Mock<ILoopAnalysisService>();
+        service
+            .Setup(s => s.GetDailyProfileAsync(It.IsAny<LoopAnalysisFilter>(), It.IsAny<TimeZoneInfo>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DailyProfile);
+        service
+            .Setup(s => s.GetPredictionAccuracyAsync(It.IsAny<LoopAnalysisFilter>(), It.IsAny<TimeZoneInfo>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PredictionAccuracy);
+        service
+            .Setup(s => s.GetLoopHealthAsync(It.IsAny<LoopAnalysisFilter>(), It.IsAny<TimeZoneInfo>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LoopHealth);
+
+        var context = ContextWith(scopes);
+        context.HttpContext.Request.QueryString = new QueryString(query);
+        var readContext = new Nocturne.Infrastructure.Data.Services.CategoryReadContext();
+        if (historyClamped)
+            readContext.ClampMemberHistory();
+        context.HttpContext.RequestServices = new ServiceCollection()
+            .AddSingleton<ICategoryReadContext>(readContext)
+            .AddMvcCore().Services
+            .BuildServiceProvider();
+
+        var settings = new Mock<ITherapySettingsResolver>();
+        settings.Setup(s => s.GetTimezoneAsync(null, It.IsAny<CancellationToken>())).ReturnsAsync(timezone);
+        var clock = new TenantClockResolver(settings.Object, readContext, NullLogger<TenantClockResolver>.Instance);
+
+        var controller = new LoopAnalysisController(
+            service.Object, clock, new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(LoopAnalysisNow)))
+        {
+            ControllerContext = context,
+        };
+        return (controller, service);
+    }
+
+    private static LoopAnalysisQuery Week(Action<LoopAnalysisQuery>? configure = null)
+    {
+        var query = new LoopAnalysisQuery { StartDate = new DateOnly(2024, 6, 1), EndDate = new DateOnly(2024, 6, 7) };
+        configure?.Invoke(query);
+        return query;
+    }
+
+    private static DailyProfileResponse Ok(ActionResult<DailyProfileResponse> result) =>
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<DailyProfileResponse>().Subject;
+
+    [Fact]
+    public async Task LoopAnalysis_Handler_RedactsAndReportsWhatItIgnoredAndApplied()
+    {
+        var (controller, service) = LoopAnalysisHandler(
+            Granted(Scope.ReportsRead, Scope.GlucoseRead), query: "?profileName=Default&ExcludeOverrides=true");
+
+        var data = Ok(await controller.GetDailyProfile(
+            Week(q => { q.ProfileName = "Default"; q.ExcludeOverrides = true; })));
+
+        data.Primary.Slots.Single().Glucose.Should().NotBeNull();
+        data.Primary.Slots.Single().Iob.Should().BeNull();
+        data.WithheldSeries.Should().Contain(LoopAnalysisSeries.Iob).And.NotContain(LoopAnalysisSeries.Glucose);
+        data.HistoryClamped.Should().BeFalse();
+        data.IgnoredFilters.Should().BeEquivalentTo(
+            ["profileName", "excludeOverrides"], "the masks on by default are dropped too, but the caller never sent them");
+        data.UnavailableFilters.Select(f => f.Filter).Should().BeEquivalentTo(
+            ["profileName", "excludeOverrides", "excludeTemporaryTargets", "excludeExercise", "excludeIllness", "excludeOpenLoop"],
+            "unavailability does not depend on what was sent");
+        data.AppliedFilters.Should().BeEquivalentTo(new LoopAnalysisMasks
+        {
+            Days = [.. Enum.GetValues<DayOfWeek>()],
+            ExcludeOverrides = false,
+            ExcludeIllness = false,
+            ExcludeOpenLoop = false,
+            ProfileName = null,
+        });
+        data.PrimaryRange!.StartDate.Should().Be(new DateOnly(2024, 6, 1));
+        data.PrimaryRange.From.Should().Be(new DateTime(2024, 5, 31, 14, 0, 0, DateTimeKind.Utc));
+        data.PrimaryRange.To.Should().Be(new DateTime(2024, 6, 7, 14, 0, 0, DateTimeKind.Utc));
+        service.Verify(s => s.GetDailyProfileAsync(
+            It.Is<LoopAnalysisFilter>(f => f.Masks.ProfileName == null && !f.Masks.ExcludeOverrides && f.CompareFrom == null),
+            It.Is<TimeZoneInfo>(z => z.Id == "Australia/Sydney"),
+            It.IsAny<CancellationToken>()));
+    }
+
+    [Theory]
+    [InlineData(nameof(LoopAnalysisController.GetDailyProfile), true)]
+    [InlineData(nameof(LoopAnalysisController.GetDailyProfile), false)]
+    [InlineData(nameof(LoopAnalysisController.GetPredictionAccuracy), true)]
+    [InlineData(nameof(LoopAnalysisController.GetPredictionAccuracy), false)]
+    [InlineData(nameof(LoopAnalysisController.GetLoopHealth), true)]
+    [InlineData(nameof(LoopAnalysisController.GetLoopHealth), false)]
+    public async Task LoopAnalysis_EveryTab_CarriesTheProfileNames_OnlyWithTherapy(string action, bool therapy)
+    {
+        var scopes = therapy ? AllLoopAnalysisCategories : AllLoopAnalysisCategories.Except([Scope.TherapyRead]);
+        var (controller, service) = LoopAnalysisHandler(Granted([Scope.ReportsRead, .. scopes]));
+
+        var data = action switch
+        {
+            nameof(LoopAnalysisController.GetDailyProfile) =>
+                (LoopAnalysisResponse)Ok(await controller.GetDailyProfile(Week())),
+            nameof(LoopAnalysisController.GetPredictionAccuracy) => Ok(await controller.GetPredictionAccuracy(Week())),
+            _ => (await controller.GetLoopHealth(Week())).Result.Should().BeOfType<OkObjectResult>()
+                .Which.Value.Should().BeAssignableTo<LoopAnalysisResponse>().Subject,
+        };
+
+        data.ProfileNames.Should().Equal(therapy ? ["Default"] : []);
+        data.WithheldSeries.Contains(LoopAnalysisSeries.ProfileNames).Should().Be(!therapy);
+        var asked = service.Invocations.Single().Arguments.OfType<LoopAnalysisFilter>().Single();
+        asked.ReadProfileNames.Should().Be(therapy, "a page that does not load the profiles reads them only for a caller who may see them");
+    }
+
+    [Fact]
+    public async Task LoopAnalysis_Handler_EchoesTheDefaultsItApplied()
+    {
+        var (controller, _) = LoopAnalysisHandler(Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories]));
+
+        var data = Ok(await controller.GetDailyProfile(Week(q => q.Days = [DayOfWeek.Friday, DayOfWeek.Monday])));
+
+        data.AppliedFilters.Days.Should().Equal(DayOfWeek.Monday, DayOfWeek.Friday);
+        data.AppliedFilters.ExcludeIllness.Should().BeTrue();
+        data.AppliedFilters.ExcludeOpenLoop.Should().BeTrue();
+        data.AppliedFilters.ExcludeOverrides.Should().BeFalse();
+        data.IgnoredFilters.Should().BeEmpty();
+        data.UnavailableFilters.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task LoopAnalysis_Handler_TrimsALongRangeAndComparesWithThePeriodBeforeIt()
+    {
+        var (controller, service) = LoopAnalysisHandler(Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories]));
+
+        var data = Ok(await controller.GetDailyProfile(new LoopAnalysisQuery
+        {
+            StartDate = new DateOnly(2024, 1, 1), EndDate = new DateOnly(2024, 5, 31), Compare = LoopAnalysisComparison.Previous,
+        }));
+
+        data.PrimaryRange!.Shortened.Should().BeTrue();
+        data.PrimaryRange.StartDate.Should().Be(new DateOnly(2024, 3, 3));
+        data.ComparisonRange!.StartDate.Should().Be(new DateOnly(2023, 12, 4));
+        data.ComparisonRange.EndDate.Should().Be(new DateOnly(2024, 3, 2));
+        service.Verify(s => s.GetDailyProfileAsync(
+            It.Is<LoopAnalysisFilter>(f => f.From == data.PrimaryRange.From && f.CompareTo == data.PrimaryRange.From),
+            It.IsAny<TimeZoneInfo>(),
+            It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task LoopAnalysis_Handler_AnalysesAClampedCallersLastDayWhateverDatesItAskedFor()
+    {
+        var (controller, service) = LoopAnalysisHandler(
+            Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories]), historyClamped: true,
+            query: "?startDate=2024-01-01&endDate=2024-01-07&compare=previous");
+
+        var data = Ok(await controller.GetDailyProfile(new LoopAnalysisQuery
+        {
+            StartDate = new DateOnly(2024, 1, 1), EndDate = new DateOnly(2024, 1, 7), Compare = LoopAnalysisComparison.Previous,
+        }));
+
+        data.HistoryClamped.Should().BeTrue();
+        data.ComparisonRange.Should().BeNull();
+        data.IgnoredFilters.Should().BeEquivalentTo("startDate", "endDate", "compare");
+        data.PrimaryRange!.From.Should().Be(LoopAnalysisNow.AddHours(-24));
+        data.PrimaryRange.To.Should().Be(LoopAnalysisNow);
+        service.Verify(s => s.GetDailyProfileAsync(
+            It.Is<LoopAnalysisFilter>(f =>
+                f.From == LoopAnalysisNow.AddHours(-24) && f.To == LoopAnalysisNow && f.CompareFrom == null && f.CompareTo == null),
+            It.IsAny<TimeZoneInfo>(),
+            It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task LoopAnalysis_Handler_WithoutATimezone_ResolvesNothingAndSaysWhy()
+    {
+        var (controller, service) = LoopAnalysisHandler(
+            Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories]), timezone: null);
+
+        var data = Ok(await controller.GetDailyProfile(Week()));
+
+        data.TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.NotConfigured);
+        data.PrimaryRange.Should().BeNull();
+        data.Primary.Slots.Should().BeEmpty();
+        service.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData("2024-06-07", "2024-06-01", LoopAnalysisComparison.None, null, null)]
+    [InlineData("2024-06-01", "2024-06-07", LoopAnalysisComparison.Custom, null, null)]
+    [InlineData("2024-06-01", "2024-06-07", LoopAnalysisComparison.Previous, "2024-05-01", "2024-05-07")]
+    [InlineData("2024-06-01", "2024-06-07", LoopAnalysisComparison.Custom, "2024-05-07", "2024-05-01")]
+    public async Task LoopAnalysis_Handler_RejectsDatesThatDoNotMakeARange(
+        string start, string end, LoopAnalysisComparison compare, string? compareStart, string? compareEnd)
+    {
+        var (controller, service) = LoopAnalysisHandler(Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories]));
+
+        var result = await controller.GetDailyProfile(new LoopAnalysisQuery
+        {
+            StartDate = DateOnly.Parse(start),
+            EndDate = DateOnly.Parse(end),
+            Compare = compare,
+            CompareStartDate = compareStart is null ? null : DateOnly.Parse(compareStart),
+            CompareEndDate = compareEnd is null ? null : DateOnly.Parse(compareEnd),
+        });
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+        service.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task LoopAnalysis_Handler_ReadsDatesAfterTodayAsTodaySoFar()
+    {
+        var (controller, service) = LoopAnalysisHandler(Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories]));
+
+        var data = Ok(await controller.GetDailyProfile(new LoopAnalysisQuery
+        {
+            StartDate = new DateOnly(2024, 6, 9),
+            EndDate = new DateOnly(2024, 6, 15),
+            Compare = LoopAnalysisComparison.Custom,
+            CompareStartDate = new DateOnly(2024, 6, 9),
+            CompareEndDate = new DateOnly(2024, 6, 15),
+        }));
+
+        var startOfToday = new DateTime(2024, 6, 7, 14, 0, 0, DateTimeKind.Utc);
+        foreach (var range in new[] { data.PrimaryRange!, data.ComparisonRange! })
+        {
+            range.StartDate.Should().Be(new DateOnly(2024, 6, 8));
+            range.EndDate.Should().Be(new DateOnly(2024, 6, 8));
+            range.From.Should().Be(startOfToday);
+            range.To.Should().Be(LoopAnalysisNow);
+        }
+        service.Verify(s => s.GetDailyProfileAsync(
+            It.Is<LoopAnalysisFilter>(f => f.From == startOfToday && f.To == LoopAnalysisNow
+                && f.CompareFrom == startOfToday && f.CompareTo == LoopAnalysisNow),
+            It.IsAny<TimeZoneInfo>(),
+            It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task LoopAnalysis_Handler_EndsTheRangeAtNow_AndComparesTheSameTimeOfTheEarlierDays()
+    {
+        var (controller, service) = LoopAnalysisHandler(Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories]));
+
+        var data = Ok(await controller.GetDailyProfile(new LoopAnalysisQuery
+        {
+            StartDate = new DateOnly(2024, 6, 2),
+            EndDate = new DateOnly(2024, 6, 14),
+            Compare = LoopAnalysisComparison.Previous,
+        }));
+
+        data.PrimaryRange!.EndDate.Should().Be(new DateOnly(2024, 6, 8));
+        data.PrimaryRange.From.Should().Be(new DateTime(2024, 6, 1, 14, 0, 0, DateTimeKind.Utc));
+        data.PrimaryRange.To.Should().Be(LoopAnalysisNow);
+        data.ComparisonRange!.StartDate.Should().Be(new DateOnly(2024, 5, 26));
+        data.ComparisonRange.EndDate.Should().Be(new DateOnly(2024, 6, 1));
+        data.ComparisonRange.To.Should().Be(new DateTime(2024, 6, 1, 2, 0, 0, DateTimeKind.Utc), "noon on 1 June, local");
+        (data.ComparisonRange.To - data.ComparisonRange.From).Should().Be(data.PrimaryRange.To - data.PrimaryRange.From);
+        service.Verify(s => s.GetDailyProfileAsync(
+            It.Is<LoopAnalysisFilter>(f => f.To == LoopAnalysisNow && f.CompareTo == data.ComparisonRange.To),
+            It.IsAny<TimeZoneInfo>(),
+            It.IsAny<CancellationToken>()));
+    }
+
+    // ── Loop Analysis predictions ───────────────────────────────────────────────────────────
+
+    private static PredictionHorizonAccuracy[] Horizons() =>
+        [new PredictionHorizonAccuracy { Minutes = 30, Error = Aggregate(5), Mae = 5, Mard = 4, SettingsSignal = true }];
+
+    private static PredictionCurveAccuracy Curve(PredictionCurve curve, params PredictionContext[] contexts) => new()
+    {
+        Curve = curve,
+        Contexts = [.. contexts],
+        Horizons = [.. Horizons()],
+        ByHour = [new PredictionHourAccuracy { Hour = 0, Horizons = [.. Horizons()] }],
+        ByContext = [.. contexts.Select(c => new PredictionContextAccuracy { Context = c, Horizons = [.. Horizons()] })],
+    };
+
+    private static PredictionAccuracyRange PredictionAccuracyRange() => new()
+    {
+        Predictions = 2,
+        Algorithms = [AidAlgorithm.Loop, AidAlgorithm.AndroidAps],
+        Curves =
+        [
+            Curve(PredictionCurve.Default, Enum.GetValues<PredictionContext>()),
+            Curve(PredictionCurve.Iob, PredictionContext.PostCorrection, PredictionContext.Fasting),
+            Curve(PredictionCurve.Cob, PredictionContext.PostMeal),
+            Curve(PredictionCurve.Uam, Enum.GetValues<PredictionContext>()),
+        ],
+    };
+
+    private static PredictionAccuracyResponse PredictionAccuracy() => new()
+    {
+        Primary = PredictionAccuracyRange(),
+        Comparison = PredictionAccuracyRange(),
+        ProfileNames = ["Default"],
+    };
+
+    [Fact]
+    public void LoopAnalysis_PredictionAccuracy_IsGatedOnReportsRead()
+    {
+        var gate = GateOn<LoopAnalysisController>(nameof(LoopAnalysisController.GetPredictionAccuracy));
+
+        gate!.RequiredScopes.Should().BeEquivalentTo([LoopAnalysisReadScopeGuard.AdmissionScope]);
+    }
+
+    [Fact]
+    public void LoopAnalysis_Predictions_WithNoCategory_WithholdEveryField()
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(RedactionCoverage.Populated<PredictionAccuracyResponse>(), Granted());
+
+        RedactionCoverage.AssertWithheld(
+            data,
+            [typeof(PredictionAccuracyRange)],
+            ["PredictionAccuracyRange.From", "PredictionAccuracyRange.To"]);
+    }
+
+    [Fact]
+    public void LoopAnalysis_Predictions_WithoutTreatments_WithholdEveryContextField()
+    {
+        var data = RedactionCoverage.Populated<PredictionAccuracyResponse>();
+        foreach (var curve in data.Primary.Curves.Concat(data.Comparison!.Curves))
+            curve.Contexts = [.. Enum.GetValues<PredictionContext>()];
+
+        RedactionCoverage.AssertWithheld(
+            LoopAnalysisReadScopeGuard.Redact(data, Granted(Scope.GlucoseRead, Scope.DevicesRead)),
+            [typeof(PredictionCurveAccuracy), typeof(PredictionHourAccuracy), typeof(PredictionHorizonAccuracy)],
+            [
+                "PredictionCurveAccuracy.Curve", "PredictionCurveAccuracy.Contexts",
+                "PredictionCurveAccuracy.Horizons", "PredictionCurveAccuracy.ByHour",
+                "PredictionHourAccuracy.Hour", "PredictionHourAccuracy.Horizons",
+                "PredictionHorizonAccuracy.Minutes", "PredictionHorizonAccuracy.Error",
+                "PredictionHorizonAccuracy.Mae", "PredictionHorizonAccuracy.Mard",
+                "PredictionHorizonAccuracy.Unmatched", "PredictionHorizonAccuracy.Excluded",
+                "PredictionHorizonAccuracy.SettingsSignal", "PredictionHorizonAccuracy.BiasScale",
+            ]);
+    }
+
+    [Fact]
+    public void LoopAnalysis_Predictions_WithEveryCategory_AreUntouched()
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(PredictionAccuracy(), Granted(AllLoopAnalysisCategories));
+
+        data.WithheldSeries.Should().BeEmpty();
+        data.Primary.Curves.Should().HaveCount(4);
+        data.Primary.Curves.Should().OnlyContain(c => c.ByContext.Count > 0);
+    }
+
+    [Theory]
+    [InlineData(Scope.TreatmentsRead, Scope.DevicesRead)]
+    [InlineData(Scope.GlucoseRead, Scope.TreatmentsRead)]
+    public void LoopAnalysis_Predictions_NeedBothTheReadingsAndTheSnapshots(params string[] scopes)
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(PredictionAccuracy(), Granted(scopes));
+
+        var devices = scopes.Contains(Scope.DevicesRead);
+        data.WithheldSeries.Should().Equal(devices
+            ? [LoopAnalysisSeries.ProfileNames, LoopAnalysisSeries.PredictionCurves]
+            : [LoopAnalysisSeries.ProfileNames, LoopAnalysisSeries.PredictionCurves, LoopAnalysisSeries.PredictionCount]);
+        foreach (var range in new[] { data.Primary, data.Comparison! })
+        {
+            range.Curves.Should().BeEmpty();
+            (range.Predictions == 0).Should().Be(!devices, "the count is of APS snapshots");
+            (range.Algorithms.Count == 0).Should().Be(!devices);
+        }
+    }
+
+    [Fact]
+    public void LoopAnalysis_Predictions_WithoutTreatments_NameTheHiddenCurvesWhetherOrNotAnySnapshotCarriedThem()
+    {
+        // No COB curve was carried: oref uploads it only while carbs are absorbing.
+        var data = PredictionAccuracy();
+        data.Primary.Curves.RemoveAll(c => c.Curve == PredictionCurve.Cob);
+
+        var redacted = LoopAnalysisReadScopeGuard.Redact(data, Granted(Scope.GlucoseRead, Scope.DevicesRead, Scope.TherapyRead));
+
+        redacted.Primary.HiddenCurves.Should().Equal(
+            [PredictionCurve.Iob, PredictionCurve.ZeroTemp, PredictionCurve.Cob], "the list follows the algorithms, not the snapshots");
+        redacted.Primary.HiddenCurves.Should().Equal(redacted.Comparison!.HiddenCurves);
+    }
+
+    [Fact]
+    public void LoopAnalysis_Predictions_WithDevicesAlone_NameNoHiddenCurve()
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(PredictionAccuracy(), Granted(Scope.DevicesRead));
+
+        foreach (var range in new[] { data.Primary, data.Comparison! })
+        {
+            range.Curves.Should().BeEmpty();
+            range.HiddenCurves.Should().BeEmpty("every curve is withheld for want of glucose, not only some for treatments");
+            range.Algorithms.Should().NotBeEmpty();
+        }
+    }
+
+    [Fact]
+    public void LoopAnalysis_Predictions_ForLoopAlone_HideNoCurveWithoutTreatments()
+    {
+        var data = PredictionAccuracy();
+        data.Primary.Algorithms = [AidAlgorithm.Loop];
+
+        LoopAnalysisReadScopeGuard.Redact(data, Granted(Scope.GlucoseRead, Scope.DevicesRead, Scope.TherapyRead))
+            .Primary.HiddenCurves.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void LoopAnalysis_Predictions_WithoutTreatments_DropTheContextsAndTheCurvesReportedInSome()
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(
+            PredictionAccuracy(), Granted(Scope.GlucoseRead, Scope.DevicesRead, Scope.TherapyRead));
+
+        data.WithheldSeries.Should().Equal(LoopAnalysisSeries.PredictionContexts);
+        foreach (var range in new[] { data.Primary, data.Comparison! })
+        {
+            range.Curves.Select(c => c.Curve).Should().Equal(
+                [PredictionCurve.Default, PredictionCurve.Uam], "a curve reported in every context reads no treatment");
+            range.HiddenCurves.Should().Equal(PredictionCurve.Iob, PredictionCurve.ZeroTemp, PredictionCurve.Cob);
+            foreach (var curve in range.Curves)
+            {
+                curve.Horizons.Should().NotBeEmpty();
+                curve.ByHour.Should().NotBeEmpty();
+                curve.ByContext.Should().BeEmpty();
+            }
+        }
+    }
+
+    private static PredictionAccuracyResponse Ok(ActionResult<PredictionAccuracyResponse> result) =>
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<PredictionAccuracyResponse>().Subject;
+
+    [Fact]
+    public async Task LoopAnalysis_PredictionHandler_ResolvesRedactsAndEchoes()
+    {
+        var (controller, service) = LoopAnalysisHandler(
+            Granted(Scope.ReportsRead, Scope.GlucoseRead, Scope.DevicesRead), query: "?excludeExercise=true");
+
+        var data = Ok(await controller.GetPredictionAccuracy(
+            Week(q => { q.Compare = LoopAnalysisComparison.Previous; q.ExcludeExercise = true; })));
+
+        data.Primary.Curves.Should().HaveCount(2).And.OnlyContain(c => c.ByContext.Count == 0);
+        data.WithheldSeries.Should().Equal(LoopAnalysisSeries.ProfileNames, LoopAnalysisSeries.PredictionContexts);
+        data.IgnoredFilters.Should().Equal("excludeExercise");
+        data.UnavailableFilters.Should().BeEquivalentTo(new[]
+        {
+            new LoopAnalysisUnavailableFilter { Filter = "profileName", RequiredScope = Scope.TherapyRead },
+            new LoopAnalysisUnavailableFilter { Filter = "excludeOverrides", RequiredScope = Scope.TreatmentsRead },
+            new LoopAnalysisUnavailableFilter { Filter = "excludeTemporaryTargets", RequiredScope = Scope.TreatmentsRead },
+            new LoopAnalysisUnavailableFilter { Filter = "excludeExercise", RequiredScope = Scope.TreatmentsRead },
+            new LoopAnalysisUnavailableFilter { Filter = "excludeIllness", RequiredScope = Scope.TreatmentsRead },
+        }, "every filter the caller's scopes would drop, set or not");
+        data.AppliedFilters.ExcludeExercise.Should().BeFalse();
+        data.ComparisonRange!.EndDate.Should().Be(new DateOnly(2024, 5, 31));
+        service.Verify(s => s.GetPredictionAccuracyAsync(
+            It.Is<LoopAnalysisFilter>(f => !f.Masks.ExcludeExercise && f.CompareTo == data.PrimaryRange!.From),
+            It.Is<TimeZoneInfo>(z => z.Id == "Australia/Sydney"),
+            It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task LoopAnalysis_PredictionHandler_AnalysesAClampedCallersLastDay()
+    {
+        var (controller, service) = LoopAnalysisHandler(
+            Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories]), historyClamped: true);
+
+        var data = Ok(await controller.GetPredictionAccuracy(Week()));
+
+        data.HistoryClamped.Should().BeTrue();
+        service.Verify(s => s.GetPredictionAccuracyAsync(
+            It.Is<LoopAnalysisFilter>(f => f.From == LoopAnalysisNow.AddHours(-24) && f.To == LoopAnalysisNow),
+            It.IsAny<TimeZoneInfo>(),
+            It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task LoopAnalysis_PredictionHandler_WithoutATimezone_ComputesNothing()
+    {
+        var (controller, service) = LoopAnalysisHandler(
+            Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories]), timezone: null);
+
+        var data = Ok(await controller.GetPredictionAccuracy(Week()));
+
+        data.TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.NotConfigured);
+        data.Primary.Curves.Should().BeEmpty();
+        service.VerifyNoOtherCalls();
+    }
+
+    // ── Loop health ─────────────────────────────────────────────────────────────────────────
+
+    private static LoopHealthShare Share(double percent) => new() { Percent = percent, Daily = Aggregate(percent) };
+
+    private static LoopHealthRange LoopHealthRange() => new()
+    {
+        Days = [new LoopHealthDay { Date = "2024-06-03" }],
+        Activity = new LoopHealthActivity
+        {
+            AidActivePercent = 90, PumpUsePercent = 95, CgmActivePercent = 98,
+            ClosedLoop = Share(90), Pump = Share(95), Cgm = Share(98),
+        },
+        Cadence = new LoopHealthCadence { LoopGaps = new LoopHealthGaps { Count = 1 }, UnrecordedDelivery = new LoopHealthGaps() },
+        ZeroDelivery = new LoopHealthZeroDelivery(),
+        MaxBasal = new LoopHealthMaxBasal { AtCap = Share(5) },
+        AtMaxIob = Share(1),
+        AutomaticBoluses = new LoopHealthAutomaticBoluses(),
+        SuggestedNotEnacted = Share(0.1),
+        SensitivityRatio = new LoopHealthDistribution { Overall = Aggregate(1) },
+        Limits = new LoopHealthLimits { LoopMaximumBasalRate = 3, OrefMaxIob = 4 },
+    };
+
+    private static LoopHealthResponse LoopHealth() =>
+        new() { Primary = LoopHealthRange(), Comparison = LoopHealthRange(), ProfileNames = ["Default"] };
+
+    [Fact]
+    public void LoopHealth_WithoutDevices_DropsWhatTheLoopCyclesReport()
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(
+            LoopHealth(), Granted(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.TherapyRead));
+
+        data.WithheldSeries.Should().BeEquivalentTo([
+            LoopAnalysisSeries.LoopActivity, LoopAnalysisSeries.UnrecordedDelivery, LoopAnalysisSeries.LoopGaps,
+            LoopAnalysisSeries.MaxBasal, LoopAnalysisSeries.AtMaxIob, LoopAnalysisSeries.SuggestedNotEnacted,
+            LoopAnalysisSeries.SensitivityRatio, LoopAnalysisSeries.LoopLimits, LoopAnalysisSeries.OrefMaxIob,
+        ]);
+        foreach (var range in new[] { data.Primary, data.Comparison! })
+        {
+            range.Cadence.LoopGaps.Should().BeNull();
+            range.Cadence.UnrecordedDelivery.Should().BeNull();
+            range.Activity.ClosedLoop.Should().BeNull();
+            range.Activity.Pump.Should().BeNull();
+            range.Activity.AidActivePercent.Should().BeNull();
+            range.Activity.PumpUsePercent.Should().BeNull();
+            range.MaxBasal.Should().BeNull();
+            range.AtMaxIob.Should().BeNull();
+            range.SuggestedNotEnacted.Should().BeNull();
+            range.SensitivityRatio.Should().BeNull();
+            range.Limits.OrefMaxIob.Should().BeNull();
+            range.Limits.LoopMaximumBasalRate.Should().BeNull("a Loop setting shows the system was Loop, which the cycles say");
+            range.ZeroDelivery.Should().NotBeNull();
+            range.AutomaticBoluses.Should().NotBeNull();
+            range.Activity.Cgm.Should().NotBeNull();
+        }
+    }
+
+    [Fact]
+    public void LoopHealth_WithoutTreatments_DropsDeliveryAndBoluses()
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(
+            LoopHealth(), Granted(Scope.GlucoseRead, Scope.DevicesRead, Scope.TherapyRead));
+
+        data.WithheldSeries.Should().BeEquivalentTo([
+            LoopAnalysisSeries.LoopActivity, LoopAnalysisSeries.UnrecordedDelivery, LoopAnalysisSeries.MaxBasal,
+            LoopAnalysisSeries.ZeroDelivery, LoopAnalysisSeries.AutomaticBoluses,
+        ]);
+        data.Primary.ZeroDelivery.Should().BeNull();
+        data.Primary.AutomaticBoluses.Should().BeNull();
+        data.Primary.Activity.ClosedLoop.Should().BeNull("without cycles it is read off the algorithm's temps");
+        data.Primary.Cadence.UnrecordedDelivery.Should().BeNull();
+        data.Primary.Cadence.LoopGaps.Should().NotBeNull();
+        data.Primary.MaxBasal.Should().BeNull("time at the cap is measured on delivered basal");
+        data.Primary.Limits.OrefMaxIob.Should().Be(4);
+    }
+
+    [Fact]
+    public void LoopHealth_WithoutTherapyOrGlucose_DropsTheLimitsAndTheCgm()
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(
+            LoopHealth(), Granted(Scope.TreatmentsRead, Scope.DevicesRead));
+
+        data.WithheldSeries.Should().BeEquivalentTo([
+            LoopAnalysisSeries.ProfileNames, LoopAnalysisSeries.CgmActivity, LoopAnalysisSeries.LoopLimits, LoopAnalysisSeries.OrefMaxIob,
+            LoopAnalysisSeries.MaxBasal,
+        ]);
+        data.Primary.Limits.Should().BeEquivalentTo(new LoopHealthLimits());
+        data.Primary.Activity.Cgm.Should().BeNull();
+        data.Primary.Activity.CgmActivePercent.Should().BeNull();
+        data.Primary.MaxBasal.Should().BeNull("the hours at Loop's cap show where its setting sits");
+    }
+
+    [Fact]
+    public void LoopHealth_FullAccess_KeepsEverything()
+    {
+        var original = LoopHealth();
+
+        var data = LoopAnalysisReadScopeGuard.Redact(original, Granted(AllLoopAnalysisCategories));
+
+        data.Should().BeSameAs(original);
+        data.WithheldSeries.Should().BeEmpty();
+        data.Primary.MaxBasal.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void LoopHealth_WithholdingEveryCategory_LeavesNothingButTheDays()
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(RedactionCoverage.Populated<LoopHealthResponse>(), Granted());
+
+        RedactionCoverage.AssertWithheld(
+            data,
+            [
+                typeof(LoopHealthRange), typeof(LoopHealthActivity), typeof(LoopHealthCadence), typeof(LoopHealthLimits),
+                typeof(LoopHealthUnknown),
+            ],
+            [
+                "LoopHealthRange.From", "LoopHealthRange.To", "LoopHealthRange.Days",
+                "LoopHealthRange.Activity", "LoopHealthRange.Cadence", "LoopHealthRange.Limits", "LoopHealthRange.Unknown",
+            ]);
+    }
+
+    [Fact]
+    public void LoopHealth_WithoutDevices_DropsEveryReasonReadOffTheCycles()
+    {
+        var data = RedactionCoverage.Populated<LoopHealthResponse>();
+
+        var redacted = LoopAnalysisReadScopeGuard.Redact(
+            data, Granted(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.TherapyRead));
+
+        redacted.Primary.Unknown.Should().BeEquivalentTo(new LoopHealthUnknown(),
+            "which system looped, and whether it looped at all, are read off the APS cycles");
+    }
+
+    [Fact]
+    public void LoopHealth_WithEveryCategory_KeepsTheReasons()
+    {
+        var data = LoopAnalysisReadScopeGuard.Redact(
+            RedactionCoverage.Populated<LoopHealthResponse>(), Granted(AllLoopAnalysisCategories));
+
+        data.Primary.Unknown.AtMaxIob.Should().NotBeNull();
+        data.Primary.Unknown.LoopMaximumBasalRate.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void LoopHealth_GateIsReportsRead() =>
+        GateOn<LoopAnalysisController>(nameof(LoopAnalysisController.GetLoopHealth))!
+            .RequiredScopes.Should().BeEquivalentTo([LoopAnalysisReadScopeGuard.AdmissionScope]);
+
+    [Fact]
+    public async Task LoopHealth_Handler_RedactsClampsAndReportsTheIgnoredFilters()
+    {
+        var (controller, service) = LoopAnalysisHandler(
+            Granted(Scope.ReportsRead, Scope.GlucoseRead), historyClamped: true, query: "?excludeOpenLoop=true");
+        service
+            .Setup(s => s.GetLoopHealthAsync(It.IsAny<LoopAnalysisFilter>(), It.IsAny<TimeZoneInfo>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LoopHealth);
+
+        var result = await controller.GetLoopHealth(Week(q => q.ExcludeOpenLoop = true));
+
+        var data = result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<LoopHealthResponse>().Subject;
+        data.HistoryClamped.Should().BeTrue();
+        data.IgnoredFilters.Should().Equal("excludeOpenLoop");
+        data.WithheldSeries.Should().Contain(LoopAnalysisSeries.LoopGaps);
+        data.Primary.Cadence.LoopGaps.Should().BeNull();
+        data.Primary.Activity.Cgm.Should().NotBeNull();
+        data.PrimaryRange!.From.Should().Be(LoopAnalysisNow.AddHours(-24));
+        service.Verify(s => s.GetLoopHealthAsync(
+            It.Is<LoopAnalysisFilter>(f => f.From == LoopAnalysisNow.AddHours(-24) && !f.Masks.ExcludeOpenLoop),
+            It.IsAny<TimeZoneInfo>(),
+            It.IsAny<CancellationToken>()));
     }
 }

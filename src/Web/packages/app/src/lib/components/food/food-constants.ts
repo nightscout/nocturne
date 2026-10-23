@@ -1,3 +1,5 @@
+import type { Food } from "$lib/api";
+
 /** Standard food measurement units */
 export const FOOD_UNITS = ["g", "ml", "pcs", "oz", "serving"] as const;
 export type FoodUnit = (typeof FOOD_UNITS)[number];
@@ -14,6 +16,38 @@ export type GiValue = (typeof GI_OPTIONS)[number]["value"];
 /** Get GI label from numeric value */
 export function getGiLabel(value: number | undefined): string {
   return GI_OPTIONS.find((opt) => opt.value === value)?.label ?? "Unknown";
+}
+
+/** Category name to its subcategory names, as the category combobox reads it. */
+export type FoodCategoryMap = Record<string, Record<string, boolean>>;
+
+export function foodCategoryMap(foods: Food[]): FoodCategoryMap {
+  const map: FoodCategoryMap = {};
+  for (const food of foods) {
+    if (!food.category) continue;
+    map[food.category] ??= {};
+    if (food.subcategory) map[food.category][food.subcategory] = true;
+  }
+  return map;
+}
+
+/**
+ * A food to create from another: what it is and what it contains, without the source's identity,
+ * visibility or quickpick list.
+ */
+export function newFoodFrom(food: Food): Food {
+  const {
+    _id: _,
+    hidden: _hidden,
+    hideafteruse: _hideafteruse,
+    position: _position,
+    foods: _foods,
+    created_at: _createdAt,
+    srvCreated: _srvCreated,
+    srvModified: _srvModified,
+    ...copy
+  } = food;
+  return copy;
 }
 
 /** Default portion size for new foods */

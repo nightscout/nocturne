@@ -44,6 +44,8 @@ export interface SequenceDefinition {
   /** A sequence that must be done first, or a {@link CoachGates} entry the host must set true. */
   prerequisite?: string;
   completesKeys?: string[];
+  /** Dismissing a step of this sequence also holds back every other mark until the next navigation. */
+  quietOnDismiss?: boolean;
 }
 
 export interface SequenceConfig {
@@ -68,8 +70,19 @@ export interface CoachRouter {
   goto(url: URL): Promise<unknown>;
 }
 
+/** The popover's control text. The app supplies it so the package carries no language of its own. */
+export interface CoachLabels {
+  dismiss: string;
+  showTip: string;
+  back: string;
+  next: string;
+  gotIt: string;
+  stepCounter: (current: number, total: number) => string;
+}
+
 export interface CoachMarkProviderOptions {
   adapter: CoachMarkAdapter;
+  labels: CoachLabels;
   sequences?: SequenceConfig;
   gates?: CoachGates;
   settleDelay?: number;

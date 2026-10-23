@@ -1,0 +1,640 @@
+---
+title: Loop Analysis
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Loop Analysis
+
+An automated insulin delivery system (Loop, AAPS, Trio, iAPS or OpenAPS) makes
+small changes to your insulin all day. **Loop Analysis** shows these changes,
+when they occurred, and what occurred after them. Use it to find answers to
+questions such as these:
+
+- _"Does my loop always add insulin at 3 in the morning?"_
+- _"What does my glucose do after breakfast?"_
+- _"How frequently does the loop not operate?"_
+
+To open it, go to **Reports > Loop Analysis**. Anyone whose access includes
+reports can open it. This includes members, guest links and apps that you
+authorise. A public share link shows the pages, but it cannot show the figures,
+because the share does not get the time zone.
+
+<Callout type="warning" title="Observations, not advice">
+
+  All of Loop Analysis is an observation of your own data. Each figure shows the
+  number of days or events that it uses. No figure is an instruction. Speak to
+  your diabetes care team before you change a setting.
+
+</Callout>
+
+## The five pages
+
+Loop Analysis has five pages. The page switcher under the report header links
+the pages. When you go to a different page, the range and the filters stay the
+same.
+
+| Page | The question that it answers |
+|------|------------------------------|
+| **Daily profile** | What does a usual day look like, hour by hour? When does the loop add or remove insulin? |
+| **Meals and events** | What occurs after a meal, a correction, a rise with no carbs logged, or the start of exercise or a new sensor? |
+| **Prediction accuracy** | How close are the predictions of the loop to the readings that followed them? |
+| **Loop health** | How much of the time was the loop closed, and how frequently did it reach its limits? |
+| **Settings evidence** | What does your data show about your basal rates, insulin sensitivity (ISF) and carb ratio? |
+
+## The Filters panel
+
+To change the range and the filters, open the **Filters** panel of the reports.
+The Loop Analysis filters are under the date range.
+
+<Screenshot id="loop-analysis-filter-bar" />
+
+- The date range: the days that the report uses. The maximum is 90 days. For a
+  longer range, the report uses only the most recent 90 days, and it tells you
+  this.
+- **Compare with**: a second period to show with the first. Select
+  **Previous period** for the period immediately before, or **Custom range** to
+  select the dates. The charts show the comparison as dashed outlines. The Loop
+  health tiles and the chart readouts show the compared value.
+- **Profile**: use only the time when one profile was active.
+- **Days of the week**: use only some days of the week, for example weekdays.
+- **Exclude the time of**: remove the time of overrides, temporary targets,
+  exercise, illness, or time not in closed loop. Illness and time not in closed
+  loop are removed by default. The report removes only that time. It does not
+  remove the full day.
+
+**Time not in closed loop** uses the dates when each of your pumps was in use.
+These dates are days in your time zone, from local midnight to local midnight.
+
+The report always removes glucose readings that your data marks as not
+reliable. Examples are compression lows (a false low when you lie on your
+sensor) and sensor errors.
+
+### Ranges that include today
+
+A range never goes after the current time. If the range includes today, the
+report uses today only up to now. When you compare with the previous period,
+the comparison also stops at the same time of day on its last day.
+
+### Time zone
+
+Loop Analysis aligns days by the local time of day. It needs the time zone of
+your data to do this. If it cannot get the time zone, each page shows
+**This report needs a time zone** and the cause:
+
+- **The profile settings do not have a time zone.** The owner of this data can
+  set a time zone in the profile settings.
+- **This server does not recognise the time zone in the profile settings.** The
+  owner of this data can correct the time zone in the profile settings.
+- **The time zone of this data did not load.** To try again, reload the report
+  later.
+- **A shared link does not show the time zone of this data.**
+
+## Net loop correction
+
+Many figures use **net loop correction**. This is the insulin that your loop
+added above your scheduled basal, or removed from it. It is the sum of two
+decisions of the algorithm:
+
+- **Temp basals that the algorithm set**, measured against your scheduled
+  basal. The schedule is adjusted for an override that changes your insulin
+  needs. A temp above the schedule adds insulin. A temp below the schedule
+  (also a zero temp) removes insulin.
+- **Automatic boluses** (SMBs in AAPS, Trio, iAPS and OpenAPS, or the automatic
+  boluses of Loop).
+
+Many systems make most of their corrections with automatic boluses. So the
+figure includes them. If it did not include them, it would show only a part of
+what the loop does.
+
+<Screenshot id="loop-analysis-net-correction" />
+
+Some insulin changes are not decisions of the algorithm. Net loop correction
+does not include them. The Daily profile can show them as separate lines:
+
+- temp basals that you set manually;
+- pump suspends;
+- delivery that the report calculated from the schedule (**Inferred**).
+
+### Which temp basals the loop set
+
+Trio, AAPS and OpenAPS do not record whether a temp basal came from the loop or
+from you. Nocturne compares each temp with the decisions that your loop uploaded
+near it:
+
+- If the loop asked for the same rate within 5 minutes, the temp is from the
+  algorithm.
+- If the loop asked only for different rates, the temp is manual.
+- If the loop uploaded no decisions near the temp, the temp keeps the origin
+  that its uploader gives. This is the algorithm for a loop app, and manual for
+  other sources.
+
+The temp and the decision can come from devices with different names. For
+example, AAPS can upload through Nightscout with no device name, and Trio
+through Tidepool. Nocturne then uses the decisions of the one loop device that
+uploaded near the temp. If two or more loop devices uploaded near the temp, the
+temp keeps the origin that its uploader gives.
+
+### Delivered basal
+
+The report calculates delivered basal from the temp basal records of the pump.
+
+- **Two sources for one pump.** Two sources can record the same pump, for
+  example a loop and a Tidepool copy of it. The records of the loop are used
+  first. The records of the other source fill only the time that the loop did
+  not record.
+- **A cancelled temp.** When a temp is cancelled, basal goes back to the
+  schedule. The report uses the schedule for this time only when the rule for
+  missing records applies.
+- **Missing records.** If there is no record of delivery, the basal for that
+  time is not known. The report uses the schedule only for a gap of 3 hours or
+  less, with records on the two sides. A longer gap stays unknown.
+
+## Read the charts
+
+Most charts in Loop Analysis show a shaded band, not a single line.
+
+- The **line** in the middle is the median. Half of your days (or readings) were
+  above it and half were below it.
+- The **darker band** shows the middle half (25th to 75th percentile).
+- The **lighter band** shows most of your data (10th to 90th percentile).
+- **n** is the number of days, readings or events that a figure uses.
+
+The report measures two types of figure differently:
+
+- For **glucose**, the report puts all the readings from all the days into each
+  five-minute period. The AGP report does the same, so the bands agree with AGP.
+  For glucose, n counts readings.
+- **Rates** (basal, net loop correction, insulin on board and carbs on board)
+  are calculated for each day first. Then the report compares the days. For
+  rates, n counts days. A day counts in a period only when data covers half of the
+  period or more.
+
+If a figure uses **fewer than 5 days**, the chart shows it faded. There is not
+enough data to show a pattern.
+
+The report shows missing data as missing, never as zero. A zero temp is a real
+zero, and it always counts.
+
+### When parts are hidden
+
+Your access can include only some types of data. Then some parts of the report
+show **Hidden: your access does not include this data**. Each part needs access
+to the type of data that it uses: glucose, treatments (insulin and carbs),
+devices (the records of the loop and the pump) or therapy settings (your
+profile). Filters that you cannot use are grey, and they show the access that
+they need.
+
+If you can see only the **last 24 hours**, the report shows only those 24 hours
+for all ranges. It does not compare ranges. Settings evidence does not show. The
+report tells you this.
+
+## Daily profile
+
+The Daily profile aligns your days by the time of day, in five-minute periods of
+the local day. This shows the patterns at each time of day.
+
+<Screenshot id="loop-analysis-daily-profile" />
+
+The tiles at the top show the totals:
+
+- **Days with data**.
+- **Total insulin** each day.
+- **Basal / bolus**: the split between basal and bolus.
+- **Automatic / manual bolus**.
+- **Delivered basal ratio**: delivered basal divided by scheduled basal.
+- **Net loop correction** each day.
+
+Four tiles use only complete days: **Total insulin**, **Basal / bolus**,
+**Automatic / manual bolus** and **Net loop correction**. A day counts in these
+tiles only when the report uses 90% of the day or more. Delivery must also be
+known for 90% of the day or more. Known delivery is recorded, or filled from the
+schedule. Net loop correction each day also needs the schedule for 90% of the
+day. The report never increases a part of a day to a full day. Today counts only when 90% of
+the day is before now.
+
+**Days with data** counts each day with glucose or treatments. **Delivered basal
+ratio** adds all the days that have delivery and a schedule.
+
+The charts are under the tiles. From top to bottom:
+
+- **Glucose**, with your target range behind it.
+- **Basal**: the scheduled basal and the delivered basal.
+- **Net loop correction**: the insulin that the loop added or removed. A line
+  shows the mean, with automatic boluses. A band shows the middle half of the
+  temp basal change only. The chart under it shows the sum of the correction for
+  each hour.
+- **Insulin on board** and **carbs on board**.
+- **Manual boluses** and **carbs**: how frequently and how much at each time of
+  day.
+
+<Screenshot id="loop-analysis-daily-glucose" />
+
+To list the days for a time, select the time or press Enter on it. Each day
+links to **Day in Review** at that time. A day that the range includes only
+partly, for example today, shows **Part of the day**.
+
+## Meals and events
+
+This page aligns all the events of one kind at the time that they occurred. Then
+it shows what occurred after them: the change in glucose, glucose, the
+correction of the loop, the insulin above your schedule since the event, and
+insulin and carbs on board. You can compare a maximum of three kinds of event
+(cohorts).
+
+<Screenshot id="loop-analysis-event-glucose-change" />
+
+For each cohort, you can select a time of day. For meals, you can also select a
+range of grams. Select the time to show before and after each event. The
+default is 1 hour before and 5 hours after.
+
+<Screenshot id="loop-analysis-meals-events" />
+
+The report uses only events whose full window is before now. The report does
+not use an event until its window is complete.
+
+### The events that you can select
+
+- **Meals**: a carb entry. Entries at the same time count as one meal.
+- **Correction boluses**: a manual bolus with no carbs logged in the 30 minutes
+  before or after it. Automatic boluses are not correction boluses.
+- **Unannounced rises**: a rise in glucose that looks like a meal, with no carbs
+  logged. See below.
+- **Sensor starts**, and the start of **exercise**, an **override** or a
+  **temporary target**.
+
+### How the report finds an unannounced rise
+
+The report looks for the pattern that a meal makes:
+
+1. **A stable floor.** Glucose stays stable for 30 minutes or more. It moves
+   20 mg/dL (1.1 mmol/L) or less. The lowest quarter of its readings is at
+   70 mg/dL (3.9 mmol/L) or more.
+2. **A climb.** After the floor, glucose increases by 40 mg/dL (2.2 mmol/L) or
+   more in 45 minutes. If glucose goes back to the floor, the climb starts
+   again.
+3. **Not a sensor error.** The report does not use a climb faster than
+   5 mg/dL (0.3 mmol/L) each minute. It does not use a single jump of
+   30 mg/dL (1.7 mmol/L) or more. It also does not use the shape of a
+   **compression recovery**. In this shape, glucose decreases quickly. Then it
+   increases to the value from before the decrease. This is the shape that you
+   get when you lie on your sensor.
+4. **No carbs logged.** If carbs were logged from 3 hours before the rise to
+   30 minutes after it, or carbs were on board, the report does not count the rise.
+
+A second climb within 2 hours is part of the same rise.
+
+You can also select **Only rises with extra loop insulin**.
+Then the report uses only rises where the loop added half an hour of your usual
+basal or more, and 0.2 U or more, in the 45 minutes after the rise started. This
+removes rises that your loop did not treat as real.
+
+### Rises and falls
+
+<Screenshot id="loop-analysis-event-metrics" />
+
+Each kind of event has a usual direction. After a meal, an unannounced rise or a
+sensor start, the table shows rise figures. After a correction bolus, the start
+of exercise, an override or a temporary target, the table shows fall figures.
+
+For a rise, the table shows the **peak rise**, the **time to peak**, and the
+time until glucose is again within 20 mg/dL (1.1 mmol/L) of the start glucose.
+
+For a fall, the table shows these figures:
+
+- **Drop to window end**: the start glucose minus the glucose at the end of the
+  window. Settings evidence uses the same method over a maximum of 4 hours. The
+  drop does not use the lowest reading, because noise can make the lowest
+  reading too low.
+- **Lowest glucose** and **Time to lowest glucose**.
+- **Drop per unit above schedule**: the drop divided by the net insulin above
+  your schedule. The insulin is for the full window of the event. This includes
+  the time before the event. The table shows this figure only for isolated events with
+  0.5 U or more above the schedule, and with no glucose below 70 mg/dL
+  (3.9 mmol/L).
+- **Went below range**: the number of events with a reading below 70 mg/dL
+  (3.9 mmol/L) after the event.
+
+### Isolated events
+
+An event is **isolated** when no other meal, correction or meal-like rise occurs
+in its window. To use only these events, select **Isolated events only**. If you
+do not select it, the curves after a meal can also include the next snack.
+
+The **observed grams per unit** is the grams of carbs for each unit of insulin
+above your schedule in the window. It is not the same as your carb ratio, which
+counts all of your bolus insulin. The figure shows only for isolated meals. When
+a meal overlaps another event, the insulin in the window was not for that meal
+only. So the grams divided by that insulin gives an incorrect value. The
+figure also needs the delivery and the schedule for 90% of the window or more.
+
+## Prediction accuracy
+
+Your loop predicts your glucose, and it makes its decisions from these
+predictions. This page compares the predictions with the readings that followed
+them, at 30, 60, 90 and 120 minutes ahead.
+
+<Screenshot id="loop-analysis-predictions" />
+
+- **Bias** is the average of _prediction minus reading_. A positive bias means
+  that the predictions were too high. A negative bias means that they were too
+  low.
+- **MAE** (mean absolute error) is the average size of the error, in the two
+  directions.
+- **n** is the number of predictions that the report compared.
+
+The report pairs a prediction only with a reading within 2.5 minutes of the
+predicted time. If there is no reading that close, the prediction is unmatched.
+The report does not use a horizon whose reading can still arrive.
+
+### Why only 30 and 60 minutes are about your settings
+
+A prediction assumes that nothing else will occur. But the loop continues to
+change insulin after the prediction. After two hours, glucose also shows all of
+these changes. So only the **bias at 30 and 60 minutes** gives information
+about your settings. For example, if predictions after meals are usually too
+high, speak to your diabetes care team. The longer horizons are for information only.
+
+### Interrupted predictions
+
+If you logged carbs or gave a manual bolus after a prediction and before its
+horizon, the prediction did not know about it. These horizons are
+**interrupted**. The report does not use them in a figure. Food that you did
+not log does not interrupt a prediction.
+
+### Curves and contexts
+
+Loop makes one prediction. AAPS, Trio, iAPS and OpenAPS make a number of
+predictions. Each one assumes something different: **IOB** (insulin only),
+**zero temp** (if basal stops), **COB** (carbs absorb as entered) and **UAM**
+(unannounced meal, from the rise in glucose). The report checks each curve
+only in the contexts where the algorithm uses it. For example, IOB and zero
+temp are checked after a correction or when fasting. COB is checked after a
+meal.
+
+<Screenshot id="loop-analysis-prediction-detail" />
+
+The **By hour and context** box shows the bias of one curve at each hour of the
+day and in each context.
+
+Two curves select the predictions that the report can check:
+
+- The algorithm makes **UAM** only when glucose increases faster than insulin
+  alone predicts, or when carbs are absorbing. So the report measures UAM
+  accuracy only at these times.
+- The algorithm removes the end of the **zero temp** curve where the curve
+  increases above the target. So its long horizons come only from predictions
+  that did not increase above the target.
+
+If your access does not include treatments, the report hides the curves that
+it checks only in some contexts: IOB, zero temp and COB. The page names these
+curves.
+The contexts come from treatments.
+
+## Loop health
+
+Loop health shows how the loop operated. Most tiles show a percentage of time.
+**Loop gaps** and **Unrecorded delivery** show a count of periods.
+**Requested, not done** shows a percentage of the changes that the loop asked
+for. The last two tiles show the limits that your loop reported. The charts show
+the data for each hour of the day.
+
+<Screenshot id="loop-analysis-loop-health" />
+
+| Tile | What it shows |
+|------|---------------|
+| **Closed loop** | Time when the loop controlled basal delivery. |
+| **CGM active** | Time when your sensor sent readings. |
+| **Pump active** | Time when the loop uploaded a cycle. If there are no cycles, the report uses the delivery records. |
+| **Loop gaps** | Gaps of more than 15 minutes between two loop cycles. |
+| **Unrecorded delivery** | Periods when the loop operated but there is no record of the pump delivery. |
+| **Algorithm zero temps** | Time when the loop set basal to zero, as a percentage of the time with known delivery. Suspends and manual zero temps are separate. |
+| **At max basal** | Time when the temp basals of the loop were at the highest rate that it can set. |
+| **At max IOB** | Time when insulin on board was at max IOB, as a percentage of loop time with a recorded reason (AAPS, Trio, iAPS, OpenAPS). |
+| **Automatic boluses a day** | The number and the size of automatic boluses. |
+| **Requested, not done** | Changes that the loop asked for but did not make, for example because the pump did not reply (AAPS, Trio, iAPS, OpenAPS). |
+| **Max basal rate setting of the Loop app** and **Max IOB** | The limits that your loop reported. |
+
+### At max basal and "max basal known"
+
+For **Loop**, a temp is at its limit when it is at your maximum basal rate
+setting. For **AAPS, Trio, iAPS and OpenAPS**, the limit is a safety limit that
+the algorithm calculates each time. Only the reason that the loop gives tells
+when the temp was at that limit. **Max basal known** is the percentage of the temp
+time of the algorithm where Nocturne can tell. **At max basal** uses only that
+time.
+
+### Unrecorded delivery
+
+When the loop operates but there is no record of the pump delivery, the basal
+for that time is not known. Loop Analysis uses your schedule only for a gap of
+3 hours or less, with records on the two sides. A large quantity of unrecorded
+delivery usually means that pump history does not arrive in Nocturne. It also
+makes the insulin figures on the other pages less complete.
+
+### When a tile shows "Unknown"
+
+When the report cannot calculate a tile, the tile shows **Unknown** and the
+reason:
+
+- **No loop cycles in this range**: the loop recorded nothing.
+- **The system that ran the loop does not record this**: for example, Loop does
+  not record a maximum IOB.
+- **Only the Loop app uploads this setting**: the maximum basal rate setting.
+- **No loop cycle in this range recorded the data that this figure needs**: the
+  loop operated, but it did not record the reason that the figure uses.
+- **No loop cycle in this range set the temp basals that this figure needs**: no
+  loop decision matched the temps.
+- **All the data for this figure is in time that the filters exclude.**
+- **The active profile does not record a maximum basal rate.**
+- **The loop did not set a temp basal in this range.**
+- **Nothing measured in this range.**
+
+**Max IOB** shows only when the loop reports that max IOB limited a dose.
+
+## Settings evidence
+
+Settings evidence compares your profile with your data, for three settings:
+
+- **Basal**, in two-hour blocks of the day.
+- **Insulin sensitivity (ISF)**, also known as the correction factor, and
+  **carb ratio**, in four blocks: overnight
+  (midnight to 6 am), morning (6 am to 11 am), midday (11 am to 5 pm) and evening
+  (5 pm to midnight).
+
+<Screenshot id="loop-analysis-settings-evidence" />
+
+Each figure shows the number of days or events that it uses, their spread, a
+confidence level, and a list of all the days or events. A hollow dot shows a
+figure with low confidence. To see more, open a block. It shows the concerns,
+how many days or events the report did not use and why, and the days or events
+that it used.
+
+<Callout type="warning" title="Speak to your diabetes care team before you change a setting">
+
+  These figures are observations of your own data. They are not
+  recommendations. A figure can look correct and be incorrect because of
+  something that the data does not show. Speak to your diabetes care team before you
+  change a setting.
+
+</Callout>
+
+### How the report calculates each figure
+
+**Basal.** For each two-hour block on each day, the report estimates the basal
+rate that would keep glucose stable. It starts from your scheduled rate. It
+adds the insulin that the loop added or removed. It uses an ISF to adjust for
+glucose that went up or down across the block. This ISF comes from your data
+when the report has a confident one. If not, it comes from your profile, adjusted by how your data compares with your profile in the other blocks. The
+figure is the average of the days that the report can use.
+
+The figure shows only when 70% of these days or more agree on one direction:
+the loop added insulin, or it removed insulin. A day where the loop changed
+delivery by less than 10% of the schedule agrees with the two directions. The
+figure does not show when glucose increased or decreased by more than
+10 mg/dL (0.6 mmol/L) an hour on average.
+
+**The report counts the insulin that acted in each block.** The report counts
+the insulin that the loop added in the block where the pump delivered it. It
+then adds the insulin that was active at the start of the block. It removes the
+insulin that was still active at the end. So each block counts the insulin that
+acted in it. The blocks are two hours long because the insulin of the loop acts
+over the next one or two hours.
+
+**Insulin sensitivity (ISF).** The report follows each correction bolus for 4 hours. If
+you log carbs 3 to 4 hours after the bolus, the window stops at the carbs. The
+figure is the decrease in glucose divided by the insulin that acted. The page
+shows the median of the corrections in each block. The report uses the reading
+at the end of the window, not the lowest reading. The lowest of many readings is
+usually a little too low.
+
+**Carb ratio.** The report follows each meal from 15 minutes before it (to
+include a bolus before the meal) to 4 hours after it. The figure is the grams
+eaten divided by the insulin that the meal needed. This is the insulin that
+acted, adjusted for the change between the start glucose and the end glucose.
+The page shows the median of the meals in each block.
+
+The ISF and the carb ratio measure insulin above your
+**observed** basal, when the report has a confident basal figure for that time.
+If not, they use your schedule, and the figure gets a concern. If your scheduled
+basal is too low, the loop adds insulin. That added insulin is not for the meal
+or the correction.
+
+### What the report does not use
+
+The report does not use a day or an event if one of these conditions occurs in
+its window. Each day or event counts once, under the first condition that it
+fails. The page shows how many it did not use for each reason.
+
+**Basal blocks:**
+
+- The loop was open, or an override, temporary target, exercise or illness was
+  active.
+- Carbs were logged in the 4 hours before the block or during it, or carbs were
+  on board.
+- Glucose increased as it does after a meal, in the 4 hours before the block or
+  during it.
+- A manual bolus occurred in the 5 hours before the block or during it.
+- A manual temp basal or a suspend occurred.
+- Delivery records cover less than 90% of the block.
+- Basal delivery was not recorded and was different from the schedule.
+- Insulin on board is not known at the start or the end of the block.
+- The insulin on board at the start and the end comes from different sources.
+- There is no reading near the start or the end of the block.
+- The block is outside your filters.
+
+**Corrections:**
+
+- Carbs were logged from 1 hour before to 3 hours after.
+- Another meal, correction or meal-like rise occurred in the window.
+- An override, temporary target, exercise or illness was active.
+- No target range was set.
+- Glucose was not above your target range, or it moved more than
+  15 mg/dL (0.8 mmol/L) in the 15 minutes before.
+- The insulin on board was already more than the bolus, or it was negative by
+  more than the bolus.
+- Glucose went below 70 mg/dL (3.9 mmol/L) in the window.
+- Less than 0.5 U of insulin acted.
+- Readings, delivery records or insulin on board are missing, or the insulin on
+  board at the start and the end comes from different sources.
+- The window is outside your filters, or not fully in the range.
+
+**Meals:**
+
+- Another meal, correction or meal-like rise occurred in the window.
+- An override, temporary target, exercise or illness was active.
+- Glucose at the start was below 70 mg/dL or above 180 mg/dL (3.9 or
+  10.0 mmol/L), or it moved more than 15 mg/dL (0.8 mmol/L) in the 15 minutes
+  before the meal.
+- The meal needed less than 0.5 U of insulin.
+- Readings, delivery records or insulin on board are missing, or the insulin on
+  board at the start and the end comes from different sources.
+- The window is outside your filters, or not fully in the range.
+
+The page shows a figure only when it has 5 days or more (basal) or 3 events or
+more (ISF and carb ratio).
+
+### Confidence
+
+Each figure has **High**, **Moderate** or **Low** confidence. A figure with no
+concerns has High confidence. One concern gives Moderate, and two or more give
+Low. A figure from fewer than 6 days or events always has Low confidence. High
+confidence means that the report found none of these concerns. It does not mean
+that the figure is correct. These are the concerns:
+
+- Fewer than 10 days or events give the figure.
+- The days or events are very different from each other: the middle half of
+  the values is wider than half of the figure.
+- The report used the ISF of your profile, not an ISF from your data, to convert
+  changes in glucose. The converted change was 15% or more of the figure.
+- The report measured insulin against a basal that it did not check for this
+  time of day.
+- Much of the insulin was still active at the end of the window.
+- More than half of the events overlapped other meals, boluses or rises.
+- Fewer than one day in five has carb entries. So the fasting time comes from
+  glucose only.
+- Glucose usually still changed at the end of the window.
+- The decrease in insulin on board from the start to the end of the block was
+  15% or more of the basal figure.
+- 15% or more of the corrections went below 70 mg/dL (3.9 mmol/L), so the
+  report did not use them. So the ISF can show less effect for each unit than
+  the true value.
+
+### Why figures for more insulin need more evidence
+
+Some figures point to **more insulin** than your profile by 10% or more: a
+higher basal, a lower ISF, or a lower carb ratio. The 10% compares
+the rounded figure that the page shows with your profile. If 15% or more of such
+a figure comes from another estimate, its confidence decreases by one level.
+Other estimates are the ISF that converts glucose changes, the basal that the
+report measures insulin above, and the insulin on board at the start and the
+end of the window. Many corrections that went low have the same effect on an
+ISF. The page shows this as a concern. An error in this direction can cause a low.
+So the report needs stronger evidence for it.
+
+## How it is different from the Nightscout Loopalyzer
+
+Loop Analysis replaces the Loopalyzer report of Nightscout. It corrects the
+problems that made Loopalyzer difficult to trust:
+
+- **Zeros count.** Loopalyzer did not use zeros in its averages. So the loop
+  correction looked larger than it was.
+- **Automatic boluses count.** Loopalyzer showed only temp basals. If your loop
+  corrects with SMBs, Loopalyzer showed only a part of what it did.
+- **Daylight saving time is correct.** Loopalyzer did not use days that were not
+  exactly 24 hours long. After a change, it showed glucose with an error of one
+  hour.
+- **Readings exactly on a five-minute mark stay in.** One missing basal record
+  does not move all the times after it.
+- **The spread and n are shown**, not only an average.
+- **Totals**: insulin each day, with basal, automatic boluses and manual boluses.
+- **A maximum of 90 days**, not 14.
+- **Meals align correctly.** Loopalyzer moved the time from the first meal in the
+  data, not from the first meal in the day. It also lost data that moved past
+  midnight.
+- **You can remove time**: overrides, temporary targets, exercise, illness and
+  time not in closed loop.
+- **One method for Loop, AAPS, Trio, iAPS and OpenAPS.**

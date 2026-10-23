@@ -1,12 +1,16 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Clinical.Sleep;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.Sleep.Report;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Sleep;
 
@@ -18,7 +22,8 @@ namespace Nocturne.API.Services.Sleep;
 /// Overnight TIR and hypo events use the clinical consensus bands, not the profile's
 /// personal target, so they agree with every other report. Glucose is the canonical stream
 /// (<see cref="ICanonicalGlucoseService.SelectAsync"/>), as the other reports read it, so a
-/// reading posted by two uploaders counts once.
+/// reading posted by two uploaders counts once. Weekly buckets start on the caller's regional
+/// first day of the week (<see cref="FirstDayOfWeek"/>), Monday for a caller with no preferences.
 /// </remarks>
 public class SleepReportService : ISleepReportService
 {
@@ -26,6 +31,8 @@ public class SleepReportService : ISleepReportService
     private readonly ISensorGlucoseRepository _glucose;
     private readonly ICanonicalGlucoseService _canonicalGlucose;
     private readonly IPatientRecordRepository _patientRecord;
+    private readonly INocturneDbContextFactory _contexts;
+    private readonly IAuditContext _caller;
     private readonly ILogger<SleepReportService> _logger;
 
     public SleepReportService(
@@ -33,12 +40,16 @@ public class SleepReportService : ISleepReportService
         ISensorGlucoseRepository glucose,
         ICanonicalGlucoseService canonicalGlucose,
         IPatientRecordRepository patientRecord,
+        INocturneDbContextFactory contexts,
+        IAuditContext caller,
         ILogger<SleepReportService> logger)
     {
         _sessions = sessions;
         _glucose  = glucose;
         _canonicalGlucose = canonicalGlucose;
         _patientRecord = patientRecord;
+        _contexts = contexts;
+        _caller = caller;
         _logger   = logger;
     }
 
@@ -52,6 +63,26 @@ public class SleepReportService : ISleepReportService
         var record = await _patientRecord.GetAsync(ct);
         var age = record?.DateOfBirth is { } dob ? AgeInYears(dob) : (int?)null;
         return SleepStageReferenceRangeSet.Resolve(age, record?.Sex);
+    }
+
+    private async Task<DayOfWeek> ResolveFirstDayOfWeekAsync(CancellationToken ct)
+    {
+        if (_caller.SubjectId is not { } subjectId)
+            return DayOfWeek.Monday;
+
+        await using var db = await _contexts.CreateAsync(ct);
+        var subject = await db.Subjects
+            .AsNoTracking()
+            .Where(s => s.Id == subjectId)
+            .Select(s => new { s.Preferences, s.PreferredLanguage })
+            .FirstOrDefaultAsync(ct);
+        if (subject is null)
+            return DayOfWeek.Monday;
+
+        var preferences = UserDisplayPreferences.Deserialize(subject.Preferences);
+        return FirstDayOfWeek.Resolve(
+            preferences.RegionFormat,
+            string.IsNullOrEmpty(subject.PreferredLanguage) ? UserDisplayPreferences.DefaultLanguage : subject.PreferredLanguage);
     }
 
     /// <summary>Completed years between <paramref name="dob"/> and today (UTC).</summary>
@@ -203,7 +234,8 @@ public class SleepReportService : ISleepReportService
             })
             .ToList();
         var summary = SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange, referenceRanges);
-        var weeks   = SleepReportCalculator.ComputeWeekSummaries(nights, from, to);
+        var weeks   = SleepReportCalculator.ComputeWeekSummaries(
+            nights, from, to, await ResolveFirstDayOfWeekAsync(ct));
 
         return new SleepTrendsReport
         {

@@ -161,26 +161,6 @@ public class GoogleHealthConnectorServiceTests
     }
 
     [Fact]
-    public async Task Sync_requires_a_durable_oauth_session()
-    {
-        var fixture = new Fixture(_ => Json("{}"));
-        var config = fixture.Configuration();
-        config.RefreshToken = null;
-        fixture.SetSession(null, GoogleHealthClient.MetricsScope);
-
-        var result = await fixture.Service.SyncDataAsync(
-            new SyncRequest(), config, CancellationToken.None);
-
-        Assert.False(result.Success);
-        Assert.Equal("reconnect_required", result.Message);
-        fixture.Writer.Verify(value => value.WriteAsync(
-            It.IsAny<IReadOnlyCollection<GoogleHealthReading>>(),
-            It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
-            It.IsAny<int>(),
-            It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
     public async Task Disabled_connector_skips_polling_without_a_refresh_token()
     {
         var fixture = new Fixture(_ => throw new InvalidOperationException("Google must not be called"));
@@ -220,7 +200,6 @@ public class GoogleHealthConnectorServiceTests
         Assert.Equal("reconnect_required", result.Message);
         Assert.False(fixture.Secrets.ContainsKey("refreshToken"));
         using var saved = JsonDocument.Parse(fixture.StoredConfiguration);
-        Assert.False(saved.RootElement.GetProperty("enabled").GetBoolean());
         Assert.Equal("2026-01-01T00:00:00Z", saved.RootElement.GetProperty("importFrom").GetString());
         Assert.Equal(14, saved.RootElement.GetProperty("historyDays").GetInt32());
         Assert.Equal("kept", saved.RootElement.GetProperty("sentinel").GetString());
@@ -832,11 +811,8 @@ public class GoogleHealthConnectorServiceTests
 
         var result = await pending;
 
-        Assert.False(result.Success);
-        Assert.Equal("reconnect_required", result.Message);
+        Assert.True(result.Success);
         Assert.False(fixture.Secrets.ContainsKey("refreshToken"));
-        using var saved = JsonDocument.Parse(fixture.StoredConfiguration);
-        Assert.False(saved.RootElement.GetProperty("enabled").GetBoolean());
         var skipped = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
         Assert.True(skipped.Success);
     }
@@ -949,8 +925,6 @@ public class GoogleHealthConnectorServiceTests
                     ImportFromWasConsumed = document.RootElement.GetProperty("importFrom").ValueKind == JsonValueKind.Null;
                     LastSavedConfiguration = document.RootElement.GetRawText();
                     StoredConfiguration = LastSavedConfiguration;
-                    if (currentConfiguration is not null && document.RootElement.TryGetProperty("enabled", out var enabled))
-                        currentConfiguration.Enabled = enabled.GetBoolean();
                 })
                 .ReturnsAsync(() => new ConnectorConfigurationResponse());
             var cursorStore = new Mock<IConnectorSyncCursorStore>();
@@ -993,6 +967,7 @@ public class GoogleHealthConnectorServiceTests
                     JsonSerializer.Serialize(currentConfiguration!))!;
                 loaded.RefreshToken = secrets.GetValueOrDefault("refreshToken");
                 loaded.GrantedScopes = secrets.GetValueOrDefault("grantedScopes");
+                loaded.Enabled = !string.IsNullOrWhiteSpace(loaded.RefreshToken);
                 return loaded;
             });
             var oauth = new GoogleHealthAuthTokenProvider(

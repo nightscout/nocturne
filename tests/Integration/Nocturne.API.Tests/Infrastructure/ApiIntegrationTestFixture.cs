@@ -341,8 +341,6 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         // distributed tier is keyed by tenant, and the local tier sits in the same memory cache.
         using (var scope = Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<ITenantCache>().RemoveTenantAsync(TenantId);
-        if (cache is MemoryCache memory)
-            memory.Compact(1.0);
 
         await AuthTestHelpers.SeedApiSecretGrantAsync(conn, TenantId, OwnerSubjectId, ApiSecret);
 

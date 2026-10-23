@@ -76,32 +76,6 @@ public class DeltaInfo
     public Dictionary<string, long> Times { get; set; } = new();
 }
 
-/// <summary>
-/// Time pattern query for brace expansion
-/// </summary>
-public class TimePatternQuery
-{
-    /// <summary>
-    /// Pattern string with braces
-    /// </summary>
-    public string Pattern { get; set; } = string.Empty;
-
-    public List<TimeRange> Ranges { get; set; } = new();
-}
-
-public class TimeRange
-{
-    /// <summary>
-    /// Start time in milliseconds
-    /// </summary>
-    public long Start { get; set; }
-
-    /// <summary>
-    /// End time in milliseconds
-    /// </summary>
-    public long End { get; set; }
-}
-
 public class TimeQueryEcho
 {
     /// <summary>

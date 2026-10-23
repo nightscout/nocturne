@@ -18,6 +18,7 @@
   } from "$lib/utils/formatting";
   import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
   import { coachmark } from "@nocturne/coach";
+  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import History from "@lucide/svelte/icons/history";
   import BatteryCharging from "@lucide/svelte/icons/battery-charging";
   import BatteryFull from "@lucide/svelte/icons/battery-full";
@@ -145,10 +146,7 @@
     <div
       data-testid="current-glucose-tile"
       {@attach coachmark({
-        key: "quick-tour.current-bg",
-        title: "Your glucose, live",
-        description:
-          "This updates in real-time as new readings arrive from your CGM.",
+        ...coachFor("quick-tour.current-bg"),
       })}
     >
       <GlucoseValueIndicator

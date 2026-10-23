@@ -12,7 +12,11 @@
   const { Form, formProps, width }: Props = $props();
   const Rendered = $derived(Form as Component<Record<string, unknown>>);
 
-  setFoodState({ foods: [], categories: ["Dairy"] } as unknown as FoodState);
+  setFoodState({
+    foods: [],
+    categories: ["Dairy"],
+    categoryMap: { Dairy: {} },
+  } as unknown as FoodState);
 </script>
 
 <div

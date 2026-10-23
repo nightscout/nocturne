@@ -58,6 +58,9 @@
   --pred-acob: rgb(251, 140, 0);
   --pred-zt: rgb(64, 187, 170);             /* AAPS accent teal */
   --pred-uam: rgb(201, 189, 96);            /* #c9bd60 - standard UAM */
+  /* Prediction bias: a prediction that ran high or low, as the Loop Analysis heatmap tints it. */
+  --bias-high: #3b7fd1;
+  --bias-low: #d04a3c;
 
   /* Status Colors. Chat cards and e-mail use the default theme's values
      (see @nocturne/ui/tokens); overrides here apply in-browser only. */
@@ -134,6 +137,9 @@
 /* Dark mode */
 :root.aaps-theme.dark,
 .aaps-theme .dark {
+  /* Prediction bias: a prediction that ran high or low, as the Loop Analysis heatmap tints it. */
+  --bias-high: #5b97e0;
+  --bias-low: #e0665a;
   /* shadcn/ui Base Colors - AAPS Dark Mode */
   --background: oklch(0.12 0.01 280);      /* #0F0F0F - AAPS dark surface */
   --foreground: oklch(0.95 0.005 250);
