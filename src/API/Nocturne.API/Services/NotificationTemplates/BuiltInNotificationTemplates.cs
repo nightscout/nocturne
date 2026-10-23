@@ -114,6 +114,15 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
+            Type = "profile.raw_mmol_values",
+            Category = NotificationCategory.ActionRequired,
+            DefaultUrgency = NotificationUrgency.Warn,
+            Icon = "alert-triangle",
+            Source = "profile"
+        });
+
+        registry.Register(new NotificationTemplate
+        {
             Type = "membership.denied",
             Category = NotificationCategory.Informational,
             DefaultUrgency = NotificationUrgency.Info,

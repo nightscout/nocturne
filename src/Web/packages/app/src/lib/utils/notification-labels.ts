@@ -24,6 +24,9 @@ const LABEL_MAP: Record<string, string> = {
   rejected_uploads: "Some uploads could not be stored",
   rejected_uploads_subtitle:
     "An uploader sent a record Nocturne could not store. Most uploaders treat it as saved, so it is kept under Data Quality for you to review or export.",
+  raw_mmol_profile_values: "Some profile values look like mmol/L",
+  raw_mmol_profile_values_subtitle:
+    "Some target or ISF values look like mmol/L values stored as mg/dL. These values change insulin and alert calculations. Go to your profile settings to check and correct them.",
   declared_zone_changed_subtitle:
     "Your connected account now reports a different timezone, so a matching entry was added to your timezone timeline. You can review or edit it in settings.",
 };

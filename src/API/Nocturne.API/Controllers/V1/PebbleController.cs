@@ -108,7 +108,6 @@ public class PebbleController : ControllerBase
 
             // Fetch required data in parallel
             var entriesTask = _entryService.GetEntriesAsync(type: "sgv", count: count + 1, skip: 0, cancellationToken);
-            var deviceStatusTask = _projectionService.GetMatchingAsync(FindQuery.Empty, count: 1, skip: 0, ct: cancellationToken);
             var calsTask = _entryService.GetEntriesAsync(type: "cal", count: count, skip: 0, cancellationToken);
             var iobCobTask = ReadIobCobAsync(cancellationToken);
             var batteryTask = ReadBatteryAsync(cancellationToken);
