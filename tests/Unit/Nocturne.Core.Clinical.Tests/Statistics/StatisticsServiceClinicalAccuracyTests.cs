@@ -2,6 +2,7 @@ using FluentAssertions;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using static Nocturne.Core.Clinical.Tests.Statistics.WindowEnd;
 
 namespace Nocturne.Core.Clinical.Tests.Statistics;
 
@@ -598,7 +599,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new Bolus { Insulin = 1.5, Automatic = false, Timestamp = DateTimeOffset.Parse("2024-01-02T20:00:00Z").UtcDateTime },
         };
 
-        var result = _sut.CalculateInsulinDeliveryStatistics(boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), startDate, endDate);
+        var result = _sut.CalculateInsulinDeliveryStatistics(boluses, Array.Empty<Bolus>(), Array.Empty<TempBasal>(), Array.Empty<CarbIntake>(), startDate, endDate, Mills(endDate));
 
         // Bolus = 5 + 7 + 2 + 1.5 = 15.5
         result.TotalBolus.Should().Be(15.5);
@@ -623,7 +624,8 @@ public class StatisticsServiceClinicalAccuracyTests
             Array.Empty<TempBasal>(),
             Array.Empty<CarbIntake>(),
             new DateTime(2024, 1, 1),
-            new DateTime(2024, 1, 8)
+            new DateTime(2024, 1, 8),
+            Mills(new DateTime(2024, 1, 8))
         );
 
         result.TotalBolus.Should().Be(0);
@@ -660,7 +662,8 @@ public class StatisticsServiceClinicalAccuracyTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             new DateTime(2024, 1, 1),
-            new DateTime(2024, 1, 2)
+            new DateTime(2024, 1, 2),
+            Mills(new DateTime(2024, 1, 2))
         );
 
         (result.BasalPercent + result.BolusPercent).Should().BeApproximately(100, 0.1);
@@ -683,7 +686,8 @@ public class StatisticsServiceClinicalAccuracyTests
             Array.Empty<TempBasal>(),
             Array.Empty<CarbIntake>(),
             new DateTime(2024, 1, 1),
-            new DateTime(2024, 1, 3)
+            new DateTime(2024, 1, 3),
+            Mills(new DateTime(2024, 1, 3))
         );
 
         result.ManualBolusCount.Should().Be(10);

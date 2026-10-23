@@ -6,6 +6,7 @@ import {
   isTimeZone,
   resolveDayRange,
   startOfDay,
+  timeOnDay,
   toDayString,
 } from "./date-range";
 
@@ -195,5 +196,18 @@ describe("toDayString", () => {
 
   it("zero-pads month and day", () => {
     expect(toDayString(new Date(2026, 0, 5))).toBe("2026-01-05");
+  });
+});
+
+describe("timeOnDay", () => {
+  it("reads the wall-clock time in the given zone, not the viewer's", () => {
+    expect(timeOnDay("2026-10-13", "08:00", "Australia/Sydney")?.toISOString()).toBe("2026-10-12T21:00:00.000Z");
+    expect(timeOnDay("2026-10-13", "08:00", "America/Los_Angeles")?.toISOString()).toBe("2026-10-13T15:00:00.000Z");
+  });
+
+  it("refuses a malformed day or time", () => {
+    expect(timeOnDay("2026-10-13", "8am", "UTC")).toBeNull();
+    expect(timeOnDay("2026-10-13", "24:00", "UTC")).toBeNull();
+    expect(timeOnDay(null, "08:00", "UTC")).toBeNull();
   });
 });

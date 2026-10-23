@@ -6,11 +6,10 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.API.Services.Auth;
-using Nocturne.API.Services.Devices;
+using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
-using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
@@ -26,6 +25,9 @@ public class PebbleControllerTests
     private readonly Mock<IEntryService> _entryService = new();
     private static readonly Guid TenantId = Guid.NewGuid();
     private readonly Mock<ITenantAppearanceReader> _appearance = new();
+    private readonly Mock<ICurrentIobCobReader> _iobCob = new();
+    private readonly Mock<IUploaderSnapshotRepository> _uploaders = new();
+    private List<UploaderSnapshot> _uploaderSnapshotsNewestFirst = [];
     private int _requestedSgvCount;
     private int _requestedCalCount;
 
@@ -46,23 +48,14 @@ public class PebbleControllerTests
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.SetupGet(t => t.TenantId).Returns(TenantId);
 
-        var projection = new DeviceStatusProjectionService(
-            Mock.Of<IDeviceStatusGroupRepository>(r => r.GetAsync(
-                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
-                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())
-                == Task.FromResult<IReadOnlyList<DeviceStatusGroup>>(Array.Empty<DeviceStatusGroup>())),
-            Mock.Of<IApsSnapshotRepository>(),
-            Mock.Of<IPumpSnapshotRepository>(),
-            Mock.Of<IUploaderSnapshotRepository>(),
-            Mock.Of<IStateSpanRepository>(),
-            Mock.Of<IDeviceStatusExtrasRepository>(),
-            Mock.Of<ILogger<DeviceStatusProjectionService>>()
-        );
+        _uploaders
+            .Setup(u => u.GetAsync(null, null, null, null, It.IsAny<int>(), 0, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _uploaderSnapshotsNewestFirst.AsEnumerable());
 
         return new PebbleController(
             _entryService.Object,
-            projection,
-            Mock.Of<ITreatmentService>(),
+            _iobCob.Object,
+            _uploaders.Object,
             _appearance.Object,
             tenantAccessor.Object,
             Mock.Of<ILogger<PebbleController>>()
@@ -97,6 +90,60 @@ public class PebbleControllerTests
         JsonSerializer
             .SerializeToElement(response, new JsonSerializerOptions(JsonSerializerDefaults.Web))
             .GetProperty("bgs")[0];
+
+    [Fact]
+    public async Task IobAndCob_ComeFromTheReader()
+    {
+        _iobCob
+            .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CurrentIobCob(1.25, "1.25", "OpenAPS", 23, "OpenAPS"));
+        var controller = NewController("mg/dl", Sgv(113, 0));
+
+        var bg = FirstBg(await Get(controller));
+
+        bg.GetProperty("iob").GetString().Should().Be("1.25");
+        bg.GetProperty("cob").GetDouble().Should().Be(23);
+    }
+
+    [Fact]
+    public async Task WhenTheReaderFails_TheGlucoseStillReturns()
+    {
+        _iobCob
+            .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException());
+        var controller = NewController("mg/dl", Sgv(113, 0));
+
+        var bg = FirstBg(await Get(controller));
+
+        bg.GetProperty("sgv").GetString().Should().Be("113");
+        bg.GetProperty("iob").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Battery_IsTheNewestUploaderSnapshotThatHasOne()
+    {
+        _uploaderSnapshotsNewestFirst =
+        [
+            new UploaderSnapshot { Timestamp = DateTime.UtcNow, Battery = null },
+            new UploaderSnapshot { Timestamp = DateTime.UtcNow.AddMinutes(-5), Battery = 64 },
+            new UploaderSnapshot { Timestamp = DateTime.UtcNow.AddMinutes(-10), Battery = 90 },
+        ];
+        var controller = NewController("mg/dl", Sgv(113, 0));
+
+        var bg = FirstBg(await Get(controller));
+
+        bg.GetProperty("battery").GetString().Should().Be("64");
+    }
+
+    [Fact]
+    public async Task NoUploaderSnapshots_OmitsTheBattery()
+    {
+        var controller = NewController("mg/dl", Sgv(113, 0));
+
+        var bg = FirstBg(await Get(controller));
+
+        bg.GetProperty("battery").ValueKind.Should().Be(JsonValueKind.Null);
+    }
 
     [Fact]
     public async Task NoUnitsParameter_UsesTenantMmolUnits()

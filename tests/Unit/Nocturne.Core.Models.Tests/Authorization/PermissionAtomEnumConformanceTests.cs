@@ -76,6 +76,7 @@ public class PermissionAtomEnumConformanceTests
             [PermissionAtom.TherapyReadWrite] = Scope.TherapyReadWrite,
             [PermissionAtom.AlertsRead] = Scope.AlertsRead,
             [PermissionAtom.AlertsReadWrite] = Scope.AlertsReadWrite,
+            [PermissionAtom.AlertsAcknowledge] = Scope.AlertsAcknowledge,
             [PermissionAtom.IdentityRead] = Scope.IdentityRead,
             [PermissionAtom.RolesManage] = Scope.RolesManage,
             [PermissionAtom.MembersInvite] = Scope.MembersInvite,

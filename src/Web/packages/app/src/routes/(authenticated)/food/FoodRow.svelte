@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Key } from '@nocturne/ui/keys';
 	import type { Food } from '$api';
 	import Star from '@lucide/svelte/icons/star';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
@@ -29,7 +30,7 @@
 	role="button"
 	tabindex="0"
 	onclick={ontoggle}
-	onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ontoggle(); } }}
+	onkeydown={(e) => { if (e.key === Key.Enter || e.key === Key.Space) { e.preventDefault(); ontoggle(); } }}
 >
 	<span class="star-cell">
 		<Toggle

@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using System.Linq;
@@ -254,10 +255,10 @@ public class RetrospectiveController : ControllerBase
             limit: 5000, offset: 0, descending: false, ct: cancellationToken
         )).ToList();
         // Get device status
-        var deviceStatus = await _projectionService.GetAsync(
+        var deviceStatus = await _projectionService.GetMatchingAsync(
+            FindQuery.Empty,
             count: 500,
             skip: 0,
-            find: null,
             ct: cancellationToken
         );
         var deviceStatusList = deviceStatus?

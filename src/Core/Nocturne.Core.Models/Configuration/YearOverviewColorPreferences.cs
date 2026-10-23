@@ -1,36 +1,30 @@
 namespace Nocturne.Core.Models.Configuration;
 
+/// <summary>
+/// The year overview's color scale for each metric: a focus window, outside which days are
+/// dimmed by <see cref="OutOfBandTransparency"/>, and the color boundaries that warp the
+/// metric's color ramp.
+/// </summary>
 public class YearOverviewColorPreferences
 {
-    public bool? AdvancedMode { get; set; }
-    public double? OutOfBandTransparency { get; set; }
-    public string? LowColor { get; set; }
-    public string? HighColor { get; set; }
+    internal const int MaxBoundaries = 16;
+    private const double GlucoseMin = 40;
+    private const double GlucoseMax = 350;
 
-    public double[]? AvgGlucose { get; set; }
+    public double? OutOfBandTransparency { get; set; }
+
     public double[]? AvgGlucoseBand { get; set; }
-    public string[]? AvgGlucoseColors { get; set; }
-    public bool? AvgGlucoseInvert { get; set; }
-    public double[]? Tir { get; set; }
+    public YearOverviewColorBoundary[]? AvgGlucoseBoundaries { get; set; }
     public double[]? TirBand { get; set; }
-    public string[]? TirColors { get; set; }
-    public bool? TirInvert { get; set; }
-    public double[]? Bolus { get; set; }
+    public YearOverviewColorBoundary[]? TirBoundaries { get; set; }
     public double[]? BolusBand { get; set; }
-    public string[]? BolusColors { get; set; }
-    public bool? BolusInvert { get; set; }
-    public double[]? Basal { get; set; }
+    public YearOverviewColorBoundary[]? BolusBoundaries { get; set; }
     public double[]? BasalBand { get; set; }
-    public string[]? BasalColors { get; set; }
-    public bool? BasalInvert { get; set; }
-    public double[]? Tdd { get; set; }
+    public YearOverviewColorBoundary[]? BasalBoundaries { get; set; }
     public double[]? TddBand { get; set; }
-    public string[]? TddColors { get; set; }
-    public bool? TddInvert { get; set; }
-    public double[]? Carbs { get; set; }
+    public YearOverviewColorBoundary[]? TddBoundaries { get; set; }
     public double[]? CarbsBand { get; set; }
-    public string[]? CarbsColors { get; set; }
-    public bool? CarbsInvert { get; set; }
+    public YearOverviewColorBoundary[]? CarbsBoundaries { get; set; }
 
     public string? Validate()
     {
@@ -39,27 +33,47 @@ public class YearOverviewColorPreferences
             return "yearOverviewColors.outOfBandTransparency: invalid_transparency_value";
         }
 
-        foreach (var (field, values) in new[]
+        foreach (var (metric, band, boundaries, min, max) in new[]
         {
-            ("avgGlucose", AvgGlucose), ("avgGlucoseBand", AvgGlucoseBand),
-            ("tir", Tir), ("tirBand", TirBand),
-            ("bolus", Bolus), ("bolusBand", BolusBand),
-            ("basal", Basal), ("basalBand", BasalBand),
-            ("tdd", Tdd), ("tddBand", TddBand),
-            ("carbs", Carbs), ("carbsBand", CarbsBand),
+            ("avgGlucose", AvgGlucoseBand, AvgGlucoseBoundaries, GlucoseMin, GlucoseMax),
+            ("tir", TirBand, TirBoundaries, 0d, 100d),
+            ("bolus", BolusBand, BolusBoundaries, 0d, double.PositiveInfinity),
+            ("basal", BasalBand, BasalBoundaries, 0d, double.PositiveInfinity),
+            ("tdd", TddBand, TddBoundaries, 0d, double.PositiveInfinity),
+            ("carbs", CarbsBand, CarbsBoundaries, 0d, double.PositiveInfinity),
         })
         {
-            if (values is null) continue;
-            var is4 = field == "avgGlucose";
-            if (values.Length != (is4 ? 4 : 2)
-                || values.Any(value => !double.IsFinite(value))
-                || values.Zip(values.Skip(1)).Any(pair => pair.First >= pair.Second)
-                || (field == "avgGlucose" ? values[0] <= 40 || values[^1] >= 350 : (field == "avgGlucoseBand" ? values[0] < 40 || values[^1] > 350 : values[0] < 0))
-                || ((field == "tir" || field == "tirBand") && values[^1] > 100))
+            if (band is not null
+                && (band.Length != 2
+                    || !band.All(double.IsFinite)
+                    || band[0] >= band[1]
+                    || band[0] < min
+                    || band[1] > max))
             {
-                return $"yearOverviewColors.{field}: invalid_color_range";
+                return $"yearOverviewColors.{metric}Band: invalid_color_range";
+            }
+
+            if (boundaries is not null
+                && (boundaries.Length > MaxBoundaries
+                    || boundaries.Any(b => b is null
+                        || !double.IsFinite(b.Value) || b.Value <= min || b.Value >= max
+                        || !double.IsFinite(b.Position) || b.Position <= 0 || b.Position >= 1)
+                    || boundaries.Zip(boundaries.Skip(1)).Any(pair =>
+                        pair.First.Value >= pair.Second.Value || pair.First.Position >= pair.Second.Position)))
+            {
+                return $"yearOverviewColors.{metric}Boundaries: invalid_color_boundaries";
             }
         }
         return null;
     }
+}
+
+/// <summary>
+/// Pins the point <see cref="Position"/> of the way along a metric's color ramp (0 to 1,
+/// exclusive) to <see cref="Value"/>, in the metric's canonical unit (mg/dL for glucose).
+/// </summary>
+public class YearOverviewColorBoundary
+{
+    public double Value { get; set; }
+    public double Position { get; set; }
 }

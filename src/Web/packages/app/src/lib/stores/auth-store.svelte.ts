@@ -23,7 +23,7 @@ import {
 import { remoteErrorMessage } from "$lib/api/remote-error";
 import { whenIdle } from "$lib/utils/when-idle";
 
-const AUTH_STORE_KEY = Symbol("auth-store");
+const AUTH_STORE_KEY = "nocturne:app:auth-store";
 
 /**
  * User information from the current session

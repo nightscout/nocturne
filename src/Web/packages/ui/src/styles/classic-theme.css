@@ -58,6 +58,9 @@
   --pred-acob: rgb(251, 140, 0);
   --pred-zt: rgb(0, 210, 210);              /* #00d2d2 */
   --pred-uam: rgb(201, 189, 96);            /* #c9bd60 */
+  /* Prediction bias: a prediction that ran high or low, as the Loop Analysis heatmap tints it. */
+  --bias-high: #3b7fd1;
+  --bias-low: #d04a3c;
 
   /* Status Colors. Chat cards and e-mail use the default theme's values
      (see @nocturne/ui/tokens); overrides here apply in-browser only. */
@@ -129,6 +132,9 @@
 /* Pure black, neon green, grey pills - medical device aesthetic */
 :root.classic-theme.dark,
 .classic-theme .dark {
+  /* Prediction bias: a prediction that ran high or low, as the Loop Analysis heatmap tints it. */
+  --bias-high: #3d74c2;
+  --bias-low: #c2493d;
   /* shadcn/ui Base Colors - True Nightscout Dark */
   --background: oklch(0 0 0);              /* #000000 - pure black */
   --foreground: oklch(0.78 0.005 250);     /* #bdbdbd - Nightscout text grey */

@@ -32,6 +32,8 @@ interface BridgeSocketData {
   subjectId?: string;
   /** The API broadcast categories whose storage events the socket receives. */
   categories?: string[];
+  /** Whether an `/alarm` socket's credential may silence the tenant's alarms. */
+  mayAck?: boolean;
   /** How the socket proves its admission again; absent until it is admitted. */
   readmission?: Readmission;
   /** The pending re-check of the socket's admission. */
@@ -572,6 +574,7 @@ class SocketIOServer {
           socket.disconnect(true);
           return null;
         }
+        socket.data.mayAck = admission.mayAck;
         return ADMISSION_RECHECK_INTERVAL_MS;
       }
     }
@@ -723,51 +726,41 @@ class SocketIOServer {
   }
 
   broadcastAnnouncement(message: unknown, tenantSlug?: string): void {
-    const target = this.emitTarget(tenantSlug);
-    if (!target) return;
-
-    logger.debug(`Broadcasting announcement${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit('announcement', message);
-
-    if (this.alarmNsp && tenantSlug) {
-      this.alarmNsp.to(alarmRoom(tenantSlug)).emit('announcement', message);
-    }
+    this.broadcastToBothNamespaces('announcement', message, tenantSlug);
   }
 
   broadcastAlarm(event: AlarmEvent, alarm: AlarmData, tenantSlug?: string): void {
-    const target = this.emitTarget(tenantSlug);
-    if (!target) return;
-
-    logger.debug(`Broadcasting ${event}${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit(event, alarm);
-
-    if (this.alarmNsp && tenantSlug) {
-      this.alarmNsp.to(alarmRoom(tenantSlug)).emit(event, alarm);
-    }
+    this.broadcastToBothNamespaces(event, alarm, tenantSlug);
   }
 
   broadcastClearAlarm(clear: unknown, tenantSlug?: string): void {
-    const target = this.emitTarget(tenantSlug);
-    if (!target) return;
-
-    logger.debug(`Broadcasting clear_alarm${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit('clear_alarm', clear);
-
-    if (this.alarmNsp && tenantSlug) {
-      this.alarmNsp.to(alarmRoom(tenantSlug)).emit('clear_alarm', clear);
-    }
+    this.broadcastToBothNamespaces('clear_alarm', clear, tenantSlug);
   }
 
   broadcastNotification(notification: unknown, tenantSlug?: string): void {
-    const target = this.emitTarget(tenantSlug);
-    if (!target) return;
+    this.broadcastToBothNamespaces('notification', notification, tenantSlug);
+  }
 
-    logger.debug(`Broadcasting notification${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit('notification', notification);
-
-    if (this.alarmNsp && tenantSlug) {
-      this.alarmNsp.to(alarmRoom(tenantSlug)).emit('notification', notification);
+  /** Emit an event to a tenant's `/alarm` subscribers alone, as the API's
+   *  engine alarms go out. */
+  broadcastToAlarmNamespace(event: AlarmEvent | 'clear_alarm', payload: unknown, tenantSlug?: string): void {
+    if (!this.alarmNsp) return;
+    if (!tenantSlug) {
+      logger.warn('Refusing to broadcast without a tenant slug');
+      return;
     }
+
+    logger.debug(`Broadcasting ${event} to /alarm for tenant ${tenantSlug}`);
+    this.alarmNsp.to(alarmRoom(tenantSlug)).emit(event, payload);
+  }
+
+  private broadcastToBothNamespaces(event: string, payload: unknown, tenantSlug?: string): void {
+    const target = this.emitTarget(tenantSlug);
+    if (!target || !tenantSlug) return;
+
+    logger.debug(`Broadcasting ${event} to tenant ${tenantSlug}`);
+    target.emit(event, payload);
+    this.alarmNsp?.to(alarmRoom(tenantSlug)).emit(event, payload);
   }
 
   broadcastStatusUpdate(status: unknown, tenantSlug?: string): void {
@@ -1118,6 +1111,14 @@ class SocketIOServer {
       );
     };
 
+  /**
+   * The tenant's alarm still sounding, as the event and payload an `/alarm`
+   * subscriber hears, or null. The bridge setup wires it to the tenant's
+   * SignalR client.
+   */
+  currentAlarm: (tenantSlug: string) => Promise<{ event: AlarmEvent; alarm: unknown } | null> =
+    async () => null;
+
   private setupAlarmNamespace(): void {
     if (!this.io) return;
     this.alarmNsp = this.io.of('/alarm');
@@ -1142,14 +1143,7 @@ class SocketIOServer {
       // Positional ack: AAPS emits ("ack", level, group, silenceTime) — three
       // separate arguments, not a JSON object (matches cgm-remote-monitor).
       socket.on('ack', (level: unknown, group: unknown, silenceTime: unknown) => {
-        const tenantSlug = socket.data.tenantSlug;
-        if (!tenantSlug) return;
-        this.onAlarmAck(
-          tenantSlug,
-          typeof level === 'number' ? level : Number(level) || 0,
-          typeof group === 'string' ? group : String(group ?? ''),
-          typeof silenceTime === 'number' ? silenceTime : Number(silenceTime) || 0,
-        );
+        this.handleAlarmAck(socket, level, group, silenceTime);
       });
 
       socket.on('disconnect', (reason: string) => {
@@ -1157,6 +1151,26 @@ class SocketIOServer {
         logger.info(`v3 /alarm client disconnected: ${socket.id}, reason: ${reason}`);
       });
     });
+  }
+
+  /**
+   * Handle a v3 `/alarm` `ack`. The bridge forwards it on its own AlarmHub
+   * connection, which the API always lets ack, so the subscriber's own right to
+   * silence the tenant's alarms is checked here. Exposed for unit testing.
+   */
+  handleAlarmAck(socket: BridgeSocket, level: unknown, group: unknown, silenceTime: unknown): void {
+    const tenantSlug = socket.data.tenantSlug;
+    if (!tenantSlug) return;
+    if (socket.data.mayAck !== true) {
+      logger.warn(`/alarm ack from ${socket.id} (tenant ${tenantSlug}) dropped: its credential may not silence alarms`);
+      return;
+    }
+    this.onAlarmAck(
+      tenantSlug,
+      typeof level === 'number' ? level : Number(level) || 0,
+      typeof group === 'string' ? group : String(group ?? ''),
+      typeof silenceTime === 'number' ? silenceTime : Number(silenceTime) || 0,
+    );
   }
 
   /**
@@ -1199,11 +1213,24 @@ class SocketIOServer {
     socket.join(alarmRoom(tenantSlug));
     socket.data.tenantSlug = tenantSlug;
     socket.data.pendingTenantSlug = undefined;
+    socket.data.mayAck = admitted.mayAck;
     this.onTenantAdmitted(tenantSlug);
     socket.data.readmission = { kind: 'alarm', accessToken };
     this.scheduleReadmission(socket, ADMISSION_RECHECK_INTERVAL_MS);
     logger.info(`/alarm client ${socket.id} subscribed for tenant ${tenantSlug}`);
     ack?.({ success: true, message: 'Subscribed for alarms' });
+    await this.replayCurrentAlarm(socket, tenantSlug);
+  }
+
+  /** The API raises an alarm once, so a socket that subscribes after it was
+   *  raised hears it only from this replay. */
+  private async replayCurrentAlarm(socket: BridgeSocket, tenantSlug: string): Promise<void> {
+    try {
+      const current = await this.currentAlarm(tenantSlug);
+      if (current) socket.emit(current.event, current.alarm);
+    } catch (error) {
+      logger.error(`Failed to replay the sounding alarm to /alarm client ${socket.id}:`, error);
+    }
   }
 
   async stop(): Promise<void> {

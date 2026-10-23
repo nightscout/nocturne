@@ -12,7 +12,7 @@ const SECRET = 'test-instance-key-0123456789';
 const HOST = 'rhys.nocturne.run';
 
 function grant(extra: Partial<RealtimeGrant> = {}): RealtimeGrant {
-  return { tenantRelay: true, categories: [], historyClamped: false, ...extra };
+  return { tenantRelay: true, categories: [], historyClamped: false, mayAck: false, ...extra };
 }
 
 function admission(body: unknown) {
@@ -207,6 +207,26 @@ describe('SocketIOServer re-admission of a socket admitted on its own credential
     fetchMock.mockResolvedValue(answer);
     await server.readmit(socket as never);
     expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('follows the right to silence alarms across re-checks of an /alarm socket', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(admission({ tenantRelay: true, mayAck: false }));
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeServer();
+    const onAlarmAck = vi.fn();
+    server.onAlarmAck = onAlarmAck;
+    const socket = admittedSocket();
+    await server.handleAlarmSubscribe(socket as never, { accessToken: 'aaps' });
+
+    fetchMock.mockResolvedValue(admission({ tenantRelay: true, mayAck: true }));
+    await server.readmit(socket as never);
+    server.handleAlarmAck(socket as never, 2, 'granted', 60000);
+
+    fetchMock.mockResolvedValue(admission({ tenantRelay: true, mayAck: false }));
+    await server.readmit(socket as never);
+    server.handleAlarmAck(socket as never, 2, 'revoked', 60000);
+
+    expect(onAlarmAck).toHaveBeenCalledExactlyOnceWith('rhys', 2, 'granted', 60000);
   });
 });
 

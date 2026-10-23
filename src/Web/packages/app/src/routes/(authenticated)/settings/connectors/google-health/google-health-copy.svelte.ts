@@ -61,6 +61,8 @@ const errorMessages: Record<GoogleHealthErrorCode, string> = {
     "Nocturne could not complete the import. Check the server log for the technical code and stage.",
   internal_sync_native_write:
     "Nocturne downloaded the data, but could not store it locally. Retry the same range; if it persists, use the technical stage from the server log.",
+  activation_failed:
+    "Google Health is connected, but Nocturne could not finish the set-up. Imports continue. Check the server log if this message stays.",
 };
 
 /** The sentence for a server error code, or a generic one for a code this page does not know. */

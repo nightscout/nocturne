@@ -49,6 +49,7 @@ public class AlertDeliveryServiceMuteTests
             factory.Object.AsNocturneFactory(),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             Mock.Of<ISignalRBroadcastService>(),
+            Mock.Of<IEngineAlarmRelay>(),
             services,
             NullLogger<AlertDeliveryService>.Instance);
     }

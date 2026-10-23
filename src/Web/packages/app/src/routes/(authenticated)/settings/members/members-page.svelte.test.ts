@@ -8,6 +8,8 @@ import { remoteQuery } from "$lib/test-stubs/remote-resource";
 
 const mocks = vi.hoisted(() => ({
   getMembers: vi.fn(),
+  getRoles: vi.fn(),
+  getPendingRequests: vi.fn(),
   setMemberRoles: vi.fn(),
   setMemberPermissions: vi.fn(),
   setMemberLimitTo24Hours: vi.fn(),
@@ -29,19 +31,26 @@ vi.mock("$lib/api/generated/memberInvites.generated.remote", () => ({
   },
   listInvites: () => remoteQuery(() => []),
   revokeInvite: () => Promise.resolve(),
+  createInvite: vi.fn(),
   removeMember: () => Promise.resolve(),
   setMemberRoles: mocks.setMemberRoles,
   setMemberPermissions: mocks.setMemberPermissions,
   setMemberLimitTo24Hours: mocks.setMemberLimitTo24Hours,
 }));
 vi.mock("$lib/api/generated/roles.generated.remote", () => ({
-  getRoles: () => remoteQuery(() => [viewer]),
+  getRoles: () => {
+    mocks.getRoles();
+    return remoteQuery(() => [viewer]);
+  },
 }));
 vi.mock("$api/generated/shareLinks.generated.remote", () => ({
   getShareLink: () => remoteQuery(() => null),
 }));
 vi.mock("$lib/api/generated/membershipRequests.generated.remote", () => ({
-  getPendingRequests: () => remoteQuery(() => []),
+  getPendingRequests: () => {
+    mocks.getPendingRequests();
+    return remoteQuery(() => []);
+  },
   approveRequest: () => Promise.resolve(),
   denyRequest: () => Promise.resolve(),
 }));
@@ -49,7 +58,6 @@ vi.mock("@nocturne/coach", () => ({ coachmark: () => () => {} }));
 vi.mock("$lib/components/members/PublicAccessCard.svelte", () => ({ default: () => {} }));
 vi.mock("$lib/components/members/MembershipRequestsCard.svelte", () => ({ default: () => {} }));
 vi.mock("$lib/components/members/GuestLinksSection.svelte", () => ({ default: () => {} }));
-vi.mock("$lib/components/members/CreateInviteCard.svelte", () => ({ default: () => {} }));
 vi.mock("$lib/components/members/RolesSection.svelte", () => ({ default: () => {} }));
 
 import MembersPage from "./+page.svelte";
@@ -168,5 +176,45 @@ describe("members page listing members", () => {
 
     await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
     expect(mocks.getMembers).toHaveBeenCalled();
+  });
+});
+
+describe("members page loading roles and pending requests", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    page.data.user = { subjectId: "55555555-5555-5555-5555-555555555555" };
+    members = [member];
+  });
+
+  it("requests roles for a caller with members.invite and no roles.manage", async () => {
+    page.data.effectivePermissions = ["members.invite"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    await browserPage.getByRole("button", { name: "Create Invite Link" }).click();
+
+    await expect.element(browserPage.getByText("Viewer", { exact: true }).last()).toBeVisible();
+    expect(mocks.getRoles).toHaveBeenCalled();
+    expect(mocks.getPendingRequests).not.toHaveBeenCalled();
+  });
+
+  it("requests neither roles nor pending requests for a caller with only sharing.manage", async () => {
+    page.data.effectivePermissions = ["sharing.manage"];
+    render(MembersPage);
+
+    await expect
+      .element(browserPage.getByRole("heading", { name: "Sharing & Privacy" }))
+      .toBeVisible();
+    expect(mocks.getRoles).not.toHaveBeenCalled();
+    expect(mocks.getPendingRequests).not.toHaveBeenCalled();
+  });
+
+  it("requests pending requests for a caller with members.manage", async () => {
+    page.data.effectivePermissions = ["members.manage"];
+    render(MembersPage);
+
+    await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
+    expect(mocks.getPendingRequests).toHaveBeenCalled();
+    expect(mocks.getRoles).toHaveBeenCalled();
   });
 });

@@ -3,6 +3,7 @@ using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.ChartData;
@@ -10,14 +11,15 @@ namespace Nocturne.API.Services.ChartData;
 /// <summary>
 /// Builds basal delivery series from TempBasal records and profile-inferred rates.
 /// TempBasal records are the v4 source of truth for pump-confirmed basal delivery.
-/// Gaps in TempBasal coverage are filled at 5-minute resolution from the active
-/// basal rate schedule; when no TempBasal records exist the entire series is
+/// Gaps in TempBasal coverage are filled from the active basal rate schedule, stepping
+/// at its exact boundaries; when no TempBasal records exist the entire series is
 /// profile-derived. With no therapy settings at all there is no schedule to
 /// infer from, so the series is left empty rather than invented — a fabricated
 /// flat rate renders as real delivery on the chart.
 /// </summary>
 internal sealed class BasalSeriesBuilder(
     ITherapySettingsResolver therapySettingsResolver,
+    IBasalSegmentService basalSegmentService,
     ILogger<BasalSeriesBuilder> logger
 ) : IBasalSeriesBuilder
 {
@@ -26,7 +28,6 @@ internal sealed class BasalSeriesBuilder(
         long startTime,
         long endTime,
         double defaultBasalRate,
-        TherapyTimeline timeline,
         CancellationToken ct = default
     )
     {
@@ -37,15 +38,20 @@ internal sealed class BasalSeriesBuilder(
 
         logger.LogDebug("Building basal series from {Count} TempBasal records", sorted.Count);
 
+        var segments = hasData
+            ? await basalSegmentService.GetSegmentsAsync(startTime, endTime, ct).ToListAsync(ct)
+            : [];
+        var cursor = 0;
+
         if (sorted.Count == 0)
-            return BuildFromProfile(startTime, endTime, defaultBasalRate, timeline, hasData);
+            return FillFromSchedule(segments, ref cursor, startTime, endTime, defaultBasalRate, hasData);
 
         long currentTime = startTime;
 
         foreach (var tb in sorted)
         {
             var tbStart = tb.StartMills;
-            var tbEnd = tb.EndMills ?? endTime;
+            var tbEnd = tb.EndMills!.Value;
 
             if (tbEnd < startTime || tbStart > endTime)
                 continue;
@@ -54,12 +60,12 @@ internal sealed class BasalSeriesBuilder(
             tbEnd = Math.Min(tbEnd, endTime);
 
             if (tbStart > currentTime)
-                series.AddRange(BuildFromProfile(currentTime, tbStart, defaultBasalRate, timeline, hasData));
+                series.AddRange(FillFromSchedule(segments, ref cursor, currentTime, tbStart, defaultBasalRate, hasData));
 
             // A relative temp of unknown rate still cancels the temp before it; the schedule shows
             if (tb.Origin != TempBasalOrigin.Suspended && tb.Rate is null)
             {
-                series.AddRange(BuildFromProfile(tbStart, tbEnd, defaultBasalRate, timeline, hasData));
+                series.AddRange(FillFromSchedule(segments, ref cursor, tbStart, tbEnd, defaultBasalRate, hasData));
                 currentTime = tbEnd;
                 continue;
             }
@@ -67,7 +73,9 @@ internal sealed class BasalSeriesBuilder(
             var origin = MapTempBasalOrigin(tb.Origin);
 
             var scheduledRate = tb.ScheduledRate
-                ?? (hasData ? timeline.SnapshotAt(tbStart).BasalRateAt(tbStart) : (double?)null);
+                ?? (hasData && segments.Count > 0
+                    ? segments[SegmentIndexAt(segments, ref cursor, tbStart)].UnitsPerHour
+                    : (double?)null);
 
             series.Add(
                 new BasalPoint
@@ -85,7 +93,7 @@ internal sealed class BasalSeriesBuilder(
         }
 
         if (currentTime < endTime)
-            series.AddRange(BuildFromProfile(currentTime, endTime, defaultBasalRate, timeline, hasData));
+            series.AddRange(FillFromSchedule(segments, ref cursor, currentTime, endTime, defaultBasalRate, hasData));
 
         if (series.Count == 0 && hasData)
         {
@@ -105,11 +113,12 @@ internal sealed class BasalSeriesBuilder(
         return series;
     }
 
-    internal static List<BasalPoint> BuildFromProfile(
+    private static List<BasalPoint> FillFromSchedule(
+        IReadOnlyList<BasalSegment> segments,
+        ref int cursor,
         long startTime,
         long endTime,
         double defaultBasalRate,
-        TherapyTimeline timeline,
         bool hasData
     )
     {
@@ -117,30 +126,37 @@ internal sealed class BasalSeriesBuilder(
 
         // No therapy settings means no basal schedule. Emitting defaultBasalRate
         // here would draw a flat band the wearer never received.
-        if (!hasData)
+        if (!hasData || startTime >= endTime)
             return series;
 
-        const long intervalMs = 5 * 60 * 1000;
         double? prevRate = null;
 
-        for (long t = startTime; t <= endTime; t += intervalMs)
+        if (segments.Count > 0)
         {
-            var rate = timeline.SnapshotAt(t).BasalRateAt(t);
-
-            if (prevRate == null || Math.Abs(rate - prevRate.Value) > 0.001)
+            for (
+                var i = SegmentIndexAt(segments, ref cursor, startTime);
+                i < segments.Count && segments[i].StartMills < endTime;
+                i++
+            )
             {
-                series.Add(
-                    new BasalPoint
-                    {
-                        Timestamp = t,
-                        Rate = rate,
-                        ScheduledRate = rate,
-                        Origin = BasalDeliveryOrigin.Inferred,
-                        FillColor = ChartColorMapper.FillFromBasalOrigin(BasalDeliveryOrigin.Inferred),
-                        StrokeColor = ChartColorMapper.StrokeFromBasalOrigin(BasalDeliveryOrigin.Inferred),
-                    }
-                );
-                prevRate = rate;
+                var segment = segments[i];
+                var rate = segment.UnitsPerHour;
+
+                if (prevRate == null || Math.Abs(rate - prevRate.Value) > 0.001)
+                {
+                    series.Add(
+                        new BasalPoint
+                        {
+                            Timestamp = Math.Max(startTime, segment.StartMills),
+                            Rate = rate,
+                            ScheduledRate = rate,
+                            Origin = BasalDeliveryOrigin.Inferred,
+                            FillColor = ChartColorMapper.FillFromBasalOrigin(BasalDeliveryOrigin.Inferred),
+                            StrokeColor = ChartColorMapper.StrokeFromBasalOrigin(BasalDeliveryOrigin.Inferred),
+                        }
+                    );
+                    prevRate = rate;
+                }
             }
         }
 
@@ -160,6 +176,19 @@ internal sealed class BasalSeriesBuilder(
         }
 
         return series;
+    }
+
+    /// <summary>
+    /// Index of the segment covering <paramref name="mills"/>, or the nearest one when none does.
+    /// The cursor only moves as far as the instant needs, so ordered lookups walk the list once.
+    /// </summary>
+    private static int SegmentIndexAt(IReadOnlyList<BasalSegment> segments, ref int cursor, long mills)
+    {
+        while (cursor > 0 && segments[cursor].StartMills > mills)
+            cursor--;
+        while (cursor < segments.Count - 1 && segments[cursor].EndMills <= mills)
+            cursor++;
+        return cursor;
     }
 
     /// <summary>

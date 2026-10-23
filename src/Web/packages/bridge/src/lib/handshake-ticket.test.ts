@@ -11,7 +11,7 @@ import {
 const SECRET = 'test-instance-key-0123456789';
 
 function grant(tenantRelay: boolean, extra: Partial<RealtimeGrant> = {}): RealtimeGrant {
-  return { tenantRelay, categories: [], historyClamped: false, ...extra };
+  return { tenantRelay, categories: [], historyClamped: false, mayAck: false, ...extra };
 }
 
 describe('normalizeHandshakeHost', () => {
@@ -29,19 +29,21 @@ describe('handshake ticket sign/verify', () => {
       tenantRelay: true,
       categories: [],
       historyClamped: false,
+      mayAck: false,
     });
   });
 
-  it('round-trips the granted categories and the history clamp', () => {
+  it('round-trips the granted categories, the history clamp and the right to silence alarms', () => {
     const token = signHandshakeTicket(
       SECRET,
       'rhys.nocturne.run',
-      grant(true, { categories: ['entries', 'care'], historyClamped: true }),
+      grant(true, { categories: ['entries', 'care'], historyClamped: true, mayAck: true }),
     );
 
     expect(verifyHandshakeTicket(SECRET, token)).toMatchObject({
       categories: ['entries', 'care'],
       historyClamped: true,
+      mayAck: true,
     });
   });
 
@@ -125,6 +127,14 @@ describe('readRealtimeGrant', () => {
     ['an admission with no categories or clamp', { tenantRelay: true }],
   ])('grants no category room for %s', (_case, value) => {
     expect(readRealtimeGrant(value)).toMatchObject({ categories: [], historyClamped: true });
+  });
+
+  it.each([
+    ['true', true, true],
+    ['absent', undefined, false],
+    ['a truthy string', 'true', false],
+  ])('grants the right to silence alarms only when mayAck is %s', (_case, mayAck, expected) => {
+    expect(readRealtimeGrant({ tenantRelay: true, mayAck }).mayAck).toBe(expected);
   });
 
   it('keeps only the string categories of a malformed list', () => {

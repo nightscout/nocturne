@@ -151,8 +151,9 @@ public class DDataParityTests : ParityTestBase
     [Fact]
     public async Task GetDDataAt_IsoDateString_ReturnsSameShape()
     {
-        await SeedEntrySequenceAsync(count: 5);
-        var isoDate = TestTimeProvider.GetTestTime().AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        var at = TestTimeProvider.GetTestTime().AddHours(-1);
+        await SeedEntriesAsync(TestDataFactory.CreateEntrySequence(5, 5, startTime: at));
+        var isoDate = at.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
         await AssertGetParityAsync($"/api/v2/ddata/at/{Uri.EscapeDataString(isoDate)}");
     }

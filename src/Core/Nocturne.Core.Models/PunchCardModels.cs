@@ -115,4 +115,7 @@ public class PunchCardResponse
     public double GlobalMaxCarbs { get; set; }
     public double GlobalMaxInsulin { get; set; }
     public double GlobalMaxCarbInsulinDiff { get; set; }
+
+    /// <summary>Why <see cref="Months"/> is empty; null when the tenant's timezone resolved.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }

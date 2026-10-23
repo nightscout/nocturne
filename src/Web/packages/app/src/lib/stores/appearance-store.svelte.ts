@@ -108,7 +108,7 @@ interface SyncedEntry {
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- module-level registry; nothing renders from it
 const syncedRegistry = new Map<string, SyncedEntry>();
 
-const PREFERENCES_CONTEXT_KEY = Symbol("nocturne-display-preferences");
+const PREFERENCES_CONTEXT_KEY = "nocturne:app:display-preferences";
 
 /**
  * One request's preference sources: the display-preference payloads, highest

@@ -21,6 +21,7 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
   import {
     getInsulinDeliveryStatistics,
@@ -75,6 +76,10 @@
     { errorTitle: "Error Loading Insulin Delivery Data" }
   );
   const hourlyDelivery = $derived(hourlyDeliveryResource.current);
+  const timeZoneReason = $derived(
+    dailyRatiosResource.current?.timeZoneUnavailableReason ??
+      hourlyDelivery?.timeZoneUnavailableReason
+  );
 
   const emptyStats: InsulinDeliveryStatistics = {
     totalBolus: 0,
@@ -188,6 +193,14 @@
       { label: "Avg I:C", value: (insulinStats.icRatio ?? 0) > 0 ? `1:${(insulinStats.icRatio ?? 0).toFixed(0)}` : "–", note: `${(insulinStats.totalCarbs ?? 0).toFixed(0)}g carbs` },
     ]}
   />
+
+  {#if timeZoneReason}
+    <p class="text-sm text-muted-foreground">
+      <TimeZoneNote reason={timeZoneReason}>
+        This report cannot show insulin by local day or hour of day.
+      </TimeZoneNote>
+    </p>
+  {/if}
 
   <Card>
     <CardHeader>

@@ -1,21 +1,28 @@
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Storage;
+using Nocturne.API.Services.Docs;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
 /// <summary>
 /// Background service that periodically removes expired OAuth device codes, authorisation codes and
-/// TOTP step-up tokens to prevent database bloat. Runs every hour and removes records that expired
-/// more than one hour ago.
+/// TOTP step-up tokens, and OAuth clients nothing uses, to prevent database bloat. Runs every hour.
 /// </summary>
 /// <remarks>
 /// The <see cref="RetentionBuffer"/> provides a grace window for in-flight exchanges to complete
 /// before their codes are permanently deleted.
+/// <para>
+/// Every <c>/register</c> call mints a client, and registration is anonymous, so a client that never
+/// reached a grant, an authorisation code or a device code within <see cref="UnusedClientRetention"/>
+/// is deleted. A client with a grant stays even once every grant is revoked: it names the app in the
+/// grant's audit trail. The tenant's Scalar docs client is never deleted.
+/// </para>
 /// </remarks>
 public class OAuthCodeCleanupService : BackgroundService
 {
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<OAuthCodeCleanupService> _logger;
 
     /// <summary>
@@ -31,16 +38,22 @@ public class OAuthCodeCleanupService : BackgroundService
     private static readonly TimeSpan RetentionBuffer = TimeSpan.FromHours(1);
 
     /// <summary>
+    /// How long a registered client may go without a grant or a code before it is deleted. Longer
+    /// than any device code lives, so a registrant mid-flow keeps its client.
+    /// </summary>
+    internal static readonly TimeSpan UnusedClientRetention = TimeSpan.FromHours(24);
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="OAuthCodeCleanupService"/> class.
     /// </summary>
-    /// <param name="scopeFactory">Service scope factory for creating scoped services</param>
+    /// <param name="contexts">Root-resolved, so each tenant's context is pinned explicitly.</param>
     /// <param name="logger">Logger</param>
     public OAuthCodeCleanupService(
-        IServiceScopeFactory scopeFactory,
+        INocturneDbContextFactory contexts,
         ILogger<OAuthCodeCleanupService> logger
     )
     {
-        _scopeFactory = scopeFactory;
+        _contexts = contexts;
         _logger = logger;
     }
 
@@ -65,20 +78,15 @@ public class OAuthCodeCleanupService : BackgroundService
 
             try
             {
-                await CleanupExpiredCodesAsync(stoppingToken);
+                await CleanupAsync(stoppingToken);
             }
-            catch (DbUpdateConcurrencyException dbCx)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                _logger.LogError(dbCx, "Database concurrency error during OAuth code cleanup");
+                break;
             }
-            catch (DbUpdateException dbEx)
+            catch (Exception ex) when (ex is DbException or DbUpdateException or RetryLimitExceededException)
             {
-                _logger.LogError(dbEx, "Database update error during OAuth code cleanup");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unexpected error during OAuth code cleanup");
-                throw;
+                _logger.LogError(ex, "OAuth code cleanup failed; retrying at the next tick");
             }
         }
 
@@ -86,39 +94,65 @@ public class OAuthCodeCleanupService : BackgroundService
     }
 
     /// <summary>
-    /// Delete device codes and authorization codes that expired before the retention cutoff.
-    /// Uses EF Core <c>ExecuteDeleteAsync</c> for efficient bulk deletion without loading entities.
+    /// Deletes the expired codes and step-up tokens, then the unused clients, tenant by tenant:
+    /// the OAuth tables are tenant-scoped under FORCE ROW LEVEL SECURITY, so a context pinned to no
+    /// tenant sees none of their rows.
     /// </summary>
-    /// <param name="ct">Cancellation token</param>
-    private async Task CleanupExpiredCodesAsync(CancellationToken ct)
+    internal async Task CleanupAsync(CancellationToken ct)
     {
-        using var scope = _scopeFactory.CreateScope();
-        await using var db = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(ct);
+        var now = DateTime.UtcNow;
+        var codeCutoff = now.Subtract(RetentionBuffer);
+        var clientCutoff = now.Subtract(UnusedClientRetention);
 
-        var cutoff = DateTime.UtcNow.Subtract(RetentionBuffer);
+        List<Guid> tenantIds;
+        int deletedStepUpTokens;
+        await using (var platform = await _contexts.CreatePlatformAsync(ct))
+        {
+            tenantIds = await platform.Tenants.Select(t => t.Id).ToListAsync(ct);
+            deletedStepUpTokens = await platform
+                .TotpStepUpTokens.Where(t => t.ExpiresAt < codeCutoff)
+                .ExecuteDeleteAsync(ct);
+        }
 
-        var deletedDeviceCodes = await db
-            .OAuthDeviceCodes.Where(d => d.ExpiresAt < cutoff)
-            .ExecuteDeleteAsync(ct);
+        int deletedDeviceCodes = 0, deletedAuthCodes = 0, deletedClients = 0;
+        foreach (var tenantId in tenantIds)
+        {
+            try
+            {
+                await using var db = await _contexts.CreateForTenantAsync(tenantId, ct);
 
-        var deletedAuthCodes = await db
-            .OAuthAuthorizationCodes.Where(c => c.ExpiresAt < cutoff)
-            .ExecuteDeleteAsync(ct);
+                deletedDeviceCodes += await db
+                    .OAuthDeviceCodes.Where(d => d.ExpiresAt < codeCutoff)
+                    .ExecuteDeleteAsync(ct);
 
-        // TOTP step-up tokens are the same shape of short-lived single-use record: one row per
-        // minted token, redeemable once, kept only until it has been expired for the buffer.
-        var deletedStepUpTokens = await db
-            .TotpStepUpTokens.Where(t => t.ExpiresAt < cutoff)
-            .ExecuteDeleteAsync(ct);
+                deletedAuthCodes += await db
+                    .OAuthAuthorizationCodes.Where(c => c.ExpiresAt < codeCutoff)
+                    .ExecuteDeleteAsync(ct);
 
-        if (deletedDeviceCodes > 0 || deletedAuthCodes > 0 || deletedStepUpTokens > 0)
+                deletedClients += await db
+                    .OAuthClients.Where(c =>
+                        c.CreatedAt < clientCutoff
+                        && c.SoftwareId != ScalarAuthProvider.ScalarSoftwareId
+                        && !db.OAuthGrants.Any(g => g.ClientEntityId == c.Id)
+                        && !db.OAuthAuthorizationCodes.Any(a => a.ClientEntityId == c.Id)
+                        && !db.OAuthDeviceCodes.Any(d => d.ClientId == c.ClientId))
+                    .ExecuteDeleteAsync(ct);
+            }
+            catch (Exception ex) when (ex is DbException or DbUpdateException or RetryLimitExceededException)
+            {
+                _logger.LogError(ex, "OAuth code cleanup failed for tenant {TenantId}", tenantId);
+            }
+        }
+
+        if (deletedDeviceCodes > 0 || deletedAuthCodes > 0 || deletedStepUpTokens > 0 || deletedClients > 0)
         {
             _logger.LogInformation(
-                "OAuth code cleanup: removed {DeviceCodes} device codes, {AuthCodes} authorization codes "
-                    + "and {StepUpTokens} TOTP step-up tokens",
+                "OAuth code cleanup: removed {DeviceCodes} device codes, {AuthCodes} authorization codes, "
+                    + "{StepUpTokens} TOTP step-up tokens and {Clients} unused clients",
                 deletedDeviceCodes,
                 deletedAuthCodes,
-                deletedStepUpTokens
+                deletedStepUpTokens,
+                deletedClients
             );
         }
     }

@@ -28,6 +28,7 @@ internal sealed class ExcursionResolutionHandler(
     IAlertRepository repository,
     ISignalRBroadcastService broadcastService,
     IInAppNotificationService notificationService,
+    IEngineAlarmRelay alarmRelay,
     TimeProvider timeProvider,
     ILogger<ExcursionResolutionHandler> logger)
     : IExcursionResolutionHandler
@@ -69,6 +70,7 @@ internal sealed class ExcursionResolutionHandler(
         }
 
         await ArchiveInAppNotificationsAsync(tenantId, excursionId, ct);
+        await alarmRelay.ClearIfQuietAsync([excursionId], ct);
 
         logger.LogInformation(
             "Excursion {ExcursionId} resolved (reason={Reason}), {Count} instances closed",

@@ -20,7 +20,9 @@
   import CalendarHeader from "$lib/components/calendar/CalendarHeader.svelte";
   import CalendarMonthSummary from "$lib/components/calendar/CalendarMonthSummary.svelte";
   import CalendarDayCell from "$lib/components/calendar/CalendarDayCell.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import { coachmark } from "@nocturne/coach";
+  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import { groupBy, indexBy } from "$lib/utils/collections";
   import { toDayString } from "$lib/utils/date-range";
 
@@ -351,10 +353,7 @@
     <div
       class="sticky top-(--app-sticky-top,0px) z-10 transition-all duration-300 print:hidden"
       {@attach coachmark({
-        key: "feature-intro.calendar-views",
-        title: "View modes",
-        description:
-          "Switch between Time in Range and Profile views to see different patterns.",
+        ...coachFor("feature-intro.calendar-views"),
         completeOn: { event: "click" },
       })}
     >
@@ -391,6 +390,13 @@
                 Tracker data is unavailable, so site and sensor changes are not shown.
               </p>
             {/if}
+            {#if punchCardQuery.current?.timeZoneUnavailableReason}
+              <p class="text-sm text-muted-foreground">
+                <TimeZoneNote reason={punchCardQuery.current.timeZoneUnavailableReason}>
+                  This report cannot show each day's time in range, glucose and insulin.
+                </TimeZoneNote>
+              </p>
+            {/if}
             <div class="flex-1 overflow-x-auto print:overflow-visible flex flex-col">
               <div class="grid grid-cols-7 gap-1 mb-2 min-w-[28rem] @md:min-w-0">
                 {#each DAY_NAMES as dayName, i (i)}
@@ -405,10 +411,7 @@
               <div
                 class="flex-1 grid grid-rows-6 gap-1 min-w-[28rem] @md:min-w-0"
                 {@attach coachmark({
-                  key: "feature-intro.calendar-trackers",
-                  title: "Tracker events",
-                  description:
-                    "Tracker events appear on your calendar \u2014 colored by urgency.",
+                  ...coachFor("feature-intro.calendar-trackers"),
                 })}
               >
                 {#each calendarGrid as week, idx (idx)}

@@ -26,6 +26,7 @@ export default defineConfig({
         find: /^\$lib\/utils$/,
         replacement: fileURLToPath(new URL("./src/lib/test-stubs/utils-cn.ts", import.meta.url)),
       },
+      { find: /^\$api\//, replacement: fileURLToPath(new URL("./src/lib/api/", import.meta.url)) },
       { find: /^\$lib\//, replacement: fileURLToPath(new URL("./src/lib/", import.meta.url)) },
       { find: "$lib", replacement: fileURLToPath(new URL("./src/lib", import.meta.url)) },
       {

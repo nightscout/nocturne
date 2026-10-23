@@ -15,6 +15,8 @@ namespace Nocturne.Infrastructure.Data.Security;
 /// </summary>
 public static class ShareRlsPolicy
 {
+    private static readonly string ClampInterval = $"interval '{HistoryClamp.WindowHours} hours'";
+
     /// <summary>Name of the RESTRICTIVE FOR SELECT policy applied to every tenant-scoped table.</summary>
     public const string PolicyName = "share_category_read";
 
@@ -122,17 +124,17 @@ public static class ShareRlsPolicy
         }
 
         var windowStart = recencyIsUnixMillis
-            ? "(extract(epoch from now() - interval '24 hours') * 1000)::bigint"
-            : "now() - interval '24 hours'";
+            ? $"(extract(epoch from now() - {ClampInterval}) * 1000)::bigint"
+            : $"now() - {ClampInterval}";
 
         var recent = recencyColumn is not null
             ? $"\"{recencyColumn}\" >= {windowStart}"
             : spanEndColumn is null
                 ? null
                 : openSpanBound is null
-                    ? $"(\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - interval '24 hours')"
+                    ? $"(\"{spanEndColumn}\" IS NULL OR \"{spanEndColumn}\" >= now() - {ClampInterval})"
                     : $"((\"{spanEndColumn}\" IS NULL AND \"{openSpanBound.StartColumn}\" >= now() - interval '{openSpanBound.MaxOpenDays} days')" +
-                      $" OR \"{spanEndColumn}\" >= now() - interval '24 hours')";
+                      $" OR \"{spanEndColumn}\" >= now() - {ClampInterval})";
 
         // IS [NOT] DISTINCT FROM keeps the clamp test non-null when a GUC is unset, so an
         // unset app.history_clamped leaves a non-share unclamped instead of hiding the row.
@@ -152,8 +154,8 @@ public static class ShareRlsPolicy
             // table-qualified: unqualified, a parent column of the same name would shadow it. The
             // clamp test comes first so an unclamped reader is not sent into the subquery.
             var parentShown = parentRecencyColumn is not null
-                ? $"p.\"{parentRecencyColumn}\" >= now() - interval '24 hours'"
-                : $"(p.\"{parentSpanEndColumn}\" IS NULL OR p.\"{parentSpanEndColumn}\" >= now() - interval '24 hours')";
+                ? $"p.\"{parentRecencyColumn}\" >= now() - {ClampInterval}"
+                : $"(p.\"{parentSpanEndColumn}\" IS NULL OR p.\"{parentSpanEndColumn}\" >= now() - {ClampInterval})";
             usingExpr += $" AND (NOT ({clamped}) OR EXISTS (SELECT 1 FROM {parent.Table} p" +
                 $" WHERE p.id = {table}.\"{parent.ForeignKeyColumn}\" AND {parentShown}))";
         }

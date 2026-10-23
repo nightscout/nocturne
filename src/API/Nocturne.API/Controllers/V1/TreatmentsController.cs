@@ -225,7 +225,7 @@ public class TreatmentsController : ControllerBase
                 return BadRequest("No treatments provided");
             }
 
-            var createdTreatments = await _treatmentService.CreateTreatmentsAsync(
+            var createdTreatments = await _treatmentService.CreateV1TreatmentsAsync(
                 PrepareTreatments(treatmentsToCreate),
                 cancellationToken
             );

@@ -89,6 +89,45 @@ async function openThresholdTrackerEditor(page: Page): Promise<void> {
 	await openWith(edit, page.getByTestId('tracker-editor'));
 }
 
+/**
+ * Centres one section of the tracker editor in the editor's own scroll area, once the editor's
+ * height has stopped changing. The editor fills in after it opens, so a section scrolled into view
+ * before then could end with its foot under the editor's lower edge, and the capture showed the
+ * backdrop below it.
+ */
+async function centreInTrackerEditor(page: Page, testId: string): Promise<void> {
+	await openThresholdTrackerEditor(page);
+	await page.waitForFunction(
+		() => {
+			const editor = document.querySelector<HTMLElement>('[data-testid="tracker-editor"]');
+			if (!editor) return false;
+			const height = String(editor.scrollHeight);
+			const steady = height === editor.dataset.captureHeight ? Number(editor.dataset.captureSteady ?? 0) + 1 : 0;
+			editor.dataset.captureHeight = height;
+			editor.dataset.captureSteady = String(steady);
+			return steady >= 5;
+		},
+		undefined,
+		{ polling: 200 },
+	);
+	await page.getByTestId(testId).evaluate((el) => {
+		const scroller = el.closest('[data-testid="tracker-editor"]')!;
+		const section = el.getBoundingClientRect();
+		const view = scroller.getBoundingClientRect();
+		scroller.scrollTop += section.top - view.top - (view.height - section.height) / 2;
+	});
+}
+
+/**
+ * Hides every child of `container` that matches none of `keep`. A Loop Analysis page draws its
+ * charts as one stack, and only the last chart in it labels the time axis they share: this shows one
+ * chart over that last chart, where a clip of the whole stack would be taller than the docs column
+ * can show legibly.
+ */
+async function showOnly(page: Page, container: string, keep: string[]): Promise<void> {
+	await page.addStyleTag({ content: `${container} > :not(${keep.join(', ')}) { display: none !important; }` });
+}
+
 async function seededClockFace({ fetch }: ArrangeContext): Promise<Record<string, string>> {
 	const faces = await fetch('/api/v4/clockfaces');
 	const clockId = stringField(Array.isArray(faces) ? faces[0] : undefined, 'id');
@@ -184,7 +223,7 @@ async function signInToTheAuthenticatorStep(page: Page): Promise<void> {
 	await page.context().clearCookies();
 	await page.goto(`${origin}/auth/login`, { waitUntil: 'domcontentloaded' });
 	await page.getByTestId('passkey-sign-in').click();
-	await page.getByText('Your passkey was accepted.').waitFor();
+	await page.getByTestId('authenticator-step').waitFor();
 }
 
 async function seededAlertRule(
@@ -478,6 +517,122 @@ export const definitions: ScreenshotDefinition[] = [
 		alt: 'The Ambulatory Glucose Profile report. It stacks every day of the chosen date range onto one 24-hour graph, drawing a middle line with shaded bands around it, and lists the share of time spent in each glucose range beside it.',
 	},
 	{
+		id: 'loop-analysis-filter-bar',
+		route: '/reports/loop-analysis/daily-profile?days=7',
+		scenario: 'patient',
+		// The Loop Analysis filters sit under the date range in the reports Filters panel, below
+		// the fold of its own scroll area.
+		prepare: async (page) => {
+			await page.getByRole('button', { name: 'Filters', exact: true }).click();
+			const filters = page.getByTestId('loop-analysis-filters');
+			await filters.waitFor();
+			await filters.scrollIntoViewIfNeeded();
+		},
+		clip: '[data-testid="loop-analysis-filters"]',
+		alt: 'The Loop Analysis filters, under the date range in the reports Filters panel. They hold a choice of period to compare with, a profile picker, buttons for the days of the week to include, and tick boxes that leave out the time of overrides, temporary targets, exercise, illness and time not in closed loop.',
+	},
+	{
+		id: 'loop-analysis-daily-profile',
+		route: '/reports/loop-analysis/daily-profile?days=7',
+		scenario: 'patient',
+		clip: '[data-testid="loop-analysis-daily-totals"]',
+		// Seeded data: the figures move every capture.
+		alt: 'The row of tiles at the top of the Daily profile page. The tiles show the days with data, the total insulin each day, the basal and bolus split, automatic and manual boluses, delivered and scheduled basal, and the net loop correction each day. A link under the tiles opens the Insulin Delivery report.',
+	},
+	{
+		id: 'loop-analysis-daily-glucose',
+		route: '/reports/loop-analysis/daily-profile?days=7',
+		scenario: 'patient',
+		prepare: (page) =>
+			showOnly(page, '[data-testid="loop-analysis-daily-curves"]', [
+				':has(> [data-testid="loop-analysis-panel-glucose"])',
+				'[data-testid="loop-analysis-panel-carbs"]',
+			]),
+		clip: '[data-testid="loop-analysis-daily-curves"]',
+		// Seeded data: the figures move every capture.
+		alt: 'The glucose chart of the Daily profile page, with the carbs chart under it. The carbs chart is the last chart on the page. Its axis shows the time of day for all the charts. On the glucose chart, a line shows the median glucose at each time of day. Two shaded bands around the line show the middle half and most of the readings. The target range is behind them. A key under the glucose chart gives the name of each band.',
+	},
+	{
+		id: 'loop-analysis-net-correction',
+		route: '/reports/loop-analysis/daily-profile?days=7',
+		scenario: 'patient',
+		prepare: (page) =>
+			showOnly(page, '[data-testid="loop-analysis-daily-curves"]', [
+				'[data-testid="loop-analysis-net-correction"]',
+				'[data-testid="loop-analysis-panel-carbs"]',
+			]),
+		clip: '[data-testid="loop-analysis-daily-curves"]',
+		// Seeded data: the figures move every capture.
+		alt: 'The net loop correction chart of the Daily profile page, with the carbs chart under it. The carbs chart is the last chart on the page. Its axis shows the time of day for all the charts. A line shows the mean insulin that the loop added or removed at each time of day, above or below zero. A band shows the middle half of the temp basal change. Under the net loop correction chart, switches add manual temps, suspends and inferred delivery as separate lines.',
+	},
+	{
+		id: 'loop-analysis-meals-events',
+		route: '/reports/loop-analysis/meals-and-events?days=7',
+		scenario: 'patient',
+		clip: '[data-testid="loop-analysis-event-builder"]',
+		alt: 'The Events to align box on the Meals and events page. Each row is one kind of event. A row has a kind of event, here meals, a start time and an end time of day, and a range of grams for meals. Under the rows are the time to show before and after each event, and a tick box for isolated events only.',
+	},
+	{
+		id: 'loop-analysis-event-glucose-change',
+		route: '/reports/loop-analysis/meals-and-events?days=7',
+		scenario: 'patient',
+		prepare: async (page) => {
+			await showOnly(page, '[data-testid="loop-analysis-event-response"]', [
+				'ul',
+				'[data-testid="loop-analysis-event-window"]',
+				'[data-testid="loop-analysis-event-curves"]',
+			]);
+			await showOnly(page, '[data-testid="loop-analysis-event-curves"]', [
+				'[data-testid="loop-analysis-panel-glucose-change"]',
+				'[data-testid="loop-analysis-panel-cob"]',
+				'p',
+			]);
+		},
+		clip: '[data-testid="loop-analysis-event-response"]',
+		// Seeded data: the figures move every capture.
+		alt: 'The change in glucose chart of the Meals and events page, with the carbs on board chart under it. The carbs on board chart is the last chart on the page. Its axis shows the hours before and after the event for all the charts. Above the charts, a key gives the colour of the meals and the number of meals. All meals are aligned at zero, the time of the meal. A line shows the median change in glucose from the start, with shaded bands for the spread, from one hour before to five hours after. A note under the charts gives the meaning of the bands.',
+	},
+	{
+		id: 'loop-analysis-event-metrics',
+		route: '/reports/loop-analysis/meals-and-events?days=14&anchor1=Meal&anchor2=CorrectionBolus',
+		scenario: 'patient',
+		clip: '[data-testid="loop-analysis-event-metrics-table"]',
+		// Seeded data: the figures move every capture.
+		alt: 'The table of what happened after each event, with one column for meals and one column for correction boluses. Each cell shows the median and the middle half. The meals column shows the rise figures. The corrections column shows the fall figures: the drop to the window end, the lowest glucose, the time to the lowest glucose, the drop for each unit above schedule, and how many events went below range.',
+	},
+	{
+		id: 'loop-analysis-predictions',
+		route: '/reports/loop-analysis/prediction-accuracy?days=7',
+		scenario: 'patient',
+		clip: '[data-testid="loop-analysis-prediction-error"]',
+		// Seeded data: the figures move every capture.
+		alt: 'The Error by horizon chart of the Prediction accuracy page. There is one chart for each prediction curve of the loop. Each chart shows the spread of the prediction minus the reading at 30, 60, 90 and 120 minutes ahead. A bold line shows the bias. The MAE and the number of predictions are above each horizon.',
+	},
+	{
+		id: 'loop-analysis-prediction-detail',
+		route: '/reports/loop-analysis/prediction-accuracy?days=7',
+		scenario: 'patient',
+		clip: '[data-testid="loop-analysis-prediction-detail"]',
+		// Seeded data: the figures move every capture.
+		alt: 'The By hour and context box of the Prediction accuracy page. If there is more than one curve, buttons at the top select one. A heat map shows the bias of that curve at each hour of the day. A table under it shows the bias, the MAE and the number of predictions in each context, for example after a meal or fasting.',
+	},
+	{
+		id: 'loop-analysis-loop-health',
+		route: '/reports/loop-analysis/loop-health?days=7',
+		scenario: 'patient',
+		clip: '[data-testid="loop-analysis-health-strips"]',
+		// Seeded data: the figures move every capture.
+		alt: 'The hourly charts of the Loop health page. Bar charts show the share of each hour of the day with the loop closed, the CGM active and the pump active. More bar charts show the algorithm zero temps and the time at max basal by hour. The last chart shows the sensitivity ratio of the loop by hour, with a line at 1.0.',
+	},
+	{
+		id: 'loop-analysis-settings-evidence',
+		route: '/reports/loop-analysis/settings-evidence?days=30',
+		scenario: 'patient',
+		clip: '[data-testid="loop-analysis-settings-evidence-isf"]',
+		// Seeded data: the figures move every capture.
+		alt: 'The insulin sensitivity (ISF) box of the Settings evidence page. A chart shows the ISF of the profile as a line. Each block of the day with enough episodes has a dot for the observed figure, with its spread. A hollow dot is a figure with low confidence. Under the chart is one row for each block, with the figure, the number of episodes and the confidence.',
+	},
+	{
 		id: 'sharing-settings',
 		route: '/settings/members',
 		scenario: 'patient',
@@ -603,7 +758,7 @@ export const definitions: ScreenshotDefinition[] = [
 		arrange: enrolAuthenticator,
 		prepare: signInToTheAuthenticatorStep,
 		clip: '[data-testid="sign-in-card"]',
-		alt: 'The second step of signing in on an account that uses an authenticator app. Nocturne says the passkey was accepted and asks for the current six-digit code before it will finish signing you in.',
+		alt: 'The second step of signing in on an account that uses an authenticator app. After the passkey, Nocturne asks for the current six-digit code from the authenticator app before it will finish signing you in.',
 	},
 	// The alert entries come last, and among them the ones that create rules follow the ones that
 	// read the seeded set: an arranged rule would otherwise join the alerts list, the simulator's
@@ -772,10 +927,7 @@ export const definitions: ScreenshotDefinition[] = [
 		route: '/settings/trackers',
 		scenario: 'patient',
 		arrange: sensorTrackerWithThresholds,
-		prepare: async (page) => {
-			await openThresholdTrackerEditor(page);
-			await page.getByTestId('tracker-triggers').scrollIntoViewIfNeeded();
-		},
+		prepare: (page) => centreInTrackerEditor(page, 'tracker-triggers'),
 		clip: '[data-testid="tracker-triggers"]',
 		alt: 'The Restart automatically on section of the tracker editor. It lists the device events a tracker can restart on, from Sensor Start to Pump Battery Change, each with a tick box; Sensor Start is ticked. Under the list is an optional box for words the event notes must contain.',
 	},
@@ -784,10 +936,7 @@ export const definitions: ScreenshotDefinition[] = [
 		route: '/settings/trackers',
 		scenario: 'patient',
 		arrange: sensorTrackerWithThresholds,
-		prepare: async (page) => {
-			await openThresholdTrackerEditor(page);
-			await page.getByTestId('tracker-thresholds').scrollIntoViewIfNeeded();
-		},
+		prepare: (page) => centreInTrackerEditor(page, 'tracker-thresholds'),
 		clip: '[data-testid="tracker-thresholds"]',
 		alt: 'The Notification Thresholds list inside the tracker editor, with three steps: an Info notice a day before the sensor ends, a Warning two hours before, and an Urgent alert once it has run its full ten days. Each step has a level, a number of hours, a Channels button for choosing where it is delivered, and a message on the line below.',
 	},

@@ -91,6 +91,7 @@
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
+  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
   const realtimeStore = getRealtimeStore();
@@ -934,9 +935,7 @@
 
     <!-- Dashboard Widgets -->
     <div {@attach coachmark({
-      key: "feature-intro.appearance-widgets",
-      title: "Widget order",
-      description: "Drag to reorder your dashboard widgets.",
+      ...coachFor("feature-intro.appearance-widgets"),
       completeOn: { event: "dragend" },
     })}>
       <DashboardWidgetConfigurator

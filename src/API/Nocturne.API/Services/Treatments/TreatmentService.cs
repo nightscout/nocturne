@@ -127,6 +127,11 @@ public class TreatmentService : ITreatmentService
     }
 
     /// <inheritdoc />
+    public Task<Treatment?> GetLatestTreatmentOfTypeAsync(
+        string eventType, long fromMills, long toMills, CancellationToken cancellationToken = default) =>
+        _store.GetLatestOfTypeAsync(eventType, fromMills, toMills, cancellationToken);
+
+    /// <inheritdoc />
     public Task<bool> IsTreatmentDeletedByUserAsync(
         string id, CancellationToken cancellationToken = default)
         => _store.IsDeletedByUserAsync(id, cancellationToken);
@@ -158,12 +163,27 @@ public class TreatmentService : ITreatmentService
     /// the <see cref="ITreatmentCache"/> is invalidated and events are fired via
     /// <see cref="IDataEventSink{T}.OnCreatedAsync(IReadOnlyList{T}, CancellationToken)"/>.
     /// </remarks>
-    public async Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
-        IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default)
+    public Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
+        IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default) =>
+        CreateAsync(treatments, splitPreBolus: false, cancellationToken);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// As <see cref="CreateTreatmentsAsync"/>, with each meal split by <see cref="PreBolusSplit"/>
+    /// after its insulin context is set, so the carbs take none.
+    /// </remarks>
+    public Task<BulkWrite<Treatment>> CreateV1TreatmentsAsync(
+        IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default) =>
+        CreateAsync(treatments, splitPreBolus: true, cancellationToken);
+
+    private async Task<BulkWrite<Treatment>> CreateAsync(
+        IEnumerable<Treatment> treatments, bool splitPreBolus, CancellationToken cancellationToken)
     {
         var treatmentList = treatments.ToList();
 
         await PopulateInsulinContextAsync(treatmentList, cancellationToken);
+        if (splitPreBolus)
+            treatmentList = await SplitPreBolusAsync(treatmentList, cancellationToken);
 
         BulkWrite<Treatment> created;
         var stored = new List<Treatment>();
@@ -200,6 +220,23 @@ public class TreatmentService : ITreatmentService
         await RecordRejectedAsync(created);
 
         return created;
+    }
+
+    /// <summary>
+    /// <see cref="PreBolusSplit"/> over a batch. A meal whose id the user deleted keeps its carbs
+    /// deleted too: its bolus is refused under that id, and its carbs would otherwise be written
+    /// fresh under their own.
+    /// </summary>
+    private async Task<List<Treatment>> SplitPreBolusAsync(List<Treatment> treatments, CancellationToken ct)
+    {
+        var meals = treatments.Select(PreBolusSplit.Split).ToList();
+        var split = meals.Where(halves => halves.Count == 2).Select(halves => halves[0].Id!).ToList();
+        if (split.Count == 0)
+            return [.. meals.SelectMany(halves => halves)];
+
+        var deleted = await _decomposer.GetDeletedByUserAsync(split, ct);
+        return [.. meals.SelectMany(halves =>
+            halves.Count == 2 && deleted.Contains(halves[0].Id!) ? halves.Take(1) : halves)];
     }
 
     /// <summary>

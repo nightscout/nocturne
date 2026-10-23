@@ -144,7 +144,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// fallback); without one the treatment is left unidentified rather than risk a wrong key.
     /// A lowercase <c>id</c> is deliberately not an identity; see <see cref="TreatmentClientId"/>.
     /// </summary>
-    private static void NormalizeIdentity(Treatment treatment)
+    internal static void NormalizeIdentity(Treatment treatment)
     {
         if (!string.IsNullOrEmpty(treatment.Id))
             return;
@@ -162,17 +162,17 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     }
 
     /// <summary>
-    /// Computes a deterministic identifier for an identifier-less treatment by hashing its
-    /// defining fields. Every field that distinguishes one real event from another is included
-    /// (event type, exact time, source, and all dose/value fields), so only byte-identical
-    /// re-uploads of the same event collapse — distinct events never share an id.
-    /// </summary>
-    /// <summary>
     /// <see cref="Treatment.Absolute"/> as it read before it stopped reading through
     /// <see cref="Treatment.Rate"/> beside a percent, so ids and fingerprints already stored still match.
     /// </summary>
     private static double? HashedAbsolute(Treatment t) => t.Absolute ?? t.Rate;
 
+    /// <summary>
+    /// Computes a deterministic identifier for an identifier-less treatment by hashing its
+    /// defining fields. Every field that distinguishes one real event from another is included
+    /// (event type, exact time, source, and all dose/value fields), so only byte-identical
+    /// re-uploads of the same event collapse — distinct events never share an id.
+    /// </summary>
     internal static string ComputeSyntheticId(Treatment t)
     {
         var canonical = string.Join(
@@ -228,12 +228,6 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             && !ProduceNote && !ProduceBolusCalc && !ProduceDeviceEvent && !DelegateToStateSpan;
     }
 
-    /// <summary>
-    /// Classifies which v4 records a legacy <see cref="Treatment"/> decomposes into, based on its
-    /// <see cref="Treatment.EventType"/> and the insulin/carb data present. This mapping is shared
-    /// by <see cref="DecomposeAsync"/> and <see cref="DecomposeBatchAsync"/> so it lives in exactly
-    /// one place.
-    /// </summary>
     private static string? SanitizeForLog(string? value)
     {
         return value?
@@ -241,6 +235,12 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             .Replace("\n", string.Empty);
     }
 
+    /// <summary>
+    /// Classifies which v4 records a legacy <see cref="Treatment"/> decomposes into, based on its
+    /// <see cref="Treatment.EventType"/> and the insulin/carb data present. This mapping is shared
+    /// by <see cref="DecomposeAsync"/> and <see cref="DecomposeBatchAsync"/> so it lives in exactly
+    /// one place.
+    /// </summary>
     private TreatmentClassification ClassifyTreatment(Treatment treatment)
     {
         var eventType = treatment.EventType?.Trim();
@@ -781,7 +781,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         model.LegacyId = treatment.Id;
         model.CorrelationId = correlationId;
         model.DataSource = treatment.DataSource;
-        model.Device = treatment.EnteredBy;
+        model.Device = UploadedDevice(treatment);
         model.Origin = ProfileActivationSource.OriginOf(model.App, treatment.EnteredBy, treatment.OriginalProfileName);
         if (!isEffective && model.RequestedDurationMs is > 0 and var duration)
             model.EndTimestamp = start.AddMilliseconds(duration);
@@ -895,6 +895,10 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         catch (OverflowException ex) { throw new TreatmentMappingException(ex); }
     }
 
+    /// <summary>
+    /// A Temp Basal with no duration ends where it starts: Nightscout reads one as a cancel, which
+    /// ends the temp before it and delivers nothing.
+    /// </summary>
     internal static V4Models.TempBasal MapToTempBasal(Treatment treatment, Guid? correlationId)
     {
         var startTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime;
@@ -908,12 +912,14 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             LegacyId = treatment.Id,
             AdditionalProperties = TempBasalUploadedFields.Keep(
                 TempBasalAutomaticFlag.Keep(
-                    TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment), treatment.Automatic),
+                    TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                    treatment.Automatic
+                    ?? (evidence is V4Models.TempBasalOriginEvidence.Reported ? TempBasalAutomaticFlag.Of(origin) : null)),
                 treatment),
             StartTimestamp = startTimestamp,
-            EndTimestamp = durationMs > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + durationMs).UtcDateTime : null,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + Math.Max(durationMs, 0)).UtcDateTime,
             UtcOffset = treatment.UtcOffset,
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             App = treatment.EnteredBy,
             DataSource = treatment.DataSource,
             CorrelationId = correlationId,
@@ -986,9 +992,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// Decides whether an echoed origin beside echoed non-<see cref="V4Models.TempBasalOriginEvidence.Reported"/>
     /// evidence is an edit or the stored row read back. A different origin is the user's statement only when
     /// the evidence echoed with it is the stored row's, since that proves the body was read from this state;
-    /// a stale echo keeps the stored origin. A kept verdict (<see cref="V4Models.TempBasalOriginEvidence.Snapshot"/>,
-    /// <see cref="V4Models.TempBasalOriginEvidence.Uncorroborated"/>) stands only while the start, rate and
-    /// percent it was judged on are unchanged, and is otherwise judged again.
+    /// a stale echo is a default for the stored origin, which <see cref="V4Models.TempBasalOriginProvenance.OnUpdate"/>
+    /// settles as it does a re-upload's. A rate the edit left unset is the stored one unless its percent changed.
     /// </summary>
     internal static void SettleEchoedTempBasalOrigin(V4Models.TempBasal model, Treatment treatment, V4Models.TempBasal? stored)
     {
@@ -1006,21 +1011,18 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             return;
         }
 
-        model.Origin = stored.Origin;
-        var verdict = storedEvidence is V4Models.TempBasalOriginEvidence.Snapshot or V4Models.TempBasalOriginEvidence.Uncorroborated;
-        var unchanged = model.StartTimestamp == stored.StartTimestamp
-            && (model.Rate ?? stored.Rate) == stored.Rate
-            && model.Percent == stored.Percent;
-        if (verdict && !unchanged)
-        {
-            model.OriginEvidence = V4Models.TempBasalOriginEvidence.Uploader;
-            model.ApsSnapshotId = null;
-        }
-        else
-        {
-            model.OriginEvidence = storedEvidence;
-            model.ApsSnapshotId = stored.ApsSnapshotId;
-        }
+        var settled = V4Models.TempBasalOriginProvenance.OnUpdate(
+            new V4Models.TempBasalOriginState(
+                stored.Origin, storedEvidence, stored.ApsSnapshotId, stored.StartMills, stored.Rate),
+            new V4Models.TempBasalOriginState(
+                stored.Origin,
+                V4Models.TempBasalOriginEvidence.Uploader,
+                null,
+                model.StartMills,
+                model.Percent == stored.Percent ? model.Rate ?? stored.Rate : model.Rate));
+        model.Origin = settled.Origin;
+        model.OriginEvidence = settled.Evidence;
+        model.ApsSnapshotId = settled.ApsSnapshotId;
     }
 
     internal static V4Models.Bolus MapToBolus(Treatment treatment, Guid? correlationId, bool keepEventType = true)
@@ -1028,9 +1030,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         return new V4Models.Bolus
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = UploadedEventType(
-                TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-                treatment, keepEventType, TreatmentTypes.CorrectionBolus),
+            AdditionalProperties = UploadedPreBolus(
+                UploadedEventType(
+                    TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                    treatment, keepEventType, TreatmentTypes.CorrectionBolus),
+                treatment, keepEventType),
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
             Insulin = treatment.Insulin ?? 0,
             Programmed = treatment.Programmed,
@@ -1038,7 +1042,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             BolusType = ParseBolusType(treatment.BolusType),
             Automatic = treatment.Automatic ?? false,
             Duration = treatment.Duration,
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -1061,7 +1065,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 treatment, keepEventType, TreatmentTypes.CarbCorrection),
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
             Carbs = treatment.Carbs ?? 0,
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -1075,6 +1079,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         Dictionary<string, object?>? record, Treatment treatment, bool keep, string servedWithout) =>
         keep ? TreatmentUploadedEventType.AddTo(record, treatment, servedWithout) : record;
 
+    /// <remarks>A wizard's calculation keeps the preBolus itself.</remarks>
+    private static Dictionary<string, object?>? UploadedPreBolus(
+        Dictionary<string, object?>? record, Treatment treatment, bool keep) =>
+        keep ? TreatmentUploadedPreBolus.AddTo(record, treatment) : record;
+
     internal static V4Models.BGCheck MapToBGCheck(Treatment treatment, Guid? correlationId)
     {
         return new V4Models.BGCheck
@@ -1085,7 +1094,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             Glucose = treatment.Glucose ?? 0,
             GlucoseType = ParseGlucoseType(treatment.GlucoseType),
             Units = ParseGlucoseUnit(treatment.Units),
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -1103,7 +1112,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             Text = treatment.Notes ?? string.Empty,
             EventType = treatment.EventType,
             IsAnnouncement = isAnnouncement || (treatment.IsAnnouncement ?? false),
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -1120,7 +1129,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
             EventType = deviceEventType,
             Notes = treatment.Notes,
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -1142,7 +1151,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             InsulinRecommendation = treatment.InsulinRecommendationForCorrection,
             CarbRatio = treatment.CR,
             CalculationType = MapCalculationType(treatment.CalculationType),
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -1224,6 +1233,13 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     internal static bool IsAapsUpload(Treatment treatment) =>
         string.Equals(UploadedString(treatment, "app"), "AAPS", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The device a record names: its uploader, else the <c>device</c> the upload sent. The uploader
+    /// comes first because it is the key a temp basal is matched to its loop's snapshots by.
+    /// </summary>
+    private static string? UploadedDevice(Treatment treatment) =>
+        treatment.EnteredBy ?? UploadedString(treatment, "device");
+
     /// <summary>An uploaded field the treatment has no property for, when it is a string.</summary>
     private static string? UploadedString(Treatment treatment, string key) =>
         treatment.AdditionalProperties?.GetValueOrDefault(key) switch
@@ -1291,7 +1307,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             t => string.Equals(eventType, t, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IsMealEventType(string? eventType) =>
+    internal static bool IsMealEventType(string? eventType) =>
         string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
         || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
         || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase);
@@ -2283,6 +2299,17 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(canonical)));
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> GetDeletedByUserAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+    {
+        if (legacyIds.Count == 0)
+            return new HashSet<string>();
+
+        await using var db = await _contexts.CreateAsync(ct);
+        return (await GetHeldLegacyIdsAsync(db, [.. legacyIds], ct)).DeletedByUser;
     }
 
     /// <summary>

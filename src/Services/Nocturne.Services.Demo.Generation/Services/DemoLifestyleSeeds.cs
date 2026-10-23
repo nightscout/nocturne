@@ -88,11 +88,12 @@ public static class DemoLifestyleSeeds
     /// workout overrides + temporary targets, illness spans on sick days, and
     /// the travel span matching the timezone-timeline trip.
     /// </summary>
-    public static List<SpanSeed> BuildSpans(DateTime localToday, int days)
+    /// <param name="seedEnd">The local end of the seeded range; now when omitted.</param>
+    public static List<SpanSeed> BuildSpans(DateTime localToday, int days, DateTime? seedEnd = null)
     {
         var spans = new List<SpanSeed>();
         var windowStart = localToday.AddDays(-days);
-        var now = DateTime.Now;
+        var now = seedEnd ?? DateTime.Now;
 
         // Pump mode: Automatic, interrupted by occasional Manual windows and
         // by Exercise mode during workouts on exercise days.
@@ -114,11 +115,9 @@ public static class DemoLifestyleSeeds
                     workoutStart.AddMinutes(-10), workoutEnd.AddMinutes(10),
                     new Dictionary<string, object> { ["targetTop"] = 150.0, ["targetBottom"] = 140.0 }));
             }
-            else if (DayScenarios.Roll(day, "manual-mode", 100) < 9)
+            else if (DemoLoopInterruptions.ManualModeWindow(day, now) is { } manual)
             {
-                // An occasional afternoon in manual mode (pump maintenance, pool day).
-                var start = day.AddHours(13 + DayScenarios.Roll(day, "manual-start", 4));
-                interruptions.Add((start, start.AddHours(2.5), nameof(PumpModeState.Manual)));
+                interruptions.Add((manual.Start, manual.End, nameof(PumpModeState.Manual)));
             }
         }
 

@@ -26,6 +26,7 @@ internal sealed class AlertAcknowledgementService(
     INocturneDbContextFactory contextFactory,
     ISignalRBroadcastService broadcastService,
     ITenantMemberService memberService,
+    IEngineAlarmRelay alarmRelay,
     ILogger<AlertAcknowledgementService> logger)
     : IAlertAcknowledgementService
 {
@@ -96,6 +97,8 @@ internal sealed class AlertAcknowledgementService(
             logger.LogWarning(ex, "Failed to broadcast alert_acknowledged for tenant {TenantId}", tenantId);
         }
 
+        await alarmRelay.ClearIfQuietAsync(excursionIds, ct);
+
         logger.LogInformation(
             "Acknowledged {ExcursionCount} excursions and {InstanceCount} instances for tenant {TenantId} by {AcknowledgedBy}",
             excursions.Count, instances.Count, tenantId, acknowledgedBy);
@@ -146,6 +149,8 @@ internal sealed class AlertAcknowledgementService(
         ApplyAcknowledgement(excursion, instances, acknowledgedBy, now);
 
         await db.SaveChangesAsync(ct);
+
+        await alarmRelay.ClearIfQuietAsync([excursionId], ct);
 
         if (broadcast)
         {

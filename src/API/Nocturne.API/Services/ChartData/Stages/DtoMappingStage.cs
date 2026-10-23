@@ -64,7 +64,7 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
         activitySpans.AddRange(MapSleepSessions(context.SleepSessions));
 
         var basalDeliverySpans = ChartDataService.MapBasalDeliverySpans(context.DisplayTempBasals.ToList());
-        var lastPumpSyncMills = ChartDataService.LastPumpSyncMills(context.DisplayTempBasals, context.LatestPumpSnapshot);
+        var lastPumpSyncMills = ChartDataService.LastPumpSyncMills(context.TempBasalList, context.LatestPumpSnapshot);
         var tempBasalSpans = ChartDataService.MapTempBasalSpans(context.DisplayTempBasals.ToList());
         var systemEventMarkers = ChartDataService.MapSystemEvents(context.SystemEvents);
         var basalInjectionMarkers = context.BasalInjectionList

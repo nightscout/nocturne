@@ -47,6 +47,12 @@ public interface ITreatmentDecomposer
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
+    /// The subset of <paramref name="legacyIds"/> held only by records the user deleted, which a
+    /// re-upload under that id does not bring back.
+    /// </summary>
+    Task<IReadOnlySet<string>> GetDeletedByUserAsync(IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Soft-deletes <paramref name="source"/>'s records decomposed from <paramref name="legacyIds"/>,
     /// including the state spans those treatments served as and the profile rows of a Profile Switch,
     /// leaving every other source's rows under those ids alone. A deleted row that was a dedup

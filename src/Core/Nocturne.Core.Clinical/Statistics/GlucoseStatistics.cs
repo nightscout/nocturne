@@ -46,6 +46,27 @@ public static class GlucoseStatistics
             : sortedValues[sortedValues.Count / 2];
 
     /// <summary>
+    /// Linearly interpolated percentile (0-100) of an already-sorted series; 0 for an empty one.
+    /// </summary>
+    public static double Percentile(IList<double> sortedValues, double percentile)
+    {
+        if (sortedValues.Count == 0)
+            return 0;
+
+        var index = (percentile / 100) * (sortedValues.Count - 1);
+        var lower = (int)Math.Floor(index);
+        var upper = (int)Math.Ceiling(index);
+
+        if (lower == upper)
+        {
+            return sortedValues[lower];
+        }
+
+        var weight = index - lower;
+        return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
+    }
+
+    /// <summary>
     /// <paramref name="values"/> in ascending order, for <see cref="Median"/> and percentiles. An
     /// in-place array sort orders doubles exactly as <c>OrderBy</c> does, NaN first, at a fraction
     /// of the cost; the two can differ only in the order of equal values, which a median or a

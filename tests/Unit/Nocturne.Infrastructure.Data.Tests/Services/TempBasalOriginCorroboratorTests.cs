@@ -4,7 +4,10 @@ using Proposal = Nocturne.Infrastructure.Data.Services.TempBasalOriginCorroborat
 
 namespace Nocturne.Infrastructure.Data.Tests.Services;
 
-/// <summary>The matching rules of <see cref="TempBasalOriginCorroborator.Judge"/>.</summary>
+/// <summary>
+/// The matching rules of <see cref="TempBasalOriginCorroborator.Judge"/>, and the device rule of
+/// <see cref="TempBasalOriginCorroborator.ProposalsFor"/>.
+/// </summary>
 [Trait("Category", "Unit")]
 public class TempBasalOriginCorroboratorTests
 {
@@ -108,5 +111,78 @@ public class TempBasalOriginCorroboratorTests
     {
         Judge(1.2, At(TimeSpan.FromMinutes(1), enacted: 1.2, suggested: 0.5, enactedAt: Start.AddMinutes(-20)))
             .Should().Be(new TempBasalOriginCorroborator.Verdict(TempBasalOrigin.Manual, TempBasalOriginEvidence.Snapshot, null));
+    }
+
+    private static TempBasalOriginCorroborator.Verdict JudgeAcrossDevices(
+        string? device, double rate, params (string? Device, Proposal Proposal)[] read)
+    {
+        var (proposals, otherDevice) = TempBasalOriginCorroborator.ProposalsFor(device, Start, read);
+        return TempBasalOriginCorroborator.Judge(TempBasalOrigin.Manual, Start, rate, proposals, otherDevice);
+    }
+
+    [Fact]
+    public void A_temp_with_no_device_is_linked_to_the_one_loop_nearby_as_another_devices()
+    {
+        JudgeAcrossDevices(null, 1.2, ("openaps://SM-G991B", At(TimeSpan.FromMinutes(1), enacted: 1.2)))
+            .Should().Be(new TempBasalOriginCorroborator.Verdict(TempBasalOrigin.Algorithm, TempBasalOriginEvidence.OtherDevice, Snapshot));
+    }
+
+    [Fact]
+    public void A_temp_mirrored_through_another_uploader_is_linked_to_the_one_loop_nearby_as_another_devices()
+    {
+        JudgeAcrossDevices("tidepool", 0.85, ("Trio", At(TimeSpan.FromMinutes(-2), enacted: 0.5, suggested: 0.85)))
+            .Should().Be(new TempBasalOriginCorroborator.Verdict(TempBasalOrigin.Algorithm, TempBasalOriginEvidence.OtherDevice, Snapshot));
+    }
+
+    [Fact]
+    public void With_two_loops_nearby_neither_judges_a_temp_of_a_third_device()
+    {
+        JudgeAcrossDevices(null, 1.2,
+                ("openaps://SM-G991B", At(TimeSpan.FromMinutes(1), enacted: 1.2)),
+                ("Trio", At(TimeSpan.FromMinutes(2), enacted: 0.4, id: Other)))
+            .Should().Be(new TempBasalOriginCorroborator.Verdict(TempBasalOrigin.Manual, TempBasalOriginEvidence.Uncorroborated, null));
+    }
+
+    [Fact]
+    public void A_temp_with_no_device_is_not_judged_by_snapshots_with_no_device_beside_a_named_loop()
+    {
+        JudgeAcrossDevices(null, 1.2,
+                (null, At(TimeSpan.FromMinutes(1), enacted: 1.2)),
+                ("Trio", At(TimeSpan.FromMinutes(2), enacted: 0.4, id: Other)))
+            .Should().Be(new TempBasalOriginCorroborator.Verdict(TempBasalOrigin.Manual, TempBasalOriginEvidence.Uncorroborated, null));
+    }
+
+    [Fact]
+    public void A_second_loop_uploading_only_for_a_repeated_enactment_still_counts_as_a_second_loop()
+    {
+        JudgeAcrossDevices("tidepool", 1.2,
+                ("Trio", At(TimeSpan.FromMinutes(1), enacted: 1.2)),
+                ("openaps://SM-G991B", At(TimeSpan.FromMinutes(14), id: Other)))
+            .Evidence.Should().Be(TempBasalOriginEvidence.Uncorroborated);
+    }
+
+    [Fact]
+    public void A_loop_uploading_outside_the_window_is_not_a_second_loop()
+    {
+        JudgeAcrossDevices("tidepool", 1.2,
+                ("Trio", At(TimeSpan.FromMinutes(1), enacted: 1.2)),
+                ("openaps://SM-G991B", At(TimeSpan.FromMinutes(16), id: Other)))
+            .SnapshotId.Should().Be(Snapshot);
+    }
+
+    [Fact]
+    public void A_temp_whose_device_uploaded_nearby_is_judged_by_its_own_loop_only()
+    {
+        JudgeAcrossDevices("Trio", 1.2,
+                ("Trio", At(TimeSpan.FromMinutes(1), enacted: 0.4)),
+                ("openaps://SM-G991B", At(TimeSpan.FromMinutes(-1), enacted: 1.2, id: Other)))
+            .Should().Be(new TempBasalOriginCorroborator.Verdict(TempBasalOrigin.Manual, TempBasalOriginEvidence.Snapshot, null));
+    }
+
+    [Fact]
+    public void A_temp_the_one_loop_nearby_proposed_another_rate_for_is_manual()
+    {
+        JudgeAcrossDevices(null, 2.0, ("openaps://SM-G991B", At(TimeSpan.FromMinutes(1), enacted: 1.2, suggested: 1.2)))
+            .Should().Be(new TempBasalOriginCorroborator.Verdict(TempBasalOrigin.Manual, TempBasalOriginEvidence.OtherDevice, null));
     }
 }

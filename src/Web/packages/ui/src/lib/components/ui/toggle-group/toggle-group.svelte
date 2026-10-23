@@ -18,11 +18,11 @@
   };
 
   export function setToggleGroupCtx(props: ToggleGroupCtx) {
-    setContext("toggleGroup", props);
+    setContext("nocturne:ui:toggle-group", props);
   }
 
   export function getToggleGroupCtx() {
-    return getContext<ToggleGroupCtx>("toggleGroup");
+    return getContext<ToggleGroupCtx>("nocturne:ui:toggle-group");
   }
 </script>
 

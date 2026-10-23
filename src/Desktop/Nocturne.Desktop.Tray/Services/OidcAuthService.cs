@@ -15,9 +15,8 @@ namespace Nocturne.Desktop.Tray.Services;
 public sealed class OidcAuthService : IDisposable
 {
     // Reverse-DNS software_id matching the bundled known-client directory entry. The
-    // server issues an opaque, per-tenant client_id for it via Dynamic Client
-    // Registration — client_ids are not stable across instances, so they can't be
-    // hardcoded.
+    // server issues a new opaque client_id for every Dynamic Client Registration, so
+    // it can't be hardcoded.
     private const string SoftwareId = "com.nocturne.tray";
     private const string ClientName = "Nocturne Tray";
     // Loopback redirect (RFC 8252) registered without a port. The actual login uses a
@@ -72,8 +71,8 @@ public sealed class OidcAuthService : IDisposable
         if (string.IsNullOrEmpty(serverUrl))
             return false;
 
-        // Obtain an opaque client_id for this server. client_ids are per-tenant random
-        // values, so they can't be hardcoded — register by stable software_id instead.
+        // Each login registers a new client; the stored credentials keep its client_id
+        // for refresh.
         _clientId = await RegisterClientAsync(serverUrl);
         if (_clientId is null)
             return false;
@@ -108,9 +107,8 @@ public sealed class OidcAuthService : IDisposable
     }
 
     /// <summary>
-    /// Obtains an opaque <c>client_id</c> via RFC 7591 Dynamic Client Registration.
-    /// Registration is idempotent per tenant on <see cref="SoftwareId"/>, so reconnects
-    /// reuse the same client. Returns <see langword="null"/> on failure.
+    /// Obtains a new opaque <c>client_id</c> via RFC 7591 Dynamic Client Registration.
+    /// Returns <see langword="null"/> on failure.
     /// </summary>
     private async Task<string?> RegisterClientAsync(string serverUrl)
     {

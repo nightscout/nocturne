@@ -53,7 +53,7 @@ export class ReportPrintContext {
   }
 }
 
-const KEY = Symbol("report-print");
+const KEY = "nocturne:app:report-print";
 
 export function createReportPrintContext(): ReportPrintContext {
   return setContext(KEY, new ReportPrintContext());

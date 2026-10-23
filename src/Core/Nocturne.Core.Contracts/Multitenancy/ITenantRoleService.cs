@@ -11,6 +11,13 @@ public interface ITenantRoleService
     Task<List<TenantRoleDto>> GetRolesAsync(Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// The roles of <paramref name="tenantId"/> that <paramref name="granterScopes"/> could confer:
+    /// exactly those for which <see cref="ValidateRoleGrantAsync"/> succeeds.
+    /// </summary>
+    Task<List<TenantRoleDto>> GetAssignableRolesAsync(
+        Guid tenantId, IReadOnlyCollection<string> granterScopes, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns a role by its ID within <paramref name="tenantId"/>, or null if the tenant has
     /// no such role. A role ID belonging to another tenant resolves to null.
     /// </summary>

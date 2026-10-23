@@ -25,6 +25,7 @@
   import MealsTable from "$lib/components/meals/MealsTable.svelte";
   import MealBolusDialog from "$lib/components/meals/MealBolusDialog.svelte";
   import { coachmark } from "@nocturne/coach";
+  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import { localDayStart, localDayEnd } from "$lib/utils/timezone";
   import { toIsoString } from "$lib/utils/api-date";
   import { Now } from "$lib/hooks/now.svelte";
@@ -369,9 +370,7 @@
   </div>
 
   <div {@attach coachmark({
-    key: "feature-intro.meals-matching",
-    title: "Smart matching",
-    description: "Nocturne suggests food matches based on your history \u2014 review them here.",
+    ...coachFor("feature-intro.meals-matching"),
     completeOn: { event: "click" },
   })}>
     <MealsTable
