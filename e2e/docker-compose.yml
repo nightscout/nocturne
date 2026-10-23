@@ -88,7 +88,8 @@ services:
       DOTNET_gcServer: "0"
       DOTNET_GCConserveMemory: "5"
       # 90% of the container limit (hex) instead of the default 75%: the heap peaks while the
-      # migrations run on a fresh database, then settles around 140 MB.
+      # migrations run on a fresh database, then settles around 140 MB. The peak grows with the
+      # migration count, and at 512 MB the onboarding migrations ran it out of memory.
       DOTNET_GCHeapHardLimitPercent: "0x5A"
       DOTNET_TieredPGO: "0"
       Logging__LogLevel__Default: Warning
@@ -101,7 +102,7 @@ services:
         condition: service_healthy
       mocks:
         condition: service_healthy
-    mem_limit: 512m
+    mem_limit: 640m
     cpus: 2.0
     healthcheck:
       # The aspnet base image carries no curl or wget; bash's /dev/tcp does the probe.
