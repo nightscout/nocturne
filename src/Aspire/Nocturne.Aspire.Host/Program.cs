@@ -47,6 +47,13 @@ class Program
             true
         );
 
+        // First-boot setup page and DuckDNS updater for the one-click cloud images, both behind
+        // Compose profiles. See SelfHostSetup.
+        var enableSelfHostSetup = builder.Configuration.GetValue(
+            "Aspire:OptionalServices:SelfHostSetup:Enabled",
+            false
+        );
+
         var compose = builder.AddDockerComposeEnvironment("compose");
         if (!includeDashboard)
         {
@@ -387,6 +394,12 @@ class Program
                 .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
                 .WithHttpEndpoint(name: "http", targetPort: 8080)
                 .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
+                // Self-hosted stacks share a small box with Postgres and the web app. Under a 2 GB
+                // limit on 2 vCPUs, workstation GC with a conserving heap held ~100 MiB less than
+                // the per-core server GC at rest and ~250 MiB less at an overload peak, while
+                // serving more of that overload, for ~10 ms more at the median under steady load.
+                .WithEnvironment("DOTNET_gcServer", "0")
+                .WithEnvironment("DOTNET_GCConserveMemory", "5")
                 .PublishAsDockerComposeService((_, _) => { })
                 .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
                 .WithRemoteImageTag("latest")
@@ -911,6 +924,11 @@ class Program
                 var port = isWorktree ? 0 : hasExplicitDomain ? 443 : 1612;
                 MkcertHelper.WarnIfDomainUnresolvable(customDomain, port);
             }
+        }
+
+        if (builder.ExecutionContext.IsPublishMode && enableSelfHostSetup)
+        {
+            builder.AddSelfHostSetup();
         }
 
         // ------------------------------------------------------------------

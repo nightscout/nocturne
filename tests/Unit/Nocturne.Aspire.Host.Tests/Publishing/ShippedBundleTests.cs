@@ -26,6 +26,16 @@ public class ShippedBundleTests
 
     [Theory]
     [MemberData(nameof(Bundles))]
+    public void TheApiRunsTheConservingWorkstationGc(string bundle)
+    {
+        var environment = (YamlMappingNode)Service(bundle, "nocturne-api")["environment"];
+
+        ((YamlScalarNode)environment["DOTNET_gcServer"]).Value.Should().Be("0");
+        ((YamlScalarNode)environment["DOTNET_GCConserveMemory"]).Value.Should().Be("5");
+    }
+
+    [Theory]
+    [MemberData(nameof(Bundles))]
     public void TheEdgeSendsHstsForItsOwnHostsOnly(string bundle)
     {
         var hsts = File.ReadLines(Path.Combine(RepositoryRoot(), bundle))
