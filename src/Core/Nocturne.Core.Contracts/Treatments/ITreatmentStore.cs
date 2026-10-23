@@ -20,6 +20,9 @@ public interface ITreatmentStore
     /// <returns>A read-only list of <see cref="Treatment"/> records matching the query.</returns>
     Task<IReadOnlyList<Treatment>> QueryAsync(TreatmentQuery query, CancellationToken ct = default);
 
+    /// <inheritdoc cref="Nocturne.Core.Contracts.V4.IV4ToLegacyProjectionService.GetLatestProjectedTreatmentAsync"/>
+    Task<Treatment?> GetLatestOfTypeAsync(string eventType, long fromMills, long toMills, CancellationToken ct = default);
+
     /// <summary>
     /// Whether <paramref name="id"/> names a treatment record the user deleted, under any key
     /// <see cref="GetByIdAsync"/> resolves.

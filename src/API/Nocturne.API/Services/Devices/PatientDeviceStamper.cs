@@ -1,8 +1,7 @@
+using Nocturne.Core.Clinical.Devices;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
-using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.V4.Repositories;
-using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Devices;
@@ -24,7 +23,7 @@ namespace Nocturne.API.Services.Devices;
 internal sealed class PatientDeviceStamper : IPatientDeviceStamper
 {
     private readonly IPatientDeviceRepository _patientDeviceRepository;
-    private readonly ITimezoneTimelineService _timezoneTimelineService;
+    private readonly DeviceDateClockResolver _deviceDates;
     private readonly ILogger<PatientDeviceStamper> _logger;
 
     /// <summary>
@@ -49,11 +48,11 @@ internal sealed class PatientDeviceStamper : IPatientDeviceStamper
 
     public PatientDeviceStamper(
         IPatientDeviceRepository patientDeviceRepository,
-        ITimezoneTimelineService timezoneTimelineService,
+        DeviceDateClockResolver deviceDates,
         ILogger<PatientDeviceStamper> logger)
     {
         _patientDeviceRepository = patientDeviceRepository ?? throw new ArgumentNullException(nameof(patientDeviceRepository));
-        _timezoneTimelineService = timezoneTimelineService ?? throw new ArgumentNullException(nameof(timezoneTimelineService));
+        _deviceDates = deviceDates ?? throw new ArgumentNullException(nameof(deviceDates));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -94,24 +93,15 @@ internal sealed class PatientDeviceStamper : IPatientDeviceStamper
             .ToList();
         if (candidates.Count == 0) return;
 
-        // Records missing a UtcOffset fall back to the tenant's timezone timeline; an empty
-        // timeline resolves to UTC unchanged.
-        TimezoneTimeline? timeline = null;
+        DeviceDateClock? clock = null;
         if (unstamped.Any(r => r.UtcOffset is null))
-            timeline = await _timezoneTimelineService.GetResolverAsync(fallbackOffsetHours: null, ct);
+            clock = await _deviceDates.ResolveAsync(ct);
 
         var unresolved = 0;
         foreach (var record in unstamped)
         {
-            var local = record.UtcOffset is { } offsetMinutes
-                ? record.Timestamp.AddMinutes(offsetMinutes)
-                : timeline!.ToLocal(record.Timestamp);
-            var date = DateOnly.FromDateTime(local);
-            var active = candidates
-                .Where(d =>
-                    (d.StartDate is null || d.StartDate <= date) &&
-                    (d.EndDate is null || d.EndDate >= date))
-                .ToList();
+            var date = PatientDeviceUsage.LocalDate(record.Timestamp, record.UtcOffset, clock);
+            var active = candidates.Where(d => PatientDeviceUsage.Covers(d, date)).ToList();
             if (active.Count == 0) continue;
 
             var match = MatchBySerial(record, active) ?? MatchBySource(record, active, batchSource);

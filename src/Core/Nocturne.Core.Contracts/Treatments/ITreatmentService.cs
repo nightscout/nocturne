@@ -30,6 +30,14 @@ public interface ITreatmentService
         CancellationToken cancellationToken = default
     );
 
+    /// <inheritdoc cref="ITreatmentStore.GetLatestOfTypeAsync"/>
+    Task<Treatment?> GetLatestTreatmentOfTypeAsync(
+        string eventType,
+        long fromMills,
+        long toMills,
+        CancellationToken cancellationToken = default
+    );
+
     /// <returns>Treatment if found, null otherwise</returns>
     Task<Treatment?> GetTreatmentByIdAsync(
         string id,

@@ -1,11 +1,15 @@
+using FluentAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Hubs;
+using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
@@ -622,4 +626,107 @@ public class SignalRBroadcastServiceTests
         );
     }
 
+    private static readonly string TenantPrefix = MockTenantAccessor.DefaultTenantId.ToString();
+
+    private sealed class SentEvents
+    {
+        public List<(string Group, string Event)> Alert { get; } = [];
+        public List<(string Group, string Event)> HomeAssistant { get; } = [];
+    }
+
+    private static Mock<IHubContext<THub>> RecordingHub<THub>(List<(string Group, string Event)> sent)
+        where THub : Hub
+    {
+        var clients = new Mock<IHubClients>();
+        clients
+            .Setup(c => c.Group(It.IsAny<string>()))
+            .Returns((string group) =>
+            {
+                var proxy = new Mock<IClientProxy>();
+                proxy
+                    .Setup(p => p.SendCoreAsync(It.IsAny<string>(), It.IsAny<object[]>(), It.IsAny<CancellationToken>()))
+                    .Callback((string name, object[] _, CancellationToken _) => sent.Add((group, name)))
+                    .Returns(Task.CompletedTask);
+                return proxy.Object;
+            });
+        var hub = new Mock<IHubContext<THub>>();
+        hub.Setup(h => h.Clients).Returns(clients.Object);
+        return hub;
+    }
+
+    private (SignalRBroadcastService Service, Mock<IHubContext<HomeAssistantHub>> HaHub, SentEvents Sent) RecordingService()
+    {
+        var sent = new SentEvents();
+        var haHub = RecordingHub<HomeAssistantHub>(sent.HomeAssistant);
+        var service = new SignalRBroadcastService(
+            _mockDataHubContext.Object,
+            _mockAlarmHubContext.Object,
+            _mockConfigHubContext.Object,
+            RecordingHub<AlertHub>(sent.Alert).Object,
+            haHub.Object,
+            _mockOverviewHubContext.Object,
+            MockTenantAccessor.Create().Object,
+            Options.Create(new JsonHubProtocolOptions()),
+            _mockLogger.Object
+        );
+        return (service, haHub, sent);
+    }
+
+    [Theory]
+    [InlineData("alert_resolved")]
+    [InlineData("alert_acknowledged")]
+    public async Task BroadcastAlertEventAsync_SendsResolvedAndAcknowledgedToHomeAssistantAlertsGroup(string eventName)
+    {
+        var (service, _, sent) = RecordingService();
+
+        await service.BroadcastAlertEventAsync(eventName, new { });
+
+        sent.HomeAssistant.Should().Equal((TenantPrefix + ":ha-alerts", eventName));
+        sent.Alert.Should().Equal((TenantPrefix + ":alert-subscribers", eventName));
+    }
+
+    [Theory]
+    [InlineData("alert_dispatch")]
+    [InlineData("alert_snoozed")]
+    [InlineData("alert_test_fire")]
+    public async Task BroadcastAlertEventAsync_KeepsOtherEventsOffHomeAssistantAlertsGroup(string eventName)
+    {
+        var (service, _, sent) = RecordingService();
+
+        await service.BroadcastAlertEventAsync(eventName, new { });
+
+        sent.HomeAssistant.Should().BeEmpty();
+        sent.Alert.Should().Equal((TenantPrefix + ":alert-subscribers", eventName));
+    }
+
+    [Fact]
+    public async Task AlertDispatch_ReachesAConnectedInstanceOnceThroughItsChannel()
+    {
+        var (service, haHub, sent) = RecordingService();
+        var connections = new HomeAssistantConnections();
+        connections.Add(MockTenantAccessor.DefaultTenantId, "ha-instance", "connection-1");
+        var provider = new HomeAssistantProvider(
+            haHub.Object, connections, NullLogger<HomeAssistantProvider>.Instance);
+        var payload = new AlertPayload
+        {
+            AlertType = AlertConditionType.Threshold,
+            RuleName = "Low",
+            Severity = AlertRuleSeverity.Warning,
+            TenantId = MockTenantAccessor.DefaultTenantId,
+            GlucoseValue = 62,
+            Trend = null,
+            TrendRate = null,
+            ReadingTimestamp = DateTime.UtcNow,
+            SubjectName = "Synthetic",
+            ExcursionId = Guid.NewGuid(),
+            InstanceId = Guid.NewGuid(),
+            ActiveExcursionCount = 1,
+        };
+
+        await service.BroadcastAlertEventAsync("alert_dispatch", payload);
+        await provider.SendAsync(MockTenantAccessor.DefaultTenantId, "ha-instance", payload, CancellationToken.None);
+
+        sent.HomeAssistant.Should().Equal((TenantPrefix + ":ha:ha-instance", "alert_dispatch"));
+        sent.Alert.Should().Equal((TenantPrefix + ":alert-subscribers", "alert_dispatch"));
+    }
 }

@@ -37,7 +37,7 @@ public static class LegacyFindQueryString
 
     /// <summary>
     /// <c>true</c> when <paramref name="find"/> is a query string with <c>find[…]</c> keys of which the
-    /// parser can read none, so it names no condition and is not an activity type either.
+    /// parser can read none, so it names no condition.
     /// </summary>
     public static bool IsUnreadableQueryString(string? find) =>
         find is not null && CarriesFindKeys(find) && FindQuery.Parse(find).IsEmpty;

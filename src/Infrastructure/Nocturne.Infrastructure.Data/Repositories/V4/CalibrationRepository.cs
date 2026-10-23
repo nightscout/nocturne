@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Projections;
@@ -62,13 +63,14 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// Deletes all calibration records for the given data source.
     /// </summary>
     /// <param name="source">Data source identifier.</param>
+    /// <param name="origin">Whether the delete is a live event; see <see cref="V4RepositoryBase{TModel,TEntity}.RaiseBroadcastAsync"/>.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
-    public async Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default)
+    public async Task<int> DeleteBySourceAsync(string source, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.Calibrations.FromSource(source), AuditContext, $"data_source={source}", ct);
+        return await AuditedSoftDeleteAndBroadcastAsync(
+            ctx, ctx.Calibrations.FromSource(source), $"data_source={source}", DuplicateDelete.PromoteSurvivor, origin, ct);
     }
 
     /// <summary>
@@ -76,9 +78,10 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// </summary>
     /// <param name="from">Inclusive start, or null for no lower bound.</param>
     /// <param name="to">Inclusive end, or null for no upper bound.</param>
+    /// <param name="origin">Whether the delete is a live event; see <see cref="V4RepositoryBase{TModel,TEntity}.RaiseBroadcastAsync"/>.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
-    public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
+    public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = ctx.Calibrations.AsQueryable();
@@ -88,6 +91,7 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
         if (to.HasValue)
             query = query.Where(e => e.Timestamp <= to.Value);
 
-        return await ctx.AuditedSoftDeleteAsync(query, AuditContext, $"timestamp={from:O}..{to:O}", ct);
+        return await AuditedSoftDeleteAndBroadcastAsync(
+            ctx, query, $"timestamp={from:O}..{to:O}", DuplicateDelete.PromoteSurvivor, origin, ct);
     }
 }

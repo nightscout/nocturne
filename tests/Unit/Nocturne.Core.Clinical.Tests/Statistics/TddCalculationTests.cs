@@ -2,6 +2,7 @@ using FluentAssertions;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using static Nocturne.Core.Clinical.Tests.Statistics.WindowEnd;
 
 namespace Nocturne.Core.Clinical.Tests.Statistics;
 
@@ -150,7 +151,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBasal.Should().Be(24.0);
@@ -199,7 +201,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         // 4.80 + 4.80 + 6.00 + 6.60 + 1.80 = 24.00
@@ -231,7 +234,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         // 0.8 * 24 = 19.2, 4.0 + 6.0 + 5.5 + 1.5 = 17.0, total = 36.2
@@ -261,7 +265,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBasal.Should().Be(1.0);
@@ -283,7 +288,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBasal.Should().Be(1.5);
@@ -304,7 +310,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBasal.Should().Be(0);
@@ -330,7 +337,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         // 0.25 + 0.60 + 0.00 + 0.90 + 0.15 = 1.90
@@ -355,7 +363,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBasal.Should().Be(1.5);
@@ -395,7 +404,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         // 23 * 1.0 + 1 * 2.0 = 25.0
@@ -429,7 +439,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         // 22 * 1.0 + 2 * 0.3 = 22.6
@@ -463,7 +474,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         // 22 * 1.0 + 2 * 0.0 = 22.0
@@ -536,7 +548,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         // Scheduled basal (non-overridden hours):
@@ -583,7 +596,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         // 1.6 U/hr * 30 min / 60 = 0.8 U
@@ -612,7 +626,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBasal.Should().Be(0.6);
@@ -642,7 +657,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBasal.Should().Be(2.0);
@@ -668,7 +684,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         // Delivered: 0.2 + 1.8 = 2.0; scheduled part: 0.2 + 1.0 = 1.2; additional: 0.8
@@ -699,6 +716,7 @@ public class TddCalculationTests
             Array.Empty<CarbIntake>(),
             StartDate,
             EndDate,
+            Mills(EndDate),
             basalInjections
         );
 
@@ -722,7 +740,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBolus.Should().Be(5.0);
@@ -753,7 +772,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBasal.Should().Be(2.0);
@@ -778,7 +798,8 @@ public class TddCalculationTests
             Array.Empty<TempBasal>(),
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.AvgBolus.Should().Be(3.0);
@@ -806,7 +827,8 @@ public class TddCalculationTests
             Array.Empty<TempBasal>(),
             carbs,
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.IcRatio.Should().Be(10.0, "30 g over 2 U manual plus 1 U automatic");
@@ -837,7 +859,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         // 2 manual + 2 micro-boluses + 2 basal deliveries
@@ -865,7 +888,8 @@ public class TddCalculationTests
             Array.Empty<TempBasal>(),
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.BasalCount.Should().Be(0);
@@ -889,7 +913,8 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateDailyBasalBolusRatios(
             boluses,
             algorithmBoluses,
-            tempBasals
+            tempBasals,
+            Mills(EndDate)
         );
 
         var day = result.DailyData.Should().ContainSingle().Subject;
@@ -925,8 +950,8 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateDailyBasalBolusRatios(
             boluses,
             Array.Empty<Bolus>(),
-            tempBasals
-        );
+            tempBasals,
+            Mills(EndDate));
 
         result.DaysWithData.Should().Be(1);
         result.DailyData.Should().HaveCount(1);
@@ -961,8 +986,8 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateDailyBasalBolusRatios(
             Array.Empty<Bolus>(),
             Array.Empty<Bolus>(),
-            tempBasals
-        );
+            tempBasals,
+            Mills(EndDate));
 
         result.DaysWithData.Should().Be(1);
 
@@ -1011,8 +1036,8 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateDailyBasalBolusRatios(
             Array.Empty<Bolus>(),
             Array.Empty<Bolus>(),
-            tempBasals
-        );
+            tempBasals,
+            Mills(EndDate));
 
         result.DaysWithData.Should().Be(2);
         result.DailyData.Should().HaveCount(2);
@@ -1048,7 +1073,8 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateBasalAnalysis(
             tempBasals,
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TempBasalInfo.Total.Should().Be(4);
@@ -1072,7 +1098,8 @@ public class TddCalculationTests
         var result = _statisticsService.CalculateBasalAnalysis(
             tempBasals,
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.Stats.Count.Should().Be(4);
@@ -1097,7 +1124,8 @@ public class TddCalculationTests
             Array.Empty<TempBasal>(),
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBasal.Should().Be(0);
@@ -1121,7 +1149,8 @@ public class TddCalculationTests
             Array.Empty<TempBasal>(),
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBasal.Should().Be(0);
@@ -1154,7 +1183,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             start,
-            end
+            end,
+            Mills(end)
         );
 
         // 72 hours of 1.0 U/hr = 72.0 U total
@@ -1181,7 +1211,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            StartDate.AddDays(3)
+            StartDate.AddDays(3),
+            Mills(StartDate.AddDays(3))
         );
 
         result.WindowDays.Should().Be(3);
@@ -1201,7 +1232,8 @@ public class TddCalculationTests
             Array.Empty<TempBasal>(),
             Array.Empty<CarbIntake>(),
             StartDate,
-            StartDate.AddDays(90)
+            StartDate.AddDays(90),
+            Mills(StartDate.AddDays(90))
         );
 
         result.ManualBolusPerDay.Should().Be(0);
@@ -1224,7 +1256,8 @@ public class TddCalculationTests
             tempBasals,
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBasal.Should().Be(0.25);
@@ -1246,7 +1279,8 @@ public class TddCalculationTests
             Array.Empty<TempBasal>(),
             Array.Empty<CarbIntake>(),
             StartDate,
-            EndDate
+            EndDate,
+            Mills(EndDate)
         );
 
         result.TotalBolus.Should().Be(0.3);

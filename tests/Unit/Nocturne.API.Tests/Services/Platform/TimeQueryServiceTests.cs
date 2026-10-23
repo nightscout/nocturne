@@ -13,7 +13,6 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Queries;
 using Xunit;
-using TimePatternQuery = Nocturne.Core.Contracts.Legacy.TimePatternQuery;
 
 namespace Nocturne.API.Tests.Services.Platform;
 
@@ -516,6 +515,78 @@ public class TimeQueryServiceTests
         echoConditions.Matches(new Entry { Type = "sgv", Device = "001" }).Should().BeTrue();
         echoConditions.Matches(new Entry { Type = "sgv", Device = "1" }).Should().BeFalse();
         echoConditions.Matches(new Entry { Type = "mbg", Device = "001" }).Should().BeFalse();
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [Parity]
+    [InlineData(null, new[] { "" }, true, "{\"find\":{\"dateString\":{\"$in\":[{}],\"$regex\":{}}}}")]
+    [InlineData("entries", new[] { "" }, true, "{\"find\":{\"dateString\":{\"$in\":[{}],\"$regex\":{}}}}")]
+    [InlineData("2024-{01,02}", new[] { "^2024-01", "^2024-02" }, false, "{\"find\":{\"dateString\":{\"$in\":[{},{}]}}}")]
+    public void GenerateTimeQueryEcho_RequestQueryCarriesMergedFindWithRegExpsAsEmptyObjects(
+        string? prefix, string[] patterns, bool singleRegex, string expected)
+    {
+        _mockBraceExpansionService
+            .Setup(x => x.PrepareTimePatterns(prefix, null, "dateString"))
+            .Returns(new TimePatternQuery
+            {
+                Patterns = patterns,
+                InPatterns = patterns,
+                CanOptimizeWithIndex = singleRegex,
+            });
+
+        var result = _timeQueryService.GenerateTimeQueryEcho(prefix, null);
+
+        JsonSerializer.Serialize(result.Req.Query).Should().Be(expected);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    [Parity]
+    public void GenerateTimeQueryEcho_RequestQueryNestsCallerFindBesideTimePatternAndDropsRawKeys()
+    {
+        _mockBraceExpansionService
+            .Setup(x => x.PrepareTimePatterns("entries", null, "dateString"))
+            .Returns(new TimePatternQuery
+            {
+                Patterns = [""],
+                InPatterns = [""],
+                CanOptimizeWithIndex = true,
+            });
+
+        var result = _timeQueryService.GenerateTimeQueryEcho(
+            "entries",
+            null,
+            queryString: "?count=5&find[type]=sgv&find[sgv][$gte]=100"
+        );
+
+        JsonSerializer.Serialize(result.Req.Query).Should().Be(
+            "{\"count\":\"5\",\"find\":{\"type\":\"sgv\",\"sgv\":{\"$gte\":\"100\"},"
+                + "\"dateString\":{\"$in\":[{}],\"$regex\":{}}}}");
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [Parity]
+    [InlineData("?find[dateString][$gte]=2024", "{\"find\":{\"dateString\":{\"$gte\":\"2024\",\"$in\":[{}]}}}")]
+    [InlineData("?find[dateString][$regex]=T10", "{\"find\":{\"dateString\":{\"$regex\":\"T10\",\"$in\":[{}]}}}")]
+    [InlineData("?find[$or][0][type]=sgv", "{\"find\":{\"$or\":[{\"type\":\"sgv\"}],\"dateString\":{\"$in\":[{}],\"$regex\":{}}}}")]
+    [InlineData("?find[]=sgv", "{\"find\":{\"dateString\":{\"$in\":[{}],\"$regex\":{}}}}")]
+    [InlineData("?find[type][$in][]=sgv", "{\"find\":{\"type\":{\"$in\":[\"sgv\"]},\"dateString\":{\"$in\":[{}],\"$regex\":{}}}}")]
+    public void GenerateTimeQueryEcho_RequestQueryMergesTimePatternAsUpstreamDoes(string queryString, string expected)
+    {
+        _mockBraceExpansionService
+            .Setup(x => x.PrepareTimePatterns("entries", null, "dateString"))
+            .Returns(new TimePatternQuery
+            {
+                Patterns = [""],
+                InPatterns = [""],
+                CanOptimizeWithIndex = true,
+            });
+
+        var result = _timeQueryService.GenerateTimeQueryEcho("entries", null, queryString: queryString);
+
+        JsonSerializer.Serialize(result.Req.Query).Should().Be(expected);
     }
 
     [Fact]

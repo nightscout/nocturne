@@ -18,7 +18,6 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Queries;
 using Xunit;
-using TimePatternQuery = Nocturne.Core.Contracts.Legacy.TimePatternQuery;
 
 namespace Nocturne.API.Tests.Controllers.V1;
 

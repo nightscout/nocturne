@@ -42,6 +42,7 @@ type LoadedData = {
   displayPreferences: UserDisplayPreferences[];
   serverPreferences: UserDisplayPreferences | null;
   tenantPreferences: UserDisplayPreferences | null;
+  hasAccount: boolean;
 };
 
 function runLoad(situation: Situation) {
@@ -309,5 +310,14 @@ describe("root layout load", () => {
 
     await expect(data).resolves.toMatchObject({ serverPreferences: null });
     expect(getTenantAppearance).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a signed-in member", { host: TENANT_HOST, memberPreferences: { glucoseUnits: "mg/dl" } }, true],
+    ["a guest", { host: TENANT_HOST, isGuestSession: true }, false],
+    ["an anonymous visitor", { host: TENANT_HOST }, false],
+    ["a share viewer", { host: SHARE_HOST, isShareHost: true }, false],
+  ] as [string, Situation, boolean][])("reports %s as having an account: %s", async (_, situation, hasAccount) => {
+    await expect(runLoad(situation).data).resolves.toMatchObject({ hasAccount });
   });
 });

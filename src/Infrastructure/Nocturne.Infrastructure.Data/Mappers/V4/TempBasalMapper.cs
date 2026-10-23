@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -71,12 +72,8 @@ public static class TempBasalMapper
             ScheduledRate = entity.ScheduledRate,
             Percent = entity.Percent,
             RateFromSchedule = entity.RateFromSchedule,
-            Origin = Enum.TryParse<TempBasalOrigin>(entity.Origin, out var origin)
-                ? origin
-                : TempBasalOrigin.Inferred,
-            OriginEvidence = Enum.TryParse<TempBasalOriginEvidence>(entity.OriginEvidence, out var evidence)
-                ? evidence
-                : null,
+            Origin = TempBasalOriginColumns.OriginOf(entity.Origin),
+            OriginEvidence = TempBasalOriginColumns.EvidenceOf(entity.OriginEvidence),
             DeviceId = entity.DeviceId,
             PatientDeviceId = entity.PatientDeviceId,
             PumpRecordId = entity.PumpRecordId,
@@ -98,6 +95,10 @@ public static class TempBasalMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(TempBasalEntity entity, TempBasal model)
     {
+        var origin = TempBasalOriginProvenance.OnUpdate(
+            StoredOriginState(entity),
+            new TempBasalOriginState(
+                model.Origin, model.OriginEvidence, model.ApsSnapshotId, model.StartMills, model.Rate));
         entity.Timestamp = model.StartTimestamp;
         entity.EndTimestamp = model.EndTimestamp;
         entity.UtcOffset = model.UtcOffset;
@@ -110,18 +111,32 @@ public static class TempBasalMapper
         entity.ScheduledRate = model.ScheduledRate;
         entity.Percent = model.Percent;
         entity.RateFromSchedule = model.RateFromSchedule;
-        entity.Origin = model.Origin.ToString();
-        entity.OriginEvidence = model.OriginEvidence?.ToString();
+        entity.Origin = origin.Origin.ToString();
+        entity.OriginEvidence = origin.Evidence?.ToString();
+        entity.ApsSnapshotId = origin.ApsSnapshotId;
         entity.DeviceId = model.DeviceId;
         entity.PatientDeviceId = model.PatientDeviceId;
         entity.PumpRecordId = model.PumpRecordId;
         entity.SyncIdentifier = model.SyncIdentifier;
-        entity.ApsSnapshotId = model.ApsSnapshotId;
         entity.InsulinContextJson = model.InsulinContext is not null
             ? JsonSerializer.Serialize(model.InsulinContext)
             : null;
         entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
             ? JsonSerializer.Serialize(model.AdditionalProperties)
             : null;
+    }
+
+    private static TempBasalOriginState StoredOriginState(TempBasalEntity entity)
+    {
+        var origin = TempBasalOriginColumns.OriginOf(entity.Origin);
+        var evidence = TempBasalOriginProvenance.EvidenceOf(
+            origin,
+            TempBasalOriginColumns.EvidenceOf(entity.OriginEvidence),
+            TempBasalAutomaticFlag.Of(
+                MapperHelpers.DeserializeJson<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)),
+            entity.App,
+            entity.DataSource,
+            entity.LegacyId);
+        return new TempBasalOriginState(origin, evidence, entity.ApsSnapshotId, new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(), entity.Rate);
     }
 }

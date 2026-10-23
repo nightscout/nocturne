@@ -24,4 +24,11 @@ public enum TempBasalOriginEvidence
 
     /// <summary>The default for who uploaded it, which no snapshot of its device was near enough to judge.</summary>
     Uncorroborated,
+
+    /// <summary>
+    /// Decided as <see cref="Snapshot"/> is, by the snapshots of another device: its own uploaded
+    /// none around its start, and one other device did. A temp mirrored through another uploader is
+    /// judged so, which says who set it but not that its stream is the loop's own.
+    /// </summary>
+    OtherDevice,
 }

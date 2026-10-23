@@ -530,77 +530,6 @@ public class ActivityService : IActivityService
     }
 
     /// <inheritdoc />
-    public async Task<long> DeleteMultipleActivitiesAsync(
-        string? find = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            _logger.LogDebug("Bulk deleting activity records with filter: {Find}", find);
-
-            // Regular activities are stored as StateSpans and are the only source
-            // addressable by the type-based `find` filter. Heart rate and step count
-            // sensor data live in dedicated tables and are not bulk-deletable here.
-            var activities = await _stateSpanService.GetActivitiesAsync(
-                type: find,
-                count: int.MaxValue,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
-
-            long deletedCount = 0;
-            foreach (var activity in activities)
-            {
-                if (string.IsNullOrEmpty(activity.Id))
-                    continue;
-
-                // Clean up any decomposed records linked to this legacy activity id.
-                try
-                {
-                    await _activityDecomposer.DeleteByLegacyIdAsync(
-                        activity.Id,
-                        WriteOrigin.Live,
-                        cancellationToken
-                    );
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Failed to delete decomposed records for legacy activity {Id}",
-                        activity.Id
-                    );
-                }
-
-                deletedCount += (await _stateSpanService.DeleteActivityAsync(activity.Id, cancellationToken)).Count;
-            }
-
-            if (deletedCount > 0)
-            {
-                await _signalRBroadcastService.BroadcastStorageDeleteAsync(
-                    "activity",
-                    new StorageBulkDeleteEvent("activity", deletedCount)
-                );
-
-                await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);
-
-                _logger.LogDebug(
-                    "Successfully bulk deleted {Count} activity records",
-                    deletedCount
-                );
-            }
-
-            return deletedCount;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error bulk deleting activity records");
-            throw;
-        }
-    }
-
-    /// <inheritdoc />
     public async Task<long> CountActivitiesAsync(
         string? find = null,
         CancellationToken cancellationToken = default
@@ -627,11 +556,8 @@ public class ActivityService : IActivityService
                 string.Join(",", categories),
                 sanitizedFindForLog);
 
-            // A find with conditions is read as the list reads it. Any other find is an activity type,
-            // which narrows the state spans, and every heart rate and step count is counted regardless.
             var query = FindQuery.Parse(find);
             var structured = !query.IsEmpty;
-            var type = structured ? null : find;
             var from = query.FromMills is { } fromMills
                 ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime
                 : (DateTime?)null;
@@ -639,8 +565,6 @@ public class ActivityService : IActivityService
                 ? DateTimeOffset.FromUnixTimeMilliseconds(toMills).UtcDateTime
                 : (DateTime?)null;
 
-            // Sleep sessions are counted for a structured find, an empty type or a sleep type.
-            var countSleep = structured || string.IsNullOrEmpty(type) || ActivityStateSpanMapper.IsSleepType(type);
             var fetchCount = query.HasFieldFilters ? MaxFilteredFetch : int.MaxValue;
 
             // Sequential: the services share one DbContext.
@@ -648,7 +572,6 @@ public class ActivityService : IActivityService
             if (categories.Contains(Scope.TreatmentsRead))
             {
                 var stateSpans = await _stateSpanService.GetActivitiesAsync(
-                    type: type,
                     count: fetchCount,
                     skip: 0,
                     from: from,
@@ -685,9 +608,7 @@ public class ActivityService : IActivityService
 
             if (categories.Contains(Scope.SleepRead))
             {
-                if (!countSleep)
-                    counts[Scope.SleepRead] = 0;
-                else if (!structured)
+                if (!structured)
                     counts[Scope.SleepRead] = await _sleepService.CountSessionsAsync(cancellationToken: cancellationToken);
                 else
                 {

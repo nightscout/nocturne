@@ -28,17 +28,17 @@ public class HomeAssistantHub(HomeAssistantConnections connections) : TenantAwar
     private const string InstanceItemKey = "ha_instance_id";
 
     /// <summary>
-    /// Subscribe the calling connection to its instance's alert dispatches, the tenant's alert
-    /// events and, when it may read glucose, the glucose relay. Replays the instance's failed
-    /// deliveries to it.
+    /// Subscribe the calling connection to its instance's alert dispatches, the tenant's resolved
+    /// and acknowledged alert events and, when it may read glucose, the glucose relay. Replays the
+    /// instance's failed deliveries to it.
     /// </summary>
     /// <param name="instanceId">
     /// The Home Assistant instance, which is the OAuth client the connection's token was issued to
     /// and the channel destination its alerts are addressed to. Any other value is refused, so a
     /// connection receives only its own instance's dispatches.
     /// </param>
-    // ha-alerts carries every alert dispatch and the catch-up replays undelivered alert payloads, so
-    // a share-style credential is refused.
+    // The instance group and the catch-up carry alert payloads, and ha-alerts carries alert
+    // resolutions and acknowledgements, so a share-style credential is refused.
     [HubScope(Scope.AlertsRead)]
     [HubTenantGroup]
     public async Task Subscribe(string instanceId)

@@ -11,7 +11,8 @@ namespace Nocturne.Core.Models;
 /// <see cref="V4.TempBasal.Origin"/> cannot stand in for it: an origin the upload did not state is a
 /// default or an inference (<see cref="V4.TempBasalOriginProvenance"/>), and deriving the flag from it
 /// would serve Nocturne's guess as the uploader's statement. Where the origin is a reported fact
-/// (a connector, or a v4 request that names it) <see cref="Of(TempBasalOrigin)"/> gives the flag to keep.
+/// (a connector, a v4 request that names it, or an upload that states or echoes it)
+/// <see cref="Of(TempBasalOrigin)"/> gives the flag to keep.
 /// </remarks>
 public static class TempBasalAutomaticFlag
 {

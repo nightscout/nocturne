@@ -171,7 +171,7 @@ public class OAuthControllerIntrospectTests
         response.Active.Should().BeTrue();
         response.Sub.Should().Be(_callerSubjectId.ToString());
         response.Scope.Should().Be(Scope.GlucoseRead);
-        response.TokenType.Should().Be("access_token");
+        response.TokenType.Should().Be("Bearer");
     }
 
     [Fact]

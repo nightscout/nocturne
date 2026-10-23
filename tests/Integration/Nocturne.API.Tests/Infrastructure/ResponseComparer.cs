@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace Nocturne.API.Tests.Integration.Infrastructure;
 
@@ -284,6 +285,17 @@ public class ResponseComparer
                 return;
         }
 
+        if (expected.TryGetValue<string>(out var expectedText) && actual.TryGetValue<string>(out var actualText))
+        {
+            foreach (var normaliser in _options.ValueNormalisers.Where(n => n.Fields.Contains(fieldName)))
+            {
+                expected = JsonValue.Create(normaliser.Pattern.Replace(expectedText, normaliser.Replacement));
+                actual = JsonValue.Create(normaliser.Pattern.Replace(actualText, normaliser.Replacement));
+                expectedText = expected.GetValue<string>();
+                actualText = actual.GetValue<string>();
+            }
+        }
+
         // Standard value comparison
         var expectedJson = expected.ToJsonString();
         var actualJson = actual.ToJsonString();
@@ -358,6 +370,12 @@ public class ComparisonResult
 public record Difference(string Path, string? Expected, string? Actual);
 
 /// <summary>
+/// Rewrites the part of a string value matching <paramref name="Pattern"/> in the named fields
+/// before comparison, for a value that is nondeterministic only in part.
+/// </summary>
+public record ValueNormaliser(Regex Pattern, string Replacement, IReadOnlySet<string> Fields);
+
+/// <summary>
 /// Options for response comparison
 /// </summary>
 public class ComparisonOptions
@@ -394,6 +412,11 @@ public class ComparisonOptions
         "serverTime",
         "dateString"
     };
+
+    /// <summary>
+    /// Partial rewrites applied to string values before comparison
+    /// </summary>
+    public IReadOnlyList<ValueNormaliser> ValueNormalisers { get; init; } = [];
 
     /// <summary>
     /// HTTP headers to compare
@@ -436,6 +459,20 @@ public class ComparisonOptions
     };
 
     /// <summary>
+    /// Create options with additional fields whose presence is checked but whose value is not
+    /// </summary>
+    public ComparisonOptions WithPresenceOnlyFields(params string[] fields)
+    {
+        var options = WithIgnoredFields();
+        foreach (var field in fields)
+        {
+            options.IdFields.Add(field);
+        }
+
+        return options;
+    }
+
+    /// <summary>
     /// Create options with additional fields to ignore
     /// </summary>
     public ComparisonOptions WithIgnoredFields(params string[] fields)
@@ -446,6 +483,7 @@ public class ComparisonOptions
             IdFields = new HashSet<string>(IdFields),
             TimestampFields = new HashSet<string>(TimestampFields),
             HeadersToCompare = new HashSet<string>(HeadersToCompare),
+            ValueNormalisers = ValueNormalisers,
             AllowExtraActualFields = AllowExtraActualFields
         };
 
@@ -468,7 +506,25 @@ public class ComparisonOptions
             IdFields = new HashSet<string>(IdFields),
             TimestampFields = new HashSet<string>(TimestampFields),
             HeadersToCompare = new HashSet<string>(HeadersToCompare),
+            ValueNormalisers = ValueNormalisers,
             AllowExtraActualFields = false
+        };
+    }
+
+    /// <summary>
+    /// Create options that rewrite what <paramref name="pattern"/> matches in the string values of
+    /// <paramref name="fields"/> to <paramref name="replacement"/> before comparing them
+    /// </summary>
+    public ComparisonOptions WithNormalisedValues(Regex pattern, string replacement, params string[] fields)
+    {
+        return new ComparisonOptions
+        {
+            DynamicFields = new HashSet<string>(DynamicFields),
+            IdFields = new HashSet<string>(IdFields),
+            TimestampFields = new HashSet<string>(TimestampFields),
+            HeadersToCompare = new HashSet<string>(HeadersToCompare),
+            ValueNormalisers = [.. ValueNormalisers, new ValueNormaliser(pattern, replacement, fields.ToHashSet())],
+            AllowExtraActualFields = AllowExtraActualFields
         };
     }
 }

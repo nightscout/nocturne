@@ -8,8 +8,9 @@ namespace Nocturne.API.Tests.Integration.Parity;
 /// the status and body kind Nocturne answers with instead, so they stay tested.
 /// </summary>
 /// <remarks>
-/// Three kinds: Nightscout has no such route (A), Nightscout fails with a 500 (B), and Nocturne
-/// accepts or validates input Nightscout treats otherwise, which is out of scope for #1746 (C).
+/// Four kinds: Nightscout has no such route (A), Nightscout fails with a 500 (B), Nocturne
+/// accepts or validates input Nightscout treats otherwise, which is out of scope for #1746 (C),
+/// and Nightscout answers a bug's output Nocturne does not reproduce (D).
 /// A difference that is a Nocturne bug belongs in <c>tests/quarantine.txt</c>, not here.
 /// </remarks>
 public static class ParityDivergences
@@ -34,6 +35,9 @@ public static class ParityDivergences
 
     private const string UndefinedPropertyCrash =
         "(B) Nightscout 15.0.3 answers 500 (Cannot read properties of undefined) here.";
+
+    private const string BasalNaN =
+        "(D) Nightscout 15.0.3 speaks \"Your current basal is NaN units per hour and you have 0 units of insulin on board\" in the full status; Nocturne omits the basal sentence and says \"no insulin on board\" for zero.";
 
     private const string V3Tolerant =
         "(C) Nightscout rejects the payload (missing app/date/body); Nocturne accepts it. Out of scope for #1746, behaviour unchanged; strict v3 validation to be decided separately.";
@@ -61,6 +65,7 @@ public static class ParityDivergences
     public static readonly IReadOnlyList<Divergence> All =
     [
         new("V1.AlexaParityTests.PostAlexa_InvalidRequest_ReturnsSameShape", "POST /api/v1/alexa", 200, JsonValueKind.Object, UndefinedPropertyCrash),
+        new("V1.AlexaParityTests.PostAlexa_IntentRequest_NSStatus_ReturnsSameShape", "POST /api/v1/alexa", 200, JsonValueKind.Object, BasalNaN),
         new("V1.CountParityTests.CountActivity_Empty_ReturnsSameShape", "GET /api/v1/count/activity/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountDeviceStatus_Empty_ReturnsSameShape", "GET /api/v1/count/devicestatus/where", 200, JsonValueKind.Array, CountCrashes),
         new("V1.CountParityTests.CountDeviceStatus_WithData_ReturnsSameShape", "GET /api/v1/count/devicestatus/where", 200, JsonValueKind.Array, CountCrashes),

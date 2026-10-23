@@ -733,6 +733,7 @@ public static class ServiceRegistrationExtensions
         // Device resolution
         services.AddScoped<IDeviceService, DeviceService>();
         services.AddScoped<IPatientDeviceStamper, PatientDeviceStamper>();
+        services.AddScoped<DeviceDateClockResolver>();
         services.AddScoped<IDeviceReattributionService, DeviceReattributionService>();
         services.AddScoped<IDeviceTrackerProvisioner, DeviceTrackerProvisioner>();
 
@@ -776,6 +777,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IChartDataAssembler, DashboardChartDataAssembler>();
         services.AddScoped<IChartDataService, ChartDataService>();
         services.AddScoped<IActogramReportService, ActogramReportService>();
+        services.AddScoped<TenantClockResolver>();
+        services.AddScoped<ILoopAnalysisService, LoopAnalysisService>();
         services.AddScoped<IDataOverviewService, DataOverviewService>();
 
         return services;
@@ -833,6 +836,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IAidDetectionStrategy, TbrBasedStrategy>();
         services.AddSingleton<IAidDetectionStrategy, NoAidStrategy>();
         services.AddScoped<IAidMetricsService, AidMetricsService>();
+        services.AddScoped<AidSystemMetricsReader>();
 
         // V4 Decomposers
         services.AddScoped<IEntryDecomposer, EntryDecomposer>();

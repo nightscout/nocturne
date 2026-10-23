@@ -37,17 +37,15 @@ public class AlexaService : IAlexaService
     private readonly MetricAnswer _fullStatus;
     private readonly MetricAnswer _lastLoop;
 
-    // Translation mappings for supported locales (simplified implementation)
+    // Values for es and fr are Nightscout's own; a key missing from a locale falls back to en.
     private readonly Dictionary<string, Dictionary<string, string>> _translations = new()
     {
         ["en"] = new Dictionary<string, string>
         {
-            ["virtAsstTitleLaunch"] = "Nightscout",
-            ["virtAsstLaunch"] =
-                "Hello, I can help you check your blood sugar. What would you like to know?",
-            ["virtAsstUnknownIntentTitle"] = "Unknown Request",
-            ["virtAsstUnknownIntentText"] =
-                "I'm sorry, I didn't understand that request. Please try again.",
+            ["virtAsstTitleLaunch"] = "Welcome to Nightscout",
+            ["virtAsstLaunch"] = "What would you like to check on Nightscout?",
+            ["virtAsstUnknownIntentTitle"] = "Unknown Intent",
+            ["virtAsstUnknownIntentText"] = "I'm sorry, I don't know what you're asking for.",
             ["FortyFiveDown"] = "slightly dropping",
             ["FortyFiveUp"] = "slightly rising",
             ["Flat"] = "holding",
@@ -92,21 +90,18 @@ public class AlexaService : IAlexaService
         },
         ["es"] = new Dictionary<string, string>
         {
-            ["virtAsstTitleLaunch"] = "Nightscout",
-            ["virtAsstLaunch"] =
-                "Hola, puedo ayudarte a verificar tu azúcar en sangre. ¿Qué te gustaría saber?",
-            ["virtAsstUnknownIntentTitle"] = "Solicitud Desconocida",
-            ["virtAsstUnknownIntentText"] =
-                "Lo siento, no entendí esa solicitud. Por favor, inténtalo de nuevo.",
+            ["virtAsstTitleLaunch"] = "Bienvenido a Nightscout",
+            ["virtAsstLaunch"] = "¿Qué quieres saber de Nightscout?",
+            ["virtAsstUnknownIntentTitle"] = "Intento desconocido",
+            ["virtAsstUnknownIntentText"] = "Lo siento, no sé lo que estás pidiendo.",
         },
         ["fr"] = new Dictionary<string, string>
         {
-            ["virtAsstTitleLaunch"] = "Nightscout",
-            ["virtAsstLaunch"] =
-                "Bonjour, je peux vous aider à vérifier votre glycémie. Que voulez-vous savoir?",
-            ["virtAsstUnknownIntentTitle"] = "Demande Inconnue",
+            ["virtAsstTitleLaunch"] = "Bienvenue dans Nightscout",
+            ["virtAsstLaunch"] = "Qu'est ce que vous voulez voir sur Nightscout?",
+            ["virtAsstUnknownIntentTitle"] = "Intentions inconnues",
             ["virtAsstUnknownIntentText"] =
-                "Désolé, je n'ai pas compris cette demande. Veuillez réessayer.",
+                "« Je suis désolée, je ne sais pas ce que vous demandez. ».",
         },
     };
 
@@ -146,8 +141,11 @@ public class AlexaService : IAlexaService
     /// <remarks>Maintains 1:1 compatibility with the legacy Nightscout Alexa implementation.</remarks>
     /// <param name="request">The incoming <see cref="AlexaRequest"/> from the Alexa Skills Kit.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>An <see cref="AlexaResponse"/> appropriate for the request type.</returns>
-    public async Task<AlexaResponse> ProcessRequestAsync(
+    /// <returns>
+    /// An <see cref="AlexaResponse"/> appropriate for the request type, or null for a session-ended
+    /// request, which Nightscout answers with an empty string.
+    /// </returns>
+    public async Task<AlexaResponse?> ProcessRequestAsync(
         AlexaRequest request,
         CancellationToken cancellationToken = default
     )
@@ -158,7 +156,7 @@ public class AlexaService : IAlexaService
 
         return request.Request.Type switch
         {
-            "SessionEndedRequest" => await HandleSessionEndedRequestAsync(),
+            "SessionEndedRequest" => LogSessionEnded(),
             "LaunchRequest" => await HandleLaunchRequestAsync(locale),
             "IntentRequest" => request.Request.Intent != null
                 ? await HandleIntentRequestAsync(request.Request.Intent, locale, cancellationToken)
@@ -192,23 +190,10 @@ public class AlexaService : IAlexaService
         );
     }
 
-    /// <summary>
-    /// Handles a session-ended notification from the Alexa service.
-    /// </summary>
-    /// <remarks>Replicates the legacy <c>onSessionEnded</c> behaviour. No async work is performed.</remarks>
-    /// <returns>An empty <see cref="AlexaResponse"/> with <c>ShouldEndSession = true</c>.</returns>
-    public async Task<AlexaResponse> HandleSessionEndedRequestAsync()
+    private AlexaResponse? LogSessionEnded()
     {
         _logger.LogDebug("Session ended");
-
-        await Task.CompletedTask; // Legacy compatibility - no async work in session end
-
-        // Return empty response as per legacy implementation
-        return new AlexaResponse
-        {
-            Version = "1.0",
-            Response = new AlexaResponseDetails { ShouldEndSession = true },
-        };
+        return null;
     }
 
     /// <summary>
@@ -256,12 +241,7 @@ public class AlexaService : IAlexaService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing intent {IntentName}", intent.Name);
-                return BuildSpeechletResponse(
-                    Translate("virtAsstUnknownIntentTitle", locale),
-                    "Sorry, I encountered an error processing your request.",
-                    string.Empty,
-                    true
-                );
+                return BuildErrorResponse();
             }
         }
         else
@@ -275,12 +255,22 @@ public class AlexaService : IAlexaService
         }
     }
 
+    /// <inheritdoc/>
+    /// <remarks>Nightscout has no error answer, so the wording is English whatever the locale.</remarks>
+    public AlexaResponse BuildErrorResponse() =>
+        BuildSpeechletResponse(
+            "Error",
+            "Sorry, I'm having trouble right now. Please try again later.",
+            string.Empty,
+            true
+        );
+
     /// <summary>
     /// Builds an <see cref="AlexaResponse"/> in the legacy <c>buildSpeechletResponse</c> format.
     /// </summary>
     /// <param name="title">Card title displayed in the Alexa app.</param>
     /// <param name="output">Plain-text speech output.</param>
-    /// <param name="repromptText">Reprompt text spoken if the user does not respond; ignored when <paramref name="shouldEndSession"/> is <see langword="true"/> or when empty.</param>
+    /// <param name="repromptText">Reprompt text spoken if the user does not respond. Always sent, empty when there is none, as Nightscout does.</param>
     /// <param name="shouldEndSession">Whether the session should be closed after this response.</param>
     /// <returns>A fully formed <see cref="AlexaResponse"/>.</returns>
     public AlexaResponse BuildSpeechletResponse(
@@ -302,18 +292,13 @@ public class AlexaService : IAlexaService
                     Title = title,
                     Content = output,
                 },
+                Reprompt = new AlexaReprompt
+                {
+                    OutputSpeech = new AlexaOutputSpeech { Type = "PlainText", Text = repromptText },
+                },
                 ShouldEndSession = shouldEndSession,
             },
         };
-
-        // Add reprompt if provided and session should not end
-        if (!string.IsNullOrEmpty(repromptText) && !shouldEndSession)
-        {
-            response.Response.Reprompt = new AlexaReprompt
-            {
-                OutputSpeech = new AlexaOutputSpeech { Type = "PlainText", Text = repromptText },
-            };
-        }
 
         return response;
     }
@@ -548,14 +533,26 @@ public class AlexaService : IAlexaService
                 ["basal", "iob"],
                 request.CancellationToken
             );
-            if (wantsBasal && BasalSentence(properties, request) is { } basal)
+            // NIGHTSCOUT-COMPAT: Nightscout speaks "basal is NaN units per hour" and "0 units of insulin" here; Nocturne omits the basal sentence and says "no insulin" for zero.
+            var basal = wantsBasal ? BasalSentence(properties, request) : null;
+            var iobUnits = wantsIob ? IobUnits(properties, request.Locale) : null;
+
+            // virtAsstBasal has no full stop: Nightscout always follows it with the IOB clause.
+            if (basal is not null)
             {
-                parts.Add((1, basal));
+                parts.Add((1, iobUnits is null ? basal + "." : basal));
             }
 
-            if (wantsIob && IobUnits(properties, request.Locale) is { } iobUnits)
+            if (iobUnits is not null)
             {
-                parts.Add((2, Translate("virtAsstIob", request.Locale, iobUnits)));
+                parts.Add(
+                    (
+                        2,
+                        basal is not null
+                            ? Translate("virtAsstIob", request.Locale, iobUnits)
+                            : Translate("virtAsstIobIntent", request.Locale, iobUnits) + "."
+                    )
+                );
             }
         }
 

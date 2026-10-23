@@ -187,10 +187,11 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
         if (range.NativeOnly)
             records = records.Where(r => legacyId(r) is null);
 
-        return records
-            .Select(r => new FetchedRecord(this, r, ((IV4Record)r).Id, CreatedAt(r), ModifiedAt(r)))
-            .ToList();
+        return records.Select(Fetch).ToList();
     }
+
+    internal FetchedRecord Fetch(TRecord record) =>
+        new(this, record, ((IV4Record)record).Id, CreatedAt(record), ModifiedAt(record));
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<FetchedRecord>> ModifiedSinceAsync(
@@ -422,6 +423,42 @@ internal sealed class LegacyProfileActivationTable : ILegacyTreatmentTable
         new(this, ProfileActivationMapper.ToDomainModel(entity), entity.Id, entity.SysCreatedAt, entity.SysUpdatedAt,
             entity.DeletedAt is not null);
 
+    private const int LatestSwitchPageSize = 50;
+
+    // Bounds the step over activations served as something else; Nightscout's read has no cap.
+    private const int LatestSwitchMaxPages = 20;
+
+    /// <summary>
+    /// The newest activation in the window that serves as a Profile Switch of zero duration, read
+    /// in pages off <c>ix_profile_activations_tenant_start_timestamp</c> so an activation served as
+    /// something else, or with a duration, is stepped over without reading the whole window.
+    /// </summary>
+    internal async Task<IReadOnlyList<FetchedRecord>> LatestSwitchAsync(
+        NocturneDbContext context, DateTime from, DateTime to, CancellationToken ct)
+    {
+        for (var page = 0; page < LatestSwitchMaxPages; page++)
+        {
+            var rows = await InWindow(context, from, to)
+                .OrderByDescending(a => a.Timestamp)
+                .ThenBy(a => a.Id)
+                .Skip(page * LatestSwitchPageSize)
+                .Take(LatestSwitchPageSize)
+                .ToListAsync(ct);
+
+            foreach (var row in rows.Select(Fetched))
+            {
+                var treatment = LegacyTreatmentTables.ProjectProfileActivation((ProfileActivation)row.Record);
+                if (treatment.EventType == TreatmentTypes.ProfileSwitch && treatment.Duration == 0)
+                    return [row];
+            }
+
+            if (rows.Count < LatestSwitchPageSize)
+                break;
+        }
+
+        return [];
+    }
+
     /// <inheritdoc />
     /// <remarks>Every activation served here mirrors a legacy write, so <see cref="LegacyTreatmentRange.NativeOnly"/> leaves none.</remarks>
     public async Task<IReadOnlyList<FetchedRecord>> InRangeAsync(
@@ -611,6 +648,40 @@ internal static class LegacyTreatmentTables
         return context.StateSpans.Where(s => served.Contains(s.Id));
     }
 
+    /// <summary>
+    /// The newest record serving as <paramref name="eventType"/> in the window, bounds inclusive, or
+    /// none: a device event off <c>ix_device_events_tenant_event_type_timestamp</c>, or a zero-duration
+    /// Profile Switch off <see cref="LegacyProfileActivationTable.LatestSwitchAsync"/>.
+    /// </summary>
+    internal static async Task<IReadOnlyList<FetchedRecord>> LatestOfTypeAsync(
+        LegacyTreatmentRepositories repositories,
+        NocturneDbContext context,
+        string eventType,
+        DateTime from,
+        DateTime to,
+        CancellationToken ct)
+    {
+        if (eventType == TreatmentTypes.ProfileSwitch)
+            return await ProfileActivationTable.LatestSwitchAsync(context, from, to, ct);
+
+        if (!TreatmentTypes.DeviceEventTypeMap.TryGetValue(eventType, out var type))
+            return [];
+
+        var latest = await repositories.DeviceEvents.GetLatestByEventTypeAsync(type, to, ct);
+        if (latest is null || latest.Timestamp < from)
+            return [];
+
+        return [DeviceEventTable.Fetch(latest)];
+    }
+
+    private static readonly LegacyTreatmentTable<DeviceEvent, DeviceEventEntity> DeviceEventTable = new(
+        (repositories, range, ct) => repositories.DeviceEvents.GetAsync(
+            from: range.From, to: range.To, device: null, source: null,
+            limit: range.Limit, offset: 0, descending: range.Descending, nativeOnly: range.NativeOnly, ct: ct),
+        r => r.LegacyId,
+        c => c.DeviceEvents, RecordType.DeviceEvent, DeviceEventMapper.ToDomainModel,
+        (r, _) => ProjectDeviceEvent(r));
+
     internal static readonly IReadOnlyList<ILegacyTreatmentTable> All =
     [
         new LegacyTreatmentTable<Bolus, BolusEntity>(
@@ -641,13 +712,7 @@ internal static class LegacyTreatmentTables
             r => r.LegacyId,
             c => c.Notes, RecordType.Note, NoteMapper.ToDomainModel,
             (r, _) => ProjectNote(r)),
-        new LegacyTreatmentTable<DeviceEvent, DeviceEventEntity>(
-            (repositories, range, ct) => repositories.DeviceEvents.GetAsync(
-                from: range.From, to: range.To, device: null, source: null,
-                limit: range.Limit, offset: 0, descending: range.Descending, nativeOnly: range.NativeOnly, ct: ct),
-            r => r.LegacyId,
-            c => c.DeviceEvents, RecordType.DeviceEvent, DeviceEventMapper.ToDomainModel,
-            (r, _) => ProjectDeviceEvent(r)),
+        DeviceEventTable,
         new LegacyTreatmentTable<TempBasal, TempBasalEntity>(
             (repositories, range, ct) => repositories.TempBasals.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,

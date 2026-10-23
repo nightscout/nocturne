@@ -575,6 +575,15 @@ public sealed class FindQuery
     }
 
     /// <summary>
+    /// The bracketed segments of a <c>find[a][b]</c> querystring key, a trailing <c>[]</c> array
+    /// marker included as an empty segment, or null when the key is not a find key.
+    /// </summary>
+    public static List<string>? SplitFindKey(string key) =>
+        Regex.IsMatch(key, @"^find(\[[^\]]*\])+$")
+            ? Regex.Matches(key, @"\[([^\]]*)\]").Select(m => m.Groups[1].Value).ToList()
+            : null;
+
+    /// <summary>
     /// Parses a single querystring key into its group ("", "and:N", "or:N"), dotted field path,
     /// and operator. Handles <c>find[field]</c>, <c>find[field][$op]</c>, nested paths
     /// (<c>find[a][b]</c> → <c>a.b</c>), the <c>find[field][$in][]</c> array marker, and
@@ -588,12 +597,8 @@ public sealed class FindQuery
         op = "$eq";
         opIsImplicit = true;
 
-        if (!Regex.IsMatch(key, @"^find(\[[^\]]*\])+$"))
+        if (SplitFindKey(key) is not { } segments)
             return false;
-
-        var segments = Regex.Matches(key, @"\[([^\]]*)\]")
-            .Select(m => m.Groups[1].Value)
-            .ToList();
 
         // Trailing [] is an array marker (find[f][$in][])
         if (segments.Count > 1 && segments[^1].Length == 0)

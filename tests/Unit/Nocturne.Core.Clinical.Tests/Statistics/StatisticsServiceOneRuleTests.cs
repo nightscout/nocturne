@@ -3,6 +3,7 @@ using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using static Nocturne.Core.Clinical.Tests.Statistics.WindowEnd;
 
 namespace Nocturne.Core.Clinical.Tests.Statistics;
 
@@ -29,8 +30,8 @@ public class StatisticsServiceOneRuleTests
             TempBasalAt(3.0, start.AddMinutes(5), start.AddMinutes(25)),
         };
 
-        var analysis = _sut.CalculateBasalAnalysis(tempBasals, start, end, Kathmandu);
-        var delivery = _sut.CalculateHourlyInsulinDelivery(tempBasals, [], [], start, end, Kathmandu);
+        var analysis = _sut.CalculateBasalAnalysis(tempBasals, start, end, Mills(end), Kathmandu);
+        var delivery = _sut.CalculateHourlyInsulinDelivery(tempBasals, [], [], start, end, Mills(end), Kathmandu);
 
         analysis.HourlyPercentiles[5].Count.Should().Be(1);
         analysis.HourlyPercentiles[6].Count.Should().Be(1);
@@ -54,8 +55,8 @@ public class StatisticsServiceOneRuleTests
         var tempBasals = new[] { TempBasalAt(1.0, start.AddHours(1), start.AddHours(2)) };
         var boluses = new[] { new Bolus { Insulin = 2.0, Timestamp = start.AddHours(3) } };
 
-        var delivery = _sut.CalculateInsulinDeliveryStatistics(boluses, [], tempBasals, [], start, end);
-        var analysis = _sut.CalculateBasalAnalysis(tempBasals, start, end);
+        var delivery = _sut.CalculateInsulinDeliveryStatistics(boluses, [], tempBasals, [], start, end, Mills(end));
+        var analysis = _sut.CalculateBasalAnalysis(tempBasals, start, end, Mills(end));
 
         delivery.WindowDays.Should().Be(expected);
         analysis.WindowDays.Should().Be(expected);
@@ -80,9 +81,9 @@ public class StatisticsServiceOneRuleTests
         var tempBasals = new[] { TempBasalAt(1.0, start.AddDays(1).AddHours(8), start.AddDays(1).AddHours(9)) };
         var boluses = new[] { new Bolus { Insulin = 2.0, Timestamp = start.AddDays(4).AddHours(12) } };
 
-        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, [], tempBasals);
-        var hourly = _sut.CalculateHourlyInsulinDelivery(tempBasals, boluses, [], start, end);
-        var delivery = _sut.CalculateInsulinDeliveryStatistics(boluses, [], tempBasals, [], start, end);
+        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, [], tempBasals, Mills(end));
+        var hourly = _sut.CalculateHourlyInsulinDelivery(tempBasals, boluses, [], start, end, Mills(end));
+        var delivery = _sut.CalculateInsulinDeliveryStatistics(boluses, [], tempBasals, [], start, end, Mills(end));
 
         ratios.DaysWithData.Should().Be(2);
         hourly.DaysWithData.Should().Be(2);

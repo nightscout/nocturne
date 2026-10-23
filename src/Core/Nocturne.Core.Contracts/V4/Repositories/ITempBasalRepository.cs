@@ -62,8 +62,8 @@ public interface ITempBasalRepository
     Task<bool> SetScheduleDerivedRateAsync(
         Guid id, double percent, double? readRate, double? rate, double? scheduledRate, CancellationToken ct = default);
 
-    /// <summary>The live temp basals set by <see cref="TempBasal.Percent"/> under these legacy ids.</summary>
-    Task<IReadOnlyList<TempBasal>> GetRelativeByLegacyIdsAsync(
+    /// <summary>The live temp basals under these legacy ids.</summary>
+    Task<IReadOnlyList<TempBasal>> GetByLegacyIdsAsync(
         IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
 
     /// <summary>

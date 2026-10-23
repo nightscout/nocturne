@@ -558,8 +558,8 @@ public class DataOverviewService : IDataOverviewService
 
         var isCurrentYear = year == localNow.Year;
         // A sensor or meter glucose write through the V4 repositories clears the years its readings
-        // reach (EHbA1cCacheFamilies). Delete-by-source, and the year an update moves a reading out
-        // of, do not clear, so the expiry bounds those.
+        // reach or leave (EHbA1cCacheFamilies), and a bulk delete clears every year; the expiry bounds
+        // any write that bypasses the repositories.
         var expiry = isCurrentYear ? DateTime.UtcNow.AddHours(1) : DateTime.UtcNow.AddDays(14);
         await _cache.SetAsync(cacheKey, response, expiry, cancellationToken);
 

@@ -171,7 +171,7 @@ function withRecordEvent<T extends { id?: string; mills?: number }>(
   return newestFirst([doc, ...others]).slice(0, cap);
 }
 
-const REALTIME_STORE_KEY = Symbol("realtime-store");
+const REALTIME_STORE_KEY = "nocturne:app:realtime-store";
 
 // Module-level singleton instance
 let singletonStore: RealtimeStore | null = null;
@@ -1455,7 +1455,7 @@ export function clockGlucoseSourceOf(
   };
 }
 
-const CLOCK_GLUCOSE_SOURCE_KEY = Symbol("clock-glucose-source");
+const CLOCK_GLUCOSE_SOURCE_KEY = "nocturne:app:clock-glucose-source";
 
 /** Provide a {@link ClockGlucoseSource} to descendants (e.g. the public clock route). */
 export function setClockGlucoseSource(source: ClockGlucoseSource): void {

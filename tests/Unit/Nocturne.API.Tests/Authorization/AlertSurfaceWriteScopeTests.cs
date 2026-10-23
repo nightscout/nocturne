@@ -2,12 +2,10 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Routing;
-using Microsoft.AspNetCore.Routing;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -378,48 +376,15 @@ public class AlertSurfaceWriteScopeTests
             yield return declared.WriteScope;
     }
 
-    /// <summary>
-    /// Runs the gate an action actually declares, in MVC's order: the authorization filters first,
-    /// then the action filters (<see cref="RequireDeclaredWriteScopeAttribute"/> is one). Returns
-    /// the short-circuit result, or null when the request would proceed to the handler.
-    /// </summary>
     private static IActionResult? Evaluate(
-        Type controller, MethodInfo action, bool authenticated, IReadOnlySet<string> grantedScopes)
-    {
-        var httpContext = new DefaultHttpContext();
-        if (authenticated)
-            httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true };
-        httpContext.Items["GrantedScopes"] = grantedScopes;
-
-        var actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
-        var filters = action.GetCustomAttributes(inherit: true);
-
-        foreach (var filter in filters.OfType<IAuthorizationFilter>())
-        {
-            var authorizationContext = new AuthorizationFilterContext(actionContext, []);
-            filter.OnAuthorization(authorizationContext);
-            if (authorizationContext.Result is not null)
-                return authorizationContext.Result;
-        }
-
-        var executingContext = new ActionExecutingContext(
-            actionContext, [], new Dictionary<string, object?>(), ControllerInstance(controller));
-
-        foreach (var filter in filters.OfType<IActionFilter>())
-        {
-            filter.OnActionExecuting(executingContext);
-            if (executingContext.Result is not null)
-                return executingContext.Result;
-        }
-
-        return null;
-    }
+        Type controller, MethodInfo action, bool authenticated, IReadOnlySet<string> grantedScopes) =>
+        ActionGate.Evaluate(
+            controller, action, grantedScopes, authenticated ? new AuthContext { IsAuthenticated = true } : null);
 
     /// <summary>
-    /// A controller instance for reading <see cref="IWriteScopedController.WriteScope"/> and for
-    /// running the write-scope filters. The getter returns a constant and the filters touch nothing
-    /// else, so the controller is left unconstructed — these controllers take services with no
-    /// mockable constructor.
+    /// A controller instance for reading <see cref="IWriteScopedController.WriteScope"/>. The getter
+    /// returns a constant, so the controller is left unconstructed — these controllers take services
+    /// with no mockable constructor.
     /// </summary>
     private static object ControllerInstance(Type controller) =>
         RuntimeHelpers.GetUninitializedObject(controller);

@@ -36,6 +36,7 @@ public sealed class ActogramReportService : IActogramReportService
     private readonly IHeartRateService _heartRateService;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly ITargetRangeResolver _targetRangeResolver;
+    private readonly TenantClockResolver _tenantClock;
     private readonly ILogger<ActogramReportService> _logger;
 
     public ActogramReportService(
@@ -45,6 +46,7 @@ public sealed class ActogramReportService : IActogramReportService
         IHeartRateService heartRateService,
         ITherapySettingsResolver therapySettingsResolver,
         ITargetRangeResolver targetRangeResolver,
+        TenantClockResolver tenantClock,
         ILogger<ActogramReportService> logger
     )
     {
@@ -54,6 +56,7 @@ public sealed class ActogramReportService : IActogramReportService
         _heartRateService = heartRateService;
         _therapySettingsResolver = therapySettingsResolver;
         _targetRangeResolver = targetRangeResolver;
+        _tenantClock = tenantClock;
         _logger = logger;
     }
 
@@ -99,9 +102,7 @@ public sealed class ActogramReportService : IActogramReportService
 
         var thresholdsRaw = await BuildThresholdsAsync(endTime, cancellationToken);
 
-        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(
-            await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken)
-        );
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
 
         var (glucoseData, glucoseYMax) = ChartDataService.BuildGlucoseData(
             glucoseRecords.ToList()
@@ -166,7 +167,10 @@ public sealed class ActogramReportService : IActogramReportService
             Thresholds = thresholds,
             HeartRates = heartRates,
             StepCounts = stepCounts,
-            StepDayTotals = SumStepsByLocalDay(stepRecords, startTime, endTime, tz),
+            StepDayTotals = clock.Zone is { } tz
+                ? SumStepsByLocalDay(stepRecords, startTime, endTime, tz)
+                : new Dictionary<string, int>(),
+            TimeZoneUnavailableReason = clock.Reason,
             SleepSpans = sleepSpans,
         };
     }

@@ -67,6 +67,7 @@ function mainSection(id: WidgetId, enabled: boolean): WidgetConfig {
 const pageData: HarnessProps["data"] = {
   tenantless: false,
   isAuthenticated: true,
+  hasAccount: true,
   isShareHost: false,
   canViewRealtimeData: false,
   showBackupSignInPrompt: false,

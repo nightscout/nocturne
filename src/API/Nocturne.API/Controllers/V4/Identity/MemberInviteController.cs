@@ -265,8 +265,10 @@ public class MemberInviteController : ControllerBase
     /// List all members of the current tenant.
     /// </summary>
     [HttpGet("members")]
+    [RequireScope(Scope.MembersInvite, Scope.MembersManage, Scope.SharingManage)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<TenantMemberDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetMembers(CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
@@ -275,26 +277,6 @@ public class MemberInviteController : ControllerBase
             return NotFound();
 
         return Ok(tenant.Members);
-    }
-
-    /// <summary>
-    /// List followers of the current tenant (members with the follower role).
-    /// </summary>
-    [HttpGet("members/followers")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(List<TenantMemberDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetFollowers(CancellationToken ct)
-    {
-        var tenantId = _tenantAccessor.TenantId;
-        var tenant = await _tenantService.GetByIdAsync(tenantId, ct);
-        if (tenant == null)
-            return NotFound();
-
-        var followers = tenant.Members
-            .Where(m => m.Roles.Any(r => r.Slug == RoleSeeds.Viewer))
-            .ToList();
-
-        return Ok(followers);
     }
 
     /// <summary>

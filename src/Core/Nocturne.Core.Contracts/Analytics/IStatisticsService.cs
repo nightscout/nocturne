@@ -284,6 +284,7 @@ public interface IStatisticsService
     /// Calculate comprehensive insulin delivery statistics.
     /// Algorithm boluses count as bolus insulin. Basal data comes from TempBasals and basalInjections (MDI); pass empty collections if none are available.
     /// </summary>
+    /// <param name="untilMills">Where a temp basal still running stops: now, or the window end when that comes first.</param>
     InsulinDeliveryStatistics CalculateInsulinDeliveryStatistics(
         IEnumerable<Bolus> boluses,
         IEnumerable<Bolus> algorithmBoluses,
@@ -291,6 +292,7 @@ public interface IStatisticsService
         IEnumerable<CarbIntake> carbIntakes,
         DateTime startDate,
         DateTime endDate,
+        long untilMills,
         IEnumerable<BasalInjection>? basalInjections = null
     );
 
@@ -378,23 +380,30 @@ public interface IStatisticsService
     /// <summary>
     /// Calculate daily basal/bolus ratio breakdown.
     /// Algorithm boluses count as bolus insulin. Basal data comes from TempBasals and basalInjections (MDI); pass empty collections if none are available.
+    /// Carb intakes, when given, fill each day's <see cref="DailyBasalBolusRatioData.Carbs"/>. A day with carbs and no
+    /// insulin gets a row but is not counted in <see cref="DailyBasalBolusRatioResponse.DaysWithData"/>.
     /// </summary>
+    /// <param name="untilMills">As for <see cref="CalculateInsulinDeliveryStatistics"/>.</param>
     DailyBasalBolusRatioResponse CalculateDailyBasalBolusRatios(
         IEnumerable<Bolus> boluses,
         IEnumerable<Bolus> algorithmBoluses,
         IEnumerable<TempBasal> tempBasals,
+        long untilMills,
         TimeZoneInfo? userTimeZone = null,
-        IEnumerable<BasalInjection>? basalInjections = null);
+        IEnumerable<BasalInjection>? basalInjections = null,
+        IEnumerable<CarbIntake>? carbIntakes = null);
 
     /// <summary>
     /// Calculate comprehensive basal analysis statistics from TempBasals. Hourly percentiles are
     /// bucketed by <paramref name="userTimeZone"/>'s local hour-of-day (0–23) so the chart shows
     /// rates against the user's wall clock, not UTC. Defaults to UTC when null.
     /// </summary>
+    /// <param name="untilMills">As for <see cref="CalculateInsulinDeliveryStatistics"/>.</param>
     BasalAnalysisResponse CalculateBasalAnalysis(
         IEnumerable<TempBasal> tempBasals,
         DateTime startDate,
         DateTime endDate,
+        long untilMills,
         TimeZoneInfo? userTimeZone = null);
 
     /// <summary>
@@ -409,12 +418,14 @@ public interface IStatisticsService
     /// <paramref name="profileBasalSegments"/> is the profile's schedule over the window; it fills
     /// <see cref="HourlyInsulinDeliveryPoint.ProfileBasalRate"/> and is left at zero when absent.
     /// </summary>
+    /// <param name="untilMills">As for <see cref="CalculateInsulinDeliveryStatistics"/>.</param>
     HourlyInsulinDeliveryResponse CalculateHourlyInsulinDelivery(
         IEnumerable<TempBasal> tempBasals,
         IEnumerable<Bolus> boluses,
         IEnumerable<Bolus> algorithmBoluses,
         DateTime startDate,
         DateTime endDate,
+        long untilMills,
         TimeZoneInfo? userTimeZone = null,
         IEnumerable<BasalInjection>? basalInjections = null,
         IEnumerable<BasalSegment>? profileBasalSegments = null);

@@ -72,6 +72,11 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
         ],
     },
     {
+        id: "reports",
+        title: "Reports",
+        items: [{ href: "/docs/reports/loop-analysis", label: "Loop Analysis" }],
+    },
+    {
         id: "trackers",
         title: "Trackers",
         items: [

@@ -81,16 +81,6 @@ public interface IActivityService
     Task<bool> DeleteActivityAsync(string id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Delete multiple <see cref="Activity"/> records with optional filtering.
-    /// </summary>
-    /// <param name="find">Optional MongoDB-style query filter string.</param>
-    /// <returns>Number of records deleted.</returns>
-    Task<long> DeleteMultipleActivitiesAsync(
-        string? find = null,
-        CancellationToken cancellationToken = default
-    );
-
-    /// <summary>
     /// Count <see cref="Activity"/> records across all decomposed sources (StateSpans, HeartRate, StepCount).
     /// </summary>
     /// <param name="find">Optional MongoDB-style query filter string.</param>

@@ -59,6 +59,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
   return {
     tenantless: true,
     isAuthenticated: true,
+    hasAccount: true,
     isShareHost: false,
     canViewRealtimeData: false,
     showBackupSignInPrompt: false,

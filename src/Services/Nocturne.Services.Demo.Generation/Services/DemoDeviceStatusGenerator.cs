@@ -30,6 +30,32 @@ public static class DemoDeviceStatusGenerator
     private const int PredictionPoints = 42;
 
     /// <summary>
+    /// The loop cycle of one simulation step; null when the loop could not cycle (a site change, a
+    /// sensor warm-up, the phone out of range).
+    /// </summary>
+    public static DeviceStatus? ForStep(DemoTimeStep step, double targetGlucose, double baseBasalRate)
+    {
+        if (step.Loop is not (DemoLoopState.Closed or DemoLoopState.Manual))
+            return null;
+
+        return Create(
+            step.Time,
+            step.Entry.Sgv ?? step.Entry.Mgdl,
+            step.Iob,
+            step.Cob,
+            step.TempBasalRate,
+            step.TempBasalDuration,
+            step.EffectiveIsf,
+            step.EffectiveCarbRatio,
+            targetGlucose,
+            DemoTherapyProfile.ScheduledRateAt(step.Time, baseBasalRate),
+            step.Scenario,
+            step.RequestedBasalRate,
+            step.MaxSafeBasalRate,
+            enacted: step.Loop == DemoLoopState.Closed);
+    }
+
+    /// <summary>
     /// Builds the device status for one simulation step (historical) or one
     /// realtime tick. <paramref name="localTime"/> is the step's local time;
     /// the emitted mills convert via its Kind.
@@ -45,7 +71,10 @@ public static class DemoDeviceStatusGenerator
         double effectiveCarbRatio,
         double targetGlucose,
         double scheduledBasalRate,
-        DayScenario scenario)
+        DayScenario scenario,
+        double? requestedBasalRate = null,
+        double? maxSafeBasalRate = null,
+        bool enacted = true)
     {
         var mills = new DateTimeOffset(localTime).ToUnixTimeMilliseconds();
         var isoTime = new DateTimeOffset(localTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
@@ -63,7 +92,7 @@ public static class DemoDeviceStatusGenerator
 
         var insulinReq = Math.Round((glucose - targetGlucose) / effectiveIsf - iob * 0.5, 2);
         var reason = BuildReason(glucose, eventualBg, iob, cob, effectiveIsf, targetGlucose,
-            sensitivityRatio, tempBasalRate, tempBasalDuration, insulinReq);
+            sensitivityRatio, tempBasalRate, tempBasalDuration, insulinReq, requestedBasalRate, maxSafeBasalRate);
 
         var suggested = new OpenApsSuggested
         {
@@ -82,23 +111,26 @@ public static class DemoDeviceStatusGenerator
             PredBGs = predictions,
         };
 
-        var enacted = new OpenApsEnacted
-        {
-            Timestamp = isoTime,
-            DeliverAt = isoTime,
-            Bg = suggested.Bg,
-            EventualBG = suggested.EventualBG,
-            TargetBG = suggested.TargetBG,
-            IOB = suggested.IOB,
-            COB = suggested.COB,
-            InsulinReq = suggested.InsulinReq,
-            SensitivityRatio = suggested.SensitivityRatio,
-            Rate = tempBasalRate ?? scheduledBasalRate,
-            Duration = tempBasalDuration ?? 0,
-            Reason = reason,
-            PredBGs = predictions,
-            Received = true,
-        };
+        // oref enacts only a change: a cycle that sets no temp has no enacted block.
+        var enactedTemp = !enacted || tempBasalRate is null
+            ? null
+            : new OpenApsEnacted
+            {
+                Timestamp = isoTime,
+                DeliverAt = isoTime,
+                Bg = suggested.Bg,
+                EventualBG = suggested.EventualBG,
+                TargetBG = suggested.TargetBG,
+                IOB = suggested.IOB,
+                COB = suggested.COB,
+                InsulinReq = suggested.InsulinReq,
+                SensitivityRatio = suggested.SensitivityRatio,
+                Rate = tempBasalRate,
+                Duration = tempBasalDuration ?? 0,
+                Reason = reason,
+                PredBGs = predictions,
+                Received = true,
+            };
 
         return new DeviceStatus
         {
@@ -109,7 +141,7 @@ public static class DemoDeviceStatusGenerator
             OpenAps = new OpenApsStatus
             {
                 Suggested = suggested,
-                Enacted = enacted,
+                Enacted = enactedTemp,
                 Version = AidVersion,
                 Iob = new OpenApsIobData
                 {
@@ -252,14 +284,17 @@ public static class DemoDeviceStatusGenerator
     private static string BuildReason(
         double glucose, double eventualBg, double iob, double cob, double effectiveIsf,
         double targetGlucose, double sensitivityRatio, double? tempBasalRate, int? tempBasalDuration,
-        double insulinReq)
+        double insulinReq, double? requestedBasalRate, double? maxSafeBasalRate)
     {
+        var cap = requestedBasalRate is { } requested && maxSafeBasalRate is { } max && requested > max
+            ? $"adj. req. rate: {requested:0.0#} to maxSafeBasal: {max:0.0#}, "
+            : "";
         var action = tempBasalRate is { } rate && tempBasalDuration is { } duration
             ? $"setting {duration}m temp basal of {rate:0.0#}U/h."
             : "temp basal within range, no action.";
 
         return $"Autosens ratio: {sensitivityRatio:0.0#}, ISF: {effectiveIsf:0}, COB: {cob:0.#}, "
             + $"IOB: {iob:0.0##}, Target: {targetGlucose:0}, "
-            + $"Eventual BG {eventualBg:0} vs BG {glucose:0}, insulinReq {insulinReq:0.0#}; {action}";
+            + $"Eventual BG {eventualBg:0} vs BG {glucose:0}, insulinReq {insulinReq:0.0#}; {cap}{action}";
     }
 }

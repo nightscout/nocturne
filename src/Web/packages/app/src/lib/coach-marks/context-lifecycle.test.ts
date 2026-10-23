@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CoachMarkContext } from "@nocturne/coach";
+import { coachLabels } from "./copy.svelte";
 import type { CoachMarkAdapter, MarkRegistration, MarkState, SequenceConfig } from "@nocturne/coach";
 
 const SETTLE = 10;
@@ -15,7 +16,7 @@ function stored(markKey: string, status: MarkState["status"]): MarkState {
 }
 
 async function started(sequences: SequenceConfig = {}, adapter = emptyAdapter) {
-  const context = new CoachMarkContext(adapter, sequences, SETTLE);
+  const context = new CoachMarkContext(adapter, coachLabels(), sequences, SETTLE);
   await context.initialize();
   return context;
 }
@@ -112,7 +113,7 @@ describe("before the stored states arrive", () => {
 
   it("selects nothing when a mark completes", () => {
     const { adapter } = pendingAdapter();
-    const context = new CoachMarkContext(adapter, {}, SETTLE);
+    const context = new CoachMarkContext(adapter, coachLabels(), {}, SETTLE);
     void context.initialize();
     context.register(makeRegistration("dismissed-on-server"));
     context.register(makeRegistration("configured"));
@@ -124,7 +125,7 @@ describe("before the stored states arrive", () => {
 
   it("reports every mark ineligible, so no dot is drawn", () => {
     const { adapter } = pendingAdapter();
-    const context = new CoachMarkContext(adapter, {}, SETTLE);
+    const context = new CoachMarkContext(adapter, coachLabels(), {}, SETTLE);
     void context.initialize();
 
     expect(context.isMarkEligible("any")).toBe(false);
@@ -132,7 +133,7 @@ describe("before the stored states arrive", () => {
 
   it("keeps a completion made while the fetch was in flight", async () => {
     const { adapter, resolve } = pendingAdapter();
-    const context = new CoachMarkContext(adapter, {}, SETTLE);
+    const context = new CoachMarkContext(adapter, coachLabels(), {}, SETTLE);
     const initializing = context.initialize();
     context.complete("configured");
 
@@ -149,7 +150,7 @@ describe("before the stored states arrive", () => {
       update: async () => {},
     };
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const context = new CoachMarkContext(failing, {}, SETTLE);
+    const context = new CoachMarkContext(failing, coachLabels(), {}, SETTLE);
 
     await context.initialize();
 

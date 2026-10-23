@@ -19,7 +19,9 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </summary>
 /// <remarks>
 /// Acknowledging, snoozing and recording a delivery outcome all silence or close an excursion, so
-/// every write action here requires <see cref="Scope.AlertsReadWrite"/>; the class-level
+/// every write action here requires <see cref="Scope.AlertsReadWrite"/>, as does
+/// <see cref="GetPendingDeliveries"/>, which returns other recipients' destinations and payloads
+/// to the delivery adapters; the class-level
 /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session,
 /// which holds <c>alerts.read</c>. <see cref="AcknowledgeExcursion"/> additionally accepts
 /// <see cref="Scope.DeviceNotify"/>, because for a caller without <c>alerts.readwrite</c> it mutes
@@ -335,6 +337,7 @@ public class AlertsController : ControllerBase
     /// Used by bot/adapter services to poll for work.
     /// </summary>
     [HttpGet("deliveries/pending")]
+    [RequireScope(Scope.AlertsReadWrite)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<PendingDeliveryResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<PendingDeliveryResponse>>> GetPendingDeliveries(

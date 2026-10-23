@@ -20,6 +20,12 @@ public interface IDDataService
     Task<DData> GetDDataAsync(long timestamp, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Creates the DData frame Nightscout serves for a point in time, with glucose oldest first
+    /// </summary>
+    /// <param name="timestamp">The timestamp to get data for (Unix milliseconds)</param>
+    Task<DDataFrame> GetDDataFrameAsync(long timestamp, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates a DData structure for the current time
     /// </summary>
     /// <returns>A DData structure containing all relevant data</returns>

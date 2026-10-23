@@ -88,6 +88,8 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies, depends
     cookies.get(LANGUAGE_COOKIE_NAME)
   );
 
+  const hasAccount = locals.isAuthenticated && !locals.isGuestSession;
+
   return {
     displayPreferences,
     displayLanguage,
@@ -95,6 +97,7 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies, depends
     tenantPreferences,
     user: locals.user,
     isAuthenticated: locals.isAuthenticated,
+    hasAccount,
     isShareHost: locals.isShareHost,
     effectivePermissions: permissions.scopes ?? [],
     limitTo24Hours: permissions.limitTo24Hours ?? false,

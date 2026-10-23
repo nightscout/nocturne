@@ -11,6 +11,7 @@
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { isMainSectionEnabled } from "$lib/types/dashboard-widgets";
   import { coachmark } from "@nocturne/coach";
+  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import TenantsOverview from "$lib/components/tenants/TenantsOverview.svelte";
   import HistoryLimitNotice from "$lib/components/layout/HistoryLimitNotice.svelte";
   import FirstReadingChartArea from "$lib/components/dashboard/first-reading/FirstReadingChartArea.svelte";
@@ -66,10 +67,7 @@
 
     <div
       {@attach coachmark({
-        key: "quick-tour.current-bg",
-        title: "Your glucose, live",
-        description:
-          "This updates in real-time as new readings arrive from your CGM.",
+        ...coachFor("quick-tour.current-bg"),
       })}
     >
       <CurrentBGDisplay />
@@ -83,10 +81,7 @@
       -->
       <div
         {@attach coachmark({
-          key: "quick-tour.widgets",
-          title: "Customizable widgets",
-          description:
-            "Reorder or swap these in Settings \u2192 Appearance to show the stats you care about.",
+          ...coachFor("quick-tour.widgets"),
         })}
       >
         <WidgetGrid widgets={topWidgets} maxWidgets={3} />
@@ -97,10 +92,7 @@
           <div
             {@attach chartVisible
               ? coachmark({
-                  key: "quick-tour.chart",
-                  title: "Interactive chart",
-                  description:
-                    "Drag to pan, pinch or scroll to zoom. Tap any point to see the exact reading and time.",
+                  ...coachFor("quick-tour.chart"),
                 })
               : undefined}
           >

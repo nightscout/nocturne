@@ -1,4 +1,4 @@
-import { Context } from "runed";
+import { getContext, setContext } from "svelte";
 import type { ChartDataEngine } from "./engine/chart-data-view.svelte";
 import type { TrackLayout } from "./engine/track-layout";
 import type { PointInspection } from "./engine/point-inspection.svelte";
@@ -36,19 +36,16 @@ export interface GlucoseChartContext {
 	readonly glucoseUnits?: GlucoseUnits;
 }
 
-// Extracted as a message, this name makes wuchale wrap `ctx` in $derived, which
-// builds a new Context, and so a new key Symbol, whenever it re-evaluates. While
-// more than one batch is alive a dirty derived re-evaluates on every read, so a
-// marker mounted during a day change looks up a key no chart ever set.
-// @wc-ignore
-const ctx = new Context<GlucoseChartContext>("GlucoseChartContext");
+const GLUCOSE_CHART_KEY = "nocturne:app:glucose-chart";
 
 export function setGlucoseChartContext(value: GlucoseChartContext) {
-	return ctx.set(value);
+	return setContext(GLUCOSE_CHART_KEY, value);
 }
 
 export function getGlucoseChartContext(): GlucoseChartContext {
-	return ctx.get();
+	const chart = getContext<GlucoseChartContext | undefined>(GLUCOSE_CHART_KEY);
+	if (!chart) throw new Error("Glucose chart context not found");
+	return chart;
 }
 
 /**

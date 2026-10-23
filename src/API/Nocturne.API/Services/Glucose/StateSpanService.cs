@@ -162,7 +162,6 @@ public class StateSpanService : IStateSpanService
 
     /// <inheritdoc />
     public async Task<IEnumerable<Activity>> GetActivitiesAsync(
-        string? type = null,
         int count = 10,
         int skip = 0,
         DateTime? from = null,
@@ -170,12 +169,11 @@ public class StateSpanService : IStateSpanService
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
-            "Getting activities with type: {Type}, count: {Count}, skip: {Skip}",
-            type, count, skip);
+            "Getting activities with count: {Count}, skip: {Skip}",
+            count, skip);
 
         // Get Activity StateSpans from repository
         var stateSpans = await _repository.GetActivityStateSpansAsync(
-            type: type,
             count: count,
             skip: skip,
             from: from,

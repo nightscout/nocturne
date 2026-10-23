@@ -21,6 +21,7 @@
   import CalendarMonthSummary from "$lib/components/calendar/CalendarMonthSummary.svelte";
   import CalendarDayCell from "$lib/components/calendar/CalendarDayCell.svelte";
   import { coachmark } from "@nocturne/coach";
+  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import { groupBy, indexBy } from "$lib/utils/collections";
   import { toDayString } from "$lib/utils/date-range";
 
@@ -351,10 +352,7 @@
     <div
       class="sticky top-(--app-sticky-top,0px) z-10 transition-all duration-300 print:hidden"
       {@attach coachmark({
-        key: "feature-intro.calendar-views",
-        title: "View modes",
-        description:
-          "Switch between Time in Range and Profile views to see different patterns.",
+        ...coachFor("feature-intro.calendar-views"),
         completeOn: { event: "click" },
       })}
     >
@@ -405,10 +403,7 @@
               <div
                 class="flex-1 grid grid-rows-6 gap-1 min-w-[28rem] @md:min-w-0"
                 {@attach coachmark({
-                  key: "feature-intro.calendar-trackers",
-                  title: "Tracker events",
-                  description:
-                    "Tracker events appear on your calendar \u2014 colored by urgency.",
+                  ...coachFor("feature-intro.calendar-trackers"),
                 })}
               >
                 {#each calendarGrid as week, idx (idx)}

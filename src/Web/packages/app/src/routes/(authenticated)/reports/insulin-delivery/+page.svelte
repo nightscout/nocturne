@@ -195,7 +195,9 @@
         <PieChart class="h-5 w-5 text-muted-foreground" />
         Daily Basal/Bolus Breakdown
       </CardTitle>
-      <CardDescription>See how your insulin was split each day</CardDescription>
+      <CardDescription>
+        See how your insulin was split each day, against the carbs you logged
+      </CardDescription>
     </CardHeader>
     <CardContent>
       <BasalBolusRatioChart

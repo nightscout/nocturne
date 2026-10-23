@@ -69,13 +69,13 @@ public class DDataControllerTests
             .Setup(x => x.RequiredReadScope(It.IsAny<Activity>()))
             .Returns((Activity a) => a.Id == "heart" ? Scope.HeartRateRead : Scope.StepCountRead);
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DData { Activity = [heart, steps] });
+            .Setup(x => x.GetDDataFrameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DDataFrame { Activity = [heart, steps] });
         Grant(Scope.GlucoseRead, Scope.HeartRateRead);
 
         var result = await _controller.GetDDataAt(cancellationToken: CancellationToken.None);
 
-        var response = Assert.IsType<DData>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var response = Assert.IsType<DDataFrame>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal(["heart"], response.Activity.Select(a => a.Id));
     }
 
@@ -117,11 +117,11 @@ public class DDataControllerTests
     {
         // Arrange
         var timestamp = "1640995200000"; // Valid Unix timestamp
-        var expectedResponse = new DData { LastUpdated = 1640995200000 };
+        var expectedResponse = new DDataFrame { LastUpdated = 1640995200000 };
 
         _mockDDataService
             .Setup(x =>
-                x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())
+                x.GetDDataFrameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(expectedResponse);
 
@@ -130,7 +130,7 @@ public class DDataControllerTests
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<DData>(okResult.Value);
+        var response = Assert.IsType<DDataFrame>(okResult.Value);
         Assert.Equal(1640995200000, response.LastUpdated);
     }
 
@@ -139,11 +139,11 @@ public class DDataControllerTests
     {
         // Arrange
         var timestamp = "2022-01-01T00:00:00.000Z"; // Valid ISO date
-        var expectedResponse = new DData { LastUpdated = 1640995200000 };
+        var expectedResponse = new DDataFrame { LastUpdated = 1640995200000 };
 
         _mockDDataService
             .Setup(x =>
-                x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())
+                x.GetDDataFrameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(expectedResponse);
 
@@ -152,7 +152,7 @@ public class DDataControllerTests
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<DData>(okResult.Value);
+        var response = Assert.IsType<DDataFrame>(okResult.Value);
         Assert.Equal(1640995200000, response.LastUpdated);
     }
 
@@ -179,15 +179,15 @@ public class DDataControllerTests
     public async Task GetDDataAt_WithoutTimestamp_QueriesNow()
     {
         _mockDDataService
-            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DData());
+            .Setup(x => x.GetDDataFrameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DDataFrame());
         var before = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         var result = await _controller.GetDDataAt(cancellationToken: CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
         _mockDDataService.Verify(x =>
-            x.GetDDataAsync(It.Is<long>(t => t >= before), It.IsAny<CancellationToken>())
+            x.GetDDataFrameAsync(It.Is<long>(t => t >= before), It.IsAny<CancellationToken>())
         );
         _mockDDataService.Verify(
             x => x.GetDDataWithRecentStatusesAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()),

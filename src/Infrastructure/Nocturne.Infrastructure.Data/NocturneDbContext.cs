@@ -441,6 +441,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         ConfigureTenantCascadeDeletes(modelBuilder);
 
+        Jsonb.Register(modelBuilder);
+
         // EF Core's default convention emits the C# property name verbatim for the column, which
         // would leave case-sensitive quoted "Id" columns in an otherwise snake_case schema. The
         // generator is a backstop for construction sites that leave Id unset; an Id EF does not

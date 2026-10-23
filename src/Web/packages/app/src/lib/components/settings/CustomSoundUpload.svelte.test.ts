@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getCustomSounds } from "$lib/audio/alarm-sounds";
 import CustomSoundUpload from "./CustomSoundUpload.svelte";
 
+/** The playability probe's own load timeout in alarm-sounds.ts. */
+const PROBE_TIMEOUT_MS = 10_000;
+
 /** A tenth of a second of 8 kHz mono 16-bit silence. */
 function silentWav(): Uint8Array<ArrayBuffer> {
   const samples = 800;
@@ -51,14 +54,13 @@ describe("CustomSoundUpload", () => {
     const fileName = `alarm-${crypto.randomUUID()}.wav`;
     await upload(new File([silentWav()], fileName, { type: "audio/wav" }));
 
-    const stored = await vi.waitFor(async () => {
-      const sound = (await getCustomSounds()).find((s) => s.fileName === fileName);
-      expect(sound).toBeDefined();
-      return sound!;
-    });
-    expect(stored.mimeType).toBe("audio/wav");
-    expect(stored.dataUrl).toMatch(/^data:audio\/wav;base64,/);
-  });
+    await expect.element(page.getByText(`${fileName} •`), { timeout: PROBE_TIMEOUT_MS + 5_000 }).toBeVisible();
+
+    const stored = (await getCustomSounds()).find((s) => s.fileName === fileName);
+    expect(stored).toBeDefined();
+    expect(stored!.mimeType).toBe("audio/wav");
+    expect(stored!.dataUrl).toMatch(/^data:audio\/wav;base64,/);
+  }, PROBE_TIMEOUT_MS + 10_000);
 
   it("rejects a file that is not a supported format", async () => {
     await upload(new File(["notes"], "notes.txt", { type: "text/plain" }));
@@ -94,7 +96,7 @@ describe("CustomSoundUpload", () => {
 
     await upload(new File([silentWav()], "stalled.wav", { type: "audio/wav" }));
     await vi.waitFor(() => expect(loading).toBe(true));
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(PROBE_TIMEOUT_MS);
 
     await expect.element(page.getByText("The audio file took too long to load")).toBeVisible();
   });

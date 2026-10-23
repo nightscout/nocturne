@@ -110,7 +110,7 @@ public class RetrospectiveControllerTests
         _cobCalculatorMock
             .Setup(s => s.FromCarbIntakes(
                 It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>>(),
-                It.IsAny<List<TempBasal>>(), It.IsAny<long?>()))
+                It.IsAny<List<TempBasal>>(), It.IsAny<long>()))
             .Returns(new CobResult());
 
         _entryServiceMock
@@ -225,7 +225,7 @@ public class RetrospectiveControllerTests
             .Setup(s => s.CalculateTotalAsync(
                 It.IsAny<List<Bolus>>(),
                 It.IsAny<List<TempBasal>?>(),
-                It.IsAny<long?>(),
+                It.IsAny<long>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IobResult());
 
@@ -234,7 +234,7 @@ public class RetrospectiveControllerTests
                 It.IsAny<List<CarbIntake>>(),
                 It.IsAny<List<Bolus>?>(),
                 It.IsAny<List<TempBasal>?>(),
-                It.IsAny<long?>(),
+                It.IsAny<long>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CobResult());
 

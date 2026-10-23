@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Devices;
@@ -83,7 +84,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
             .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<V4Models.TempBasal> records, WriteOrigin origin, CancellationToken _) => [.. records]);
         _tempBasalRepoMock
-            .Setup(x => x.GetRelativeByLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetByLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         // StateSpanService returns a new StateSpan
@@ -660,12 +661,76 @@ public class TreatmentDecomposerBatchTests : IDisposable
         (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage("batch failure");
     }
 
+    private async Task<List<V4Models.TempBasal>> BatchPutStoredTempBasalAsync(
+        V4Models.TempBasal stored, V4Models.TempBasalOrigin echoedOrigin, V4Models.TempBasalOriginEvidence echoedEvidence)
+    {
+        var put = Nocturne.Infrastructure.Data.Mappers.TempBasalToTreatmentMapper.ToTreatment(stored);
+        put.AdditionalProperties!["basalOrigin"] = echoedOrigin.ToString();
+        put.AdditionalProperties["originEvidence"] = echoedEvidence.ToString();
+        put = System.Text.Json.JsonSerializer.Deserialize<Treatment>(System.Text.Json.JsonSerializer.Serialize(put))!;
+        put.Id = stored.LegacyId;
+        _tempBasalRepoMock
+            .Setup(r => r.GetByLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([stored]);
+        List<V4Models.TempBasal> written = [];
+        _tempBasalRepoMock
+            .Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<V4Models.TempBasal> tbs, WriteOrigin _, CancellationToken _) => written = [.. tbs])
+            .ReturnsAsync((IEnumerable<V4Models.TempBasal> tbs, WriteOrigin _, CancellationToken _) => [.. tbs]);
+
+        await _decomposer.DecomposeBatchAsync([put], WriteOrigin.Live);
+        return written;
+    }
+
+    private static V4Models.TempBasal StoredTempBasal(
+        V4Models.TempBasalOrigin origin, V4Models.TempBasalOriginEvidence evidence) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        LegacyId = "tb-batch-origin",
+        StartTimestamp = new DateTime(2026, 9, 20, 12, 0, 0, DateTimeKind.Utc),
+        EndTimestamp = new DateTime(2026, 9, 20, 12, 30, 0, DateTimeKind.Utc),
+        Rate = 0.4,
+        Origin = origin,
+        OriginEvidence = evidence,
+        App = "Trio",
+    };
+
+    [Theory]
+    [InlineData(V4Models.TempBasalOriginEvidence.Snapshot)]
+    [InlineData(V4Models.TempBasalOriginEvidence.Uploader)]
+    public async Task DecomposeBatchAsync_ChangingTheOriginWhileEchoingEvidence_StatesTheNewOrigin(
+        V4Models.TempBasalOriginEvidence echoed)
+    {
+        var stored = StoredTempBasal(V4Models.TempBasalOrigin.Algorithm, echoed);
+
+        var written = await BatchPutStoredTempBasalAsync(stored, V4Models.TempBasalOrigin.Manual, echoed);
+
+        var tempBasal = written.Should().ContainSingle().Subject;
+        tempBasal.Origin.Should().Be(V4Models.TempBasalOrigin.Manual);
+        tempBasal.OriginEvidence.Should().Be(V4Models.TempBasalOriginEvidence.Reported);
+    }
+
+    [Theory]
+    [InlineData(V4Models.TempBasalOriginEvidence.Snapshot)]
+    [InlineData(V4Models.TempBasalOriginEvidence.Uploader)]
+    public async Task DecomposeBatchAsync_EchoingTheStoredOrigin_KeepsItAndItsEvidence(
+        V4Models.TempBasalOriginEvidence echoed)
+    {
+        var stored = StoredTempBasal(V4Models.TempBasalOrigin.Algorithm, echoed);
+
+        var written = await BatchPutStoredTempBasalAsync(stored, V4Models.TempBasalOrigin.Algorithm, echoed);
+
+        var tempBasal = written.Should().ContainSingle().Subject;
+        tempBasal.Origin.Should().Be(V4Models.TempBasalOrigin.Algorithm);
+        tempBasal.OriginEvidence.Should().Be(echoed);
+    }
+
     private static DeviceService CreateDeviceService(Mock<IDeviceRepository> deviceRepo)
     {
         var patientDevices = new Mock<IPatientDeviceRepository>();
         patientDevices
             .Setup(r => r.GetByDeviceIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        return new DeviceService(deviceRepo.Object, patientDevices.Object, MockTenantAccessor.Create().Object);
+        return new DeviceService(deviceRepo.Object, patientDevices.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc());
     }
 }

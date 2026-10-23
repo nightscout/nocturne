@@ -1765,6 +1765,11 @@ public class DailyBasalBolusRatioData
     /// Bolus, manual and automatic, as percentage of total (0-100)
     /// </summary>
     public double BolusPercent { get; set; }
+
+    /// <summary>
+    /// Carbohydrates logged that day in grams
+    /// </summary>
+    public double Carbs { get; set; }
 }
 
 public class DailyBasalBolusRatioResponse
@@ -2099,6 +2104,12 @@ public class AidSystemMetrics
 
     /// <summary>Per-device time segments with individual metrics</summary>
     public List<AidTimeSegment> Segments { get; set; } = new();
+
+    /// <summary>
+    /// Why no tenant timezone was available, so device start and end dates were read as UTC days;
+    /// null when they followed the tenant's timezone.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -2150,8 +2161,8 @@ public class AidDetectionContext
 
     public DateTime EndDate { get; set; }
 
-    /// <summary>APS snapshots within the segment window (for OS AID strategies)</summary>
-    public IReadOnlyList<V4.ApsSnapshot> ApsSnapshots { get; set; } = [];
+    /// <summary>APS loop cycles within the segment window (for OS AID strategies)</summary>
+    public IReadOnlyList<V4.ApsLoopCycle> LoopCycles { get; set; } = [];
 
     /// <summary>Temp basals within the segment window (for TBR-based strategies)</summary>
     public IReadOnlyList<V4.TempBasal> TempBasals { get; set; } = [];

@@ -217,7 +217,7 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<TempBasal>> GetRelativeByLegacyIdsAsync(
+    public async Task<IReadOnlyList<TempBasal>> GetByLegacyIdsAsync(
         IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
     {
         if (legacyIds.Count == 0)
@@ -225,7 +225,7 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
 
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await ctx.TempBasals.AsNoTracking()
-            .Where(t => t.Percent != null && t.LegacyId != null && legacyIds.Contains(t.LegacyId))
+            .Where(t => t.LegacyId != null && legacyIds.Contains(t.LegacyId))
             .ToListAsync(ct);
         return entities.Select(TempBasalMapper.ToDomainModel).ToList();
     }

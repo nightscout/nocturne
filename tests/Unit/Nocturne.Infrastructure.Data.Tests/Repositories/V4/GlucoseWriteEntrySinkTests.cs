@@ -21,6 +21,9 @@ public class GlucoseWriteEntrySinkTests : IDisposable
     private static readonly Guid TestTenantId = Guid.Parse("00000000-0000-0000-0000-000000000002");
     private static readonly DateTime CompletedYearReading = new(2023, 6, 15, 12, 0, 0, DateTimeKind.Utc);
 
+    private static readonly DateTime VacatedYearReading = new(2025, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime ReachedYearReading = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly Mock<IDataEventSink<Entry>> _sink = new();
@@ -92,6 +95,118 @@ public class GlucoseWriteEntrySinkTests : IDisposable
         _sink.Verify(
             s => s.OnCreatedAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task SensorGlucoseUpdate_MovingAcrossYears_TellsTheEntrySinkBothDates()
+    {
+        var created = await _sensor.CreateAsync(
+            new SensorGlucose { Mgdl = 120, Timestamp = VacatedYearReading, DataSource = "test-source" },
+            WriteOrigin.Live);
+        _written.Clear();
+
+        await _sensor.UpdateAsync(
+            created.Id,
+            new SensorGlucose { Id = created.Id, Mgdl = 120, Timestamp = ReachedYearReading, DataSource = "test-source" },
+            WriteOrigin.Live);
+
+        _written.Select(e => e.Date).Should().BeEquivalentTo<DateTime?>([VacatedYearReading, ReachedYearReading]);
+    }
+
+    [Fact]
+    public async Task SensorGlucoseUpdate_NotMovingTheReading_TellsTheEntrySinkOneDate()
+    {
+        var created = await _sensor.CreateAsync(
+            new SensorGlucose { Mgdl = 120, Timestamp = ReachedYearReading, DataSource = "test-source" },
+            WriteOrigin.Live);
+        _written.Clear();
+
+        await _sensor.UpdateAsync(
+            created.Id,
+            new SensorGlucose { Id = created.Id, Mgdl = 130, Timestamp = ReachedYearReading, DataSource = "test-source" },
+            WriteOrigin.Live);
+
+        _written.Select(e => e.Date).Should().BeEquivalentTo<DateTime?>([ReachedYearReading]);
+    }
+
+    [Fact]
+    public async Task SensorGlucoseSyncKeyUpsert_MovingAcrossYears_TellsTheEntrySinkBothDates()
+    {
+        await _sensor.CreateAsync(
+            new SensorGlucose { Mgdl = 120, Timestamp = VacatedYearReading, DataSource = "test-source", SyncIdentifier = "sync-1" },
+            WriteOrigin.Live);
+        _written.Clear();
+
+        await _sensor.UpsertAsync(
+            new SensorGlucose { Mgdl = 120, Timestamp = ReachedYearReading, DataSource = "test-source", SyncIdentifier = "sync-1" },
+            WriteOrigin.Live);
+
+        _written.Select(e => e.Date).Should().BeEquivalentTo<DateTime?>([VacatedYearReading, ReachedYearReading]);
+    }
+
+    [Fact]
+    public async Task SensorGlucoseBulkSyncKeyUpsert_MovingAcrossYears_TellsTheEntrySinkBothDates()
+    {
+        await _sensor.BulkCreateAsync(
+            [new SensorGlucose { Mgdl = 120, Timestamp = VacatedYearReading, DataSource = "test-source", SyncIdentifier = "sync-1" }],
+            WriteOrigin.Live);
+        _written.Clear();
+
+        await _sensor.BulkCreateAsync(
+            [new SensorGlucose { Mgdl = 120, Timestamp = ReachedYearReading, DataSource = "test-source", SyncIdentifier = "sync-1" }],
+            WriteOrigin.Live);
+
+        _written.Select(e => e.Date).Should().BeEquivalentTo<DateTime?>([VacatedYearReading, ReachedYearReading]);
+    }
+
+    [Fact]
+    public async Task MeterGlucoseLegacyKeyUpsert_MovingAcrossYears_TellsTheEntrySinkBothDates()
+    {
+        await _meter.BulkUpsertByLegacyIdAsync(
+            [new MeterGlucose { Mgdl = 110, Timestamp = VacatedYearReading, DataSource = "test-source", LegacyId = "legacy-1" }],
+            WriteOrigin.Live);
+        _written.Clear();
+
+        await _meter.BulkUpsertByLegacyIdAsync(
+            [new MeterGlucose { Mgdl = 110, Timestamp = ReachedYearReading, DataSource = "test-source", LegacyId = "legacy-1" }],
+            WriteOrigin.Live);
+
+        _written.Select(e => e.Date).Should().BeEquivalentTo<DateTime?>([VacatedYearReading, ReachedYearReading]);
+    }
+
+    [Fact]
+    public async Task MeterGlucoseBulkUpsert_MovingAcrossYears_TellsTheEntrySinkBothDates()
+    {
+        await _meter.BulkUpsertAsync(
+            [new MeterGlucose { Mgdl = 110, Timestamp = VacatedYearReading, DataSource = "test-source", LegacyId = "legacy-1" }],
+            WriteOrigin.Live);
+        _written.Clear();
+
+        await _meter.BulkUpsertAsync(
+            [new MeterGlucose { Mgdl = 110, Timestamp = ReachedYearReading, DataSource = "test-source", LegacyId = "legacy-1" }],
+            WriteOrigin.Live);
+
+        _written.Select(e => e.Date).Should().BeEquivalentTo<DateTime?>([VacatedYearReading, ReachedYearReading]);
+    }
+
+    [Fact]
+    public async Task SensorGlucoseUpdate_MovingAcrossYears_ProjectsOnlyTheReachedReading()
+    {
+        var created = await _sensor.CreateAsync(
+            new SensorGlucose { Mgdl = 120, Timestamp = VacatedYearReading, DataSource = "test-source" },
+            WriteOrigin.Live);
+        var projected = new List<Entry>();
+        _sink
+            .Setup(s => s.OnUpdatedAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()))
+            .Callback<Entry, CancellationToken>((entry, _) => projected.Add(entry))
+            .Returns(Task.CompletedTask);
+
+        await _sensor.UpdateAsync(
+            created.Id,
+            new SensorGlucose { Id = created.Id, Mgdl = 120, Timestamp = ReachedYearReading, DataSource = "test-source" },
+            WriteOrigin.Live);
+
+        projected.Select(e => e.Date).Should().BeEquivalentTo<DateTime?>([ReachedYearReading]);
     }
 
     [Fact]

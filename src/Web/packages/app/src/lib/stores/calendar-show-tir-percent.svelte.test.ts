@@ -27,4 +27,16 @@ describe("calendar show TIR percent preference", () => {
     await vi.waitFor(() => expect(saved).toHaveBeenCalled());
     expect(saved.mock.lastCall?.[0].calendarShowTirPercent).toBe(true);
   });
+
+  it("stops saving to the backend once the write-through is withdrawn", async () => {
+    const saved = vi.fn<(prefs: UserDisplayPreferences) => unknown>();
+    registerPreferencesWriteThrough(saved);
+    registerPreferencesWriteThrough(null);
+
+    calendarShowTirPercent.current = true;
+
+    expect(collectPreferences().calendarShowTirPercent).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(saved).not.toHaveBeenCalled();
+  });
 });

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models;
@@ -183,6 +184,34 @@ public abstract class ParityTestBase : IAsyncLifetime
     {
         var entries = TestDataFactory.CreateEntrySequence(count, intervalMinutes);
         await SeedEntriesAsync(entries);
+    }
+
+    /// <summary>
+    /// Waits until the summary Nightscout serves at <paramref name="path"/> lists the seeded
+    /// <paramref name="sgvs"/> and <paramref name="treatments"/>. Nightscout serves summary reads
+    /// from memory it reloads about 5 seconds after a write, so a read straight after seeding sees
+    /// the data from before it. Returns on timeout and leaves the assertion to report the difference.
+    /// </summary>
+    protected async Task WaitForNightscoutReloadAsync(
+        string path,
+        int sgvs,
+        int treatments = 0,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(20));
+
+        while (true)
+        {
+            using var response = await NightscoutClient.GetAsync(path, cancellationToken);
+            var body = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            var served = body?["sgvs"]?.AsArray().Count;
+            var servedTreatments = body?["treatments"]?["treatments"]?.AsArray().Count;
+            if ((served == sgvs && servedTreatments == treatments) || DateTime.UtcNow >= deadline)
+                return;
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+        }
     }
 
     #endregion

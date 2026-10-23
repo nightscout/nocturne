@@ -740,7 +740,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             _tempBasalRepository, treatment.Id, model, result, origin, ct,
             beforeWrite: async existing =>
             {
-                RelativeTempBasalRates.ForgetEchoedRate(model, existing);
+                SettleAgainstStored(model, treatment, existing);
                 await _relativeTempBasalRates.ResolveAsync([model], ct);
                 await StampAttributionAsync(
                     _patientDeviceStamper, model, existing, V4Models.DeviceAttributionCategories.TempBasal, ct);
@@ -781,7 +781,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         model.LegacyId = treatment.Id;
         model.CorrelationId = correlationId;
         model.DataSource = treatment.DataSource;
-        model.Device = treatment.EnteredBy;
+        model.Device = UploadedDevice(treatment);
         model.Origin = ProfileActivationSource.OriginOf(model.App, treatment.EnteredBy, treatment.OriginalProfileName);
         if (!isEffective && model.RequestedDurationMs is > 0 and var duration)
             model.EndTimestamp = start.AddMilliseconds(duration);
@@ -895,6 +895,10 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         catch (OverflowException ex) { throw new TreatmentMappingException(ex); }
     }
 
+    /// <summary>
+    /// A Temp Basal with no duration ends where it starts: Nightscout reads one as a cancel, which
+    /// ends the temp before it and delivers nothing.
+    /// </summary>
     internal static V4Models.TempBasal MapToTempBasal(Treatment treatment, Guid? correlationId)
     {
         var startTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime;
@@ -908,12 +912,14 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             LegacyId = treatment.Id,
             AdditionalProperties = TempBasalUploadedFields.Keep(
                 TempBasalAutomaticFlag.Keep(
-                    TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment), treatment.Automatic),
+                    TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                    treatment.Automatic
+                    ?? (evidence is V4Models.TempBasalOriginEvidence.Reported ? TempBasalAutomaticFlag.Of(origin) : null)),
                 treatment),
             StartTimestamp = startTimestamp,
-            EndTimestamp = durationMs > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + durationMs).UtcDateTime : null,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills + Math.Max(durationMs, 0)).UtcDateTime,
             UtcOffset = treatment.UtcOffset,
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             App = treatment.EnteredBy,
             DataSource = treatment.DataSource,
             CorrelationId = correlationId,
@@ -941,12 +947,9 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         // An edit echoes the stored origin back next to the field it changes. An echoed default is
         // not a statement, or the edit would lock it in.
-        if (treatment.AdditionalProperties is { } props
-            && TryGetString(props, V4Models.TempBasalOriginProvenance.OriginField, out var stored)
-            && TryParseDefinedName<V4Models.TempBasalOrigin>(stored, out var origin)
-            && (!props.ContainsKey(V4Models.TempBasalOriginProvenance.EvidenceField)
-                || TryGetString(props, V4Models.TempBasalOriginProvenance.EvidenceField, out var evidence)
-                && string.Equals(evidence, nameof(V4Models.TempBasalOriginEvidence.Reported), StringComparison.OrdinalIgnoreCase)))
+        if (TryEchoedOrigin(treatment, out var origin, out var echoedEvidence)
+            && (echoedEvidence is null
+                || string.Equals(echoedEvidence, nameof(V4Models.TempBasalOriginEvidence.Reported), StringComparison.OrdinalIgnoreCase)))
             return (origin, reported);
 
         if (treatment.BolusType is "PUMP_SUSPEND" or "EMULATED_PUMP_SUSPEND")
@@ -954,6 +957,72 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         return (V4Models.TempBasalOriginProvenance.UploaderDefault(treatment.EnteredBy, UploadedString(treatment, "app")),
             V4Models.TempBasalOriginEvidence.Uploader);
+    }
+
+    private static bool TryEchoedOrigin(Treatment treatment, out V4Models.TempBasalOrigin origin, out string? evidence)
+    {
+        origin = default;
+        evidence = null;
+        if (treatment.AdditionalProperties is not { } props
+            || !TryGetString(props, V4Models.TempBasalOriginProvenance.OriginField, out var name)
+            || !TryParseDefinedName(name, out origin))
+            return false;
+
+        if (props.ContainsKey(V4Models.TempBasalOriginProvenance.EvidenceField))
+        {
+            if (!TryGetString(props, V4Models.TempBasalOriginProvenance.EvidenceField, out var echoed))
+                return false;
+            evidence = echoed;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// What an edit echoes back of the stored row, settled for a PUT, a PATCH and a batch alike: the rate
+    /// the edit did not change, and the origin as <see cref="SettleEchoedTempBasalOrigin"/> reads it.
+    /// </summary>
+    internal static void SettleAgainstStored(V4Models.TempBasal model, Treatment treatment, V4Models.TempBasal? stored)
+    {
+        RelativeTempBasalRates.ForgetEchoedRate(model, stored);
+        SettleEchoedTempBasalOrigin(model, treatment, stored);
+    }
+
+    /// <summary>
+    /// Decides whether an echoed origin beside echoed non-<see cref="V4Models.TempBasalOriginEvidence.Reported"/>
+    /// evidence is an edit or the stored row read back. A different origin is the user's statement only when
+    /// the evidence echoed with it is the stored row's, since that proves the body was read from this state;
+    /// a stale echo is a default for the stored origin, which <see cref="V4Models.TempBasalOriginProvenance.OnUpdate"/>
+    /// settles as it does a re-upload's. A rate the edit left unset is the stored one unless its percent changed.
+    /// </summary>
+    internal static void SettleEchoedTempBasalOrigin(V4Models.TempBasal model, Treatment treatment, V4Models.TempBasal? stored)
+    {
+        if (stored is null
+            || model.OriginEvidence is V4Models.TempBasalOriginEvidence.Reported
+            || !TryEchoedOrigin(treatment, out var echoed, out var echoedEvidence))
+            return;
+
+        var storedEvidence = V4Models.TempBasalOriginProvenance.EvidenceOf(stored);
+        if (echoed != stored.Origin
+            && string.Equals(echoedEvidence, storedEvidence.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            model.Origin = echoed;
+            model.OriginEvidence = V4Models.TempBasalOriginEvidence.Reported;
+            return;
+        }
+
+        var settled = V4Models.TempBasalOriginProvenance.OnUpdate(
+            new V4Models.TempBasalOriginState(
+                stored.Origin, storedEvidence, stored.ApsSnapshotId, stored.StartMills, stored.Rate),
+            new V4Models.TempBasalOriginState(
+                stored.Origin,
+                V4Models.TempBasalOriginEvidence.Uploader,
+                null,
+                model.StartMills,
+                model.Percent == stored.Percent ? model.Rate ?? stored.Rate : model.Rate));
+        model.Origin = settled.Origin;
+        model.OriginEvidence = settled.Evidence;
+        model.ApsSnapshotId = settled.ApsSnapshotId;
     }
 
     internal static V4Models.Bolus MapToBolus(Treatment treatment, Guid? correlationId, bool keepEventType = true)
@@ -971,7 +1040,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             BolusType = ParseBolusType(treatment.BolusType),
             Automatic = treatment.Automatic ?? false,
             Duration = treatment.Duration,
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -994,7 +1063,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 treatment, keepEventType, TreatmentTypes.CarbCorrection),
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
             Carbs = treatment.Carbs ?? 0,
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -1018,7 +1087,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             Glucose = treatment.Glucose ?? 0,
             GlucoseType = ParseGlucoseType(treatment.GlucoseType),
             Units = ParseGlucoseUnit(treatment.Units),
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -1036,7 +1105,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             Text = treatment.Notes ?? string.Empty,
             EventType = treatment.EventType,
             IsAnnouncement = isAnnouncement || (treatment.IsAnnouncement ?? false),
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -1053,7 +1122,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
             EventType = deviceEventType,
             Notes = treatment.Notes,
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -1075,7 +1144,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             InsulinRecommendation = treatment.InsulinRecommendationForCorrection,
             CarbRatio = treatment.CR,
             CalculationType = MapCalculationType(treatment.CalculationType),
-            Device = treatment.EnteredBy,
+            Device = UploadedDevice(treatment),
             DataSource = treatment.DataSource,
             UtcOffset = treatment.UtcOffset,
             CorrelationId = correlationId,
@@ -1156,6 +1225,13 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// </summary>
     internal static bool IsAapsUpload(Treatment treatment) =>
         string.Equals(UploadedString(treatment, "app"), "AAPS", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The device a record names: its uploader, else the <c>device</c> the upload sent. The uploader
+    /// comes first because it is the key a temp basal is matched to its loop's snapshots by.
+    /// </summary>
+    private static string? UploadedDevice(Treatment treatment) =>
+        treatment.EnteredBy ?? UploadedString(treatment, "device");
 
     /// <summary>An uploaded field the treatment has no property for, when it is a string.</summary>
     private static string? UploadedString(Treatment treatment, string key) =>
@@ -1590,7 +1666,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         var noteList = new List<V4Models.Note>(estimatedPerType);
         var bolusCalcList = new List<V4Models.BolusCalculation>(estimatedPerType);
         var deviceEventList = new List<V4Models.DeviceEvent>(estimatedPerType);
-        var tempBasalList = new List<V4Models.TempBasal>(estimatedPerType);
+        var tempBasalSources = new List<(Treatment Treatment, V4Models.TempBasal Model)>(estimatedPerType);
 
         // State span treatments are upserted individually (idempotent semantics)
         var stateSpanTreatments = new List<(Treatment Treatment, Guid CorrelationId, bool IsProfileSwitch, bool IsOverride, bool IsTemporaryTarget)>();
@@ -1630,7 +1706,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                     // TempBasal treatments can also be bulk-inserted
                     if (!c.IsProfileSwitch && !c.IsOverride && !c.IsTemporaryTarget)
                     {
-                        tempBasalList.Add(await BuildTempBasalAsync(treatment, correlationId, ct));
+                        tempBasalSources.Add((treatment, await BuildTempBasalAsync(treatment, correlationId, ct)));
                     }
                     else
                     {
@@ -1686,6 +1762,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 result.SkippedUnsupported, string.Join(", ", unsupportedTypes));
         }
 
+        var tempBasalList = tempBasalSources.ConvertAll(s => s.Model);
+
         // Fallback attribution for records the serial-based DeviceId resolution left unattributed.
         if (bolusList.Count > 0)
             await _patientDeviceStamper.StampAsync(bolusList, V4Models.DeviceAttributionCategories.Bolus, batchSource: null, ct);
@@ -1708,15 +1786,19 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 batchInsulinTimeline[treatment.Mills] = icfg;
         }
 
-        var echoedRates = tempBasalList
-            .Where(t => t is { Percent: not null, Rate: not null, LegacyId: not null })
-            .Select(t => t.LegacyId!)
+        var echoingStored = tempBasalSources
+            .Where(s => s.Model.LegacyId is not null
+                && (s.Model is { Percent: not null, Rate: not null }
+                    || s.Model.OriginEvidence is not V4Models.TempBasalOriginEvidence.Reported
+                    && TryEchoedOrigin(s.Treatment, out _, out _)))
+            .Select(s => s.Model.LegacyId!)
+            .Distinct(StringComparer.Ordinal)
             .ToList();
-        var storedRelative = (echoedRates.Count == 0 ? [] : await _tempBasalRepository.GetRelativeByLegacyIdsAsync(echoedRates, ct))
+        var stored = (echoingStored.Count == 0 ? [] : await _tempBasalRepository.GetByLegacyIdsAsync(echoingStored, ct))
             .GroupBy(t => t.LegacyId!, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        foreach (var tb in tempBasalList)
-            RelativeTempBasalRates.ForgetEchoedRate(tb, tb.LegacyId is { } legacyId ? storedRelative.GetValueOrDefault(legacyId) : null);
+        foreach (var (treatment, model) in tempBasalSources)
+            SettleAgainstStored(model, treatment, model.LegacyId is { } legacyId ? stored.GetValueOrDefault(legacyId) : null);
         await _relativeTempBasalRates.ResolveAsync(tempBasalList, ct);
 
         // Resolve insulin context for each temp basal

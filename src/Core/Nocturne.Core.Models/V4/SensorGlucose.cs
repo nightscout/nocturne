@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using NJsonSchema.Annotations;
 using Nocturne.Core.Constants;
 
@@ -97,6 +98,11 @@ public class SensorGlucose : V4RecordBase, IDeviceAttributed
     /// <summary>
     /// Received signal strength the uploader reported for the reading
     /// </summary>
+    /// <remarks>
+    /// Omitted when null: the generated Java SDK rejects fields it does not know, so a client built
+    /// before this field existed would fail to parse every response that carried it.
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? Rssi { get; set; }
 
     /// <summary>

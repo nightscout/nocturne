@@ -45,7 +45,7 @@ public class HistoryCommitVisibilityTests(V4GoldenFixture fixture)
 
         using var deleteScope = scope.ServiceProvider.CreateScope();
         var delete = deleteScope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>()
-            .DeleteBySourceAsync("dexcom-connector");
+            .DeleteBySourceAsync("dexcom-connector", WriteOrigin.Live);
         await PostgresLockWaits.UntilBlockedAsync(fixture.AppConnectionString, delete);
 
         using var liveScope = scope.ServiceProvider.CreateScope();

@@ -180,18 +180,21 @@ public class SummaryState
     /// Insulin on board in units
     /// </summary>
     [JsonPropertyName("iob")]
-    public double Iob { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public double? Iob { get; set; }
 
     /// <summary>
     /// Carbs on board in grams
     /// </summary>
     [JsonPropertyName("cob")]
-    public int Cob { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public int? Cob { get; set; }
 
     /// <summary>
     /// Bolus wizard preview estimate in units
     /// </summary>
     [JsonPropertyName("bwp")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public double Bwp { get; set; }
 
     /// <summary>

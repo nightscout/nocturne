@@ -63,17 +63,20 @@ in-flight remote queries for an unbroken moment; otherwise the entry fails with 
 outstanding, e.g.
 
 ```
-some-entry: /somewhere did not settle within 120000ms (34 skeleton placeholders; 8 remote queries in flight)
+some-entry: /somewhere did not settle within 120000ms (34 skeleton placeholders; remote queries in flight: getSummary (118s))
 ```
 
-Two very different things produce that, and the message reads the same either way.
+Two very different things produce that, and the last part of the message says which.
 
 Remote queries stuck in flight while the API itself answers them in milliseconds is the dev server,
 not the app: a `vite dev` that has been up for hours, through several dependency re-optimisations,
-starts accepting remote-function requests and never answering them. Stopping and starting
-`nocturne-web` clears it.
+starts accepting remote-function requests and never answering them, and so can the first visit to
+a route on a dev server that has only just started. For a long-running dev server, restart
+`nocturne-web`. For a dev server that has just started, run the capture again. The message then ends
+`renderer answers now`, perhaps with a count of probes it missed earlier: one old call in flight
+points to the dev server, many young calls point to a refetch loop in the app.
 
-The other is the app, and the tell is `renderer did not answer N probes` alongside the skeletons:
+The other is the app, and the tell is `renderer is not answering` alongside the skeletons:
 the page's main thread is pegged, so the queries only *look* outstanding — nothing is left to
 notice them landing. Restarting clears nothing, and a route that behaves on an empty tenant and
 hangs on a seeded one is pointing at a render loop rather than at the capture. Check whether the

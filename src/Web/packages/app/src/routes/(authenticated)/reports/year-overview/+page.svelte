@@ -18,24 +18,20 @@
   import type {
     DailySummaryDay,
     GriTimelinePeriod,
+    YearOverviewColorPreferences,
   } from "$api/generated/nocturne-api-client";
   import { getUnitLabel } from "$lib/utils/formatting";
-  import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
   import {
     glucoseUnits,
     yearOverviewColors,
   } from "$lib/stores/appearance-store.svelte";
   import {
-    getFocusedIntensityFill,
-    resolveColorFocusRange,
-    resolveGlucoseColorThresholds,
-    applyGlucosePalette,
-    DEFAULT_GLUCOSE_COLOR_THRESHOLDS,
-    GLUCOSE_COLOR_MIN,
-    GLUCOSE_COLOR_MAX,
-    glucoseColorFocusStops,
+    glucoseScale,
+    intensityScale,
+    scaleFill,
+    GLUCOSE_LIMITS,
+    type ColorBoundary,
     type ColorFocusRange,
-    type GlucoseColorThresholds,
   } from "$lib/utils/metric-color-focus";
   import { onMount, untrack, tick } from "svelte";
   import { fade } from "svelte/transition";
@@ -82,126 +78,135 @@
   ];
 
   let selectedMetric = $state<HeatmapMetric>("avgGlucose");
-  const colorsKey = $derived<`${HeatmapMetric}Colors`>(
-    `${selectedMetric}Colors`
-  );
-  const invertKey = $derived<`${HeatmapMetric}Invert`>(
-    `${selectedMetric}Invert`
-  );
-  const bandKey = $derived<`${HeatmapMetric}Band`>(`${selectedMetric}Band`);
-  const colorFocusPreferences = $derived(yearOverviewColors.current);
-  const advancedMode = $derived(colorFocusPreferences.advancedMode ?? false);
-  const transparencyPercent = $derived(
-    Math.max(
-      0,
-      Math.min(100, colorFocusPreferences.outOfBandTransparency ?? 90)
-    )
+
+  /** Each metric's own theme color; glucose draws the heatmap ramp instead. */
+  const METRIC_CSS_VARS: Record<Exclude<HeatmapMetric, "avgGlucose">, string> = {
+    tir: "--glucose-in-range",
+    bolus: "--insulin-bolus",
+    basal: "--basal",
+    tdd: "--insulin",
+    carbs: "--carbs",
+  };
+  const METRIC_UNITS: Record<HeatmapMetric, string> = {
+    avgGlucose: "",
+    tir: "%",
+    bolus: "U",
+    basal: "U",
+    tdd: "U",
+    carbs: "g",
+  };
+
+  type ScaleKeys = {
+    band: `${HeatmapMetric}Band`;
+    boundaries: `${HeatmapMetric}Boundaries`;
+  };
+  const scaleKeys = $derived<ScaleKeys>({
+    band: `${selectedMetric}Band`,
+    boundaries: `${selectedMetric}Boundaries`,
+  });
+  /**
+   * The retired shape applied its bands and dimming only in advanced mode. A blob saved with
+   * advanced mode off carries settings its owner turned off, so they stay off.
+   */
+  const colorPreferences = $derived.by((): YearOverviewColorPreferences => {
+    const stored = yearOverviewColors.current;
+    if (!("advancedMode" in stored) || stored.advancedMode === true) return stored;
+    return Object.fromEntries(
+      Object.entries(stored).filter(
+        ([key]) => !key.endsWith("Band") && key !== "outOfBandTransparency"
+      )
+    );
+  });
+  const dim = $derived(
+    Math.max(0, Math.min(100, colorPreferences.outOfBandTransparency ?? 90))
   );
 
-  const currentMetricColors = $derived.by(() => {
-    const colors = colorFocusPreferences[colorsKey];
-    return colors && colors.length >= 2 ? colors : undefined;
+  /** The largest daily value of a dose or carb metric across the loaded years. */
+  const metricMax = $derived.by(() => {
+    let max = 0;
+    for (const days of yearData.values()) {
+      for (const day of days) {
+        const value =
+          selectedMetric === "bolus"
+            ? day.totalBolusUnits
+            : selectedMetric === "basal"
+              ? day.totalBasalUnits
+              : selectedMetric === "tdd"
+                ? day.totalDailyDose
+                : selectedMetric === "carbs"
+                  ? day.totalCarbs
+                  : undefined;
+        if (value != null && Number.isFinite(value) && value > max) max = value;
+      }
+    }
+    return max;
   });
 
-  const lowColor = $derived(currentMetricColors?.[0]);
-  const highColor = $derived(currentMetricColors?.at(-1));
-  const invert = $derived(!!colorFocusPreferences[invertKey]);
-
-  const focusRange = $derived.by(() => {
-    if (!advancedMode || selectedMetric === "avgGlucose") return null;
-    return resolveColorFocusRange(colorFocusPreferences[selectedMetric]);
-  });
-  const focusBand = $derived.by(() => {
-    if (!advancedMode) return null;
-    return resolveColorFocusRange(colorFocusPreferences[bandKey]);
-  });
-  const glucoseThresholds = $derived(
-    advancedMode
-      ? (resolveGlucoseColorThresholds(colorFocusPreferences.avgGlucose) ??
-          DEFAULT_GLUCOSE_COLOR_THRESHOLDS)
-      : DEFAULT_GLUCOSE_COLOR_THRESHOLDS
+  const scaleLimits = $derived<ColorFocusRange>(
+    selectedMetric === "avgGlucose"
+      ? GLUCOSE_LIMITS
+      : [0, selectedMetric === "tir" ? 100 : Infinity]
   );
-  // Unrecolored ramp, used by the Theme swatch preview so it never reflects the currently active palette.
-  const glucoseThemeStops = $derived(glucoseColorFocusStops(glucoseThresholds));
-  const glucoseLegendStops = $derived(
-    advancedMode
-      ? applyGlucosePalette(
-          glucoseThemeStops,
-          glucoseThresholds[0],
-          glucoseThresholds[3],
-          colorFocusPreferences.avgGlucoseColors?.[0],
-          colorFocusPreferences.avgGlucoseColors?.at(-1),
-          !!colorFocusPreferences.avgGlucoseInvert,
-          colorFocusPreferences.avgGlucoseColors
+  const scale = $derived(
+    selectedMetric === "avgGlucose"
+      ? glucoseScale(
+          colorPreferences.avgGlucoseBand,
+          colorPreferences.avgGlucoseBoundaries,
+          dim
         )
-      : glucoseThemeStops
+      : intensityScale(
+          METRIC_CSS_VARS[selectedMetric],
+          scaleLimits,
+          metricMax,
+          colorPreferences[scaleKeys.band],
+          colorPreferences[scaleKeys.boundaries],
+          dim
+        )
   );
 
-  function setAdvancedMode(value: boolean) {
-    const next = { ...colorFocusPreferences, advancedMode: value };
+  /** Writes only the current shape, so keys from a retired one are dropped on the next save. */
+  function saveColorPreferences(
+    change: (next: YearOverviewColorPreferences) => void
+  ) {
+    const next: YearOverviewColorPreferences = {};
+    if (colorPreferences.outOfBandTransparency !== undefined)
+      next.outOfBandTransparency = colorPreferences.outOfBandTransparency;
+    for (const { value } of METRIC_OPTIONS) {
+      const band = colorPreferences[`${value}Band`];
+      const boundaries = colorPreferences[`${value}Boundaries`];
+      if (band) next[`${value}Band`] = band;
+      if (boundaries) next[`${value}Boundaries`] = boundaries;
+    }
+    change(next);
     yearOverviewColors.current = next;
   }
 
-  function setTransparency(value: number | undefined) {
-    const next = { ...colorFocusPreferences };
-    if (value !== undefined && Number.isFinite(value)) {
+  function setScaleWindow(focusWindow: ColorFocusRange | null) {
+    saveColorPreferences((next) => {
+      if (focusWindow) next[scaleKeys.band] = [...focusWindow];
+      else delete next[scaleKeys.band];
+    });
+  }
+
+  function setScaleBoundaries(boundaries: ColorBoundary[] | null) {
+    saveColorPreferences((next) => {
+      if (boundaries?.length)
+        next[scaleKeys.boundaries] = boundaries.map((b) => ({ ...b }));
+      else delete next[scaleKeys.boundaries];
+    });
+  }
+
+  function setDim(value: number) {
+    saveColorPreferences((next) => {
       next.outOfBandTransparency = Math.max(0, Math.min(100, value));
-    } else {
-      delete next.outOfBandTransparency;
-    }
-    yearOverviewColors.current = next;
+    });
   }
 
-  function setCustomColors(colors: string[] | undefined) {
-    const next = { ...colorFocusPreferences };
-    if (colors && colors.length >= 2) {
-      next[colorsKey] = [...colors];
-    } else {
-      delete next[colorsKey];
-    }
-    yearOverviewColors.current = next;
-  }
-
-  function setInvert(value: boolean) {
-    const next = { ...colorFocusPreferences };
-    delete next[invertKey];
-    yearOverviewColors.current = value ? { ...next, [invertKey]: true } : next;
-  }
-
-  function setFocusRange(candidate: ColorFocusRange | null) {
-    if (selectedMetric === "avgGlucose") return;
-    const range = resolveColorFocusRange(candidate);
-    if (
-      candidate !== null &&
-      (!range || (selectedMetric === "tir" && range[1] > 100))
-    )
-      return;
-    const next = { ...colorFocusPreferences };
-    if (range) next[selectedMetric] = [...range];
-    else delete next[selectedMetric];
-    yearOverviewColors.current = next;
-  }
-
-  function setGlucoseThresholds(candidate: GlucoseColorThresholds | null) {
-    const thresholds = resolveGlucoseColorThresholds(candidate);
-    if (candidate !== null && !thresholds) return;
-    const next = { ...colorFocusPreferences };
-    if (thresholds) next.avgGlucose = [...thresholds];
-    else delete next.avgGlucose;
-    yearOverviewColors.current = next;
-  }
-
-  function setFocusBand(candidate: ColorFocusRange | null) {
-    const range = resolveColorFocusRange(candidate);
-    if (
-      candidate !== null &&
-      (!range || (selectedMetric === "tir" && range[1] > 100))
-    )
-      return;
-    const next = { ...colorFocusPreferences };
-    if (range) next[bandKey] = [...range];
-    else delete next[bandKey];
-    yearOverviewColors.current = next;
+  function resetScale() {
+    saveColorPreferences((next) => {
+      delete next[scaleKeys.band];
+      delete next[scaleKeys.boundaries];
+    });
   }
 
   /** All known data types that can appear in counts */
@@ -254,77 +259,6 @@
     return glucoseHatchScale(data.value);
   }
 
-  /** CSS variable names for each metric's hue */
-  const METRIC_CSS_VARS: Record<
-    Exclude<HeatmapMetric, "avgGlucose">,
-    string
-  > = {
-    tir: "--chart-2",
-    bolus: "--chart-1",
-    basal: "--chart-3",
-    tdd: "--chart-4",
-    carbs: "--chart-5",
-  };
-
-  function metricCssVar(metric: Exclude<HeatmapMetric, "avgGlucose">): string {
-    switch (metric) {
-      case "tir":
-        return METRIC_CSS_VARS.tir;
-      case "bolus":
-        return METRIC_CSS_VARS.bolus;
-      case "basal":
-        return METRIC_CSS_VARS.basal;
-      case "tdd":
-        return METRIC_CSS_VARS.tdd;
-      case "carbs":
-        return METRIC_CSS_VARS.carbs;
-    }
-  }
-
-  /** Compute max value for a metric across all loaded year data */
-  function getMetricMax(metric: HeatmapMetric): number {
-    let max = 0;
-    for (const days of yearData.values()) {
-      for (const day of days) {
-        let val: number | undefined | null;
-        switch (metric) {
-          case "bolus":
-            val = day.totalBolusUnits;
-            break;
-          case "basal":
-            val = day.totalBasalUnits;
-            break;
-          case "tdd":
-            val = day.totalDailyDose;
-            break;
-          case "carbs":
-            val = day.totalCarbs;
-            break;
-          case "tir":
-            val = day.timeInRangePercent;
-            break;
-          default:
-            val = day.averageGlucoseMgdl;
-            break;
-        }
-        if (val != null && Number.isFinite(val) && val > max) max = val;
-      }
-    }
-    return max || 1;
-  }
-
-  /**
-   * Memoized max for current metric — recomputed only when metric or data
-   * changes
-   */
-  const metricMaxCached = $derived.by(() => {
-    // Depend on yearData and selectedMetric
-    void yearData;
-    if (selectedMetric === "avgGlucose") return 1;
-    if (selectedMetric === "tir") return 100;
-    return getMetricMax(selectedMetric);
-  });
-
   /** Get cell value for the selected metric */
   function getMetricCellValue(data: CalendarDatum): number | null {
     switch (selectedMetric) {
@@ -345,51 +279,11 @@
 
   function getCellFill(data: CalendarDatum | undefined): string {
     if (!data) return "rgb(0 0 0 / 5%)";
-
-    const opacity = advancedMode ? Math.round(100 - transparencyPercent) : 100;
-
-    if (selectedMetric === "avgGlucose") {
-      if (data.value != null && Number.isFinite(data.value)) {
-        const baseColor = getGlucoseHeatmapFill(data.value, glucoseLegendStops);
-        if (advancedMode) {
-          const band = focusBand ?? [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX];
-          const lower = band[0] <= GLUCOSE_COLOR_MIN ? -Infinity : band[0];
-          const upper = band[1] >= GLUCOSE_COLOR_MAX ? Infinity : band[1];
-          if (data.value < lower || data.value > upper) {
-            return `color-mix(in srgb, ${baseColor} ${opacity}%, transparent)`;
-          }
-        }
-        return baseColor;
-      }
-      if (data.filteredCount > 0) return "var(--muted)";
-      return "rgb(0 0 0 / 5%)";
-    }
-
-    const metricValue = getMetricCellValue(data);
-    if (metricValue == null || !Number.isFinite(metricValue)) {
-      if (data.filteredCount > 0) return "var(--muted)";
-      return "rgb(0 0 0 / 5%)";
-    }
-
-    const cssVar = metricCssVar(selectedMetric);
-    const baseColor = getFocusedIntensityFill(
-      metricValue,
-      focusRange ?? [0, metricMaxCached],
-      cssVar,
-      advancedMode ? lowColor : undefined,
-      advancedMode ? highColor : undefined,
-      advancedMode ? invert : false,
-      advancedMode ? currentMetricColors : undefined
-    );
-    if (advancedMode) {
-      const band = focusBand ?? [0, metricMaxCached];
-      const lower = band[0] <= 0 ? -Infinity : band[0];
-      const upper = band[1] >= metricMaxCached ? Infinity : band[1];
-      if (metricValue < lower || metricValue > upper) {
-        return `color-mix(in srgb, ${baseColor} ${opacity}%, transparent)`;
-      }
-    }
-    return baseColor;
+    const value =
+      selectedMetric === "avgGlucose" ? data.value : getMetricCellValue(data);
+    if (value != null && Number.isFinite(value)) return scaleFill(value, scale);
+    if (data.filteredCount > 0) return "var(--muted)";
+    return "rgb(0 0 0 / 5%)";
   }
 
   // =========================================================================
@@ -714,28 +608,15 @@
     <!-- Color Legend -->
     <HeatmapLegend
       bind:selectedMetric
+      metricOptions={METRIC_OPTIONS}
       {units}
-      {METRIC_OPTIONS}
-      HEATMAP_STOPS={glucoseLegendStops}
-      themeStops={glucoseThemeStops}
-      {METRIC_CSS_VARS}
-      {getMetricMax}
-      {focusRange}
-      onFocusRangeChange={setFocusRange}
-      {glucoseThresholds}
-      onGlucoseThresholdsChange={setGlucoseThresholds}
-      {focusBand}
-      onFocusBandChange={setFocusBand}
-      {lowColor}
-      {highColor}
-      metricColors={currentMetricColors}
-      {advancedMode}
-      onAdvancedModeChange={setAdvancedMode}
-      {transparencyPercent}
-      onTransparencyChange={setTransparency}
-      onCustomColorsChange={setCustomColors}
-      {invert}
-      onInvertChange={setInvert}
+      unit={METRIC_UNITS[selectedMetric]}
+      {scale}
+      limits={scaleLimits}
+      onWindowChange={setScaleWindow}
+      onBoundariesChange={setScaleBoundaries}
+      onDimChange={setDim}
+      onReset={resetScale}
       glucoseBands={GLUCOSE_BANDS}
     />
 

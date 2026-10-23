@@ -2,8 +2,8 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
@@ -15,7 +15,6 @@ namespace Nocturne.API.Tests.Services.Devices;
 public class PatientDeviceStamperTests
 {
     private readonly Mock<IPatientDeviceRepository> _mockRepository;
-    private readonly Mock<ITimezoneTimelineService> _mockTimezoneTimeline;
     private readonly PatientDeviceStamper _stamper;
 
     private static readonly DateTime Now = new(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
@@ -23,13 +22,8 @@ public class PatientDeviceStamperTests
     public PatientDeviceStamperTests()
     {
         _mockRepository = new Mock<IPatientDeviceRepository>();
-        _mockTimezoneTimeline = new Mock<ITimezoneTimelineService>();
-        // Empty timeline: records without a UtcOffset resolve to their UTC date.
-        _mockTimezoneTimeline
-            .Setup(s => s.GetResolverAsync(It.IsAny<double?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TimezoneTimeline([]));
         _stamper = new PatientDeviceStamper(
-            _mockRepository.Object, _mockTimezoneTimeline.Object, NullLogger<PatientDeviceStamper>.Instance);
+            _mockRepository.Object, DeviceDateClockDoubles.Utc(), NullLogger<PatientDeviceStamper>.Instance);
     }
 
     private void SetupDevices(params PatientDevice[] devices)
@@ -304,11 +298,11 @@ public class PatientDeviceStamperTests
     [Fact]
     public async Task MissingUtcOffset_FallsBackToTenantTimezoneTimeline()
     {
-        _mockTimezoneTimeline
-            .Setup(s => s.GetResolverAsync(It.IsAny<double?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TimezoneTimeline([
-                new TimezoneTimelineEntry { Timezone = "Australia/Brisbane", EffectiveFrom = new DateTime(2020, 1, 1) },
-            ]));
+        var stamper = new PatientDeviceStamper(
+            _mockRepository.Object,
+            DeviceDateClockDoubles.Resolver(timeline:
+                [new TimezoneTimelineEntry { Timezone = "Australia/Brisbane", EffectiveFrom = new DateTime(2020, 1, 1) }]),
+            NullLogger<PatientDeviceStamper>.Instance);
 
         var device = Cgm("Dexcom", start: new DateOnly(2026, 6, 15));
         SetupDevices(device);
@@ -316,7 +310,7 @@ public class PatientDeviceStamperTests
             dataSource: DataSources.DexcomConnector,
             timestamp: new DateTime(2026, 6, 14, 21, 0, 0, DateTimeKind.Utc));
 
-        await _stamper.StampAsync([record], [DeviceCategory.CGM], DataSources.DexcomConnector);
+        await stamper.StampAsync([record], [DeviceCategory.CGM], DataSources.DexcomConnector);
 
         record.PatientDeviceId.Should().Be(device.Id);
     }

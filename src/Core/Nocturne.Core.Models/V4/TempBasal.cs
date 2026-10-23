@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.Core.Models.V4;
 
 /// <summary>
@@ -127,6 +129,28 @@ public class TempBasal : IV4Record, IDeviceAttributed
     /// </summary>
     public static double RateRelativeTo(double scheduledRate, double percent) =>
         Math.Max(0, scheduledRate * (100 + percent) / 100);
+
+    private long? _recordStartMills;
+
+    /// <summary>
+    /// The start of the stored record this is a piece of, which is <see cref="StartMills"/> for a
+    /// record that has not been cut by <see cref="WithSpan"/>.
+    /// </summary>
+    [JsonIgnore]
+    public long RecordStartMills => _recordStartMills ?? StartMills;
+
+    /// <summary>
+    /// A shallow copy over <paramref name="startMills"/> to <paramref name="endMills"/>. Reference
+    /// members such as <see cref="AdditionalProperties"/> are shared with this record.
+    /// </summary>
+    public TempBasal WithSpan(long startMills, long endMills)
+    {
+        var copy = (TempBasal)MemberwiseClone();
+        copy._recordStartMills = RecordStartMills;
+        copy.StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime;
+        copy.EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(endMills).UtcDateTime;
+        return copy;
+    }
 
     /// <summary>
     /// Origin of this temp basal: <see cref="TempBasalOrigin.Algorithm"/>,

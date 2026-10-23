@@ -108,7 +108,7 @@ interface SyncedEntry {
 // eslint-disable-next-line svelte/prefer-svelte-reactivity -- module-level registry; nothing renders from it
 const syncedRegistry = new Map<string, SyncedEntry>();
 
-const PREFERENCES_CONTEXT_KEY = Symbol("nocturne-display-preferences");
+const PREFERENCES_CONTEXT_KEY = "nocturne:app:display-preferences";
 
 /**
  * One request's preference sources: the display-preference payloads, highest
@@ -149,9 +149,9 @@ function requestPreferences(): RequestPreferences | null {
  */
 let writeThrough: ((prefs: UserDisplayPreferences) => unknown) | null = null;
 
-/** Register the backend write-through used to persist synced preferences per-user. */
+/** Register the backend write-through used to persist synced preferences per-user; null withdraws it. */
 export function registerPreferencesWriteThrough(
-  fn: (prefs: UserDisplayPreferences) => unknown
+  fn: ((prefs: UserDisplayPreferences) => unknown) | null
 ): void {
   writeThrough = fn;
 }

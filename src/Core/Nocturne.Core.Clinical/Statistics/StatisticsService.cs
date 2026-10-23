@@ -1,4 +1,6 @@
+using System.Globalization;
 using Nocturne.Core.Clinical.Devices;
+using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
@@ -816,23 +818,8 @@ public class StatisticsService : IStatisticsService
     /// <param name="sortedValues">Pre-sorted collection of values</param>
     /// <param name="percentile">Percentile to calculate (0-100)</param>
     /// <returns>Value at the specified percentile</returns>
-    public double CalculatePercentile(IList<double> sortedValues, double percentile)
-    {
-        if (sortedValues.Count == 0)
-            return 0;
-
-        var index = (percentile / 100) * (sortedValues.Count - 1);
-        var lower = (int)Math.Floor(index);
-        var upper = (int)Math.Ceiling(index);
-
-        if (lower == upper)
-        {
-            return sortedValues[lower];
-        }
-
-        var weight = index - lower;
-        return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
-    }
+    public double CalculatePercentile(IList<double> sortedValues, double percentile) =>
+        GlucoseStatistics.Percentile(sortedValues, percentile);
 
     /// <summary>
     /// Extract glucose values from entries
@@ -1057,7 +1044,7 @@ public class StatisticsService : IStatisticsService
         var tz = timeZone ?? TimeZoneInfo.Utc;
         var dailyRanges = entries
             .Where(entry => entry.Mills > 0 && IsPlausibleReading(entry))
-            .GroupBy(entry => LocalDay(entry.Mills, tz))
+            .GroupBy(entry => LocalSlotBinning.LocalDay(entry.Mills, tz))
             .Select(day =>
                 day.Max(entry => KovatchevSidedRisk(entry.Mgdl, keepPositive: false))
                 + day.Max(entry => KovatchevSidedRisk(entry.Mgdl, keepPositive: true)))
@@ -2169,8 +2156,8 @@ public class StatisticsService : IStatisticsService
             IcRatio = Math.Round(icRatio * 10) / 10,
             BolusesPerDay = Math.Round(bolusesPerDay * 10) / 10,
             WindowDays = dayCount,
-            StartDate = startDate.ToString("yyyy-MM-dd"),
-            EndDate = endDate.ToString("yyyy-MM-dd"),
+            StartDate = startDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            EndDate = endDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             CarbCount = carbCount,
             CarbBolusCount = carbBolusCount,
         };
@@ -2197,64 +2184,141 @@ public class StatisticsService : IStatisticsService
     {
         var utc = DateTimeOffset.FromUnixTimeMilliseconds(mills);
         var local = TimeZoneInfo.ConvertTime(utc, tz);
-        return local.ToString("yyyy-MM-dd");
+        return local.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 
     /// <summary>
-    /// Groups TempBasals by device, sorts each group by start time, and clips each record's
-    /// effective end to the next record's start within the same device group. This corrects
-    /// the over-counting that occurs with loop/AID systems (Trio, AndroidAPS, Loop) that
-    /// write a new TempBasal every ~5 minutes with a 30–120 min declared duration — each new
-    /// record cancels the previous on the pump, so only the actual inter-record window was
-    /// delivered.
+    /// How far after an open temp basal another stream may stamp its copy of that same temp: two
+    /// loop cycles. See <see cref="ClipOverlappingTempBasals"/>.
+    /// </summary>
+    private static readonly TimeSpan MirrorSkewTolerance = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// The longest temp basal a pump accepts, so the longest an open record can still be running.
+    /// See <see cref="ClipOverlappingTempBasals"/>.
+    /// </summary>
+    private static readonly TimeSpan MaxOpenTempDuration = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// Temp basals as delivered: each piece of a record during which it set the pump's rate, as a
+    /// copy with the piece's start and end, in start order. Every reader of basal delivery reads
+    /// temp basals through this.
     /// </summary>
     /// <remarks>
-    /// Grouping is by <c>DeviceId?.ToString() ?? Device ?? string.Empty</c> so records from
-    /// different physical devices (e.g. Tidepool history alongside Trio loop data) are clipped
-    /// independently. Records from different devices must not truncate each other.
-    ///
-    /// The last record in each device group keeps its declared end unchanged.
-    /// Zero-duration records (identical start times, or clipped to their own start) are
-    /// returned with <c>EffectiveEndMills == StartMills</c> and are discarded by the
-    /// <c>insulin &lt;= 0</c> guards in callers.
+    /// <para>
+    /// A stream is the records of one <c>DeviceId</c>, else one <c>Device</c>. Within a stream a
+    /// record ends where the next starts: loop systems write a new temp every few minutes with a
+    /// 30 to 120 minute declared duration, and each cancels the one before on the pump. A record
+    /// whose end is its start is a cancel: it ends the record before it and delivers nothing, and a
+    /// cancel at the instant a new temp starts ends the one before, not the new one. A record with
+    /// no end is still running, so it runs to the earliest of: the next record of its stream; the
+    /// first later start of a successor stream or of a stream that outranks it; the first record of
+    /// any other stream that starts more than <see cref="MirrorSkewTolerance"/> after it; its start
+    /// plus <see cref="MaxOpenTempDuration"/>; and <paramref name="untilMills"/>. A successor is a
+    /// stream whose first record starts after it:
+    /// a stream that stops, as at a pump switch, cannot claim the time the stream that took over
+    /// recorded after it. A stream that outranks it describes the pump wherever it has records, so a
+    /// mirror's copy cannot run past the loop's own records. A lower-ranked stream with a record at
+    /// or before it ran beside it, as a mirror does, and a mirror's copy of the same running temp
+    /// lands within the tolerance, so that copy cannot cut the temp short. A record of that stream
+    /// past the tolerance shows the stream records on after this one went quiet, so it ends it. No
+    /// pump accepts a temp longer than <see cref="MaxOpenTempDuration"/>, so no record with no end
+    /// delivers past it, even where its own stream's next record comes days later after an upload
+    /// gap. A mirror whose earlier records are not in the input reads
+    /// as a successor, so a reader fetches with lookback before the window.
+    /// </para>
+    /// <para>
+    /// A patient wears one pump, so where streams overlap only one of them describes its delivery.
+    /// Another source can mirror the loop's temps, such as Tidepool history beside Trio's own, and
+    /// summing both counts the same insulin twice. The stream holding a temp its own device's APS
+    /// snapshots judged (<see cref="TempBasalOriginEvidence.Snapshot"/>, or an
+    /// <see cref="TempBasal.ApsSnapshotId"/> with that evidence or none) is the loop's own and wins. A
+    /// snapshot judges a temp only some time after it is stored, and never one whose upload stated
+    /// its origin, so next comes a stream a closed-loop uploader wrote
+    /// (<see cref="TempBasalOriginProvenance.IsAidUploader"/>), which wins in every window that holds
+    /// one of its records, and then a stream with no temp judged only by another device's snapshots
+    /// (<see cref="TempBasalOriginEvidence.OtherDevice"/>): such a temp is most often a
+    /// mirror's copy of the loop's, and the loop's own stream, stating its origin, has no judgement to
+    /// show. Among the rest the stream with more records wins, since it steps the rate more finely;
+    /// then the one whose first record is earlier, then the lower stream key, so the result never
+    /// depends on read order. A losing record keeps
+    /// only the time no winning stream covers, so a mirror still counts where the loop's own records
+    /// are missing.
+    /// </para>
+    /// <para>
+    /// The pieces are records again, so clipping them again changes nothing.
+    /// </para>
     /// </remarks>
-    public static IReadOnlyList<(TempBasal Tb, long EffectiveEndMills)> ClipOverlappingTempBasals(
-        IEnumerable<TempBasal> tempBasals)
+    /// <param name="untilMills">
+    /// Where a record with no end stops: now, or the end of the window read when that ends first.
+    /// </param>
+    public static List<TempBasal> ClipOverlappingTempBasals(IEnumerable<TempBasal> tempBasals, long untilMills)
     {
-        var result = new List<(TempBasal Tb, long EffectiveEndMills)>();
-
-        var groups = tempBasals
-            .GroupBy(tb => tb.DeviceId?.ToString() ?? tb.Device ?? string.Empty);
-
-        foreach (var group in groups)
+        var streams = tempBasals
+            .GroupBy(tb => tb.DeviceId?.ToString() ?? tb.Device ?? string.Empty)
+            .Select(g => (g.Key, Temps: g.OrderBy(tb => tb.StartMills).ThenBy(tb => tb.EndMills != tb.StartMills).ToList()))
+            .OrderByDescending(s => s.Temps.Any(IsLoopTemp))
+            .ThenByDescending(s => s.Temps.Any(IsAidUploaderTemp))
+            .ThenBy(s => s.Temps.Any(tb => tb.OriginEvidence == TempBasalOriginEvidence.OtherDevice))
+            .ThenByDescending(s => s.Temps.Count)
+            .ThenBy(s => s.Temps[0].StartMills)
+            .ThenBy(s => s.Key, StringComparer.Ordinal)
+            .ToList();
+        var result = new List<TempBasal>();
+        var covered = IntervalSet.Empty;
+        for (var rank = 0; rank < streams.Count; rank++)
         {
-            var sorted = group.OrderBy(tb => tb.StartMills).ToList();
-            for (int i = 0; i < sorted.Count; i++)
+            var sorted = streams[rank].Temps;
+            var own = new List<MillsInterval>(sorted.Count);
+            for (var i = 0; i < sorted.Count; i++)
             {
                 var tb = sorted[i];
-                var declaredEnd = tb.EndMills ?? tb.StartMills + (5 * 60_000L);
-                var effectiveEnd = i < sorted.Count - 1
-                    ? Math.Min(declaredEnd, sorted[i + 1].StartMills)
-                    : declaredEnd;
-                result.Add((tb, effectiveEnd));
+                var last = i == sorted.Count - 1;
+                var bound = tb.EndMills is null
+                    ? Math.Min(untilMills, OpenEndBound(streams, rank, tb.StartMills))
+                    : untilMills;
+                var declaredEnd = tb.EndMills ?? Math.Max(bound, tb.StartMills);
+                var end = last ? declaredEnd : Math.Min(declaredEnd, sorted[i + 1].StartMills);
+                covered.ForEachGap(tb.StartMills, end, (start, stop) => result.Add(tb.WithSpan(start, stop)));
+                own.Add(new MillsInterval(tb.StartMills, end));
             }
+            covered = covered.Union(IntervalSet.Of(own));
         }
 
-        return result;
+        return [.. result.OrderBy(tb => tb.StartMills)];
     }
 
-    /// <summary>
-    /// Calculate the insulin delivered (units) for a single TempBasal record.
-    /// When <paramref name="effectiveEndMills"/> is provided (from
-    /// <see cref="ClipOverlappingTempBasals"/>), it overrides the record's declared end.
-    /// Otherwise falls back to <c>EndMills ?? StartMills + 5 min</c>. Null when the rate is unknown.
-    /// </summary>
-    internal static double? GetTempBasalInsulin(TempBasal tb, long? effectiveEndMills = null)
+    private static long OpenEndBound(List<(string Key, List<TempBasal> Temps)> rankedStreams, int rank, long startMills)
     {
-        var endMills = effectiveEndMills ?? tb.EndMills ?? tb.StartMills + (5 * 60 * 1000);
-        var durationHours = (endMills - tb.StartMills) / (1000.0 * 60 * 60);
-        return tb.Rate * durationHours;
+        var bound = startMills + (long)MaxOpenTempDuration.TotalMilliseconds;
+        for (var r = 0; r < rankedStreams.Count; r++)
+        {
+            if (r == rank)
+                continue;
+            var temps = rankedStreams[r].Temps;
+            var endsAtNextStart = r < rank || temps[0].StartMills > startMills;
+            var after = endsAtNextStart ? startMills : startMills + (long)MirrorSkewTolerance.TotalMilliseconds;
+            var next = SortedSearch.FirstEndingAfter(temps, after, static tb => tb.StartMills);
+            if (next < temps.Count)
+                bound = Math.Min(bound, temps[next].StartMills);
+        }
+        return bound;
     }
+
+    private static bool IsLoopTemp(TempBasal tb) =>
+        tb.OriginEvidence == TempBasalOriginEvidence.Snapshot
+        || tb.ApsSnapshotId is not null && tb.OriginEvidence != TempBasalOriginEvidence.OtherDevice;
+
+    private static bool IsAidUploaderTemp(TempBasal tb) =>
+        TempBasalOriginProvenance.IsAidUploader(tb.App, tb.App)
+        || TempBasalOriginProvenance.IsAidUploader(tb.Device, app: null);
+
+    /// <summary>
+    /// The insulin (U) a delivered temp basal from <see cref="ClipOverlappingTempBasals"/> gave.
+    /// Null when the rate is unknown.
+    /// </summary>
+    internal static double? GetTempBasalInsulin(TempBasal delivered) =>
+        delivered.Rate * ((delivered.EndMills!.Value - delivered.StartMills) / (1000.0 * 60 * 60));
 
     /// <summary>
     /// Calculate comprehensive insulin delivery statistics. Algorithm boluses are bolus insulin;
@@ -2267,6 +2331,7 @@ public class StatisticsService : IStatisticsService
         IEnumerable<CarbIntake> carbIntakes,
         DateTime startDate,
         DateTime endDate,
+        long untilMills,
         IEnumerable<BasalInjection>? basalInjections = null
     )
     {
@@ -2280,16 +2345,16 @@ public class StatisticsService : IStatisticsService
         var scheduledBasalInsulin = 0.0;
         var additionalBasalInsulin = 0.0;
         var tempBasalCount = 0;
-        foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
+        foreach (var tb in ClipOverlappingTempBasals(tempBasals, untilMills))
         {
-            if (GetTempBasalInsulin(tb, effectiveEndMills) is not { } insulin || insulin <= 0)
+            if (GetTempBasalInsulin(tb) is not { } insulin || insulin <= 0)
                 continue;
             tempBasalInsulin += insulin;
             tempBasalCount++;
 
             if (tb.ScheduledRate.HasValue)
             {
-                var durationHours = (effectiveEndMills - tb.StartMills) / (1000.0 * 60 * 60);
+                var durationHours = (tb.EndMills!.Value - tb.StartMills) / (1000.0 * 60 * 60);
                 var scheduled = tb.ScheduledRate.Value * durationHours;
                 scheduledBasalInsulin += Math.Min(insulin, scheduled);
                 additionalBasalInsulin += Math.Max(0, insulin - scheduled);
@@ -2346,27 +2411,31 @@ public class StatisticsService : IStatisticsService
 
     /// <summary>
     /// Calculate daily basal/bolus ratio breakdown. Algorithm boluses count as bolus, alongside manual boluses.
+    /// Each day also carries its carbohydrate total when <paramref name="carbIntakes"/> is given.
     /// </summary>
     public DailyBasalBolusRatioResponse CalculateDailyBasalBolusRatios(
         IEnumerable<Bolus> boluses,
         IEnumerable<Bolus> algorithmBoluses,
         IEnumerable<TempBasal> tempBasals,
+        long untilMills,
         TimeZoneInfo? userTimeZone = null,
-        IEnumerable<BasalInjection>? basalInjections = null
+        IEnumerable<BasalInjection>? basalInjections = null,
+        IEnumerable<CarbIntake>? carbIntakes = null
     )
     {
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
         var bolusList = boluses.ToList();
-        var dailyData = new Dictionary<string, (double Basal, double Manual, double Automatic)>();
+        var dailyData = new Dictionary<string, (double Basal, double Manual, double Automatic, double Carbs)>();
 
-        void Accumulate(long mills, double basal, double manual, double automatic)
+        void Accumulate(long mills, double basal, double manual, double automatic, double carbs = 0)
         {
             var dateKey = MillsToLocalDateString(mills, tz);
             dailyData.TryGetValue(dateKey, out var current);
             dailyData[dateKey] = (
                 current.Basal + basal,
                 current.Manual + manual,
-                current.Automatic + automatic);
+                current.Automatic + automatic,
+                current.Carbs + carbs);
         }
 
         foreach (var bolus in bolusList)
@@ -2377,10 +2446,9 @@ public class StatisticsService : IStatisticsService
             Accumulate(bolus.Mills, 0, bolus.Insulin, 0);
         }
 
-        // Process TempBasals — clip overlapping records (loop systems write every ~5 min with longer declared duration)
-        foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
+        foreach (var tb in ClipOverlappingTempBasals(tempBasals, untilMills))
         {
-            if (GetTempBasalInsulin(tb, effectiveEndMills) is not { } basalInsulin || basalInsulin <= 0)
+            if (GetTempBasalInsulin(tb) is not { } basalInsulin || basalInsulin <= 0)
                 continue;
 
             Accumulate(tb.StartMills, basalInsulin, 0, 0);
@@ -2406,12 +2474,25 @@ public class StatisticsService : IStatisticsService
             }
         }
 
+        // Process carb intakes. A day with carbs but no insulin still gets a row, so the carb
+        // line has no gaps, but it doesn't count towards DaysWithData or the averages.
+        if (carbIntakes != null)
+        {
+            foreach (var carb in carbIntakes)
+            {
+                if (carb.Carbs <= 0 || carb.Mills <= 0)
+                    continue;
+
+                Accumulate(carb.Mills, 0, 0, 0, carb.Carbs);
+            }
+        }
+
         // Build response
         var sortedDates = dailyData.Keys.OrderBy(d => d).ToList();
         var result = new DailyBasalBolusRatioResponse
         {
             DailyData = new List<DailyBasalBolusRatioData>(),
-            DaysWithData = sortedDates.Count,
+            DaysWithData = sortedDates.Count(d => dailyData[d].Basal + dailyData[d].Manual + dailyData[d].Automatic > 0),
         };
 
         double totalBasal = 0;
@@ -2419,7 +2500,7 @@ public class StatisticsService : IStatisticsService
 
         foreach (var dateKey in sortedDates)
         {
-            var (basal, manual, automatic) = dailyData[dateKey];
+            var (basal, manual, automatic, carbs) = dailyData[dateKey];
             var bolus = manual + automatic;
             var total = basal + bolus;
             var basalPercent = total > 0 ? (basal / total) * 100 : 0;
@@ -2441,6 +2522,7 @@ public class StatisticsService : IStatisticsService
                     Total = Math.Round(total * 100) / 100,
                     BasalPercent = Math.Round(basalPercent * 10) / 10,
                     BolusPercent = Math.Round(bolusPercent * 10) / 10,
+                    Carbs = Math.Round(carbs * 10) / 10,
                 }
             );
 
@@ -2470,11 +2552,12 @@ public class StatisticsService : IStatisticsService
         IEnumerable<TempBasal> tempBasals,
         DateTime startDate,
         DateTime endDate,
+        long untilMills,
         TimeZoneInfo? userTimeZone = null
     )
     {
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
-        var tempBasalList = ClipOverlappingTempBasals(tempBasals);
+        var tempBasalList = ClipOverlappingTempBasals(tempBasals, untilMills);
         var dayCount = WindowDays(startDate, endDate);
 
         var allRates = new List<double>();
@@ -2488,18 +2571,14 @@ public class StatisticsService : IStatisticsService
         var hourlyRates = new List<(double Rate, long WeightMs)>[24];
         for (int h = 0; h < 24; h++) hourlyRates[h] = new();
 
-        foreach (var (tb, effectiveEndMills) in tempBasalList)
+        foreach (var tb in tempBasalList)
         {
-            // Skip zero-duration records (e.g. exact cross-source duplicates clipped to zero)
-            if (effectiveEndMills <= tb.StartMills)
-                continue;
-
             if (tb.Rate is not { } rate)
                 continue;
             allRates.Add(rate);
-            totalDelivered += GetTempBasalInsulin(tb, effectiveEndMills) ?? 0;
+            totalDelivered += GetTempBasalInsulin(tb) ?? 0;
 
-            DistributeAcrossHourOfDay(tb.StartMills, effectiveEndMills, rate, tz, hourlyRates);
+            DistributeAcrossHourOfDay(tb.StartMills, tb.EndMills!.Value, rate, tz, hourlyRates);
 
             if (tb.Origin != TempBasalOrigin.Scheduled && tb.Origin != TempBasalOrigin.Inferred)
             {
@@ -2564,8 +2643,8 @@ public class StatisticsService : IStatisticsService
             TempBasalInfo = tempBasalInfo,
             HourlyPercentiles = hourlyPercentiles,
             WindowDays = dayCount,
-            StartDate = startDate.ToString("yyyy-MM-dd"),
-            EndDate = endDate.ToString("yyyy-MM-dd"),
+            StartDate = startDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            EndDate = endDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         };
     }
 
@@ -2576,6 +2655,7 @@ public class StatisticsService : IStatisticsService
         IEnumerable<Bolus> algorithmBoluses,
         DateTime startDate,
         DateTime endDate,
+        long untilMills,
         TimeZoneInfo? userTimeZone = null,
         IEnumerable<BasalInjection>? basalInjections = null,
         IEnumerable<BasalSegment>? profileBasalSegments = null)
@@ -2594,9 +2674,9 @@ public class StatisticsService : IStatisticsService
         var basalDays = new HashSet<DateOnly>();
         var bolusDays = new HashSet<DateOnly>();
 
-        foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
+        foreach (var tb in ClipOverlappingTempBasals(tempBasals, untilMills))
         {
-            if (effectiveEndMills <= tb.StartMills || tb.Rate is not { } rate)
+            if (tb.Rate is not { } rate)
                 continue;
 
             // Categorize whole segments by origin: what was delivered while a
@@ -2606,7 +2686,7 @@ public class StatisticsService : IStatisticsService
                 : tempBasal;
 
             DistributeInsulinAcrossHourOfDay(
-                tb.StartMills, effectiveEndMills, rate, tz, target, basalDays);
+                tb.StartMills, tb.EndMills!.Value, rate, tz, target, basalDays);
             counts[LocalHourOfDay(tb.StartMills, tz)]++;
         }
 
@@ -2615,7 +2695,7 @@ public class StatisticsService : IStatisticsService
             var hour = LocalHourOfDay(b.Mills, tz);
             manualBolus[hour] += b.Insulin;
             counts[hour]++;
-            bolusDays.Add(LocalDay(b.Mills, tz));
+            bolusDays.Add(LocalSlotBinning.LocalDay(b.Mills, tz));
         }
 
         foreach (var ab in algorithmBoluses.Where(ab => ab.Insulin > 0))
@@ -2623,7 +2703,7 @@ public class StatisticsService : IStatisticsService
             var hour = LocalHourOfDay(ab.Mills, tz);
             automaticBolus[hour] += ab.Insulin;
             counts[hour]++;
-            bolusDays.Add(LocalDay(ab.Mills, tz));
+            bolusDays.Add(LocalSlotBinning.LocalDay(ab.Mills, tz));
         }
 
         // Long-acting basal injections (MDI) provide baseline coverage across their duration
@@ -2637,7 +2717,7 @@ public class StatisticsService : IStatisticsService
             var dia = bi.InsulinContext?.Dia ?? 0.0;
             var coverageHours = dia > 0 ? Math.Min(dia, 72.0) : 24.0;
             var ratePerHour = bi.Units / coverageHours;
-            var endMills = bi.Mills + (long)(coverageHours * HourMs);
+            var endMills = bi.Mills + (long)(coverageHours * LocalSlotBinning.HourMs);
             DistributeInsulinAcrossHourOfDay(
                 bi.Mills, endMills, ratePerHour, tz, scheduledBasal, basalDays);
             counts[LocalHourOfDay(bi.Mills, tz)]++;
@@ -2647,10 +2727,10 @@ public class StatisticsService : IStatisticsService
         var profileHours = new double[24];
         foreach (var segment in profileBasalSegments ?? [])
         {
-            DistributeAcrossLocalHours(segment.StartMills, segment.EndMills, tz, (localStart, sliceMs) =>
+            LocalSlotBinning.Distribute(segment.StartMills, segment.EndMills, tz, 60, (localStart, sliceMs) =>
             {
-                profileUnits[localStart.Hour] += segment.UnitsPerHour * sliceMs / HourMs;
-                profileHours[localStart.Hour] += (double)sliceMs / HourMs;
+                profileUnits[localStart.Hour] += segment.UnitsPerHour * sliceMs / LocalSlotBinning.HourMs;
+                profileHours[localStart.Hour] += (double)sliceMs / LocalSlotBinning.HourMs;
             });
         }
 
@@ -2697,8 +2777,8 @@ public class StatisticsService : IStatisticsService
             TotalDeliveryPeriods = BuildPeriodBreakdown(exactTotal),
             BasalPeriods = BuildPeriodBreakdown(exactBasal),
             DaysWithData = allDays.Count,
-            StartDate = startDate.ToString("yyyy-MM-dd"),
-            EndDate = endDate.ToString("yyyy-MM-dd"),
+            StartDate = startDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            EndDate = endDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         };
     }
 
@@ -2730,7 +2810,7 @@ public class StatisticsService : IStatisticsService
 
     /// <summary>
     /// Adds a constant-rate delivery interval's insulin into per-local-hour-of-day
-    /// buckets, sliced by <see cref="DistributeAcrossLocalHours"/>. Also records the local
+    /// buckets, sliced by <see cref="LocalSlotBinning.Distribute"/>. Also records the local
     /// days the interval touches.
     /// </summary>
     private static void DistributeInsulinAcrossHourOfDay(
@@ -2741,52 +2821,18 @@ public class StatisticsService : IStatisticsService
         double[] insulinBuckets,
         HashSet<DateOnly> localDays)
     {
-        DistributeAcrossLocalHours(startMills, endMills, tz, (localStart, sliceMs) =>
+        LocalSlotBinning.Distribute(startMills, endMills, tz, 60, (localStart, sliceMs) =>
         {
-            insulinBuckets[localStart.Hour] += rate * sliceMs / HourMs;
+            insulinBuckets[localStart.Hour] += rate * sliceMs / LocalSlotBinning.HourMs;
             localDays.Add(DateOnly.FromDateTime(localStart));
         });
     }
 
-    private const long HourMs = 3_600_000L;
-
-    /// <summary>
-    /// Walks a [startMills, endMills) interval in slices that end on <paramref name="tz"/>'s
-    /// local hour boundaries, handing each slice's local start and length to
-    /// <paramref name="addSlice"/>. A 30-minute interval at local 13:55 yields 5 min in hour 13
-    /// and 25 min in hour 14. Slicing on local rather than UTC boundaries is what keeps a zone
-    /// with a non-whole-hour offset (Adelaide +9:30, Kathmandu +5:45) from attributing part of
-    /// every slice to the neighbouring hour. Every hour-of-day distribution goes through here.
-    /// </summary>
-    private static void DistributeAcrossLocalHours(
-        long startMills,
-        long endMills,
-        TimeZoneInfo tz,
-        Action<DateTime, long> addSlice)
-    {
-        long cursor = startMills;
-        while (cursor < endMills)
-        {
-            var utcDt = DateTimeOffset.FromUnixTimeMilliseconds(cursor);
-            var offsetMs = (long)tz.GetUtcOffset(utcDt).TotalMilliseconds;
-            long nextLocalHourBoundary = ((cursor + offsetMs) / HourMs + 1) * HourMs - offsetMs;
-            long sliceEnd = Math.Min(nextLocalHourBoundary, endMills);
-            addSlice(TimeZoneInfo.ConvertTimeFromUtc(utcDt.UtcDateTime, tz), sliceEnd - cursor);
-            cursor = sliceEnd;
-        }
-    }
-
-    private static int LocalHourOfDay(long mills, TimeZoneInfo tz) =>
-        TimeZoneInfo.ConvertTimeFromUtc(
-            DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime, tz).Hour;
-
-    private static DateOnly LocalDay(long mills, TimeZoneInfo tz) =>
-        DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
-            DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime, tz));
+    private static int LocalHourOfDay(long mills, TimeZoneInfo tz) => LocalSlotBinning.LocalTime(mills, tz).Hour;
 
     /// <summary>
     /// Adds (rate, overlapMs) entries to each local hour-of-day bucket the interval crosses,
-    /// sliced by <see cref="DistributeAcrossLocalHours"/>.
+    /// sliced by <see cref="LocalSlotBinning.Distribute"/>.
     /// </summary>
     private static void DistributeAcrossHourOfDay(
         long startMills,
@@ -2795,7 +2841,7 @@ public class StatisticsService : IStatisticsService
         TimeZoneInfo tz,
         List<(double Rate, long WeightMs)>[] buckets)
     {
-        DistributeAcrossLocalHours(startMills, endMills, tz,
+        LocalSlotBinning.Distribute(startMills, endMills, tz, 60,
             (localStart, sliceMs) => buckets[localStart.Hour].Add((rate, sliceMs)));
     }
 
@@ -2997,7 +3043,7 @@ public class StatisticsService : IStatisticsService
 
         var tz = timeZone ?? TimeZoneInfo.Utc;
         var daysOfData = sortedEntries
-            .Select(e => LocalDay(e.Mills, tz))
+            .Select(e => LocalSlotBinning.LocalDay(e.Mills, tz))
             .Distinct()
             .Count();
         var reliability = AssessReliability(daysOfData, sortedEntries.Count, windowDays);

@@ -159,7 +159,7 @@ public class CobCalculatorTests
             },
         };
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: now);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, now);
 
         Assert.True(result.Cob > 0, "50g carbs 30 min ago should have non-zero COB");
         Assert.True(result.Cob <= 50, "COB should not exceed total carbs");
@@ -178,7 +178,7 @@ public class CobCalculatorTests
             },
         };
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: now);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, now);
 
         Assert.Equal(0.0, result.Cob);
     }
@@ -201,8 +201,8 @@ public class CobCalculatorTests
             AbsorptionTime = 240,
         };
 
-        var fastResult = await _calculator.CalculateTotalAsync(new List<CarbIntake> { fastIntake }, time: now);
-        var slowResult = await _calculator.CalculateTotalAsync(new List<CarbIntake> { slowIntake }, time: now);
+        var fastResult = await _calculator.CalculateTotalAsync(new List<CarbIntake> { fastIntake }, null, null, now);
+        var slowResult = await _calculator.CalculateTotalAsync(new List<CarbIntake> { slowIntake }, null, null, now);
 
         Assert.True(slowResult.Cob > fastResult.Cob,
             "Slow absorption (240 min) should have more COB remaining than fast absorption (60 min)");
@@ -230,7 +230,7 @@ public class CobCalculatorTests
             },
         };
 
-        var result = _calculator.FromCarbIntakes(carbIntakes, time: now);
+        var result = _calculator.FromCarbIntakes(carbIntakes, null, null, now);
 
         Assert.True(result.Cob > 0, "Multiple recent carb intakes should produce non-zero COB");
         Assert.True(result.Cob <= 50, "COB should not exceed total carbs (30 + 20)");
@@ -253,7 +253,9 @@ public class CobCalculatorTests
 
         var result = _calculator.FromCarbIntakes(
             new List<CarbIntake> { olderIntake, newerIntake },
-            time: now
+            null,
+            null,
+            now
         );
 
         Assert.NotNull(result.LastCarbs);
@@ -291,7 +293,7 @@ public class CobCalculatorTests
             },
         };
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: now);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, now);
 
         Assert.Equal(0.0, result.Cob);
         Assert.NotEqual("Care Portal", result.Source);
@@ -315,7 +317,7 @@ public class CobCalculatorTests
                 },
             });
 
-        var result = await _calculator.CalculateTotalAsync(new List<CarbIntake>(), time: historical);
+        var result = await _calculator.CalculateTotalAsync(new List<CarbIntake>(), null, null, historical);
 
         Assert.Equal(25.0, result.Cob);
     }

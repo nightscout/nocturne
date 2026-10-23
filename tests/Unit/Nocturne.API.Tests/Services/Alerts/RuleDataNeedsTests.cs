@@ -307,7 +307,74 @@ public class RuleDataNeedsTests
         result.Should().BeEquivalentTo(DataNeedsSet.None);
     }
 
-    private static AlertRuleSnapshot MakeRule(AlertConditionType type, string json) =>
+    private const string CobZero = """{"type":"cob","cob":{"operator":"==","value":0}}""";
+
+    [Fact]
+    public void Enabled_auto_resolve_condition_sets_a_need_the_body_does_not()
+    {
+        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""", true, CobZero);
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsCob.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Disabled_auto_resolve_condition_contributes_no_needs()
+    {
+        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""", false, CobZero);
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.Should().BeEquivalentTo(DataNeedsSet.None);
+    }
+
+    [Fact]
+    public void Nested_auto_resolve_tree_is_walked_with_the_per_node_selections()
+    {
+        var trackerId = Guid.NewGuid();
+        var autoResolve = $$"""
+        {
+          "type": "composite",
+          "composite": {
+            "operator": "and",
+            "conditions": [
+              {
+                "type": "not",
+                "not": { "child": { "type": "iob", "iob": { "operator": ">", "value": 2 } } }
+              },
+              { "type": "tracker_age", "tracker_age": { "tracker_definition_id": "{{trackerId}}", "operator": ">", "minutes": 60 } }
+            ]
+          }
+        }
+        """;
+        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""", true, autoResolve);
+
+        var result = RuleDataNeeds.Walk(new[] { rule });
+
+        result.NeedsIob.Should().BeTrue();
+        result.ReferencedTrackerDefinitions.Should().BeEquivalentTo(new[] { trackerId });
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("null")]
+    [InlineData("{not json")]
+    [InlineData("""{"type":"composite","composite":{"operator":"and"}}""")]
+    public void Malformed_auto_resolve_does_not_abort_the_batch(string? autoResolve)
+    {
+        var bad = MakeRule(AlertConditionType.Threshold, """{"direction":"above","value":180}""", true, autoResolve);
+        var iob = MakeRule(AlertConditionType.Iob, """{"operator":">","value":2}""");
+
+        var result = RuleDataNeeds.Walk(new[] { bad, iob });
+
+        result.NeedsIob.Should().BeTrue();
+        result.NeedsCob.Should().BeFalse();
+    }
+
+    private static AlertRuleSnapshot MakeRule(
+        AlertConditionType type, string json, bool autoResolveEnabled = false, string? autoResolveParams = null) =>
         new(Id: Guid.NewGuid(),
             TenantId: Guid.NewGuid(),
             Name: "test-rule",
@@ -316,6 +383,6 @@ public class RuleDataNeedsTests
             Severity: AlertRuleSeverity.Warning,
             ClientConfiguration: "{}",
             SortOrder: 0,
-            AutoResolveEnabled: false,
-            AutoResolveParams: null);
+            AutoResolveEnabled: autoResolveEnabled,
+            AutoResolveParams: autoResolveParams);
 }

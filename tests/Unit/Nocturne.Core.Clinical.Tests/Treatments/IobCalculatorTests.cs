@@ -380,7 +380,7 @@ public class IobCalculatorTests
             },
         };
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: now);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, now);
 
         Assert.Equal(0.0, result.Iob);
         Assert.Equal("OpenAPS", result.Source);
@@ -459,6 +459,74 @@ public class IobCalculatorTests
         Assert.Equal(2.0, result.Iob);
         Assert.NotNull(result.BasalIob);
         Assert.True(result.BasalIob > 0, "local basal IOB should fill in when the device reports none");
+    }
+
+    #endregion
+
+    #region Delivered temp basals
+
+    // Six loop temps 5 min apart, each declaring 30 min at 2 U/h over a 1 U/h schedule. Each cancels
+    // the one before, so 1 U/h extra ran for 30 min: six 1/12 U pieces, 5 to 30 min old, decayed
+    // linearly over the 3 h DIA.
+    private const double LoopStreamBasalIob = 0.451;
+
+    private static List<TempBasal> LoopStream(long now) =>
+    [
+        .. Enumerable.Range(0, 6).Select(i => new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - (30 - 5 * i) * 60_000L).UtcDateTime,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - (30 - 5 * i) * 60_000L + 30 * 60_000L).UtcDateTime,
+            Rate = 2.0,
+            ScheduledRate = DefaultBasalRate,
+            Origin = TempBasalOrigin.Algorithm,
+            Device = "openaps://Trio",
+        }),
+    ];
+
+    [Fact]
+    public async Task CalculateTotalAsync_LoopTempsCancellingEachOther_CountsOnlyWhatRan()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        var result = await _calculator.CalculateTotalAsync([], LoopStream(now), now);
+
+        Assert.NotNull(result.BasalIob);
+        Assert.Equal(LoopStreamBasalIob, result.BasalIob!.Value, 0.002);
+    }
+
+    [Fact]
+    public void IobCobSeries_LoopTempsCancellingEachOther_CountsOnlyWhatRan()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var timeline = new TherapyTimeline([new TherapySegment(now - 60 * 60_000L, now + 1, MatchingSnapshot())]);
+
+        var ticks = IobCobSeries.Build(
+            _calculator, Mock.Of<ICobCalculator>(), [], [], LoopStream(now), timeline, null, now, now, now, 5 * 60_000L);
+
+        Assert.Equal(LoopStreamBasalIob, ticks.Single().Iob, 0.002);
+    }
+
+    [Fact]
+    public async Task CalculateTotalAsync_MirrorOverlappingTheLoop_CountsTheLoopOnly()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var loop = LoopStream(now);
+        foreach (var tb in loop)
+            tb.OriginEvidence = TempBasalOriginEvidence.Snapshot;
+        var mirror = LoopStream(now - 2 * 60_000L);
+        foreach (var tb in mirror)
+        {
+            tb.Device = "tidepool";
+            tb.Rate = 3.0;
+        }
+
+        var result = await _calculator.CalculateTotalAsync([], [.. loop, .. mirror], now);
+
+        // The mirror's first two minutes at 2 U/h over schedule run before the loop's first temp:
+        // 1/15 U, 32 min old. Were the mirror to win, basal IOB would be about 0.925 U.
+        var mirrorOnly = 2.0 * 2 / 60 * (1 - 32.0 / 180);
+        Assert.NotNull(result.BasalIob);
+        Assert.Equal(LoopStreamBasalIob + mirrorOnly, result.BasalIob!.Value, 0.002);
     }
 
     #endregion

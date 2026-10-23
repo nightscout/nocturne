@@ -41,9 +41,8 @@ public class IobCobComputeStageTests
                 It.IsAny<long>(),
                 It.IsAny<long>(),
                 It.IsAny<double>(),
-                It.IsAny<TherapyTimeline>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((List<TempBasal> _, long start, long _, double rate, TherapyTimeline _, CancellationToken _) =>
+            .ReturnsAsync((List<TempBasal> _, long start, long _, double rate, CancellationToken _) =>
                 new List<BasalPoint>
                 {
                     new()
@@ -81,6 +80,39 @@ public class IobCobComputeStageTests
         cache,
         NullLogger<IobCobComputeStage>.Instance
     );
+
+    [Fact]
+    public async Task ExecuteAsync_ARunningTempInAWindowEndingAfterNow_DeliversOnlyUntilNow()
+    {
+        var now = TestMills + 10 * 60 * 1000;
+        var running = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(TestMills).UtcDateTime,
+            Rate = 3.0,
+            Origin = TempBasalOrigin.Algorithm,
+        };
+        var pieceEnds = new List<long>();
+        _mockIobCalculator
+            .Setup(s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
+            .Returns(new IobResult { Iob = 0 });
+        _mockIobCalculator
+            .Setup(s => s.FromTempBasals(It.IsAny<List<TempBasal>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
+            .Callback((List<TempBasal> pieces, TherapySnapshot _, long _) => pieceEnds.AddRange(pieces.Select(p => p.EndMills!.Value)))
+            .Returns(new IobResult { BasalIob = 0.1 });
+
+        await _stage.ExecuteAsync(new ChartDataContext
+        {
+            StartTime = TestMills,
+            EndTime = TestMills + 30 * 60 * 1000,
+            NowMills = now,
+            IntervalMinutes = 5,
+            DefaultBasalRate = 1.0,
+            TempBasalList = [running],
+        }, CancellationToken.None);
+
+        pieceEnds.Should().NotBeEmpty().And.OnlyContain(end => end == now,
+            "the chart's basal stops a running temp at now, and so must its IOB");
+    }
 
     [Fact]
     public async Task ExecuteAsync_ComputesIobCobAndBasalSeries()
@@ -271,7 +303,7 @@ public class IobCobComputeStageTests
                 new TherapyTimeline(new[] { new TherapySegment(from, to, snapshot) }));
         var basalSeriesBuilder = new Mock<IBasalSeriesBuilder>();
         basalSeriesBuilder
-            .Setup(b => b.BuildAsync(It.IsAny<List<TempBasal>>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<TherapyTimeline>(), It.IsAny<CancellationToken>()))
+            .Setup(b => b.BuildAsync(It.IsAny<List<TempBasal>>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<BasalPoint>());
 
         var stage = new IobCobComputeStage(
@@ -626,11 +658,11 @@ public class IobCobComputeStageTests
 
         var result = await _stage.ExecuteAsync(context, CancellationToken.None);
 
-        firstTickBasals.Should().ContainSingle().Which.Should().BeSameAs(preWindow);
+        firstTickBasals.Should().ContainSingle().Which.Should().BeEquivalentTo(preWindow);
         result.IobSeries[0].Value.Should().BeApproximately(0.4, 1e-9);
         _mockBasalSeriesBuilder.Verify(b => b.BuildAsync(
             It.Is<List<TempBasal>>(l => l.Count == 0),
-            startTime, endTime, It.IsAny<double>(), It.IsAny<TherapyTimeline>(), It.IsAny<CancellationToken>()),
+            startTime, endTime, It.IsAny<double>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }

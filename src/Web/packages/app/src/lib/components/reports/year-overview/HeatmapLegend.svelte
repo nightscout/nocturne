@@ -1,252 +1,128 @@
-<script lang="ts">
+<script lang="ts" generics="Metric extends string">
   import * as Select from "$lib/components/ui/select";
-  import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
+  import Headroom from "$lib/components/layout/Headroom.svelte";
   import { formatGlucoseValue, getUnitLabel, type GlucoseUnits } from "$lib/utils/formatting";
   import ColorFocusRange from "./ColorFocusRange.svelte";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import {
-    GLUCOSE_COLOR_MIN,
-    GLUCOSE_COLOR_MAX,
-    type GlucoseColorThresholds as GlucoseThresholds,
+    scaleGradient,
+    type ColorBoundary,
+    type ColorFocusRange as Range,
+    type MetricScale,
   } from "$lib/utils/metric-color-focus";
 
-  type HeatmapMetric =
-    | "avgGlucose"
-    | "tir"
-    | "bolus"
-    | "basal"
-    | "tdd"
-    | "carbs";
-
-  // Approximate stops for each colormap (https://sjmgarnier.github.io/viridis/articles/intro-to-viridis.html),
-  // sampled at 0/25/50/75/100% so the picker previews and the actual scale both show the full spectrum.
-  const COLOR_PALETTES = [
-    { label: "Theme", colors: undefined },
-    { label: "Viridis", colors: ["#440154", "#3b528b", "#21908d", "#5dc963", "#fde725"] },
-    { label: "Plasma", colors: ["#0d0887", "#7e03a8", "#cc4778", "#f89441", "#f0f921"] },
-    { label: "Inferno", colors: ["#000004", "#57106e", "#bc3754", "#f98c0a", "#fcffa4"] },
-    { label: "Magma", colors: ["#000004", "#51127c", "#b73779", "#fc8961", "#fcfdbf"] },
-    { label: "Cividis", colors: ["#00204d", "#414d6b", "#7c7b78", "#b6a069", "#ffe945"] },
-    { label: "Turbo", colors: ["#30123b", "#4675ed", "#1ae4b6", "#a4fc3c", "#fb8022", "#7a0403"] },
-    { label: "Mako", colors: ["#0b0405", "#35264c", "#2f6b8e", "#52c2ac", "#dbf6d7"] },
-    { label: "Rocket", colors: ["#03051a", "#521635", "#a52c60", "#f2703a", "#fbeae3"] },
-  ];
-
   let {
-    selectedMetric = $bindable("avgGlucose"),
+    selectedMetric = $bindable(),
+    metricOptions,
     units,
-    METRIC_OPTIONS,
-    HEATMAP_STOPS,
-    METRIC_CSS_VARS,
-    getMetricMax,
-    focusRange = null,
-    onFocusRangeChange = () => {},
-    glucoseThresholds,
-    onGlucoseThresholdsChange = () => {},
-    focusBand = null,
-    onFocusBandChange = () => {},
-    lowColor = undefined,
-    highColor = undefined,
-    metricColors = undefined,
-    advancedMode = false,
-    onAdvancedModeChange = () => {},
-    transparencyPercent = 90,
-    onTransparencyChange = () => {},
-    onCustomColorsChange = () => {},
-    invert = false,
-    onInvertChange = () => {},
-    themeStops = undefined,
+    unit,
+    scale,
+    limits,
+    onWindowChange,
+    onBoundariesChange,
+    onDimChange,
+    onReset,
     glucoseBands,
   }: {
-    selectedMetric: HeatmapMetric;
+    selectedMetric: Metric;
+    metricOptions: { value: Metric; label: string }[];
     units: GlucoseUnits;
-    METRIC_OPTIONS: { value: HeatmapMetric; label: string }[];
-    HEATMAP_STOPS: ReadonlyArray<{ mgdl: number; color: string }>;
-    METRIC_CSS_VARS: Record<Exclude<HeatmapMetric, "avgGlucose">, string>;
-    getMetricMax: (metric: HeatmapMetric) => number;
-    focusRange?: readonly [number, number] | null;
-    onFocusRangeChange?: (range: [number, number] | null) => void;
-    glucoseThresholds: GlucoseThresholds;
-    onGlucoseThresholdsChange?: (value: GlucoseThresholds | null) => void;
-    focusBand?: readonly [number, number] | null;
-    onFocusBandChange?: (value: [number, number] | null) => void;
-    lowColor?: string;
-    highColor?: string;
-    metricColors?: readonly string[];
-    advancedMode?: boolean;
-    onAdvancedModeChange?: (val: boolean) => void;
-    transparencyPercent?: number;
-    onTransparencyChange?: (val: number | undefined) => void;
-    onCustomColorsChange?: (colors: string[] | undefined) => void;
-    invert?: boolean;
-    onInvertChange?: (value: boolean) => void;
-    themeStops?: ReadonlyArray<{ mgdl: number; color: string }>;
+    /** The selected metric's unit; glucose is shown in `units` instead. */
+    unit: string;
+    scale: MetricScale;
+    limits: Range;
+    onWindowChange: (window: Range | null) => void;
+    onBoundariesChange: (boundaries: ColorBoundary[] | null) => void;
+    onDimChange: (dim: number) => void;
+    onReset: () => void;
     /** Very-low, low, high and very-high boundaries in mg/dL, as the cells are hatched. */
     glucoseBands: readonly number[];
   } = $props();
 
+  const glucose = $derived(selectedMetric === "avgGlucose");
+  const metricLabel = $derived(
+    metricOptions.find((o) => o.value === selectedMetric)?.label ?? "Scale"
+  );
+  const unitLabel = $derived(glucose ? getUnitLabel(units) : unit);
+  const formatted = (value: number) =>
+    glucose ? formatGlucoseValue(value, units) : String(Math.round(value * 1000) / 1000);
+
   const bandKey = $derived.by(() => {
     const [veryLow, low, high, veryHigh] = glucoseBands.map((mgdl) => formatGlucoseValue(mgdl, units));
-    const unit = getUnitLabel(units);
     return [
-      { texture: "very-low-hatch" as const, label: `Very low < ${veryLow} ${unit}` },
+      { texture: "very-low-hatch" as const, label: `Very low < ${veryLow} ${unitLabel}` },
       { texture: "low-hatch" as const, label: `Low < ${low}` },
       { texture: "high-hatch" as const, label: `High ≥ ${high}` },
       { texture: "very-high-hatch" as const, label: `Very high ≥ ${veryHigh}` },
     ];
   });
-
-  let isPoppedOut = $state(false);
-
-  const currentMetricOption = $derived(
-    METRIC_OPTIONS.find((o) => o.value === selectedMetric)
-  );
-  const currentMetricLabel = $derived(currentMetricOption?.label ?? "Scale");
 </script>
 
-<!-- Scale panel: inline by default, optional floating top-right mode. -->
-<div class="{isPoppedOut ? 'fixed top-20 right-6 z-40 shadow-2xl max-h-[calc(100vh-6rem)] overflow-y-auto' : 'relative mb-6'} print:static print:max-w-none print:shadow-none rounded-xl border border-border/80 bg-card/95 backdrop-blur-md p-3.5 space-y-3 w-[460px] max-w-[calc(100vw-2.5rem)] transition-all">
-    <!-- Top bar: Metric Selector, Advanced Checkbox & Minimize Button -->
-    <div class="flex items-center justify-between gap-2 border-b border-border/40 pb-2.5">
-      <div class="flex items-center gap-2 min-w-0">
-        <Select.Root
-          type="single"
-          value={selectedMetric}
-          onValueChange={(v) => {
-            const option = METRIC_OPTIONS.find((o) => o.value === v);
-            if (option) selectedMetric = option.value;
-          }}
-        >
-          <span class="hidden text-sm font-medium print:inline">{currentMetricLabel}</span>
-          <Select.Trigger size="sm" class="w-[145px] print:hidden">
-            <span class="truncate">
-              {currentMetricLabel}
-            </span>
-          </Select.Trigger>
-          <Select.Content>
-            {#each METRIC_OPTIONS as option (option.value)}
-              <Select.Item value={option.value}>
-                {option.label}
-              </Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
-
-        <!-- Advanced Settings Checkbox -->
-        <label class="flex items-center gap-1.5 font-medium cursor-pointer text-foreground/90 text-xs shrink-0 select-none print:hidden">
-          <Checkbox
-            checked={advancedMode}
-            onCheckedChange={(checked: boolean) => onAdvancedModeChange(checked)}
-          />
-          Advanced
-        </label>
-      </div>
-
-      <!-- Dock / undock Button -->
-      <Button
-        variant="ghost-muted"
-        size="xs"
-        class="shrink-0 print:hidden"
-        title={isPoppedOut ? "Return panel to the page" : "Float panel in the top-right corner"}
-        onclick={() => isPoppedOut = !isPoppedOut}
+<Headroom class="mb-6 print:mb-4">
+  <div
+    class="color-focus rounded-xl border border-border/80 bg-card/95 p-3 shadow-sm backdrop-blur-md print:border-0 print:p-0 print:shadow-none"
+  >
+    <div class="print:hidden">
+      <ColorFocusRange
+        {metricLabel}
+        {scale}
+        {limits}
+        {glucose}
+        {units}
+        {unit}
+        {onWindowChange}
+        {onBoundariesChange}
+        {onDimChange}
+        {onReset}
       >
-        <SlidersHorizontal class="h-3.5 w-3.5" />
-        {isPoppedOut ? "Dock" : "Float"}
-      </Button>
+        {#snippet leading()}
+          <Select.Root
+            type="single"
+            value={selectedMetric}
+            onValueChange={(v) => {
+              const option = metricOptions.find((o) => o.value === v);
+              if (option) selectedMetric = option.value;
+            }}
+          >
+            <Select.Trigger size="sm" class="w-36">
+              <span class="truncate">{metricLabel}</span>
+            </Select.Trigger>
+            <Select.Content>
+              {#each metricOptions as option (option.value)}
+                <Select.Item value={option.value}>{option.label}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        {/snippet}
+      </ColorFocusRange>
     </div>
 
-    <!-- Sliders & Ranges (Always fixed compact width) -->
-    {#if selectedMetric === "avgGlucose"}
-      <div class="w-full">
-        {#if advancedMode}
-          <div class="print:hidden">
-            {#key `avgGlucose-${lowColor}-${highColor}-${invert}`}
-              <ColorFocusRange
-                metricKey="avgGlucose"
-                glucose
-                {units}
-                thresholds={glucoseThresholds}
-                stops={HEATMAP_STOPS}
-                {themeStops}
-                onThresholdsChange={onGlucoseThresholdsChange}
-                {focusBand}
-                onFocusBandChange={onFocusBandChange}
-                {lowColor}
-                {highColor}
-                colors={metricColors}
-                {COLOR_PALETTES}
-                {onCustomColorsChange}
-                {invert}
-                {onInvertChange}
-                {transparencyPercent}
-                {onTransparencyChange}
-              />
-            {/key}
-          </div>
-        {/if}
-        <!-- The advanced editor is all controls, so paper gets this preview of the scale it set. -->
-        <div class={["w-full space-y-1.5 text-xs text-muted-foreground", advancedMode && "hidden print:block"]}>
-          <span
-            class="block h-3.5 w-full rounded-sm bg-(image:--heatmap-gradient)"
-            style:--heatmap-gradient="linear-gradient(to right in srgb, {HEATMAP_STOPS.map((s) => `${s.color} ${((s.mgdl - GLUCOSE_COLOR_MIN) / (GLUCOSE_COLOR_MAX - GLUCOSE_COLOR_MIN)) * 100}%`).join(', ')})"
-          ></span>
-          <div class="flex justify-between text-xs tabular-nums">
-            <span>{formatGlucoseValue(GLUCOSE_COLOR_MIN, units)} {getUnitLabel(units)}</span>
-            <span class="text-muted-foreground">{advancedMode ? "Custom scale" : "Default scale"}</span>
-            <span>{formatGlucoseValue(GLUCOSE_COLOR_MAX, units)} {getUnitLabel(units)}</span>
-          </div>
-          <ChartKey items={bandKey} class="hidden justify-start [.chart-patterns-on_&]:flex" />
-        </div>
+    <!-- The editor is all controls, so paper gets the scale it set. -->
+    <div class="hidden space-y-1.5 text-xs text-muted-foreground print:block">
+      <span class="text-sm font-medium text-foreground">{metricLabel}</span>
+      <span
+        class="block h-3.5 w-full rounded-sm bg-(image:--scale-gradient)"
+        style:--scale-gradient={scaleGradient(scale)}
+        role="img"
+        aria-label={`${metricLabel} color scale`}
+      ></span>
+      <div class="flex justify-between tabular-nums">
+        <span>{formatted(scale.axis[0])} {unitLabel}</span>
+        <span>
+          Focus {formatted(scale.window[0])}–{formatted(scale.window[1])} {unitLabel}
+        </span>
+        <span>{formatted(scale.axis[1])} {unitLabel}</span>
       </div>
-    {:else}
-      {@const metricLabel = currentMetricLabel}
-      {@const metricUnit =
-        selectedMetric === "tir" ? "%" : selectedMetric === "carbs" ? "g" : "U"}
-      {@const metricMax =
-        selectedMetric === "tir" ? 100 : getMetricMax(selectedMetric)}
-      {@const cssVar =
-        Object.entries(METRIC_CSS_VARS).find(([metric]) => metric === selectedMetric)?.[1]}
-      <div class="w-full">
-        {#if advancedMode}
-          <div class="print:hidden">
-            {#key `${selectedMetric}-${lowColor}-${highColor}-${invert}`}
-              <ColorFocusRange
-                metricKey={selectedMetric}
-                {metricLabel}
-                unit={metricUnit}
-                observedMax={metricMax}
-                {cssVar}
-                fixedMax={selectedMetric === "tir" ? 100 : undefined}
-                {focusRange}
-                {onFocusRangeChange}
-                {focusBand}
-                {onFocusBandChange}
-                {lowColor}
-                {highColor}
-                colors={metricColors}
-                {COLOR_PALETTES}
-                {onCustomColorsChange}
-                {invert}
-                {onInvertChange}
-                {transparencyPercent}
-                {onTransparencyChange}
-              />
-            {/key}
-          </div>
-        {/if}
-        <div class={["w-full space-y-1.5 text-xs text-muted-foreground", advancedMode && "hidden print:block"]}>
-          <span
-            class="block h-3.5 w-full rounded-sm bg-linear-to-r from-(--metric-color)/15 to-(--metric-color)"
-            style:--metric-color="var({cssVar})"
-          ></span>
-          <div class="flex justify-between text-xs tabular-nums">
-            <span>0 {metricUnit}</span>
-            <span class="text-muted-foreground">{metricLabel} {advancedMode ? "custom scale" : "default scale"}</span>
-            <span>{metricMax} {metricUnit}</span>
-          </div>
-        </div>
-      </div>
-    {/if}
+      {#if glucose}
+        <ChartKey items={bandKey} class="hidden justify-start [.chart-patterns-on_&]:flex" />
+      {/if}
+    </div>
   </div>
+</Headroom>
+
+<style>
+  .color-focus {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+</style>

@@ -151,7 +151,7 @@ public interface ISensorGlucoseRepository
     /// </summary>
     /// <param name="source">Data source identifier (e.g., connector name).</param>
     /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default);
+    Task<int> DeleteBySourceAsync(string source, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Lists distinct <c>(DataSource, Device)</c> combinations among unattributed readings
@@ -163,7 +163,7 @@ public interface ISensorGlucoseRepository
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Inclusive end, or <c>null</c> for no upper bound.</param>
     /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+    Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Every live reading attributed to <paramref name="patientDeviceId"/> in [<paramref name="from"/>,

@@ -275,7 +275,6 @@ msgstr "Alta urgente"
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
-#: src/lib/help/reference.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
@@ -295,7 +294,6 @@ msgstr "Bajo"
 #: src/lib/components/reports/TIRStackedChart.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
-#: src/lib/help/reference.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
@@ -471,6 +469,7 @@ msgstr "{0} sin nombre"
 #: src/lib/components/members/PendingRequestsList.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -670,21 +669,19 @@ msgstr "<0/> Cerrar sesión"
 #: src/lib/components/dashboard/glucose-chart/engine/point-inspection.svelte.ts
 #: src/lib/components/entries/BGCheckSection.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+#: src/lib/components/reports/loop-analysis/SlotDays.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Glucose"
 msgstr "Glucosa"
 
-#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
-#: src/lib/components/actogram/Actogram.svelte
-#: src/lib/components/actogram/Actogram.svelte
-msgid "ArrowDown"
-msgstr "Flecha abajo"
+#~ msgid "ArrowDown"
+#~ msgstr "Flecha abajo"
 
-#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
-#: src/lib/components/actogram/Actogram.svelte
-msgid "ArrowUp"
-msgstr "Flecha arriba"
+#~ msgid "ArrowUp"
+#~ msgstr "Flecha arriba"
 
 #: src/lib/components/actogram/Actogram.svelte
 msgid "Actogram with keyboard navigation"
@@ -1189,6 +1186,7 @@ msgid "Previous"
 msgstr "Anterior"
 
 #: ../cms/src/translations/TranslationEditor.svelte
+#: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Next"
@@ -1233,10 +1231,8 @@ msgid "No condition configured"
 msgstr "No hay ninguna condición configurada"
 
 #. 0: mins
-#. 0: facts.googleHealthSyncIntervalMinutes
 #. 0: toleranceMinutes
 #: src/lib/components/alerts/DndPanel.svelte
-#: src/lib/components/help/HelpReference.svelte
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
 msgid "{0} minutes"
 msgstr "{0} minutos"
@@ -1410,18 +1406,8 @@ msgstr "Zona horaria"
 #~ msgid "{0}m <0/>"
 #~ msgstr ""
 
-#: ../cms/src/editor/ComponentPropsEditor.svelte
-#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
-#: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-#: src/lib/components/reports/InsulinDonutChart.svelte
-#: src/lib/components/reports/sleep/SleepCompositionChart.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-#: src/routes/(authenticated)/food/FoodRow.svelte
-#: src/routes/(authenticated)/tools/packing/list/+page.svelte
-#: src/routes/(authenticated)/tools/packing/list/+page.svelte
-#: src/routes/(authenticated)/tools/packing/list/+page.svelte
-msgid "Enter"
-msgstr "Introducir"
+#~ msgid "Enter"
+#~ msgstr "Introducir"
 
 #~ msgid "Smart Snooze"
 #~ msgstr ""
@@ -1447,6 +1433,11 @@ msgstr "Activar pantalla"
 #: src/lib/components/ambulatory-glucose-profile/AmbulatoryGlucoseProfile.svelte
 #: src/lib/components/reports/BasalRatePercentileChart.svelte
 #: src/lib/components/reports/SiteChangeImpactChart.svelte
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -1666,6 +1657,7 @@ msgstr "Nombre de usuario"
 msgid "<0/> Continue with passkey"
 msgstr "<0/> Continuar con clave de acceso"
 
+#: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/components/auth/LoginForm.svelte
 msgid "Back"
 msgstr "Atrás"
@@ -1835,7 +1827,6 @@ msgid "Click to view full day report"
 msgstr "Pulsa para ver el informe completo del día"
 
 #: src/lib/components/calendar/CalendarHeader.svelte
-#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Calendar"
 msgstr "Calendario"
@@ -1859,6 +1850,9 @@ msgstr "TIR"
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 msgid "Profile"
 msgstr "Perfil"
@@ -2084,6 +2078,7 @@ msgstr "Mostrar unidades"
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/profile/ProfileSwitchDialog.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
 msgid "Hours"
 msgstr "Horas"
@@ -2124,10 +2119,16 @@ msgstr "{0} min"
 
 #. 0: m
 #. 0: bolusCalc.preBolus
+#. 0: minutes
+#. 0: minutesBefore ?? "–"
+#. 0: Math.round(value)
 #. 0: min
 #. 0: therapy.delay ?? "-"
 #: src/lib/components/clock-builder/ElementInspector.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 #: src/lib/components/settings/alarm-profile/AlarmSnoozeTab.svelte
 #: src/routes/(authenticated)/settings/profile/+page.svelte
 msgid "{0} min"
@@ -2219,7 +2220,6 @@ msgid "System"
 msgstr "Sistema"
 
 #: src/lib/components/clock-builder/TextStyleControls.svelte
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Weight"
 msgstr "Grosor"
@@ -2450,7 +2450,6 @@ msgstr "Dispositivo desconocido"
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
-#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Food"
 msgstr "Alimento"
@@ -2573,6 +2572,9 @@ msgstr "Selecciona un intervalo de fechas para volver a sincronizar datos concre
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/rejected-uploads/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
@@ -2582,6 +2584,8 @@ msgstr "Desde"
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
@@ -3152,6 +3156,7 @@ msgstr "Los datos originales se conservan; solo se crean vínculos"
 msgid "Safe to run multiple times"
 msgstr "Se puede ejecutar varias veces de forma segura"
 
+#: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/components/connectors/DeduplicationDialog.svelte
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
@@ -3268,7 +3273,6 @@ msgstr "<0/> Visitar el sitio web de {0}"
 
 #: src/lib/components/dashboard/BGStatisticsCards.svelte
 #: src/lib/components/dashboard/widgets/BgDeltaWidget.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
 msgid "BG Delta"
 msgstr "Variación de glucosa"
 
@@ -3279,7 +3283,6 @@ msgstr "Variación de glucosa"
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
 #: src/lib/components/dashboard/widgets/LastUpdatedWidget.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Last Updated"
 msgstr "Última actualización"
 
@@ -3329,6 +3332,7 @@ msgstr "{0} está enviando datos. {1} entradas en las últimas 24 horas."
 msgid "Continue to Dashboard"
 msgstr "Continuar al panel"
 
+#: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/components/connectors/UploaderSetupView.svelte
 #: src/lib/components/connectors/UploaderSetupView.svelte
 msgid "Waiting for data"
@@ -3454,7 +3458,6 @@ msgstr "Dispositivos"
 msgid "Insulins"
 msgstr "Insulinas"
 
-#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/constants/scope-labels.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/alerts/+page.svelte
@@ -3462,13 +3465,13 @@ msgstr "Insulinas"
 msgid "Alerts"
 msgstr "Alertas"
 
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "Sharing & Privacy"
 msgstr "Compartir y privacidad"
 
 #: ../portal/src/routes/studio/+page.svelte
+#: src/lib/coach-marks/copy.svelte.ts
 #: src/lib/components/layout/BackupSignInPrompt.svelte
 #: src/lib/components/layout/SessionExpiryWarning.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
@@ -3490,7 +3493,6 @@ msgid "Cone of probabilities"
 msgstr "Cono de probabilidades"
 
 #: src/lib/components/dashboard/PredictionSettings.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Cone"
 msgstr "Cono"
 
@@ -3499,7 +3501,6 @@ msgid "All prediction lines"
 msgstr "Todas las líneas de predicción"
 
 #: src/lib/components/dashboard/PredictionSettings.svelte
-#: src/lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte
 msgid "Lines"
 msgstr "Líneas"
 
@@ -3600,6 +3601,8 @@ msgstr "Bolo"
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/food/FoodFields.svelte
 #: src/lib/components/meals/MealsTable.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/EventList.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
@@ -3687,6 +3690,9 @@ msgstr "Crea un nuevo alimento con información nutricional."
 
 #: src/lib/components/entries/CarbIntakeSection.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
+#: src/lib/components/reports/BasalBolusRatioChart.svelte
+#: src/lib/components/reports/BasalBolusRatioChart.svelte
+#: src/lib/components/reports/BasalBolusRatioChart.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentPortionsForm.svelte
 msgid "Carbs (g)"
@@ -3784,16 +3790,13 @@ msgstr "<0/> Añadir a {0}"
 #~ msgstr "No se encontró ninguna unidad."
 
 #: src/lib/components/entries/BGCheckSection.svelte
-#: src/lib/help/dashboard-examples.svelte.ts
 msgid "Finger"
 msgstr "Dedo"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/entries/BGCheckSection.svelte
-#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/help/dashboard-examples.svelte.ts
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 msgid "Sensor"
 msgstr "Sensor"
@@ -3843,7 +3846,6 @@ msgid "Rate (U/hr)"
 msgstr "Tasa (U/h)"
 
 #: src/lib/components/entries/BolusSection.svelte
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
 msgid "<0/> Advanced"
 msgstr "<0/> Avanzado"
 
@@ -4221,7 +4223,6 @@ msgstr "Refuerzo"
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
 #: src/lib/constants/scope-labels.svelte.ts
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
@@ -4231,7 +4232,8 @@ msgstr "Sueño"
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/lib/help/dashboard-examples.svelte.ts
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
 msgid "Exercise"
 msgstr "Ejercicio"
 
@@ -4240,6 +4242,7 @@ msgstr "Ejercicio"
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 msgid "Suspended"
 msgstr "Suspendido"
 
@@ -4263,6 +4266,7 @@ msgstr "Corrección de carbohidratos"
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/meals/MealsTable.svelte
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 #: src/routes/(authenticated)/meals/+page.svelte
 msgid "Meal"
 msgstr "Comida"
@@ -4280,13 +4284,14 @@ msgstr "Tentempié"
 #: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/entries/BasalInjectionSection.svelte
-#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
@@ -4310,7 +4315,6 @@ msgstr "Zona"
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 msgid "Battery"
@@ -4412,12 +4416,10 @@ msgstr "Hora registrada"
 msgid "Accept"
 msgstr "Aceptar"
 
-#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Dashboard"
 msgstr "Panel"
 
-#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Time Spans"
 msgstr "Intervalos de tiempo"
@@ -4431,8 +4433,6 @@ msgid "Reports"
 msgstr "Informes"
 
 #: src/lib/components/dashboard/widgets/ClockWidget.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
-#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Clock"
 msgstr "Reloj"
@@ -4442,7 +4442,7 @@ msgstr "Reloj"
 msgid "Overview"
 msgstr "Resumen"
 
-#: src/lib/help/pages.svelte.ts
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/meals/+page.svelte
 msgid "Meals"
@@ -4453,7 +4453,6 @@ msgstr "Comidas"
 msgid "Tools"
 msgstr "Herramientas"
 
-#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Packing"
 msgstr "Equipaje"
@@ -4462,25 +4461,21 @@ msgstr "Equipaje"
 msgid "Dev Tools"
 msgstr "Herramientas de desarrollo"
 
-#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Compatibility"
 msgstr "Compatibilidad"
 
-#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Test Endpoint Compatibility"
 msgstr "Probar compatibilidad del endpoint"
 
 #: src/lib/components/layout/UserMenu.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/+page.svelte
 msgid "Settings"
 msgstr "Ajustes"
 
-#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 msgid "Setup"
@@ -4489,50 +4484,38 @@ msgstr "Configuración inicial"
 #: src/lib/components/layout/UserMenu.svelte
 #: src/lib/components/rbac/permission-categories.svelte.ts
 #: src/lib/components/settings/TokenScopeSelector.svelte
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 msgid "Account"
 msgstr "Cuenta"
 
-#: src/lib/components/help/DashboardExplanation.svelte
 #: src/lib/components/rbac/permission-categories.svelte.ts
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/patient/+page.svelte
 msgid "Patient Record"
 msgstr "Historia del paciente"
 
-#: src/lib/components/help/DashboardExplanation.svelte
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Appearance"
 msgstr "Apariencia"
 
-#: src/lib/components/help/DashboardExplanation.svelte
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Therapy"
 msgstr "Terapia"
 
-#: src/lib/components/help/DashboardExplanation.svelte
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/data-quality/+page.svelte
 msgid "Data Quality"
 msgstr "Calidad de los datos"
 
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 msgid "Notifications & Trackers"
 msgstr "Notificaciones y seguimientos"
 
-#: src/lib/components/help/DashboardExplanation.svelte
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Connectors & Apps"
@@ -4543,13 +4526,11 @@ msgstr "Conectores y aplicaciones"
 msgid "Audit Log"
 msgstr "Registro de auditoría"
 
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Support & Community"
 msgstr "Soporte y comunidad"
 
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 msgid "Tenant Management"
@@ -5573,7 +5554,6 @@ msgid "Blood Glucose"
 msgstr "Glucosa"
 
 #: src/lib/constants/scope-labels.svelte.ts
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Treatments"
@@ -5659,8 +5639,8 @@ msgstr "Glucosa actual"
 msgid "<0/> Eventual BG"
 msgstr "<0/> Glucosa prevista"
 
+#: src/lib/components/reports/AidSystemUseCard.svelte
 #: src/lib/components/reports/ApsStateCard.svelte
-#: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "Target"
 msgstr "Objetivo"
 
@@ -5710,6 +5690,7 @@ msgstr "No hay permisos concedidos por roles"
 msgid "Loading data..."
 msgstr "Cargando datos..."
 
+#: src/lib/components/reports/BasalBolusRatioChart.svelte
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
 msgid "Basal (U)"
@@ -5768,7 +5749,6 @@ msgstr "Resumen diario"
 msgid "Range"
 msgstr "Intervalo"
 
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
@@ -5783,7 +5763,6 @@ msgid "Std Dev"
 msgstr "Desv. estándar"
 
 #: src/lib/components/dashboard/widgets/TirChartWidget.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
@@ -5874,6 +5853,7 @@ msgstr "Carbohidratos totales:"
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.carbs)
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.protein)
 #. 0: formatCarbDisplay(treatmentSummary?.totals?.food?.fat)
+#. 0: event.grams
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/TreatmentInspectionDialog.svelte
@@ -5882,6 +5862,7 @@ msgstr "Carbohidratos totales:"
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
+#: src/lib/components/reports/loop-analysis/EventList.svelte
 msgid "{0} g"
 msgstr "{0} g"
 
@@ -6187,6 +6168,7 @@ msgstr "Temporal"
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
 msgid "Scheduled"
@@ -6205,17 +6187,14 @@ msgstr "No se pudieron cargar los datos retrospectivos"
 msgid "<0/> Try Again"
 msgstr "<0/> Intentar de nuevo"
 
-#: src/lib/components/reports/RetrospectiveTimeScrubber.svelte
-msgid "ArrowLeft"
-msgstr "Flecha izquierda"
+#~ msgid "ArrowLeft"
+#~ msgstr "Flecha izquierda"
 
-#: src/lib/components/reports/RetrospectiveTimeScrubber.svelte
-msgid "ArrowRight"
-msgstr "Flecha derecha"
+#~ msgid "ArrowRight"
+#~ msgstr "Flecha derecha"
 
-#: src/lib/components/reports/RetrospectiveTimeScrubber.svelte
-msgid "Home"
-msgstr "Inicio"
+#~ msgid "Home"
+#~ msgstr "Inicio"
 
 #: src/lib/components/reports/RetrospectiveTimeScrubber.svelte
 msgid "Time scrubber - use arrow keys to navigate, space to play/pause"
@@ -7105,7 +7084,6 @@ msgid "Flash the title and favicon during urgent glucose levels"
 msgstr "Hacer parpadear el título y el favicon durante niveles urgentes de glucosa"
 
 #: src/lib/constants/scope-labels.svelte.ts
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
 msgid "Heart Rate"
@@ -7196,7 +7174,6 @@ msgstr "Actividad"
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
-#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/status-pills/LoopPill.svelte
 msgid "Loop"
 msgstr "Loop"
@@ -7511,6 +7488,8 @@ msgstr "Añade umbrales para recibir notificaciones a medida que avanza el segui
 msgid "Level"
 msgstr "Nivel"
 
+#: src/lib/components/reports/loop-analysis/EventList.svelte
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
 #: src/lib/components/trackers/tracker-notification-editor.svelte
@@ -7545,7 +7524,6 @@ msgid "Cannula"
 msgstr "Cánula"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/status-pills/ReservoirPill.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
@@ -8406,6 +8384,7 @@ msgstr "{0} importantes"
 msgid "{0} minor"
 msgstr "{0} menores"
 
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "None"
@@ -8413,7 +8392,6 @@ msgstr "Ninguno"
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/routes/features/+page.svelte
-#: src/lib/help/connectors.svelte.ts
 #: src/routes/(authenticated)/compatibility/+page.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
@@ -8550,10 +8528,14 @@ msgid "Sort: Recently added"
 msgstr "Ordenar: añadidos recientemente"
 
 #. 0: idx + 1; 1: REPORTS.length
+#. 0: current; 1: total
+#. 0: r.wentBelowRange ?? 0; 1: plural(r.wentBelowRangeObserved ?? 0, ["# event", "# events"])
 #. 0: state.filteredFoods.length; 1: state.foods.length
 #. 0: s?.nightCount ?? 0; 1: s?.daysInRange ?? 0
 #. 0: filteredRows.length; 1: allRows.length
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
+#: src/lib/coach-marks/copy.svelte.ts
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
 #: src/routes/(authenticated)/food/+page.svelte
 #: src/routes/(authenticated)/reports/sleep/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
@@ -8589,11 +8571,8 @@ msgstr "Quitar filtros"
 msgid "g carbs"
 msgstr "g de carbohidratos"
 
-#: ../portal/src/routes/docs/+layout.svelte
-#: src/lib/components/help/HelpPageView.svelte
-#: src/routes/(authenticated)/food/Composer.svelte
-msgid "Escape"
-msgstr "Esc"
+#~ msgid "Escape"
+#~ msgstr "Esc"
 
 #: src/routes/(authenticated)/food/Composer.svelte
 msgid "Add food"
@@ -9472,7 +9451,6 @@ msgstr "Nocturne se integra con diversos servicios de datos de diabetes de terce
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
-#: src/lib/help/connectors.svelte.ts
 #: src/routes/(legal)/terms/+page.svelte
 msgid "Dexcom"
 msgstr "Dexcom"
@@ -9482,12 +9460,10 @@ msgstr "Dexcom"
 msgid "FreeStyle Libre"
 msgstr "FreeStyle Libre"
 
-#: src/lib/help/connectors.svelte.ts
 #: src/routes/(legal)/terms/+page.svelte
 msgid "Glooko"
 msgstr "Glooko"
 
-#: src/lib/help/connectors.svelte.ts
 #: src/routes/(legal)/terms/+page.svelte
 msgid "Tidepool"
 msgstr "Tidepool"
@@ -9952,6 +9928,7 @@ msgstr "Modo de bomba"
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/dashboard/glucose-chart/tracks/SwimLaneTrack.svelte
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "Override"
 msgstr "Anulación"
 
@@ -9966,7 +9943,7 @@ msgid "Scheduled ({0})"
 msgstr "Programadas ({0})"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
 #: src/routes/(authenticated)/time-spans/+page.svelte
 msgid "Overrides"
 msgstr "Anulaciones"
@@ -9984,7 +9961,6 @@ msgid "Moderate"
 msgstr "Moderado"
 
 #: src/lib/components/dashboard/widgets/DailySummaryWidget.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Today's Summary"
 msgstr "Resumen de hoy"
 
@@ -10022,7 +9998,6 @@ msgid "No data today"
 msgstr "Sin datos hoy"
 
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Connection"
 msgstr "Conexión"
@@ -10054,8 +10029,6 @@ msgid "Blood Glucose <0/>"
 msgstr "Glucosa en sangre <0/>"
 
 #: src/lib/components/dashboard/widgets/TrackersWidget.svelte
-#: src/lib/components/help/DashboardExplanation.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Trackers"
 msgstr "Seguimientos"
 
@@ -10083,7 +10056,6 @@ msgstr "No se pudieron cargar los datos"
 #~ msgstr ""
 
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Total Daily Dose"
 msgstr "Dosis diaria total"
 
@@ -10193,7 +10165,6 @@ msgstr "Nombre del contacto"
 msgid "Close Emergency View"
 msgstr "Cerrar vista de emergencia"
 
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Year Overview"
@@ -10221,7 +10192,6 @@ msgid "Show all"
 msgstr "Mostrar todo"
 
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Recent Meals"
 msgstr "Comidas recientes"
 
@@ -10634,6 +10604,7 @@ msgstr "<0/> Insulina (U)"
 msgid "Programmed"
 msgstr "Programada"
 
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 msgid "Delivered"
 msgstr "Administrada"
@@ -11095,7 +11066,6 @@ msgstr "Tu patrón diario habitual de glucosa — un informe clínico estandariz
 msgid "Summary <0/>"
 msgstr "Resumen <0/>"
 
-#. 0: facts.googleHealthDefaultHistoryDays
 #. 0: expiresInDays
 #. 0: days
 #. 0: daysOption
@@ -11105,7 +11075,6 @@ msgstr "Resumen <0/>"
 #. 0: dateInfo.dayCount
 #. 0: dayCount
 #. 0: dayCount
-#: src/lib/components/help/HelpReference.svelte
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/ui/date-range-picker.svelte
@@ -11508,7 +11477,6 @@ msgstr "Descartado"
 msgid "Data Quality Categories"
 msgstr "Categorías de calidad de datos"
 
-#: src/lib/help/reports.svelte.ts
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 msgid "Compression Lows"
@@ -11568,6 +11536,8 @@ msgstr "Error al cargar el día en revisión"
 #~ msgid "<0/> Back to Month View"
 #~ msgstr ""
 
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Mean"
@@ -11712,7 +11682,6 @@ msgstr "<0/> Episodios de glucosa alta"
 msgid "<0/> Glucose Statistics"
 msgstr "<0/> Estadísticas de glucosa"
 
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "Glucose Distribution"
@@ -11959,9 +11928,8 @@ msgstr "I:C media"
 msgid "<0/> Daily Basal/Bolus Breakdown"
 msgstr "<0/> Desglose diario basal/bolo"
 
-#: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
-msgid "See how your insulin was split each day"
-msgstr "Consulta cómo se repartió tu insulina cada día"
+#~ msgid "See how your insulin was split each day"
+#~ msgstr "Consulta cómo se repartió tu insulina cada día"
 
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 msgid "<0/> Hourly Insulin Delivery"
@@ -12151,31 +12119,31 @@ msgstr "Indicadores clave de glucosa para este periodo"
 msgid "No glucose analysis available"
 msgstr "No hay análisis de glucosa disponible"
 
-#: src/routes/(authenticated)/reports/idp/+page.svelte
+#: src/lib/components/reports/AidSystemUseCard.svelte
 msgid "<0/> AID System Use"
 msgstr "<0/> Uso del sistema AID"
 
-#: src/routes/(authenticated)/reports/idp/+page.svelte
+#: src/lib/components/reports/AidSystemUseCard.svelte
 msgid "Automated insulin delivery system metrics"
 msgstr "Métricas del sistema automatizado de administración de insulina"
 
-#: src/routes/(authenticated)/reports/idp/+page.svelte
+#: src/lib/components/reports/AidSystemUseCard.svelte
 msgid "CGM"
 msgstr "CGM"
 
-#: src/routes/(authenticated)/reports/idp/+page.svelte
+#: src/lib/components/reports/AidSystemUseCard.svelte
 msgid "Pump"
 msgstr "Bomba"
 
-#: src/routes/(authenticated)/reports/idp/+page.svelte
+#: src/lib/components/reports/AidSystemUseCard.svelte
 msgid "CGM Active"
 msgstr "CGM activo"
 
-#: src/routes/(authenticated)/reports/idp/+page.svelte
+#: src/lib/components/reports/AidSystemUseCard.svelte
 msgid "AID Active"
 msgstr "AID activo"
 
-#: src/routes/(authenticated)/reports/idp/+page.svelte
+#: src/lib/components/reports/AidSystemUseCard.svelte
 msgid "Site Changes"
 msgstr "Cambios de zona"
 
@@ -12355,9 +12323,6 @@ msgstr "Patrones diarios de pasos con superposición de glucosa"
 msgid "<0/> Step Count Actogram"
 msgstr "<0/> Actograma del recuento de pasos"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
-#: src/lib/components/help/HelpHarness.test.svelte
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/steps/+page.svelte
 #: src/routes/(authenticated)/reports/steps/+page.svelte
@@ -12371,7 +12336,6 @@ msgstr "Error al cargar la comparación semanal"
 
 #: ../portal/src/lib/components/features/AlarmsDemo.svelte
 #: src/lib/components/alerts/PlaybackStrip.svelte
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte
 #: src/routes/(authenticated)/reports/week-to-week/+page.svelte
 msgid "Reset"
@@ -12486,7 +12450,6 @@ msgstr "No se pudo denegar la solicitud. Inténtalo de nuevo."
 msgid "Access Requests - Settings - Nocturne"
 msgstr "Solicitudes de acceso - Ajustes - Nocturne"
 
-#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
 msgid "Access Requests"
 msgstr "Solicitudes de acceso"
@@ -12873,14 +12836,12 @@ msgstr "Configura las preferencias de visualización del gráfico"
 msgid "Default chart range"
 msgstr "Intervalo predeterminado del gráfico"
 
-#. 0: period
 #. 0: hours
 #. 0: Math.abs(hoursUntil).toFixed(1)
 #. 0: absHours
 #. 0: focusHours
 #. 0: therapy.dia ?? "-"
 #. 0: therapy.dia ?? "-"
-#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/status-pills/TrackerPill.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
@@ -13259,7 +13220,6 @@ msgstr "Sin datos"
 msgid "Nightscout Transition - Settings - Nocturne"
 msgstr "Transición de Nightscout - Ajustes - Nocturne"
 
-#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/nightscout-transition/+page.svelte
 msgid "Nightscout Transition"
 msgstr "Transición de Nightscout"
@@ -13393,7 +13353,6 @@ msgstr "En ejecución"
 msgid "Data Migration - Settings - Nocturne"
 msgstr "Migración de datos - Ajustes - Nocturne"
 
-#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Data Migration"
 msgstr "Migración de datos"
@@ -13673,8 +13632,6 @@ msgid "Chat with developers and other users"
 msgstr "Chatea con desarrolladores y otros usuarios"
 
 #: ../portal/src/lib/components/SiteFooter.svelte
-#: src/lib/components/help/HelpBrowser.svelte
-#: src/lib/components/help/HelpPanel.svelte
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Documentation"
 msgstr "Documentación"
@@ -14484,7 +14441,6 @@ msgid "Food library"
 msgstr "Biblioteca de alimentos"
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
 #: src/routes/(authenticated)/time-spans/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "Activities"
@@ -14574,6 +14530,8 @@ msgid "Data is {0} old"
 msgstr "Los datos tienen {0} de antigüedad"
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Inferred"
 msgstr "Inferido"
@@ -15053,7 +15011,6 @@ msgstr "No se pudo revocar el enlace."
 msgid "Failed to start Discord link flow."
 msgstr "No se pudo iniciar el proceso de vinculación con Discord."
 
-#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
 msgid "Discord Integration"
 msgstr "Integración con Discord"
@@ -15233,7 +15190,6 @@ msgstr "<0/> Añadir condición"
 #~ msgstr ""
 
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
-#: src/lib/help/reading-guides.svelte.ts
 msgid "Select a rule"
 msgstr "Selecciona una regla"
 
@@ -15270,7 +15226,6 @@ msgstr "Gravedad: {0}"
 #: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/SidebarDndToggle.svelte
 #: src/lib/components/ui/dropdown-menu/nested-in-popover.test.svelte
-#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Do Not Disturb"
 msgstr "No molestar"
@@ -15738,10 +15693,8 @@ msgstr "confirmar"
 msgid "Replay this alert (and any siblings) against historical glucose. Nothing is delivered."
 msgstr "Reproduce esta alerta (y cualquier alerta relacionada) sobre datos históricos. No se envía ninguna notificación."
 
-#: src/lib/components/alerts/RuleBuilder.svelte
-#: src/lib/components/alerts/RuleBuilder.svelte
-msgid "Shift"
-msgstr "Mayús"
+#~ msgid "Shift"
+#~ msgstr "Mayús"
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/alerts/OperatorToggle.svelte
@@ -15779,6 +15732,7 @@ msgid "Pump connectivity"
 msgstr "Conectividad de la bomba"
 
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
 msgid "Illness"
 msgstr "Enfermedad"
 
@@ -15791,6 +15745,7 @@ msgid "Data exclusion"
 msgstr "Exclusión de datos"
 
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
 msgid "Temporary target"
 msgstr "Objetivo temporal"
 
@@ -15967,7 +15922,6 @@ msgstr "Hasta <0/>"
 msgid "User snooze actions cannot be replayed."
 msgstr "Las acciones de posposición realizadas por el usuario no se pueden reproducir."
 
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Hourly Patterns"
 msgstr "Patrones horarios"
@@ -16066,7 +16020,6 @@ msgstr "Referencia de la API"
 #~ msgstr ""
 
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
-#: src/lib/help/connectors.svelte.ts
 msgid "Libre"
 msgstr "Libre"
 
@@ -16683,8 +16636,10 @@ msgstr "{0} - {1} ({2} días)"
 msgid "Active alerts ({0})"
 msgstr "Alertas activas ({0})"
 
+#. 0: relativeMinutes(slotMinute(minutes, slot)); 1: relativeMinutes(slotMinute(minutes, slot + 1))
 #. 0: mFrom; 1: mTo
 #. 0: rFrom; 1: rTo
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
 msgid "{0} to {1}"
@@ -16726,7 +16681,6 @@ msgstr "Este informe es solo informativo. Consulta siempre con tu profesional sa
 #~ msgid "Alerts, reminders, and tracked events."
 #~ msgstr ""
 
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/access/+page.svelte
 msgid "Active Access"
@@ -16851,6 +16805,7 @@ msgstr "{0} no está vinculado; conéctalo en Conectores y aplicaciones para hab
 
 #: src/lib/components/alerts/ChannelsSection.svelte
 #: src/lib/components/dashboard/widgets/WidgetPlaceholder.svelte
+#: src/lib/components/reports/loop-analysis/PageBodyLoading.svelte
 msgid "Loading"
 msgstr "Cargando"
 
@@ -18165,11 +18120,15 @@ msgstr "Error al cargar la comparación"
 msgid "{0} pp"
 msgstr "{0} pp"
 
+#. 0: minutes / 60
+#. 0: minutesAfter == null ? "–" \\: minutesAfter / 60
 #. 0: e.event.timeToNadirHours.toFixed(1)
 #. 0: v.toFixed(1)
 #. 0: signed(d)
 #. 0: v.toFixed(1)
 #. 0: signed(d)
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
 #: src/lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
 #: src/routes/(authenticated)/reports/comparison/+page.svelte
@@ -18420,7 +18379,6 @@ msgid "Link records from multiple data sources that represent the same underlyin
 msgstr "Vincula registros de varias fuentes de datos que representen el mismo evento subyacente. Esto mejora la calidad de los datos cuando las mismas lecturas de glucosa o tratamientos se cargan desde aplicaciones diferentes."
 
 #: src/lib/components/settings/DataMaintenanceCard.svelte
-#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
 msgid "Reset Connector Cursors"
 msgstr "Restablecer cursores de conectores"
@@ -18653,7 +18611,6 @@ msgstr "Reimportación iniciada."
 msgid "Re-import failed."
 msgstr "La reimportación ha fallado."
 
-#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/timezone/+page.svelte
 msgid "Timezone history"
 msgstr "Historial de zonas horarias"
@@ -18675,7 +18632,6 @@ msgstr "Aún no hay entradas. Tu zona horaria de casa se rellenará automáticam
 msgid "Delete entry"
 msgstr "Eliminar entrada"
 
-#: src/lib/help/reading-guides.svelte.ts
 #: src/routes/(authenticated)/settings/timezone/+page.svelte
 msgid "Add a location change"
 msgstr "Añadir un cambio de ubicación"
@@ -18763,8 +18719,6 @@ msgstr "Nocturne es software libre y de código abierto, creado por personas con
 msgid "Weight History - Settings - Nocturne"
 msgstr "Historial de peso - Ajustes - Nocturne"
 
-#: src/lib/components/help/HelpReference.svelte
-#: src/lib/help/settings.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 #: src/routes/(authenticated)/settings/weight/+page.svelte
 msgid "Weight history"
@@ -18969,6 +18923,8 @@ msgstr "<0/> Descargar Prelude"
 msgid "No windows were flagged in this period."
 msgstr "No se marcaron ventanas en este periodo."
 
+#: src/lib/components/reports/loop-analysis/EventList.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
 #: src/lib/components/reports/sensor-integrity/ClusterTable.svelte
 msgid "When"
 msgstr "Cuándo"
@@ -18991,6 +18947,7 @@ msgstr "Días analizados"
 msgid "Windows flagged"
 msgstr "Ventanas marcadas"
 
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
 #: src/lib/components/reports/sensor-integrity/DataQualityHeadline.svelte
 #: src/routes/(authenticated)/reports/data-quality/sensor-integrity/+page.svelte
 msgid "High confidence"
@@ -19281,6 +19238,10 @@ msgid "{0}, {1} U/hr"
 msgstr "{0}, {1} U/h"
 
 #: src/lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
 msgid "U/h"
 msgstr "U/h"
 
@@ -19313,7 +19274,6 @@ msgstr "U/h"
 
 #: ../portal/src/lib/components/AuroraPool.svelte
 #: ../portal/src/lib/components/features/ConnectorsDemo.svelte
-#: src/lib/help/connectors.svelte.ts
 msgid "Tandem"
 msgstr "Tandem"
 
@@ -21267,7 +21227,7 @@ msgid "Carbohydrates"
 msgstr "Carbohidratos"
 
 #: ../portal/src/lib/components/features/ReportsDemo.svelte
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+#: src/lib/components/reports/year-overview/ColorFocusPreview.test-harness.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "Average glucose"
 msgstr "Glucosa media"
@@ -21896,7 +21856,6 @@ msgstr "Informe generado a partir de {0} eventos basales entre {1} y {2}"
 #~ msgid "higher in {0} →"
 #~ msgstr ""
 
-#: src/lib/help/reports.svelte.ts
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
 msgid "CGM Comparison"
@@ -22196,6 +22155,7 @@ msgstr "No se pudo eliminar el proveedor."
 msgid "Failed to change whether this provider is enabled."
 msgstr "No se pudo cambiar si este proveedor está habilitado."
 
+#: src/lib/components/reports/loop-analysis/PredictionContextTable.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Interrupted"
 msgstr "Interrumpido"
@@ -22967,8 +22927,6 @@ msgstr "Objetivo para diabetes tipo 1"
 msgid "Elevated"
 msgstr "Elevado"
 
-#: src/lib/components/help/HelpDashboard.svelte
-#: src/lib/help/reference.svelte.ts
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Very high"
 msgstr "Muy alto"
@@ -23144,197 +23102,143 @@ msgstr "<0/> Sin datos"
 msgid "Average glucose — Year Overview"
 msgstr "Glucosa media — Resumen anual"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Point 1"
-msgstr "Punto 1"
+#~ msgid "Point 1"
+#~ msgstr "Punto 1"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Point 2"
-msgstr "Punto 2"
+#~ msgid "Point 2"
+#~ msgstr "Punto 2"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Point 3"
-msgstr "Punto 3"
+#~ msgid "Point 3"
+#~ msgstr "Punto 3"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Point 4"
-msgstr "Punto 4"
+#~ msgid "Point 4"
+#~ msgstr "Punto 4"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Reset average glucose color boundaries"
-msgstr "Restablecer límites de color de glucosa media"
+#~ msgid "Reset average glucose color boundaries"
+#~ msgstr "Restablecer límites de color de glucosa media"
 
-#. 0: metricLabel
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Reset {0} color range to automatic"
-msgstr "Restablecer el rango de color de {0} a automático"
+#~ msgid "Reset {0} color range to automatic"
+#~ msgstr "Restablecer el rango de color de {0} a automático"
 
-#. 0: metricLabel; 1: index === 0 ? "low" \\: "high"
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "{0} {1} color point"
-msgstr "Punto de color {0} {1}"
+#~ msgid "{0} {1} color point"
+#~ msgstr "Punto de color {0} {1}"
 
-#. 0: metricLabel; 1: labels[index]; 2: glucose ? "boundary" \\: "value"
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "{0} {1} color {2}"
-msgstr "{0} {1} color {2}"
+#~ msgid "{0} {1} color {2}"
+#~ msgstr "{0} {1} color {2}"
 
-#. 0: metricLabel
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "{0} focus lines"
-msgstr "Líneas de enfoque de {0}"
+#~ msgid "{0} focus lines"
+#~ msgstr "Líneas de enfoque de {0}"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Focus minimum line"
-msgstr "Línea mínima de enfoque"
+#~ msgid "Focus minimum line"
+#~ msgstr "Línea mínima de enfoque"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Focus maximum line"
-msgstr "Línea máxima de enfoque"
+#~ msgid "Focus maximum line"
+#~ msgstr "Línea máxima de enfoque"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Average glucose color boundaries"
-msgstr "Límites de color de glucosa media"
+#~ msgid "Average glucose color boundaries"
+#~ msgstr "Límites de color de glucosa media"
 
-#. 0: metricLabel
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "{0} color focus"
-msgstr "Enfoque de color de {0}"
+#~ msgid "{0} color focus"
+#~ msgstr "Enfoque de color de {0}"
 
-#. 0: metricLabel; 1: formatted(minimum); 2: formatted(maximum); 3: unitLabel
+#. 0: metricLabel; 1: formatted(scale.axis[0]); 2: formatted(scale.axis[1]); 3: unitLabel
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte
 msgid "{0} color scale from {1} to {2} {3}"
 msgstr "Escala de color de {0} de {1} a {2} {3}"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "<0/> Low"
 msgstr "<0/> Bajo"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "<0/> High"
 msgstr "<0/> Alto"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "<0/> Color Boundaries"
-msgstr "<0/> Límites de color"
+#~ msgid "<0/> Color Boundaries"
+#~ msgstr "<0/> Límites de color"
 
-#. 0: metricLabel
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "{0} focus minimum value"
-msgstr "Valor mínimo de enfoque de {0}"
+#~ msgid "{0} focus minimum value"
+#~ msgstr "Valor mínimo de enfoque de {0}"
 
-#. 0: metricLabel
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "{0} focus maximum value"
-msgstr "Valor máximo de enfoque de {0}"
+#~ msgid "{0} focus maximum value"
+#~ msgstr "Valor máximo de enfoque de {0}"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Dim:"
-msgstr "Atenuación:"
+#~ msgid "Dim:"
+#~ msgstr "Atenuación:"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "<0/> Focus Window"
-msgstr "<0/> Ventana de enfoque"
+#~ msgid "<0/> Focus Window"
+#~ msgstr "<0/> Ventana de enfoque"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Color palette presets"
-msgstr "Preajustes de paleta de colores"
+#~ msgid "Color palette presets"
+#~ msgstr "Preajustes de paleta de colores"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Theme colors are fixed; pick a palette to invert"
-msgstr "Los colores del tema son fijos; elige una paleta para invertirlos"
+#~ msgid "Theme colors are fixed; pick a palette to invert"
+#~ msgstr "Los colores del tema son fijos; elige una paleta para invertirlos"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Invert"
-msgstr "Invertir"
+#~ msgid "Invert"
+#~ msgstr "Invertir"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "<0/> Color Range"
-msgstr "<0/> Rango de color"
+#~ msgid "<0/> Color Range"
+#~ msgstr "<0/> Rango de color"
 
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte
 msgid "Enter a dim percentage between 0 and 100."
 msgstr "Introduce un porcentaje de atenuación entre 0 y 100."
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Enter four strictly increasing glucose color boundaries."
-msgstr "Introduce cuatro límites de color de glucosa estrictamente crecientes."
+#~ msgid "Enter four strictly increasing glucose color boundaries."
+#~ msgstr "Introduce cuatro límites de color de glucosa estrictamente crecientes."
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Enter valid focus line boundaries (min < max)."
-msgstr "Introduce límites válidos de las líneas de enfoque (mín < máx)."
+#~ msgid "Enter valid focus line boundaries (min < max)."
+#~ msgstr "Introduce límites válidos de las líneas de enfoque (mín < máx)."
 
 #~ msgid "Enter valid color scale boundaries (min < max)."
 #~ msgstr ""
 
-#. 0: metricLabel; 1: glucose ? "boundaries" \\: "focus"; 2: values.map(formatted).join(" / "); 3: unitLabel
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "{0}: color {1} {2} {3}"
-msgstr "{0}: color {1} {2} {3}"
+#~ msgid "{0}: color {1} {2} {3}"
+#~ msgstr "{0}: color {1} {2} {3}"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Theme"
 msgstr "Tema"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Viridis"
-msgstr "Viridis"
+#~ msgid "Viridis"
+#~ msgstr "Viridis"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Plasma"
-msgstr "Plasma"
+#~ msgid "Plasma"
+#~ msgstr "Plasma"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Inferno"
-msgstr "Inferno"
+#~ msgid "Inferno"
+#~ msgstr "Inferno"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Magma"
-msgstr "Magma"
+#~ msgid "Magma"
+#~ msgstr "Magma"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Cividis"
-msgstr "Cividis"
+#~ msgid "Cividis"
+#~ msgstr "Cividis"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Turbo"
-msgstr "Turbo"
+#~ msgid "Turbo"
+#~ msgstr "Turbo"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Mako"
-msgstr "Mako"
+#~ msgid "Mako"
+#~ msgstr "Mako"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Rocket"
-msgstr "Rocket"
+#~ msgid "Rocket"
+#~ msgstr "Rocket"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Return panel to the page"
-msgstr "Devolver el panel a la página"
+#~ msgid "Return panel to the page"
+#~ msgstr "Devolver el panel a la página"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Float panel in the top-right corner"
-msgstr "Flotar el panel en la esquina superior derecha"
+#~ msgid "Float panel in the top-right corner"
+#~ msgstr "Flotar el panel en la esquina superior derecha"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Dock"
-msgstr "Acoplar"
+#~ msgid "Dock"
+#~ msgstr "Acoplar"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Float"
-msgstr "Flotar"
+#~ msgid "Float"
+#~ msgstr "Flotar"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Default scale"
-msgstr "Escala predeterminada"
+#~ msgid "Default scale"
+#~ msgstr "Escala predeterminada"
 
 #~ msgid "{0} default scale"
 #~ msgstr ""
@@ -23931,7 +23835,6 @@ msgstr "Mostrado en mmol/mol (IFCC)"
 #~ msgid "Est. A1c (DCCT %)"
 #~ msgstr "A1c est. (DCCT %)"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Heart rate"
@@ -23983,6 +23886,7 @@ msgid "Fingerstick BG"
 msgstr "Glucemia capilar"
 
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
+#: src/lib/components/reports/loop-analysis/SlotDays.svelte
 msgid "Scheduled basal"
 msgstr "Basal programada"
 
@@ -24007,12 +23911,10 @@ msgstr "Fecha de nacimiento"
 msgid "Printed"
 msgstr "Impreso"
 
-#. 0: fixedMax !== undefined ? `, up to ${fixedMax} ${unitLabel}` \\: ""
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Enter valid color scale boundaries (min < max{0})."
-msgstr "Introduce límites válidos de la escala de color (mín < máx{0})."
+#~ msgid "Enter valid color scale boundaries (min < max{0})."
+#~ msgstr "Introduce límites válidos de la escala de color (mín < máx{0})."
 
-#. 0: veryLow; 1: unit
+#. 0: veryLow; 1: unitLabel
 #: src/lib/components/reports/year-overview/HeatmapLegend.svelte
 msgid "Very low < {0} {1}"
 msgstr "Muy bajo < {0} {1}"
@@ -24032,9 +23934,8 @@ msgstr "Alto ≥ {0}"
 msgid "Very high ≥ {0}"
 msgstr "Muy alto ≥ {0}"
 
-#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
-msgid "Custom scale"
-msgstr "Escala personalizada"
+#~ msgid "Custom scale"
+#~ msgstr "Escala personalizada"
 
 #. 0: comparison.deviceAName; 1: comparison.deviceBName; 2: comparison.toleranceMinutes
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
@@ -24063,6 +23964,8 @@ msgstr "Velocidad de descenso ({0}/min)"
 msgid "Recovery (minutes)"
 msgstr "Recuperación (minutos)"
 
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
 #: src/routes/(authenticated)/reports/data-quality/sensor-integrity/+page.svelte
 msgid "Low confidence"
 msgstr "Confianza baja"
@@ -24221,12 +24124,10 @@ msgid "Frequently asked questions"
 msgstr "Preguntas frecuentes"
 
 #: src/lib/components/dashboard/RecentEntriesCard.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Recent readings"
 msgstr "Lecturas recientes"
 
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
-#: src/lib/help/dashboard-guide.svelte.ts
 msgid "Recent treatments"
 msgstr "Tratamientos recientes"
 
@@ -24289,6 +24190,8 @@ msgstr "Glucosa durante 24 horas, en todo el rango"
 msgid "Full report <0/>"
 msgstr "Informe completo <0/>"
 
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "No data in this range"
 msgstr "No hay datos en este intervalo"
@@ -24349,6 +24252,7 @@ msgstr "Por debajo del {0}%"
 msgid "Above {0}%"
 msgstr "Por encima del {0}%"
 
+#: src/lib/components/reports/loop-analysis/EventList.svelte
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
 msgid "Below range"
@@ -24441,6 +24345,9 @@ msgstr "<0/>Todos los informes"
 msgid "Resting estimate"
 msgstr "Estimación en reposo"
 
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "U/day"
 msgstr "U/día"
@@ -24603,7 +24510,6 @@ msgstr "La visión general"
 msgid "Your key metrics at a glance"
 msgstr "Tus métricas principales de un vistazo"
 
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Executive Summary"
 msgstr "Resumen ejecutivo"
@@ -24650,7 +24556,6 @@ msgstr "Vista día a día"
 msgid "Review each day individually"
 msgstr "Revisa cada día individualmente"
 
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Day in Review"
 msgstr "Día en revisión"
@@ -24659,7 +24564,6 @@ msgstr "Día en revisión"
 msgid "Detailed breakdown of a single day"
 msgstr "Desglose detallado de un solo día"
 
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Week to Week"
 msgstr "Semana a semana"
@@ -24668,7 +24572,6 @@ msgstr "Semana a semana"
 msgid "Compare patterns across days"
 msgstr "Compara patrones entre días"
 
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Comparison"
 msgstr "Comparación"
@@ -24733,7 +24636,6 @@ msgstr "Tu historial de insulina y carbohidratos"
 msgid "Basal Rate Analysis"
 msgstr "Análisis de la tasa basal"
 
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Basal Analysis"
 msgstr "Análisis basal"
@@ -24742,7 +24644,6 @@ msgstr "Análisis basal"
 msgid "How your basal rates vary"
 msgstr "Cómo varían tus tasas basales"
 
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Insulin Delivery"
 msgstr "Administración de insulina"
@@ -24751,7 +24652,6 @@ msgstr "Administración de insulina"
 msgid "Basal vs bolus breakdown"
 msgstr "Desglose basal frente a bolo"
 
-#: src/lib/help/reports.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Site Change Impact"
 msgstr "Impacto del cambio de sitio"
@@ -25036,9 +24936,7 @@ msgstr "<0/> Bajadas nocturnas"
 msgid "No lows lasting 15 minutes or more during this session"
 msgstr "No hubo bajadas de 15 minutos o más durante esta sesión"
 
-#: src/lib/components/help/HelpDashboard.svelte
 #: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
-#: src/lib/help/reference.svelte.ts
 msgid "Very low"
 msgstr "Muy bajo"
 
@@ -25082,6 +24980,7 @@ msgstr "Emparejado mediante una aplicación que no informa de su nombre."
 msgid "Not linked to an app. Revoking an app will not remove this device."
 msgstr "No vinculado a una aplicación. Revocar una aplicación no eliminará este dispositivo."
 
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "Manual boluses"
 msgstr "Bolos manuales"
@@ -25242,11 +25141,11 @@ msgstr "Cada hora"
 msgid "The same figures as a table, with the typical glucose in each hour. The middle half is the range the central 50% of that hour's readings fell in."
 msgstr "Las mismas cifras en forma de tabla, con la glucosa típica de cada hora. La mitad central es el intervalo en el que cayó el 50% central de las lecturas de esa hora."
 
+#: src/lib/components/reports/loop-analysis/PredictionBiasHeatmap.svelte
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 msgid "Hour"
 msgstr "Hora"
 
-#: src/lib/help/reference.svelte.ts
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 msgid "In range"
 msgstr "En rango"
@@ -25287,37 +25186,29 @@ msgstr "En rango es {0}, el objetivo de consenso internacional. Por debajo del r
 msgid "Hours follow the time zone set in the profile settings ({0})."
 msgstr "Las horas siguen la zona horaria configurada en los ajustes del perfil ({0})."
 
-#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
-msgid "A shared link cannot see the time zone this data belongs to,"
-msgstr "Un enlace compartido no puede ver la zona horaria a la que pertenecen estos datos,"
+#~ msgid "A shared link cannot see the time zone this data belongs to,"
+#~ msgstr "Un enlace compartido no puede ver la zona horaria a la que pertenecen estos datos,"
 
-#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
-msgid "The time zone for this data could not be loaded just now,"
-msgstr "La zona horaria de estos datos no se pudo cargar ahora mismo,"
+#~ msgid "The time zone for this data could not be loaded just now,"
+#~ msgstr "La zona horaria de estos datos no se pudo cargar ahora mismo,"
 
-#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
-msgid "The time zone in the profile settings for this data isn't one this server recognises,"
-msgstr "La zona horaria de los ajustes del perfil para estos datos no es reconocida por este servidor,"
+#~ msgid "The time zone in the profile settings for this data isn't one this server recognises,"
+#~ msgstr "La zona horaria de los ajustes del perfil para estos datos no es reconocida por este servidor,"
 
-#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
-msgid "No time zone is set in the profile settings for this data,"
-msgstr "No hay ninguna zona horaria configurada en los ajustes del perfil para estos datos,"
+#~ msgid "No time zone is set in the profile settings for this data,"
+#~ msgstr "No hay ninguna zona horaria configurada en los ajustes del perfil para estos datos,"
 
-#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
-msgid "Setting a time zone in the profile settings fixes this."
-msgstr "Configurar una zona horaria en los ajustes del perfil corrige esto."
+#~ msgid "Setting a time zone in the profile settings fixes this."
+#~ msgstr "Configurar una zona horaria en los ajustes del perfil corrige esto."
 
-#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
-msgid "Correcting the time zone in the profile settings fixes this."
-msgstr "Corregir la zona horaria en los ajustes del perfil corrige esto."
+#~ msgid "Correcting the time zone in the profile settings fixes this."
+#~ msgstr "Corregir la zona horaria en los ajustes del perfil corrige esto."
 
-#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
-msgid "Reloading the report later may fix this."
-msgstr "Volver a cargar el informe más tarde puede corregirlo."
+#~ msgid "Reloading the report later may fix this."
+#~ msgstr "Volver a cargar el informe más tarde puede corregirlo."
 
-#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
-msgid "<0/> so each reading is placed at the local time the device that recorded it reported. If readings came from devices set to different time zones, some hours may be off. <1/>"
-msgstr "<0/> por lo que cada lectura se coloca en la hora local que informó el dispositivo que la registró. Si las lecturas proceden de dispositivos configurados en distintas zonas horarias, algunas horas pueden quedar desplazadas. <1/>"
+#~ msgid "<0/> so each reading is placed at the local time the device that recorded it reported. If readings came from devices set to different time zones, some hours may be off. <1/>"
+#~ msgstr "<0/> por lo que cada lectura se coloca en la hora local que informó el dispositivo que la registró. Si las lecturas proceden de dispositivos configurados en distintas zonas horarias, algunas horas pueden quedar desplazadas. <1/>"
 
 #: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
 msgid "How to read this report"
@@ -25499,12 +25390,10 @@ msgstr "<0/> Grupo"
 msgid "<0/> Condition"
 msgstr "<0/> Condición"
 
-#: src/lib/help/pages.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Tenants"
 msgstr "Inquilinos"
 
-#: src/lib/help/settings.svelte.ts
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Translations"
 msgstr "Traducciones"
@@ -25594,9 +25483,6 @@ msgstr "min atrás"
 
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
-#: src/lib/components/help/HelpReference.svelte
-#: src/lib/components/help/HelpReference.svelte
-#: src/lib/help/connectors.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health"
 msgstr "Google Health"
@@ -26036,7 +25922,6 @@ msgstr "Tipos de datos detectados y cómo Nocturne puede usarlos"
 msgid "{0}/{1} selected"
 msgstr "{0}/{1} seleccionado"
 
-#: src/lib/components/help/HelpReference.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/GoogleHealthCategoryTable.svelte
 msgid "Data type"
 msgstr "tipo de datos"
@@ -26072,6 +25957,7 @@ msgstr "Error de escaneo"
 msgid "Yes ({0})"
 msgstr "Sí ({0})"
 
+#: src/lib/components/reports/loop-analysis/EventList.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "No"
 msgstr "No"
@@ -26269,117 +26155,94 @@ msgstr "Omitir el override bind-data hace que el almacenamiento declarado vuelva
 msgid "One or more connectors failed; review the connector details and retry the failed range."
 msgstr "Uno o más conectores han fallado; revise los detalles de los conectores y vuelva a intentar el intervalo que falló."
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Sleep sessions and stages"
 msgstr "Sesiones y fases del sueño"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Active energy burned"
 msgstr "Energía quemada por actividad"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Total calories"
 msgstr "Calorías totales"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Distance"
 msgstr "Distancia"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Floors"
 msgstr "Pisos"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Workouts"
 msgstr "Entrenamientos"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Body fat"
 msgstr "Grasa corporal"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Height"
 msgstr "Estatura"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Nutrition log"
 msgstr "Registro de alimentación"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Hydration"
 msgstr "Hidratación"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Blood glucose"
 msgstr "Glucosa en sangre"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Oxygen saturation"
 msgstr "Saturación de oxígeno"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Heart rate variability"
 msgstr "Variabilidad de la frecuencia cardíaca"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Resting heart rate"
 msgstr "Frecuencia cardíaca en reposo"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Daily oxygen saturation"
 msgstr "Saturación de oxígeno diaria"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Daily respiratory rate"
 msgstr "Frecuencia respiratoria diaria"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Sleep respiratory rate"
 msgstr "Frecuencia respiratoria durante el sueño"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Core body temperature"
 msgstr "Temperatura corporal central"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Menstrual period"
 msgstr "Menstruación"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Ovulation test"
 msgstr "Prueba de ovulación"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Cervical mucus"
 msgstr "Moco cervical"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Sexual activity"
 msgstr "Actividad sexual"
 
-#: src/lib/components/connectors/google-health-labels.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
 msgid "Unknown data type"
 msgstr "Tipo de datos desconocido"
@@ -26985,9 +26848,8 @@ msgstr ""
 msgid "The content of this page might be corrupted."
 msgstr ""
 
-#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
-msgid "Tab"
-msgstr ""
+#~ msgid "Tab"
+#~ msgstr ""
 
 #. 0: text; 1: value; 2: border; 3: value
 #: ../cms/src/lib/components/edra/shadcn/components/toolbar/QuickColors.svelte
@@ -27685,9 +27547,11 @@ msgstr ""
 
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
+#: src/lib/components/reports/BasalBolusRatioChart.svelte
 msgid "Manual bolus (U)"
 msgstr ""
 
+#: src/lib/components/reports/BasalBolusRatioChart.svelte
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
 #: src/lib/components/reports/BasalBolusRatioChart.svelte
 msgid "Automatic bolus (U)"
@@ -27858,6 +27722,2786 @@ msgstr ""
 msgid "Lower means steadier glucose with fewer ups and downs."
 msgstr ""
 
+#: src/lib/components/reports/BasalBolusRatioChart.svelte
+msgid "Total (U)"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
+msgid "See how your insulin was split each day, against the carbs you logged"
+msgstr ""
+
+#: src/lib/components/layout/Headroom.test-harness.svelte
+msgid "Panel"
+msgstr ""
+
+#. 0: metricLabel
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "Reset {0} color scale"
+msgstr ""
+
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "Dim outside"
+msgstr ""
+
+#. 0: metricLabel; 1: index === 0 ? "minimum" \\: "maximum"
+#. 0: metricLabel; 1: thumb.index === 0 ? "minimum" \\: "maximum"
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "{0} focus {1}"
+msgstr ""
+
+#. 0: metricLabel
+#. 0: metricLabel
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
+msgid "{0} color scale"
+msgstr ""
+
+#. 0: metricLabel; 1: thumb.index - 1
+#. 0: metricLabel; 1: index + 1
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "{0} color boundary {1}"
+msgstr ""
+
+#. 0: metricLabel; 1: index + 1
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "Remove {0} color boundary {1}"
+msgstr ""
+
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "<0/> Color boundary"
+msgstr ""
+
+#. 0: Number.isFinite(limits[1]) ? `, between ${formatted(limits[0])} and ${formatted(limits[1])} ${unitLabel}` \\: ""
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "Enter a focus window with its minimum below its maximum{0}."
+msgstr ""
+
+#. 0: Number.isFinite(limits[1]) ? ` and inside ${formatted(limits[0])}–${formatted(limits[1])} ${unitLabel}` \\: ` and above ${formatted(limits[0])} ${unitLabel}`
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "Keep each color boundary between its neighbours{0}."
+msgstr ""
+
+#. 0: formatted(scale.window[0]); 1: formatted(scale.window[1]); 2: unitLabel
+#: src/lib/components/reports/year-overview/HeatmapLegend.svelte
+msgid "Focus {0}–{1} {2}"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/year-overview/+page.svelte
+msgid "Band"
+msgstr ""
+
+#: src/lib/coach-marks/TourScrollHarness.test.svelte
+msgid "Near target"
+msgstr ""
+
+#: src/lib/coach-marks/TourScrollHarness.test.svelte
+#: src/lib/coach-marks/TourScrollHarness.test.svelte
+msgid "Far target"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Your glucose, live"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "This updates in real-time as new readings arrive from your CGM."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Customisable widgets"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Reorder or swap these in Settings → Appearance to show the stats you care about."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Interactive chart"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Drag to pan, pinch or scroll to zoom. Tap any point to see the exact reading and time."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "View modes"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Switch between Time in Range and Profile views to see different patterns."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Tracker events"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Tracker events appear on your calendar — coloured by urgency."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Smart matching"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Nocturne suggests food matches based on your history — review them here."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Widget order"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Drag to reorder your dashboard widgets."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Start with Executive Summary"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "It combines your key metrics into a single page — great for clinic visits or sharing with your endo."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Once you set up an uploader app or cloud connector below, your data source will appear here automatically."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Cloud connectors"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Pull data directly from Dexcom, LibreLink, or Glooko — no uploader app needed."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Share with a caretaker"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Share your glucose data with a parent, partner, or clinician."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Start here"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Create a shareable link to invite a caretaker, partner, or clinician."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Choose their access"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Roles control what they can see and do. Viewer for a quick glance, Caretaker if they help manage your diabetes."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Why this matters"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Your diabetes type determines how Nocturne calculates bolus suggestions and categorises treatments. Select your type and save."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Add your current device"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Add the CGM, pump, or meter you use right now and mark it as current. Historical devices can be added later."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Add your current insulin"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Add at least one insulin and mark it as current. The brand and type help Nocturne estimate active insulin curves."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Automatically synced"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Your basal rates, carb ratios, and sensitivity factors are imported from your uploader (AAPS, Loop, xDrip+). No manual entry needed."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Pages and filters"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Select a page name to open that page. Select Filters (the funnel icon) at the top of the report to choose the data that the report uses. All the Loop Analysis pages use the same filters."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Daily totals"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "These figures show the mean insulin for one day in the range. They show basal, automatic boluses, manual boluses and the net loop correction."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Your usual day"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Each chart shows all the days in the range on one 24-hour axis. The line is the median. The bands show the spread of the days. Move the pointer along a chart to see the values at a time."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+#: src/lib/components/reports/loop-analysis/SlotDays.svelte
+msgid "Net loop correction"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "This chart shows the insulin that the loop added to your scheduled basal or removed from it. It includes temp basals and automatic boluses. Use the switches below the chart to show manual temp basals, suspends and inferred delivery."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Days at a time of day"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Select a time on a chart to see the days for that time. Select a day to open it in Day in Review. Faded areas have too few days to show a pattern."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "Events to align"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Select the type of event for each cohort, for example meals or correction boluses. You can compare a maximum of three cohorts. Isolated events only removes each event that has another meal, correction bolus or unannounced rise in its window."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Before and after each event"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "The charts align all the events of a cohort at 0. The dashed line at 0 is the time of the event. Each colour is one cohort. The line is the median of its events."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Results after each event"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "This table shows the median results for each cohort after its events, for example the peak rise and the time to the peak."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "All the events"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "This list shows each event in the cohorts. Select a column heading to sort the events. Select an event to open it in Day in Review."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "Error by horizon"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Each chart compares one prediction curve with the readings that followed it. The bold line is the bias. A positive bias means that the predictions were too high. If a horizon is marked Settings signal, only the bias at that horizon gives information about your settings."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Bias by hour"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Each row is one hour of the day. Each column is one horizon. The colour of a cell shows if the predictions from that hour were too high or too low. If there is more than one curve, select a curve at the top of By hour and context."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Bias by context"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "This table divides the predictions into groups by the events in the three hours before them, for example a meal. The bias does not include interrupted predictions."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "How the loop operated"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "These figures show the percentage of time that the loop was closed and that the CGM and pump were active. They also show how the loop changed basal. They also show the limits that your settings put on the loop. When the data cannot give a figure, the tile shows Unknown and the reason."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Each hour of the day"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Each chart shows a value for each hour of the day. Use these charts to find the hours when the loop stops or limits insulin. Select an hour to show only the gaps that started in that hour."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Gaps"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "This list shows the gaps in the loop, with the longest gap first. Select a gap to open it in Day in Review."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Observations, not advice"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "This page compares your profile settings with observations from your data. The figures are observations. They are not settings to change. Speak to your diabetes care team before you change a setting."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Profile and observed values"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "The chart shows your profile setting as a line. The dots show the observed values for each block of the day. Compare the two values for each block."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "One row for each block"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Each row shows the observed value, the profile value, the number of days or events and the confidence. Select a row to see the days or events for that figure."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Send the link"
+msgstr ""
+
+#. 0: expiryLabel
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "The link expires in {0}. They'll need to sign in or create an account to accept."
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Show the tour for this page"
+msgstr ""
+
+#: src/lib/coach-marks/copy.svelte.ts
+msgid "Show tip"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Loop Analysis"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "What your automated insulin delivery does"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Daily profile"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Glucose, insulin and carbs at each time of day"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Meals and events"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Glucose and insulin before and after each event"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Prediction accuracy"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "The loop's predictions compared with the readings that followed"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Loop health"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "How much of the time the loop was closed"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Settings evidence"
+msgstr ""
+
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Your profile settings compared with your data"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/ReportsLayoutHarness.test.svelte
+msgid "Report body"
+msgstr ""
+
+#: src/lib/components/layout/ReportFilterExtensionProbe.test-harness.svelte
+msgid "Report filter"
+msgstr ""
+
+#: src/lib/components/layout/ReportsFilterSidebar.svelte
+msgid "Set the date range and the filters for this report."
+msgstr ""
+
+#: src/lib/components/reports/AidSystemUseCard.svelte
+msgid "This report counts device use on UTC days."
+msgstr ""
+
+#: src/lib/components/reports/NoTimeZone.svelte
+msgid "This report needs a time zone"
+msgstr ""
+
+#: src/lib/components/reports/time-zone-reasons.svelte.ts
+msgid "A shared link does not show the time zone of this data."
+msgstr ""
+
+#: src/lib/components/reports/time-zone-reasons.svelte.ts
+msgid "The time zone of this data did not load."
+msgstr ""
+
+#: src/lib/components/reports/time-zone-reasons.svelte.ts
+msgid "To try again, reload the report later."
+msgstr ""
+
+#: src/lib/components/reports/time-zone-reasons.svelte.ts
+msgid "This server does not recognise the time zone in the profile settings."
+msgstr ""
+
+#: src/lib/components/reports/time-zone-reasons.svelte.ts
+msgid "The owner of this data can correct the time zone in the profile settings."
+msgstr ""
+
+#: src/lib/components/reports/time-zone-reasons.svelte.ts
+msgid "The profile settings do not have a time zone."
+msgstr ""
+
+#: src/lib/components/reports/time-zone-reasons.svelte.ts
+msgid "The owner of this data can set a time zone in the profile settings."
+msgstr ""
+
+#: ../portal/src/lib/components/features/ReportsDemo.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Net loop correction by hour"
+msgstr ""
+
+#: ../portal/src/lib/components/features/ReportsDemo.svelte
+msgid "what the loop added or took away, above schedule"
+msgstr ""
+
+#: ../portal/src/lib/components/features/ReportsDemo.svelte
+msgid "03:00 runs 0.5 U/h above schedule, across 14 days"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/hourly-stats/+page.svelte
+msgid "This report places each reading at the local time that the device reported. If the devices use different time zones, some hours can be incorrect."
+msgstr ""
+
+#. 0: dayRange(comparison.startDate, comparison.endDate)
+#: src/routes/(authenticated)/reports/loop-analysis/+layout.svelte
+msgid "Compared with {0}."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/+layout.svelte
+msgid "<0/> Loop Analysis uses a maximum of 90 days. For a longer range, it uses only the most recent 90 days."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/LoopAnalysisHarness.test.svelte
+msgid "Filters panel"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/FiltersPanelHarness.test.svelte
+#: src/routes/(authenticated)/reports/loop-analysis/LoopAnalysisHarness.test.svelte
+msgid "Open filters"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/LoopAnalysisHarness.test.svelte
+msgid "Apply filters"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/LoopAnalysisHarness.test.svelte
+msgid "Reset filters"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/steps/+page.svelte
+msgid "This report cannot calculate the total steps for each local day."
+msgstr ""
+
+#. 0: days.map(weekdayLabel).join(", ")
+#: src/lib/components/reports/loop-analysis/AppliedFiltersSummary.svelte
+msgid "Days: {0}."
+msgstr ""
+
+#. 0: applied.profileName
+#: src/lib/components/reports/loop-analysis/AppliedFiltersSummary.svelte
+msgid "Profile: {0}."
+msgstr ""
+
+#. 0: excluded.join(", ")
+#: src/lib/components/reports/loop-analysis/AppliedFiltersSummary.svelte
+msgid "Time not used: {0}."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "# day"
+msgid_plural "# days"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+#: src/lib/components/reports/loop-analysis/EventList.svelte
+#: src/lib/components/reports/loop-analysis/EventList.svelte
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "# event"
+msgid_plural "# events"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "# loop cycle"
+msgid_plural "# loop cycles"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "# reading"
+msgid_plural "# readings"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "No data at this time"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+#: src/lib/components/reports/loop-analysis/SlotDays.svelte
+msgid "This range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/PredictionContextTable.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Compared"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/HorizonErrorChart.svelte
+#: src/lib/components/reports/loop-analysis/PredictionContextTable.svelte
+msgid "n"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+msgid "Too few events to show a pattern"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/AggregateReadout.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/HorizonErrorChart.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Too few days to show a pattern"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Hidden: your access does not include this data"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Days with data"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "day"
+msgid_plural "days"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Total insulin"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "over # day"
+msgid_plural "over # days"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: u1(insulin.total?.p50 ?? 0); 1: plural(insulin.total?.n ?? 0, ["over # day", "over # days"])
+#. 0: u2(value.p50); 1: plural(value.n ?? 0, ["# loop cycle", "# loop cycles"])
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Median {0}, {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Basal / bolus"
+msgstr ""
+
+#. 0: u1(insulin.deliveredBasal ?? 0); 1: u1(insulin.bolus ?? 0)
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "{0} / {1} U/day"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Automatic / manual bolus"
+msgstr ""
+
+#. 0: percent(insulin.automaticBolusPercent); 1: percent(insulin.manualBolusPercent)
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "{0} / {1} of total insulin"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Delivered basal ratio"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Delivered basal divided by scheduled basal"
+msgstr ""
+
+#. 0: summary.netLoopCorrectionTddPercent.toFixed(0); 1: plural(correctionDays, ["over # day", "over # days"])
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "{0}% of total insulin, {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Over # day"
+msgid_plural "Over # days"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: format(value.p50 ?? 0); 1: unit; 2: n
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Median {0} {1}, {2}"
+msgstr ""
+
+#. 0: u2(series.meanPerDay ?? 0); 1: unit; 2: daysText(series.n)
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "{0} {1} per day, {2}"
+msgstr ""
+
+#. 0: signed(value.mean ?? 0); 1: daysText(value.rate?.n)
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Net loop correction {0} U/h, {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "No data in this hour"
+msgstr ""
+
+#. 0: signed(hour.mean); 1: daysText(hour.n)
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Net loop correction {0} U, {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Press Enter to list the days for the time. Press Escape to close the list."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Compared, mean per day"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Mean per day"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Events per day"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Insulin Delivery shows the totals for the full range, without these filters <0/>"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "Select a longer range, or use fewer filters."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "The charts show the comparison range as dashed outlines on each series."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "No glucose readings in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Active target range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Target range hidden: your access does not include it"
+msgstr ""
+
+#. 0: bg(s.targetLow); 1: bg(s.targetHigh)
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Target {0}–{1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "No basal delivery in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Scheduled basal hidden: your access does not include it"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Delivered 10–90%"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Delivered 25–75%"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Delivered median"
+msgstr ""
+
+#. 0: u2(s.scheduledBasal.p50 ?? 0)
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "<0>Scheduled median</0> {0} U/h"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "U/h above schedule"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "No loop corrections in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Temp basal change 25–75%"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Mean, with automatic boluses"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Manual temp"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Suspend"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Temp basal change"
+msgstr ""
+
+#. 0: signed(s.netLoopCorrection.automaticBolusMean ?? 0)
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "<0>Automatic boluses, mean</0> {0} U/h"
+msgstr ""
+
+#. 0: signed(s.manualTemp.mean ?? 0)
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "<0>Manual temp, mean</0> {0} U/h"
+msgstr ""
+
+#. 0: signed(s.suspend.mean ?? 0)
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "<0>Suspend, mean</0> {0} U/h"
+msgstr ""
+
+#. 0: signed(s.inferred.mean ?? 0)
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "<0>Inferred, mean</0> {0} U/h"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Also show"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "U per hour"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Insulin on board"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "No IOB in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Mostly as the loop reported it"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Mostly calculated from doses"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Carbs on board"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "No COB in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Mostly calculated from carbs"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "U per day"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "No manual boluses in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Grams per day"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "No carbs in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "<0/> Faded areas have too few days to show a pattern. To list the days for a time, select the time or press Enter on it. Use the arrow keys to move along the day and between charts. Use Home and End to go to the start and the end of the day."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/DailyProfileBody.svelte
+msgid "Each time of day uses data from one day at most."
+msgstr ""
+
+#. 0: i + 1
+#. 0: cohort[1]
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Cohort {0}"
+msgstr ""
+
+#. 0: i + 1
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "Cohort {0} from"
+msgstr ""
+
+#. 0: i + 1
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "Cohort {0} to"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "At least (g)"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "At most (g)"
+msgstr ""
+
+#. 0: i + 1
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "Remove cohort {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "Select a start and an end that are different. To use all of the day, clear both."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "Add a cohort of events to align."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "Your access does not include the events that this page aligns."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "<0/> Add cohort"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventCohortBuilder.svelte
+msgid "Isolated events have no other meal, correction bolus or unannounced rise in their window. A window across midnight, for example 22:00 to 02:00, continues into the next day."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventList.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "Open in Day in Review"
+msgstr ""
+
+#. 0: (event.cohorts ?? []) .map((n) => cohorts.find((c) => c.cohort === n)) .filter((c) => c != null) .map(cohortLabel) .join("\; ")
+#: src/lib/components/reports/loop-analysis/EventList.svelte
+msgid ", in {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventList.svelte
+msgid "Yes"
+msgstr ""
+
+#. 0: formatWeekdayDate(startOfDay(event.date ?? '')); 1: localTime(event.time)
+#. 0: formatWeekdayDate(startOfDay(episode.date ?? '')); 1: localTime(episode.time)
+#: src/lib/components/reports/loop-analysis/EventList.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "Open {0} {1} in Day in Review"
+msgstr ""
+
+#. 0: plural(events.length, ["# event", "# events"])
+#: src/lib/components/reports/loop-analysis/EventList.svelte
+msgid "{0}. Sort by a column, or open an event in Day in Review."
+msgstr ""
+
+#. 0: plural(sorted.length, ["# event", "# events"])
+#: src/lib/components/reports/loop-analysis/EventList.svelte
+msgid "Show all {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Observed"
+msgstr ""
+
+#. 0: formatMetric(metric.kind, value.p25); 1: formatMetric(metric.kind, value.p75); 2: value.n
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "{0} to {1}, n {2}"
+msgstr ""
+
+#. 0: value?.n ?? 0; 1: plural(events, ["# event", "# events"])
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "{0} of {1} returned to the start glucose"
+msgstr ""
+
+#. 0: value?.n ?? 0; 1: plural(events, ["# event", "# events"]); 2: bg(backToStartMgdl); 3: bgLabel()
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "{0} of {1} returned to within {2} {3} of the start glucose"
+msgstr ""
+
+#. 0: compared ? formatMetric(metric.kind, compared.p50) \\: "–"
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "Compared {0}"
+msgstr ""
+
+#. 0: compared.wentBelowRange ?? 0; 1: compared.wentBelowRangeObserved ?? 0
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "Compared {0} of {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "Went below range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "Each figure's median and middle half across each cohort's events"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "The drop is the start glucose minus the glucose at the end of the window. Drop per unit shows only for some events. The event must have no other meal, correction or rise in its window. It must also have enough insulin above schedule, and no glucose below range."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "# meal had another event in its window"
+msgid_plural "# meals had another event in their window"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "# had too little of its basal recorded"
+msgid_plural "# had too little of their basal recorded"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "# had no insulin above schedule"
+msgid_plural "# had no insulin above schedule"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: cohort ? cohortLabel(cohort) \\: ""; 1: plural(r.gramsPerUnitNotIsolated ?? 0, ["# meal had another event in its window", "# meals had another event in their window"]); 2: plural(r.gramsPerUnitUncovered ?? 0, [ "# had too little of its basal recorded", "# had too little of their basal recorded", ]); 3: plural(r.gramsPerUnitNoNetInsulin ?? 0, [ "# had no insulin above schedule", "# had no insulin above schedule", ])
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "{0}: grams per unit comes only from a meal with no other meal, correction or rise in its window. The pump records must also show all the insulin in that window. {1}; {2}; {3}."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventMetricsTable.svelte
+msgid "The figures are medians, with the middle half of events below each median. Faded figures have too few events to show a pattern. These figures are observations of what occurred, not settings to change."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "# not included because of another event in its window"
+msgid_plural "# not included because of another event in their window"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "# without a glucose reading at the time"
+msgid_plural "# without a glucose reading at the time"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "# not included because the time before it is outside the history that you can see"
+msgid_plural "# not included because the time before them is outside the history that you can see"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Glucose change from the event"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Net loop correction since the event"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Net insulin above schedule since the event"
+msgstr ""
+
+#. 0: label; 1: panel.format(value.p50 ?? 0); 2: plural(value.n ?? 0, ["# event", "# events"])
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "{0}: median {1}, {2}"
+msgstr ""
+
+#. 0: label
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "{0}: no data"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "No data recorded near these events"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "No events to align"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Select an event that your access includes."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Cohorts"
+msgstr ""
+
+#. 0: compared?.events ?? 0
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "(compared {0})"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "# minute before"
+msgid_plural "# minutes before"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "# hour after"
+msgid_plural "# hours after"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "No events like these in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Select a longer range, make the cohorts wider, or use fewer filters."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "The charts show the comparison range as dashed outlines in the colour of each cohort."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Press Enter to list the events for the time. Press Escape to close the list."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Net loop correction only"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "To list the events with a glucose reading at a time, select the time or press Enter on it."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "<0/> Each band shows the events of a cohort, aligned on the event at 0. Faded areas have too few events to show a pattern. <1/> Use the arrow keys to move along the window and between charts. Use Home and End to go to the start and the end."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "Events"
+msgstr ""
+
+#. 0: plural(response.definition?.minutesBefore ?? 0, ["# minute before", "# minutes before"]); 1: plural((response.definition?.minutesAfter ?? 0) / 60, ["# hour after", "# hours after"])
+#: src/lib/components/reports/loop-analysis/EventResponseBody.svelte
+msgid "{0} to {1} each event. <0/> <1/>"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
+msgid "This page uses only the last hour for each range that you select."
+msgid_plural "This page uses only the last # hours for each range that you select."
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: plural(response.historyWindowHours ?? 0, [ "This page uses only the last hour for each range that you select.", "This page uses only the last # hours for each range that you select.", ])
+#: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
+msgid "{0} It does not compare ranges. <0/>"
+msgstr ""
+
+#. 0: label
+#: src/lib/components/reports/loop-analysis/EventSlotEvents.svelte
+msgid "Events with a glucose reading in {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventSlotEvents.svelte
+msgid "These are the events with a glucose reading in this period, on all charts. An insulin or carbs figure in this period can use slightly more or fewer events. Open an event to see it in Day in Review. Press Escape to go back to the chart."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventSlotEvents.svelte
+msgid "Close the event list"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/EventSlotEvents.svelte
+msgid "No event of this cohort has a reading here."
+msgstr ""
+
+#. 0: formatMae(h.mae ?? 0)
+#: src/lib/components/reports/loop-analysis/HorizonErrorMarks.svelte
+msgid "MAE {0}"
+msgstr ""
+
+#. 0: (h.error.n ?? 0).toLocaleString()
+#: src/lib/components/reports/loop-analysis/HorizonErrorMarks.svelte
+msgid "n {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/HorizonErrorChart.svelte
+msgid "# prediction"
+msgid_plural "# predictions"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: horizonLabel(minutes)
+#: src/lib/components/reports/loop-analysis/HorizonErrorChart.svelte
+msgid "{0}: no matched predictions"
+msgstr ""
+
+#. 0: horizonLabel(minutes); 1: formatError(h.error.mean ?? 0); 2: unit; 3: formatMae(h.mae ?? 0); 4: unit; 5: predictions(h.error.n)
+#: src/lib/components/reports/loop-analysis/HorizonErrorChart.svelte
+msgid "{0}: bias {1} {2}, MAE {3} {4}, {5}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/HorizonErrorChart.svelte
+msgid "Only in the compared range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/HorizonErrorChart.svelte
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+#: src/lib/components/reports/loop-analysis/PredictionContextTable.svelte
+msgid "Bias"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/HorizonErrorChart.svelte
+#: src/lib/components/reports/loop-analysis/PredictionContextTable.svelte
+msgid "MAE"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/HorizonErrorChart.svelte
+msgid "No matched predictions"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/HorizonErrorChart.svelte
+msgid "Compared bias"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/HorizonErrorChart.svelte
+msgid "A settings signal. At this horizon, the loop has not yet acted on the prediction."
+msgstr ""
+
+#. 0: noAccess.map(ignoredFilterLabel).join(", ")
+#: src/lib/components/reports/loop-analysis/IgnoredFiltersNotice.svelte
+msgid "Your access does not include the data for these filters, so the report did not use them: {0}."
+msgstr ""
+
+#. 0: outOfLimits.map(ignoredFilterLabel).join(", ")
+#: src/lib/components/reports/loop-analysis/IgnoredFiltersNotice.svelte
+msgid "These values are outside the limits of the report, so the report used its default values: {0}."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/IgnoredFiltersNotice.svelte
+msgid "The report did not use some filters"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "No comparison"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "Previous period"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "Custom range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "You cannot compare, because you can see only the most recent history."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "Select the two dates to compare."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "The second date must be on or after the first date."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "Compare with"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "All profiles"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "The report uses all days. Select days to use only those days."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "The report uses only the days that you selected."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "Days of the week"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopAnalysisFilterFields.svelte
+msgid "Exclude the time of"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "The system that ran the loop does not record this"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "No loop cycles in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "No loop cycle in this range recorded the data that this figure needs"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "All the data for this figure is in time that the filters exclude"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "The active profile does not record a maximum basal rate"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "The loop did not set a temp basal in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "No loop cycle in this range set the temp basals that this figure needs"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Nothing measured in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "# min"
+msgid_plural "# min"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "# h"
+msgid_plural "# h"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: compared ?? "–"
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Compared: {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "period"
+msgid_plural "periods"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: duration(gaps.totalMinutes); 1: duration(gaps.longestMinutes)
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "{0} in total, longest {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "# period"
+msgid_plural "# periods"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: plural(compared.count ?? 0, ["# period", "# periods"]); 1: duration(compared.totalMinutes)
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "{0}, {1} in total"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Closed loop"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Percent of the analysed time when the loop controlled basal delivery"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "CGM active"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Percent of the analysed time when glucose readings arrived"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Pump active"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Percent of the analysed time when the loop uploaded a cycle. If there are no cycles, the report uses the delivery records."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Loop gaps"
+msgstr ""
+
+#. 0: gapThreshold
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "No gap of more than {0} between loop cycles"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Unrecorded delivery"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "The pump records show the delivery for all the time that the loop ran"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Algorithm zero temps"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "The delivery is not known for this range"
+msgstr ""
+
+#. 0: maybePct(zero?.suspended?.percent); 1: maybePct(zero?.manualZeroTemp?.percent)
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Percent of the time with known delivery when basal delivery was zero. Suspended {0}, manual zero temps {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "At max basal"
+msgstr ""
+
+#. 0: maybePct(known)
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Percent of the algorithm temp basal time with a known max basal ({0})"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "At max IOB"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Percent of the loop time with a recorded reason when max IOB limited the dose. Then the loop gave less insulin than it wanted. Insulin on board (IOB) was at or near max IOB."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Automatic boluses a day"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "No automatic boluses in this range"
+msgstr ""
+
+#. 0: u2(size.p50)
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Median size {0} U"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Requested, not done"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Percent of the changes that the loop requested but that did not occur (open loop, or the pump did not respond)"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Max basal rate setting of the Loop app"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Only the Loop app uploads this setting"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Max IOB"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "This figure shows only when the loop reports that max IOB limited a dose. The loop did not report this in this range."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "# minute"
+msgid_plural "# minutes"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Press Enter to show only the gaps that started in the hour. Press Escape to show all the gaps."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Closed loop by hour"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "No loop activity in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "CGM active by hour"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Pump active by hour"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "No pump activity in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Compared range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Too few days"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Nothing measured in this hour"
+msgstr ""
+
+#. 0: gapThreshold
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "More than {0} between loop cycles."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Time when the loop ran but the pump records do not show what the pump delivered."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Compared, all days"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "All days"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Median day"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Days counted"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "All days adds the time of every day in this hour. Median day is the share of the middle day."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Your access does not include the data for this page"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Share of analysed time, %"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Algorithm zero temps by hour"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Share of time with known delivery, %"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Manual zero temps"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "At max basal by hour"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Share of algorithm temp basal time with a known max basal, %"
+msgstr ""
+
+#. 0: unknown("maxBasal")
+#. 0: unknown(list.reason)
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Unknown: {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Max basal known for"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Sensitivity ratio by hour"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Autosens or dynamic ISF. Above 1 means that the loop calculated a need for more insulin."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "The loop did not report a sensitivity ratio in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "<0/> Faded hours have too few days to show a pattern. To list only the gaps that started in an hour, select the hour or press Enter on it. Use the arrow keys to move along the day and between charts."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Show all hours"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Gaps, longest first"
+msgstr ""
+
+#. 0: hourText(pickedHour)
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Only the gaps that started in {0}."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "# gap started in this hour"
+msgid_plural "# gaps started in this hour"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid ". Open in Day in Review"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Show the longest #"
+msgid_plural "Show the longest #"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Show all #"
+msgid_plural "Show all #"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/LoopHealthBody.svelte
+msgid "Each hour of the day uses data from one day at most."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+#: src/lib/components/reports/loop-analysis/PredictionBiasHeatmap.svelte
+msgid "Settings signal"
+msgstr ""
+
+#. 0: curveLabel(curve.curve); 1: unit
+#: src/lib/components/reports/loop-analysis/PredictionBiasHeatmap.svelte
+msgid "{0} bias by hour of day and horizon, in {1}. A positive value means that the prediction was too high."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionBiasHeatmap.svelte
+msgid "<0/> Predicted too low"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionBiasHeatmap.svelte
+msgid "<0/> Near zero"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionBiasHeatmap.svelte
+msgid "<0/> Predicted too high"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionBiasHeatmap.svelte
+msgid "<0>Italic</0> and faded: too few days to show a pattern"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "Predictions analysed"
+msgstr ""
+
+#. 0: (comparison?.predictions ?? 0).toLocaleString()
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "{0} in the compared range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "One per device per five minutes"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "The predictions come from the device status of your loop. Your access does not include device data."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "The report compares the predictions with your glucose readings. Your access does not include glucose."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "Prediction accuracy is hidden"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "<0/> A person who manages this account can give you access."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "This curve is hidden"
+msgid_plural "These curves are hidden"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: plural(hiddenCurves.length, ["This curve is hidden", "These curves are hidden"]); 1: hiddenCurves.map(curveLabel).join(", ")
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "<0/> {0}: {1}. The report reads each curve only in the contexts where the algorithm uses it. These contexts come from treatments, and your access does not include treatments."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "You can see only the last hour, and it has no predictions yet."
+msgid_plural "You can see only the last # hours, and they have no predictions yet."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "No predictions in this range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "Prediction accuracy needs the predictions that your loop uploads with its device status. <0/>"
+msgstr ""
+
+#. 0: settingsSignal
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "Only the bias at {0} gives information about your settings. The readings at longer horizons include all the actions of the loop after the prediction. The prediction assumed that these actions would not occur."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "oref gives its unannounced meal (UAM) curve only when glucose increases faster than insulin alone predicts, or when carbs are absorbing. So the report measures UAM accuracy only at these times."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "oref removes the end of its zero-temp curve where the curve increases above the target. So its long horizons come only from predictions that did not increase above the target."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "Bias is the prediction minus the reading that followed it. A positive bias means that the prediction was too high. MAE (mean absolute error) is the average size of the error, in either direction."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "A prediction is interrupted if a carb entry or manual bolus occurs before its horizon. No bias figure includes interrupted predictions, because the reading then measures that action."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "How to read these figures"
+msgstr ""
+
+#. 0: unit
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "The spread of prediction minus reading, in {0}, at each horizon. The bold line is the bias. The MAE and the number of predictions are above each horizon."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "<0/> Compared range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "<0/> Faded horizons have too few days to show a pattern."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "Use the arrow keys to move between horizons. Use Home and End to go to the first or the last horizon."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "Curve"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "By hour and context"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "The compared range is in the charts above."
+msgstr ""
+
+#. 0: curveLabel(detail.curve)
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "{0} bias by hour of day"
+msgstr ""
+
+#. 0: unit
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "By the local hour of the prediction, in {0}. <0/>"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "Hidden. The contexts and the interrupted counts come from carbs, boluses, overrides and exercise. Your access does not include treatments."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "Override, temporary target or exercise includes low \"eating soon\" temporary targets. So some predictions made just before a meal are in that context, not in After a meal."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "The bias, MAE and n do not include interrupted predictions."
+msgstr ""
+
+#. 0: hoursText(response.contextLookbackMs)
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "The context of a prediction is what occurred in the {0} before it. <0/> <1/>"
+msgstr ""
+
+#. 0: curveLabel(detail.curve)
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "{0} by context"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "# curve"
+msgid_plural "# curves"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: plural(kinds.length, ["# curve", "# curves"])
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "{0} from the predictions that your loop uploaded. The report pairs each prediction with the reading within 2.5 minutes of its horizon. Unmatched horizons had no reading. Excluded horizons were in a sensor error or a compression low."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte
+msgid "The report adds the most recent predictions when their readings arrive."
+msgstr ""
+
+#. 0: compared.n ?? 0; 1: confidenceLabel(compared.confidence)
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "(n = {0}, {1})"
+msgstr ""
+
+#. 0: value(compared?.observed)
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "· compared {0}<0/>"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "<0/> More insulin than your profile"
+msgstr ""
+
+#. 0: unit; 1: value(figure.profile)
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "{0}, profile {1}"
+msgstr ""
+
+#. 0: value(figure.profile)
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "· profile {0}"
+msgstr ""
+
+#. 0: figure.n ?? 0
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "n = {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "Your data points to more insulin here than your profile gives. This is an observation, not a setting to copy. Usually, people change settings in small steps, one at a time, with their diabetes care team."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "Your data points to less insulin here than your profile gives."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "Close to your profile."
+msgstr ""
+
+#. 0: value(figure.spread.p25); 1: value(figure.spread.p75); 2: unit
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "Middle half of the episodes: {0}–{1} {2}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "Why the confidence is not higher"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "Candidates not used"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "# episode"
+msgid_plural "# episodes"
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: span
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBlock.svelte
+msgid "Episodes for the {0} figure. Open an episode in Day in Review."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionContextTable.svelte
+msgid "Unmatched"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionContextTable.svelte
+msgid "Excluded"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionContextTable.svelte
+msgid "Context"
+msgstr ""
+
+#. 0: curveLabel(curve.curve); 1: unit
+#: src/lib/components/reports/loop-analysis/PredictionContextTable.svelte
+msgid "{0} accuracy by context and horizon, in {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/PredictionContextTable.svelte
+msgid "<0>Italic</0>: too few days to show a pattern"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SlotDays.svelte
+msgid "Comparison range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SlotDays.svelte
+msgid "Delivered basal"
+msgstr ""
+
+#. 0: time(atMinute(minute)); 1: time(atMinute(minute + SLOT_MINUTES))
+#: src/lib/components/reports/loop-analysis/SlotDays.svelte
+msgid "Days for {0}–{1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SlotDays.svelte
+msgid "These are the days that give the data for this time. Open a day to see it in Day in Review at this time. Press Escape to go back to the chart."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SlotDays.svelte
+msgid "Close the day list"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SlotDays.svelte
+msgid "No day has data at this time."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SlotDays.svelte
+msgid "Part of the day"
+msgstr ""
+
+#. 0: bgLabel()
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "{0} per U"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "IOB start / end / residual, U"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Insulin on board here compares delivery with the schedule. It is negative when the loop gave less basal than the schedule."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Need, U/h"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Scheduled, U/h"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Loop correction, U/h"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Carried insulin, U/h"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Insulin on board at the start of the period less insulin on board at the end, for each hour. It is negative when more insulin is on board at the end."
+msgstr ""
+
+#. 0: bgLabel()
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Glucose change, {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Bolus, U"
+msgstr ""
+
+#. 0: bgLabel()
+#. 0: bgLabel()
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Glucose start → end, {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Net insulin, U"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Basal need above schedule, U"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Insulin that acted, U"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Carb ratio, g/U"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Carbs, g"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Needed, U"
+msgstr ""
+
+#. 0: isfUnit
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "ISF used, {0}"
+msgstr ""
+
+#. 0: signed(block.meanNetLoopCorrection)
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "The loop's mean correction: {0} U/h"
+msgstr ""
+
+#. 0: Math.round(block.consistency * 100)
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "In the same direction on {0}% of days"
+msgstr ""
+
+#. 0: bgDelta(block.glucoseTrend.mean); 1: bgLabel()
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Glucose trend across the block: {0} {1} per hour"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Fasting periods, in two-hour blocks. Each figure adds the schedule, the insulin that the loop added and the decrease in insulin on board. It then adjusts for a glucose increase or decrease."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "A higher basal rate means more insulin every hour."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Insulin sensitivity (ISF)"
+msgstr ""
+
+#. 0: (rules?.isfMinimumWindowMs ?? 0) / 3_600_000; 1: hoursText(rules?.isfWindowMs)
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Correction boluses given when glucose was high and steady, with no carbs logged near them. The figure is the glucose decrease in the next {0} to {1}, per unit of insulin that acted."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "A higher ISF means that each unit decreases glucose more, so less insulin is necessary for the same correction."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Carb ratio"
+msgstr ""
+
+#. 0: hoursText(rules?.carbRatioWindowMs)
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Meals logged with carbs and no other event near them. The figure is the grams for each unit of insulin that the meal needed in {0}."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "A higher carb ratio means less insulin for the same meal."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "No block"
+msgstr ""
+
+#. 0: section.format(block.observed); 1: section.unit; 2: block.profile == null ? "–" \\: section.format(block.profile); 3: confidenceLabel(block.confidence); 4: block.n ?? 0
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Observed {0} {1}, profile {2}, {3}, n {4}"
+msgstr ""
+
+#. 0: read
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "{0}. More insulin than your profile. See the note."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Observed, middle half of episodes"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Compared range, low confidence"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "These figures come from your own data. Each figure shows its confidence. They are not medical advice. Speak to your diabetes care team before you change a setting."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "This page needs more than the last hour"
+msgid_plural "This page needs more than the last # hours"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "You can see only the last hour, so the page shows no figures."
+msgid_plural "You can see only the last # hours, so the page shows no figures."
+msgstr[0] ""
+msgstr[1] ""
+
+#. 0: plural(response.historyWindowHours ?? 0, [ "You can see only the last hour, so the page shows no figures.", "You can see only the last # hours, so the page shows no figures.", ])
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "This page needs more history than you can see. The report checks each figure against the hours before it, for example to find meals. {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Settings evidence uses glucose, the delivered insulin and the profile settings together. It shows only if you have access to all three."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "The loop's own sensitivity ratio by hour, in Loop health <0/>"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Middle half"
+msgstr ""
+
+#. 0: section.format(compared.observed); 1: compared.n ?? 0; 2: confidenceLabel(compared.confidence)
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "{0}, n {1}, {2}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Episodes"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "<0/> More insulin than your profile. See the note."
+msgstr ""
+
+#. 0: block.profile == null ? "–" \\: section.format(block.profile); 1: section.unit
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Profile {0} {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "Carb ratio needs meals with carbs logged. No meal in this range has carbs logged."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte
+msgid "<0/> Hollow dots show figures with low confidence. Open a block to see the reasons, the candidates that the report did not use and the episodes for the figure. Use the arrow keys to move along the day and between charts."
+msgstr ""
+
+#. 0: pickHelp ?? ""
+#: src/lib/components/reports/loop-analysis/TimeOfDayPanel.svelte
+msgid "Use the left and right arrows to move along the axis. Use Home and End to go to its ends. Use the up arrow to go to the previous chart and the down arrow to go to the next chart. {0}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Correction boluses"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Sensor starts"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Exercise starts"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Override starts"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Temporary target starts"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Unannounced rises"
+msgstr ""
+
+#. 0: cohort.minGrams; 1: cohort.maxGrams
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "{0}–{1} g"
+msgstr ""
+
+#. 0: cohort.cohort; 1: filters.join(", ")
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Cohort {0}: {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Correction bolus"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Sensor start"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Unannounced rise"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Start glucose"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Peak rise"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Time to peak"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Glucose at 2 h"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Glucose at 4 h"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Back to start"
+msgstr ""
+
+#. 0: bg(backToStartMgdl); 1: bgLabel()
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Back within {0} {1} of start"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Drop to window end"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Lowest glucose"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Time to lowest glucose"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Total insulin in window"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Net insulin above schedule in window"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Above schedule, first 30 min"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Above schedule, first 60 min"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Above schedule, first 2 h"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "IOB at the event"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "IOB at window end"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Observed grams per unit"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "Drop per unit above schedule"
+msgstr ""
+
+#. 0: value.toFixed(1)
+#: src/lib/components/reports/loop-analysis/event-labels.svelte.ts
+msgid "{0} g/U"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Temporary targets"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Time not in closed loop"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Needs access to treatments"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Needs access to devices"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Needs access to therapy settings"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Not available with your access"
+msgstr ""
+
+#. 0: grams[2]
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Cohort {0}, at least (g)"
+msgstr ""
+
+#. 0: grams[2]
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Cohort {0}, at most (g)"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Isolated events only"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Only rises with extra loop insulin"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "Before the event"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/filter-labels.svelte.ts
+msgid "After the event"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/loop-analysis-context.svelte.ts
+msgid "Cannot load Loop Analysis"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "Zero temp"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "Prediction"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "Insulin on board alone, no carbs"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "Insulin on board, with basal stopped from the time of the prediction"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "Absorption of announced carbs"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "The rise that the loop sees continues, announced or not"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "The one curve that the loop uses for its decisions"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "Override, temporary target or exercise"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "After a meal"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "After a correction"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "Fasting"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "An override, temporary target or exercise was active"
+msgstr ""
+
+#. 0: hoursText(lookbackMs)
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "Carbs were entered in the {0} before"
+msgstr ""
+
+#. 0: hoursText(lookbackMs)
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "A manual bolus in the {0} before, no carbs"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "None of the above"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/prediction-labels.svelte.ts
+msgid "+# min"
+msgid_plural "+# min"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/loop-analysis-pages.svelte.ts
+msgid "This page shows your glucose, basal, loop corrections, insulin on board (IOB) and carbs on board (COB) at each time of day."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/loop-analysis-pages.svelte.ts
+msgid "This page aligns your glucose and insulin on meals, corrections and other events. It shows the time before and after each event."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/loop-analysis-pages.svelte.ts
+msgid "This page compares the glucose predictions of the loop with the glucose readings that followed them."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/loop-analysis-pages.svelte.ts
+msgid "This page shows how much of the time the loop was closed, why it stopped and how frequently it reached its limits."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/loop-analysis-pages.svelte.ts
+msgid "This page compares your profile settings with observations from your data. Speak to your diabetes care team before you change a setting."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "# hour"
+msgid_plural "# hours"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Moderate confidence"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Only a small number of episodes give this figure."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Confidence increases when the range has more episodes."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "The episodes are very different from each other."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Confidence increases when more episodes show if the figure becomes stable."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "The report converted the glucose changes with the ISF from the profile, not with an ISF from your data."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Confidence increases when your data has correction boluses at this time of day. For each bolus, glucose was steady and no carb entry was near it."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "The report measured the insulin against a basal rate that it did not check for this time of day."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Confidence increases when your data has times without food at this time of day."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Much of the insulin was still active at the end of the window, so the figure depends on the insulin curve."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Confidence increases when your data has episodes with less insulin still active at their end."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Most candidates overlapped other meals, boluses or rises. The few episodes without overlaps can be different from your usual episodes."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Confidence increases when your data has more periods without overlaps."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Only a few days have carb entries, so the fasting time comes from glucose only."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Confidence increases when more days have carb entries. Then the report can find fasting time from the carb entries."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "This figure points to more insulin. Part of it depends on something that this block cannot check with its own data: another figure, the profile, or the estimate of the insulin curve."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Confidence increases when this block has its own evidence."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Glucose usually still changed at the end of the window, so the figure does not include all of the response."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Confidence increases when your data has episodes where glucose becomes stable before the end of the window."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Much of the figure comes from the decrease in insulin on board. Insulin on board is an estimate, from the loop or from the insulin curve."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Confidence increases when your data has times without food that start and end with little insulin on board."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Many corrections in this block went low, so the report did not use them. So the figure can show less effect for each unit than the true value."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Confidence increases when fewer corrections at this time of day go low."
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "No correction boluses in this block"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "No time in this block in the range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "No meal in this block has carbs logged"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Every meal in this block overlapped another meal, bolus or rise"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "The report did not use any candidates. Open the block to see why"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Too few episodes to show a figure"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Glucose changed too much in this block to calculate basal from it"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "The loop adjusted in different directions on different days"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Nothing to show"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "The loop was open"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "An override was running"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "A temporary target was active"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "An exercise entry"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "An illness entry"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Outside the report's filters"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Not fully inside the range"
+msgstr ""
+
+#. 0: hoursText(rules?.basalCarbFreeMs)
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Carbs within {0} before, or during"
+msgstr ""
+
+#. 0: hoursText(rules?.basalCarbFreeMs)
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Glucose rose as after a meal, within {0} before or during"
+msgstr ""
+
+#. 0: hoursText(rules?.basalManualBolusFreeMs)
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "A manual bolus within {0} before, or during"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Carbs still on board"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "A manual temp basal or a suspend"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "The pump did not record the basal delivery, and it was different from the schedule"
+msgstr ""
+
+#. 0: hoursText(rules?.isfCarbFreeBeforeMs); 1: hoursText(rules?.isfMinimumWindowMs)
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Carbs from {0} before to {1} after"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "No target range was set"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Glucose was not above the target range"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "The active insulin was already more than the bolus"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Insulin on board is not known"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Insulin on board came from different sources at the start and end"
+msgstr ""
+
+#. 0: bg(rules?.lowMgdl ?? 0); 1: bgLabel()
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Glucose went below {0} {1}"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Another meal, correction or rise in the window"
+msgstr ""
+
+#. 0: bg(rules?.startLowMgdl ?? 0); 1: bg(rules?.startHighMgdl ?? 0); 2: bgLabel()
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Glucose was outside {0}–{1} {2} at the start"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Glucose was moving at the start"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Some glucose readings are missing"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "The pump's records were incomplete"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Too little insulin to calculate a ratio"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/settings-evidence-labels.svelte.ts
+msgid "Not used"
+msgstr ""
+
+#: src/lib/components/reports/loop-analysis/time-zone-need.svelte.ts
+msgid "Loop Analysis aligns days by local time of day. It needs the time zone of the data to do this."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/daily-profile/+page.svelte
+msgid "Cannot load the daily profile"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/daily-profile/+page.svelte
+msgid "Glucose, basal, loop corrections, IOB and COB at each time of day."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/daily-profile/+page.svelte
+msgid "Daily profile - Loop Analysis - Nocturne Reports"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/loop-health/+page.svelte
+msgid "Cannot load the loop health"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/loop-health/+page.svelte
+msgid "How much of the time the loop was closed, why it stopped and how frequently it reached its limits."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/loop-health/+page.svelte
+msgid "Loop health - Loop Analysis - Nocturne Reports"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/meals-and-events/+page.svelte
+msgid "Cannot load the meals and events"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/meals-and-events/+page.svelte
+msgid "Glucose and insulin before and after meals, corrections and other events."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/meals-and-events/+page.svelte
+msgid "Meals and events - Loop Analysis - Nocturne Reports"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/prediction-accuracy/+page.svelte
+msgid "Cannot load the prediction accuracy"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/prediction-accuracy/+page.svelte
+msgid "The glucose predictions of the loop compared with the glucose readings that followed them."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/prediction-accuracy/+page.svelte
+msgid "Prediction accuracy - Loop Analysis - Nocturne Reports"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/settings-evidence/+page.svelte
+msgid "Cannot load the settings evidence"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/settings-evidence/+page.svelte
+msgid "Your profile settings compared with what your data shows."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/loop-analysis/settings-evidence/+page.svelte
+msgid "Settings evidence - Loop Analysis - Nocturne Reports"
+msgstr ""
+
 #: src/lib/components/help/HelpReference.svelte
 msgid "Reading"
 msgstr "Reading"
@@ -27983,10 +30627,6 @@ msgstr "Open connector settings"
 #: src/lib/components/help/HelpBrowser.svelte
 msgid "Page documentation"
 msgstr "Page documentation"
-
-#: src/lib/components/layout/AppSidebarHarness.test.svelte
-msgid "Report filter"
-msgstr ""
 
 #: src/lib/components/layout/AppSidebarHarness.test.svelte
 msgid "Underlying report"
@@ -29515,10 +32155,6 @@ msgstr "Sleep report"
 #: src/lib/components/help/HelpReference.svelte
 msgid "Reference from the running application"
 msgstr "Reference from the running application"
-
-#: src/lib/components/help/HelpReference.svelte
-msgid "Band"
-msgstr "Band"
 
 #: src/lib/components/help/HelpReference.svelte
 msgid "<0/> x <1/>"
@@ -31732,10 +34368,6 @@ msgstr ""
 
 #: src/lib/help/dashboard-guide.svelte.ts
 msgid "Pump basal delivery and schedule records. Configure your therapy profile and upload delivery data."
-msgstr ""
-
-#: src/lib/help/dashboard-guide.svelte.ts
-msgid "Insulin on board"
 msgstr ""
 
 #: src/lib/help/dashboard-guide.svelte.ts

@@ -125,9 +125,9 @@ public class CobCalculatorParityTests
         var before10Time = new DateTimeOffset(2015, 5, 29, 3, 45, 10, 670, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var after10Time = new DateTimeOffset(2015, 5, 29, 3, 45, 11, 670, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
-        var after100 = await _calculator.CalculateTotalAsync(carbIntakes, time: after100Time);
-        var before10 = await _calculator.CalculateTotalAsync(carbIntakes, time: before10Time);
-        var after10 = await _calculator.CalculateTotalAsync(carbIntakes, time: after10Time);
+        var after100 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, after100Time);
+        var before10 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, before10Time);
+        var after10 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, after10Time);
 
         Assert.Equal(100.0, after100.Cob, 1);
         Assert.Equal(59.0, Math.Round(before10.Cob), 0);
@@ -154,11 +154,11 @@ public class CobCalculatorParityTests
         var later3Time = new DateTimeOffset(2015, 5, 29, 5, 50, 0, 174, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var later4Time = new DateTimeOffset(2015, 5, 29, 6, 50, 0, 174, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
-        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, time: rightAfterTime);
-        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, time: later1Time);
-        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, time: later2Time);
-        var result4 = await _calculator.CalculateTotalAsync(carbIntakes, time: later3Time);
-        var result5 = await _calculator.CalculateTotalAsync(carbIntakes, time: later4Time);
+        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, rightAfterTime);
+        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later1Time);
+        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later2Time);
+        var result4 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later3Time);
+        var result5 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later4Time);
 
         Assert.Equal(8.0, result1.Cob, 1);
         Assert.Equal(6.0, result2.Cob, 1);
@@ -241,7 +241,7 @@ public class CobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: time);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, time);
 
         Assert.Equal(15.0, result.Cob);
         Assert.Equal("Loop", result.Source);
@@ -269,7 +269,7 @@ public class CobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: time);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, time);
 
         Assert.Equal(5.0, result.Cob);
         Assert.Equal("OpenAPS", result.Source);
@@ -282,7 +282,7 @@ public class CobCalculatorParityTests
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var carbIntakes = new List<CarbIntake> { MakeCarbIntake(time - 1, 20) };
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: time);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, time);
 
         Assert.Equal("Care Portal", result.Source);
         Assert.True(result.Cob > 0);
@@ -301,7 +301,7 @@ public class CobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: time);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, time);
 
         Assert.True(result.Cob > 0);
         Assert.Equal("Care Portal", result.Source);
@@ -331,7 +331,7 @@ public class CobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: time);
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, time);
 
         Assert.Equal("OpenAPS", result.Source);
         Assert.Equal(0.0, result.Cob);
@@ -362,9 +362,9 @@ public class CobCalculatorParityTests
         var before10 = ((DateTimeOffset)secondTime).ToUnixTimeMilliseconds();
         var after10 = ((DateTimeOffset)secondTime.AddSeconds(1)).ToUnixTimeMilliseconds();
 
-        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, time: after100);
-        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, time: before10);
-        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, time: after10);
+        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, after100);
+        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, before10);
+        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, after10);
 
         Assert.Equal(100, result1.Cob);
         Assert.Equal(59, Math.Round(result2.Cob));
@@ -390,11 +390,11 @@ public class CobCalculatorParityTests
         var later3 = ((DateTimeOffset)treatmentTime.AddMinutes(70)).ToUnixTimeMilliseconds();
         var later4 = ((DateTimeOffset)treatmentTime.AddMinutes(130)).ToUnixTimeMilliseconds();
 
-        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, time: rightAfter);
-        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, time: later1);
-        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, time: later2);
-        var result4 = await _calculator.CalculateTotalAsync(carbIntakes, time: later3);
-        var result5 = await _calculator.CalculateTotalAsync(carbIntakes, time: later4);
+        var result1 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, rightAfter);
+        var result2 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later1);
+        var result3 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later2);
+        var result4 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later3);
+        var result5 = await _calculator.CalculateTotalAsync(carbIntakes, null, null, later4);
 
         Assert.Equal(8, result1.Cob);
         Assert.Equal(6, result2.Cob);
@@ -415,7 +415,7 @@ public class CobCalculatorParityTests
             MakeCarbIntake(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), 0),
         };
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
         Assert.Equal(0, result.Cob);
     }
@@ -428,7 +428,7 @@ public class CobCalculatorParityTests
             MakeCarbIntake(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - (30 * 60 * 1000), 30),
         };
 
-        var result = await _calculator.CalculateTotalAsync(carbIntakes, time: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var result = await _calculator.CalculateTotalAsync(carbIntakes, null, null, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
         Assert.True(result.Cob > 0);
         Assert.True(result.Cob < 30);

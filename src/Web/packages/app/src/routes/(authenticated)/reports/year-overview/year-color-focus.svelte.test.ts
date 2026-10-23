@@ -5,7 +5,7 @@ import type { DailySummaryDay } from "$api/generated/nocturne-api-client";
 import { yearOverviewMocks } from "$lib/test-stubs/year-overview-remote";
 import { glucoseUnits, yearOverviewColors, applyPreferences, collectPreferences, registerPreferencesWriteThrough, parsePrefsCookie } from "$lib/stores/appearance-store.svelte";
 import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
-import { glucoseColorFocusStops } from "$lib/utils/metric-color-focus";
+import { rampColor, rampPosition, GLUCOSE_LIMITS, GLUCOSE_RAMP } from "$lib/utils/metric-color-focus";
 
 vi.mock("$api/generated/dataOverviews.generated.remote", async () =>
   import("$lib/test-stubs/year-overview-remote")
@@ -29,25 +29,21 @@ vi.mock(
 import YearOverviewPage from "./+page.svelte";
 
 const storageKey = () => "nocturne-year-overview-colors";
+const stored = () => JSON.parse(window.localStorage.getItem(storageKey())!);
 const minimum = (metric = "TDD") =>
-  page.getByRole("spinbutton", { name: `${metric} minimum color value` });
+  page.getByRole("spinbutton", { name: `${metric} focus minimum` });
 const maximum = (metric = "TDD") =>
-  page.getByRole("spinbutton", { name: `${metric} maximum color value` });
+  page.getByRole("spinbutton", { name: `${metric} focus maximum` });
+const boundary = (n: number, metric = "Avg Glucose") =>
+  page.getByRole("spinbutton", { name: `${metric} color boundary ${n}`, exact: true });
+const addBoundary = () => page.getByRole("button", { name: "Color boundary", exact: true });
+const reset = (metric = "TDD") =>
+  page.getByRole("button", { name: `Reset ${metric} color scale` });
 const cell = (day: string) => page.getByTestId(`cell-${day}`);
 const observedYears = new Map<number, () => void>();
-// The four glucose boundaries are labelled by position, not by clinical band.
-const bgInput = (point: 1 | 2 | 3 | 4 = 3) =>
-  page.getByRole("spinbutton", {
-    name: `Average glucose Point ${point} color boundary`,
-    exact: true,
-  });
-const bgSlider = (point: 1 | 2 | 3 | 4 = 3) =>
-  page.getByRole("slider", {
-    name: `Average glucose Point ${point} color boundary`,
-    exact: true,
-  });
-const bgBoundarySliders = () =>
-  page.getByRole("slider", { name: /^Average glucose Point \d color boundary$/ });
+/** The insulin ramp `100 - loShare` percent of the way across the window. */
+const insulinAt = (loShare: string) =>
+  `color-mix(in srgb, color-mix(in srgb, var(--insulin) 15%, transparent) ${loShare}%, var(--insulin))`;
 
 function day(date: string, dose: number | null): DailySummaryDay {
   return {
@@ -70,11 +66,7 @@ async function selectMetric(name: string) {
   await page.getByRole("option", { name, exact: true }).click();
 }
 
-async function enableAdvanced() {
-  await page.getByRole("checkbox", { name: "Advanced" }).click();
-}
-
-async function setRange(min: number, max: number, metric = "TDD") {
+async function setWindow(min: number, max: number, metric = "TDD") {
   await minimum(metric).fill(String(min));
   await maximum(metric).fill(String(max));
 }
@@ -131,46 +123,75 @@ describe("year overview page color focus integration", () => {
     vi.unstubAllGlobals();
   });
 
-  it("remembers independent metric limits across switches and a page remount", async () => {
+  it("colors each metric in its own theme color, with no palette or advanced mode", async () => {
+    render(YearOverviewPage);
+    await expect.element(cell("2026-01-01")).toHaveTextContent(getGlucoseHeatmapFill(120));
+    await selectMetric("TDD");
+    await expect.element(cell("2026-01-04")).toHaveTextContent(/^var\(--insulin\)$/);
+    await selectMetric("Carbs");
+    await expect.element(page.getByRole("button", { name: /palette/i })).not.toBeInTheDocument();
+    await expect.element(page.getByRole("checkbox", { name: "Advanced" })).not.toBeInTheDocument();
+    expect(page.getByRole("slider").elements()).toHaveLength(2);
+  });
+
+  it("remembers independent metric windows across switches and a page remount", async () => {
     const screen = render(YearOverviewPage);
     await expect.element(cell("2026-01-04")).toBeInTheDocument();
     await selectMetric("TDD");
-    await enableAdvanced();
-    await setRange(10, 70);
-    await expect
-      .element(cell("2026-01-02"))
-      .toHaveTextContent("var(--chart-4) 58%");
+    await setWindow(10, 70);
+    await expect.element(cell("2026-01-02")).toHaveTextContent(insulinAt("50.00"));
 
     await selectMetric("Bolus");
-    await setRange(2, 25, "Bolus");
+    await setWindow(2, 25, "Bolus");
     await selectMetric("TDD");
     await expect.element(minimum()).toHaveValue(10);
     await expect.element(maximum()).toHaveValue(70);
-    expect(JSON.parse(window.localStorage.getItem(storageKey())!)).toEqual({
-      advancedMode: true,
-      tdd: [10, 70],
-      bolus: [2, 25],
-    });
+    expect(stored()).toEqual({ tddBand: [10, 70], bolusBand: [2, 25] });
 
     await screen.unmount();
     render(YearOverviewPage);
-    await selectMetric("TDD");
-    await expect.element(minimum()).toHaveValue(10);
-    await expect.element(maximum()).toHaveValue(70);
     await selectMetric("Bolus");
     await expect.element(minimum("Bolus")).toHaveValue(2);
     await expect.element(maximum("Bolus")).toHaveValue(25);
-    await page
-      .getByRole("button", { name: "Reset Bolus color range to automatic" })
-      .click();
-    expect(JSON.parse(window.localStorage.getItem(storageKey())!)).toEqual({
-      advancedMode: true,
-      tdd: [10, 70],
-    });
+    await reset("Bolus").click();
+    expect(stored()).toEqual({ tddBand: [10, 70] });
   });
 
-  it("keeps a saved manual focus when lazy loading introduces a larger outlier", async () => {
-    applyPreferences({ yearOverviewColors: { advancedMode: true, tdd: [10, 70] } });
+  it("drops keys saved in the retired shape on the next change", async () => {
+    applyPreferences({
+      yearOverviewColors: {
+        advancedMode: true,
+        avgGlucose: [54, 72, 180, 250],
+        tddColors: ["#000", "#fff"],
+        tddBand: [5, 60],
+      } as never,
+    });
+    render(YearOverviewPage);
+    await selectMetric("TDD");
+    await expect.element(minimum()).toHaveValue(5);
+    await maximum().fill("70");
+    expect(stored()).toEqual({ tddBand: [5, 70] });
+  });
+
+  it("leaves off the bands and dimming a retired blob saved with advanced mode off", async () => {
+    applyPreferences({
+      yearOverviewColors: {
+        advancedMode: false,
+        tddBand: [5, 10],
+        outOfBandTransparency: 40,
+      } as never,
+    });
+    render(YearOverviewPage);
+    await selectMetric("TDD");
+    await expect.element(minimum()).toHaveValue(0);
+    await expect.element(maximum()).toHaveValue(500);
+    await expect.element(page.getByRole("spinbutton", { name: "Dim outside" })).toHaveValue(90);
+    await maximum().fill("70");
+    expect(stored()).toEqual({ tddBand: [0, 70] });
+  });
+
+  it("keeps a saved window when lazy loading introduces a larger outlier", async () => {
+    applyPreferences({ yearOverviewColors: { tddBand: [10, 70] } });
     yearOverviewMocks.years.mockResolvedValue({
       years: [2026, 2025],
       availableDataSources: [],
@@ -186,9 +207,7 @@ describe("year overview page color focus integration", () => {
     render(YearOverviewPage);
     await expect.element(cell("2026-01-01")).toBeInTheDocument();
     await selectMetric("TDD");
-    await expect
-      .element(cell("2026-01-01"))
-      .toHaveTextContent("var(--chart-4) 58%");
+    await expect.element(cell("2026-01-01")).toHaveTextContent(insulinAt("50.00"));
     await vi.waitFor(() => expect(observedYears.has(2025)).toBe(true));
     observedYears.get(2025)!();
     await vi.waitFor(() =>
@@ -197,26 +216,20 @@ describe("year overview page color focus integration", () => {
     olderYear.resolve({ days: [day("2025-01-01", 1000)] });
     await expect
       .element(cell("2025-01-01"))
-      .toHaveTextContent("var(--chart-4) 100%");
-    await expect
-      .element(cell("2026-01-01"))
-      .toHaveTextContent("var(--chart-4) 58%");
+      .toHaveTextContent("color-mix(in srgb, var(--insulin) 10%, transparent)");
+    await expect.element(cell("2026-01-01")).toHaveTextContent(insulinAt("50.00"));
     await expect.element(minimum()).toHaveValue(10);
     await expect.element(maximum()).toHaveValue(70);
     await expect
-      .element(page.getByRole("slider", { name: "TDD maximum color value" }))
+      .element(page.getByRole("slider", { name: "TDD focus maximum" }))
       .toHaveAttribute("aria-valuemax", "1000");
 
-    await page
-      .getByRole("button", { name: "Reset TDD color range to automatic" })
-      .click();
+    await reset().click();
     await expect.element(maximum()).toHaveValue(1000);
-    await expect
-      .element(cell("2026-01-01"))
-      .toHaveTextContent("var(--chart-4) 18%");
+    await expect.element(cell("2026-01-01")).toHaveTextContent(insulinAt("96.00"));
   });
 
-  it("saturates outliers without treating missing readings as zero or changing glucose colors", async () => {
+  it("dims values outside the window without treating missing readings as zero", async () => {
     yearOverviewMocks.days.mockResolvedValue({
       days: [
         day("2026-01-01", null),
@@ -227,34 +240,26 @@ describe("year overview page color focus integration", () => {
       ],
     });
     render(YearOverviewPage);
-    await expect
-      .element(cell("2026-01-01"))
-      .toHaveTextContent(getGlucoseHeatmapFill(120));
-    await enableAdvanced();
-    await expect.element(bgSlider(4)).toBeInTheDocument();
-    expect(bgBoundarySliders().elements()).toHaveLength(4);
     await selectMetric("TDD");
-    await setRange(10, 70);
+    await setWindow(10, 70);
     await expect.element(cell("2026-01-01")).toHaveTextContent("var(--muted)");
     await expect
       .element(cell("2026-01-02"))
-      .toHaveTextContent("var(--chart-4) 15%");
+      .toHaveTextContent(
+        "color-mix(in srgb, color-mix(in srgb, var(--insulin) 15%, transparent) 10%, transparent)"
+      );
     await expect
       .element(cell("2026-01-03"))
-      .toHaveTextContent("var(--chart-4) 15%");
-    await expect
-      .element(cell("2026-01-04"))
-      .toHaveTextContent("var(--chart-4) 100%");
+      .toHaveTextContent(/^color-mix\(in srgb, var\(--insulin\) 15%, transparent\)$/);
+    await expect.element(cell("2026-01-04")).toHaveTextContent(/^var\(--insulin\)$/);
     await expect
       .element(cell("2026-01-05"))
-      .toHaveTextContent("var(--chart-4) 100%");
+      .toHaveTextContent("color-mix(in srgb, var(--insulin) 10%, transparent)");
 
-    await selectMetric("Avg Glucose");
-    await expect.element(bgSlider(4)).toBeInTheDocument();
-    expect(bgBoundarySliders().elements()).toHaveLength(4);
+    await page.getByRole("spinbutton", { name: "Dim outside" }).fill("50");
     await expect
-      .element(cell("2026-01-01"))
-      .toHaveTextContent(getGlucoseHeatmapFill(120));
+      .element(cell("2026-01-05"))
+      .toHaveTextContent("color-mix(in srgb, var(--insulin) 50%, transparent)");
   });
 
   it("syncs to the backend and cookie even when browser storage cannot save", async () => {
@@ -266,121 +271,69 @@ describe("year overview page color focus integration", () => {
     render(YearOverviewPage);
     await expect.element(cell("2026-01-02")).toBeInTheDocument();
     await selectMetric("TDD");
-    await enableAdvanced();
-    await setRange(10, 70);
-    await vi.waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ yearOverviewColors: { advancedMode: true, tdd: [10, 70] } })));
+    await setWindow(10, 70);
+    await vi.waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ yearOverviewColors: { tddBand: [10, 70] } })));
     const cookie = document.cookie.split("; ").find(row => row.startsWith("nocturne-prefs="))!.slice("nocturne-prefs=".length);
-    expect(parsePrefsCookie(cookie)?.yearOverviewColors).toEqual({ advancedMode: true, tdd: [10, 70] });
-    await expect
-      .element(cell("2026-01-02"))
-      .toHaveTextContent("var(--chart-4) 58%");
-    await selectMetric("Bolus");
-    await selectMetric("TDD");
-    await expect.element(minimum()).toHaveValue(10);
-    await expect.element(maximum()).toHaveValue(70);
+    expect(parsePrefsCookie(cookie)?.yearOverviewColors).toEqual({ tddBand: [10, 70] });
+    await expect.element(cell("2026-01-02")).toHaveTextContent(insulinAt("50.00"));
   });
 
-  it("keeps four BG color boundaries across metric, unit and page changes, then resets only BG", async () => {
+  it("keeps glucose colors fixed to the reading while its window only dims", async () => {
+    render(YearOverviewPage);
+    await minimum("Avg Glucose").fill("130");
+    expect(stored()).toEqual({ avgGlucoseBand: [130, 350] });
+    await expect
+      .element(cell("2026-01-01"))
+      .toHaveTextContent(`color-mix(in srgb, ${getGlucoseHeatmapFill(120)} 10%, transparent)`);
+    await reset("Avg Glucose").click();
+    await expect.element(cell("2026-01-01")).toHaveTextContent(getGlucoseHeatmapFill(120));
+  });
+
+  it("adds a glucose boundary that leaves the colors alone until it moves, across units and remounts", async () => {
     const screen = render(YearOverviewPage);
+    await addBoundary().click();
+    await expect.element(boundary(1)).toHaveValue(195);
+    const [pin] = stored().avgGlucoseBoundaries;
+    expect(pin.value).toBe(195);
+    await expect.element(cell("2026-01-01")).toHaveTextContent(getGlucoseHeatmapFill(120));
+
+    await boundary(1).fill("150");
+    const moved = [{ value: 150, position: pin.position }];
     await expect
       .element(cell("2026-01-01"))
-      .toHaveTextContent(getGlucoseHeatmapFill(120));
-    await enableAdvanced();
-    await expect.element(bgSlider(4)).toBeInTheDocument();
-    expect(bgBoundarySliders().elements()).toHaveLength(4);
-    await bgInput(3).fill("140");
-    const expected = [54, 72, 140, 250] as const;
-    await expect
-      .element(cell("2026-01-01"))
-      .toHaveTextContent(
-        getGlucoseHeatmapFill(120, glucoseColorFocusStops(expected))
-      );
-    const stored = JSON.parse(window.localStorage.getItem(storageKey())!);
-    expect(stored.avgGlucose).toEqual(expected);
+      .toHaveTextContent(rampColor(GLUCOSE_RAMP, rampPosition(120, GLUCOSE_LIMITS, moved)));
+    expect(rampColor(GLUCOSE_RAMP, rampPosition(120, GLUCOSE_LIMITS, moved))).not.toBe(
+      getGlucoseHeatmapFill(120)
+    );
 
     glucoseUnits.current = "mmol";
-    await expect.element(bgInput(3)).toHaveValue(7.8);
-    expect(
-      JSON.parse(window.localStorage.getItem(storageKey())!).avgGlucose
-    ).toEqual(expected);
+    await expect.element(boundary(1)).toHaveValue(8.3);
+    expect(stored().avgGlucoseBoundaries[0].value).toBe(150);
     glucoseUnits.current = "mg/dl";
-    await selectMetric("TDD");
-    await setRange(10, 70);
-    await selectMetric("Avg Glucose");
-    await expect.element(bgInput(3)).toHaveValue(140);
     await screen.unmount();
     render(YearOverviewPage);
-    await expect.element(bgInput(3)).toHaveValue(140);
-    await page
-      .getByRole("button", { name: "Reset average glucose color boundaries" })
-      .click();
-    await expect.element(bgInput(3)).toHaveValue(180);
-    expect(JSON.parse(window.localStorage.getItem(storageKey())!)).toEqual({
-      advancedMode: true,
-      tdd: [10, 70],
-    });
-    await expect
-      .element(cell("2026-01-01"))
-      .toHaveTextContent(getGlucoseHeatmapFill(120));
+    await expect.element(boundary(1)).toHaveValue(150);
+    await page.getByRole("button", { name: "Remove Avg Glucose color boundary 1" }).click();
+    expect(stored()).toEqual({});
+    await expect.element(cell("2026-01-01")).toHaveTextContent(getGlucoseHeatmapFill(120));
   });
 
-  it("rejects crossing and empty BG inputs and moves a boundary with the keyboard", async () => {
-    render(YearOverviewPage);
-    await enableAdvanced();
-    await expect.element(bgInput(2)).toHaveValue(72);
-    for (const invalid of ["", "54", "200", "-1"]) {
-      await bgInput(2).fill(invalid);
-      await expect
-        .element(bgInput(2))
-        .toHaveAttribute("aria-invalid", "true");
-      expect(yearOverviewColors.current).toEqual({ advancedMode: true });
-    }
-    await bgInput(2).fill("100");
-    (bgSlider(2).element() as HTMLElement).focus();
-    await userEvent.keyboard("{ArrowRight}");
-    await expect.element(bgInput(2)).toHaveValue(101);
-    await userEvent.keyboard("{End}");
-    const saved = JSON.parse(
-      window.localStorage.getItem(storageKey())!
-    ).avgGlucose;
-    expect(saved[1]).toBeLessThan(saved[2]);
-  });
-
-  it("edits BG in mmol and restores canonical mg/dL without changing other boundaries", async () => {
-    glucoseUnits.current = "mmol";
-    render(YearOverviewPage);
-    await enableAdvanced();
-    await expect.element(bgInput(3)).toHaveValue(10);
-    await bgInput(3).fill("8");
-    expect(
-      JSON.parse(window.localStorage.getItem(storageKey())!).avgGlucose
-    ).toEqual([54, 72, 144, 250]);
-    glucoseUnits.current = "mg/dl";
-    await expect.element(bgInput(3)).toHaveValue(144);
-  });
-
-  it("drags a BG boundary on the mobile gradient without overflowing the page", async () => {
+  it("fits the panel on a phone and drags the glucose window", async () => {
     const originalSize = [window.innerWidth, window.innerHeight] as const;
     await page.viewport(390, 800);
     try {
       render(YearOverviewPage);
-      await enableAdvanced();
-      await expect.element(bgInput(3)).toHaveValue(180);
       const track = page.getByTestId("glucose-color-track");
       const bounds = (track.element() as HTMLElement).getBoundingClientRect();
       expect(bounds.width).toBeGreaterThan(300);
-      const originalGradient = (track.element() as HTMLElement).style
-        .getPropertyValue("--scale-gradient");
-      await userEvent.dragAndDrop(bgSlider(3), track, {
-        targetPosition: { x: bounds.width * 0.6, y: bounds.height / 2 },
-      });
-      const value = (bgInput(3).element() as HTMLInputElement).valueAsNumber;
-      expect(value).toBeGreaterThan(224);
-      expect(value).toBeLessThan(228);
-      await expect.element(bgInput(4)).toHaveValue(250);
-      expect((track.element() as HTMLElement).style.getPropertyValue("--scale-gradient")).not.toBe(
-        originalGradient
+      await userEvent.dragAndDrop(
+        page.getByRole("slider", { name: "Avg Glucose focus maximum" }),
+        track,
+        { targetPosition: { x: bounds.width * 0.5, y: bounds.height / 2 } }
       );
+      const value = (maximum("Avg Glucose").element() as HTMLInputElement).valueAsNumber;
+      expect(value).toBeGreaterThan(190);
+      expect(value).toBeLessThan(200);
       expect(
         (page.getByTestId("glucose-color-focus").element() as HTMLElement)
           .getBoundingClientRect().right
@@ -391,16 +344,16 @@ describe("year overview page color focus integration", () => {
     }
   });
 
-  it("hydrates server preferences and restores automatic ranges after a saved reset", async () => {
-    applyPreferences({ yearOverviewColors: { advancedMode: true, tdd: [10, 70] } });
+  it("hydrates server preferences and restores automatic windows after a saved reset", async () => {
+    applyPreferences({ yearOverviewColors: { tddBand: [10, 70] } });
     render(YearOverviewPage);
     await selectMetric("TDD");
     await expect.element(minimum()).toHaveValue(10);
-    await page.getByRole("button", { name: "Reset TDD color range to automatic" }).click();
+    await reset().click();
     const saved = collectPreferences();
-    applyPreferences({ yearOverviewColors: { tdd: [20, 60] } });
+    applyPreferences({ yearOverviewColors: { tddBand: [20, 60] } });
     applyPreferences(saved);
     await expect.element(maximum()).toHaveValue(500);
-    expect(yearOverviewColors.current).toEqual({ advancedMode: true });
+    expect(yearOverviewColors.current).toEqual({});
   });
 });

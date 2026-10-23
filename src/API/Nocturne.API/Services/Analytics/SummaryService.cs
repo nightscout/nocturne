@@ -88,7 +88,7 @@ public class SummaryService : ISummaryService
         var bgData = new List<SummarySgv>();
         var dataCap = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - (hours * 60 * 60 * 1000);
 
-        foreach (var bg in sgvs)
+        foreach (var bg in sgvs.OrderBy(e => e.Mills))
         {
             if (bg.Mills >= dataCap)
             {
@@ -165,6 +165,8 @@ public class SummaryService : ISummaryService
                 }
             }
         }
+
+        result.Treatments = result.Treatments.OrderBy(t => t.Mills).ToList();
 
         result.TempBasals = ProcessTempBasals(profileData, tempBasals, dataCap);
         return result;
@@ -289,7 +291,7 @@ public class SummaryService : ISummaryService
                     && double.TryParse(iobValue?.ToString(), out var iob)
                 )
                 {
-                    state.Iob = Math.Round(iob * 100) / 100;
+                    state.Iob = Math.Floor(iob * 100 + 0.5) / 100;
                 }
             }
 
@@ -304,7 +306,7 @@ public class SummaryService : ISummaryService
                     && double.TryParse(cobValue?.ToString(), out var cob)
                 )
                 {
-                    state.Cob = (int)Math.Round(cob);
+                    state.Cob = (int)Math.Floor(cob + 0.5);
                 }
             }
 

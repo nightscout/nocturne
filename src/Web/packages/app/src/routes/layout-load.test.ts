@@ -73,35 +73,63 @@ describe("root layout universal load", () => {
     });
 
     expect(registerPreferenceCookieDomain).not.toHaveBeenCalled();
-    expect(registerPreferencesWriteThrough).not.toHaveBeenCalled();
+    expect(registerPreferencesWriteThrough).not.toHaveBeenCalledWith(expect.any(Function));
   });
 
   it("keeps both registered for a signed-in member", async () => {
     await runLoad({
       isShareHost: false,
       isAuthenticated: true,
+      hasAccount: true,
       baseDomain: "nocturne.run",
       user: { preferences: { glucoseUnits: "mg/dl" } },
       serverPreferences: { glucoseUnits: "mg/dl" },
     });
 
     expect(registerPreferenceCookieDomain).toHaveBeenCalledWith("nocturne.run");
-    expect(registerPreferencesWriteThrough).toHaveBeenCalled();
+    expect(registerPreferencesWriteThrough).toHaveBeenCalledWith(expect.any(Function));
     expect(reconcilePreferences).toHaveBeenCalledWith({ glucoseUnits: "mg/dl" });
   });
 
-  it("falls a guest back to the tenant's presentation after reconciling the guest's own", async () => {
+  it.each([
+    ["a guest", { isAuthenticated: true, hasAccount: false }],
+    ["an anonymous visitor", { isAuthenticated: false, hasAccount: false }],
+  ])("withdraws the write-through and never reconciles for %s, but still sets the cookie domain", async (_, viewer) => {
+    await runLoad({
+      isShareHost: false,
+      baseDomain: "nocturne.run",
+      serverPreferences: null,
+      ...viewer,
+    });
+
+    expect(registerPreferenceCookieDomain).toHaveBeenCalledWith("nocturne.run");
+    expect(registerPreferencesWriteThrough).toHaveBeenCalledTimes(1);
+    expect(registerPreferencesWriteThrough).toHaveBeenCalledWith(null);
+    expect(reconcilePreferences).not.toHaveBeenCalled();
+  });
+
+  it("leaves nothing registered when a member's layout reloads as a guest", async () => {
+    const base = { isShareHost: false, baseDomain: "nocturne.run", serverPreferences: null };
+    await runLoad({ ...base, isAuthenticated: true, hasAccount: true });
+    await runLoad({ ...base, isAuthenticated: true, hasAccount: false });
+
+    expect(registerPreferencesWriteThrough.mock.calls.map(([fn]) => typeof fn)).toEqual([
+      "function",
+      "object",
+    ]);
+    expect(registerPreferencesWriteThrough.mock.lastCall?.[0]).toBeNull();
+  });
+
+  it("falls a guest back to the tenant's presentation", async () => {
     await runLoad({
       isShareHost: false,
       isAuthenticated: true,
+      hasAccount: false,
       baseDomain: "nocturne.run",
       serverPreferences: null,
       tenantPreferences: { glucoseUnits: "mmol" },
     });
 
     expect(applyTenantPresentation).toHaveBeenCalledWith({ glucoseUnits: "mmol" });
-    expect(reconcilePreferences.mock.invocationCallOrder[0]).toBeLessThan(
-      applyTenantPresentation.mock.invocationCallOrder[0]
-    );
   });
 });

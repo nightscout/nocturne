@@ -237,7 +237,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(1.5, result.Iob);
         Assert.Equal("Loop", result.Source);
@@ -266,7 +266,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(0.5, result.Iob);
         Assert.Equal("OpenAPS", result.Source);
@@ -294,7 +294,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(0.8, result.Iob);
         Assert.Equal("OpenAPS", result.Source);
@@ -313,7 +313,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<ApsSnapshot>());
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.True(result.Iob > 0);
         Assert.Equal("Care Portal", result.Source);
@@ -348,7 +348,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { pumpSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(0.87, result.Iob);
         Assert.Equal("Pump", result.Source);
@@ -376,7 +376,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { pumpSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(1.23, result.Iob);
         Assert.Equal("Pump", result.Source);
@@ -411,7 +411,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { pumpSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(1.5, result.Iob);
         Assert.Equal("Loop", result.Source);
@@ -430,7 +430,7 @@ public class IobCalculatorParityTests
             MakeBolus(time - 30 * 60 * 1000, 2.0),
         };
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.True(result.Iob > 0);
         Assert.Equal("Care Portal", result.Source);
@@ -457,7 +457,7 @@ public class IobCalculatorParityTests
             .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { apsSnapshot });
 
-        var result = await _calculator.CalculateTotalAsync(boluses, time: time);
+        var result = await _calculator.CalculateTotalAsync(boluses, null, time);
 
         Assert.Equal(1.5, result.Iob);
         Assert.True(result.TreatmentIob.HasValue);
@@ -541,10 +541,11 @@ public class IobCalculatorParityTests
     }
 
     [Fact]
-    public void CalcTempBasal_NoEndTime_ShouldReturnZero()
+    public void CalcTempBasal_NoEndTime_RunsToTheTimeAsked()
     {
+        // Nightscout computes no basal IOB, so this follows the clip: a temp with no end is running.
         var now = DateTimeOffset.UtcNow;
-        var tempBasal = new TempBasal
+        var running = new TempBasal
         {
             StartTimestamp = now.AddMinutes(-30).UtcDateTime,
             EndTimestamp = null,
@@ -552,10 +553,19 @@ public class IobCalculatorParityTests
             ScheduledRate = 0.5,
             Origin = TempBasalOrigin.Algorithm,
         };
+        var endedNow = new TempBasal
+        {
+            StartTimestamp = running.StartTimestamp,
+            EndTimestamp = now.UtcDateTime,
+            Rate = 2.0,
+            ScheduledRate = 0.5,
+            Origin = TempBasalOrigin.Algorithm,
+        };
 
-        var result = _calculator.CalcTempBasal(tempBasal, now.ToUnixTimeMilliseconds());
+        var result = _calculator.CalcTempBasal(running, now.ToUnixTimeMilliseconds());
 
-        Assert.Equal(0.0, result.IobContrib);
+        Assert.True(result.IobContrib > 0);
+        Assert.Equal(_calculator.CalcTempBasal(endedNow, now.ToUnixTimeMilliseconds()).IobContrib, result.IobContrib);
     }
 
     [Fact]
@@ -658,6 +668,47 @@ public class IobCalculatorParityTests
         Assert.True(result.BasalIob.HasValue);
         Assert.True(result.BasalIob!.Value > 0);
     }
+
+    [Fact]
+    public void FromTempBasals_RunningTemp_CountsUpToTheTimeAsked()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var at = now.ToUnixTimeMilliseconds();
+
+        var running = _calculator.FromTempBasals([HighTemp(now.AddMinutes(-30), end: null)], at);
+        var endedNow = _calculator.FromTempBasals([HighTemp(now.AddMinutes(-30), now)], at);
+
+        Assert.True(running.BasalIob > 0);
+        Assert.Equal(endedNow.BasalIob, running.BasalIob);
+    }
+
+    [Fact]
+    public void FromTempBasals_Cancel_EndsTheTempBeforeIt()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var at = now.ToUnixTimeMilliseconds();
+        var cancel = new TempBasal
+        {
+            StartTimestamp = now.AddMinutes(-20).UtcDateTime,
+            EndTimestamp = now.AddMinutes(-20).UtcDateTime,
+            Rate = 0, ScheduledRate = 0.5,
+            Origin = TempBasalOrigin.Algorithm,
+        };
+
+        var cancelled = _calculator.FromTempBasals([HighTemp(now.AddMinutes(-30), now.AddMinutes(30)), cancel], at);
+        var endedAtTheCancel = _calculator.FromTempBasals([HighTemp(now.AddMinutes(-30), now.AddMinutes(-20))], at);
+
+        Assert.True(cancelled.BasalIob > 0);
+        Assert.Equal(endedAtTheCancel.BasalIob, cancelled.BasalIob);
+    }
+
+    private static TempBasal HighTemp(DateTimeOffset start, DateTimeOffset? end) => new()
+    {
+        StartTimestamp = start.UtcDateTime,
+        EndTimestamp = end?.UtcDateTime,
+        Rate = 2.0, ScheduledRate = 0.5,
+        Origin = TempBasalOrigin.Algorithm,
+    };
 
     #endregion
 

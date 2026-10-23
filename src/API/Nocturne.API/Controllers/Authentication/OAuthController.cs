@@ -955,7 +955,7 @@ public class OAuthController : ControllerBase
                     Exp = claims.ExpiresAt.ToUnixTimeSeconds(),
                     Iat = claims.IssuedAt.ToUnixTimeSeconds(),
                     Jti = claims.JwtId,
-                    TokenType = "access_token",
+                    TokenType = "Bearer",
                 });
             }
         }

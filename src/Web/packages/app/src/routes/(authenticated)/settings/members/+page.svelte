@@ -26,6 +26,7 @@
     setMemberLimitTo24Hours,
   } from "$lib/api/generated/memberInvites.generated.remote";
   import { coachmark } from "@nocturne/coach";
+  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import {
     getPendingRequests,
     approveRequest,
@@ -48,6 +49,12 @@
     satisfiesScope(granted, "members.manage") ||
       satisfiesScope(granted, "sharing.manage"),
   );
+  const canListRoles = $derived(
+    canInvite ||
+      satisfiesScope(granted, "members.manage") ||
+      satisfiesScope(granted, "roles.manage"),
+  );
+  const canReviewRequests = $derived(satisfiesScope(granted, "members.manage"));
   const canEditMemberRoles = $derived(
     satisfiesScope(granted, "members.manage"),
   );
@@ -63,20 +70,23 @@
   );
 
   // Queries
-  const membersQuery = getMembers();
+  const canListMembers = $derived(canInvite || canManageMembers);
+  const membersQuery = $derived(canListMembers ? getMembers() : null);
   const invitesQuery = $derived(canInvite ? listInvites() : null);
-  const rolesQuery = getRoles();
-  const pendingRequestsQuery = $derived(canManageMembers ? getPendingRequests() : null);
+  const rolesQuery = $derived(canListRoles ? getRoles() : null);
+  const pendingRequestsQuery = $derived(canReviewRequests ? getPendingRequests() : null);
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
+  retainQuery(() => membersQuery);
   retainQuery(() => invitesQuery);
+  retainQuery(() => rolesQuery);
   retainQuery(() => pendingRequestsQuery);
   retainQuery(() => shareQuery);
 
   // Data
-  const allMembers = $derived(membersQuery.current ?? []);
+  const allMembers = $derived(membersQuery?.current ?? []);
   const invites = $derived(invitesQuery?.current ?? []);
   const activeInvites = $derived(invites.filter((i) => i.isValid));
-  const allRoles = $derived(rolesQuery.current ?? []);
+  const allRoles = $derived(rolesQuery?.current ?? []);
   const pendingRequests = $derived(pendingRequestsQuery?.current ?? []);
   const share = $derived(shareQuery?.current ?? null);
 
@@ -164,7 +174,7 @@
       await approveRequest({ id: requestId, request: { roleIds } });
       // The approved requester becomes a member; GetMembers is on another
       // controller so ApproveRequest's Invalidates cannot name it.
-      await membersQuery.refresh();
+      await membersQuery?.refresh();
       successMessage = "Membership request approved.";
       clearMessages();
     } catch (err) {
@@ -192,7 +202,7 @@
 
 <div
   class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6"
-  {@attach coachmark({ key: "onboarding.sharing", title: "Share with a caretaker", description: "Share your glucose data with a parent, partner, or clinician.", completedWhen: () => sharingConfigured })}
+  {@attach coachmark({ ...coachFor("onboarding.sharing"), completedWhen: () => sharingConfigured })}
 >
   <!-- Page header -->
   <div class="flex flex-col gap-4 @md:flex-row @md:items-start @md:justify-between">
@@ -218,10 +228,12 @@
           {publicStatus}
         </span>
       {/if}
-      <span class="inline-flex h-8 items-center gap-2 rounded-full bg-secondary px-3 text-xs font-medium">
-        <Users class="h-3.5 w-3.5 text-muted-foreground" />
-        {memberCount} member{memberCount !== 1 ? "s" : ""}
-      </span>
+      {#if canListMembers}
+        <span class="inline-flex h-8 items-center gap-2 rounded-full bg-secondary px-3 text-xs font-medium">
+          <Users class="h-3.5 w-3.5 text-muted-foreground" />
+          {memberCount} member{memberCount !== 1 ? "s" : ""}
+        </span>
+      {/if}
     </div>
   </div>
 
@@ -325,9 +337,7 @@
             class="w-full"
             onclick={() => (showCreateInvite = true)}
             {@attach coachmark({
-              key: "setup-invite.create-link",
-              title: "Start here",
-              description: "Create a shareable link to invite a caretaker, partner, or clinician.",
+              ...coachFor("setup-invite.create-link"),
             })}
           >
             <Link class="h-4 w-4" />
