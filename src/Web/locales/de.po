@@ -30518,3 +30518,36 @@ msgstr ""
 #: src/lib/constants/scope-labels.svelte.ts
 msgid "Silence Alarms"
 msgstr ""
+
+#: src/lib/components/alerts/GlucoseCalendarPicker.svelte
+#: src/lib/components/alerts/GlucoseRangeCalendarPicker.svelte
+msgid "This calendar cannot show each day's glucose trace."
+msgstr ""
+
+#: src/routes/(authenticated)/calendar/+page.svelte
+msgid "This report cannot show each day's time in range, glucose and insulin."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/basal-analysis/BasalAnalysisContent.svelte
+msgid "This report cannot show basal rates or insulin delivery by hour of day."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "This report cannot group readings into local days to estimate HbA1c."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
+msgid "This report cannot show insulin by local day or hour of day."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/week-to-week/+page.svelte
+msgid "This report cannot average glucose by weekday and time of day."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/year-overview/+page.svelte
+msgid "This report cannot group the data into local days and years."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-copy.svelte.ts
+msgid "Google Health is connected, but Nocturne could not finish the set-up. Imports continue. Check the server log if this message stays."
+msgstr ""
