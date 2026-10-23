@@ -12,6 +12,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Platform;
+using Nocturne.API.Services.Profiles;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -37,6 +38,7 @@ namespace Nocturne.API.Tests.Services.Platform;
 public class StatusServiceTests
 {
     private readonly Mock<ICacheService> _mockCacheService;
+    private readonly Mock<ITenantService> _tenants = new();
     private readonly Mock<IDemoModeService> _mockDemoModeService;
     private readonly Mock<ILogger<StatusService>> _mockLogger;
     private readonly Mock<ITenantAccessor> _mockTenantAccessor;
@@ -213,6 +215,7 @@ public class StatusServiceTests
             _httpContextAccessor,
             MockTenantAccessor.Create(tenantId: tenantId, slug: "t", isDemo: isDemo).Object,
             TestPublicAccessCache.Create(),
+            _tenants.Object,
             appearanceReader.Object,
             new GlucoseStatusClassifier(_configuration, NullLogger<GlucoseStatusClassifier>.Instance),
             Mock.Of<ICategoryReadContext>(),
@@ -735,6 +738,66 @@ public class StatusServiceTests
     #endregion
 
     #region Configuration and Settings Tests
+
+    [Fact]
+    public async Task GetSystemStatusAsync_ReportsTheTenantDefaultOverTheInstanceConfig()
+    {
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("mmol");
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Display:Units"] = "mg/dl" })
+            .Build();
+
+        var result = await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mmol");
+        (await CreateStatusService(configuration, _dbContext).GetV3SystemStatusAsync())
+            .Settings!["units"].Should().Be("mmol");
+    }
+
+    [Fact]
+    public async Task GetSystemStatusAsync_ReportsTheOwnersOwnUnitsOverTheTenantDefault()
+    {
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("mg/dl");
+
+        var result = await CreateStatusService(
+                new ConfigurationBuilder().Build(),
+                appearance: new UserDisplayPreferences { GlucoseUnits = "mmol" })
+            .GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mmol");
+    }
+
+    // A tenant upgraded from before the explicit default holds "mg/dl" in its features settings
+    // from the old class default. Status must not read that as the owner's choice.
+    [Fact]
+    public async Task GetSystemStatusAsync_IgnoresTheLegacyFeaturesUnitsUntilTheOwnerChooses()
+    {
+        _dbContext.TenantId = MockTenantAccessor.DefaultTenantId;
+        await new UISettingsService(new TestNocturneDbContextFactory(_dbContext), Mock.Of<ILogger<UISettingsService>>()).SaveSectionAsync(
+            "features", new FeatureSettings { Display = new DisplaySettings { Units = "mmol" } });
+        var configuration = new ConfigurationBuilder().Build();
+
+        var result = await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mg/dl");
+
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("mmol");
+
+        (await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync())
+            .Settings!["units"].Should().Be("mmol");
+    }
+
+    [Fact]
+    public async Task GetSystemStatusAsync_FallsBackToMgDlWithNoTenantUnits()
+    {
+        var result = await CreateStatusService(new ConfigurationBuilder().Build(), _dbContext)
+            .GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mg/dl");
+    }
 
     [Fact]
     public async Task GetSystemStatusAsync_WithCustomDisplaySettings_ShouldIncludeInSettings()
@@ -1397,6 +1460,7 @@ public class StatusServiceTests
             httpContextAccessor ?? _httpContextAccessor,
             tenantAccessor ?? _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
+            _tenants.Object,
             appearanceReader.Object,
             classifier,
             categoryReadContext ?? Mock.Of<ICategoryReadContext>(),

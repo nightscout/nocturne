@@ -55,7 +55,7 @@ public class AlertRulesController : ControllerBase
     private readonly IAlertDeliveryService _deliveryService;
     private readonly IRuleScopeClassifier _scopeClassifier;
     private readonly IAlertRuleConditionValidator _conditionValidator;
-    private readonly ISecretEncryptionService _encryption;
+    private readonly AlertRuleChannelWriter _channels;
     private readonly AlertRuleRearm _rearm;
     private readonly AlertRuleRetirement _retirement;
     private readonly ILogger<AlertRulesController> _logger;
@@ -79,7 +79,7 @@ public class AlertRulesController : ControllerBase
         _deliveryService = deliveryService;
         _scopeClassifier = scopeClassifier;
         _conditionValidator = conditionValidator;
-        _encryption = encryption;
+        _channels = new AlertRuleChannelWriter(encryption);
         _rearm = rearm;
         _retirement = retirement;
         _logger = logger;
@@ -146,7 +146,7 @@ public class AlertRulesController : ControllerBase
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
         await using var db = await _contextFactory.CreateAsync(ct);
 
-        if (await ResolveAndValidateChannelsAsync(request.Channels, NoStoredRecipients, db, ct) is { } badChannel)
+        if (await ResolveAndValidateChannelsAsync(request.Channels, AlertRuleChannelWriter.NoStoredRecipients, db, ct) is { } badChannel)
             return badChannel;
 
         if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
@@ -181,7 +181,7 @@ public class AlertRulesController : ControllerBase
             var sortIndex = 0;
             foreach (var ch in request.Channels)
             {
-                rule.Channels.Add(BuildChannel(ch, rule.Id, tenantId, sortIndex++, NoRetainedSecrets));
+                rule.Channels.Add(_channels.Build(ch, rule.Id, tenantId, sortIndex++, AlertRuleChannelWriter.NoRetainedSecrets));
             }
         }
 
@@ -228,7 +228,7 @@ public class AlertRulesController : ControllerBase
             return invalid;
         var trees = new CanonicalTrees(check.ConditionParams, check.AutoResolveParams, check.ClientConfiguration);
 
-        if (await ResolveAndValidateChannelsAsync(request.Channels, InAppRecipientsOf(rule.Channels), db, ct) is { } badChannel)
+        if (await ResolveAndValidateChannelsAsync(request.Channels, AlertRuleChannelWriter.InAppRecipientsOf(rule.Channels), db, ct) is { } badChannel)
             return badChannel;
 
         if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
@@ -275,7 +275,7 @@ public class AlertRulesController : ControllerBase
 
         if (request.Channels is not null)
         {
-            var retainedSecrets = CollectRetainedSecrets(rule.Channels);
+            var retainedSecrets = AlertRuleChannelWriter.CollectRetainedSecrets(rule.Channels);
 
             // Replace the channel list wholesale. Cascade-delete on AlertRuleChannelEntity ⇒
             // AlertDeliveryEntity is configured as SetNull (not Cascade) to preserve the audit
@@ -286,7 +286,7 @@ public class AlertRulesController : ControllerBase
             var sortIndex = 0;
             foreach (var ch in request.Channels)
             {
-                rule.Channels.Add(BuildChannel(ch, rule.Id, tenantId, sortIndex++, retainedSecrets));
+                rule.Channels.Add(_channels.Build(ch, rule.Id, tenantId, sortIndex++, retainedSecrets));
             }
         }
 
@@ -460,7 +460,7 @@ public class AlertRulesController : ControllerBase
         var channels = request.Channels
             .Select((c, i) => new AlertRuleChannelSnapshot(
                 Guid.Empty, Guid.Empty, c.ChannelType, c.Destination ?? string.Empty,
-                c.DestinationLabel, i, SerializeMetadata(c.Metadata), EncryptSecret(c.Secret)))
+                c.DestinationLabel, i, AlertRuleChannelWriter.SerializeMetadata(c.Metadata), _channels.EncryptSecret(c.Secret)))
             .ToList();
 
         var payload = new AlertPayload
@@ -483,7 +483,7 @@ public class AlertRulesController : ControllerBase
         return Accepted();
     }
 
-    private static AlertPayload BuildTestPayload(AlertRuleEntity rule, Guid tenantId) => new()
+    internal static AlertPayload BuildTestPayload(AlertRuleEntity rule, Guid tenantId) => new()
     {
         AlertType = rule.ConditionType,
         RuleName = $"[Test] {rule.Name}",
@@ -501,314 +501,16 @@ public class AlertRulesController : ControllerBase
 
     #region Helpers
 
-    /// <summary>
-    /// Fills in a DM channel's destination from the caller's linked identity on that channel's
-    /// platform, routes an in-app channel (see <see cref="ResolveInAppRecipientAsync"/>), and
-    /// rejects a channel list whose destinations cannot deliver: an in-app channel naming no
-    /// member, a <c>device_action</c> channel naming an unknown kind or capability, a channel type
-    /// with no delivery path, a channel type that needs a destination and was given none, or a
-    /// destination the platform adapter cannot address. Nothing downstream inspects a destination,
-    /// so an unrejected one becomes a channel that stores fine and never delivers. Returns a 400
-    /// <see cref="BadRequestObjectResult"/> on the first offender, or null when all channels are
-    /// valid.
-    /// </summary>
-    /// <param name="storedRecipients">
-    /// The in-app recipients already stored where these channels come from, which may have left
-    /// the site since.
-    /// </param>
+    /// <inheritdoc cref="AlertRuleChannelWriter.ResolveAndValidateAsync"/>
+    /// <returns>A 400 <see cref="BadRequestObjectResult"/> on the first offender, or null when all are valid.</returns>
     private async Task<ActionResult?> ResolveAndValidateChannelsAsync(
         List<CreateAlertRuleChannelRequest>? channels,
         IReadOnlySet<string> storedRecipients,
         NocturneDbContext db,
-        CancellationToken ct)
-    {
-        if (channels is null)
-        {
-            return null;
-        }
-
-        foreach (var ch in channels)
-        {
-            if (RejectOversizedSecret(ch) is { } badSecret)
-            {
-                return badSecret;
-            }
-
-            if (ch.ChannelType == ChannelType.DeviceAction)
-            {
-                if (RejectInvalidDeviceActionChannel(ch) is { } badDevice)
-                {
-                    return badDevice;
-                }
-
-                continue;
-            }
-
-            if (ChannelDestinations.SupersededBy(ch.ChannelType) is { } replacements)
-            {
-                return BadRequest(new
-                {
-                    message = $"A {WireName(ch.ChannelType)} channel has no delivery path. Use "
-                        + $"{string.Join(" or ", replacements.Select(WireName))} instead.",
-                });
-            }
-
-            if (ChannelDestinations.RoutesToMember(ch.ChannelType))
-            {
-                var goesToSaver = string.IsNullOrWhiteSpace(ch.Destination)
-                                  || storedRecipients.Contains(ch.Destination);
-                var member = await ResolveInAppRecipientAsync(db, ch.Destination, storedRecipients, ct);
-                if (member is null)
-                {
-                    return BadRequest(new
-                    {
-                        message = goesToSaver
-                            ? $"A {WireName(ch.ChannelType)} channel without a member to name is "
-                                + "delivered to the member who saves it, and this caller is not a "
-                                + "member of this site."
-                            : $"A {WireName(ch.ChannelType)} channel's destination must be the subject "
-                                + $"id of a member of this site; got '{ch.Destination}'.",
-                    });
-                }
-
-                ch.Destination = member.Value.ToString();
-                continue;
-            }
-
-            if (ChannelDestinations.ResolvesFromLinkedIdentity(ch.ChannelType)
-                && string.IsNullOrWhiteSpace(ch.Destination))
-            {
-                var platform = ChannelDestinations.PlatformOf(ch.ChannelType)!;
-                ch.Destination = await ResolveLinkedPlatformUserIdAsync(db, platform, ct);
-                if (ch.Destination is null)
-                {
-                    var name = char.ToUpperInvariant(platform[0]) + platform[1..];
-                    return BadRequest(new
-                    {
-                        message = $"No linked {name} account for this user. Link {name} under "
-                            + $"Connectors & Apps, or enter a {name} user ID as the destination.",
-                    });
-                }
-            }
-
-            if (ChannelDestinations.RequiresDestination(ch.ChannelType)
-                && string.IsNullOrWhiteSpace(ch.Destination))
-            {
-                return BadRequest(new
-                {
-                    message = $"A {WireName(ch.ChannelType)} channel requires a destination.",
-                });
-            }
-
-            if (!ChannelDestinations.IsWellFormed(ch.ChannelType, ch.Destination))
-            {
-                return BadRequest(new
-                {
-                    message = $"A {WireName(ch.ChannelType)} channel's destination must be "
-                        + $"{ChannelDestinations.DescribeDestination(ch.ChannelType)}; "
-                        + $"got '{ch.Destination}'.",
-                });
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// The largest signing secret accepted, measured in UTF-8 bytes because that — not the
-    /// character count — is what the stored ciphertext is sized from. Stating the bound keeps a
-    /// secret of legal length in non-Latin script from being discovered as a 500 at the column.
-    /// </summary>
-    private const int SecretMaxBytes = 256;
-
-    private ActionResult? RejectOversizedSecret(CreateAlertRuleChannelRequest ch)
-    {
-        var secret = ch.Secret?.Trim();
-        if (string.IsNullOrEmpty(secret))
-        {
-            return null;
-        }
-
-        var bytes = System.Text.Encoding.UTF8.GetByteCount(secret);
-        return bytes <= SecretMaxBytes
-            ? null
-            : BadRequest(new
-            {
-                message = $"A {WireName(ch.ChannelType)} channel's signing secret must be at most "
-                    + $"{SecretMaxBytes} bytes once UTF-8 encoded; got {bytes}.",
-            });
-    }
-
-    private ActionResult? RejectInvalidDeviceActionChannel(CreateAlertRuleChannelRequest ch)
-    {
-        if (string.IsNullOrWhiteSpace(ch.Destination) || !DeviceKinds.IsValid(ch.Destination))
-        {
-            return BadRequest(new
-            {
-                message = $"A device_action channel's destination must be a device kind "
-                    + $"({string.Join(", ", DeviceKinds.All)}); got '{ch.Destination}'.",
-            });
-        }
-
-        var requested = DeviceCapabilities.ParseRequestedCapabilities(SerializeMetadata(ch.Metadata));
-        foreach (var capability in requested)
-        {
-            if (!DeviceCapabilities.IsKnown(capability))
-            {
-                return BadRequest(new
-                {
-                    message = $"Unknown device capability '{capability}'.",
-                });
-            }
-
-            if (!DeviceCapabilities.Registry[capability].Kinds.Contains(ch.Destination))
-            {
-                return BadRequest(new
-                {
-                    message = $"Capability '{capability}' is not available on "
-                        + $"device kind '{ch.Destination}'.",
-                });
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Returns the platform user ID linked to the calling subject within this tenant, or null when
-    /// the subject has no active link on that platform. Resolution happens here rather than at
-    /// delivery because a dispatch runs from the background orchestrator, where there is no caller
-    /// to attribute a DM to — and a rule carries no owner of its own.
-    /// </summary>
-    private async Task<string?> ResolveLinkedPlatformUserIdAsync(
-        NocturneDbContext db, string platform, CancellationToken ct)
-    {
-        var subjectId = HttpContext?.GetSubjectId();
-        if (subjectId is null)
-        {
-            return null;
-        }
-
-        var tenantId = db.TenantId;
-        return await db.ChatIdentityDirectory
-            .Where(d => d.TenantId == tenantId
-                        && d.NocturneUserId == subjectId.Value
-                        && d.Platform == platform
-                        && d.IsActive)
-            .OrderBy(d => d.CreatedAt)
-            .Select(d => d.PlatformUserId)
-            .FirstOrDefaultAsync(ct);
-    }
-
-    /// <summary>
-    /// The member an in-app channel delivers to: the member it names, or the caller when it names
-    /// none. Null when it names a subject who may not receive (<see cref="InAppRecipients"/>).
-    /// </summary>
-    /// <remarks>
-    /// A stored recipient who has since left the site, or can no longer receive, goes to the
-    /// caller as well, rather than
-    /// failing the save: the editor sends back the destination it loaded, so refusing it would
-    /// leave the rule uneditable, and keeping it would leave the channel reaching no one.
-    /// </remarks>
-    private async Task<Guid?> ResolveInAppRecipientAsync(
-        NocturneDbContext db, string? destination, IReadOnlySet<string> storedRecipients, CancellationToken ct)
-    {
-        if (!string.IsNullOrWhiteSpace(destination)
-            && await InAppRecipients.ResolveAsync(db, db.TenantId, destination, ct) is { } named)
-        {
-            return named;
-        }
-
-        if (!string.IsNullOrWhiteSpace(destination) && !storedRecipients.Contains(destination))
-        {
-            return null;
-        }
-
-        return await InAppRecipients.ResolveAsync(db, db.TenantId, HttpContext?.GetSubjectId()?.ToString(), ct);
-    }
-
-    /// <summary>The in-app recipients stored on <paramref name="channels"/>.</summary>
-    private static HashSet<string> InAppRecipientsOf(IEnumerable<AlertRuleChannelEntity> channels) =>
-        channels.Where(c => c.ChannelType == ChannelType.InApp).Select(c => c.Destination).ToHashSet();
-
-    /// <summary>Serialised name of a channel type, so error text matches the request wire format.</summary>
-    private static string WireName(ChannelType channelType) =>
-        JsonSerializer.Serialize(channelType).Trim('"');
-
-    private static readonly Dictionary<(ChannelType, string), string> NoRetainedSecrets = [];
-
-    private static readonly IReadOnlySet<string> NoStoredRecipients = new HashSet<string>();
-
-    private AlertRuleChannelEntity BuildChannel(
-        CreateAlertRuleChannelRequest req, Guid ruleId, Guid tenantId, int sortOrder,
-        IReadOnlyDictionary<(ChannelType, string), string> retainedSecrets) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        TenantId = tenantId,
-        AlertRuleId = ruleId,
-        ChannelType = req.ChannelType,
-        Destination = req.Destination ?? string.Empty,
-        DestinationLabel = req.DestinationLabel,
-        Metadata = SerializeMetadata(req.Metadata),
-        Secret = ResolveSecret(req, retainedSecrets),
-        SortOrder = sortOrder,
-        CreatedAt = DateTime.UtcNow,
-    };
-
-    /// <summary>
-    /// The stored ciphertext of every channel that carries a signing secret, keyed by the pair a
-    /// caller can still name after a read: an update replaces the channel list wholesale and mints
-    /// new ids, and the secret is never echoed back, so a channel arriving without one has to be
-    /// matched to its predecessor by type and destination.
-    /// </summary>
-    /// <remarks>
-    /// A pair held by more than one stored secret retains none of them: the key cannot tell which
-    /// of the duplicates an incoming channel descends from, and a guess would sign one receiver's
-    /// alerts with another's secret. Ciphertext is compared rather than plaintext, so two channels
-    /// sharing a destination are ambiguous even when the secret behind them is the same — they are
-    /// re-entered rather than silently mismatched.
-    /// </remarks>
-    private static IReadOnlyDictionary<(ChannelType, string), string> CollectRetainedSecrets(
-        IEnumerable<AlertRuleChannelEntity> channels) => channels
-            .Where(c => c.Secret is not null)
-            .GroupBy(c => (c.ChannelType, c.Destination))
-            .Select(g => (g.Key, Secrets: g.Select(c => c.Secret!).Distinct(StringComparer.Ordinal).ToArray()))
-            .Where(g => g.Secrets.Length == 1)
-            .ToDictionary(g => g.Key, g => g.Secrets[0]);
-
-    /// <summary>
-    /// Ciphertext for the channel's signing secret. A secret omitted from the request keeps the one
-    /// stored against this channel type and destination (the editor cannot re-send what it was
-    /// never shown); one that is empty once trimmed clears it.
-    /// </summary>
-    private string? ResolveSecret(
-        CreateAlertRuleChannelRequest req,
-        IReadOnlyDictionary<(ChannelType, string), string> retainedSecrets)
-    {
-        if (req.Secret is null)
-        {
-            return retainedSecrets.TryGetValue(
-                (req.ChannelType, req.Destination ?? string.Empty), out var retained)
-                ? retained
-                : null;
-        }
-
-        return EncryptSecret(req.Secret);
-    }
-
-    /// <summary>
-    /// Ciphertext for a caller-supplied secret, or null when it is blank. Surrounding whitespace is
-    /// dropped rather than signed with: it does not survive a copy-paste round trip through the
-    /// receiver's own configuration.
-    /// </summary>
-    private string? EncryptSecret(string? secret)
-    {
-        var trimmed = secret?.Trim();
-        return string.IsNullOrEmpty(trimmed) ? null : _encryption.Encrypt(trimmed);
-    }
-
-    private static string? SerializeMetadata(object? metadata) =>
-        metadata is not null ? JsonSerializer.Serialize(metadata) : null;
+        CancellationToken ct) =>
+        await _channels.ResolveAndValidateAsync(channels, storedRecipients, db, HttpContext?.GetSubjectId(), ct) is { } message
+            ? BadRequest(new { message })
+            : null;
 
     private async Task<AlertRuleResponse> ToResponseAsync(
         NocturneDbContext db, AlertRuleEntity rule, CancellationToken ct) =>

@@ -1,4 +1,4 @@
-import type { MarkState, MarkRegistration, SequenceConfig } from "./types.js";
+import type { CoachGates, MarkState, MarkRegistration, SequenceConfig } from "./types.js";
 
 export interface SelectionResult {
   key: string;
@@ -9,6 +9,7 @@ export function selectActiveMark(
   states: ReadonlyMap<string, MarkState>,
   registrations: MarkRegistration[],
   sequences: SequenceConfig,
+  gates: CoachGates = {},
 ): SelectionResult | null {
   const mountedMarkKeys = new Set(registrations.map((r) => r.key));
 
@@ -18,7 +19,7 @@ export function selectActiveMark(
   );
 
   for (const [, seq] of sortedSequences) {
-    if (seq.prerequisite && !isSequenceDone(seq.prerequisite, sequences, states)) {
+    if (seq.prerequisite && !isPrerequisiteMet(seq.prerequisite, sequences, states, gates)) {
       continue;
     }
 
@@ -59,6 +60,20 @@ export function selectActiveMark(
   }
 
   return null;
+}
+
+/**
+ * A prerequisite naming neither a gate nor a sequence is unmet: the name was misspelt or its
+ * sequence retired, and reading that as satisfied would release the tour it guards.
+ */
+export function isPrerequisiteMet(
+  name: string,
+  sequences: SequenceConfig,
+  states: ReadonlyMap<string, MarkState>,
+  gates: CoachGates,
+): boolean {
+  if (Object.hasOwn(gates, name)) return gates[name];
+  return Object.hasOwn(sequences, name) && isSequenceDone(name, sequences, states);
 }
 
 export function isSequenceDone(

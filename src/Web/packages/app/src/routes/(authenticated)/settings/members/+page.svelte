@@ -26,8 +26,6 @@
     setMemberPermissions,
     setMemberLimitTo24Hours,
   } from "$lib/api/generated/memberInvites.generated.remote";
-  import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import {
     getPendingRequests,
     approveRequest,
@@ -90,12 +88,6 @@
   const allRoles = $derived(rolesQuery?.current ?? []);
   const pendingRequests = $derived(pendingRequestsQuery?.current ?? []);
   const share = $derived(shareQuery?.current ?? null);
-
-  const publicMember = $derived(allMembers.find((m) => m.isSystemSubject));
-  const sharingConfigured = $derived(
-    (publicMember?.roles ?? []).length > 0 ||
-      (publicMember?.directPermissions ?? []).length > 0,
-  );
 
   // Header status chips
   const memberCount = $derived(allMembers.filter((m) => !m.isSystemSubject).length);
@@ -201,10 +193,7 @@
   <title>Sharing & Privacy - Settings - Nocturne</title>
 </svelte:head>
 
-<div
-  class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6"
-  {@attach coachmark({ ...coachFor("onboarding.sharing"), completedWhen: () => sharingConfigured })}
->
+<div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
   <!-- Page header -->
   <div class="flex flex-col gap-4 @md:flex-row @md:items-start @md:justify-between">
     <div class="flex items-center gap-3">
@@ -326,9 +315,6 @@
             size="lg"
             class="w-full"
             onclick={() => (showCreateInvite = true)}
-            {@attach coachmark({
-              ...coachFor("setup-invite.create-link"),
-            })}
           >
             <Link class="h-4 w-4" />
             Create Invite Link

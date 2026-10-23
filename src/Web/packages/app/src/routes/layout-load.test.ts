@@ -5,6 +5,7 @@ vi.mock("$app/environment", () => ({ browser: true, building: false, dev: false 
 const registerPreferenceCookieDomain = vi.fn();
 const registerPreferencesWriteThrough = vi.fn();
 const reconcilePreferences = vi.fn();
+const showTenantDefaultUnits = vi.fn();
 const applyTenantPresentation = vi.fn();
 const presentOwnerPreferences = vi.fn();
 
@@ -14,6 +15,7 @@ vi.mock("$lib/stores/appearance-store.svelte", () => ({
   registerPreferencesWriteThrough: (...args: unknown[]) =>
     registerPreferencesWriteThrough(...args),
   reconcilePreferences: (...args: unknown[]) => reconcilePreferences(...args),
+  showTenantDefaultUnits: (...args: unknown[]) => showTenantDefaultUnits(...args),
   applyTenantPresentation: (...args: unknown[]) => applyTenantPresentation(...args),
   presentOwnerPreferences: (...args: unknown[]) => presentOwnerPreferences(...args),
   preferredLanguage: { current: "en" },
@@ -48,6 +50,7 @@ describe("root layout universal load", () => {
     registerPreferenceCookieDomain.mockClear();
     registerPreferencesWriteThrough.mockClear();
     reconcilePreferences.mockClear();
+    showTenantDefaultUnits.mockClear();
     applyTenantPresentation.mockClear();
     presentOwnerPreferences.mockClear();
   });
@@ -89,6 +92,22 @@ describe("root layout universal load", () => {
     expect(registerPreferenceCookieDomain).toHaveBeenCalledWith("nocturne.run");
     expect(registerPreferencesWriteThrough).toHaveBeenCalledWith(expect.any(Function));
     expect(reconcilePreferences).toHaveBeenCalledWith({ glucoseUnits: "mg/dl" });
+  });
+
+  it("offers a signed-in member the tenant default units after their own", async () => {
+    await runLoad({
+      isShareHost: false,
+      isAuthenticated: true,
+      hasAccount: true,
+      baseDomain: "nocturne.run",
+      user: { preferences: {}, defaultGlucoseUnits: "mmol" },
+      serverPreferences: {},
+    });
+
+    expect(showTenantDefaultUnits).toHaveBeenCalledWith("mmol");
+    expect(reconcilePreferences.mock.invocationCallOrder[0]).toBeLessThan(
+      showTenantDefaultUnits.mock.invocationCallOrder[0]
+    );
   });
 
   it.each([

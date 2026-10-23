@@ -41,7 +41,7 @@
   import "@nocturne/coach/theme.css";
   import "../../styles/coach-theme-overrides.css";
   import { createCoachMarkAdapter } from "$lib/coach-marks/adapter";
-  import { sequences } from "$lib/coach-marks/sequences";
+  import { ONBOARDING_CORE_GATE, sequences } from "$lib/coach-marks/sequences";
   import { coachLabels } from "$lib/coach-marks/copy.svelte";
   import CoachParamHandler from "$lib/coach-marks/CoachParamHandler.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
@@ -268,7 +268,13 @@
 
 <InitialReadsPrefetch enabled={data.canViewRealtimeData} />
 
-<CoachMarkProvider adapter={coachMarkAdapter} labels={coachLabels()} {sequences} router={coachRouter}>
+<CoachMarkProvider
+  adapter={coachMarkAdapter}
+  labels={coachLabels()}
+  {sequences}
+  gates={{ [ONBOARDING_CORE_GATE]: data.onboardingComplete }}
+  router={coachRouter}
+>
   <CoachParamHandler />
   <ChartPrintPatterns />
   <Sidebar.Provider>

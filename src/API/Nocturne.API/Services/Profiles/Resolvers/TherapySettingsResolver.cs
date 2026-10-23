@@ -41,16 +41,28 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
         _logger = logger;
     }
 
+    public async Task<double> GetDIAAsync(long timeMills, string? specProfile = null, CancellationToken ct = default) =>
+        (await ResolveDiaAsync(timeMills, specProfile, ct)).Hours;
+
+    public async Task<InsulinActionTime> GetActionTimeAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
+    {
+        var (source, hours, primaryBolus) = await ResolveDiaAsync(timeMills, specProfile, ct);
+        primaryBolus ??= await _insulinRepo.GetPrimaryBolusInsulinAsync(ct);
+        return new InsulinActionTime(source, hours, primaryBolus?.Name);
+    }
+
+    /// <summary>The primary bolus insulin is returned only when the chain reached it.</summary>
     /// <remarks>
     /// Schedules an activation was uploaded with come from an AID that manages the profile, so their
     /// DIA stands as an externally managed profile's does.
     /// </remarks>
-    public async Task<double> GetDIAAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
+    private async Task<(InsulinActionTimeSource Source, double Hours, PatientInsulin? PrimaryBolus)> ResolveDiaAsync(
+        long timeMills, string? specProfile, CancellationToken ct)
     {
         if (specProfile is null
             && await _activeProfileResolver.GetActiveSchedulesAsync(timeMills, ct) is { } snapshot
             && SnapshotDia(snapshot) is { } snapshotDia)
-            return snapshotDia;
+            return (InsulinActionTimeSource.ExternalProfile, snapshotDia, null);
 
         var profileName = specProfile ?? await _activeProfileResolver.GetProfileNameAsync(timeMills, ct);
 
@@ -58,19 +70,25 @@ internal sealed class TherapySettingsResolver : ITherapySettingsResolver
         var settings = await GetCachedSettingsAsync(profileName, timestamp, ct);
 
         if (settings is null)
-            return DefaultDia;
+            return (InsulinActionTimeSource.Default, DefaultDia, null);
 
         // Priority 1: ExternallyManaged profiles use TherapySettings.Dia directly
         if (settings.IsExternallyManaged)
-            return settings.Dia > 0 ? settings.Dia : DefaultDia;
+            return settings.Dia > 0
+                ? (InsulinActionTimeSource.ExternalProfile, settings.Dia, null)
+                : (InsulinActionTimeSource.Default, DefaultDia, null);
 
         // Priority 2: PatientInsulin primary bolus DIA
         var primaryBolus = await _insulinRepo.GetPrimaryBolusInsulinAsync(ct);
         if (primaryBolus is not null)
-            return primaryBolus.Dia > 0 ? primaryBolus.Dia : DefaultDia;
+            return primaryBolus.Dia > 0
+                ? (InsulinActionTimeSource.PrimaryInsulin, primaryBolus.Dia, primaryBolus)
+                : (InsulinActionTimeSource.Default, DefaultDia, primaryBolus);
 
         // Priority 3: TherapySettings.Dia
-        return settings.Dia > 0 ? settings.Dia : DefaultDia;
+        return settings.Dia > 0
+            ? (InsulinActionTimeSource.Profile, settings.Dia, null)
+            : (InsulinActionTimeSource.Default, DefaultDia, null);
     }
 
     /// <summary>

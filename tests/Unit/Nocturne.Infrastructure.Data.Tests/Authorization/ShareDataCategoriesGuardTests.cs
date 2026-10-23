@@ -38,6 +38,9 @@ public class ShareDataCategoriesGuardTests
         // Internal bookkeeping.
         "dedup_reconcile_state",
 
+        // The owner's onboarding state.
+        "setup_hub_additions", "setup_hub_items",
+
         // Dedup links. Linking runs in the writer's own context, so clamped, a history-limited member's
         // upload of older data would miss its group and start a duplicate one. A row holds only link
         // metadata (record type, source, time), no values.
