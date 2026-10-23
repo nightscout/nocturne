@@ -35,6 +35,15 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
       ]
     ),
+    "/reports/loop-analysis": entry(
+      "trend",
+      ["/settings/connectors", "/settings/profile"],
+      [
+        ["Check the available records", "Confirm the selected dates and the availability of glucose, loop status and insulin uploads before comparing panels."],
+        ["Follow the same period", "Switch between the five analysis pages to compare daily patterns, events, predictions, loop activity and profile context."],
+        ["Inspect the detail", "Review individual events and missing-data warnings. Discuss therapy setting changes with your diabetes care team."],
+      ]
+    ),
     "/reports": entry(
       "flow",
       ["/settings/connectors", "/settings/appearance"],

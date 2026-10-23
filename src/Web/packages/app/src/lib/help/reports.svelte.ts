@@ -37,6 +37,16 @@ export function reportArticles(): HelpArticle[] {
       "Start here, then open detailed reports to understand patterns behind the summary.",
       "Indicators describe the selected data; they do not identify the cause of a change."
     ),
+    guide(
+      "/reports/loop-analysis",
+      "Loop Analysis",
+      "Explore recorded loop activity alongside glucose, insulin, meals and predictions.",
+      "Imported glucose, treatment, device-status and prediction records provide the report context. Availability depends on what your loop uploads.",
+      "Choose the report dates and filters, then switch between Daily Profile, Meals and Events, Prediction Accuracy, Loop Health and Settings Evidence.",
+      "Compare timing and coverage across the pages, then inspect individual days or events to understand the summaries.",
+      "Missing uploads and incomplete history limit the results. Comparisons describe observations and do not establish a treatment effect or recommend settings changes.",
+      ["/reports/readings", "/reports/insulin-delivery", GLUCOSE_REFERENCE_PATH]
+    ),
     report(
       "/reports/agp",
       "AGP",
@@ -133,7 +143,7 @@ export function reportArticles(): HelpArticle[] {
       "Data Quality",
       "Check that recorded data is complete and usable.",
       "Stored glucose timestamps, device identities, and quality or noise information when supplied.",
-      "Choose the report period. Settings → Data Quality contains detection and maintenance controls. Each detailed quality report has its own filters.",
+      "Choose the report period. Settings â†’ Data Quality contains detection and maintenance controls. Each detailed quality report has its own filters.",
       "Coverage and reliability help you interpret reports and recognise import or sensor problems.",
       "A flag needs inspection; it does not prove a reading is wrong. Cleanup affects later reports, so inspect records before confirming.",
       [
@@ -148,7 +158,7 @@ export function reportArticles(): HelpArticle[] {
       "Sensor Integrity",
       "Inspect noisy windows and surrounding readings.",
       "Stored readings and available source noise metadata.",
-      "Choose dates here; configure detection in Settings → Data Quality.",
+      "Choose dates here; configure detection in Settings â†’ Data Quality.",
       "Flags help you inspect questionable sections of glucose reports.",
       "Not every uploader supplies noise metadata. Noise or a low after a flagged window is not a diagnosis.",
       ["/settings/data-quality", "/reports/data-quality"]
@@ -158,7 +168,7 @@ export function reportArticles(): HelpArticle[] {
       "CGM Comparison",
       "Compare devices that recorded glucose near the same time.",
       "Readings paired between your selected device and reference.",
-      "Choose Device, Reference, and Match within here. Manage sources in Settings → Connectors & Apps.",
+      "Choose Device, Reference, and Match within here. Manage sources in Settings â†’ Connectors & Apps.",
       "The scatter and agreement summaries show differences between paired readings.",
       "Unpaired readings are excluded. A wider tolerance allows paired readings farther apart in time; your chosen reference is not guaranteed ground truth.",
       ["/settings/connectors", "/reports/data-quality"]
@@ -168,7 +178,7 @@ export function reportArticles(): HelpArticle[] {
       "Compression Lows",
       "Review suggested low-reading windows for a possible quality correction.",
       "Automatic detection examines stored glucose patterns using the detection settings.",
-      "Set date and status filters here. Configure automatic detection and typical sleep times in Settings → Data Quality. Inspect suggestions before accepting or dismissing.",
+      "Set date and status filters here. Configure automatic detection and typical sleep times in Settings â†’ Data Quality. Inspect suggestions before accepting or dismissing.",
       "Accepted corrections affect subsequent charts and analysis.",
       "A suggestion can be mistaken and does not prove pressure caused a low. Check the preview before changing records.",
       ["/settings/data-quality", "/reports/data-quality"]
@@ -178,7 +188,7 @@ export function reportArticles(): HelpArticle[] {
       "Steps",
       "This guide covers Steps: counting steps and viewing your activity over time.",
       "Step-count records received from a supported source. Google Health can import steps available in your connected account.",
-      "Choose dates above the report. Settings → Connectors & Apps → Google Health controls step imports and the historical start date.",
+      "Choose dates above the report. Settings â†’ Connectors & Apps â†’ Google Health controls step imports and the historical start date.",
       "Daily totals and activity timing help you explore your routine alongside glucose.",
       "An empty day does not necessarily mean no steps. Check source data, import selection, progress, and dates. Overlapping source records can differ from your watch's total.",
       ["/settings/connectors/google-health", "/settings/connectors"]
@@ -188,7 +198,7 @@ export function reportArticles(): HelpArticle[] {
       "Heart Rate",
       "This guide covers Heart Rate: your recorded heart rate and patterns over time.",
       "Device or service samples through a supported connector. Google Health reduces its samples to one stable average per minute.",
-      "Choose dates here. Enable heart rate in Settings → Connectors & Apps → Google Health after checking your device's readings reach that account.",
+      "Choose dates here. Enable heart rate in Settings â†’ Connectors & Apps â†’ Google Health after checking your device's readings reach that account.",
       "The timeline and daily summaries show heart-rate patterns alongside glucose.",
       "Values are beats per minute. Sampling and averaging can hide brief changes. Missing readings are not a zero heart rate; this page defines no universal high or low threshold.",
       ["/settings/connectors/google-health", "/settings/connectors"]
@@ -198,7 +208,7 @@ export function reportArticles(): HelpArticle[] {
       "Sleep",
       "Explore sleep sessions, timing, and stage composition.",
       "Imported sleep sessions and stages, including supported Google Health records.",
-      "Choose dates and the view here; open a night for details. Configure imports in Connectors & Apps → Google Health.",
+      "Choose dates and the view here; open a night for details. Configure imports in Connectors & Apps â†’ Google Health.",
       "Compare nights and glucose during recorded sleep windows.",
       "Device stages are estimates. Missing stages stay missing. Google filters sessions by their end time, so a night can begin before the import start date.",
       ["/settings/connectors/google-health", "/reports/heart-rate"]
@@ -208,7 +218,7 @@ export function reportArticles(): HelpArticle[] {
       "Treatments",
       "Browse, search, add, or edit diabetes events.",
       "Uploaded, imported, and manually saved insulin, carbohydrate, notes, and device events.",
-      "Use category tabs and Search here. Add/edit and bulk deletion require write permission. Settings → Therapy shows schedules; Connectors & Apps manages sources.",
+      "Use category tabs and Search here. Add/edit and bulk deletion require write permission. Settings â†’ Therapy shows schedules; Connectors & Apps manages sources.",
       "Events appear on glucose timelines and feed insulin and carbohydrate analysis.",
       "Event time, units, and type matter. Deletion changes later analysis. A source can recreate records on import unless the applicable deletion protection prevents it.",
       ["/settings/profile", "/settings/connectors", "/reports/insulin-delivery"]
@@ -228,7 +238,7 @@ export function reportArticles(): HelpArticle[] {
       "Sleep night",
       "Inspect one night and its stages.",
       "The selected sleep session, stage records, and glucose during that window.",
-      "Open a night from the Sleep report; choose other dates there. Import settings are in Connectors & Apps → Google Health.",
+      "Open a night from the Sleep report; choose other dates there. Import settings are in Connectors & Apps â†’ Google Health.",
       "The hypnogram and glucose summary explain the overview in detail.",
       "Missing stages and glucose stay missing. Overlapping sessions and estimated stage labels can limit the summary.",
       ["/reports/sleep", "/settings/connectors/google-health"]

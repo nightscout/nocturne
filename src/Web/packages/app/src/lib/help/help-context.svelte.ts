@@ -1,7 +1,8 @@
 import { getContext, onMount, setContext } from "svelte";
 import type { NavItem } from "$lib/navigation/app-navigation.svelte";
 
-const HELP = Symbol("nocturne-help");
+// @wc-ignore
+const HELP = "nocturne:app:help";
 const STORAGE_KEY = "nocturne-help-visibility";
 const LAYOUT_KEY = "nocturne-help-layout";
 const APPEARANCE_KEY = "nocturne-help-appearance";

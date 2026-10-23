@@ -1,7 +1,8 @@
 import { getContext, setContext } from "svelte";
 import type { CurrentBatteryStatus, MultiPeriodStatistics } from "$lib/api";
 
-const key = Symbol("dashboard-examples");
+// @wc-ignore
+const key = "nocturne:app:dashboard-examples";
 
 export interface DashboardExamples {
   statistics: MultiPeriodStatistics;

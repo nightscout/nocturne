@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick, type Snippet } from "svelte";
+  import { Key } from "@nocturne/ui/keys";
   import { on } from "svelte/events";
   import { getHelpContext } from "$lib/help/help-context.svelte";
   import HelpPanel from "./HelpPanel.svelte";
@@ -74,7 +75,7 @@
 
 <svelte:window
   onkeydown={(event) => {
-    if (help?.open && event.key === "Escape" && !event.defaultPrevented)
+    if (help?.open && event.key === Key.Escape && !event.defaultPrevented)
       help.open = false;
     if (help?.blocking && event.key === tabKey && !event.defaultPrevented) {
       // A higher-priority app dialog (for example an alert) owns its own focus.

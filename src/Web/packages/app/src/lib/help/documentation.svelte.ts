@@ -40,6 +40,7 @@ export function articles(): HelpArticle[] {
 
 function parentFor(href: string): string | undefined {
   // The report overview is not permission to visit every report.
+  if (href.startsWith("/reports/loop-analysis/")) return "/reports/loop-analysis";
   if (href.startsWith("/reports/"))
     return href.startsWith("/reports/data-quality/")
       ? "/reports/data-quality"
