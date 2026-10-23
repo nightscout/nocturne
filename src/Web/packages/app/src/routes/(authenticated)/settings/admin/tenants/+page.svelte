@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { formatNumericDate } from "$lib/utils/formatting";
+  import {
+    formatFileSize,
+    formatNumber,
+    formatNumericDate,
+  } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -32,6 +36,7 @@
   import type { TenantDetailDto, TenantMemberDto } from "$api";
   import { getCurrentTenantId } from "../../current-tenant.remote";
   import { getTransitionStatus } from "$api/generated/platforms.generated.remote";
+  import { get as getDatabaseCapacity } from "$api/generated/databaseCapacities.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { remoteErrorMessage } from "$lib/api/remote-error";
 
@@ -165,6 +170,11 @@
   let slugValid = $state(false);
   let validating = $state(false);
   let createError = $state<string | null>(null);
+
+  const capacityQuery = $derived(
+    isCreateDialogOpen ? getDatabaseCapacity() : undefined,
+  );
+  const capacity = $derived(capacityQuery?.current);
 
   const normalizedSlug = $derived(slug.trim().toLowerCase());
   const debouncedSlug = new Debounced(() => normalizedSlug, 400);
@@ -448,6 +458,34 @@
       <Dialog.Description>Set up a new Nocturne instance</Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">
+      {#if capacity}
+        <div class="space-y-2 rounded-md border p-3">
+          <h3 class="text-sm font-medium">Database capacity</h3>
+          <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+            <dt class="text-muted-foreground">Database size</dt>
+            <dd class="text-right">
+              {formatFileSize(capacity.databaseSizeBytes ?? 0)}
+            </dd>
+            <dt class="text-muted-foreground">Tenants</dt>
+            <dd class="text-right">{formatNumber(capacity.tenantCount)}</dd>
+            <dt class="text-muted-foreground">Average per tenant</dt>
+            <dd class="text-right">
+              {formatFileSize(capacity.averageTenantBytes ?? 0)}
+            </dd>
+            <dt class="text-muted-foreground">Largest tenant</dt>
+            <dd class="text-right">
+              {formatFileSize(capacity.largestTenantBytes ?? 0)}
+            </dd>
+            <dt class="text-muted-foreground">Used</dt>
+            <dd class="text-right">
+              {formatNumber(capacity.usedPercent)}% of {formatFileSize(
+                capacity.budgetBytes ?? 0,
+              )}
+            </dd>
+          </dl>
+        </div>
+      {/if}
+
       {#if createError}
         <Alert.Root variant="destructive">
           <AlertTriangle class="h-4 w-4" />

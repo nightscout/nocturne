@@ -4,6 +4,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Legacy;
+using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
@@ -30,6 +31,7 @@ public class DDataServiceTests
     private readonly Mock<IDeviceStatusGroupRepository> _mockGroupRepo;
     private readonly Mock<IFoodRepository> _mockFoodRepository;
     private readonly Mock<IActivityService> _mockActivityService;
+    private readonly Mock<IStoreSizeReader> _mockStoreSize;
     private readonly Mock<ILogger<DDataService>> _mockLogger;
     private readonly DDataService _ddataService;
 
@@ -40,6 +42,8 @@ public class DDataServiceTests
         _mockProfileProjectionService = new Mock<IProfileProjectionService>();
         _mockFoodRepository = new Mock<IFoodRepository>();
         _mockActivityService = new Mock<IActivityService>();
+        _mockStoreSize = new Mock<IStoreSizeReader>();
+        _mockStoreSize.Setup(x => x.ReadAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new DbStats());
         _mockLogger = new Mock<ILogger<DDataService>>();
 
         // Build a DeviceStatusProjectionService backed by empty mocked repositories
@@ -65,8 +69,21 @@ public class DDataServiceTests
             projectionService,
             _mockFoodRepository.Object,
             _mockActivityService.Object,
+            _mockStoreSize.Object,
             _mockLogger.Object
         );
+    }
+
+    [Fact]
+    public async Task GetDDataAsync_ReportsTheStoreSizeReadersFigure()
+    {
+        var stats = new DbStats { DataSize = 7_000, IndexSize = 3_000, Collections = 4, Indexes = 9 };
+        _mockStoreSize.Setup(x => x.ReadAsync(It.IsAny<CancellationToken>())).ReturnsAsync(stats);
+
+        var result = await _ddataService.GetDDataAsync(
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), CancellationToken.None);
+
+        Assert.Same(stats, result.DbStats);
     }
 
     [Fact]

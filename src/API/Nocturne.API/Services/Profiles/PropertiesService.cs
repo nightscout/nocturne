@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Nocturne.API.Configuration;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Legacy;
@@ -31,6 +33,7 @@ public class PropertiesService : IPropertiesService
     private readonly ITempBasalRepository _tempBasalRepository;
     private readonly IAr2Service _ar2Service;
     private readonly IDeviceAgeService _deviceAgeService;
+    private readonly DbSizeOptions _dbSize;
 
     // Properties served by IDeviceAgeService, each costing its own query.
     private static readonly HashSet<string> DeviceAgeProperties =
@@ -57,7 +60,8 @@ public class PropertiesService : IPropertiesService
         ICarbIntakeRepository carbIntakeRepository,
         ITempBasalRepository tempBasalRepository,
         IAr2Service ar2Service,
-        IDeviceAgeService deviceAgeService
+        IDeviceAgeService deviceAgeService,
+        IOptions<DbSizeOptions> dbSize
     )
     {
         _ddataService = ddataService;
@@ -69,6 +73,7 @@ public class PropertiesService : IPropertiesService
         _tempBasalRepository = tempBasalRepository;
         _ar2Service = ar2Service;
         _deviceAgeService = deviceAgeService;
+        _dbSize = dbSize.Value;
     }
 
     /// <inheritdoc />
@@ -832,19 +837,18 @@ public class PropertiesService : IPropertiesService
         if (dbStats == null)
             return;
 
-        // Simplified database size calculation
-        var totalSize = dbStats.DataSize; // Only dataSize, no indexSize in our model
-        var maxSize = 500 * 1024 * 1024; // 500MB default max
-        var percentage = totalSize > 0 ? (int)((totalSize / (double)maxSize) * 100) : 0;
+        var totalSize = dbStats.DataSize + dbStats.IndexSize;
+        var percentage = totalSize > 0 ? (int)(totalSize * 100.0 / _dbSize.MaxBytes) : 0;
 
         properties["dbsize"] = new Dictionary<string, object>
         {
             ["size"] = totalSize,
             ["percentage"] = percentage,
             ["display"] = $"{percentage}%",
+            // NIGHTSCOUT-COMPAT: Nightscout's dbsize plugin warns from 60% and is urgent from 75% of the floored percentage.
             ["status"] =
-                percentage > 80 ? "urgent"
-                : percentage > 60 ? "warn"
+                percentage >= 75 ? "urgent"
+                : percentage >= 60 ? "warn"
                 : "ok",
         };
     }

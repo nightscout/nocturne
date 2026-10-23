@@ -301,6 +301,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBraceExpansionService, BraceExpansionService>();
         services.AddScoped<ITimeQueryService, TimeQueryService>();
 
+        services.Configure<DbSizeOptions>(configuration.GetSection(DbSizeOptions.SectionName));
+        services.AddSingleton<StoreSizeEstimator>();
+        services.AddScoped<IStoreSizeReader, StoreSizeReader>();
         services.AddScoped<IDDataService, DDataService>();
         services.AddScoped<IPropertiesService, PropertiesService>();
         services.AddScoped<ISummaryService, SummaryService>();

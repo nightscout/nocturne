@@ -12,6 +12,7 @@
     type CustomAlarmSound,
     type CustomSoundRejection,
   } from "$lib/audio/alarm-sounds";
+  import { formatFileSize } from "$lib/utils/formatting";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -161,12 +162,6 @@
     } finally {
       previewingId = null;
     }
-  }
-
-  function formatFileSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 </script>
 

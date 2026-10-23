@@ -274,6 +274,19 @@ export function formatNumber(value: number | undefined | null): string {
   return (value ?? 0).toLocaleString(formatLocale());
 }
 
+/** A byte count in the largest unit that keeps it above 1, to one decimal place: "1.5 GB". */
+export function formatFileSize(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  const digits = unit === 0 ? 0 : 1;
+  return `${value.toLocaleString(formatLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })} ${units[unit]}`;
+}
+
 /**
  * The regional format's own numeric date, e.g. "31/12/2026" or "12/31/2026". The
  * shape is the locale's; use {@link formatShortDate} or {@link formatMediumDate}

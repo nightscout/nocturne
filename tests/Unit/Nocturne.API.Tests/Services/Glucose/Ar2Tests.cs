@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Glucose;
@@ -137,7 +138,8 @@ public class Ar2Tests
             Mock.Of<ICarbIntakeRepository>(),
             Mock.Of<ITempBasalRepository>(),
             _ar2Service,
-            Mock.Of<IDeviceAgeService>()
+            Mock.Of<IDeviceAgeService>(),
+            Options.Create(new DbSizeOptions())
         );
 
         var properties = await service.GetPropertiesAsync(new[] { "bgnow", "delta", "ar2" });

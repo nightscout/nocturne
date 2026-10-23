@@ -42,6 +42,7 @@ const {
 	formatWeekdayLabel,
 	formatClock,
 	formatDayTime,
+	formatFileSize,
 	formatNumber,
 	formatNumericDate,
 	formatMediumDateRange,
@@ -531,6 +532,16 @@ describe("Shared date shapes", () => {
 	it("groups numbers in the regional format", () => {
 		withRegion("de-DE", () => expect(formatNumber(1234567)).toBe("1.234.567"));
 		withRegion("en-US", () => expect(formatNumber(1234567)).toBe("1,234,567"));
+	});
+
+	it("names a byte count in the largest unit that keeps it above one", () => {
+		withRegion("en-US", () => {
+			expect(formatFileSize(512)).toBe("512 B");
+			expect(formatFileSize(1536)).toBe("1.5 KB");
+			expect(formatFileSize(5 * 1024 * 1024)).toBe("5.0 MB");
+			expect(formatFileSize(3 * 1024 ** 3)).toBe("3.0 GB");
+		});
+		withRegion("de-DE", () => expect(formatFileSize(1536)).toBe("1,5 KB"));
 	});
 
 	it("reads a missing count as zero rather than as text", () => {
