@@ -7,6 +7,7 @@
   import { formatElapsedMs } from "$lib/utils/duration";
   import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
   import { Button } from "$lib/components/ui/button";
+  import { EmptyState } from "$lib/components/shared";
 
   // Get ID from route params (guaranteed to exist in [id] route)
   const analysisId = $derived(page.params.id ?? "");
@@ -364,9 +365,12 @@
   {:else}
     <div class="bg-card rounded-lg shadow p-6">
       <h2 class="text-xl font-semibold mb-4">Discrepancies</h2>
-      <p class="text-muted-foreground">
-        No discrepancies found. The responses match perfectly!
-      </p>
+      <EmptyState
+        art="confirmation-mark"
+        size="compact"
+        title="No discrepancies found"
+        body="The responses match perfectly!"
+      />
     </div>
   {/if}
 

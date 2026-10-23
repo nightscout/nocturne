@@ -13,7 +13,7 @@
   import { formatElapsedMs } from "$lib/utils/duration";
   import type { AnalysisListItemDto } from "$lib/api";
   import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
-  import { Artwork } from "@nocturne/watercolour";
+  import { EmptyState } from "$lib/components/shared";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Checkbox } from "$lib/components/ui/checkbox";
@@ -430,16 +430,12 @@
             </tr>
           {:else}
             <tr>
-              <td colspan="7" class="px-6 py-12 text-center text-muted-foreground">
-                <Artwork
-                  artwork="linked-rings"
-                  palette="dusk"
-                  motion="auto"
-                  autoplay="once"
-                  class="mx-auto mb-3 size-48"
+              <td colspan="7">
+                <EmptyState
+                  art="linked-rings"
+                  title="No analyses found"
+                  body="Make sure the compatibility proxy service is running and receiving traffic."
                 />
-                No analyses found. Make sure the compatibility proxy service is
-                running and receiving traffic.
               </td>
             </tr>
           {/each}

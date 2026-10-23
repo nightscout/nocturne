@@ -3,7 +3,8 @@ import { SvelteSet } from 'svelte/reactivity';
 import { distinct } from '$lib/utils/collections';
 import type { Food } from '$api';
 import type { SortMode } from './types.js';
-import { foodCategoryMap, giFromInt, type GiLevel } from '$lib/components/food';
+import { foodCategoryMap } from '$lib/components/food/food-constants';
+import { giFromInt, type GiLevel } from '$lib/components/food/gi';
 import {
   getFoods,
   createFood as createFoodRemote,
@@ -118,13 +119,15 @@ export class FoodState {
     }
   }
 
-  async addFood(food: Food) {
+  /** The composer confirms the add itself, so this posts no success toast. */
+  async addFood(food: Food): Promise<Food | null> {
     try {
       const result = await createFoodRemote(food);
-      if (result?._id) {
-        this.foods = [result, ...this.foods];
-        toast.success('Food created');
+      if (!result?._id) {
+        toast.error('Failed to create food');
+        return null;
       }
+      this.foods = [result, ...this.foods];
       return result;
     } catch (err) {
       toast.error(describeSubmitError(err, 'Failed to create food'));

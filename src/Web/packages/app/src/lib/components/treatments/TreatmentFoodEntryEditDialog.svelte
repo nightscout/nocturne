@@ -15,7 +15,7 @@
   import { updateCarbIntakeFood } from "$api/generated/nutritions.generated.remote";
   import { getFood as getFoodById, getFoods as getAllFoods } from "$api/generated/foods.generated.remote";
   import { toast } from "svelte-sonner";
-  import { useToastSubmission } from "$lib/forms";
+  import { toastSaved, useToastSubmission } from "$lib/forms";
   import { AddFoodDialog, foodCategoryMap, type FoodCategoryMap } from "$lib/components/food";
 
   interface Props {
@@ -193,7 +193,7 @@
         },
       });
 
-      toast.success("Food entry updated");
+      toastSaved("Food entry updated");
       onSave?.();
       resetAndClose();
     });

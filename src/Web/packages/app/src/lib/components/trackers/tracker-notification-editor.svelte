@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { EmptyState } from "$lib/components/shared";
   import { enumValue } from "$lib/components/ui/enum-value";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -97,14 +98,13 @@
   </div>
 
   {#if notifications.length === 0}
-    <div
-      class="text-center py-4 text-muted-foreground text-sm border border-dashed rounded-lg"
-    >
-      <p>No notification thresholds configured</p>
-      <p class="text-xs mt-1">
-        Add thresholds to get notified as the tracker ages
-      </p>
-    </div>
+    <EmptyState
+      art="stopwatch"
+      size="compact"
+      variant="outline"
+      title="No notification thresholds configured"
+      body="Add thresholds to get notified as the tracker ages"
+    />
   {:else}
     <div class="space-y-3">
       <!-- eslint-disable-next-line svelte/require-each-key -- each notification is replaced on every edit and new ones have no id, so neither the object nor an id identifies a row -->

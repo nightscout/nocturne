@@ -6,6 +6,10 @@ import { recordApiFailure } from "$lib/support/api-failure-log";
 export const GENERIC_SUBMIT_ERROR =
   "We couldn't save your changes. Please try again.";
 
+/** For a form whose follow-up step, after the record itself saved, threw. */
+export const FOLLOW_UP_ERROR =
+  "Your changes were saved, but the step after saving didn't finish. Please try again.";
+
 /** Shown when a rate limiter turned the attempt away, so the credential is unspent. */
 export const RATE_LIMITED_ERROR =
   "Too many attempts. Please wait a few minutes and try again.";

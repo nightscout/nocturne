@@ -7,6 +7,8 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import * as Card from "$lib/components/ui/card";
+  import { EmptyState } from "$lib/components/shared";
+  import { labResultArtwork } from "$lib/watercolour-icons";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -372,9 +374,13 @@
           </TimeZoneNote>
         </p>
       {:else if chartData.length === 0}
-        <div class="flex h-[320px] items-center justify-center text-muted-foreground">
-          Not enough glucose history yet — each point needs at least a month of readings within
-          the trailing 90 days.
+        <div class="flex h-[320px] items-center justify-center">
+          <EmptyState
+            art="report-pages"
+            size="compact"
+            title="Not enough glucose history yet"
+            body="Each point needs at least a month of readings within the trailing 90 days."
+          />
         </div>
       {:else}
         {#if latest && extremes}
@@ -495,7 +501,7 @@
     </Card.Header>
     <Card.Content class="space-y-4">
       {#if labResults.length === 0}
-        <p class="text-sm text-muted-foreground">No lab results added yet.</p>
+        <EmptyState art={labResultArtwork} size="compact" title="No lab results added yet" />
       {:else}
         <ul class="divide-border divide-y">
           {#each [...labResults].sort((a, b) => toDate(b.measuredAt).getTime() - toDate(a.measuredAt).getTime()) as result (result.id)}

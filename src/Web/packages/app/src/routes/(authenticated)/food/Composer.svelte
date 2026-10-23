@@ -5,10 +5,12 @@
 	import X from '@lucide/svelte/icons/x';
 	import { DEFAULT_PORTION, DEFAULT_GI, FoodFields } from '$lib/components/food';
 	import { Button } from '$lib/components/ui/button';
+	import { PaintedMoment, SubmitButton, toastSaved } from '$lib/forms';
 	import { getFoodState } from './food-context.js';
 
 	interface Props {
-		onadd: (food: Food) => Promise<void> | void;
+		/** Resolves to the created food, or null when the create failed. */
+		onadd: (food: Food) => Promise<Food | null>;
 		onclose: () => void;
 	}
 
@@ -35,6 +37,8 @@
 	let nameInput: HTMLInputElement | null = $state(null);
 
 	let saving = $state(false);
+	/** Foods added through "Save & add another"; the composer stays open to show them land. */
+	let addedAnother = $state(0);
 	const canSave = $derived(
 		!saving && !!draft.name && draft.carbs !== undefined && !!draft.portion
 	);
@@ -48,12 +52,15 @@
 		// through an in-flight create would otherwise add the food twice.
 		if (!canSave) return;
 		saving = true;
+		let created: Food | null;
 		try {
-			await onadd(draft);
+			created = await onadd(draft);
 		} finally {
 			saving = false;
 		}
+		if (!created) return;
 		if (addAnother) {
+			addedAnother++;
 			const keepPortion = draft.portion;
 			const keepUnit = draft.unit;
 			const keepGi = draft.gi;
@@ -65,6 +72,7 @@
 			draft.category = keepCategory;
 			nameInput?.focus();
 		} else {
+			toastSaved('Food created');
 			onclose();
 		}
 	}
@@ -111,8 +119,9 @@
 	<FoodFields bind:draft categories={foodState.categoryMap} bind:nameRef={nameInput} collapseDetails>
 		{#snippet actions()}
 			<div class="flex items-center gap-2">
+				<PaintedMoment count={addedAnother} artwork="apple" class="text-xs text-muted-foreground">Added</PaintedMoment>
 				<Button type="submit" variant="outline" size="sm" disabled={!canSave}>Save</Button>
-				<Button type="button" size="sm" disabled={!canSave} onclick={() => submit(true)}>Save & add another <span class="ml-1 text-xs opacity-60">⌘+Enter</span></Button>
+				<SubmitButton type="button" size="sm" saved={addedAnother} disabled={!canSave} onclick={() => submit(true)}>Save & add another <span class="ml-1 text-xs opacity-60">⌘+Enter</span></SubmitButton>
 			</div>
 		{/snippet}
 	</FoodFields>

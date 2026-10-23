@@ -17,6 +17,7 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Shield from "@lucide/svelte/icons/shield";
   import Eye from "@lucide/svelte/icons/eye";
+  import { stillArtwork } from "$lib/watercolour-deferral.svelte";
   import { buildAppNavigation, type NavItem, type NavLink } from "$lib/navigation/app-navigation.svelte";
   import {
     goToTenant,
@@ -53,6 +54,9 @@
   }: Props = $props();
 
   const sidebar = Sidebar.useSidebar();
+
+  // Absolutely positioned over the item, so the menu lays out the same before it arrives.
+  const selectionEdge = stillArtwork(() => import("$lib/watercolour/selection-edge"));
 
   // Defer localStorage check to after hydration so SSR and client initial render
   // both produce the same DOM (avoids hydration mismatch from conditional rendering).
@@ -171,10 +175,23 @@
     });
   });
 
+  /**
+   * The edge marks the most specific active item on screen: a parent only while
+   * its active child is hidden, in a closed submenu or the icon rail.
+   */
+  const showParentEdge = (item: NavItem): boolean =>
+    isActive(item) && (!openMenus[item.id] || sidebar.state === "collapsed");
+
   function toggleMenu(id: string) {
     openMenus[id] = !openMenus[id];
   }
 </script>
+
+{#snippet edge(active: boolean)}
+  {#if selectionEdge.component}
+    <selectionEdge.component {active} />
+  {/if}
+{/snippet}
 
 <Sidebar.Sidebar collapsible="icon">
   <Sidebar.Header
@@ -284,6 +301,7 @@
                     isActive={isActive(item)}
                     onclick={() => toggleMenu(item.id)}
                   >
+                    {@render edge(showParentEdge(item))}
                     <item.icon class="h-4 w-4" />
                     <span class="group-data-[collapsible=icon]:hidden">
                       {item.title}
@@ -308,6 +326,7 @@
                             href={child.href}
                             isActive={isActive(child)}
                           >
+                            {@render edge(isActive(child))}
                             <child.icon class="h-4 w-4" />
                             <span>{child.title}</span>
                           </Sidebar.MenuSubButton>
@@ -324,6 +343,7 @@
                   {#snippet child({ props })}
                     <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a runtime string | undefined from NavItem; resolve() requires a literal route id and throws on undefined -->
                     <a href={item.href} {...props}>
+                      {@render edge(isActive(item))}
                       <item.icon class="h-4 w-4" />
                       <span class="group-data-[collapsible=icon]:hidden">
                         {item.title}

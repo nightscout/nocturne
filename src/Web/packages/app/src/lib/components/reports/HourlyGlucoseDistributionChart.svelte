@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
   import { timeFormat } from "$lib/stores/appearance-store.svelte";
-  import BarChart2 from "@lucide/svelte/icons/chart-no-axes-column";
+  import { EmptyState } from "$lib/components/shared";
   import type { AveragedStats, GlycemicThresholds } from "$lib/api";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import { hourlyBandSeries } from "./hourly-bands";
@@ -86,14 +86,13 @@
       items={chartSeries.map((s) => ({ texture: s.texture, label: s.label }))}
     />
   {:else}
-    <div
-      class="flex h-[350px] w-full items-center justify-center text-muted-foreground"
-    >
-      <div class="text-center">
-        <BarChart2 class="mx-auto h-10 w-10 opacity-30" />
-        <p class="mt-2 font-medium">No glucose data available</p>
-        <p class="text-sm">Hourly distribution requires glucose entries</p>
-      </div>
+    <div class="flex h-[350px] w-full items-center justify-center">
+      <EmptyState
+        art="report-pages"
+        size="compact"
+        title="No glucose data available"
+        body="Hourly distribution requires glucose entries"
+      />
     </div>
   {/if}
 </div>

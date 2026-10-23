@@ -1,7 +1,7 @@
 import type { Component } from "svelte";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- any props, exports and bindings; the loaded component keeps its own
-type AnyComponent = Component<any, any, any>;
+export type AnyComponent = Component<any, any, any>;
 
 export interface LazyComponent<C extends AnyComponent> {
   /** Whether the component is wanted open. Bind the rendered component's `open` to it. */

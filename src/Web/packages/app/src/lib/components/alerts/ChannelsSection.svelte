@@ -19,6 +19,7 @@
     DeviceCapabilityCatalog,
     InAppRecipientResponse,
   } from "$api-clients";
+  import { EmptyState } from "$lib/components/shared";
   import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
   import { applyChannelDestination, type ChannelDef } from "./types";
   import {
@@ -155,9 +156,12 @@
 
 <div class="space-y-2">
   {#if channels.length === 0}
-    <p class="text-sm text-muted-foreground italic">
-      No channels configured. Add at least one to receive this alert.
-    </p>
+    <EmptyState
+      art="chat-bubble"
+      size="compact"
+      title="No channels configured"
+      body="Add at least one to receive this alert."
+    />
   {/if}
 
   {#each channels as ch, i (ch._uid ?? i)}

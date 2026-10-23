@@ -5,6 +5,8 @@ import { MigrationJobState, MigrationMode } from "$api";
 import type { MigrationJobInfo } from "$api";
 
 let history: MigrationJobInfo[] = [];
+/** What a status poll answers; the history it leaves behind stands in for the server's. */
+let polled: { status: object; history: MigrationJobInfo[] } | null = null;
 
 const remote = vi.hoisted(() => ({
   historyCalls: 0,
@@ -33,7 +35,10 @@ vi.mock("$api/generated/migrations.generated.remote", () => {
     getStatus: () => ({
       run: () => {
         remote.statusCalls += 1;
-        return remote.statusError ? Promise.reject(remote.statusError) : Promise.resolve(remote.status);
+        if (remote.statusError) return Promise.reject(remote.statusError);
+        if (!polled) return Promise.resolve(remote.status);
+        history = polled.history;
+        return Promise.resolve(polled.status);
       },
     }),
     testConnection: inertForm,
@@ -109,8 +114,63 @@ describe("settings/migration history", () => {
   });
 });
 
+describe("settings/migration completion moment", () => {
+  const moment = () => page.getByTestId("migration-complete");
+
+  const finishRunning = (finished: Partial<MigrationJobInfo>) => {
+    history = [entry({ state: MigrationJobState.Running, completedAt: undefined })];
+    polled = {
+      status: { jobId: entry({}).id, state: finished.state ?? MigrationJobState.Completed },
+      history: [entry(finished)],
+    };
+  };
+
+  it("paints when a watched run completes cleanly", async () => {
+    finishRunning({ hasFailures: false });
+
+    render(MigrationPage, {});
+
+    await expect.element(moment()).toBeVisible();
+    await expect.element(moment()).toHaveTextContent("Migration complete");
+  });
+
+  it("stays quiet when a watched run completes with a failed collection", async () => {
+    finishRunning({ hasFailures: true, errorMessage: "1 of 2 collections imported, 1 failed." });
+
+    render(MigrationPage, {});
+    await openHistory();
+
+    await expect.element(page.getByText(/1 of 2 collections imported/)).toBeVisible();
+    await expect.element(moment()).not.toBeInTheDocument();
+  });
+
+  it.each([MigrationJobState.Failed, MigrationJobState.Cancelled, MigrationJobState.Interrupted])(
+    "stays quiet when a watched run ends %s",
+    async (state) => {
+      finishRunning({ state });
+
+      render(MigrationPage, {});
+      await openHistory();
+
+      await expect.element(page.getByRole("tabpanel")).toBeVisible();
+      await expect.element(moment()).not.toBeInTheDocument();
+    },
+  );
+
+  it("stays quiet for a run that had already completed before the page opened", async () => {
+    history = [entry({ hasFailures: false })];
+
+    render(MigrationPage, {});
+    await openHistory();
+
+    await expect.element(page.getByText("https://mynightscout.example")).toBeVisible();
+    await expect.element(moment()).not.toBeInTheDocument();
+  });
+});
+
 describe("settings/migration running job", () => {
   beforeEach(() => {
+    polled = null;
     remote.historyCalls = 0;
     remote.statusCalls = 0;
     remote.statusError = undefined;

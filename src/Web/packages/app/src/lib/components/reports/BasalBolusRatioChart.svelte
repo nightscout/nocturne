@@ -2,7 +2,7 @@
   import { Axis, BarChart, Points, Spline, Tooltip } from "layerchart";
   import { scaleLinear } from "d3-scale";
   import { carbAxisMax as niceCarbAxisMax, carbsOnInsulinScale } from "./carb-axis";
-  import PieChart from "@lucide/svelte/icons/chart-pie";
+  import { EmptyState } from "$lib/components/shared";
   import { dashClass, patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import type { DailyBasalBolusRatioData, DailyBasalBolusRatioResponse } from "$lib/api";
@@ -163,14 +163,13 @@
     />
 
   {:else}
-    <div
-      class="flex h-[350px] w-full items-center justify-center text-muted-foreground"
-    >
-      <div class="text-center">
-        <PieChart class="mx-auto h-10 w-10 opacity-30" />
-        <p class="mt-2 font-medium">No insulin data available</p>
-        <p class="text-sm">No basal or bolus treatments found in this period</p>
-      </div>
+    <div class="flex h-[350px] w-full items-center justify-center">
+      <EmptyState
+        art="report-pages"
+        size="compact"
+        title="No insulin data available"
+        body="No basal or bolus treatments found in this period"
+      />
     </div>
   {/if}
 </div>

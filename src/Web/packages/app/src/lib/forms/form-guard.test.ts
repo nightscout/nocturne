@@ -18,7 +18,7 @@ import { z } from "zod";
 import type { Mock } from "vitest";
 import type { BeforeNavigate } from "@sveltejs/kit";
 import { FormGuard, type GuardedForm } from "./form-guard.svelte";
-import { GENERIC_SUBMIT_ERROR } from "./submit-error";
+import { FOLLOW_UP_ERROR, GENERIC_SUBMIT_ERROR } from "./submit-error";
 
 const schema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -504,6 +504,64 @@ describe("FormGuard", () => {
       await form._triggerEnhance();
       expect(guard.submitError).toBeNull();
       expect(guard.submitted).toBe(true);
+      expect(guard.saved).toBe(1);
+    });
+
+    it("counts a save only once the consumer callback has run", async () => {
+      const form = createMockForm();
+      const guard = new FormGuard({
+        form,
+        schema,
+        el: () => null,
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => ({ name: "Bob", age: 30 }),
+      });
+      let savedDuringCallback: number | undefined;
+      guard.enhance(async () => {
+        savedDuringCallback = guard.saved;
+      });
+      await form._triggerEnhance();
+      expect(savedDuringCallback).toBe(0);
+      expect(guard.saved).toBe(1);
+    });
+
+    // The patient record's callback saves the weight, which reports failure by
+    // returning false; the button must not glaze over "Failed to save weight".
+    it("does not count a save whose follow-up returned false", async () => {
+      const form = createMockForm();
+      const guard = new FormGuard({
+        form,
+        schema,
+        el: () => null,
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => ({ name: "Bob", age: 30 }),
+      });
+      guard.enhance(async () => false);
+      await form._triggerEnhance();
+
+      expect(guard.saved).toBe(0);
+      expect(guard.submitError).toBeNull();
+    });
+
+    it("says the record saved when only the follow-up threw", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const form = createMockForm();
+      const guard = new FormGuard({
+        form,
+        schema,
+        el: () => null,
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => ({ name: "Bob", age: 30 }),
+        submitErrorMessage: "Couldn't save your patient record.",
+      });
+      guard.enhance(async () => {
+        throw new Error("offline");
+      });
+      await form._triggerEnhance();
+
+      expect(guard.submitError).toBe(FOLLOW_UP_ERROR);
+      expect(guard.submitted).toBe(true);
+      expect(guard.saved).toBe(0);
     });
   });
 

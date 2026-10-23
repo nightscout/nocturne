@@ -21,6 +21,8 @@ vi.mock("$api/generated/insulinCatalogs.generated.remote", () => ({
   getCatalog: () => ({ current: undefined }),
 }));
 
+import { z } from "zod";
+import { FormGuard } from "$lib/forms/form-guard.svelte";
 import { WeightState } from "./state.svelte";
 
 /**
@@ -80,6 +82,37 @@ describe("WeightState", () => {
     await expect(w.save()).resolves.toBe(true);
 
     expect(create).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it("keeps a failed weight save from counting as saved", async () => {
+    create.mockRejectedValueOnce(new Error("offline"));
+    const { w, cleanup } = makeWeightState();
+    w.weightKg = 72.5;
+
+    let guard!: FormGuard<{ name: string }>;
+    let enhance: ((helpers: { submit: () => Promise<boolean> }) => Promise<void>) | undefined;
+    const stop = $effect.root(() => {
+      guard = new FormGuard({
+        form: {
+          enhance(cb) {
+            enhance = cb;
+            return { action: "/mock", method: "POST" };
+          },
+        },
+        schema: z.object({ name: z.string() }),
+        el: () => null,
+        initial: () => ({ name: "a" }),
+        values: () => ({ name: "b" }),
+      });
+    });
+    guard.enhance(() => w.save());
+    await enhance?.({ submit: async () => true });
+
+    expect(w.saveError).not.toBeNull();
+    expect(guard.saved).toBe(0);
+    expect(guard.submitError).toBeNull();
+    stop();
     cleanup();
   });
 

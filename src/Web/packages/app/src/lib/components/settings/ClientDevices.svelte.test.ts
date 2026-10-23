@@ -52,7 +52,7 @@ describe("ClientDevices", () => {
     render(ClientDevices);
 
     await expect
-      .element(page.getByText("No registered devices.", { exact: false }))
+      .element(page.getByText("No registered devices"))
       .toBeVisible();
   });
 

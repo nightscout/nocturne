@@ -26,8 +26,8 @@
   const glucose = displayedGlucose(realtimeStore);
   const directionInfo = $derived(getDirectionInfo(glucose.direction));
 
-  // This header is the only glucose surface on a phone — CurrentBGDisplay hides
-  // itself below @md — so it carries the same stale/disconnected states.
+  // This header is the glucose surface on a phone unless the Current Glucose widget is showing —
+  // CurrentBGDisplay hides itself below @md — so it carries the same stale/disconnected states.
   const rawCurrentBG = $derived(glucose.currentBG);
   const lastUpdated = $derived(realtimeStore?.lastUpdated ?? 0);
   const tileVariant = $derived(

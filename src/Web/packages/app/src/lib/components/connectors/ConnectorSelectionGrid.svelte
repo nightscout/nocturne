@@ -10,7 +10,7 @@
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import Plug from "@lucide/svelte/icons/plug";
+  import { EmptyState } from "$lib/components/shared";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
 
@@ -84,15 +84,12 @@
     </div>
   </div>
 {:else}
-  <Card>
-    <CardContent class="py-8 text-center">
-      <Plug class="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-      <p class="font-medium">No connectors available</p>
-      <p class="text-sm text-muted-foreground mt-2">
-        No server-side connectors are registered in this installation.
-      </p>
-    </CardContent>
-  </Card>
+  <EmptyState
+    art="plug"
+    variant="card"
+    title="No connectors available"
+    body="No server-side connectors are registered in this installation."
+  />
 {/if}
 
 {#if onCancel}

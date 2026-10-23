@@ -1,4 +1,7 @@
 <script lang="ts">
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
+  import type { IconArtworkSource } from "@nocturne/watercolour";
+  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
@@ -9,7 +12,6 @@
   import User from "@lucide/svelte/icons/user";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Info from "@lucide/svelte/icons/info";
@@ -65,7 +67,7 @@
   const recoveryQuery = getRecoveryStatus();
 
   let errorMessage = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean; icon?: IconArtworkSource } | null>(null);
 
   // Passkey add flow
   let isRegistering = $state(false);
@@ -119,10 +121,10 @@
   $effect(() => {
     const linked = page.url.searchParams.get("linked");
     if (linked === "success") {
-      successMessage = "Account linked successfully.";
+      successMessage = { text: "Account linked successfully.", wash: true };
       clearMessages();
     } else if (linked === "already") {
-      successMessage = "This account was already linked.";
+      successMessage = { text: "This account was already linked.", wash: false };
       clearMessages();
     }
     if (linked && typeof window !== "undefined") {
@@ -187,7 +189,7 @@
       showLabelDialog = false;
       pendingPasskey = null;
       newPasskeyLabel = "";
-      successMessage = "Passkey added successfully.";
+      successMessage = { text: "Passkey added successfully.", wash: true, icon: fingerprintArtwork };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to register passkey.");
@@ -219,7 +221,7 @@
     try {
       await removeCredential(removeTarget.id);
       await invalidateAll();
-      successMessage = "Passkey removed.";
+      successMessage = { text: "Passkey removed.", wash: false };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to remove passkey.");
@@ -306,7 +308,7 @@
       totpQrDataUrl = null;
       totpVerifyCode = "";
       totpLabel = "";
-      successMessage = "Authenticator app added successfully.";
+      successMessage = { text: "Authenticator app added successfully.", wash: true };
       clearMessages();
     } catch (err) {
       totpSetupError = describeTotpSetupError(err);
@@ -328,7 +330,7 @@
 
     try {
       await totpRemoveCredential(totpRemoveTarget.id);
-      successMessage = "Authenticator removed.";
+      successMessage = { text: "Authenticator removed.", wash: false };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to remove authenticator.");
@@ -338,8 +340,12 @@
     }
   }
 
+  let clearTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Restarted per message, so an earlier message's timer cannot cut a newer one short.
   function clearMessages() {
-    setTimeout(() => {
+    clearTimeout(clearTimer);
+    clearTimer = setTimeout(() => {
       successMessage = null;
       errorMessage = null;
     }, 3000);
@@ -377,16 +383,7 @@
     {/if}
 
     {#if successMessage}
-      <div
-        class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-      >
-        <Check
-          class="mt-0.5 h-4 w-4 shrink-0 text-success"
-        />
-        <p class="text-sm text-success">
-          {successMessage}
-        </p>
-      </div>
+      <SuccessBanner wash={successMessage.wash} icon={successMessage.icon}>{successMessage.text}</SuccessBanner>
     {/if}
 
     {#if isSecurityLoading}

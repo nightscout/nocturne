@@ -20,6 +20,11 @@
     notification?: InAppNotificationDto | null;
     match?: SuggestedMealMatch | null;
     onComplete?: () => void;
+    /**
+     * Set when the host marks the matched meal itself; the dialog then leaves
+     * out its own "accepted" toast.
+     */
+    onAccepted?: (carbIntakeId: string) => void;
   }
 
   let {
@@ -28,6 +33,7 @@
     notification = null,
     match = null,
     onComplete,
+    onAccepted,
   }: Props = $props();
 
   // Form state
@@ -149,7 +155,8 @@
         carbs,
         timeOffsetMinutes,
       });
-      toast.success("Meal match accepted");
+      if (onAccepted) onAccepted(carbIntakeId);
+      else toast.success("Meal match accepted");
       onComplete?.();
       resetAndClose();
     });
