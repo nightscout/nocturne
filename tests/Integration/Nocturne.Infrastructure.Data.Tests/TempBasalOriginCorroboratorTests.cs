@@ -25,6 +25,28 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
     /// <summary>A Trio temp whose only snapshot nearby, proposing its rate, is another device's.</summary>
     internal static readonly Guid OtherDevice = Guid.Parse("70000000-0000-7000-8000-000000000003");
 
+    /// <summary>An AAPS temp mirrored through Nightscout with no device, beside its phone's snapshot.</summary>
+    internal static readonly Guid Deviceless = Guid.Parse("70000000-0000-7000-8000-00000000000c");
+
+    /// <summary>A temp Tidepool mirrored, stored before evidence was recorded, beside a Trio snapshot.</summary>
+    internal static readonly Guid Tidepool = Guid.Parse("70000000-0000-7000-8000-00000000000d");
+
+    /// <summary>A temp with no device beside the snapshots of two loops, one proposing its rate.</summary>
+    internal static readonly Guid TwoLoops = Guid.Parse("70000000-0000-7000-8000-00000000000e");
+
+    /// <summary>A temp with no device beside one loop's snapshot proposing another rate.</summary>
+    internal static readonly Guid DevicelessByHand = Guid.Parse("70000000-0000-7000-8000-00000000000f");
+
+    /// <summary>A temp with no device its upload flagged as manual, beside a snapshot proposing its rate.</summary>
+    internal static readonly Guid DevicelessFlagged = Guid.Parse("70000000-0000-7000-8000-000000000010");
+
+    /// <summary>A Glooko Manual temp written before the connector kept the flag, beside a snapshot proposing its rate.</summary>
+    internal static readonly Guid GlookoManual = Guid.Parse("70000000-0000-7000-8000-000000000011");
+
+    internal static readonly Guid LoopPhoneSnapshot = Guid.Parse("50000000-0000-7000-8000-000000000004");
+    internal static readonly Guid PhoneSnapshot = Guid.Parse("50000000-0000-7000-8000-000000000008");
+    internal static readonly Guid TrioMirroredSnapshot = Guid.Parse("50000000-0000-7000-8000-000000000009");
+
     /// <summary>A temp its upload flagged as manual.</summary>
     internal static readonly Guid Flagged = Guid.Parse("70000000-0000-7000-8000-000000000004");
 
@@ -180,7 +202,23 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
                '{"rate": 1.2}', '{"rate": 1.2, "timestamp": "2026-08-01T12:01:00Z"}'),
               ('50000000-0000-7000-8000-000000000003', '{{TenantA}}', '2026-08-01T13:02:00Z', 'Trio', 'Trio', true, 0.8,
                '{"rate": 0.8}', '{"rate": 0.8}'),
-              ('50000000-0000-7000-8000-000000000004', '{{TenantA}}', '2026-08-01T14:00:00Z', 'loop://phone', 'Loop', true, 1.0,
+              ('50000000-0000-7000-8000-00000000000a', '{{TenantA}}', '2026-08-01T13:01:00Z', 'openaps://SM-G991B', 'OpenAps', true, 2.0,
+               NULL, NULL),
+              ('{{LoopPhoneSnapshot}}', '{{TenantA}}', '2026-08-01T14:00:00Z', 'loop://phone', 'Loop', true, 1.0,
+               NULL, NULL),
+              ('{{PhoneSnapshot}}', '{{TenantA}}', '2026-08-01T22:01:00Z', 'openaps://SM-G991B', 'OpenAps', true, 1.1,
+               '{"rate": 1.1}', NULL),
+              ('{{TrioMirroredSnapshot}}', '{{TenantA}}', '2026-08-01T23:02:00Z', 'Trio', 'Trio', true, 0.5,
+               '{"rate": 0.85}', NULL),
+              ('50000000-0000-7000-8000-00000000000b', '{{TenantA}}', '2026-08-02T01:01:00Z', 'openaps://SM-G991B', 'OpenAps', true, 1.0,
+               NULL, NULL),
+              ('50000000-0000-7000-8000-00000000000c', '{{TenantA}}', '2026-08-02T01:02:00Z', 'Trio', 'Trio', true, 0.3,
+               NULL, NULL),
+              ('50000000-0000-7000-8000-00000000000d', '{{TenantA}}', '2026-08-02T02:01:00Z', 'openaps://SM-G991B', 'OpenAps', true, 1.0,
+               NULL, NULL),
+              ('50000000-0000-7000-8000-00000000000e', '{{TenantA}}', '2026-08-02T03:01:00Z', 'openaps://SM-G991B', 'OpenAps', true, 0.6,
+               NULL, NULL),
+              ('50000000-0000-7000-8000-00000000000f', '{{TenantA}}', '2026-08-02T04:01:00Z', 'openaps://SM-G991B', 'OpenAps', true, 0.9,
                NULL, NULL);
             INSERT INTO aps_snapshots (id, tenant_id, timestamp, device, aps_system, enacted, enacted_rate, loop_json)
             VALUES
@@ -188,25 +226,33 @@ public class TempBasalOriginCorroboratorFixture : IAsyncLifetime
                '{"name": "Loop", "automaticDoseRecommendation": {"tempBasal": {"rate": 0.9, "duration": 30} } }'),
               ('{{LoopEnactedSnapshot}}', '{{TenantA}}', '2026-08-01T19:09:00Z', 'loop://iPhone', 'Loop', true, 0.7,
                '{"name": "Loop", "enacted": {"rate": 0.7, "duration": 30, "received": true, "timestamp": "2026-08-01T19:01:00Z"} }');
-            INSERT INTO temp_basals (id, tenant_id, start_timestamp, rate, device, app, origin, origin_evidence, additional_properties, sys_updated_at)
+            INSERT INTO temp_basals (id, tenant_id, start_timestamp, rate, device, app, origin, origin_evidence, additional_properties, legacy_id, sys_updated_at)
             VALUES
-              ('{{Enacted}}', '{{TenantA}}', '2026-08-01T12:00:00Z', 1.2, 'Trio', 'Trio', 'Manual', NULL, NULL, '2026-08-02T00:00:00Z'),
-              ('{{ByHand}}', '{{TenantA}}', '2026-08-01T13:00:00Z', 2.0, 'Trio', 'Trio', 'Manual', NULL, NULL, '2026-08-02T00:00:00Z'),
-              ('{{OtherDevice}}', '{{TenantA}}', '2026-08-01T14:00:00Z', 1.0, 'Trio', 'Trio', 'Manual', NULL, NULL, '2026-08-02T00:00:00Z'),
-              ('{{Flagged}}', '{{TenantA}}', '2026-08-01T15:00:00Z', 1.0, 'Trio', 'Trio', 'Manual', NULL, '{"automatic": false}', '2026-08-02T00:00:00Z'),
-              ('{{Suspend}}', '{{TenantA}}', '2026-08-01T16:00:00Z', 0, 'Glooko', 'Glooko', 'Suspended', NULL, NULL, '2026-08-02T00:00:00Z'),
-              ('{{Unsettled}}', '{{TenantA}}', '2026-08-01T17:00:00Z', 1.0, 'Trio', 'Trio', 'Algorithm', 'Uploader', NULL, now()),
-              ('{{LoopRecommended}}', '{{TenantA}}', '2026-08-01T18:00:00Z', 0.9, 'loop://iPhone', 'loop://iPhone', 'Algorithm', NULL, NULL, '2026-08-02T00:00:00Z'),
-              ('{{LoopEnacted}}', '{{TenantA}}', '2026-08-01T19:00:00Z', 0.7, 'loop://iPhone', 'loop://iPhone', 'Algorithm', NULL, NULL, '2026-08-02T00:00:00Z'),
-              ('{{Late}}', '{{TenantA}}', '2026-08-01T20:00:00Z', 1.4, 'Trio', 'Trio', 'Manual', NULL, NULL, '2026-08-02T00:00:00Z');
+              ('{{Enacted}}', '{{TenantA}}', '2026-08-01T12:00:00Z', 1.2, 'Trio', 'Trio', 'Manual', NULL, NULL, 'ns-Enacted', '2026-08-02T00:00:00Z'),
+              ('{{ByHand}}', '{{TenantA}}', '2026-08-01T13:00:00Z', 2.0, 'Trio', 'Trio', 'Manual', NULL, NULL, 'ns-ByHand', '2026-08-02T00:00:00Z'),
+              ('{{OtherDevice}}', '{{TenantA}}', '2026-08-01T14:00:00Z', 1.0, 'Trio', 'Trio', 'Manual', NULL, NULL, 'ns-OtherDevice', '2026-08-02T00:00:00Z'),
+              ('{{Flagged}}', '{{TenantA}}', '2026-08-01T15:00:00Z', 1.0, 'Trio', 'Trio', 'Manual', NULL, '{"automatic": false}', 'ns-Flagged', '2026-08-02T00:00:00Z'),
+              ('{{Suspend}}', '{{TenantA}}', '2026-08-01T16:00:00Z', 0, 'Glooko', 'Glooko', 'Suspended', NULL, NULL, 'ns-Suspend', '2026-08-02T00:00:00Z'),
+              ('{{Unsettled}}', '{{TenantA}}', '2026-08-01T17:00:00Z', 1.0, 'Trio', 'Trio', 'Algorithm', 'Uploader', NULL, 'ns-Unsettled', now()),
+              ('{{LoopRecommended}}', '{{TenantA}}', '2026-08-01T18:00:00Z', 0.9, 'loop://iPhone', 'loop://iPhone', 'Algorithm', NULL, NULL, 'ns-LoopRecommended', '2026-08-02T00:00:00Z'),
+              ('{{LoopEnacted}}', '{{TenantA}}', '2026-08-01T19:00:00Z', 0.7, 'loop://iPhone', 'loop://iPhone', 'Algorithm', NULL, NULL, 'ns-LoopEnacted', '2026-08-02T00:00:00Z'),
+              ('{{Late}}', '{{TenantA}}', '2026-08-01T20:00:00Z', 1.4, 'Trio', 'Trio', 'Manual', NULL, NULL, 'ns-Late', '2026-08-02T00:00:00Z'),
+              ('{{Deviceless}}', '{{TenantA}}', '2026-08-01T22:00:00Z', 1.1, NULL, NULL, 'Manual', 'Uploader', NULL, 'ns-Deviceless', '2026-08-02T00:00:00Z'),
+              ('{{TwoLoops}}', '{{TenantA}}', '2026-08-02T01:00:00Z', 1.0, NULL, NULL, 'Manual', 'Uploader', NULL, 'ns-TwoLoops', '2026-08-02T00:00:00Z'),
+              ('{{DevicelessByHand}}', '{{TenantA}}', '2026-08-02T02:00:00Z', 2.5, NULL, NULL, 'Manual', 'Uploader', NULL, 'ns-DevicelessByHand', '2026-08-02T00:00:00Z'),
+              ('{{DevicelessFlagged}}', '{{TenantA}}', '2026-08-02T03:00:00Z', 0.6, NULL, NULL, 'Manual', NULL, '{"automatic": false}', 'ns-DevicelessFlagged', '2026-08-02T00:00:00Z');
             INSERT INTO temp_basals (id, tenant_id, start_timestamp, rate, device, app, data_source, origin, sys_updated_at)
-            VALUES ('{{Connector}}', '{{TenantA}}', '2026-08-01T21:00:00Z', 0.6, NULL, NULL, 'carelink-connector', 'Algorithm', '2026-08-02T00:00:00Z');
+            VALUES
+              ('{{Connector}}', '{{TenantA}}', '2026-08-01T21:00:00Z', 0.6, NULL, NULL, 'carelink-connector', 'Algorithm', '2026-08-02T00:00:00Z'),
+              ('{{GlookoManual}}', '{{TenantA}}', '2026-08-02T04:00:00Z', 0.9, NULL, NULL, 'glooko-connector', 'Manual', '2026-08-02T00:00:00Z');
+            INSERT INTO temp_basals (id, tenant_id, start_timestamp, rate, device, app, data_source, origin, legacy_id, sys_updated_at)
+            VALUES ('{{Tidepool}}', '{{TenantA}}', '2026-08-01T23:00:00Z', 0.85, 'tidepool', 'tidepool', 'nightscout-connector', 'Manual', 'ns-Tidepool', '2026-08-02T00:00:00Z');
 
             SELECT set_config('app.current_tenant_id', '{{TenantB}}', false);
             INSERT INTO aps_snapshots (id, tenant_id, timestamp, device, aps_system, enacted, enacted_rate)
             VALUES ('{{SnapshotB}}', '{{TenantB}}', '2026-08-01T12:00:00Z', 'Trio', 'Trio', true, 1.2);
-            INSERT INTO temp_basals (id, tenant_id, start_timestamp, rate, device, app, origin, sys_updated_at)
-            VALUES ('{{OtherTenant}}', '{{TenantB}}', '2026-08-01T12:00:00Z', 1.2, 'Trio', 'Trio', 'Manual', '2026-08-02T00:00:00Z');
+            INSERT INTO temp_basals (id, tenant_id, start_timestamp, rate, device, app, origin, legacy_id, sys_updated_at)
+            VALUES ('{{OtherTenant}}', '{{TenantB}}', '2026-08-01T12:00:00Z', 1.2, 'Trio', 'Trio', 'Manual', 'ns-OtherTenant', '2026-08-02T00:00:00Z');
 
             SELECT set_config('app.current_tenant_id', '', false);
             """;
@@ -244,7 +290,7 @@ public class TempBasalOriginCorroboratorTests(TempBasalOriginCorroboratorFixture
     }
 
     [Fact]
-    public void A_temp_no_snapshot_nearby_proposed_is_manual()
+    public void A_temp_no_snapshot_of_its_own_device_nearby_proposed_is_manual_though_another_loops_did()
     {
         Rows[TempBasalOriginCorroboratorFixture.ByHand].Should().BeEquivalentTo(new
         {
@@ -253,12 +299,56 @@ public class TempBasalOriginCorroboratorTests(TempBasalOriginCorroboratorFixture
     }
 
     [Fact]
-    public void Another_devices_snapshot_does_not_judge_it_and_the_uploader_default_stands()
+    public void A_temp_whose_device_uploaded_nothing_nearby_is_judged_by_the_one_loop_that_did()
     {
         Rows[TempBasalOriginCorroboratorFixture.OtherDevice].Should().BeEquivalentTo(new
         {
-            Origin = "Algorithm", Evidence = "Uncorroborated", SnapshotId = (Guid?)null,
+            Origin = "Algorithm", Evidence = "OtherDevice", SnapshotId = (Guid?)TempBasalOriginCorroboratorFixture.LoopPhoneSnapshot,
         });
+    }
+
+    [Fact]
+    public void An_aaps_temp_with_no_device_is_linked_to_its_phones_snapshot()
+    {
+        Rows[TempBasalOriginCorroboratorFixture.Deviceless].Should().BeEquivalentTo(new
+        {
+            Origin = "Algorithm", Evidence = "OtherDevice", SnapshotId = (Guid?)TempBasalOriginCorroboratorFixture.PhoneSnapshot,
+        });
+    }
+
+    [Fact]
+    public void A_tidepool_mirrored_temp_stored_without_evidence_is_linked_to_the_trio_snapshot()
+    {
+        Rows[TempBasalOriginCorroboratorFixture.Tidepool].Should().BeEquivalentTo(new
+        {
+            Origin = "Algorithm", Evidence = "OtherDevice", SnapshotId = (Guid?)TempBasalOriginCorroboratorFixture.TrioMirroredSnapshot,
+        });
+    }
+
+    [Fact]
+    public void With_two_loops_nearby_a_temp_of_neither_keeps_its_default()
+    {
+        Rows[TempBasalOriginCorroboratorFixture.TwoLoops].Should().BeEquivalentTo(new
+        {
+            Origin = "Manual", Evidence = "Uncorroborated", SnapshotId = (Guid?)null,
+        });
+    }
+
+    [Fact]
+    public void A_temp_with_no_device_the_one_loop_nearby_proposed_another_rate_for_is_manual()
+    {
+        Rows[TempBasalOriginCorroboratorFixture.DevicelessByHand].Should().BeEquivalentTo(new
+        {
+            Origin = "Manual", Evidence = "OtherDevice", SnapshotId = (Guid?)null,
+        });
+    }
+
+    [Theory]
+    [InlineData("70000000-0000-7000-8000-000000000010")]
+    [InlineData("70000000-0000-7000-8000-000000000011")]
+    public void A_stated_manual_temp_beside_a_loop_proposing_its_rate_keeps_its_origin(string id)
+    {
+        Rows[Guid.Parse(id)].Should().BeEquivalentTo(new { Origin = "Manual", Evidence = "Reported", SnapshotId = (Guid?)null });
     }
 
     [Theory]
@@ -383,8 +473,8 @@ public class TempBasalOriginCorroboratorConcurrencyFixture : IAsyncLifetime
             VALUES ('{{Tenant}}', 'tenant-a', 'Tenant A', true, now(), now());
             INSERT INTO aps_snapshots (id, tenant_id, timestamp, device, aps_system, enacted, enacted_rate)
             VALUES ('50000000-0000-7000-8000-000000000001', '{{Tenant}}', '2026-08-01T12:01:00Z', 'Trio', 'Trio', true, 1.2);
-            INSERT INTO temp_basals (id, tenant_id, start_timestamp, rate, device, app, origin, sys_updated_at)
-            VALUES ('{{TempBasal}}', '{{Tenant}}', '2026-08-01T12:00:00Z', 1.2, 'Trio', 'Trio', 'Manual', '2026-08-02T00:00:00Z');
+            INSERT INTO temp_basals (id, tenant_id, start_timestamp, rate, device, app, origin, legacy_id, sys_updated_at)
+            VALUES ('{{TempBasal}}', '{{Tenant}}', '2026-08-01T12:00:00Z', 1.2, 'Trio', 'Trio', 'Manual', 'ns-TempBasal', '2026-08-02T00:00:00Z');
             """;
         await cmd.ExecuteNonQueryAsync();
     }

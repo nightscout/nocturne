@@ -8,6 +8,7 @@
   import { Button } from "$lib/components/ui/button";
   import { cn } from "$lib/utils";
   import ChartKey, { type ChartKeyItem } from "$lib/components/charts/print/ChartKey.svelte";
+  import { Key } from "@nocturne/ui/keys";
 
   interface Props {
     boluses: Bolus[];
@@ -96,7 +97,7 @@
       props.role = "button";
       props["aria-label"] = `${slice.label} ${slice.value.toFixed(1)}U`;
       props.onkeydown = (e: KeyboardEvent) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.key === Key.Enter || e.key === Key.Space) {
           e.preventDefault();
           activate(slice);
         }

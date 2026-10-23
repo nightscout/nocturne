@@ -7,7 +7,7 @@
  * viewer's local zone by default, the patient's configured zone on the server),
  * never UTC midnight, and the end bound is the last millisecond of the last day.
  */
-import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
+import { getLocalTimeZone, parseDate, parseDateTime, today } from "@internationalized/date";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -106,6 +106,19 @@ export function endOfDay(day: string, timeZone: string = getLocalTimeZone()): Da
   return new Date(
     parseDate(dayPart(day)).add({ days: 1 }).toDate(timeZone).getTime() - 1
   );
+}
+
+/** The wall-clock `HH:mm` on `day` in `timeZone`, or null when either is malformed. */
+export function timeOnDay(
+  day: string | null | undefined,
+  hhmm: string | null | undefined,
+  timeZone: string = getLocalTimeZone()
+): Date | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(hhmm ?? "");
+  if (!isDayString(day) || !match) return null;
+  const [hour, minute] = [Number(match[1]), Number(match[2])];
+  if (hour > 23 || minute > 59) return null;
+  return parseDateTime(`${dayPart(day)}T${match[1]}:${match[2]}`).toDate(timeZone);
 }
 
 /**

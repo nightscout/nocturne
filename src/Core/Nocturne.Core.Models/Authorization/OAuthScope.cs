@@ -45,6 +45,9 @@ public enum OAuthScope
     [EnumMember(Value = "alerts.readwrite"), JsonStringEnumMemberName("alerts.readwrite")]
     AlertsReadWrite,
 
+    [EnumMember(Value = "alerts.acknowledge"), JsonStringEnumMemberName("alerts.acknowledge")]
+    AlertsAcknowledge,
+
     [EnumMember(Value = "reports.read"), JsonStringEnumMemberName("reports.read")]
     ReportsRead,
 

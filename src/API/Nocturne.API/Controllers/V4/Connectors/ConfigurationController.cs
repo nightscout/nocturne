@@ -157,6 +157,11 @@ public class ConfigurationController : ControllerBase
         _logger.LogInformation("Saving configuration for connector {ConnectorName} by {ModifiedBy}",
             connectorName, modifiedBy);
 
+        if (IsGrantDrivenConnector(connectorName) && SetsEnabled(configuration))
+        {
+            return RefuseGrantDrivenEnabled();
+        }
+
         // Validate the configuration against the schema
         var validationErrors = await ValidateConfigurationAsync(connectorName, configuration, ct);
         if (validationErrors.Count > 0)
@@ -169,6 +174,20 @@ public class ConfigurationController : ControllerBase
         var result = await _configService.SaveConfigurationAsync(connectorName, configuration, modifiedBy, ct);
         return Ok(result);
     }
+
+    private static bool IsGrantDrivenConnector(string connectorName) =>
+        ConnectorNames.Canonical(connectorName) == ConnectorNames.Canonical(nameof(ConnectSource.GoogleHealth));
+
+    private static bool SetsEnabled(JsonDocument configuration) =>
+        configuration.RootElement.ValueKind == JsonValueKind.Object &&
+        configuration.RootElement.EnumerateObject()
+            .Any(property => property.Name.Equals("enabled", StringComparison.OrdinalIgnoreCase));
+
+    private ObjectResult RefuseGrantDrivenEnabled() =>
+        Problem(
+            detail: "Google Health is enabled while it holds a Google sign-in. Disconnect it to stop syncing.",
+            statusCode: 400,
+            title: "Bad Request");
 
     /// <summary>
     /// Validates the configuration against the connector's schema.
@@ -464,11 +483,17 @@ public class ConfigurationController : ControllerBase
     [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
     [RequireScope(Scope.TenantSettings)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SetActive(
         string connectorName,
         [FromBody] SetActiveRequest request,
         CancellationToken ct)
     {
+        if (IsGrantDrivenConnector(connectorName))
+        {
+            return RefuseGrantDrivenEnabled();
+        }
+
         var modifiedBy = User.Identity?.Name ?? "api";
         _logger.LogInformation("Setting connector {ConnectorName} active={IsActive} by {ModifiedBy}",
             connectorName, request.IsActive, modifiedBy);

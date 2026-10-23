@@ -97,8 +97,8 @@ function queueConnections(...connections: FakeHubConnection[]): void {
   });
 }
 
-function createClient(withAlarmHub = false): SignalRClient {
-  return new SignalRClient({} as MessageTranslator, {
+function createClient(withAlarmHub = false, translator = {} as MessageTranslator): SignalRClient {
+  return new SignalRClient(translator, {
     hubUrl: "http://api/hubs/data",
     ...(withAlarmHub ? { alarmHubUrl: "http://api/hubs/alarm" } : {}),
     reconnectAttempts: 3,
@@ -374,5 +374,38 @@ describe("SignalRClient reconnect confirmation", () => {
 
     expect(confirmReconnect).toHaveBeenCalledTimes(1);
     expect(signalr.buildConnection).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("SignalRClient current alarm", () => {
+  beforeEach(() => {
+    signalr.buildConnection.mockReset();
+  });
+
+  async function connectedWith(currentAlarm: unknown): Promise<SignalRClient> {
+    const alarmConnection = new FakeHubConnection();
+    const subscribe = alarmConnection.invoke.getMockImplementation()!;
+    alarmConnection.invoke.mockImplementation(async (methodName: string) =>
+      methodName === "CurrentAlarm" ? currentAlarm : subscribe(methodName));
+    queueConnections(new FakeHubConnection(), alarmConnection);
+    const client = createClient(true, new MessageTranslator({} as never, "rhys"));
+    await client.connect();
+    return client;
+  }
+
+  it.each([
+    [2, "urgent_alarm"],
+    [1, "alarm"],
+  ])("names a level %i alarm %s", async (level, event) => {
+    const notify = { level, title: "Urgent low", group: "0192a3b4-0000-7000-8000-000000000001" };
+    const client = await connectedWith(notify);
+
+    expect(await client.currentAlarm()).toEqual({ event, alarm: expect.objectContaining(notify) });
+  });
+
+  it("names no alarm when nothing sounds", async () => {
+    const client = await connectedWith(null);
+
+    expect(await client.currentAlarm()).toBeNull();
   });
 });

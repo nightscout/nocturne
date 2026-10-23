@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Key } from "@nocturne/ui/keys";
   import { Slider } from "$lib/components/ui/slider";
   import { Button } from "$lib/components/ui/button";
   import Play from "@lucide/svelte/icons/play";
@@ -7,6 +8,7 @@
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   import { onDestroy } from "svelte";
   import { time } from "$lib/utils/formatting";
+  import { CalendarDateTime, fromDate, getLocalTimeZone } from "@internationalized/date";
 
   interface Props {
     /** The date being reviewed */
@@ -19,6 +21,8 @@
     stepMinutes?: number;
     /** Playback speed multiplier */
     playbackSpeed?: number;
+    /** The zone the day is read in; the viewer's when not given. */
+    timeZone?: string;
   }
 
   let {
@@ -27,7 +31,10 @@
     onTimeChange,
     stepMinutes = 5,
     playbackSpeed = 60, // 1 second = 1 minute of playback
+    timeZone,
   }: Props = $props();
+
+  const zone = $derived(timeZone ?? getLocalTimeZone());
 
   // Total minutes in the day (for slider range)
   const totalMinutes = 24 * 60; // 1440 minutes
@@ -38,8 +45,8 @@
   // Sync slider value with currentTime
   $effect(() => {
     if (currentTime) {
-      const minutes = currentTime.getHours() * 60 + currentTime.getMinutes();
-      sliderValue = minutes;
+      const local = fromDate(currentTime, zone);
+      sliderValue = local.hour * 60 + local.minute;
     }
   });
 
@@ -49,16 +56,8 @@
 
   // Convert slider value back to time
   function sliderToTime(minutes: number): Date {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return new Date(
-      date.getFullYear(),
-      date.getMonth(),
-      date.getDate(),
-      hours,
-      mins,
-      0
-    );
+    const day = fromDate(date, zone);
+    return new CalendarDateTime(day.year, day.month, day.day, Math.floor(minutes / 60), minutes % 60).toDate(zone);
   }
 
   // Handle slider change
@@ -129,16 +128,16 @@
 
   // Handle keyboard navigation
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === "ArrowLeft") {
+    if (event.key === Key.ArrowLeft) {
       event.preventDefault();
       stepBack();
-    } else if (event.key === "ArrowRight") {
+    } else if (event.key === Key.ArrowRight) {
       event.preventDefault();
       stepForward();
-    } else if (event.key === " ") {
+    } else if (event.key === Key.Space) {
       event.preventDefault();
       togglePlayback();
-    } else if (event.key === "Home") {
+    } else if (event.key === Key.Home) {
       event.preventDefault();
       goToStart();
     }
@@ -164,7 +163,7 @@
     </div>
     <div class="text-center">
       <div class="text-2xl font-bold tabular-nums">
-        {time(currentTime)}
+        {time(new Date(2000, 0, 1, 0, sliderValue))}
       </div>
       <div class="text-xs text-muted-foreground">
         Scrub time to see data at that moment

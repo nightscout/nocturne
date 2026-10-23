@@ -1,176 +1,177 @@
 import { describe, expect, it } from "vitest";
+import { getGlucoseHeatmapFill } from "./chart-colors";
 import {
-  GLUCOSE_HEATMAP_LEGEND_STOPS,
-  getGlucoseHeatmapFill,
-} from "./chart-colors";
-import {
-  colorFocusGradient,
+  addColorBoundary,
   insertSliderSteps,
-  getFocusedIntensityFill,
+  metricRamp,
+  rampColor,
+  rampPosition,
+  rampValue,
+  resolveColorBoundaries,
   resolveColorFocusRange,
-  resolveGlucoseColorThresholds,
-  glucoseColorFocusStops,
-  type ColorFocusRange,
+  scaleFill,
+  scaleGradient,
+  GLUCOSE_COLOR_MAX,
+  GLUCOSE_COLOR_MIN,
+  GLUCOSE_RAMP,
+  MAX_COLOR_BOUNDARIES,
+  type MetricScale,
 } from "./metric-color-focus";
 
-const cssVar = "--chart-bolus";
-const focus = [10, 70] as const satisfies ColorFocusRange;
-
-function colorShare(fill: string): number {
-  const match = fill.match(/var\(--chart-bolus\) ([\d.]+)%/);
-  expect(match).not.toBeNull();
-  return Number(match![1]);
-}
-
-describe("resolveColorFocusRange", () => {
-  it("accepts increasing nonnegative bounds including decimals", () => {
-    expect(resolveColorFocusRange([0, 100])).toEqual([0, 100]);
-    expect(resolveColorFocusRange([10.5, 70.5])).toEqual([10.5, 70.5]);
-  });
-
-  it.each(
-    [
-      null,
-      undefined,
-      "10,70",
-      { min: 10, max: 70 },
-      [],
-      [10],
-      [10, 70, 100],
-      ["10", 70],
-      [10, "70"],
-      [-1, 70],
-      [10, 10],
-      [70, 10],
-      [NaN, 70],
-      [10, Infinity],
-      [-Infinity, 70],
-    ].map((candidate) => ({ candidate }))
-  )("rejects invalid range $candidate", ({ candidate }) => {
-    expect(resolveColorFocusRange(candidate)).toBeNull();
-  });
+const glucoseScale = (overrides: Partial<MetricScale> = {}): MetricScale => ({
+  ramp: GLUCOSE_RAMP,
+  domain: [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX],
+  axis: [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX],
+  window: [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX],
+  boundaries: [],
+  dim: 90,
+  ...overrides,
 });
 
-describe("resolveGlucoseColorThresholds", () => {
-  it("accepts four strictly increasing glucose boundaries", () => {
-    expect(resolveGlucoseColorThresholds([54, 72, 180, 250])).toEqual([
-      54, 72, 180, 250,
-    ]);
+const doseScale = (overrides: Partial<MetricScale> = {}): MetricScale => ({
+  ramp: metricRamp("--insulin"),
+  domain: [10, 70],
+  axis: [0, 500],
+  window: [10, 70],
+  boundaries: [],
+  dim: 90,
+  ...overrides,
+});
+
+describe("resolveColorFocusRange", () => {
+  it("accepts increasing bounds within the limits", () => {
+    expect(resolveColorFocusRange([10.25, 70.75])).toEqual([10.25, 70.75]);
+    expect(resolveColorFocusRange([0, 100], [0, 100])).toEqual([0, 100]);
   });
 
-  it.each(
-    [
-      null,
-      [54, 72, 180],
-      [54, 72, 70, 250],
-      [40, 70, 180, 250],
-      [54, 72, 180, 350],
-      [-1, 70, 180, 250],
-      [54, 72, 180, Infinity],
-      [54, "70", 180, 250],
-      [54, 72, 180, 170],
-    ].map((value) => ({ value }))
-  )("rejects invalid boundaries $value", ({ value }) =>
-    expect(resolveGlucoseColorThresholds(value)).toBeNull()
+  it.each([[[]], [[1]], [[70, 10]], [[10, 10]], [[-1, 10]], [[0, 101]], [[NaN, 1]], ["10,70"]])(
+    "rejects %j",
+    (candidate) => expect(resolveColorFocusRange(candidate, [0, 100])).toBeNull()
   );
 });
 
-describe("glucoseColorFocusStops", () => {
-  it("preserves every original color when using the default boundaries", () => {
-    expect(glucoseColorFocusStops([54, 72, 180, 250])).toEqual(
-      GLUCOSE_HEATMAP_LEGEND_STOPS
-    );
+describe("resolveColorBoundaries", () => {
+  it("accepts boundaries increasing in value and position strictly inside the limits", () => {
+    const boundaries = [
+      { value: 100, position: 0.2 },
+      { value: 200, position: 0.8 },
+    ];
+    expect(resolveColorBoundaries(boundaries, [40, 350])).toEqual(boundaries);
   });
 
-  it("moves palette anchors continuously and uses those same stops for cells", () => {
-    const stops = glucoseColorFocusStops([60, 100, 200, 280]);
-    expect(stops.find((stop) => stop.mgdl === 100)?.color).toBe(
-      "var(--glucose-heatmap-3)"
-    );
-    expect(stops.find((stop) => stop.mgdl === 200)?.color).toBe(
-      "var(--glucose-heatmap-6)"
-    );
-    expect(stops.some((stop) => stop.mgdl === 280)).toBe(true);
-    expect(
-      stops.every(
-        (stop, index) => index === 0 || stop.mgdl > stops[index - 1].mgdl
-      )
-    ).toBe(true);
-    expect(getGlucoseHeatmapFill(100 + (48 / 108) * 100, stops)).toBe(
-      getGlucoseHeatmapFill(120)
-    );
-    expect(getGlucoseHeatmapFill(-1, stops)).toBe("var(--glucose-heatmap-1)");
-    expect(getGlucoseHeatmapFill(500, stops)).toBe("var(--glucose-heatmap-9)");
-    expect(getGlucoseHeatmapFill(120, stops)).not.toBe(
-      getGlucoseHeatmapFill(120)
+  it.each([
+    [[{ value: 40, position: 0.5 }]],
+    [[{ value: 100, position: 0 }]],
+    [[{ value: 100, position: 1 }]],
+    [[{ value: 100, position: 0.5 }, { value: 90, position: 0.6 }]],
+    [[{ value: 100, position: 0.5 }, { value: 110, position: 0.4 }]],
+    [[{ value: "100", position: 0.5 }]],
+    [[null]],
+  ])("rejects %j", (candidate) => expect(resolveColorBoundaries(candidate, [40, 350])).toBeNull());
+
+  it("caps how many boundaries a scale carries", () => {
+    const many = Array.from({ length: MAX_COLOR_BOUNDARIES + 1 }, (_, i) => ({
+      value: 50 + i,
+      position: (i + 1) / 100,
+    }));
+    expect(resolveColorBoundaries(many, [40, 350])).toBeNull();
+  });
+});
+
+describe("ramp positions", () => {
+  const pins = [{ value: 20, position: 0.75 }];
+
+  it("is linear across the domain without boundaries and clamps outside it", () => {
+    expect(rampPosition(40, [10, 70])).toBe(0.5);
+    expect(rampPosition(0, [10, 70])).toBe(0);
+    expect(rampPosition(500, [10, 70])).toBe(1);
+    expect(rampPosition(NaN, [10, 70])).toBe(0);
+  });
+
+  it("warps around a boundary and inverts back to the same value", () => {
+    expect(rampPosition(15, [10, 70], pins)).toBeCloseTo(0.375);
+    expect(rampPosition(45, [10, 70], pins)).toBeCloseTo(0.875);
+    for (const value of [12, 20, 33, 69]) {
+      expect(rampValue(rampPosition(value, [10, 70], pins), [10, 70], pins)).toBeCloseTo(value);
+    }
+  });
+
+  it("ignores a boundary the domain no longer reaches", () => {
+    expect(rampPosition(40, [30, 50], pins)).toBe(0.5);
+  });
+});
+
+describe("rampColor", () => {
+  it("draws the unwarped glucose ramp exactly as the heatmap fill", () => {
+    for (const mgdl of [40, 54, 63, 120, 180, 300, 350]) {
+      expect(rampColor(GLUCOSE_RAMP, rampPosition(mgdl, [GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX]))).toBe(
+        getGlucoseHeatmapFill(mgdl)
+      );
+    }
+  });
+
+  it("blends a single-hue ramp from faint to the metric color", () => {
+    const ramp = metricRamp("--carbs");
+    expect(rampColor(ramp, 0)).toBe("color-mix(in srgb, var(--carbs) 15%, transparent)");
+    expect(rampColor(ramp, 1)).toBe("var(--carbs)");
+    expect(rampColor(ramp, 0.25)).toBe(
+      "color-mix(in srgb, color-mix(in srgb, var(--carbs) 15%, transparent) 75.00%, var(--carbs))"
     );
   });
 });
 
-describe("getFocusedIntensityFill", () => {
-  it("clamps outliers to the selected endpoint colors", () => {
-    const low = getFocusedIntensityFill(10, focus, cssVar);
-    const high = getFocusedIntensityFill(70, focus, cssVar);
-
-    expect(getFocusedIntensityFill(0, focus, cssVar)).toBe(low);
-    expect(getFocusedIntensityFill(500, focus, cssVar)).toBe(high);
-    expect(colorShare(low)).toBe(15);
-    expect(colorShare(high)).toBe(100);
+describe("scaleFill", () => {
+  it("dims values outside the window but not past an end that reaches the axis", () => {
+    const scale = glucoseScale({ window: [70, GLUCOSE_COLOR_MAX] });
+    expect(scaleFill(120, scale)).toBe(getGlucoseHeatmapFill(120));
+    expect(scaleFill(60, scale)).toBe(`color-mix(in srgb, ${getGlucoseHeatmapFill(60)} 10%, transparent)`);
+    expect(scaleFill(400, scale)).toBe(getGlucoseHeatmapFill(400));
   });
 
-  it("makes 20, 40 and 60 distinguishable despite an observed outlier of 500", () => {
-    const focused = [20, 40, 60].map((value) =>
-      colorShare(getFocusedIntensityFill(value, focus, cssVar))
-    );
-    const fullDomain = [20, 40, 60].map((value) =>
-      colorShare(getFocusedIntensityFill(value, [0, 500], cssVar))
-    );
-
-    expect(focused).toEqual([29, 58, 86]);
-    expect(focused[2] - focused[0]).toBeGreaterThan(
-      fullDomain[2] - fullDomain[0]
-    );
-  });
-
-  it("preserves the default zero-to-maximum scale and theme color", () => {
-    expect(getFocusedIntensityFill(0, [0, 500], cssVar)).toBe(
-      "color-mix(in srgb, var(--chart-bolus) 15%, transparent)"
-    );
-    expect(colorShare(getFocusedIntensityFill(250, [0, 500], cssVar))).toBe(58);
-    expect(colorShare(getFocusedIntensityFill(500, [0, 500], cssVar))).toBe(
-      100
-    );
+  it("saturates a dose outlier at the window's top color", () => {
+    const scale = doseScale();
+    expect(scaleFill(500, scale)).toBe("color-mix(in srgb, var(--insulin) 10%, transparent)");
+    expect(scaleFill(70, scale)).toBe("var(--insulin)");
   });
 });
 
-describe("colorFocusGradient", () => {
-  it("uses the cell endpoint colors with flat ends outside the selected focus", () => {
-    const low = getFocusedIntensityFill(0, focus, cssVar);
-    const high = getFocusedIntensityFill(500, focus, cssVar);
-    const gradient = colorFocusGradient(focus, 500, cssVar);
+describe("scaleGradient", () => {
+  it("stops at the axis ends, the domain ends and every boundary", () => {
+    const gradient = scaleGradient(doseScale({ boundaries: [{ value: 20, position: 0.75 }] }));
+    expect(gradient).toMatch(/^linear-gradient\(to right in srgb, /);
+    for (const at of ["0.000%", "2.000%", "4.000%", "14.000%", "100.000%"]) {
+      expect(gradient).toContain(at);
+    }
+  });
+});
 
-    expect(gradient).toContain(`${low} 0%, ${low} 2%`);
-    const highStop = gradient
-      .slice(gradient.indexOf(high) + high.length)
-      .match(/^ ([\d.]+)%/);
-    expect(Number(highStop?.[1])).toBeCloseTo(14);
-    expect(gradient).toContain(`${high} 100%)`);
-    expect(gradient).toMatch(/^linear-gradient\(to right,/);
+describe("addColorBoundary", () => {
+  it("pins the color already drawn at the middle of the widest gap", () => {
+    const scale = glucoseScale({ window: [70, 180] });
+    const [added] = addColorBoundary(scale, Math.round)!;
+    expect(added.value).toBe(125);
+    expect(added.position).toBeCloseTo(rampPosition(125, scale.domain));
+    expect(rampColor(GLUCOSE_RAMP, added.position)).toBe(scaleFill(125, scale));
   });
 
-  it("keeps the selected maximum in the legend when observed values decrease", () => {
-    const high = getFocusedIntensityFill(70, focus, cssVar);
+  it("splits the widest remaining gap next", () => {
+    const scale = doseScale({ boundaries: [{ value: 20, position: 0.5 }] });
+    expect(addColorBoundary(scale)!.map((b) => b.value)).toEqual([20, 45]);
+  });
 
-    expect(colorFocusGradient(focus, 20, cssVar)).toContain(
-      `${high} 100%, ${high} 100%`
-    );
+  it("refuses past the cap", () => {
+    const boundaries = Array.from({ length: MAX_COLOR_BOUNDARIES }, (_, i) => ({
+      value: 100 + i,
+      position: (i + 1) / 100,
+    }));
+    expect(addColorBoundary(glucoseScale({ boundaries }))).toBeNull();
   });
 });
 
 describe("insertSliderSteps", () => {
   it("inserts exact bounds without mutating or sorting the base again", () => {
-    const base = Object.freeze([0, 0.1, 0.2, 1]);
-    expect(insertSliderSteps(base, [0.15, 0.1, 2, 0.15])).toEqual([0, 0.1, 0.15, 0.2, 1, 2]);
-    expect(base).toEqual([0, 0.1, 0.2, 1]);
+    const base = [0, 1, 2, 3];
+    expect(insertSliderSteps(base, [1.5, 2, 3.25])).toEqual([0, 1, 1.5, 2, 3, 3.25]);
+    expect(base).toEqual([0, 1, 2, 3]);
   });
 });

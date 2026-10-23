@@ -9,6 +9,7 @@
   import { convertToDisplayUnits, bg, bgLabel, bgRange } from "$lib/utils/formatting";
   import { CHART_TEXTURES, patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import { GLUCOSE_BANDS } from "$lib/components/reports/percentile-band-colors";
   import type { AveragedStats } from "$lib/api";
   import {
     formatHour as _formatHour,
@@ -65,10 +66,7 @@
     v == null ? "–" : isMMOL ? v.toFixed(1) : Math.round(v).toString()
   );
 
-  // Band colors shared between the series fills and the tooltip swatches
-  const BAND_OUTER = "oklch(from var(--chart-1) l c h / 0.35)";
-  const BAND_INNER = "oklch(from var(--chart-1) l c h / 0.6)";
-  const MEDIAN_COLOR = "var(--chart-1)";
+  const { outer: BAND_OUTER, inner: BAND_INNER, median: MEDIAN_COLOR } = GLUCOSE_BANDS;
 
   // Drawn over the bands, so each label wears a paper-coloured halo to stay legible where a band crosses it.
   const RULE_LABEL_CLASS = "text-xs fill-foreground stroke-background [stroke-width:3px] [paint-order:stroke]";

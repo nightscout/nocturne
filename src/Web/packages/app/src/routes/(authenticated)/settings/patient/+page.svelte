@@ -11,6 +11,7 @@
   } from "$lib/components/patient";
   import type { ClinicalState } from "$lib/components/patient";
   import { coachmark } from "@nocturne/coach";
+  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import * as patientRemote from "$api/generated/patientRecords.generated.remote";
 
   const patientRecord = patientRemote.getPatientRecord();
@@ -50,7 +51,7 @@
   </div>
 
   <!-- Clinical Information -->
-  <Card.Root {@attach coachmark({ key: "onboarding.patient-details", title: "Why this matters", description: "Your diabetes type determines how Nocturne calculates bolus suggestions and categorizes treatments. Select your type and save.", completedWhen: () => patientConfigured })}>
+  <Card.Root {@attach coachmark({ ...coachFor("onboarding.patient-details"), completedWhen: () => patientConfigured })}>
     <Card.Header>
       <div class="flex items-center gap-2">
         <HeartPulse class="h-5 w-5 text-muted-foreground" />
@@ -79,7 +80,7 @@
   </Card.Root>
 
   <!-- Devices -->
-  <Card.Root {@attach coachmark({ key: "onboarding.devices", title: "Add your current device", description: "Add the CGM, pump, or meter you use right now and mark it as current. Historical devices can be added later.", completedWhen: () => devicesConfigured })}>
+  <Card.Root {@attach coachmark({ ...coachFor("onboarding.devices"), completedWhen: () => devicesConfigured })}>
     <Card.Header>
       <div class="flex items-center gap-2">
         <Cpu class="h-5 w-5 text-muted-foreground" />
@@ -95,7 +96,7 @@
   </Card.Root>
 
   <!-- Insulins -->
-  <Card.Root {@attach coachmark({ key: "onboarding.insulins", title: "Add your current insulin", description: "Add at least one insulin and mark it as current. The brand and type help Nocturne estimate active insulin curves.", completedWhen: () => insulinsConfigured })}>
+  <Card.Root {@attach coachmark({ ...coachFor("onboarding.insulins"), completedWhen: () => insulinsConfigured })}>
     <Card.Header>
       <div class="flex items-center gap-2">
         <Syringe class="h-5 w-5 text-muted-foreground" />

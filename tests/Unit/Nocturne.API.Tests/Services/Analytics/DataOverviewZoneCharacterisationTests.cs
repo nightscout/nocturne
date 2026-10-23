@@ -55,7 +55,7 @@ public class DataOverviewZoneCharacterisationTests : IDisposable
 
         _therapySettings
             .Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string?)null);
+            .ReturnsAsync("UTC");
 
         var statistics = new Mock<IStatisticsService>();
         statistics
@@ -67,7 +67,10 @@ public class DataOverviewZoneCharacterisationTests : IDisposable
 
         _service = new DataOverviewService(
             factory.Object,
-            _therapySettings.Object,
+            new TenantClockResolver(
+                _therapySettings.Object,
+                new CategoryReadContext(),
+                NullLogger<TenantClockResolver>.Instance),
             statistics.Object,
             cacheService.Object,
             NullLogger<DataOverviewService>.Instance

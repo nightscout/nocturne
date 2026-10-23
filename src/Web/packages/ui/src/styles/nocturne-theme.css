@@ -59,6 +59,9 @@
   --pred-uam: oklch(0.75 0.12 85);       /* yellow-green, was #c9bd60 */
   /* The combined prediction the loop acts on, drawn over or instead of the per-input lines. */
   --pred-main: oklch(0.714 0.203 305.504);
+  /* Prediction bias: a prediction that ran high or low, as the Loop Analysis heatmap tints it. */
+  --bias-high: #3b7fd1;
+  --bias-low: #d04a3c;
 
   /* Insulin Types */
   --insulin: rgb(30, 150, 252);
@@ -185,6 +188,9 @@
 }
 
 .dark {
+  /* Prediction bias: a prediction that ran high or low, as the Loop Analysis heatmap tints it. */
+  --bias-high: #5b97e0;
+  --bias-low: #e0665a;
   --glucose-heatmap-1: #ffffff;
   --severity-urgent: oklch(0.704 0.191 22.216);
   --severity-urgent-foreground: oklch(0.21 0.034 264.665);

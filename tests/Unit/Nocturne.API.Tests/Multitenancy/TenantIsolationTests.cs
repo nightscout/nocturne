@@ -14,6 +14,7 @@ using Moq;
 using Nocturne.API.Extensions;
 using Nocturne.API.Hubs;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -1002,7 +1003,8 @@ public class TenantIsolationTests
     {
         var mockLogger = new Mock<ILogger<AlarmHub>>();
         var mockAuthorizer = new Mock<Nocturne.API.Services.Identity.IHubTokenAuthorizer>();
-        var hub = new AlarmHub(mockLogger.Object, mockAuthorizer.Object);
+        var hub = new AlarmHub(
+            mockLogger.Object, mockAuthorizer.Object, Mock.Of<IAlarmAckHandler>(), Mock.Of<IEngineAlarmRelay>());
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] = tenantContext;

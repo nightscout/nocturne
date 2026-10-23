@@ -54,6 +54,36 @@ public class TenantRoleServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetAssignableRolesAsync_ListsExactlyTheRolesValidateRoleGrantAsyncAccepts()
+    {
+        await _service.SeedRolesForTenantAsync(_tenantId);
+        var granter = new[] { Scope.MembersInvite, Scope.MembersManage, "glucose.read" };
+
+        var assignable = await _service.GetAssignableRolesAsync(_tenantId, granter);
+        var all = await _service.GetRolesAsync(_tenantId);
+
+        foreach (var role in all)
+        {
+            var validation = await _service.ValidateRoleGrantAsync(_tenantId, [role.Id], granter);
+            assignable.Any(r => r.Id == role.Id).Should().Be(validation.Ok, role.Slug);
+        }
+
+        assignable.Should().NotBeEmpty();
+        assignable.Should().NotContain(r => r.Slug == RoleSeeds.Owner);
+        assignable.Count.Should().BeLessThan(all.Count);
+    }
+
+    [Fact]
+    public async Task GetAssignableRolesAsync_ForSuperuser_ListsEveryRole()
+    {
+        await _service.SeedRolesForTenantAsync(_tenantId);
+
+        var assignable = await _service.GetAssignableRolesAsync(_tenantId, [Scope.FullAccess]);
+
+        assignable.Should().HaveCount(6);
+    }
+
+    [Fact]
     public async Task SeedRolesForTenantAsync_CreatesAllSixSeedRoles()
     {
         await _service.SeedRolesForTenantAsync(_tenantId);

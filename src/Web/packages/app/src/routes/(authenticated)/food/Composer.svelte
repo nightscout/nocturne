@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Key } from '@nocturne/ui/keys';
 	import type { Food } from '$api';
 	import Plus from '@lucide/svelte/icons/plus';
 	import X from '@lucide/svelte/icons/x';
@@ -76,10 +77,10 @@
 
 	function handleKeydown(e: KeyboardEvent) {
 		const mod = e.metaKey || e.ctrlKey;
-		if (mod && e.key === 'Enter') {
+		if (mod && e.key === Key.Enter) {
 			e.preventDefault();
 			submit(true);
-		} else if (e.key === 'Escape') {
+		} else if (e.key === Key.Escape) {
 			e.preventDefault();
 			onclose();
 		}

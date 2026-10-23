@@ -8,6 +8,7 @@
     "./ui/*.svelte": "./src/lib/components/ui/*.svelte",
     "./ui/*": "./src/lib/components/ui/*/index.ts",
     "./utils": "./src/lib/utils/index.ts",
+    "./keys": "./src/lib/dom-keys.ts",
     "./glucose": "./src/lib/glucose.ts",
     "./energy": "./src/lib/energy.ts",
     "./tokens": "./src/lib/tokens.ts",

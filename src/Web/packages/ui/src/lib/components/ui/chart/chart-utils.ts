@@ -53,7 +53,7 @@ type ChartContextValue = {
   config: ChartConfig;
 };
 
-const chartContextKey = Symbol("chart-context");
+const chartContextKey = "nocturne:ui:chart";
 
 export function setChartContext(value: ChartContextValue) {
   return setContext(chartContextKey, value);

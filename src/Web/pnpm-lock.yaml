@@ -538,6 +538,9 @@ importers:
       '@nocturne/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config
+      '@nocturne/ui':
+        specifier: workspace:*
+        version: link:../ui
       eslint:
         specifier: ^10.3.0
         version: 10.3.0(jiti@2.7.0)

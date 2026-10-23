@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { Key } from "@nocturne/ui/keys";
     import DocsSidebar from "$lib/components/DocsSidebar.svelte";
     import DocsScrollDepth from "$lib/components/docs/DocsScrollDepth.svelte";
     import { Button } from "@nocturne/ui/ui/button";
@@ -32,7 +33,7 @@
             <div
                 class="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden"
                 onclick={() => (sidebarOpen = false)}
-                onkeydown={(e) => e.key === "Escape" && (sidebarOpen = false)}
+                onkeydown={(e) => e.key === Key.Escape && (sidebarOpen = false)}
                 role="button"
                 tabindex="0"
             ></div>

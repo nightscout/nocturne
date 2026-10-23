@@ -342,6 +342,20 @@ public class MemberScopeResolverTests
             .Should().BeEquivalentTo([Scope.GlucoseRead]);
     }
 
+    [Fact]
+    public void AlertsReadWriteMembership_OnAcknowledgeCredential_DowngradesToAcknowledge()
+    {
+        Resolve([Scope.AlertsReadWrite], AuthType.ApiKey, Scope.AlertsAcknowledge)
+            .Should().BeEquivalentTo([Scope.AlertsAcknowledge]);
+    }
+
+    [Fact]
+    public void AlertsReadMembership_OnAcknowledgeCredential_ResolvesToNothing()
+    {
+        Resolve([Scope.AlertsRead], AuthType.ApiKey, Scope.AlertsAcknowledge)
+            .Should().BeEmpty();
+    }
+
     // ---- administration atoms ----
 
     [Fact]

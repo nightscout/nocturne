@@ -38,6 +38,31 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// <param name="to">Inclusive end of the time window.</param>
     Task<IReadOnlyList<ApsIobCobPoint>> GetIobCobPointsAsync(DateTime from, DateTime to, CancellationToken ct = default);
 
+    /// <summary>
+    /// The prediction curves of the snapshots whose <see cref="ApsSnapshot.PredictedStartTimestamp"/>
+    /// is within a time window, thinned to at most one per device per five minutes of it, ordered by
+    /// it.
+    /// </summary>
+    /// <remarks>
+    /// Within a five-minute bucket an enacted snapshot wins over one that was not, then the newest:
+    /// uploaders post every one to five minutes and some post a cycle twice, so thinning keeps each
+    /// device's predictions evenly weighted, and the enacted one is the prediction the loop acted on.
+    /// Snapshots with no curve are left out, and so is the default curve of one that carries oref's
+    /// curves, which is a copy of its IOB curve.
+    /// </remarks>
+    /// <param name="from">Inclusive start of the window, on the prediction start.</param>
+    /// <param name="to">Exclusive end of the window.</param>
+    Task<IReadOnlyList<ApsPredictionPoint>> GetPredictionsAsync(DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Every <see cref="ApsLoopCycle"/> within a time window, with the newest before it and the
+    /// oldest after it so a gap that straddles either end is bounded, ordered oldest-first and read
+    /// without the snapshots' JSON blob columns.
+    /// </summary>
+    /// <param name="from">Inclusive start of the time window.</param>
+    /// <param name="to">Inclusive end of the time window.</param>
+    Task<IReadOnlyList<ApsLoopCycle>> GetLoopCyclesAsync(DateTime from, DateTime to, CancellationToken ct = default);
+
     /// <summary>Retrieve <see cref="ApsSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
     Task<IEnumerable<ApsSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);

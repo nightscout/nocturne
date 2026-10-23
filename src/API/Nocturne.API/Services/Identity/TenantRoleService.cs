@@ -39,6 +39,14 @@ public partial class TenantRoleService(INocturneDbContextFactory contexts) : ITe
             .ToListAsync(ct);
     }
 
+    /// <inheritdoc />
+    public async Task<List<TenantRoleDto>> GetAssignableRolesAsync(
+        Guid tenantId, IReadOnlyCollection<string> granterScopes, CancellationToken ct = default)
+    {
+        var roles = await GetRolesAsync(tenantId, ct);
+        return roles.Where(r => Scope.ValidateGrant(r.Permissions, granterScopes) is null).ToList();
+    }
+
     public async Task<TenantRoleDto?> GetRoleByIdAsync(Guid tenantId, Guid roleId, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateAsync(ct);
@@ -238,8 +246,7 @@ public partial class TenantRoleService(INocturneDbContextFactory contexts) : ITe
                 false, RoleGrantValidation.ForeignRole, "One or more role IDs do not belong to this tenant.");
         }
 
-        var exceeded = Scope.ValidateGrant(
-            permissionSets.SelectMany(permissions => permissions), granterScopes);
+        var exceeded = Scope.ValidateGrant(permissionSets.SelectMany(permissions => permissions), granterScopes);
 
         return exceeded is null
             ? RoleGrantValidation.Valid

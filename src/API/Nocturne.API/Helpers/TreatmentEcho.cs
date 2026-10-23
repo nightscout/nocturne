@@ -5,7 +5,9 @@ namespace Nocturne.API.Helpers;
 
 /// <summary>
 /// The reply to a bulk treatment write: one element per submitted treatment, in submission order,
-/// because Loop and other NightscoutKit uploaders pair the reply with the request by position.
+/// because Loop and other NightscoutKit uploaders pair the reply with the request by position. A
+/// meal a v1 POST splits (<see cref="Nocturne.API.Services.Treatments.PreBolusSplit"/>) echoes two
+/// elements in its place, the bolus and then its carbs, as Nightscout's POST does.
 /// </summary>
 public static class TreatmentEcho
 {

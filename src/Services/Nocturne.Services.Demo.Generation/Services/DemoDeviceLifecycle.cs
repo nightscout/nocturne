@@ -36,9 +36,9 @@ public static class DemoDeviceLifecycle
         new(new TrackerSeedSpec("CGM Sensor", TrackerCategory.Sensor, "radio", 240,
             "Sensor Start", CompletionReason.Completed), CycleDays: 10, Phase: 3, HourOfDay: 9),
         new(new TrackerSeedSpec("Infusion Site", TrackerCategory.Cannula, "syringe", 72,
-            "Site Change", CompletionReason.Completed), CycleDays: 3, Phase: 1, HourOfDay: 8),
+            "Site Change", CompletionReason.Completed), CycleDays: 3, Phase: 1, HourOfDay: 20),
         new(new TrackerSeedSpec("Reservoir", TrackerCategory.Reservoir, "cylinder", 72,
-            "Insulin Change", CompletionReason.Refilled), CycleDays: 3, Phase: 1, HourOfDay: 8),
+            "Insulin Change", CompletionReason.Refilled), CycleDays: 3, Phase: 1, HourOfDay: 20),
         new(new TrackerSeedSpec("Pump Battery", TrackerCategory.Battery, "battery", 504,
             "Pump Battery Change", CompletionReason.Completed), CycleDays: 21, Phase: 8, HourOfDay: 19),
     ];

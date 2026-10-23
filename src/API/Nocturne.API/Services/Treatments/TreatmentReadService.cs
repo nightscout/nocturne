@@ -166,6 +166,11 @@ public class TreatmentReadService : ITreatmentStore
     }
 
     /// <inheritdoc />
+    public Task<Treatment?> GetLatestOfTypeAsync(
+        string eventType, long fromMills, long toMills, CancellationToken ct = default) =>
+        _projection.GetLatestProjectedTreatmentAsync(eventType, fromMills, toMills, ct);
+
+    /// <inheritdoc />
     public async Task<Treatment?> GetByIdAsync(string id, CancellationToken ct = default)
     {
         var (stored, spanId) = await ResolveAsync(id, ct);

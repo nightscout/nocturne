@@ -23,6 +23,7 @@
   import { Button } from "$lib/components/ui/button";
   import { getPunchCardData } from "$api/generated/statistics.generated.remote";
   import GlucosePickerCell from "$lib/components/alerts/GlucosePickerCell.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import { formatLocale } from "$lib/utils/formatting";
 
   interface Props {
@@ -190,6 +191,14 @@
       </div>
     {/each}
   </div>
+
+  {#if punchCardQuery.current?.timeZoneUnavailableReason}
+    <p class="mb-2 text-sm text-muted-foreground">
+      <TimeZoneNote reason={punchCardQuery.current.timeZoneUnavailableReason}>
+        This calendar cannot show each day's glucose trace.
+      </TimeZoneNote>
+    </p>
+  {/if}
 
   <div class="grid grid-cols-7 gap-1">
     {#each gridDays as { date, inMonth } (dateKey(date))}

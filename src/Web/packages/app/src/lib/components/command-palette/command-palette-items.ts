@@ -1,6 +1,7 @@
 import { a1cLabel } from "$lib/utils/a1c-formatting";
 import {
 	estimatedA1cTitle,
+	reportTitle,
 	visibleReportCategories,
 	type ReportViewer,
 } from "$lib/navigation/report-navigation.svelte";
@@ -382,11 +383,11 @@ export const items: CommandPaletteItem[] = [
 
 function reportItems(viewer: ReportViewer): CommandPaletteItem[] {
 	return visibleReportCategories(viewer)
-		.flatMap((category) => category.reports)
-		.filter((report) => report.status === "available")
-		.map((report) => ({
+		.flatMap((category) => category.reports.map((report) => ({ category, report })))
+		.filter(({ report }) => report.status === "available")
+		.map(({ category, report }) => ({
 			id: `report-${report.href.split("/").pop()}`,
-			label: report.title,
+			label: reportTitle(category, report),
 			group: "reports",
 			description: report.description,
 			keywords: report.keywords,

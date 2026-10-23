@@ -21,6 +21,7 @@
     LabHbA1cResult,
     A1cDisplayValue,
     A1cDisplayReferences,
+    TimeZoneUnavailableReason,
   } from "$api/generated/nocturne-api-client";
   import { a1cUnits } from "$lib/stores/appearance-store.svelte";
   import {
@@ -34,6 +35,7 @@
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import {
     CHART_TEXTURES,
     patternClass,
@@ -61,6 +63,7 @@
   let error = $state<unknown>(null);
   let pointsByYear = $state<Map<number, EHbA1cPoint[]>>(new Map());
   let references = $state<A1cDisplayReferences>();
+  let timeZoneReason = $state<TimeZoneUnavailableReason>();
 
   let labResults = $state<LabHbA1cResult[]>([]);
   let newLabDate = $state("");
@@ -200,21 +203,24 @@
     loading = true;
     error = null;
     try {
-      const [{ years }, results] = await Promise.all([
+      const [{ years, timeZoneUnavailableReason }, results] = await Promise.all([
         getAvailableYears().run(),
         labResultsApi.getAll().run(),
       ]);
       labResults = results ?? [];
+      const timelineReasons: (TimeZoneUnavailableReason | undefined)[] = [];
       const pointResults = await Promise.all(
         (years?.length ? years : [new Date().getFullYear()]).map(
           async (year) => {
             const response = await getEHbA1cTimeline({ year }).run();
             references = response.a1cReferences;
+            timelineReasons.push(response.timeZoneUnavailableReason);
             return [year, response.points ?? []] as const;
           }
         )
       );
       pointsByYear = new Map(pointResults);
+      timeZoneReason = timeZoneUnavailableReason ?? timelineReasons.find((reason) => reason);
     } catch (err) {
       error = err;
       console.error("Failed to load eHbA1c timeline:", err);
@@ -359,6 +365,12 @@
         <div class="flex h-[320px] items-center justify-center text-destructive">
           Failed to load {a1cLabel(true)} data. Please try again later.
         </div>
+      {:else if chartData.length === 0 && timeZoneReason}
+        <p class="text-sm text-muted-foreground">
+          <TimeZoneNote reason={timeZoneReason}>
+            This report cannot group readings into local days to estimate HbA1c.
+          </TimeZoneNote>
+        </p>
       {:else if chartData.length === 0}
         <div class="flex h-[320px] items-center justify-center text-muted-foreground">
           Not enough glucose history yet — each point needs at least a month of readings within

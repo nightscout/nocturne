@@ -347,8 +347,9 @@ overlap instead, `("end_timestamp" IS NULL OR "end_timestamp" >= now() - interva
 clamped member however long ago it started; clamping it by start would leave the
 therapy resolvers on the default profile. A hidden table whose rows are parts of a parent row,
 in `ShareDataCategories.HiddenParentRecency` (`treatment_foods`, `sleep_stages`,
-`sleep_biometric_samples`), is shown exactly while the clamp shows its parent, by an `EXISTS`
-on the parent. `ShareDataCategoriesGuardTests` fails on a tenant-scoped table that is neither
+`sleep_biometric_samples`, `alert_excursion_mutes`, `alert_deliveries`), is shown exactly
+while the clamp shows its parent, by an `EXISTS` on the parent.
+`ShareDataCategoriesGuardTests` fails on a tenant-scoped table that is neither
 shareable, clamped, nor listed as deliberately unclamped.
 `IS [NOT] DISTINCT FROM` keeps the clamp test non-null when a GUC is unset.)
 

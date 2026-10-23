@@ -85,7 +85,8 @@ interface DevTenant {
 	accessToken: string;
 }
 
-const remoteCallsInFlight = new WeakMap<Page, Set<Request>>();
+/** Each remote call still outstanding on a page, with when it was sent. */
+const remoteCallsInFlight = new WeakMap<Page, Map<Request, number>>();
 
 function validate(candidates: ScreenshotDefinition[]): string[] {
 	const problems: string[] = [];
@@ -203,10 +204,10 @@ function resolveRoute(definition: ScreenshotDefinition, values: Record<string, s
  */
 async function openPage(context: BrowserContext): Promise<Page> {
 	const page = await context.newPage();
-	const inFlight = new Set<Request>();
+	const inFlight = new Map<Request, number>();
 	remoteCallsInFlight.set(page, inFlight);
 	page.on('request', (request) => {
-		if (request.url().includes(REMOTE_ENDPOINT)) inFlight.add(request);
+		if (request.url().includes(REMOTE_ENDPOINT)) inFlight.set(request, Date.now());
 	});
 	page.on('requestfinished', (request) => inFlight.delete(request));
 	page.on('requestfailed', (request) => inFlight.delete(request));
@@ -294,6 +295,16 @@ async function probe(page: Page, theme: Theme): Promise<string[] | null> {
 	]);
 }
 
+/** Names each outstanding remote function and how long it has waited, e.g. `getServicesOverview (118s)`. */
+function describeInFlight(inFlight: Map<Request, number>): string {
+	return [...inFlight]
+		.map(([request, sent]) => {
+			const name = new URL(request.url()).pathname.split('/').pop();
+			return `${name} (${Math.round((Date.now() - sent) / 1000)}s)`;
+		})
+		.join(', ');
+}
+
 /**
  * Holds until the route has come up clean on enough consecutive polls to cover SETTLE_MS. Anything
  * that arrives late — a widget's skeleton, a coach mark — restarts that window rather than landing
@@ -303,10 +314,12 @@ async function settle(page: Page, definition: ScreenshotDefinition, theme: Theme
 	const inFlight = remoteCallsInFlight.get(page);
 	const deadline = Date.now() + SETTLE_TIMEOUT_MS;
 	let quietPolls = 0;
+	let polls = 0;
 	let unanswered = 0;
 
 	for (;;) {
 		const observed = await probe(page, theme);
+		polls++;
 		if (observed === null) unanswered++;
 		const quiet = observed?.length === 0 && !inFlight?.size;
 		quietPolls = quiet ? quietPolls + 1 : 0;
@@ -314,11 +327,18 @@ async function settle(page: Page, definition: ScreenshotDefinition, theme: Theme
 		if ((quietPolls - 1) * POLL_MS >= SETTLE_MS) return;
 
 		if (Date.now() >= deadline) {
-			const reasons = (await probe(page, theme)) ?? [];
-			if (inFlight?.size) reasons.push(`${inFlight.size} remote queries in flight`);
+			const last = await probe(page, theme);
+			const reasons = last ?? [];
+			if (inFlight?.size) reasons.push(`remote queries in flight: ${describeInFlight(inFlight)}`);
 			// Separates a route still waiting on data from one whose main thread is pegged, which
-			// is also what stalls the screenshot itself.
-			if (unanswered > 0) reasons.push(`renderer did not answer ${unanswered} probes`);
+			// is also what stalls the screenshot itself. Only the last probe says which: a cold dev
+			// server leaves the first probes of a navigation unanswered while it transforms modules,
+			// and a renderer that answers now is not looping, however many it missed then.
+			if (last === null) {
+				reasons.push(`renderer is not answering (${unanswered} of ${polls} probes unanswered)`);
+			} else if (unanswered > 0) {
+				reasons.push(`renderer answers now (${unanswered} of ${polls} probes unanswered earlier)`);
+			}
 			throw new Error(
 				`${definition.id}: ${definition.route} did not settle within ${SETTLE_TIMEOUT_MS}ms (${reasons.join('; ')})`,
 			);

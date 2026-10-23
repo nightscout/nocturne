@@ -918,7 +918,8 @@ public enum HourlyClockBasis
 }
 
 /// <summary>
-/// Why no tenant timezone was available, so the hours fell back to each reading's own offset.
+/// Why no tenant timezone was available. What a report does without one is stated on the response
+/// that carries the reason.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<TimeZoneUnavailableReason>))]
 public enum TimeZoneUnavailableReason
@@ -1022,6 +1023,18 @@ public class WeekdayGlucoseSlot
     /// readings in the slot is absent.
     /// </summary>
     public Dictionary<DayOfWeek, double> Mean { get; set; } = new();
+}
+
+/// <summary>
+/// Response for <c>GET /api/v4/Statistics/weekday-averages</c>.
+/// </summary>
+public class WeekdayAveragesResponse
+{
+    /// <summary>The populated slots in time-of-day order.</summary>
+    public List<WeekdayGlucoseSlot> Slots { get; set; } = [];
+
+    /// <summary>Why <see cref="Slots"/> is empty; null when the tenant's timezone resolved.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -1796,6 +1809,9 @@ public class DailyBasalBolusRatioResponse
     /// by it. Not the length of the requested window.
     /// </summary>
     public int DaysWithData { get; set; }
+
+    /// <summary>Why <see cref="DailyData"/> is empty; null when the tenant's timezone resolved.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -1915,6 +1931,12 @@ public class BasalAnalysisResponse
     public string StartDate { get; set; } = string.Empty;
 
     public string EndDate { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Why <see cref="HourlyPercentiles"/> is empty; null when the tenant's timezone resolved. The
+    /// other figures do not depend on the local clock and are served either way.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -2042,6 +2064,9 @@ public class HourlyInsulinDeliveryResponse
     /// End date of the analysis period
     /// </summary>
     public string EndDate { get; set; } = string.Empty;
+
+    /// <summary>Why <see cref="Hours"/> is empty; null when the tenant's timezone resolved.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 public class SiteChangeImpactAnalysis
@@ -2104,6 +2129,12 @@ public class AidSystemMetrics
 
     /// <summary>Per-device time segments with individual metrics</summary>
     public List<AidTimeSegment> Segments { get; set; } = new();
+
+    /// <summary>
+    /// Why no tenant timezone was available, so device start and end dates were read as UTC days;
+    /// null when they followed the tenant's timezone.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -2155,8 +2186,8 @@ public class AidDetectionContext
 
     public DateTime EndDate { get; set; }
 
-    /// <summary>APS snapshots within the segment window (for OS AID strategies)</summary>
-    public IReadOnlyList<V4.ApsSnapshot> ApsSnapshots { get; set; } = [];
+    /// <summary>APS loop cycles within the segment window (for OS AID strategies)</summary>
+    public IReadOnlyList<V4.ApsLoopCycle> LoopCycles { get; set; } = [];
 
     /// <summary>Temp basals within the segment window (for TBR-based strategies)</summary>
     public IReadOnlyList<V4.TempBasal> TempBasals { get; set; } = [];

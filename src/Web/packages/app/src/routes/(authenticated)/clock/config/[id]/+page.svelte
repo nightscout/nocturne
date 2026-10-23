@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Key } from "@nocturne/ui/keys";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -106,12 +107,12 @@
     const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
     const modifier = isMac ? e.metaKey : e.ctrlKey;
 
-    if (modifier && e.key === "z" && !e.shiftKey) {
+    if (modifier && e.key === Key.Z && !e.shiftKey) {
       e.preventDefault();
       if (history.canUndo) history.undo();
     } else if (
-      (modifier && e.key === "z" && e.shiftKey) ||
-      (modifier && e.key === "y")
+      (modifier && e.key === Key.Z && e.shiftKey) ||
+      (modifier && e.key === Key.Y)
     ) {
       e.preventDefault();
       if (history.canRedo) history.redo();

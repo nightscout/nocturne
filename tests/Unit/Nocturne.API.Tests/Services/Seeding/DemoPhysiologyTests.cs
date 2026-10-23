@@ -62,7 +62,7 @@ public class DemoPhysiologyTests
         var glucose = generator.GenerateHistoricalTimeline(new DateTime(2026, 9, 24, 12, 0, 0, DateTimeKind.Local)).Select(s => s.Entry.Sgv ?? 0).ToList();
         double Percent(Func<double, bool> f) => 100.0 * glucose.Count(f) / glucose.Count;
 
-        Percent(g => g >= 70 && g <= 180).Should().BeInRange(55, 88);
+        Percent(g => g >= 70 && g <= 180).Should().BeInRange(68, 85);
         Percent(g => g > 180).Should().BeGreaterThan(8);
         Percent(g => g > 250).Should().BeGreaterThan(0);
         Percent(g => g < 70).Should().BeInRange(1, 10);

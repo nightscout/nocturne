@@ -3,6 +3,7 @@ import { items, paletteItemsFor } from "./command-palette-items";
 import { isTenantlessRoute } from "$lib/navigation/tenantless-navigation";
 import {
   reportCategories,
+  reportTitle,
   visibleReportCategories,
   type ReportViewer,
 } from "$lib/navigation/report-navigation.svelte";
@@ -21,7 +22,7 @@ function paletteReports(viewer: ReportViewer) {
 
 function registryReports(viewer: ReportViewer) {
   return visibleReportCategories(viewer)
-    .flatMap((c) => c.reports)
+    .flatMap((c) => c.reports.map((r) => ({ ...r, title: reportTitle(c, r) })))
     .filter((r) => r.status === "available");
 }
 
@@ -112,5 +113,11 @@ describe("the reports group", () => {
     const ids = paletteItemsFor(false, OWNER).map((i) => i.id);
 
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("names each page of a report made of several with the report", () => {
+    const labels = paletteReports(OWNER).map((i) => i.label);
+    expect(labels).toContain("Loop Analysis: Daily profile");
+    expect(labels).toContain("Loop Analysis: Settings evidence");
   });
 });

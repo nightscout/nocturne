@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -34,22 +35,20 @@ public class CobCalculator(
     /// <inheritdoc />
     public async Task<CobResult> CalculateTotalAsync(
         List<CarbIntake> carbIntakes,
-        List<Bolus>? boluses = null,
-        List<TempBasal>? tempBasals = null,
-        long? time = null,
+        List<Bolus>? boluses,
+        List<TempBasal>? tempBasals,
+        long time,
         CancellationToken ct = default
     )
     {
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
         var hasData = await therapySettingsResolver.HasDataAsync(ct);
 
         if (hasData)
         {
             try
             {
-                var sens = GetSensitivityOrDefault(currentTime);
-                var carbRatio = GetCarbRatioOrDefault(currentTime);
+                var sens = GetSensitivityOrDefault(time);
+                var carbRatio = GetCarbRatioOrDefault(time);
                 if (sens <= 0 || carbRatio <= 0)
                 {
                     logger.LogWarning(
@@ -67,15 +66,15 @@ public class CobCalculator(
         }
 
         // Get COB from APS snapshot (prioritized source)
-        var deviceCob = await GetLatestDeviceCobAsync(currentTime, ct);
+        var deviceCob = await GetLatestDeviceCobAsync(time, ct);
 
         // Prefer the device's own COB when it is recent. A reported COB of exactly zero is a
         // real value ("no carbs on board"), not a missing one, so it is accepted like any other.
-        // Age is measured against currentTime so historical queries resolve against the requested
+        // Age is measured against the requested time, so historical queries resolve against that
         // instant rather than the wall clock.
         if (deviceCob != null && deviceCob.Mills.HasValue)
         {
-            var deviceAge = currentTime - deviceCob.Mills.Value;
+            var deviceAge = time - deviceCob.Mills.Value;
             if (deviceAge <= DeviceReportedValues.RecencyThresholdMs)
             {
                 return AddDisplay(deviceCob);
@@ -85,7 +84,7 @@ public class CobCalculator(
         // Fall back to carb-intake-based COB calculation
         var treatmentCOB =
             carbIntakes?.Any() == true
-                ? FromCarbIntakes(carbIntakes, boluses, tempBasals, currentTime)
+                ? FromCarbIntakes(carbIntakes, boluses, tempBasals, time)
                 : new CobResult();
 
         var result = new CobResult
@@ -107,25 +106,25 @@ public class CobCalculator(
     /// <inheritdoc />
     public CobResult FromCarbIntakes(
         List<CarbIntake> carbIntakes,
-        List<Bolus>? boluses = null,
-        List<TempBasal>? tempBasals = null,
-        long? time = null
+        List<Bolus>? boluses,
+        List<TempBasal>? tempBasals,
+        long time
     )
     {
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
         // Insulin activity for the dynamic carb-delay calc comes from the full IOB total
-        // (boluses + temp basals + device snapshots) at the requested time.
+        // (boluses + temp basals + device snapshots) at the requested time. Carbs still absorbing
+        // ask for times after it, and a temp still running has delivered nothing past it.
+        var delivered = tempBasals is null ? null : StatisticsService.ClipOverlappingTempBasals(tempBasals, time);
         double ActivityAt(long t) =>
             iobCalculator
-                .CalculateTotalAsync(boluses ?? [], tempBasals, t, ct: default)
+                .CalculateTotalAsync(boluses ?? [], delivered, t, ct: default)
                 .GetAwaiter()
                 .GetResult()
                 ?.Activity ?? double.NaN;
 
         return FromCarbIntakesCore(
             carbIntakes,
-            currentTime,
+            time,
             GetCarbAbsorptionRateOrDefault,
             GetSensitivityOrDefault,
             GetCarbRatioOrDefault,

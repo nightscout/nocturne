@@ -41,7 +41,7 @@ public class AidMetricsService : IAidMetricsService
 
     public AidSystemMetrics Calculate(
         IReadOnlyList<DeviceSegmentInput> deviceSegments,
-        IReadOnlyList<ApsSnapshot> apsSnapshots,
+        IReadOnlyList<ApsLoopCycle> loopCycles,
         IReadOnlyList<TempBasal> tempBasals,
         int siteChangeCount,
         string? cgmDeviceNames,
@@ -86,7 +86,7 @@ public class AidMetricsService : IAidMetricsService
                 continue;
 
             // Slice data to segment window
-            var segSnapshots = apsSnapshots
+            var segCycles = loopCycles
                 .Where(s => s.Timestamp >= segStart && s.Timestamp < segEnd)
                 .ToList();
 
@@ -99,7 +99,7 @@ public class AidMetricsService : IAidMetricsService
                 Algorithm = segment.Algorithm,
                 StartDate = segStart,
                 EndDate = segEnd,
-                ApsSnapshots = segSnapshots,
+                LoopCycles = segCycles,
                 TempBasals = segTempBasals,
             };
 

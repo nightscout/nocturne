@@ -1,4 +1,5 @@
 using System.Globalization;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -33,28 +34,26 @@ public class IobCalculator(
     /// <inheritdoc />
     public async Task<IobResult> CalculateTotalAsync(
         List<Bolus> boluses,
-        List<TempBasal>? tempBasals = null,
-        long? time = null,
+        List<TempBasal>? tempBasals,
+        long time,
         CancellationToken ct = default
     )
     {
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
         // Get IOB from device snapshots (APS, pump) - prioritized source. Null means no recent
         // snapshot carried an IOB at all; a reported IOB of zero (or negative, after a long
         // low-temp) is a real device value and is kept.
-        var deviceResult = await GetLatestDeviceIobAsync(currentTime, ct);
+        var deviceResult = await GetLatestDeviceIobAsync(time, ct);
 
         // Calculate IOB from boluses
         var bolusResult =
             boluses?.Any() == true
-                ? FromBoluses(boluses, currentTime)
+                ? FromBoluses(boluses, time)
                 : new IobResult();
 
         // Calculate basal IOB from V4 TempBasal records
         var tempBasalResult =
             tempBasals?.Any() == true
-                ? FromTempBasals(tempBasals, currentTime)
+                ? FromTempBasals(tempBasals, time)
                 : new IobResult();
 
         // Merge TempBasal basal IOB into the bolus result
@@ -247,37 +246,45 @@ public class IobCalculator(
     }
 
     /// <inheritdoc />
-    public IobContribution CalcTempBasal(TempBasal tempBasal, long? time = null)
+    public IobContribution CalcTempBasal(TempBasal tempBasal, long time)
     {
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        if (!tempBasal.EndMills.HasValue)
+        if (Delivered(tempBasal, time) is not { } delivered)
         {
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
 
-        var dia = tempBasal.InsulinContext?.Dia
-            ?? therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult();
+        var dia = delivered.InsulinContext?.Dia
+            ?? therapySettings.GetDIAAsync(time, null).GetAwaiter().GetResult();
 
-        var scheduledBasalRate = tempBasal.ScheduledRate
-            ?? basalRate.GetBasalRateAsync(tempBasal.StartMills, null).GetAwaiter().GetResult();
+        var scheduledBasalRate = delivered.ScheduledRate
+            ?? basalRate.GetBasalRateAsync(delivered.StartMills, null).GetAwaiter().GetResult();
 
-        return CalcTempBasalCore(tempBasal, dia, scheduledBasalRate, currentTime);
+        return CalcTempBasalCore(delivered, dia, scheduledBasalRate, time);
     }
 
     /// <inheritdoc />
     public IobContribution CalcTempBasal(TempBasal tempBasal, TherapySnapshot snapshot, long time)
     {
-        if (!tempBasal.EndMills.HasValue)
+        if (Delivered(tempBasal, time) is not { } delivered)
         {
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
 
-        var dia = tempBasal.InsulinContext?.Dia ?? snapshot.Dia;
-        var scheduledBasalRate = tempBasal.ScheduledRate ?? snapshot.BasalRateAt(tempBasal.StartMills);
+        var dia = delivered.InsulinContext?.Dia ?? snapshot.Dia;
+        var scheduledBasalRate = delivered.ScheduledRate ?? snapshot.BasalRateAt(delivered.StartMills);
 
-        return CalcTempBasalCore(tempBasal, dia, scheduledBasalRate, time);
+        return CalcTempBasalCore(delivered, dia, scheduledBasalRate, time);
     }
+
+    /// <summary>
+    /// <paramref name="tempBasal"/> as delivered up to <paramref name="time"/>, as
+    /// <see cref="StatisticsService.ClipOverlappingTempBasals"/> reads a record alone. Null when it
+    /// delivers nothing by then.
+    /// </summary>
+    private static TempBasal? Delivered(TempBasal tempBasal, long time) =>
+        tempBasal.EndMills.HasValue
+            ? tempBasal
+            : StatisticsService.ClipOverlappingTempBasals([tempBasal], time).FirstOrDefault();
 
     private static IobContribution CalcTempBasalCore(
         TempBasal tempBasal, double dia, double scheduledBasalRate, long currentTime)
@@ -322,22 +329,18 @@ public class IobCalculator(
     }
 
     /// <inheritdoc />
-    public IobResult FromTempBasals(List<TempBasal> tempBasals, long? time = null)
+    public IobResult FromTempBasals(List<TempBasal> tempBasals, long time)
     {
-        var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        // DIA is read at currentTime for every temp basal; resolved once, as in FromBoluses.
+        // Every temp basal reads DIA at the same time, so it is resolved once, as in FromBoluses.
         var profileDia = new Lazy<double>(
-            () => therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult());
+            () => therapySettings.GetDIAAsync(time, null).GetAwaiter().GetResult());
 
-        return FromTempBasalsCore(tempBasals, currentTime, tb => tb.EndMills.HasValue
-            ? CalcTempBasalCore(
-                tb,
-                tb.InsulinContext?.Dia ?? profileDia.Value,
-                tb.ScheduledRate
-                    ?? basalRate.GetBasalRateAsync(tb.StartMills, null).GetAwaiter().GetResult(),
-                currentTime)
-            : new IobContribution { IobContrib = 0, ActivityContrib = 0 });
+        return FromTempBasalsCore(StatisticsService.ClipOverlappingTempBasals(tempBasals ?? [], time), time, tb => CalcTempBasalCore(
+            tb,
+            tb.InsulinContext?.Dia ?? profileDia.Value,
+            tb.ScheduledRate
+                ?? basalRate.GetBasalRateAsync(tb.StartMills, null).GetAwaiter().GetResult(),
+            time));
     }
 
     /// <inheritdoc />

@@ -132,8 +132,8 @@ describe("resolveLanguage", () => {
 });
 
 it("keeps year color preferences scoped to the SSR request", async () => {
-  const first = await ssr([{ yearOverviewColors: { tdd: [10, 70] } }]);
-  const second = await ssr([{ yearOverviewColors: { tdd: [20, 60] } }]);
+  const first = await ssr([{ yearOverviewColors: { tddBand: [10, 70] } }]);
+  const second = await ssr([{ yearOverviewColors: { tddBand: [20, 60] } }]);
   expect(first).toContain('[10,70]');
   expect(second).toContain('[20,60]');
   expect(second).not.toContain('[10,70]');

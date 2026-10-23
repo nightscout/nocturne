@@ -35,17 +35,24 @@ public class RoleController : ControllerBase
     /// List roles for the current tenant.
     /// </summary>
     /// <inheritdoc cref="ITenantRoleService.GetRolesAsync"/>
+    /// <remarks>
+    /// A <c>roles.manage</c> caller gets every role; a <c>members.invite</c> or <c>members.manage</c> caller gets only the roles it can grant.
+    /// </remarks>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<TenantRoleDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetRoles(CancellationToken ct)
     {
-        if (!HttpContext.HasScope(Scope.RolesManage))
+        if (HttpContext.HasScope(Scope.RolesManage))
+            return Ok(await _roleService.GetRolesAsync(_tenantAccessor.TenantId, ct));
+
+        if (!HttpContext.HasScope(Scope.MembersInvite) && !HttpContext.HasScope(Scope.MembersManage))
             return Forbid();
 
-        var roles = await _roleService.GetRolesAsync(_tenantAccessor.TenantId, ct);
-        return Ok(roles);
+        var assignable = await _roleService.GetAssignableRolesAsync(
+            _tenantAccessor.TenantId, HttpContext.GetGrantedScopes(), ct);
+        return Ok(assignable);
     }
 
     /// <summary>

@@ -1022,7 +1022,7 @@ public class DevAdminController : ControllerBase
         if (!validation.IsValid)
             return await SlugRejectionAsync(slug, validation.Message, ct);
 
-        // 1. Tenant (seeds roles, public subject, OAuth clients)
+        // 1. Tenant (seeds roles, public subject)
         var tenant = await _tenantService.CreateWithoutOwnerAsync(
             slug, request.DisplayName, ct: ct);
 

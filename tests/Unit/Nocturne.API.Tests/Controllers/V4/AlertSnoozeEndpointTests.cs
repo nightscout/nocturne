@@ -65,6 +65,7 @@ public class AlertSnoozeEndpointTests
             Mock.Of<ISensorContextEnricher>(),
             Mock.Of<ICanonicalGlucoseService>(),
             Mock.Of<ISignalRBroadcastService>(),
+            Mock.Of<IEngineAlarmRelay>(),
             TimeProvider.System,
             NullLogger<AlertSnoozeService>.Instance);
 

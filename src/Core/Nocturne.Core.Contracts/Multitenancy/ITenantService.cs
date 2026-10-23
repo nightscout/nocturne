@@ -17,7 +17,7 @@ public interface ITenantService
     /// <summary>Creates a new tenant without assigning an owner.</summary>
     Task<TenantCreatedDto> CreateWithoutOwnerAsync(string slug, string displayName, CancellationToken ct = default);
 
-    /// <summary>Re-seeds roles, public membership, and OAuth clients for an existing tenant after a data purge.</summary>
+    /// <summary>Re-seeds roles and public membership for an existing tenant after a data purge.</summary>
     Task SeedAfterResetAsync(Guid tenantId, CancellationToken ct = default);
 
     Task<List<TenantDto>> GetAllAsync(CancellationToken ct = default);

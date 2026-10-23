@@ -25,13 +25,18 @@ interface ContextResourceWithDate<T> extends ContextResourceBase<T> {
 
 interface ContextResourceOptions {
   errorTitle?: string;
+  /**
+   * Whether the resource reports to the guard; while false it is unregistered, so a panel off
+   * screen neither blanks the page with its error nor holds it loading.
+   */
+  active?: () => boolean;
 }
 
 interface ContextResourceOptionsWithDate extends ContextResourceOptions {
   dateParams: ReportsParamsReturn;
 }
 
-const RESOURCE_CONTEXT_KEY = Symbol("resource-context");
+const RESOURCE_CONTEXT_KEY = "nocturne:app:resource-context";
 
 /** One panel's fetch state, as reported to the layout's ResourceGuard. */
 export interface ResourceRegistration {
@@ -129,11 +134,15 @@ export function getResourceContext(): ResourceContext | undefined {
  */
 function registerWith(
   ctx: ResourceContext | undefined,
-  read: () => ResourceRegistration
+  read: () => ResourceRegistration,
+  active: () => boolean = () => true
 ): void {
   if (!ctx) return;
   const key = Symbol("resource-registration");
-  $effect.pre(() => ctx.register(key, read()));
+  $effect.pre(() => {
+    if (active()) ctx.register(key, read());
+    else ctx.unregister(key);
+  });
   onDestroy(() => ctx.unregister(key));
 }
 
@@ -219,7 +228,7 @@ export function contextResource<T>(
   queryFn: () => QueryResult<T>,
   options: ContextResourceOptions & { dateParams?: ReportsParamsReturn } = {}
 ): ContextResourceBase<T> | ContextResourceWithDate<T> {
-  const { errorTitle = "Error Loading Data", dateParams } = options;
+  const { errorTitle = "Error Loading Data", dateParams, active } = options;
 
   // Create the query in a $derived tracking context so reactive queries
   // are never constructed inside an $effect (which would trigger a Svelte warning).
@@ -248,7 +257,8 @@ export function contextResource<T>(
       refreshing: query.loading && current !== undefined && current !== null,
       errorTitle,
       refetch: () => query.refresh(),
-    })
+    }),
+    active
   );
 
   const base = {

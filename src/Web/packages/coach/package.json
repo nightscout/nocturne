@@ -13,6 +13,7 @@
     "./theme.css": "./src/lib/theme.css"
   },
   "peerDependencies": {
+    "@nocturne/ui": ">=0.1.0",
     "svelte": ">=5.0.0"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@nocturne/eslint-config": "workspace:*",
+    "@nocturne/ui": "workspace:*",
     "eslint": "^10.3.0",
     "svelte-check": "^4.4.2",
     "typescript": "^5.8.3"

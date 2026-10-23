@@ -6,7 +6,7 @@ namespace Nocturne.API.Services.AidDetection;
 
 /// <summary>
 /// Calculates <see cref="AidSegmentMetrics"/> for APS-based closed-loop algorithms from the
-/// <see cref="AidDetectionContext.ApsSnapshots"/> within the evaluation window.
+/// <see cref="AidDetectionContext.LoopCycles"/> within the evaluation window.
 /// </summary>
 /// <remarks>
 /// Each loop cycle stands for the time from its timestamp to the next cycle, up to one 5-minute
@@ -37,7 +37,7 @@ public class ApsSnapshotStrategy : IAidDetectionStrategy
     public AidSegmentMetrics CalculateMetrics(AidDetectionContext context)
     {
         // Of cycles at one instant only the last is credited, so an enacted copy goes last.
-        var snapshots = context.ApsSnapshots.OrderBy(s => s.Timestamp).ThenBy(s => s.Enacted).ToList();
+        var snapshots = context.LoopCycles.OrderBy(s => s.Timestamp).ThenBy(s => s.Enacted).ToList();
 
         if (snapshots.Count == 0)
         {

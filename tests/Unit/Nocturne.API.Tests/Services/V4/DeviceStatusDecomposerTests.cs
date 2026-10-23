@@ -4,11 +4,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.V4;
+using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
@@ -2060,7 +2063,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             new UploaderSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance),
             _extrasRepo,
             _stateSpanServiceMock.Object,
-            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, MockTenantAccessor.Create().Object),
+            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc()),
             Mock.Of<IAuditContext>(),
             NullLogger<DeviceStatusDecomposer>.Instance);
     }
@@ -3242,6 +3245,128 @@ public class DeviceStatusDecomposerTests : IDisposable
 
         Canonical(projected.OpenAps!.Suggested).Should().Be(Canonical(suggested));
         Canonical(projected.OpenAps.Enacted).Should().Be(Canonical(enacted));
+    }
+
+    #endregion
+
+    #region Prediction accuracy reads the stored curves
+
+    // Shapes follow nightscout/cgm-remote-monitor tests/fixtures/captured/{loop,trio}/devicestatus.json
+    // at c6a0d8ed65637bc90d3090e6e7a0f752041c57fd: Loop's predicted.values runs about 80 values from a
+    // startDate off the five-minute grid, and oref's predBGs run 48 values unless a curve's tail was
+    // cut. The values here are synthesised.
+
+    private static PredictionSnapshot? ParseStored(V4Models.ApsSnapshot aps) =>
+        PredictionAccuracyCalculator.Parse(new V4Models.ApsPredictionPoint(
+            aps.PredictedStartTimestamp!.Value, aps.Device, aps.Enacted, aps.AidAlgorithm,
+            aps.PredictedDefaultJson, aps.PredictedIobJson, aps.PredictedZtJson, aps.PredictedCobJson, aps.PredictedUamJson));
+
+    private static double?[]? CurveOf(PredictionSnapshot snapshot, PredictionCurve curve) =>
+        snapshot.Curves[(int)curve];
+
+    /// <summary>A curve from <paramref name="first"/> moving by <paramref name="step"/> and levelling at <paramref name="floor"/>.</summary>
+    private static List<double?> Synthesised(int count, double first, double step, double floor = 39) =>
+        [.. Enumerable.Range(0, count).Select(i => (double?)Math.Max(floor, Math.Round(first + step * i)))];
+
+    [Fact]
+    public async Task PredictionAccuracy_ReadsLoopsStoredCurveAsTheDefault()
+    {
+        var values = Synthesised(83, 141, -0.8, floor: 70).Select(v => v!.Value).ToArray();
+        var ds = new DeviceStatus
+        {
+            Id = "loop-prediction-shape",
+            Mills = new DateTimeOffset(2026, 5, 9, 0, 1, 57, 372, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            Device = "loop://test-device",
+            Loop = new LoopStatus
+            {
+                Timestamp = "2026-05-09T00:01:57.372Z",
+                Predicted = new LoopPredicted { Values = values, StartDate = "2026-05-08T23:59:59.372Z" },
+            },
+        };
+
+        var snapshot = ParseStored(await DecomposeApsAsync(ds))!;
+
+        snapshot.StartMills.Should().Be(new DateTimeOffset(2026, 5, 8, 23, 59, 59, 372, TimeSpan.Zero).ToUnixTimeMilliseconds());
+        CurveOf(snapshot, PredictionCurve.Default).Should().Equal(values.Take(25).Select(v => (double?)v), "values past the last horizon are not read");
+        snapshot.Curves.Count(c => c is not null).Should().Be(1);
+        PredictionAccuracyCalculator.TargetMills(snapshot, PredictionCurve.Default, 6)
+            .Should().Be(new DateTimeOffset(2026, 5, 9, 0, 25, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                "Loop's later values sit on the grid point after its off-grid start");
+    }
+
+    [Fact]
+    public async Task PredictionAccuracy_ReadsAapsStoredCurves_WithoutTheDefaultCopyOfIob()
+    {
+        var iob = Synthesised(31, 156, -4);
+        var zeroTemp = Synthesised(7, 104, 3);
+        var ds = new DeviceStatus
+        {
+            Id = "aaps-prediction-shape",
+            Mills = 1778284798029,
+            Device = "openaps://samsung",
+            OpenAps = new OpenApsStatus
+            {
+                Suggested = new OpenApsSuggested
+                {
+                    Bg = 156.0,
+                    Timestamp = "2026-05-08T23:59:58.029Z",
+                    PredBGs = new OpenApsPredBGs
+                    {
+                        IOB = iob,
+                        ZT = zeroTemp,
+                        COB = Synthesised(48, 156, 5, floor: 0),
+                        UAM = Synthesised(48, 156, 2, floor: 0),
+                    },
+                },
+            },
+            Uploader = new UploaderStatus { Name = "AndroidAPS" },
+        };
+
+        var aps = await DecomposeApsAsync(ds);
+        var snapshot = ParseStored(aps)!;
+
+        aps.PredictedDefaultJson.Should().Be(aps.PredictedIobJson, "the decomposer copies oref's IOB curve into the default column");
+        CurveOf(snapshot, PredictionCurve.Default).Should().BeNull();
+        CurveOf(snapshot, PredictionCurve.Iob).Should().Equal(iob.Take(25), "a curve of 31 reaches every horizon itself");
+        CurveOf(snapshot, PredictionCurve.ZeroTemp).Should().Equal(zeroTemp, "oref cut the zero-temp curve where it turned up; nothing is held");
+        CurveOf(snapshot, PredictionCurve.Cob).Should().HaveCount(25);
+        CurveOf(snapshot, PredictionCurve.Uam).Should().HaveCount(25);
+    }
+
+    [Fact]
+    public async Task PredictionAccuracy_ReadsTriosStoredCurves_HoldingALevelledTail()
+    {
+        var iob = Synthesised(18, 152, -7);
+        var ds = new DeviceStatus
+        {
+            Id = "trio-prediction-shape",
+            Mills = 1778284489623,
+            Device = "Trio",
+            OpenAps = new OpenApsStatus
+            {
+                Version = "0.2.1",
+                Suggested = new OpenApsSuggested
+                {
+                    Bg = 152.0,
+                    Timestamp = "2026-05-08T23:54:49.623Z",
+                    PredBGs = new OpenApsPredBGs
+                    {
+                        IOB = iob,
+                        ZT = Synthesised(48, 152, -3),
+                        COB = Synthesised(48, 152, 6, floor: 0),
+                        UAM = Synthesised(22, 152, -5.5),
+                    },
+                },
+            },
+        };
+
+        var snapshot = ParseStored(await DecomposeApsAsync(ds))!;
+
+        snapshot.Algorithm.Should().Be(V4Models.AidAlgorithm.Trio);
+        CurveOf(snapshot, PredictionCurve.Default).Should().BeNull();
+        CurveOf(snapshot, PredictionCurve.Iob).Should().StartWith(iob)
+            .And.HaveCount(25, "oref dropped the level tail after 39").And.EndWith(39);
+        CurveOf(snapshot, PredictionCurve.Uam).Should().HaveCount(25).And.EndWith(39);
     }
 
     #endregion

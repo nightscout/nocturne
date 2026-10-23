@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.API.Services.Realtime;
 
@@ -8,9 +9,8 @@ namespace Nocturne.API.Services.Notifications;
 
 /// <summary>
 /// In-memory alarm and admin-notification service with 1:1 legacy JavaScript compatibility.
-/// Implements functionality from <c>notifications.js</c> and <c>adminnotifies.js</c>, maintaining
-/// per-site alarm state in <see cref="ConcurrentDictionary{TKey,TValue}"/> collections with bounded
-/// cache sizes and TTL-based eviction. Also bridges legacy Pushover receipt polling.
+/// Implements functionality from <c>notifications.js</c> and <c>adminnotifies.js</c>. Alarm snoozes
+/// live in <see cref="LegacyAlarmSnoozeStore"/>. Also bridges legacy Pushover receipt polling.
 /// </summary>
 /// <seealso cref="INotificationV1Service"/>
 public class NotificationV1Service : INotificationV1Service, IDisposable
@@ -18,14 +18,13 @@ public class NotificationV1Service : INotificationV1Service, IDisposable
     private readonly ILogger<NotificationV1Service> _logger;
     private readonly IAuthorizationService _authorizationService;
     private readonly ISignalRBroadcastService _signalRBroadcastService;
-    private readonly ConcurrentDictionary<string, AlarmState> _alarms = new();
+    private readonly ITenantAccessor _tenantAccessor;
+    private readonly LegacyAlarmSnoozeStore _snoozes;
     private readonly ConcurrentDictionary<string, AdminNotification> _adminNotifications = new();
     private readonly ConcurrentDictionary<string, PushoverReceipt> _pushoverReceipts = new();
     private readonly IPushoverService? _pushoverService;
 
-    private const int THIRTY_MINUTES_MS = 30 * 60 * 1000;
     private const int ADMIN_NOTIFICATION_CLEANUP_THRESHOLD_MS = 9 * 60 * 60 * 1000; // 9 hours - matches legacy test expectations
-    private const int MAX_ALARMS_CACHE_SIZE = 1000; // Prevent unbounded growth
     private const int MAX_RECEIPTS_CACHE_SIZE = 5000; // Prevent unbounded growth
 
     private bool _disposed = false;
@@ -34,27 +33,17 @@ public class NotificationV1Service : INotificationV1Service, IDisposable
         ILogger<NotificationV1Service> logger,
         IAuthorizationService authorizationService,
         ISignalRBroadcastService signalRBroadcastService,
+        ITenantAccessor tenantAccessor,
+        LegacyAlarmSnoozeStore snoozes,
         IPushoverService? pushoverService = null
     )
     {
         _logger = logger;
         _authorizationService = authorizationService;
         _signalRBroadcastService = signalRBroadcastService;
+        _tenantAccessor = tenantAccessor;
+        _snoozes = snoozes;
         _pushoverService = pushoverService;
-    }
-
-    /// <summary>
-    /// Internal alarm state tracking for acknowledgments
-    /// Based on the Alarm class from legacy notifications.js
-    /// </summary>
-    private class AlarmState
-    {
-        public int Level { get; set; }
-        public string Group { get; set; } = "default";
-        public string Label { get; set; } = string.Empty;
-        public int SilenceTime { get; set; } = THIRTY_MINUTES_MS;
-        public long LastAckTime { get; set; }
-        public long? LastEmitTime { get; set; }
     }
 
     /// <summary>
@@ -71,71 +60,6 @@ public class NotificationV1Service : INotificationV1Service, IDisposable
         public string NotificationMessage { get; set; } = string.Empty;
     }
 
-    /// <summary>
-    /// Gets or creates an alarm state for the given level and group
-    /// Implements the getAlarm() function from legacy notifications.js
-    /// Includes memory protection by limiting cache size
-    /// </summary>
-    private AlarmState GetAlarm(int level, string group)
-    {
-        var key = $"{level}-{group}";
-
-        // Check if we need to cleanup old entries to prevent memory leaks
-        if (_alarms.Count >= MAX_ALARMS_CACHE_SIZE)
-        {
-            CleanupOldAlarms();
-        }
-
-        return _alarms.GetOrAdd(
-            key,
-            _ =>
-            {
-                var display = group == "default" ? $"Level {level}" : $"{group}:{level}";
-                return new AlarmState
-                {
-                    Level = level,
-                    Group = group,
-                    Label = display,
-                };
-            }
-        );
-    }
-
-    /// <summary>
-    /// Cleanup old alarm states to prevent memory leaks
-    /// Removes alarms that haven't been acknowledged in the last 24 hours
-    /// </summary>
-    private void CleanupOldAlarms()
-    {
-        try
-        {
-            var cutoff = DateTimeOffset.UtcNow.AddHours(-24).ToUnixTimeMilliseconds();
-            var keysToRemove = new List<string>();
-
-            foreach (var kvp in _alarms)
-            {
-                if (
-                    kvp.Value.LastAckTime < cutoff
-                    && (!kvp.Value.LastEmitTime.HasValue || kvp.Value.LastEmitTime < cutoff)
-                )
-                {
-                    keysToRemove.Add(kvp.Key);
-                }
-            }
-
-            foreach (var key in keysToRemove.Take(_alarms.Count / 4)) // Remove up to 25% of entries
-            {
-                _alarms.TryRemove(key, out _);
-            }
-
-            _logger.LogDebug("Cleaned up {Count} old alarm states", keysToRemove.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error during alarm cleanup");
-        }
-    }
-
     public async Task<NotificationAckResponse> AckNotificationAsync(
         NotificationAckRequest request,
         CancellationToken cancellationToken = default
@@ -149,11 +73,10 @@ public class NotificationV1Service : INotificationV1Service, IDisposable
                 request.Group
             );
 
-            var alarm = GetAlarm(request.Level, request.Group);
             var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var silenceTime = request.Time ?? NotificationAckRequest.DefaultSilenceTimeMs;
 
-            // Check if already snoozed (based on legacy notifications.js logic)
-            if (currentTime < alarm.LastAckTime + alarm.SilenceTime)
+            if (!_snoozes.TrySnooze(_tenantAccessor.TenantId, request.Level, request.Group, silenceTime))
             {
                 var message =
                     $"Alarm has already been snoozed, don't snooze it again, level: {request.Level}, group: {request.Group}";
@@ -166,16 +89,11 @@ public class NotificationV1Service : INotificationV1Service, IDisposable
                 };
             }
 
-            // Acknowledge the alarm
-            alarm.LastAckTime = currentTime;
-            alarm.SilenceTime = request.Time ?? THIRTY_MINUTES_MS;
-            alarm.LastEmitTime = null; // Clear last emit time
-
             _logger.LogInformation(
                 "Acknowledged alarm - level: {Level}, group: {Group}, silenceTime: {SilenceTime}ms",
                 request.Level,
                 request.Group,
-                alarm.SilenceTime
+                silenceTime
             );
 
             // Send clear alarm notification if requested (replaces legacy ctx.bus.emit('notification', notify))
@@ -297,7 +215,7 @@ public class NotificationV1Service : INotificationV1Service, IDisposable
                     {
                         Level = receiptInfo.Level,
                         Group = receiptInfo.Group,
-                        Time = THIRTY_MINUTES_MS, // Default 30 minute silence
+                        Time = NotificationAckRequest.DefaultSilenceTimeMs,
                         SendClear = true,
                     };
 
@@ -780,7 +698,6 @@ public class NotificationV1Service : INotificationV1Service, IDisposable
 
         try
         {
-            _alarms.Clear();
             _pushoverReceipts.Clear();
         }
         catch (Exception ex)

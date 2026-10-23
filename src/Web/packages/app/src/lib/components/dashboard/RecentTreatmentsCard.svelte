@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Key } from "@nocturne/ui/keys";
   import { lazyComponent } from "$lib/utils/lazy-component.svelte";
   import type { EntryRecord } from "$lib/constants/entry-categories";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
@@ -74,7 +75,7 @@
               role="button"
               tabindex="0"
               onkeydown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
+                if (e.key === Key.Enter || e.key === Key.Space) {
                   e.preventDefault();
                   handleEntryClick(entry);
                 }

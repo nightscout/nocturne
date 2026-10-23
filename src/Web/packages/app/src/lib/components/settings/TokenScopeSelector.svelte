@@ -52,7 +52,7 @@
       },
       {
         header: "Platform",
-        categories: rowsFor(["alerts.read", "reports.read"]),
+        categories: rowsFor(["alerts.read", "alerts.acknowledge", "reports.read"]),
       },
       {
         header: "Account",

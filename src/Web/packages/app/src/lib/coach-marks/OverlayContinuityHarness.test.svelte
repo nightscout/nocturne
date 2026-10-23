@@ -2,14 +2,20 @@
   import {
     CoachMarkProvider,
     coachmark,
+    type CoachLabels,
     type CoachMarkAdapter,
     type CoachMarkOptions,
     type SequenceConfig,
   } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
+  import { coachLabels } from "./copy.svelte";
   import Starter from "./OverlayContinuityStarter.test.svelte";
 
-  let { forced = false, multiStep = false }: { forced?: boolean; multiStep?: boolean } = $props();
+  let {
+    forced = false,
+    multiStep = false,
+    labels = coachLabels(),
+  }: { forced?: boolean; multiStep?: boolean; labels?: CoachLabels } = $props();
 
   const adapter: CoachMarkAdapter = {
     fetchAll: async () => [],
@@ -44,7 +50,7 @@
   );
 </script>
 
-<CoachMarkProvider {adapter} {sequences} settleDelay={10} seenDwellMs={100000}>
+<CoachMarkProvider {adapter} {labels} {sequences} settleDelay={10} seenDwellMs={100000}>
   <Starter sequence="tour" />
   <div {@attach coachmark(alpha)}>Alpha target</div>
   <div

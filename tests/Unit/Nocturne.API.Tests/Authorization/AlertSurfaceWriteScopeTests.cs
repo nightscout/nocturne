@@ -234,6 +234,17 @@ public class AlertSurfaceWriteScopeTests
     }
 
     [Fact]
+    public void AnAlertsAcknowledgeCaller_ReachesOnlyTheSnooze()
+    {
+        var reached = GatedWriteActions()
+            .Where(x => Evaluate(x.Controller, x.Action, authenticated: true,
+                new HashSet<string> { Scope.AlertsAcknowledge }) is null)
+            .Select(x => $"{x.Controller.Name}.{x.Action.Name}");
+
+        reached.Should().BeEquivalentTo(["AlertsController.SnoozeInstance"]);
+    }
+
+    [Fact]
     public void ReadOnlyGuestSession_IsDeniedEveryAlertSurfaceWrite()
     {
         // The widest grant a guest link can hold: ValidateGrantScopes caps a guest at

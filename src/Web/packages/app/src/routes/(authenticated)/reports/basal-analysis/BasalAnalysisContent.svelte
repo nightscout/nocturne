@@ -20,6 +20,7 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import {
     getBasalAnalysis,
     getHourlyInsulinDelivery,
@@ -64,6 +65,10 @@
   });
 
   const hourlyPercentiles = $derived(analysisQuery.current?.hourlyPercentiles ?? []);
+
+  const timeZoneReason = $derived(
+    analysisQuery.current?.timeZoneUnavailableReason ?? hourlyDelivery?.timeZoneUnavailableReason
+  );
 </script>
 
 {#if hourlyDeliveryQuery.error || analysisQuery.error}
@@ -153,6 +158,14 @@
         { label: "High / Low", value: `${tempBasalInfo.highTemps} / ${tempBasalInfo.lowTemps}`, unit: "temp basals" },
       ]}
     />
+
+    {#if timeZoneReason}
+      <p class="text-sm text-muted-foreground">
+        <TimeZoneNote reason={timeZoneReason}>
+          This report cannot show basal rates or insulin delivery by hour of day.
+        </TimeZoneNote>
+      </p>
+    {/if}
 
     <Card>
       <CardHeader>

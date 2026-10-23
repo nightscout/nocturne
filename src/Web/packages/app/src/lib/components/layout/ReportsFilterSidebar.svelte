@@ -4,9 +4,13 @@
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
   import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import { untrack } from "svelte";
+  import { page } from "$app/state";
+  import { goto } from "$app/navigation";
   import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
   import type { DateRange } from "bits-ui";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
+  import { requireDateParamsContext, withRange, type RangeWrite } from "$lib/hooks/date-params.svelte";
+  import { getReportSlots } from "$lib/hooks/report-slots.svelte";
   import { RangeCalendar } from "$lib/components/ui/range-calendar";
   import { dayCount } from "$lib/utils/date-range";
   import { formatLocale, formatMediumDateRange } from "$lib/utils/formatting";
@@ -23,6 +27,8 @@
 
   // Get shared date params from context (set by reports layout)
   const params = requireDateParamsContext();
+  const slots = getReportSlots();
+  const extension = $derived(slots?.filters ?? null);
 
   // Quick day presets
   const dayPresets = [
@@ -43,13 +49,17 @@
   // rather than the URL-only params: a default range seeded during hydration
   // never reaches the URL, so params.from/days can read as null while the range
   // on screen is intact.
+  // Only opening seeds the drafts: a range that changes while the panel is open leaves them be.
   $effect(() => {
     if (!open) return;
 
-    draftCalendarValue = {
-      start: parseDate(params.fromDay),
-      end: parseDate(params.toDay),
-    };
+    untrack(() => {
+      extension?.begin();
+      draftCalendarValue = {
+        start: parseDate(params.fromDay),
+        end: parseDate(params.toDay),
+      };
+    });
   });
 
   // The quick-selection preset to highlight: the whole-day span of the draft
@@ -81,35 +91,48 @@
     }
   }
 
-  /**
-   * Return to the on-screen report's own default window and hand the range back
-   * to default mode, so navigating to another report can adjust it again.
-   * Resetting to a fixed 7 days shortened 30-day reports and pinned the result
-   * as a user choice.
-   */
-  function resetFilters() {
-    params.reset();
-    open = false;
-    onOpenChange?.(false);
+  /** Writes the range and the report's filters in one navigation, so one history entry. */
+  async function write(range: RangeWrite | null, report: (search: URLSearchParams) => URLSearchParams) {
+    const search = report(range ? withRange(page.url.searchParams, range) : page.url.searchParams);
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- a query on the page on screen
+    await goto(`?${search.toString()}`, { noScroll: true, keepFocus: true });
   }
 
-  function applyFilters() {
+  /**
+   * Returns to the on-screen report's own default window and hands the range back
+   * to default mode, so navigating to another report can adjust it again.
+   */
+  async function resetFilters() {
+    open = false;
+    onOpenChange?.(false);
+    if (extension) await write(params.resetWrite(), extension.reset);
+    else params.reset();
+  }
+
+  async function applyFilters() {
     const start = draftCalendarValue?.start;
     const end = draftCalendarValue?.end;
 
-    if (start && end) {
-      // A range matching a "last N days" preset commits as a relative range so it
-      // stays anchored to today; anything else commits as an explicit custom range.
+    open = false;
+    onOpenChange?.(false);
+
+    // A range matching a "last N days" preset commits as a relative range so it
+    // stays anchored to today; anything else commits as an explicit custom range.
+    if (extension) {
+      const range =
+        start && end
+          ? selectedDays !== undefined
+            ? params.dayRangeWrite(selectedDays)
+            : params.customRangeWrite(start.toString(), end.toString())
+          : null;
+      await write(range, extension.apply);
+    } else if (start && end) {
       if (selectedDays !== undefined) {
         params.setDayRange(selectedDays);
       } else {
         params.setCustomRange(start.toString(), end.toString());
       }
     }
-
-    // Close the sidebar
-    open = false;
-    onOpenChange?.(false);
   }
 
   const dateRangeText = $derived.by(() => {
@@ -133,7 +156,11 @@
         </Sheet.Title>
       </div>
       <Sheet.Description>
-        Adjust the date range for your report.
+        {#if extension}
+          Set the date range and the filters for this report.
+        {:else}
+          Adjust the date range for your report.
+        {/if}
       </Sheet.Description>
     </Sheet.Header>
 
@@ -175,6 +202,11 @@
             />
           </div>
         </div>
+
+        {#if extension}
+          <Separator />
+          {@render extension.fields()}
+        {/if}
       </div>
     </ScrollArea>
 

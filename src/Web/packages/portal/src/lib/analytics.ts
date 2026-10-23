@@ -25,6 +25,7 @@ export const DOCS_SECTION_IDS = [
   'authentication',
   'sharing',
   'food',
+  'reports',
   'trackers',
   'alerts',
   'bots',
