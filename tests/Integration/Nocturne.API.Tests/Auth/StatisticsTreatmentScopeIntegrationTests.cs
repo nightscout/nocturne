@@ -4,6 +4,8 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Npgsql;
 using Xunit;
@@ -73,6 +75,7 @@ public class StatisticsTreatmentScopeIntegrationTests(ApiIntegrationTestFixture 
     [Fact]
     public async Task Glucose_only_token_reads_punch_card_without_insulin_or_carbs()
     {
+        await SetPatientTimezoneAsync("UTC");
         await SeedGlucoseAndTreatmentsAsync();
         using var glucoseOnly = await CreateTokenClientAsync(Scope.GlucoseRead);
         var today = DateTime.UtcNow.Date;
@@ -97,6 +100,15 @@ public class StatisticsTreatmentScopeIntegrationTests(ApiIntegrationTestFixture 
             && day.GetProperty("totalBasal").GetDouble() == 0
             && day.GetProperty("carbToInsulinRatio").GetDouble() == 0);
     }
+
+    private Task SetPatientTimezoneAsync(string timezone) =>
+        WithTenantScopeAsync(async services =>
+        {
+            var patients = services.GetRequiredService<IPatientRecordRepository>();
+            var patient = await patients.GetOrCreateAsync();
+            patient.Timezone = timezone;
+            return await patients.UpdateAsync(patient, WriteOrigin.Live);
+        });
 
     private async Task SeedGlucoseAndTreatmentsAsync()
     {

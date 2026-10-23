@@ -31,7 +31,7 @@ using Xunit;
 namespace Nocturne.API.Tests.Controllers.V4.Analytics;
 
 [Trait("Category", "Unit")]
-public class StatisticsControllerTests
+public partial class StatisticsControllerTests
 {
     private readonly Mock<IStatisticsService> _statsServiceMock = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepoMock = new();
@@ -51,6 +51,13 @@ public class StatisticsControllerTests
     private readonly Mock<ILogger<StatisticsController>> _loggerMock = new();
     private readonly Mock<ILogger<TenantClockResolver>> _clockLoggerMock = new();
     private static readonly DateTimeOffset DefaultNow = new(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    public StatisticsControllerTests()
+    {
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("UTC");
+    }
 
     private StatisticsController CreateController(
         ICanonicalGlucoseService? canonicalGlucose = null,
@@ -379,7 +386,9 @@ public class StatisticsControllerTests
             new DateTime(2026, 1, 8, 0, 0, 0, DateTimeKind.Utc));
 
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-        ok.Value.Should().BeSameAs(slots);
+        var payload = ok.Value.Should().BeOfType<WeekdayAveragesResponse>().Subject;
+        payload.Slots.Should().BeEquivalentTo(slots);
+        payload.TimeZoneUnavailableReason.Should().BeNull();
         usedEntries.Should().BeEquivalentTo(canonical);
         canonicalGlucose.Verify(
             s => s.SelectAsync(
@@ -388,23 +397,6 @@ public class StatisticsControllerTests
             Times.Once);
         usedTz.Should().Be(TimeZoneHelper.GetTimeZoneInfoFromId("Europe/Stockholm"));
         usedTz!.BaseUtcOffset.Should().Be(TimeSpan.FromHours(1));
-    }
-
-    [Fact]
-    public async Task GetWeekdayAverages_WithoutATherapyTimezone_BucketsOnUtc()
-    {
-        SetupGlucose(Array.Empty<SensorGlucose>());
-        TimeZoneInfo? usedTz = null;
-        _statsServiceMock
-            .Setup(s => s.CalculateWeekdayAverages(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
-            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo>((_, tz) => usedTz = tz)
-            .Returns(new List<WeekdayGlucoseSlot>());
-
-        await CreateController().GetWeekdayAverages(
-            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            new DateTime(2026, 1, 8, 0, 0, 0, DateTimeKind.Utc));
-
-        usedTz.Should().Be(TimeZoneInfo.Utc);
     }
 
     [Fact]
@@ -486,24 +478,6 @@ public class StatisticsControllerTests
                 LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(),
                 It.IsAny<InvalidOperationException>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
-    }
-
-    [Fact]
-    public async Task GetWeekdayAverages_WhenTheTimezoneLookupFails_FailsRatherThanBucketingOnUtc()
-    {
-        SetupGlucose(Array.Empty<SensorGlucose>());
-        _therapySettingsResolverMock
-            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("db down"));
-
-        var act = () => CreateController().GetWeekdayAverages(
-            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            new DateTime(2026, 1, 8, 0, 0, 0, DateTimeKind.Utc));
-
-        await act.Should().ThrowAsync<InvalidOperationException>();
-        _statsServiceMock.Verify(
-            s => s.CalculateWeekdayAverages(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()),
-            Times.Never);
     }
 
     [Fact]

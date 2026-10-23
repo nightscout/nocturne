@@ -15,9 +15,11 @@
   import HeatmapLegend from "$lib/components/reports/year-overview/HeatmapLegend.svelte";
   import YearHeatmap from "$lib/components/reports/year-overview/YearHeatmap.svelte";
   import VisibleChart from "$lib/components/reports/year-overview/VisibleChart.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import type {
     DailySummaryDay,
     GriTimelinePeriod,
+    TimeZoneUnavailableReason,
     YearOverviewColorPreferences,
   } from "$api/generated/nocturne-api-client";
   import { getUnitLabel } from "$lib/utils/formatting";
@@ -57,6 +59,7 @@
   let loadingYears = $state<Set<number>>(new Set());
   let failedYears = $state<Set<number>>(new Set());
   let metadataLoaded = $state(false);
+  let timeZoneReason = $state<TimeZoneUnavailableReason>();
   let metadataLoading = $state(false);
   let sentinelElements: Record<number, HTMLDivElement | undefined> = $state({});
 
@@ -327,6 +330,7 @@
         if (disposed) return;
         availableYears = result.years ?? [];
         availableDataSources = result.availableDataSources ?? [];
+        timeZoneReason = result.timeZoneUnavailableReason;
         metadataLoaded = true;
       } catch (err) {
         console.error("Failed to load available years:", err);
@@ -633,8 +637,16 @@
       </div>
     {/if}
 
-    <!-- No data state -->
-    {#if metadataLoaded && sortedYears.length === 0}
+    {#if metadataLoaded && sortedYears.length === 0 && timeZoneReason}
+      <div class="py-20">
+        <p class="text-sm text-muted-foreground">
+          <TimeZoneNote reason={timeZoneReason}>
+            This report cannot group the data into local days and years.
+          </TimeZoneNote>
+        </p>
+      </div>
+    {:else if metadataLoaded && sortedYears.length === 0}
+      <!-- No data state -->
       <div
         class="flex items-center justify-center py-20"
         in:fade={{ duration: 300 }}

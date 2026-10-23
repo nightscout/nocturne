@@ -55,6 +55,12 @@ public interface ISignalRBroadcastService
     /// </summary>
     Task BroadcastClearAlarmAsync(NotificationBase clearAlarm);
 
+    /// <summary>
+    /// Broadcast an alert engine alarm or all-clear to alarm subscribers, as one of the
+    /// <see cref="Alerts.EngineAlarmEvents"/>.
+    /// </summary>
+    Task BroadcastEngineAlarmAsync(string eventName, NotificationBase notify);
+
     // Storage events
     /// <summary>
     /// Broadcast storage create event (replaces socket.io 'create' event in storage namespace)
@@ -378,6 +384,21 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error broadcasting clear alarm");
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task BroadcastEngineAlarmAsync(string eventName, NotificationBase notify)
+    {
+        try
+        {
+            await _alarmHubContext
+                .Clients.Group(TenantGroup("alarm-subscribers"))
+                .SendCoreAsync(eventName, new[] { notify });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting {EventName}", eventName);
         }
     }
 

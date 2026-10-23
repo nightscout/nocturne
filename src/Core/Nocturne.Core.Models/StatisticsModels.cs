@@ -918,7 +918,8 @@ public enum HourlyClockBasis
 }
 
 /// <summary>
-/// Why no tenant timezone was available, so the hours fell back to each reading's own offset.
+/// Why no tenant timezone was available. What a report does without one is stated on the response
+/// that carries the reason.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<TimeZoneUnavailableReason>))]
 public enum TimeZoneUnavailableReason
@@ -1022,6 +1023,18 @@ public class WeekdayGlucoseSlot
     /// readings in the slot is absent.
     /// </summary>
     public Dictionary<DayOfWeek, double> Mean { get; set; } = new();
+}
+
+/// <summary>
+/// Response for <c>GET /api/v4/Statistics/weekday-averages</c>.
+/// </summary>
+public class WeekdayAveragesResponse
+{
+    /// <summary>The populated slots in time-of-day order.</summary>
+    public List<WeekdayGlucoseSlot> Slots { get; set; } = [];
+
+    /// <summary>Why <see cref="Slots"/> is empty; null when the tenant's timezone resolved.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -1796,6 +1809,9 @@ public class DailyBasalBolusRatioResponse
     /// by it. Not the length of the requested window.
     /// </summary>
     public int DaysWithData { get; set; }
+
+    /// <summary>Why <see cref="DailyData"/> is empty; null when the tenant's timezone resolved.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -1915,6 +1931,12 @@ public class BasalAnalysisResponse
     public string StartDate { get; set; } = string.Empty;
 
     public string EndDate { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Why <see cref="HourlyPercentiles"/> is empty; null when the tenant's timezone resolved. The
+    /// other figures do not depend on the local clock and are served either way.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>
@@ -2042,6 +2064,9 @@ public class HourlyInsulinDeliveryResponse
     /// End date of the analysis period
     /// </summary>
     public string EndDate { get; set; } = string.Empty;
+
+    /// <summary>Why <see cref="Hours"/> is empty; null when the tenant's timezone resolved.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 public class SiteChangeImpactAnalysis

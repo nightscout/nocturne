@@ -159,6 +159,25 @@ public sealed class FindQuery
     public IReadOnlySet<string> Fields =>
         EnumerateAll(_root).Where(cond => cond.Op != UnsupportedOp).Select(cond => cond.Path).ToHashSet(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The query with every condition on field <paramref name="from"/> naming <paramref name="to"/>
+    /// instead, at any depth. Conditions already on <paramref name="to"/> are kept, so a record must
+    /// satisfy both.
+    /// </summary>
+    public FindQuery WithFieldRenamed(string from, string to) =>
+        new(RenameField(_root, from, to), _boundFields, FromMills, ToMills);
+
+    private static Group RenameField(Group group, string from, string to) =>
+        group with
+        {
+            Children = group.Children.Select(child => child switch
+            {
+                Condition cond when cond.Path == from => (object)(cond with { Path = to }),
+                Group nested => RenameField(nested, from, to),
+                _ => child,
+            }).ToList(),
+        };
+
     private static IEnumerable<Condition> EnumerateAll(Group group) =>
         group.Children.SelectMany(child => child switch
         {
@@ -190,7 +209,7 @@ public sealed class FindQuery
         // Only a single consistent equality can be excepted: contradictory equalities on the
         // field (a match-nothing query) must stay residual, or excepting them would silently
         // widen the query — and, on the delete path, widen it into a whole-window sweep.
-        if (exceptField != null && GetEqualityValue(exceptField, comparison) is null)
+        if (exceptField != null && GetPushableEquality(exceptField, comparison) is null)
             exceptField = null;
 
         return CountResidual(_root, andReachable: true, exceptField, comparison, _boundFields) > 0;
@@ -208,6 +227,23 @@ public sealed class FindQuery
         {
             if (cond.Op != "$eq")
                 return null;
+            if (found != null && found != cond.StringValue)
+                return null;
+            found = cond.StringValue;
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// The single value every AND-reachable <c>$eq</c> condition on <paramref name="field"/> agrees
+    /// on, or <c>null</c> when there is none or they contradict. Other operators on the field are
+    /// ignored: they stay residual, so a store narrowed by this value is still tested by them.
+    /// </summary>
+    public string? GetPushableEquality(string field, StringComparison comparison = StringComparison.OrdinalIgnoreCase)
+    {
+        string? found = null;
+        foreach (var cond in EnumerateAndReachable(_root).Where(c => c.Op == "$eq" && c.Path.Equals(field, comparison)))
+        {
             if (found != null && found != cond.StringValue)
                 return null;
             found = cond.StringValue;

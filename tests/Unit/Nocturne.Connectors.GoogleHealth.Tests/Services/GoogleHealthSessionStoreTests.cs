@@ -52,15 +52,15 @@ public class GoogleHealthSessionStoreTests : IDisposable
     [InlineData(true)]
     public async Task Clearing_drops_the_session_its_client_and_a_former_tenant_secret(bool removeAccount)
     {
-        var store = Store(out _);
+        var store = Store(out var configurations);
 
         await store.ClearAsync(removeAccount, Guid.NewGuid(), revoke: false, default);
 
         secrets.Keys.Should().BeEquivalentTo(removeAccount ? [] : new[] { "accountKey" });
-        savedEnabled.Should().BeFalse();
+        configurations.Verify(service => service.SaveConfigurationAsync(
+            It.IsAny<string>(), It.IsAny<JsonDocument>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private bool? savedEnabled;
     private readonly Guid tenantId = Guid.NewGuid();
     private readonly Mock<IGoogleHealthGrantHolders> holders = new();
     private readonly List<bool> tokenStoredWhenHeld = [];
@@ -85,11 +85,6 @@ public class GoogleHealthSessionStoreTests : IDisposable
                 ConnectorName = "GoogleHealth",
                 Configuration = JsonDocument.Parse("""{"enabled":true}""")
             });
-        configurations.Setup(service => service.SaveConfigurationAsync(
-                "GoogleHealth", It.IsAny<JsonDocument>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) =>
-                savedEnabled = document.RootElement.GetProperty("enabled").GetBoolean())
-            .ReturnsAsync(new ConnectorConfigurationResponse());
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(accessor => accessor.IsResolved).Returns(true);
         tenant.SetupGet(accessor => accessor.TenantId).Returns(tenantId);

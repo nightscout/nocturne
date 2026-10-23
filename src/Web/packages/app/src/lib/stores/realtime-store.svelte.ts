@@ -201,8 +201,11 @@ export class RealtimeStore {
   now = $state(Date.now());
   private timeInterval: ReturnType<typeof setTimeout> | null = null;
 
-  /** Track when we last received data for backfill purposes */
-  private lastDataReceived = Date.now();
+  /** When any realtime event last arrived; drives the stale check and the backfill skip. */
+  private lastEventReceived = Date.now();
+
+  /** Where the next backfill starts, before the margin and the newest-held check. */
+  private backfillCursor = Date.now();
 
   /** Track if sync/backfill is in progress (public for UI feedback) */
   isSyncing = $state(false);
@@ -234,6 +237,9 @@ export class RealtimeStore {
   private foregroundPollInterval: ReturnType<typeof setInterval> | null = null;
   private static readonly FOREGROUND_POLL_MS = 60_000; // re-check staleness every 60s while visible
   private static readonly DATA_STALE_MS = 5 * 60_000;
+
+  /** How far before the cursor a backfill reaches, to catch records stamped just before an event. */
+  private static readonly BACKFILL_MARGIN_MS = 2 * 60_000;
 
   /** Pending refetch of the records the backend derives from devicestatus. */
   private decompositionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -451,7 +457,7 @@ export class RealtimeStore {
           if (!this.websocketClient.isConnected) this.scheduleDisconnectNotice();
           console.log('[RealtimeStore] Page became visible, backfilling missed data...');
           // Always backfill on return — timers are unreliable in hidden tabs
-          // so we can't trust lastDataReceived to be meaningful
+          // so we can't trust lastEventReceived to be meaningful
           this.performBackfillIfNeeded(true);
         } else {
           this.clearDisconnectNotice();
@@ -659,12 +665,13 @@ export class RealtimeStore {
   private handleDataUpdate(event: DataUpdateEvent): void {
     if (!Array.isArray(event.data)) return;
 
-    this.updateLastDataReceived();
+    this.markEventReceived();
 
     // Merge new entries with existing ones, avoiding duplicates
     const newEntries = unseenEntries(this.entries, event.data);
 
     if (newEntries.length > 0) {
+      this.advanceBackfillCursor();
       this.entries = [...this.entries, ...newEntries]
         .sort((a, b) => (b.mills || 0) - (a.mills || 0))
         .slice(0, 1000); // Keep last 1000 entries
@@ -676,7 +683,10 @@ export class RealtimeStore {
     const windowStart = Date.now() - DAY_MS;
     const apply = <T extends { id?: string; mills?: number }>(records: T[], cap: number): T[] => {
       const next = withRecordEvent<T>(records, action, event, windowStart, cap);
-      if (next !== records) this.treatmentRevision++;
+      if (next !== records) {
+        this.treatmentRevision++;
+        if (action !== "delete") this.advanceBackfillCursor();
+      }
       return next;
     };
     switch (event.recordType) {
@@ -703,7 +713,7 @@ export class RealtimeStore {
 
   /** Handle storage create events */
   private handleCreate(event: StorageEvent): void {
-    this.updateLastDataReceived();
+    this.markEventReceived();
     if (event.recordType) {
       this.handleRecordEvent("create", event);
       return;
@@ -720,6 +730,7 @@ export class RealtimeStore {
       );
 
       if (!exists) {
+        this.advanceBackfillCursor();
         this.deviceStatuses = [doc, ...this.deviceStatuses]
           .sort((a, b) => (b.mills || 0) - (a.mills || 0))
           .slice(0, 100);
@@ -753,6 +764,7 @@ export class RealtimeStore {
     const additions = unseenEntries(this.entries, pending);
 
     if (additions.length > 0) {
+      this.advanceBackfillCursor();
       this.entries = [...additions.reverse(), ...this.entries]
         .sort((a, b) => (b.mills || 0) - (a.mills || 0))
         .slice(0, 1000);
@@ -1116,7 +1128,7 @@ export class RealtimeStore {
   }
 
   private isDataStale(): boolean {
-    return Date.now() - this.lastDataReceived > RealtimeStore.DATA_STALE_MS;
+    return Date.now() - this.lastEventReceived > RealtimeStore.DATA_STALE_MS;
   }
 
   /** Stop background polling (called when tab becomes visible again) */
@@ -1183,22 +1195,22 @@ export class RealtimeStore {
       return;
     }
 
-    const timeSinceLastData = Date.now() - this.lastDataReceived;
-    const fiveMinutes = 5 * 60 * 1000;
+    const timeSinceLastData = Date.now() - this.lastEventReceived;
 
     // Only backfill if more than 5 minutes have passed (unless forced)
-    if (!force && timeSinceLastData < fiveMinutes) {
+    if (!force && timeSinceLastData < RealtimeStore.DATA_STALE_MS) {
       console.log('[RealtimeStore] Data is recent, skipping backfill');
       return;
     }
 
     this.isSyncing = true;
-    const backfillFrom = this.lastDataReceived;
+    const backfillFrom = this.backfillStart();
     const { from: backfillFromDate, to: nowDate } = untilNow(backfillFrom);
+    const backfillTo = Date.parse(nowDate);
 
     console.log(
       `[RealtimeStore] Backfilling data from ${backfillFromDate} ` +
-      `(${Math.round(timeSinceLastData / 60000)} minutes ago)`
+      `(${Math.round((Date.now() - backfillFrom) / 60000)} minutes ago)`
     );
 
     try {
@@ -1300,8 +1312,7 @@ export class RealtimeStore {
         }
       }
 
-      // Update last data received timestamp
-      this.lastDataReceived = Date.now();
+      this.backfillCursor = backfillTo;
 
       if (backfilledCount > 0) {
         console.log(`[RealtimeStore] Backfilled ${backfilledCount} items`);
@@ -1317,12 +1328,37 @@ export class RealtimeStore {
     }
   }
 
+  /** Any realtime event, whether or not it changed a held array. */
+  private markEventReceived(): void {
+    this.lastEventReceived = Date.now();
+  }
+
+  /** A realtime event merged a record into a held array. */
+  private advanceBackfillCursor(): void {
+    this.backfillCursor = Date.now();
+  }
+
   /**
-   * Update the last data received timestamp.
-   * Called when new data arrives via WebSocket.
+   * Where a backfill starts: a margin before the cursor or the newest held record, whichever is
+   * earlier, and never before the store's window.
    */
-  private updateLastDataReceived(): void {
-    this.lastDataReceived = Date.now();
+  private backfillStart(): number {
+    const newestHeld = Math.max(
+      this.newestMills(this.entries),
+      this.newestMills(this.deviceStatuses),
+      this.newestMills(this.boluses),
+      this.newestMills(this.carbIntakes),
+      this.newestMills(this.bgChecks),
+      this.newestMills(this.notes),
+      this.newestMills(this.deviceEvents),
+      this.newestMills(this.apsSnapshots)
+    );
+    const earliest = Math.min(this.backfillCursor, newestHeld);
+    return Math.max(earliest - RealtimeStore.BACKFILL_MARGIN_MS, Date.now() - DAY_MS);
+  }
+
+  private newestMills(records: readonly { mills?: number }[]): number {
+    return records.reduce((newest, record) => Math.max(newest, record.mills ?? 0), 0);
   }
 }
 

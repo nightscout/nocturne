@@ -779,10 +779,18 @@ public class DDataService : IDDataService
     {
         try
         {
-            var deviceStatuses = await _projectionService.GetAsync(
+            var window = new Dictionary<string, object>
+            {
+                ["created_at"] = new Dictionary<string, string>
+                {
+                    ["$gte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp - DeviceStatusWindowMills).UtcDateTime.ToString("o"),
+                    ["$lte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime.ToString("o"),
+                },
+            };
+            var deviceStatuses = await _projectionService.GetMatchingAsync(
+                DeviceStatusProjectionService.ParseFind(JsonSerializer.Serialize(window)),
                 count: 1000,
                 skip: 0,
-                find: CreatedAtWindow(timestamp - DeviceStatusWindowMills, timestamp),
                 ct: cancellationToken
             );
             ddata.DeviceStatus = deviceStatuses.ToList();

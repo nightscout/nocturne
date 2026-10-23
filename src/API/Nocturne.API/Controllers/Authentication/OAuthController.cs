@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Extensions;
 using Nocturne.API.Models.OAuth;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Docs;
 using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
 
@@ -967,8 +968,7 @@ public class OAuthController : ControllerBase
     /// <summary>
     /// RFC 7591 Dynamic Client Registration. Allows third-party native apps
     /// (Trio, xDrip+, Loop, AAPS) to obtain a tenant-scoped <c>client_id</c> without
-    /// any out-of-band registration step. Idempotent on <c>(tenant, software_id)</c> for a
-    /// registration whose redirect URIs the existing client already accepts; see
+    /// any out-of-band registration step. Every call issues a new client; see
     /// <see cref="OAuthClientService.RegisterClientAsync"/>.
     /// </summary>
     /// <param name="request">The client registration metadata including redirect URIs, scopes, and optional software ID.</param>
@@ -991,6 +991,15 @@ public class OAuthController : ControllerBase
             {
                 Error = "invalid_client_metadata",
                 ErrorDescription = "Request body is required.",
+            });
+        }
+
+        if (request.SoftwareId == ScalarAuthProvider.ScalarSoftwareId)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_client_metadata",
+                ErrorDescription = "This software_id is reserved.",
             });
         }
 

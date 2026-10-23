@@ -3022,7 +3022,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_oauth_clients_tenant_client_id");
 
                     b.HasIndex("TenantId", "SoftwareId")
-                        .IsUnique()
                         .HasDatabaseName("ix_oauth_clients_tenant_software_id")
                         .HasFilter("\"software_id\" IS NOT NULL");
 

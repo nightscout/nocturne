@@ -13,6 +13,7 @@ namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 /// </summary>
 public class MarkDeviceApprovedGrantsFixture : IAsyncLifetime
 {
+    private const string MigrationUnderTest = "20261021093245_MarkDeviceApprovedGrants";
     private const string PriorMigration = "20261021070559_UnverifyKnownClientsWithForeignRedirectUris";
 
     internal static readonly Guid TenantA = Guid.Parse("11111111-1111-7111-8111-111111111111");
@@ -28,7 +29,7 @@ public class MarkDeviceApprovedGrantsFixture : IAsyncLifetime
 
         await MigrateToAsync(PriorMigration);
         await SeedAsync();
-        await MigrateToAsync(targetMigration: null);
+        await MigrateToAsync(MigrationUnderTest);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;

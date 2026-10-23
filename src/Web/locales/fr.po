@@ -30513,3 +30513,11 @@ msgstr ""
 #: src/routes/(authenticated)/reports/loop-analysis/settings-evidence/+page.svelte
 msgid "Settings evidence - Loop Analysis - Nocturne Reports"
 msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Silence an alarm for all members for a time"
+msgstr ""
+
+#: src/lib/constants/scope-labels.svelte.ts
+msgid "Silence Alarms"
+msgstr ""

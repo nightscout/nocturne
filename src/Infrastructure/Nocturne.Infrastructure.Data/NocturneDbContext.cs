@@ -1604,7 +1604,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<OAuthClientEntity>()
             .HasIndex(c => new { c.TenantId, c.SoftwareId })
             .HasDatabaseName("ix_oauth_clients_tenant_software_id")
-            .IsUnique()
             .HasFilter("\"software_id\" IS NOT NULL");
 
         modelBuilder

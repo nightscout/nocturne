@@ -133,7 +133,7 @@ public class DDataServiceTests
         await _ddataService.GetDDataAsync(at.ToUnixTimeMilliseconds(), CancellationToken.None);
 
         _mockGroupRepo.Verify(x => x.GetAsync(
-            at.UtcDateTime.AddDays(-1), at.UtcDateTime, It.IsAny<string?>(),
+            at.UtcDateTime.AddDays(-1), at.UtcDateTime.AddTicks(TimeSpan.TicksPerMillisecond - TimeSpan.TicksPerMicrosecond), It.IsAny<string?>(),
             It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()));
     }
 

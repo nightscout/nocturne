@@ -477,8 +477,8 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
-    /// Creates a tenant the way the product does, with its roles, its Public subject membership and
-    /// its bundled OAuth clients, and returns its id.
+    /// Creates a tenant the way the product does, with its roles and its Public subject membership,
+    /// and returns its id.
     /// </summary>
     public static async Task<Guid> SeedTenantAsync(
         ApiIntegrationTestFixture fixture,

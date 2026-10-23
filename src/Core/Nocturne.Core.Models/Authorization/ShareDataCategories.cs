@@ -97,7 +97,7 @@ public static class ShareDataCategories
     /// rows a history-clamped member still reads only the last 24 hours of. <c>notes</c> holds the
     /// Note and Announcement treatments the legacy treatment reads serve;
     /// <c>compression_low_suggestions</c> holds glucose-derived regions (nadir, drop rate) of past
-    /// nights.
+    /// nights. A <c>discrepancy_details</c> row is recorded with its analysis, so the two clamp together.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> HiddenRecencyColumns =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -108,6 +108,8 @@ public static class ShareDataCategories
             ["lab_hba1c_results"] = "measured_at",
             ["system_events"] = "mills",
             ["device_clock_observations"] = "observed_at",
+            ["discrepancy_analyses"] = "analysis_timestamp",
+            ["discrepancy_details"] = "recorded_at",
         };
 
     /// <summary>
@@ -168,7 +170,9 @@ public static class ShareDataCategories
     /// while the clamp shows the parent: by the parent's column in <see cref="RecencyColumns"/> or
     /// <see cref="HiddenSpanEndColumns"/>. A <c>treatment_foods</c> line is part of its carb intake and
     /// follows an edit to the intake's time with no copy to keep in step; the stages and samples of a
-    /// sleep session stay with the session, so a night shown is shown whole.
+    /// sleep session stay with the session, so a night shown is shown whole. A mute or a delivery of an
+    /// open alert stays visible however old it is: clamped by its own time, a mute would lapse and the
+    /// member would be paged again, and a pending delivery would drop out of the bot's queue.
     /// </summary>
     /// <remarks>
     /// The policy tests the clamp before the <c>EXISTS</c>, so only a clamped reader runs it, as one
@@ -181,6 +185,8 @@ public static class ShareDataCategories
             ["treatment_foods"] = new("carb_intakes", "carb_intake_id"),
             ["sleep_stages"] = new("sleep_sessions", "sleep_session_id"),
             ["sleep_biometric_samples"] = new("sleep_sessions", "sleep_session_id"),
+            ["alert_excursion_mutes"] = new("alert_excursions", "alert_excursion_id"),
+            ["alert_deliveries"] = new("alert_instances", "alert_instance_id"),
         };
 
     private static readonly IReadOnlyDictionary<string, string> TableToScope = BuildTableToScope();

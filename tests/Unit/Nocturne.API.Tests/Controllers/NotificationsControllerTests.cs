@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V1;
+using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Notifications;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -15,6 +16,7 @@ namespace Nocturne.API.Tests.Controllers;
 public class NotificationsControllerTests
 {
     private readonly Mock<INotificationV1Service> _mockNotificationService;
+    private readonly Mock<IAlarmAckHandler> _mockAckHandler = new();
     private readonly Mock<ILogger<NotificationsController>> _mockLogger;
     private readonly NotificationsController _controller;
 
@@ -24,6 +26,7 @@ public class NotificationsControllerTests
         _mockLogger = new Mock<ILogger<NotificationsController>>();
         _controller = new NotificationsController(
             _mockNotificationService.Object,
+            _mockAckHandler.Object,
             _mockLogger.Object
         );
 
@@ -42,38 +45,21 @@ public class NotificationsControllerTests
     }
 
     private void SetupAck(bool success = true) =>
-        _mockNotificationService
-            .Setup(s =>
-                s.AckNotificationAsync(
-                    It.IsAny<NotificationAckRequest>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(
-                new NotificationAckResponse { Success = success, Message = "ack result" }
-            );
+        _mockAckHandler
+            .Setup(h => h.AckAsync(
+                It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotificationAckResponse { Success = success, Message = "ack result" });
 
     [Fact]
-    public async Task AckNotification_WithQueryParameters_AcksAndAnswersPlainOk()
+    public async Task AckNotification_WithQueryParameters_AcksThroughTheAlarmAckHandler()
     {
         SetupAck();
 
         var result = await _controller.AckNotification(2, "alarms", "1800000", CancellationToken.None);
 
         AssertPlainText(result, 200, "OK");
-        _mockNotificationService.Verify(
-            s =>
-                s.AckNotificationAsync(
-                    It.Is<NotificationAckRequest>(r =>
-                        r.Level == 2
-                        && r.Group == "alarms"
-                        && r.Time == 1800000
-                        && r.SendClear == true
-                    ),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
+        _mockAckHandler.Verify(h => h.AckAsync(2, "alarms", 1800000, It.IsAny<CancellationToken>()), Times.Once);
+        _mockNotificationService.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -85,43 +71,31 @@ public class NotificationsControllerTests
 
         await _controller.AckNotification(1, group, null, CancellationToken.None);
 
-        _mockNotificationService.Verify(
-            s =>
-                s.AckNotificationAsync(
-                    It.Is<NotificationAckRequest>(r => r.Group == "default"),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
+        _mockAckHandler.Verify(
+            h => h.AckAsync(1, "default", It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
-    [InlineData(null, null)]
-    [InlineData("", null)]
-    [InlineData("0", null)]
-    [InlineData("abc", null)]
-    [InlineData("NaN", null)]
+    [InlineData(null, NotificationAckRequest.DefaultSilenceTimeMs)]
+    [InlineData("", NotificationAckRequest.DefaultSilenceTimeMs)]
+    [InlineData("0", NotificationAckRequest.DefaultSilenceTimeMs)]
+    [InlineData("abc", NotificationAckRequest.DefaultSilenceTimeMs)]
+    [InlineData("NaN", NotificationAckRequest.DefaultSilenceTimeMs)]
     [InlineData("1800000", 1800000)]
     [InlineData("1800000.9", 1800000)]
     [InlineData("-5000", -5000)]
     [InlineData("99999999999", int.MaxValue)]
     [InlineData("Infinity", int.MaxValue)]
     [InlineData("-99999999999", int.MinValue)]
-    public async Task AckNotification_ReadsTimeAsNightscoutDoes(string? time, int? expected)
+    public async Task AckNotification_ReadsTimeAsNightscoutDoes(string? time, int expected)
     {
         SetupAck();
 
         var result = await _controller.AckNotification(1, "default", time, CancellationToken.None);
 
         AssertPlainText(result, 200, "OK");
-        _mockNotificationService.Verify(
-            s =>
-                s.AckNotificationAsync(
-                    It.Is<NotificationAckRequest>(r => r.Time == expected),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Once
-        );
+        _mockAckHandler.Verify(
+            h => h.AckAsync(1, "default", expected, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -133,14 +107,7 @@ public class NotificationsControllerTests
         var result = await _controller.AckNotification(level, "default", null, CancellationToken.None);
 
         AssertPlainText(result, 400, "Level must be 1 (WARN) or 2 (URGENT)");
-        _mockNotificationService.Verify(
-            s =>
-                s.AckNotificationAsync(
-                    It.IsAny<NotificationAckRequest>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Never
-        );
+        _mockAckHandler.VerifyNoOtherCalls();
     }
 
     [Fact]

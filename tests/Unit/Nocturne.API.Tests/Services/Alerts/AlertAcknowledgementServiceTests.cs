@@ -28,6 +28,7 @@ public class AlertAcknowledgementServiceTests
     private readonly DbContextOptions<NocturneDbContext> _options;
     private readonly TestDbContextFactory _factory;
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
+    private readonly Mock<IEngineAlarmRelay> _alarmRelay = new();
     private readonly Mock<ITenantMemberService> _members = new();
     private readonly AlertAcknowledgementService _service;
 
@@ -53,6 +54,7 @@ public class AlertAcknowledgementServiceTests
             _factory,
             _broadcast.Object,
             _members.Object,
+            _alarmRelay.Object,
             NullLogger<AlertAcknowledgementService>.Instance);
     }
 
@@ -252,6 +254,9 @@ public class AlertAcknowledgementServiceTests
                 It.Is<DeviceActionIntent>(i =>
                     i.ExcursionId == excursionId && i.Acknowledged && i.Intent == "acknowledged")),
             Times.Once);
+        _alarmRelay.Verify(
+            r => r.ClearIfQuietAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()),
+            Times.Never, "a member's mute never clears the tenant's alarm");
     }
 
     [Fact]
@@ -281,6 +286,7 @@ public class AlertAcknowledgementServiceTests
             new TestDbContextFactory(racingOptions) { TenantOverride = _tenantId },
             _broadcast.Object,
             _members.Object,
+            _alarmRelay.Object,
             NullLogger<AlertAcknowledgementService>.Instance);
 
         var outcome = await service.AcknowledgeExcursionAsync(
@@ -311,6 +317,11 @@ public class AlertAcknowledgementServiceTests
             .Status.Should().Be("acknowledged");
         (await MutesAsync()).Should().BeEmpty();
         _broadcast.Verify(x => x.BroadcastAlertEventAsync("alert_acknowledged", It.IsAny<object>()), Times.Once);
+        _alarmRelay.Verify(
+            r => r.ClearIfQuietAsync(
+                It.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { excursionId })),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

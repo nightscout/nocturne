@@ -42,6 +42,7 @@ public class AlertSnoozeServiceTests
     private readonly Mock<IAlertDeliveryService> _delivery = new();
     private readonly Mock<ISensorContextEnricher> _enricher = new();
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
+    private readonly Mock<IEngineAlarmRelay> _alarmRelay = new();
     private readonly Mock<ICanonicalGlucoseService> _canonical = new();
 
     public AlertSnoozeServiceTests()
@@ -71,6 +72,7 @@ public class AlertSnoozeServiceTests
         _enricher.Object,
         _canonical.Object,
         _broadcast.Object,
+        _alarmRelay.Object,
         _time,
         NullLogger<AlertSnoozeService>.Instance);
 
@@ -150,6 +152,11 @@ public class AlertSnoozeServiceTests
         var instance = await InstanceAsync(seeded.InstanceId);
         instance.SnoozedUntil.Should().Be(Now.AddMinutes(15));
         instance.SnoozeCount.Should().Be(1);
+        _alarmRelay.Verify(
+            r => r.ClearIfQuietAsync(
+                It.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { seeded.ExcursionId })),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
@@ -245,6 +252,8 @@ public class AlertSnoozeServiceTests
 
         outcome.Result.Should().Be(SnoozeResult.LimitReached);
         (await InstanceAsync(seeded.InstanceId)).SnoozedUntil.Should().BeNull();
+        _alarmRelay.Verify(
+            r => r.ClearIfQuietAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]

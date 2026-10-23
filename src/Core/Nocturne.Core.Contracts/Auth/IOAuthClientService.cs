@@ -28,17 +28,9 @@ public interface IOAuthClientService
     );
 
     /// <summary>
-    /// Seed the bundled known-app directory into a tenant's oauth_clients.
-    /// Called during tenant provisioning so well-known apps (Trio, xDrip+, etc.)
-    /// have pre-verified client rows with is_known=true. Idempotent: existing
-    /// rows for the same software_id are left untouched.
-    /// </summary>
-    Task SeedKnownOAuthClientsAsync(Guid tenantId, CancellationToken ct = default);
-
-    /// <summary>
-    /// RFC 7591 Dynamic Client Registration. Registers a new OAuth client, or returns the existing
-    /// row for the same (tenant, software_id) pair when it already accepts every submitted
-    /// redirect URI.
+    /// RFC 7591 Dynamic Client Registration. Every call registers a new client, so two installs of
+    /// one app never share a <c>client_id</c> or a grant; an app keeps the <c>client_id</c> it was
+    /// issued for as long as it refreshes its tokens.
     /// </summary>
     /// <param name="softwareId">RFC 7591 software_id (reverse-DNS), or null for anonymous clients.</param>
     /// <param name="clientName">Display name shown on the consent screen.</param>
@@ -47,7 +39,7 @@ public interface IOAuthClientService
     /// <param name="redirectUris">Allowed redirect URIs (must already be validated).</param>
     /// <param name="scope">Space-delimited scope string.</param>
     /// <param name="createdFromIp">IP address that performed the registration request.</param>
-    /// <returns>The registered or existing <see cref="OAuthClientInfo"/>.</returns>
+    /// <returns>The registered <see cref="OAuthClientInfo"/>.</returns>
     Task<OAuthClientInfo> RegisterClientAsync(
         string? softwareId,
         string? clientName,

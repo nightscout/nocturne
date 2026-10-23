@@ -101,6 +101,10 @@ public static class ScopeTranslator
             Scope.SleepReadWrite,
         ],
 
+        // Nightscout's alarm ack permission, which silences an alarm and grants nothing else.
+        ["notifications:*:ack"] = [Scope.AlertsAcknowledge],
+        ["*:*:ack"] = [Scope.AlertsAcknowledge],
+
         // Wildcard reads. "*:*:read" is how Nightscout's own seeded "readable" role spells it.
         ["api:*:read"] = ReadEverything,
         ["*:*:read"] = ReadEverything,
@@ -246,6 +250,10 @@ public static class ScopeTranslator
                     permissions.Add("api:notifications:read");
                     permissions.Add("api:notifications:create");
                     permissions.Add("api:notifications:update");
+                    break;
+
+                case Scope.AlertsAcknowledge:
+                    permissions.Add("notifications:*:ack");
                     break;
 
                 case Scope.ReportsRead:

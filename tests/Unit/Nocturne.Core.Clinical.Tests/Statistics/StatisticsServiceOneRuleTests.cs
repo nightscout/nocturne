@@ -44,6 +44,21 @@ public class StatisticsServiceOneRuleTests
         }
     }
 
+    [Fact]
+    public void BasalAnalysis_WithoutATimeZone_BucketsNoHourAndKeepsTheOtherFigures()
+    {
+        var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(1);
+        var tempBasals = new[] { TempBasalAt(1.5, start.AddHours(1), start.AddHours(2)) };
+
+        var analysis = _sut.CalculateBasalAnalysis(tempBasals, start, end, Mills(end), null);
+
+        analysis.HourlyPercentiles.Should().BeEmpty();
+        analysis.Stats.Count.Should().Be(1);
+        analysis.Stats.AvgRate.Should().Be(1.5);
+        analysis.Stats.TotalDelivered.Should().Be(1.5);
+    }
+
     [Theory]
     [InlineData(7.4, 7)]
     [InlineData(7.6, 8)]
@@ -81,8 +96,8 @@ public class StatisticsServiceOneRuleTests
         var tempBasals = new[] { TempBasalAt(1.0, start.AddDays(1).AddHours(8), start.AddDays(1).AddHours(9)) };
         var boluses = new[] { new Bolus { Insulin = 2.0, Timestamp = start.AddDays(4).AddHours(12) } };
 
-        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, [], tempBasals, Mills(end));
-        var hourly = _sut.CalculateHourlyInsulinDelivery(tempBasals, boluses, [], start, end, Mills(end));
+        var ratios = _sut.CalculateDailyBasalBolusRatios(boluses, [], tempBasals, Mills(end), TimeZoneInfo.Utc);
+        var hourly = _sut.CalculateHourlyInsulinDelivery(tempBasals, boluses, [], start, end, Mills(end), TimeZoneInfo.Utc);
         var delivery = _sut.CalculateInsulinDeliveryStatistics(boluses, [], tempBasals, [], start, end, Mills(end));
 
         ratios.DaysWithData.Should().Be(2);

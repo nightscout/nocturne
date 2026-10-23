@@ -6,7 +6,6 @@ using Nocturne.API.Services.Caching;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data;
@@ -19,15 +18,16 @@ namespace Nocturne.API.Services.Analytics;
 /// Service for aggregating data overview statistics across all data types.
 /// Provides year-level availability and day-level <see cref="Entry"/> and <see cref="Treatment"/>
 /// record counts for heatmap and calendar visualization in the dashboard.
-/// All timestamps are resolved to the user's timezone via <see cref="ITherapySettingsResolver.GetTimezoneAsync"/>.
+/// Days, months and years are the user's local ones, from <see cref="TenantClockResolver"/>. With no
+/// timezone each report is empty and carries the reason.
 /// </summary>
 /// <seealso cref="IDataOverviewService"/>
 /// <seealso cref="IStatisticsService"/>
-/// <seealso cref="ITherapySettingsResolver"/>
+/// <seealso cref="TenantClockResolver"/>
 public class DataOverviewService : IDataOverviewService
 {
     private readonly INocturneDbContextFactory _factory;
-    private readonly ITherapySettingsResolver _therapySettingsResolver;
+    private readonly TenantClockResolver _tenantClock;
     private readonly IStatisticsService _statisticsService;
     private readonly ITenantCache _cache;
     private readonly ILogger<DataOverviewService> _logger;
@@ -38,31 +38,23 @@ public class DataOverviewService : IDataOverviewService
     /// <param name="factory">Tenant-scoped DbContext factory. Each query leases a context whose
     /// per-category share visibility is carried to Row-Level Security, so public shares see only
     /// the categories they were granted.</param>
-    /// <param name="therapySettingsResolver">Resolver for the user's active timezone and therapy settings.</param>
+    /// <param name="tenantClock">Resolver for the tenant's local clock.</param>
     /// <param name="statisticsService">Statistics service for per-day metric aggregation.</param>
     /// <param name="cache">Cross-request cache for the eHbA1c timeline, keyed per year and source.</param>
     /// <param name="logger">The logger instance.</param>
     public DataOverviewService(
         INocturneDbContextFactory factory,
-        ITherapySettingsResolver therapySettingsResolver,
+        TenantClockResolver tenantClock,
         IStatisticsService statisticsService,
         ITenantCache cache,
         ILogger<DataOverviewService> logger
     )
     {
         _factory = factory;
-        _therapySettingsResolver = therapySettingsResolver;
+        _tenantClock = tenantClock;
         _statisticsService = statisticsService;
         _cache = cache;
         _logger = logger;
-    }
-
-    private async Task<TimeZoneInfo> GetUserTimeZoneAsync(CancellationToken cancellationToken = default)
-    {
-        var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-        return !string.IsNullOrEmpty(tzId)
-            ? TimeZoneHelper.GetTimeZoneInfoFromId(tzId)
-            : TimeZoneInfo.Utc;
     }
 
     /// <inheritdoc />
@@ -97,9 +89,9 @@ public class DataOverviewService : IDataOverviewService
                 allDataSources.Add(ds);
         }
 
-        var tz = await GetUserTimeZoneAsync(cancellationToken);
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
         var years = Array.Empty<int>();
-        if (globalMin.HasValue && globalMax.HasValue)
+        if (clock.Zone is { } tz && globalMin.HasValue && globalMax.HasValue)
         {
             var minLocal = TimeZoneInfo.ConvertTime(
                 DateTimeOffset.FromUnixTimeMilliseconds(globalMin.Value),
@@ -127,6 +119,7 @@ public class DataOverviewService : IDataOverviewService
             AvailableDataSources = allDataSources
                 .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
+            TimeZoneUnavailableReason = clock.Reason,
         };
     }
 
@@ -138,15 +131,13 @@ public class DataOverviewService : IDataOverviewService
         var reads = new YearMetricReads();
         dataSources = dataSources?.ToArray();
         var result = new YearSummaryResponse();
-        try
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
+        if (clock.Zone is not { } zone)
         {
-            reads.TimeZone = await GetUserTimeZoneAsync(cancellationToken);
-        }
-        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
-        {
-            _logger.LogWarning(ex, "Failed to resolve timezone for year {Year}", year);
+            result.TimeZoneUnavailableReason = clock.Reason;
             return result;
         }
+        reads.TimeZone = zone;
 
         async Task ReadDailyAsync()
         {
@@ -175,6 +166,11 @@ public class DataOverviewService : IDataOverviewService
         return result;
     }
 
+    private async Task<TenantClock> ClockAsync(YearMetricReads? reads, CancellationToken cancellationToken) =>
+        reads?.TimeZone is { } zone
+            ? new TenantClock(zone, null)
+            : await _tenantClock.ResolveAsync(cancellationToken);
+
     /// <inheritdoc />
     public Task<DailySummaryResponse> GetDailySummaryAsync(
         int year,
@@ -195,11 +191,17 @@ public class DataOverviewService : IDataOverviewService
             dataSources != null ? string.Join(",", dataSources) : "(all)"
         );
 
+        var clock = await ClockAsync(reads, cancellationToken);
+        if (clock.Zone is not { } tz)
+            return new DailySummaryResponse
+            {
+                Year = year,
+                DataSources = dataSources,
+                TimeZoneUnavailableReason = clock.Reason,
+            };
+
         await using var context = await _factory.CreateAsync(cancellationToken);
 
-        var tz = reads?.TimeZone ?? await GetUserTimeZoneAsync(cancellationToken);
-        if (reads is not null)
-            reads.TimeZone = tz;
         var (startUtc, endUtc) = LocalYearBoundsUtc(year, tz);
 
         var dayGrouping = LocalDayGrouping.Create(year, tz);
@@ -304,11 +306,12 @@ public class DataOverviewService : IDataOverviewService
             dataSources != null ? string.Join(",", dataSources) : "(all)"
         );
 
+        var clock = await ClockAsync(reads, cancellationToken);
+        if (clock.Zone is not { } tz)
+            return new GriTimelineResponse { Year = year, TimeZoneUnavailableReason = clock.Reason };
+
         await using var context = await _factory.CreateAsync(cancellationToken);
 
-        var tz = reads?.TimeZone ?? await GetUserTimeZoneAsync(cancellationToken);
-        if (reads is not null)
-            reads.TimeZone = tz;
         var hasFilter = dataSources is { Length: > 0 };
         var periods = new List<GriTimelinePeriod>();
 
@@ -481,6 +484,10 @@ public class DataOverviewService : IDataOverviewService
             dataSources != null ? string.Join(",", dataSources.Select(SanitizeForLog)) : "(all)"
         );
 
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
+        if (clock.Zone is not { } tz)
+            return new EHbA1cTimelineResponse { Year = year, TimeZoneUnavailableReason = clock.Reason };
+
         var sourceKey = dataSources is { Length: > 0 }
             ? string.Join(",", dataSources.OrderBy(s => s, StringComparer.OrdinalIgnoreCase))
             : "all";
@@ -492,7 +499,6 @@ public class DataOverviewService : IDataOverviewService
 
         await using var context = await _factory.CreateAsync(cancellationToken);
 
-        var tz = await GetUserTimeZoneAsync(cancellationToken);
         var hasFilter = dataSources is { Length: > 0 };
 
         var localYearStart = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);

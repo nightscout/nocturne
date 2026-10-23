@@ -20,6 +20,7 @@
   import CalendarHeader from "$lib/components/calendar/CalendarHeader.svelte";
   import CalendarMonthSummary from "$lib/components/calendar/CalendarMonthSummary.svelte";
   import CalendarDayCell from "$lib/components/calendar/CalendarDayCell.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import { coachmark } from "@nocturne/coach";
   import { coachFor } from "$lib/coach-marks/copy.svelte";
   import { groupBy, indexBy } from "$lib/utils/collections";
@@ -387,6 +388,13 @@
                    calendar with them, which is served by a separate query. -->
               <p class="text-sm text-muted-foreground pb-2">
                 Tracker data is unavailable, so site and sensor changes are not shown.
+              </p>
+            {/if}
+            {#if punchCardQuery.current?.timeZoneUnavailableReason}
+              <p class="text-sm text-muted-foreground">
+                <TimeZoneNote reason={punchCardQuery.current.timeZoneUnavailableReason}>
+                  This report cannot show each day's time in range, glucose and insulin.
+                </TimeZoneNote>
               </p>
             {/if}
             <div class="flex-1 overflow-x-auto print:overflow-visible flex flex-col">

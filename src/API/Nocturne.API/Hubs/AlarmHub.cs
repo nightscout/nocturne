@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
+using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Identity;
-using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 
@@ -18,11 +18,19 @@ public class AlarmHub : TenantAwareHub
 {
     private readonly ILogger<AlarmHub> _logger;
     private readonly IHubTokenAuthorizer _tokenAuthorizer;
+    private readonly IAlarmAckHandler _ackHandler;
+    private readonly IEngineAlarmRelay _alarmRelay;
 
-    public AlarmHub(ILogger<AlarmHub> logger, IHubTokenAuthorizer tokenAuthorizer)
+    public AlarmHub(
+        ILogger<AlarmHub> logger,
+        IHubTokenAuthorizer tokenAuthorizer,
+        IAlarmAckHandler ackHandler,
+        IEngineAlarmRelay alarmRelay)
     {
         _logger = logger;
         _tokenAuthorizer = tokenAuthorizer;
+        _ackHandler = ackHandler;
+        _alarmRelay = alarmRelay;
     }
 
     /// <summary>
@@ -91,6 +99,8 @@ public class AlarmHub : TenantAwareHub
                 Context.ConnectionId
             );
 
+            await ReplayHighestAlarmAsync();
+
             return new { read = true, success = true };
         }
         catch (Exception ex)
@@ -110,12 +120,13 @@ public class AlarmHub : TenantAwareHub
     }
 
     /// <summary>
-    /// Acknowledge alarms from clients (replaces socket.io 'ack' event)
+    /// Acknowledge alarms from clients (replaces socket.io 'ack' event), through
+    /// <see cref="IAlarmAckHandler"/>.
     /// </summary>
     /// <param name="level">Alarm level to acknowledge</param>
     /// <param name="group">Alarm group to acknowledge</param>
     /// <param name="silenceTime">Time to silence alarm in milliseconds</param>
-    [HubScope(Scope.AlertsReadWrite)]
+    [HubScope(Scope.AlertsAcknowledge)]
     public async Task Ack(int level, string group, int silenceTime)
     {
         try
@@ -127,27 +138,7 @@ public class AlarmHub : TenantAwareHub
                 silenceTime
             );
 
-            // Get notification service from DI container
-            var serviceProvider = Context.GetHttpContext()?.RequestServices;
-            var notificationV1Service = serviceProvider?.GetService<INotificationV1Service>();
-
-            if (notificationV1Service == null)
-            {
-                _logger.LogWarning("NotificationV1Service not available for alarm acknowledgment");
-                return;
-            }
-
-            // Create acknowledgment request
-            var ackRequest = new NotificationAckRequest
-            {
-                Level = level,
-                Group = group,
-                Time = silenceTime,
-                SendClear = true, // Send clear notification after acknowledgment
-            };
-
-            // Process the acknowledgment through the notification service
-            var ackResult = await notificationV1Service.AckNotificationAsync(ackRequest);
+            var ackResult = await _ackHandler.AckAsync(level, group, silenceTime, Context.ConnectionAborted);
 
             if (ackResult.Success)
             {
@@ -225,6 +216,45 @@ public class AlarmHub : TenantAwareHub
                 }
             );
         }
+    }
+
+    /// <summary>
+    /// Sends the caller the alarm still sounding, as the HA hub replays failed deliveries: the engine
+    /// raises an excursion once, so a subscriber that connects after it opened would never hear it.
+    /// </summary>
+    private async Task ReplayHighestAlarmAsync()
+    {
+        try
+        {
+            if (await _alarmRelay.HighestAlarmingAsync(Context.ConnectionAborted) is { } alarm)
+            {
+                await Clients.Caller.SendCoreAsync(alarm.EventName, [alarm.Notify], Context.ConnectionAborted);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("Replay of the sounding alarm to {ConnectionId} cancelled", Context.ConnectionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to replay the sounding alarm to {ConnectionId}", Context.ConnectionId);
+        }
+    }
+
+    /// <summary>
+    /// The notify of the alarm still sounding, or null. The bridge asks for it each time a Socket.IO
+    /// client subscribes to <c>/alarm</c>, since that client joins after the bridge's own subscribe
+    /// replayed it into an empty room.
+    /// </summary>
+    [HubScope(Scope.GlucoseRead)]
+    public async Task<NotificationBase?> CurrentAlarm()
+    {
+        if (HubAuthorizationState.Resolve(Context) is not { IsInfrastructure: true })
+        {
+            throw new HubException("CurrentAlarm requires the instance key.");
+        }
+
+        return (await _alarmRelay.HighestAlarmingAsync(Context.ConnectionAborted))?.Notify;
     }
 
     public override async Task OnConnectedAsync()

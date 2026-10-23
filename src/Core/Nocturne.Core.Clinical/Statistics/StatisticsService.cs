@@ -2418,12 +2418,12 @@ public class StatisticsService : IStatisticsService
         IEnumerable<Bolus> algorithmBoluses,
         IEnumerable<TempBasal> tempBasals,
         long untilMills,
-        TimeZoneInfo? userTimeZone = null,
+        TimeZoneInfo userTimeZone,
         IEnumerable<BasalInjection>? basalInjections = null,
         IEnumerable<CarbIntake>? carbIntakes = null
     )
     {
-        var tz = userTimeZone ?? TimeZoneInfo.Utc;
+        var tz = userTimeZone;
         var bolusList = boluses.ToList();
         var dailyData = new Dictionary<string, (double Basal, double Manual, double Automatic, double Carbs)>();
 
@@ -2546,7 +2546,8 @@ public class StatisticsService : IStatisticsService
     /// Hourly percentiles are computed by duration-weighted overlap of each TempBasal's interval
     /// with each <paramref name="userTimeZone"/>-local hour-of-day bucket: a TempBasal that runs
     /// 13:55–14:25 local contributes 5 minutes to bucket 13 and 25 minutes to bucket 14. When
-    /// <paramref name="userTimeZone"/> is null, buckets are UTC hour-of-day.
+    /// <paramref name="userTimeZone"/> is null there is no local hour to bucket on, so the hourly
+    /// percentiles are empty and every other figure is unaffected.
     /// </summary>
     public BasalAnalysisResponse CalculateBasalAnalysis(
         IEnumerable<TempBasal> tempBasals,
@@ -2556,7 +2557,6 @@ public class StatisticsService : IStatisticsService
         TimeZoneInfo? userTimeZone = null
     )
     {
-        var tz = userTimeZone ?? TimeZoneInfo.Utc;
         var tempBasalList = ClipOverlappingTempBasals(tempBasals, untilMills);
         var dayCount = WindowDays(startDate, endDate);
 
@@ -2578,7 +2578,8 @@ public class StatisticsService : IStatisticsService
             allRates.Add(rate);
             totalDelivered += GetTempBasalInsulin(tb) ?? 0;
 
-            DistributeAcrossHourOfDay(tb.StartMills, tb.EndMills!.Value, rate, tz, hourlyRates);
+            if (userTimeZone is not null)
+                DistributeAcrossHourOfDay(tb.StartMills, tb.EndMills!.Value, rate, userTimeZone, hourlyRates);
 
             if (tb.Origin != TempBasalOrigin.Scheduled && tb.Origin != TempBasalOrigin.Inferred)
             {
@@ -2641,7 +2642,7 @@ public class StatisticsService : IStatisticsService
         {
             Stats = basalStats,
             TempBasalInfo = tempBasalInfo,
-            HourlyPercentiles = hourlyPercentiles,
+            HourlyPercentiles = userTimeZone is null ? [] : hourlyPercentiles,
             WindowDays = dayCount,
             StartDate = startDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             EndDate = endDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -2656,11 +2657,11 @@ public class StatisticsService : IStatisticsService
         DateTime startDate,
         DateTime endDate,
         long untilMills,
-        TimeZoneInfo? userTimeZone = null,
+        TimeZoneInfo userTimeZone,
         IEnumerable<BasalInjection>? basalInjections = null,
         IEnumerable<BasalSegment>? profileBasalSegments = null)
     {
-        var tz = userTimeZone ?? TimeZoneInfo.Utc;
+        var tz = userTimeZone;
 
         var scheduledBasal = new double[24];
         var tempBasal = new double[24];

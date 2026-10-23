@@ -5,6 +5,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 
@@ -24,35 +25,40 @@ namespace Nocturne.API.Controllers.V1;
 public class NotificationsController : ControllerBase
 {
     private readonly INotificationV1Service _notificationService;
+    private readonly IAlarmAckHandler _ackHandler;
     private readonly ILogger<NotificationsController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="NotificationsController"/>.
     /// </summary>
     /// <param name="notificationService">Service handling legacy V1 notification operations.</param>
+    /// <param name="ackHandler">Silences an acknowledged alarm.</param>
     /// <param name="logger">Logger instance.</param>
     public NotificationsController(
         INotificationV1Service notificationService,
+        IAlarmAckHandler ackHandler,
         ILogger<NotificationsController> logger
     )
     {
         _notificationService = notificationService;
+        _ackHandler = ackHandler;
         _logger = logger;
     }
 
     /// <summary>
-    /// Acknowledge a notification alarm to silence it
-    /// Implements the /notifications/ack endpoint from legacy notifications-api.js
+    /// Acknowledge a notification alarm to silence it for everyone, through
+    /// <see cref="IAlarmAckHandler"/>. Implements the /notifications/ack endpoint from legacy
+    /// notifications-api.js.
     /// </summary>
     /// <param name="level">Alarm level to acknowledge (1=WARN, 2=URGENT)</param>
-    /// <param name="group">Alarm group, defaulting to <c>default</c></param>
+    /// <param name="group">Alarm group, defaulting to <c>default</c>. An engine alarm's group is its excursion id.</param>
     /// <param name="time">Milliseconds to silence the alarm. Absent, zero or not a number means 30 minutes.</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <response code="200">The body is <c>OK</c>, also when the alarm was already snoozed.</response>
+    /// <response code="200">The body is <c>OK</c> whatever the outcome.</response>
     /// <response code="400">The level is not 1 or 2.</response>
     [HttpGet("notifications/ack")]
     [Authorize]
-    [RequireScope(Scope.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsAcknowledge)]
     [NightscoutEndpoint("/api/v1/notifications/ack")]
     [Produces("text/plain")]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
@@ -71,21 +77,17 @@ public class NotificationsController : ControllerBase
             return PlainText(StatusCodes.Status400BadRequest, "Level must be 1 (WARN) or 2 (URGENT)");
         }
 
-        await _notificationService.AckNotificationAsync(
-            new NotificationAckRequest
-            {
-                Level = level,
-                Group = string.IsNullOrEmpty(group) ? "default" : group,
-                Time = ParseSilenceTime(time),
-                SendClear = true,
-            },
+        await _ackHandler.AckAsync(
+            level,
+            string.IsNullOrEmpty(group) ? "default" : group,
+            ParseSilenceTime(time),
             cancellationToken
         );
 
         return PlainText(StatusCodes.Status200OK, "OK");
     }
 
-    private static int? ParseSilenceTime(string? time)
+    private static int ParseSilenceTime(string? time)
     {
         if (
             !double.TryParse(time, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
@@ -93,11 +95,12 @@ public class NotificationsController : ControllerBase
             || parsed == 0
         )
         {
-            return null;
+            return NotificationAckRequest.DefaultSilenceTimeMs;
         }
 
-        // NIGHTSCOUT-COMPAT: Nightscout silences for any number of milliseconds. The service holds
-        // the silence time as an int, so a longer silence is capped at about 24.8 days.
+        // NIGHTSCOUT-COMPAT: Nightscout silences for any number of milliseconds. The silence time
+        // is held as an int, so a longer silence is capped at about 24.8 days, and an engine
+        // alarm's snooze at a day.
         return (int)Math.Clamp(parsed, int.MinValue, int.MaxValue);
     }
 

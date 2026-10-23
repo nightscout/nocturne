@@ -51,7 +51,6 @@ public class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Alerts/AlertSweepService.cs: AlertSweepService.ProcessTenantSnoozesAsync",
         "src/API/Nocturne.API/Services/Alerts/RuleScopeClassBackfillService.cs: RuleScopeClassBackfillService.ExecuteAsync",
         "src/API/Nocturne.API/Services/Auth/AuthorizationSeedService.cs: AuthorizationSeedService.StartAsync",
-        "src/API/Nocturne.API/Services/Auth/OAuthCodeCleanupService.cs: OAuthCodeCleanupService.CleanupExpiredCodesAsync",
         "src/API/Nocturne.API/Services/Auth/OidcProviderService.cs: OidcProviderService.SyncConfigProvidersAsync",
         "src/API/Nocturne.API/Services/BackgroundServices/ApsSnapshotCurvesBackfillService.cs: ApsSnapshotCurvesBackfillService.ExecuteAsync",
         "src/API/Nocturne.API/Services/BackgroundServices/CompressionLowDetectionService.cs: CompressionLowDetectionService.ComputeNextRunDelayAsync",

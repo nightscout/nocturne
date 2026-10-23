@@ -31,7 +31,7 @@ public class StatisticsServiceHourlyDeliveryTests
         };
 
         var result = _sut.CalculateHourlyInsulinDelivery(
-            tempBasals, [], [], StartDate, EndDate, Mills(EndDate));
+            tempBasals, [], [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.DaysWithData.Should().Be(1);
         result.Hours[10].Basal.Should().Be(1.2);
@@ -51,7 +51,7 @@ public class StatisticsServiceHourlyDeliveryTests
         };
 
         var result = _sut.CalculateHourlyInsulinDelivery(
-            tempBasals, [], [], StartDate, EndDate, Mills(EndDate));
+            tempBasals, [], [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.Hours[10].Basal.Should().Be(0.5);
         result.Hours[11].Basal.Should().Be(0.5);
@@ -104,7 +104,7 @@ public class StatisticsServiceHourlyDeliveryTests
         };
 
         var result = _sut.CalculateHourlyInsulinDelivery(
-            tempBasals, [], [], StartDate, EndDate, Mills(EndDate));
+            tempBasals, [], [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.DaysWithData.Should().Be(2, "only two days have delivery data");
         foreach (var hour in result.Hours)
@@ -123,7 +123,7 @@ public class StatisticsServiceHourlyDeliveryTests
         };
 
         var result = _sut.CalculateHourlyInsulinDelivery(
-            tempBasals, [], [], StartDate, EndDate, Mills(EndDate));
+            tempBasals, [], [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.Hours[8].ScheduledBasal.Should().Be(0.5);
         result.Hours[8].TempBasal.Should().Be(0);
@@ -138,7 +138,7 @@ public class StatisticsServiceHourlyDeliveryTests
         var algorithmBoluses = new[] { MakeBolus(0.4, Utc(2024, 1, 1, 9, 5)) };
 
         var result = _sut.CalculateHourlyInsulinDelivery(
-            [], boluses, algorithmBoluses, StartDate, EndDate, Mills(EndDate));
+            [], boluses, algorithmBoluses, StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.Hours[8].ManualBolus.Should().Be(5.0);
         result.Hours[8].AutomaticBolus.Should().Be(0);
@@ -160,7 +160,7 @@ public class StatisticsServiceHourlyDeliveryTests
         };
 
         var result = _sut.CalculateHourlyInsulinDelivery(
-            [], boluses, [], StartDate, EndDate, Mills(EndDate));
+            [], boluses, [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.DaysWithData.Should().Be(2);
         result.Hours[12].ManualBolus.Should().Be(3.0);
@@ -187,7 +187,7 @@ public class StatisticsServiceHourlyDeliveryTests
         };
 
         var result = _sut.CalculateHourlyInsulinDelivery(
-            tempBasals, boluses, [], StartDate, EndDate, Mills(EndDate));
+            tempBasals, boluses, [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.Hours[12].ScheduledBasal.Should().Be(0.5, "basal averages over its 30 covered days");
         result.Hours[12].ManualBolus.Should().Be(3.0, "boluses average over their own 2 data days");
@@ -198,7 +198,7 @@ public class StatisticsServiceHourlyDeliveryTests
     public void NoData_ReturnsZeroedHours()
     {
         var result = _sut.CalculateHourlyInsulinDelivery(
-            [], [], [], StartDate, EndDate, Mills(EndDate));
+            [], [], [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.Hours.Should().HaveCount(24);
         result.DaysWithData.Should().Be(0);
@@ -218,7 +218,7 @@ public class StatisticsServiceHourlyDeliveryTests
             MakeBolus(2.0, Utc(2024, 1, 2, 14, 0)),
         };
 
-        var result = _sut.CalculateHourlyInsulinDelivery(tempBasals, boluses, [], StartDate, EndDate, Mills(EndDate));
+        var result = _sut.CalculateHourlyInsulinDelivery(tempBasals, boluses, [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         var total = result.TotalDeliveryPeriods;
         total.Morning.Units.Should().Be(3.0);
@@ -245,7 +245,7 @@ public class StatisticsServiceHourlyDeliveryTests
             MakeTempBasal(rate: 0.004, startUtc: Utc(2024, 1, 1, 0, 0), endUtc: Utc(2024, 1, 2, 0, 0), origin: TempBasalOrigin.Scheduled),
         };
 
-        var result = _sut.CalculateHourlyInsulinDelivery(tempBasals, [], [], StartDate, EndDate, Mills(EndDate));
+        var result = _sut.CalculateHourlyInsulinDelivery(tempBasals, [], [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.Hours.Should().OnlyContain(h => h.Basal == 0, "each hour rounds to nothing on its own");
         result.BasalPeriods.Morning.Units.Should().Be(0.02);
@@ -257,7 +257,7 @@ public class StatisticsServiceHourlyDeliveryTests
     [Fact]
     public void PeriodBlocks_WithNoDelivery_AreZeroWithNoShare()
     {
-        var result = _sut.CalculateHourlyInsulinDelivery([], [], [], StartDate, EndDate, Mills(EndDate));
+        var result = _sut.CalculateHourlyInsulinDelivery([], [], [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.TotalDeliveryPeriods.DailyTotal.Should().Be(0);
         result.TotalDeliveryPeriods.Morning.Percent.Should().Be(0);
@@ -274,7 +274,7 @@ public class StatisticsServiceHourlyDeliveryTests
         };
 
         var result = _sut.CalculateHourlyInsulinDelivery(
-            tempBasals, [], [], StartDate, EndDate, Mills(EndDate), profileBasalSegments: profile);
+            tempBasals, [], [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc, profileBasalSegments: profile);
 
         result.Hours[10].Basal.Should().Be(0);
         result.Hours[10].ProfileBasalRate.Should().Be(1.0);
@@ -292,7 +292,7 @@ public class StatisticsServiceHourlyDeliveryTests
         };
 
         var result = _sut.CalculateHourlyInsulinDelivery(
-            [], [], [], StartDate, EndDate, Mills(EndDate), profileBasalSegments: profile);
+            [], [], [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc, profileBasalSegments: profile);
 
         result.Hours.Should().OnlyContain(h => h.ProfileBasalRate == 0.9, "three days at 0.8 and one at 1.2");
     }
@@ -317,7 +317,7 @@ public class StatisticsServiceHourlyDeliveryTests
     [Fact]
     public void ProfileBasalRate_WithoutAProfile_IsZero()
     {
-        var result = _sut.CalculateHourlyInsulinDelivery([], [], [], StartDate, EndDate, Mills(EndDate));
+        var result = _sut.CalculateHourlyInsulinDelivery([], [], [], StartDate, EndDate, Mills(EndDate), TimeZoneInfo.Utc);
 
         result.Hours.Should().OnlyContain(h => h.ProfileBasalRate == 0);
     }

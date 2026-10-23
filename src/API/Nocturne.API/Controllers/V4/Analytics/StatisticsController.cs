@@ -537,17 +537,21 @@ public class StatisticsController : ControllerBase
     /// <param name="startDate">Start of the window (inclusive, UTC).</param>
     /// <param name="endDate">End of the window (exclusive, UTC).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The populated slots in time-of-day order.</returns>
+    /// <returns>The populated slots in time-of-day order, or no slots and why when the tenant has no timezone.</returns>
     [HttpGet("weekday-averages")]
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
     [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
-    public async Task<ActionResult<IEnumerable<WeekdayGlucoseSlot>>> GetWeekdayAverages(
+    public async Task<ActionResult<WeekdayAveragesResponse>> GetWeekdayAverages(
         [FromQuery] DateTime startDate,
         [FromQuery] DateTime endDate,
         CancellationToken cancellationToken = default
     )
     {
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
+        if (clock.Zone is not { } tz)
+            return Ok(new WeekdayAveragesResponse { TimeZoneUnavailableReason = clock.Reason });
+
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
@@ -555,12 +559,10 @@ public class StatisticsController : ControllerBase
         var rawGlucose = (await _sensorGlucoseRepository.GetForAnalyticsAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
         var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
 
-        // Unlike the hourly reports this one has no per-reading fallback, so a failed lookup fails
-        // the request rather than bucketing a database outage onto UTC.
-        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(
-            await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken));
-
-        return Ok(_statisticsService.CalculateWeekdayAverages(entries, tz));
+        return Ok(new WeekdayAveragesResponse
+        {
+            Slots = _statisticsService.CalculateWeekdayAverages(entries, tz).ToList(),
+        });
     }
 
     /// <summary>
@@ -962,7 +964,7 @@ public class StatisticsController : ControllerBase
     /// <summary>
     /// Calculate daily basal/bolus ratio statistics for a date range, with each day's carbs
     /// </summary>
-    /// <returns>Daily basal/bolus ratio breakdown and carb totals, with averages</returns>
+    /// <returns>Daily basal/bolus ratio breakdown and carb totals, with averages; no days and the reason when the tenant has no timezone</returns>
     [HttpGet("daily-basal-bolus-ratios")]
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
@@ -972,6 +974,10 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
+        if (clock.Zone is not { } tz)
+            return Ok(new DailyBasalBolusRatioResponse { TimeZoneUnavailableReason = clock.Reason });
+
         var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
@@ -980,11 +986,6 @@ public class StatisticsController : ControllerBase
         var (boluses, algorithmBoluses, tempBasals, basalInjections) =
             await FetchInsulinRecordsAsync(startDt, endDt, cancellationToken, carbTask);
         var carbs = await carbTask;
-
-        var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-        var tz = !string.IsNullOrEmpty(tzId)
-            ? TimeZoneHelper.GetTimeZoneInfoFromId(tzId)
-            : TimeZoneInfo.Utc;
 
         var result = _statisticsService.CalculateDailyBasalBolusRatios(
             boluses,
@@ -1021,10 +1022,9 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-        var tz = !string.IsNullOrEmpty(tzId)
-            ? TimeZoneHelper.GetTimeZoneInfoFromId(tzId)
-            : TimeZoneInfo.Utc;
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
+        if (clock.Zone is not { } tz)
+            return Ok(new PunchCardResponse { TimeZoneUnavailableReason = clock.Reason });
 
         var startLocalDate = startDate.ToDateTime(TimeOnly.MinValue);
         var endLocalDate = endDate.ToDateTime(TimeOnly.MinValue);
@@ -1292,16 +1292,16 @@ public class StatisticsController : ControllerBase
 
         await AddScheduledBasalFallbackAsync(tempBasals, startUtc, endUtc, recordedBasal: null, cancellationToken);
 
-        var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-        var userTz = string.IsNullOrEmpty(tzId) ? null : TimeZoneHelper.GetTimeZoneInfoFromId(tzId);
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
 
         var result = _statisticsService.CalculateBasalAnalysis(
             tempBasals,
             startUtc,
             endUtc,
             UntilMills(endUtc),
-            userTz
+            clock.Zone
         );
+        result.TimeZoneUnavailableReason = clock.Reason;
         return Ok(result);
     }
 
@@ -1316,7 +1316,7 @@ public class StatisticsController : ControllerBase
     /// <param name="startDate">Start date of the analysis period (UTC)</param>
     /// <param name="endDate">End date of the analysis period (UTC)</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>24 hourly averages, the period totals and the number of days with data</returns>
+    /// <returns>24 hourly averages, the period totals and the number of days with data; none of them and the reason when the tenant has no timezone</returns>
     [HttpGet("hourly-insulin-delivery")]
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
@@ -1329,6 +1329,15 @@ public class StatisticsController : ControllerBase
         var startUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
         var endUtc = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
 
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
+        if (clock.Zone is not { } userTz)
+            return Ok(new HourlyInsulinDeliveryResponse
+            {
+                StartDate = startUtc.ToString("yyyy-MM-dd"),
+                EndDate = endUtc.ToString("yyyy-MM-dd"),
+                TimeZoneUnavailableReason = clock.Reason,
+            });
+
         var profileSegmentsTask = ReadProfileBasalSegmentsAsync(startUtc, endUtc, cancellationToken);
         var (boluses, algorithmBoluses, tempBasals, basalInjections) =
             await FetchInsulinRecordsAsync(startUtc, endUtc, cancellationToken, profileSegmentsTask);
@@ -1336,9 +1345,6 @@ public class StatisticsController : ControllerBase
         var profileSegments = await profileSegmentsTask;
         await AddScheduledBasalFallbackAsync(
             tempBasals, startUtc, endUtc, basalInjections, cancellationToken, profileSegments);
-
-        var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-        var userTz = string.IsNullOrEmpty(tzId) ? null : TimeZoneHelper.GetTimeZoneInfoFromId(tzId);
 
         var result = _statisticsService.CalculateHourlyInsulinDelivery(
             tempBasals,

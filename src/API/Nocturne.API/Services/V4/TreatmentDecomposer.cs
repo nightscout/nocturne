@@ -144,7 +144,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// fallback); without one the treatment is left unidentified rather than risk a wrong key.
     /// A lowercase <c>id</c> is deliberately not an identity; see <see cref="TreatmentClientId"/>.
     /// </summary>
-    private static void NormalizeIdentity(Treatment treatment)
+    internal static void NormalizeIdentity(Treatment treatment)
     {
         if (!string.IsNullOrEmpty(treatment.Id))
             return;
@@ -162,17 +162,17 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     }
 
     /// <summary>
-    /// Computes a deterministic identifier for an identifier-less treatment by hashing its
-    /// defining fields. Every field that distinguishes one real event from another is included
-    /// (event type, exact time, source, and all dose/value fields), so only byte-identical
-    /// re-uploads of the same event collapse — distinct events never share an id.
-    /// </summary>
-    /// <summary>
     /// <see cref="Treatment.Absolute"/> as it read before it stopped reading through
     /// <see cref="Treatment.Rate"/> beside a percent, so ids and fingerprints already stored still match.
     /// </summary>
     private static double? HashedAbsolute(Treatment t) => t.Absolute ?? t.Rate;
 
+    /// <summary>
+    /// Computes a deterministic identifier for an identifier-less treatment by hashing its
+    /// defining fields. Every field that distinguishes one real event from another is included
+    /// (event type, exact time, source, and all dose/value fields), so only byte-identical
+    /// re-uploads of the same event collapse — distinct events never share an id.
+    /// </summary>
     internal static string ComputeSyntheticId(Treatment t)
     {
         var canonical = string.Join(
@@ -228,12 +228,6 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             && !ProduceNote && !ProduceBolusCalc && !ProduceDeviceEvent && !DelegateToStateSpan;
     }
 
-    /// <summary>
-    /// Classifies which v4 records a legacy <see cref="Treatment"/> decomposes into, based on its
-    /// <see cref="Treatment.EventType"/> and the insulin/carb data present. This mapping is shared
-    /// by <see cref="DecomposeAsync"/> and <see cref="DecomposeBatchAsync"/> so it lives in exactly
-    /// one place.
-    /// </summary>
     private static string? SanitizeForLog(string? value)
     {
         return value?
@@ -241,6 +235,12 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             .Replace("\n", string.Empty);
     }
 
+    /// <summary>
+    /// Classifies which v4 records a legacy <see cref="Treatment"/> decomposes into, based on its
+    /// <see cref="Treatment.EventType"/> and the insulin/carb data present. This mapping is shared
+    /// by <see cref="DecomposeAsync"/> and <see cref="DecomposeBatchAsync"/> so it lives in exactly
+    /// one place.
+    /// </summary>
     private TreatmentClassification ClassifyTreatment(Treatment treatment)
     {
         var eventType = treatment.EventType?.Trim();
@@ -1030,9 +1030,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         return new V4Models.Bolus
         {
             LegacyId = treatment.Id,
-            AdditionalProperties = UploadedEventType(
-                TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
-                treatment, keepEventType, TreatmentTypes.CorrectionBolus),
+            AdditionalProperties = UploadedPreBolus(
+                UploadedEventType(
+                    TreatmentUploadedTimestamp.AddTo(TreatmentClientId.ToRecord(treatment), treatment),
+                    treatment, keepEventType, TreatmentTypes.CorrectionBolus),
+                treatment, keepEventType),
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime,
             Insulin = treatment.Insulin ?? 0,
             Programmed = treatment.Programmed,
@@ -1076,6 +1078,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     private static Dictionary<string, object?>? UploadedEventType(
         Dictionary<string, object?>? record, Treatment treatment, bool keep, string servedWithout) =>
         keep ? TreatmentUploadedEventType.AddTo(record, treatment, servedWithout) : record;
+
+    /// <remarks>A wizard's calculation keeps the preBolus itself.</remarks>
+    private static Dictionary<string, object?>? UploadedPreBolus(
+        Dictionary<string, object?>? record, Treatment treatment, bool keep) =>
+        keep ? TreatmentUploadedPreBolus.AddTo(record, treatment) : record;
 
     internal static V4Models.BGCheck MapToBGCheck(Treatment treatment, Guid? correlationId)
     {
@@ -1300,7 +1307,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             t => string.Equals(eventType, t, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IsMealEventType(string? eventType) =>
+    internal static bool IsMealEventType(string? eventType) =>
         string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
         || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
         || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase);
@@ -2292,6 +2299,17 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(canonical)));
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> GetDeletedByUserAsync(
+        IReadOnlyCollection<string> legacyIds, CancellationToken ct = default)
+    {
+        if (legacyIds.Count == 0)
+            return new HashSet<string>();
+
+        await using var db = await _contexts.CreateAsync(ct);
+        return (await GetHeldLegacyIdsAsync(db, [.. legacyIds], ct)).DeletedByUser;
     }
 
     /// <summary>

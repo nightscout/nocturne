@@ -54,6 +54,8 @@ interface StoreInternals {
   handleDelete(event: StorageEvent): void;
   performBackfillIfNeeded(force?: boolean): Promise<void>;
   handleDataUpdate(event: { data: unknown[] }): void;
+  backfillCursor: number;
+  lastEventReceived: number;
   handleVisibilityChange: (() => void) | null;
   websocketClient: {
     connectionStatus: WebSocketConnectionStatus;
@@ -79,6 +81,7 @@ type TestStore = StoreInternals &
     | "chartThresholds"
     | "entries"
     | "boluses"
+    | "notes"
     | "currentEntry"
     | "bgDelta"
     | "previousBG"
@@ -1057,6 +1060,206 @@ describe("RealtimeStore merging", () => {
     await store.performBackfillIfNeeded(true);
 
     expect(store.boluses.map((bolus) => bolus.id)).toEqual(["b2", "b1"]);
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore backfill cursor", () => {
+  const NOW = Date.parse("2026-10-20T12:00:00Z");
+  const MINUTE = 60_000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    api.getCurrentTherapyState.mockResolvedValue({ reservoir: null });
+    api.apsGetAll.mockResolvedValue({ data: [] });
+    api.emptyPage.mockResolvedValue({ data: [] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  /** A store whose cursor and liveness clock sit `minutes` in the past, then 1 minute passes. */
+  function idleStore(minutes: number): TestStore {
+    const store = makeStore();
+    store.backfillCursor = NOW - minutes * MINUTE;
+    store.lastEventReceived = NOW - minutes * MINUTE;
+    vi.setSystemTime(NOW + MINUTE);
+    return store;
+  }
+
+  /** The `from` the first range query of the last backfill was given. */
+  const queriedFrom = () => Date.parse(api.emptyPage.mock.calls[0][0]);
+
+  it.each([
+    ["legacy treatments create", { colName: "treatments", doc: { _id: "t1", mills: NOW } }],
+    ["unheld tempBasal create", { colName: "care", recordType: "tempBasal", doc: { id: "tb", mills: NOW } }],
+    ["unheld sensorGlucose create", { colName: "glucose", recordType: "sensorGlucose", doc: { id: "s", mills: NOW } }],
+  ] as [string, StorageEvent][])("keeps the cursor still but the store live on a %s", (_name, event) => {
+    const store = idleStore(10);
+    const cursor = store.backfillCursor;
+
+    store.handleCreate(event);
+
+    expect(store.backfillCursor).toBe(cursor);
+    expect(store.lastEventReceived).toBe(Date.now());
+    store.destroy();
+  });
+
+  it("moves the cursor when a bolus is merged", () => {
+    const store = idleStore(10);
+
+    store.handleCreate({ colName: "care", recordType: "bolus", doc: { id: "b1", insulin: 1, mills: NOW } });
+
+    expect(store.backfillCursor).toBe(Date.now());
+    store.destroy();
+  });
+
+  it("keeps the cursor still for a bolus outside the store's window", () => {
+    const store = idleStore(10);
+    const cursor = store.backfillCursor;
+
+    store.handleCreate({ colName: "care", recordType: "bolus", doc: { id: "old", insulin: 1, mills: NOW - 48 * 60 * MINUTE } });
+
+    expect(store.backfillCursor).toBe(cursor);
+    store.destroy();
+  });
+
+  it("moves the cursor when a device status is merged, and not for one already held", () => {
+    const store = idleStore(10);
+    const status = { colName: "devicestatus", doc: { _id: "d1", mills: NOW, pump: {} } };
+
+    store.handleCreate(status);
+    const merged = store.backfillCursor;
+    vi.setSystemTime(NOW + 5 * MINUTE);
+    store.handleCreate(status);
+
+    expect(merged).toBe(NOW + MINUTE);
+    expect(store.backfillCursor).toBe(merged);
+    store.destroy();
+  });
+
+  it("moves the cursor when a live data update adds a reading", () => {
+    const store = idleStore(10);
+
+    store.handleDataUpdate({ data: [{ _id: "e1", type: "sgv", sgv: 100, mills: NOW }] });
+
+    expect(store.backfillCursor).toBe(Date.now());
+    store.destroy();
+  });
+
+  it("skips an unforced backfill after an event that merged nothing, since the store is live", async () => {
+    const store = idleStore(10);
+
+    store.handleCreate({ colName: "treatments", doc: { _id: "t1", mills: NOW } });
+    await store.performBackfillIfNeeded();
+
+    expect(api.emptyPage).not.toHaveBeenCalled();
+    store.destroy();
+  });
+
+  it("fetches a treatment stamped just before an unrelated event", async () => {
+    const store = idleStore(30);
+    store.entries = [{ _id: "e0", type: "sgv", sgv: 100, mills: NOW - 30 * MINUTE }];
+    const eventAt = Date.now();
+    store.handleCreate({ colName: "treatments", doc: { _id: "t1", mills: eventAt } });
+    const missed = { id: "b-missed", mills: eventAt - 5_000 };
+    api.emptyPage.mockImplementation(async (from: string, _to: string, limit: number) => ({
+      data: limit === 500 && missed.mills >= Date.parse(from) ? [missed] : [],
+    }));
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(store.boluses.map((bolus) => bolus.id)).toEqual(["b-missed"]);
+    expect(queriedFrom()).toBeLessThan(missed.mills);
+    store.destroy();
+  });
+
+  it("starts a margin before the cursor", async () => {
+    const store = idleStore(10);
+    store.entries = [{ _id: "e0", type: "sgv", sgv: 100, mills: NOW }];
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(queriedFrom()).toBe(NOW - 10 * MINUTE - 2 * MINUTE);
+    store.destroy();
+  });
+
+  it("starts from the newest held record when it is older than the cursor", async () => {
+    const store = idleStore(10);
+    store.notes = [{ id: "n1", mills: NOW - 40 * MINUTE }] as typeof store.notes;
+    store.boluses = [{ id: "b1", mills: NOW - 20 * MINUTE }] as typeof store.boluses;
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(queriedFrom()).toBe(NOW - 20 * MINUTE - 2 * MINUTE);
+    store.destroy();
+  });
+
+  it("backfills an empty store from the 24 hour floor", async () => {
+    const store = idleStore(10);
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(queriedFrom()).toBe(Date.now() - 24 * 60 * MINUTE);
+    store.destroy();
+  });
+
+  it("moves the cursor when an update merges an unheld bolus", () => {
+    const store = idleStore(10);
+
+    store.handleUpdate({ colName: "care", recordType: "bolus", doc: { id: "b1", insulin: 1, mills: NOW } });
+
+    expect(store.boluses.map((bolus) => bolus.id)).toEqual(["b1"]);
+    expect(store.backfillCursor).toBe(Date.now());
+    store.destroy();
+  });
+
+  it("moves the cursor when an apsSnapshot is created", () => {
+    const store = idleStore(10);
+
+    store.handleCreate({ colName: "device", recordType: "apsSnapshot", doc: { id: "a1", iob: 1, mills: NOW } });
+
+    expect(store.apsSnapshots).toHaveLength(1);
+    expect(store.backfillCursor).toBe(Date.now());
+    store.destroy();
+  });
+
+  it("moves the cursor when the batched entry creates flush", () => {
+    const store = idleStore(10);
+    const cursor = store.backfillCursor;
+
+    store.handleCreate({ colName: "entries", doc: { _id: "e1", type: "sgv", sgv: 100, mills: NOW } });
+    expect(store.backfillCursor).toBe(cursor);
+    vi.advanceTimersByTime(1_000);
+
+    expect(store.entries).toHaveLength(1);
+    expect(store.backfillCursor).toBeGreaterThan(cursor);
+    store.destroy();
+  });
+
+  it("never starts before the 24 hour floor", async () => {
+    const store = idleStore(60 * 48);
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(queriedFrom()).toBe(Date.now() - 24 * 60 * MINUTE);
+    store.destroy();
+  });
+
+  it("sets the cursor to the instant the backfill began, not to when it ended", async () => {
+    const store = idleStore(10);
+    const began = Date.now();
+    api.emptyPage.mockImplementation(async () => {
+      vi.setSystemTime(began + 30_000);
+      return { data: [] };
+    });
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(store.backfillCursor).toBe(began);
     store.destroy();
   });
 });

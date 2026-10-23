@@ -13,11 +13,12 @@ const FULL_ACCESS = "*";
 
 /**
  * Implications beyond the readwrite-to-read rule: for a required scope, the
- * granted scopes that satisfy it without matching it. Mirrors the entry the
+ * granted scopes that satisfy it without matching it. Mirrors the entries the
  * server's `Scope.SatisfiedBy` carries beyond the readwrite pairs.
  */
 const EXTRA_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   "audit.read": ["audit.manage"],
+  "alerts.acknowledge": ["alerts.readwrite"],
 };
 
 /** Whether `granted` covers `required`. */
