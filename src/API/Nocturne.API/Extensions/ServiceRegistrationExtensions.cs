@@ -660,6 +660,7 @@ public static class ServiceRegistrationExtensions
         });
         services.AddScoped<IBatteryService, BatteryService>();
         services.AddScoped<IProfileWriteService, ProfileWriteService>();
+        services.AddScoped<IProfileDeletionService, ProfileDeletionService>();
         services.AddScoped<IProfileActivationResolver, Services.ProfileActivations.ProfileActivationResolver>();
         services.AddScoped<Services.ProfileActivations.ProfileActivationWriter>();
         services.AddScoped<Services.ProfileActivations.NativeProfileSwitches>();

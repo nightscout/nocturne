@@ -1,6 +1,36 @@
 [workspace]
 resolver = "3"
-members = ["nocturne-alerts-core", "nocturne-alerts-ffi"]
+members = [
+    "nocturne-alerts-core",
+    "nocturne-alerts-ffi",
+    "nocturne-watercolour-core",
+    "nocturne-watercolour-infra",
+    "nocturne-watercolour-wasm",
+]
+
+[workspace.dependencies]
+# Pinned exactly, once for every crate that binds to JS: the wasm-bindgen CLI
+# that generates the JS glue must be the same version as the library
+# (portal/scripts/build-alerts-engine.mjs reads it from Cargo.lock; the
+# docker-publish and portal-pages workflows install the CLI at this version).
+wasm-bindgen = "=0.2.128"
+
+# The watercolour CPU reference runs hundreds of ticks per test; unoptimised
+# it is an order of magnitude slower than the suite is worth waiting for.
+[profile.dev.package.nocturne-watercolour-core]
+opt-level = 2
+
+[profile.dev.package.nocturne-watercolour-infra]
+opt-level = 2
+
+# The browser build (`--profile wasm-release`): size over compile time.
+# `panic = "abort"` would drop the panic hook's messages, which are the only
+# diagnostics a user can paste, so panics stay unwinding.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
 
 # A panic is caught at the FFI boundary and fails one rule; a silently wrapped
 # integer evaluates to wrong truth.

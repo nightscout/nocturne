@@ -3,7 +3,6 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Item } from "$lib/components/ui/item";
   import { rotateShareLink, disableShareLink } from "$api/generated/shareLinks.generated.remote";
-  import Check from "@lucide/svelte/icons/check";
   import ChartLine from "@lucide/svelte/icons/chart-line";
   import Users from "@lucide/svelte/icons/users";
   import Bell from "@lucide/svelte/icons/bell";
@@ -11,6 +10,8 @@
   import Plug from "@lucide/svelte/icons/plug";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import Globe from "@lucide/svelte/icons/globe";
+  import { Artwork } from "@nocturne/watercolour";
+  import { sproutArtwork } from "$lib/watercolour-icons";
 
   let {
     path,
@@ -46,12 +47,14 @@
       title: "Invite a caretaker",
       subtitle: "Add follower access with one link",
       coachUrl: "/settings/members?coach=setup-invite",
+      useBookArtwork: false,
     },
     {
       icon: Bell,
       title: "Alerts",
       subtitle: "Set up alerts",
       coachUrl: "/alerts?coach=setup-alerts",
+      useBookArtwork: false,
     },
     ...(path === "migration"
       ? [
@@ -60,6 +63,7 @@
             title: "Your first report",
             subtitle: "Generate an AGP for your next clinic visit",
             coachUrl: "/reports?coach=setup-reports",
+            useBookArtwork: true,
           },
         ]
       : [
@@ -68,6 +72,7 @@
             title: "Connect another source",
             subtitle: "Add another device or service",
             coachUrl: "/settings/connectors?coach=setup-connectors",
+            useBookArtwork: false,
           },
         ]),
   ]);
@@ -78,13 +83,16 @@
 >
   <!-- Left column -->
   <div class="flex flex-col gap-8">
-    <!-- Celebration checkmark -->
+    <!-- Celebration -->
     <div class="pulse-wrapper relative size-24">
-      <div
-        class="size-24 rounded-full border-2 flex items-center justify-center relative border-(--onb-accent) bg-(--onb-accent-dim)"
-      >
-        <Check class="size-10 text-(--onb-accent)" />
-      </div>
+      <Artwork
+        artwork="confirmation-mark"
+        palette="moss"
+        surface="dark"
+        motion="auto"
+        autoplay="once"
+        class="size-48"
+      />
     </div>
 
     <!-- Heading -->
@@ -105,6 +113,17 @@
         </em>
       {/if}
     </h1>
+
+    {#if path === "fresh"}
+      <Artwork
+        icon={sproutArtwork}
+        palette="moss"
+        surface="dark"
+        motion="auto"
+        autoplay="once"
+        class="size-48"
+      />
+    {/if}
 
     <!-- Lead paragraph -->
     <p class="text-lg leading-relaxed text-muted-foreground max-w-130">
@@ -155,13 +174,17 @@
       {#each nextSteps as step (step.title)}
         <Item
           variant="outline"
-          class="grid grid-cols-[34px_1fr_auto]"
+          class="grid grid-cols-[auto_1fr_auto]"
           onclick={() => onNavigateWithCoach(step.coachUrl)}
         >
           <div
-            class="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-muted-foreground"
+            class="flex {step.useBookArtwork ? 'size-12' : 'h-8.5 w-8.5'} shrink-0 items-center justify-center rounded-lg text-muted-foreground"
           >
-            <step.icon class="h-4.5 w-4.5" />
+            {#if step.useBookArtwork}
+              <BookOpen class="size-6 text-primary" />
+            {:else}
+              <step.icon class="h-4.5 w-4.5" />
+            {/if}
           </div>
           <div class="flex flex-col text-left">
             <span class="text-sm font-medium">{step.title}</span>

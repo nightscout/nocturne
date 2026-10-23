@@ -63,6 +63,7 @@ public class ProfileControllerSettingsDefaultTests
             Mock.Of<ISensitivityScheduleRepository>(),
             Mock.Of<ITargetRangeScheduleRepository>(),
             Mock.Of<IProfileProjectionService>(),
+            Mock.Of<IProfileDeletionService>(),
             TempBasalTestDeps.NoReresolution()
         );
     }

@@ -191,7 +191,7 @@ public class MigrationJobService : IMigrationJobService
             "Started migration job {JobId} in {Mode} mode from {Source}",
             jobId,
             request.Mode,
-            sourceDesc
+            SanitizeForLog(sourceDesc)
         );
 
         return jobInfo;
@@ -452,6 +452,13 @@ public class MigrationJobService : IMigrationJobService
 
         return sources;
     }
+
+    /// <summary>
+    /// The source description carries the caller's Nightscout URL or Mongo database name;
+    /// stripping CR/LF keeps it from forging log lines.
+    /// </summary>
+    private static string? SanitizeForLog(string? value) =>
+        value?.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>
@@ -477,6 +484,14 @@ internal class MigrationJob
     private DateTime _startedAt;
     private DateTime? _completedAt;
     private readonly ConcurrentDictionary<string, CollectionProgress> _collectionProgress = new();
+
+    /// <summary>
+    /// Newest source timestamp this run actually brought across, for
+    /// <see cref="MigrationSourceEntity.LastMigratedDataTimestamp"/>. Collections are pulled one
+    /// after another on the job's own task, so a plain field suffices.
+    /// </summary>
+    private DateTime? _newestMigratedData;
+
     private static readonly System.Text.Json.JsonSerializerOptions s_caseInsensitiveJson = new() { PropertyNameCaseInsensitive = true };
 
     /// <summary>
@@ -640,6 +655,14 @@ internal class MigrationJob
             {
                 var source = await db.MigrationSources.FirstAsync(s => s.Id == sourceId, ct);
                 source.LastMigrationAt = _completedAt ?? DateTime.UtcNow;
+
+                // A run bounded to an older date range covers ground an earlier run already
+                // covered, so the watermark only ever advances.
+                if (_newestMigratedData is { } newest
+                    && newest > (source.LastMigratedDataTimestamp ?? DateTime.MinValue))
+                {
+                    source.LastMigratedDataTimestamp = newest;
+                }
             }
 
             await db.SaveChangesAsync(ct);
@@ -652,6 +675,12 @@ internal class MigrationJob
 
     private long MigratedCount(string collection) =>
         _collectionProgress.TryGetValue(collection, out var p) ? p.DocumentsMigrated : 0;
+
+    private void ObserveDataWatermark(DateTime? candidate)
+    {
+        if (candidate is { } stamp && stamp > (_newestMigratedData ?? DateTime.MinValue))
+            _newestMigratedData = stamp;
+    }
 
     /// <summary>
     /// Finds or creates the migration source row for this job's target. Sources dedupe per
@@ -1199,15 +1228,18 @@ internal class MigrationJob
     ///     <paramref name="Oldest"/> reads the page's oldest record, answering <c>null</c> when the
     ///     page carries no usable timestamp to page back from, <paramref name="AdmittedThrough"/>
     ///     is the latest record time the filter for a cursor admits, <paramref name="Envelope"/> is
-    ///     how far above the anchor the first page reaches, and <paramref name="AtOrBefore"/> is
-    ///     whether a record's instant is at or before the anchor.
+    ///     how far above the anchor the first page reaches, <paramref name="AtOrBefore"/> is
+    ///     whether a record's instant is at or before the anchor, and <paramref name="Newest"/>
+    ///     reads the page's newest instant, for
+    ///     <see cref="MigrationSourceEntity.LastMigratedDataTimestamp"/>.
     /// </summary>
     private sealed record PageCursor(
         Func<DateTime, string> Filter,
         Func<IReadOnlyList<ProcessableDocumentBase>, DateTime?> Oldest,
         Func<DateTime, DateTime> AdmittedThrough,
         TimeSpan Envelope,
-        Func<ProcessableDocumentBase, DateTime, bool> AtOrBefore
+        Func<ProcessableDocumentBase, DateTime, bool> AtOrBefore,
+        Func<IReadOnlyList<ProcessableDocumentBase>, DateTime?> Newest
     );
 
     /// <summary>Entries page on the numeric <c>date</c> field, which mirrors mills exactly.</summary>
@@ -1222,7 +1254,10 @@ internal class MigrationJob
         },
         to => to,
         TimeSpan.Zero,
-        (_, _) => true);
+        (_, _) => true,
+        page => page.Any(d => d.Mills > 0)
+            ? DateTimeOffset.FromUnixTimeMilliseconds(page.Max(d => d.Mills)).UtcDateTime
+            : null);
 
     /// <summary>
     ///     Every other collection pages on the ISO-8601 <c>created_at</c> string, inside the
@@ -1233,7 +1268,12 @@ internal class MigrationJob
         page => BackwardTimePager.OldestWrittenCreatedAt(page, d => d.CreatedAt),
         BackwardTimePager.CreatedAtAdmittedThrough,
         BackwardTimePager.CreatedAtOffsetEnvelope,
-        (d, anchor) => BackwardTimePager.CreatedAtWithin(d.CreatedAt, null, anchor));
+        (d, anchor) => BackwardTimePager.CreatedAtWithin(d.CreatedAt, null, anchor),
+        page => page
+            .Select(d => UploaderTimestamp.TryParse(d.CreatedAt, out var parsed)
+                ? parsed.UtcDateTime
+                : (DateTime?)null)
+            .Max());
 
     /// <summary>
     ///     A legacy collection pulled page by page over a time cursor. <paramref name="Name"/> is
@@ -1389,6 +1429,7 @@ internal class MigrationJob
                     var before = tally.DocumentsSkipped;
                     tally = tally.Add(await decompose(page, ct), collection.OneRecordPerDocument);
                     totalMigrated += page.Length - (tally.DocumentsSkipped - before);
+                    ObserveDataWatermark(collection.Cursor.Newest(page));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                 {
