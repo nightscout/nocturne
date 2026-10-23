@@ -287,9 +287,14 @@ public class AlertsController : ControllerBase
     /// <c>snooze.maxCount</c> (<see cref="Nocturne.API.Services.Alerts.SmartSnoozeConfig"/>), a count
     /// shared with the sweep's smart-snooze extensions.
     /// </summary>
+    /// <remarks>
+    /// Accepts <see cref="Scope.AlertsAcknowledge"/> as well as <see cref="Scope.AlertsReadWrite"/>:
+    /// a snooze silences the alert for everyone and changes nothing else, which is all a Nightscout
+    /// token holding <c>notifications:*:ack</c> may do.
+    /// </remarks>
     /// <seealso cref="AlertSnooze"/>
     [HttpPost("instances/{instanceId:guid}/snooze")]
-    [RequireScope(Scope.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsReadWrite, Scope.AlertsAcknowledge)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

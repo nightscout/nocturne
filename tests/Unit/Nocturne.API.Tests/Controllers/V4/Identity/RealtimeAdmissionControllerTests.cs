@@ -178,6 +178,24 @@ public class RealtimeAdmissionControllerTests
     }
 
     [Fact]
+    public void A_caller_holding_alerts_acknowledge_may_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.AlertsAcknowledge).MayAck.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_caller_holding_only_device_notify_may_not_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.DeviceNotify).MayAck.Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_caller_holding_only_glucose_read_may_not_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead).MayAck.Should().BeFalse();
+    }
+
+    [Fact]
     public void A_read_only_follower_may_not_silence_alarms()
     {
         AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.AlertsRead).MayAck.Should().BeFalse();

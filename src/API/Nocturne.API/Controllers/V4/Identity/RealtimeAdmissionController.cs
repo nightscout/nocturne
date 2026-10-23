@@ -43,7 +43,7 @@ public class RealtimeAdmissionController : ControllerBase
                 ? [.. RealtimeCategories.All.Where(authorization.MayReceiveCategory)]
                 : [],
             authorization?.HistoryClamped ?? false,
-            authorization is { CanJoinTenantRelay: true } && authorization.Satisfies(Scope.AlertsReadWrite)));
+            authorization is { CanJoinTenantRelay: true } && authorization.Satisfies(Scope.AlertsAcknowledge)));
     }
 }
 

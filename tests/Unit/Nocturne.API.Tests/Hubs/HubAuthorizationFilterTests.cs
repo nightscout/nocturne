@@ -162,7 +162,26 @@ public class HubAuthorizationFilterTests
         var attempt = Attempt(typeof(AlarmHub), nameof(AlarmHub.Ack), readOnly);
 
         await attempt.Should().ThrowAsync<HubException>()
-            .Where(e => e.Message.Contains(Scope.AlertsReadWrite));
+            .Where(e => e.Message.Contains(Scope.AlertsAcknowledge));
+    }
+
+    [Fact]
+    public async Task An_alarm_ack_refuses_a_credential_that_can_only_mute_for_itself()
+    {
+        var attempt = Attempt(
+            typeof(AlarmHub), nameof(AlarmHub.Ack), Member(Scope.GlucoseRead, Scope.DeviceNotify));
+
+        await attempt.Should().ThrowAsync<HubException>();
+    }
+
+    [Theory]
+    [InlineData(Scope.AlertsAcknowledge)]
+    [InlineData(Scope.AlertsReadWrite)]
+    public async Task An_alarm_ack_admits_a_credential_that_may_silence_alarms(string scope)
+    {
+        var reached = await InvokeAsync(CreateInvocation(typeof(AlarmHub), nameof(AlarmHub.Ack), Member(scope)));
+
+        reached.Should().BeTrue();
     }
 
     [Fact]

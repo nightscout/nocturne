@@ -70,6 +70,9 @@ public enum PermissionAtom
     [EnumMember(Value = "alerts.readwrite"), JsonStringEnumMemberName("alerts.readwrite")]
     AlertsReadWrite,
 
+    [EnumMember(Value = "alerts.acknowledge"), JsonStringEnumMemberName("alerts.acknowledge")]
+    AlertsAcknowledge,
+
     [EnumMember(Value = "identity.read"), JsonStringEnumMemberName("identity.read")]
     IdentityRead,
 

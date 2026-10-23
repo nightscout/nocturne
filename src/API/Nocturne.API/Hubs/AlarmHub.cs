@@ -126,7 +126,7 @@ public class AlarmHub : TenantAwareHub
     /// <param name="level">Alarm level to acknowledge</param>
     /// <param name="group">Alarm group to acknowledge</param>
     /// <param name="silenceTime">Time to silence alarm in milliseconds</param>
-    [HubScope(Scope.AlertsReadWrite)]
+    [HubScope(Scope.AlertsAcknowledge)]
     public async Task Ack(int level, string group, int silenceTime)
     {
         try
