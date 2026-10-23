@@ -28,13 +28,11 @@ export const sequences: SequenceConfig = {
   // reader who dismisses it does not want the page's tour that would follow it either.
   "loop-analysis-pages": {
     priority: 65,
-    prerequisite: ONBOARDING_CORE_GATE,
     steps: ["loop-analysis-pages.switcher"],
     quietOnDismiss: true,
   },
   "loop-analysis-daily-profile": {
     priority: 60,
-    prerequisite: ONBOARDING_CORE_GATE,
     steps: [
       "loop-analysis-daily-profile.totals",
       "loop-analysis-daily-profile.glucose",
@@ -44,7 +42,6 @@ export const sequences: SequenceConfig = {
   },
   "loop-analysis-meals-and-events": {
     priority: 60,
-    prerequisite: ONBOARDING_CORE_GATE,
     steps: [
       "loop-analysis-meals-and-events.builder",
       "loop-analysis-meals-and-events.curves",
@@ -54,7 +51,6 @@ export const sequences: SequenceConfig = {
   },
   "loop-analysis-prediction-accuracy": {
     priority: 60,
-    prerequisite: ONBOARDING_CORE_GATE,
     steps: [
       "loop-analysis-prediction-accuracy.horizons",
       "loop-analysis-prediction-accuracy.hours",
@@ -63,7 +59,6 @@ export const sequences: SequenceConfig = {
   },
   "loop-analysis-loop-health": {
     priority: 60,
-    prerequisite: ONBOARDING_CORE_GATE,
     steps: [
       "loop-analysis-loop-health.tiles",
       "loop-analysis-loop-health.hours",
@@ -72,7 +67,6 @@ export const sequences: SequenceConfig = {
   },
   "loop-analysis-settings-evidence": {
     priority: 60,
-    prerequisite: ONBOARDING_CORE_GATE,
     steps: [
       "loop-analysis-settings-evidence.observations",
       "loop-analysis-settings-evidence.chart",

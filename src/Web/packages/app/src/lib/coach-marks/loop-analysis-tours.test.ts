@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { LOOP_ANALYSIS_PAGES } from "$lib/components/reports/loop-analysis/loop-analysis-pages.svelte";
 import { coachCopy } from "./copy.svelte";
-import { ONBOARDING_CORE_GATE, loopAnalysisTour, sequences } from "./sequences";
+import { loopAnalysisTour, sequences } from "./sequences";
 
 vi.mock("$app/paths", () => ({ resolve: (path: string) => path }));
 
@@ -26,10 +26,10 @@ describe("Loop Analysis tours", () => {
       expect(sequences[SHARED].priority).toBeGreaterThan(sequences[loopAnalysisTour(page)].priority);
   });
 
-  it("gives way to the quick tour and waits for no other tour, only the onboarding core", () => {
+  it("gives way to the setup tours and waits for no other tour", () => {
     for (const name of [SHARED, ...LOOP_ANALYSIS_PAGES.map(loopAnalysisTour)]) {
       expect(sequences[name].priority).toBeLessThan(sequences["quick-tour"].priority);
-      expect(sequences[name].prerequisite).toBe(ONBOARDING_CORE_GATE);
+      expect(sequences[name]).not.toHaveProperty("prerequisite");
     }
   });
 

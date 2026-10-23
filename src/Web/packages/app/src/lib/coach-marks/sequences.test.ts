@@ -135,10 +135,12 @@ describe("coach mark sequences", () => {
     }
   });
 
-  it("gates every tour on the onboarding core, not on a sequence", () => {
+  it("gates a tour on the onboarding core, never on a sequence", () => {
     for (const [name, seq] of Object.entries(sequences)) {
-      expect(seq.prerequisite, name).toBe(ONBOARDING_CORE_GATE);
+      if (seq.prerequisite !== undefined) expect(seq.prerequisite, name).toBe(ONBOARDING_CORE_GATE);
     }
+    expect(sequences["quick-tour"].prerequisite).toBe(ONBOARDING_CORE_GATE);
+    expect(sequences["feature-intro"].prerequisite).toBe(ONBOARDING_CORE_GATE);
     expect(sequences).not.toHaveProperty(ONBOARDING_CORE_GATE);
   });
 
