@@ -116,6 +116,17 @@
       return;
     }
 
+    if (notification.type === "profile.raw_mmol_values" && actionId === "review") {
+      if (notification.id) {
+        realtimeStore?.markNotificationRead(notification.id);
+        markAsRead(notification.id).catch((err) =>
+          console.error("Failed to mark notification read:", err)
+        );
+      }
+      goto(resolve("/settings/profile"));
+      return;
+    }
+
     try {
       await executeAction({
         id: notification.id!,

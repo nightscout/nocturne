@@ -29,6 +29,7 @@
   import ProfileSwitchDialog from "$lib/components/profile/ProfileSwitchDialog.svelte";
   import ActiveProfileActivation from "$lib/components/profile/ActiveProfileActivation.svelte";
   import TargetRangeCard from "$lib/components/schedule/TargetRangeCard.svelte";
+  import RawMmolSchedulesAlert from "$lib/components/profile/RawMmolSchedulesAlert.svelte";
 
   type Summary = Awaited<ReturnType<typeof getProfileSummary>>;
 
@@ -186,6 +187,8 @@
         {profileNames.length} profile{profileNames.length !== 1 ? "s" : ""}
       </Badge>
     </div>
+
+    <RawMmolSchedulesAlert />
 
     {#if profileNames.length === 0}
       <!-- Empty State -->

@@ -45,6 +45,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     private readonly ITargetRangeScheduleRepository _targetRangeRepo;
     private readonly IProfileProjectionService _projectionService;
     private readonly ITempBasalRateReresolver _tempBasalRates;
+    private readonly IRawMmolProfileDetector _rawMmol;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ProfileController"/>.
@@ -56,6 +57,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
     /// <param name="targetRangeRepo">Repository for target glucose range schedule records.</param>
     /// <param name="projectionService">Service for reading legacy profile projections from V4 data.</param>
     /// <param name="tempBasalRates">Re-resolves the percent temp basals a written basal schedule covers.</param>
+    /// <param name="rawMmol">Finds the schedules that still hold mmol/L values.</param>
     public ProfileController(
         ITherapySettingsRepository therapyRepo,
         IBasalScheduleRepository basalRepo,
@@ -63,7 +65,8 @@ public class ProfileController : ControllerBase, IWriteScopedController
         ISensitivityScheduleRepository sensitivityRepo,
         ITargetRangeScheduleRepository targetRangeRepo,
         IProfileProjectionService projectionService,
-        ITempBasalRateReresolver tempBasalRates
+        ITempBasalRateReresolver tempBasalRates,
+        IRawMmolProfileDetector rawMmol
     )
     {
         _therapyRepo = therapyRepo;
@@ -73,6 +76,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
         _targetRangeRepo = targetRangeRepo;
         _projectionService = projectionService;
         _tempBasalRates = tempBasalRates;
+        _rawMmol = rawMmol;
     }
 
     #region Summary
@@ -190,6 +194,34 @@ public class ProfileController : ControllerBase, IWriteScopedController
 
         return NoContent();
     }
+
+    #endregion
+
+    #region Raw mmol Values
+
+    /// <summary>
+    /// Get the live target range and sensitivity schedules whose values still look like mmol/L stored
+    /// as mg/dL, which every reader takes as mg/dL until the owner corrects or dismisses them.
+    /// </summary>
+    [HttpGet("raw-mmol")]
+    [RemoteQuery]
+    // Never cached, as GetProfileSummary: an edit or a dismiss must clear the list at once.
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(List<RawMmolSchedule>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<RawMmolSchedule>>> GetRawMmolSchedules(CancellationToken ct = default) =>
+        Ok((await _rawMmol.DetectAsync(ct)).ToList());
+
+    /// <summary>
+    /// Record that the ISF of a listed sensitivity schedule's store is already mg/dL/U, so it is not
+    /// listed again.
+    /// </summary>
+    [HttpPost("raw-mmol/sensitivity/{id:guid}/dismiss")]
+    [RequireDeclaredWriteScope]
+    [RemoteCommand(Invalidates = ["GetRawMmolSchedules"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> DismissRawMmolIsf(Guid id, CancellationToken ct = default) =>
+        await _rawMmol.DismissIsfAsync(id, ct) ? NoContent() : NotFound();
 
     #endregion
 
@@ -698,6 +730,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             "GetProfileSummary",
             "GetSensitivitySchedulesByName",
             "GetSensitivityScheduleById",
+            "GetRawMmolSchedules",
         ]
     )]
     [ProducesResponseType(typeof(SensitivitySchedule), StatusCodes.Status200OK)]
@@ -814,6 +847,7 @@ public class ProfileController : ControllerBase, IWriteScopedController
             "GetProfileSummary",
             "GetTargetRangeSchedulesByName",
             "GetTargetRangeScheduleById",
+            "GetRawMmolSchedules",
         ]
     )]
     [ProducesResponseType(typeof(TargetRangeSchedule), StatusCodes.Status200OK)]
