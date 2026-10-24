@@ -65,7 +65,7 @@
   });
 </script>
 
-<WidgetCard title="BG Delta">
+<WidgetCard title="BG delta">
   <div class="flex items-center justify-between">
     <div>
       <p class="flex items-baseline gap-1.5">

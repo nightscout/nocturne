@@ -321,7 +321,7 @@
                 <RotateCcw class="h-3 w-3" />
               </Button>
             {:else if hasEnvOverride(propName)}
-              <Badge variant="outline">From Env</Badge>
+              <Badge variant="outline">From env</Badge>
             {/if}
           </div>
           {#if meta.description}
@@ -355,7 +355,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
       <Select
@@ -393,7 +393,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
       <Input
@@ -444,7 +444,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
       <Input

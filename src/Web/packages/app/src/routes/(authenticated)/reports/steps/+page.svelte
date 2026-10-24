@@ -21,7 +21,7 @@
 
   const VISIBLE_DAYS = 14;
 
-  const report = useActogramReport("Error Loading Step Count Report");
+  const report = useActogramReport("Error loading step count report");
   const { params: reportsParams, resource: actogramResource } = report;
 
   const dayTotals = $derived(actogramResource.current?.stepDayTotals ?? {});
@@ -85,7 +85,7 @@
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Footprints class="h-5 w-5 text-muted-foreground" />
-        Step Count Actogram
+        Step count actogram
       </CardTitle>
     </CardHeader>
     <CardContent class="w-full overflow-x-auto print:overflow-visible">

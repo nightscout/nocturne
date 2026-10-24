@@ -127,7 +127,7 @@
   // A platform-access grant views a tenant the operator is not a member of, so the host's slug
   // can name a tenant the list does not carry.
   const viewedTenantLabel = $derived.by(() => {
-    if (!currentSlug) return "My Data";
+    if (!currentSlug) return "My data";
     const viewed = tenantTargets.find((t) => t.slug === currentSlug);
     return viewed ? formatTenantLabel(viewed) : currentSlug;
   });
@@ -254,7 +254,7 @@
         </Select.Trigger>
         <Select.Content>
           {#if !currentSlug}
-            <Select.Item value={TENANTLESS}>My Data</Select.Item>
+            <Select.Item value={TENANTLESS}>My data</Select.Item>
           {/if}
           {#each tenantTargets as target (target.slug)}
             <Select.Item value={target.slug}>

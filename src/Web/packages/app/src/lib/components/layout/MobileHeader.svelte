@@ -41,7 +41,7 @@
   // glucose value.
   const isLoading = $derived(rawCurrentBG <= 0);
   const statusText = $derived(
-    isDisconnected ? "Connection Error" : minutesAgo(lastUpdated, now)
+    isDisconnected ? "Connection error" : minutesAgo(lastUpdated, now)
   );
   const statusTooltip = $derived(`Last reading: ${minutesAgo(lastUpdated, now)}`);
 

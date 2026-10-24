@@ -25,15 +25,15 @@ export interface DataCategory {
 }
 
 export const dataCategories: DataCategory[] = [
-  { scope: "glucose.read", name: "Blood Glucose", description: "CGM readings and current value", icon: Droplet },
+  { scope: "glucose.read", name: "Blood glucose", description: "CGM readings and current value", icon: Droplet },
   { scope: "treatments.read", name: "Treatments", description: "Insulin doses and carb entries", icon: Syringe },
-  { scope: "devices.read", name: "Device Status", description: "Pump, CGM, and closed-loop status, including IOB and automated insulin", icon: Cpu },
-  { scope: "therapy.read", name: "Therapy Settings", description: "Basal rates, carb ratios, sensitivity and targets", icon: SlidersHorizontal },
+  { scope: "devices.read", name: "Device status", description: "Pump, CGM, and closed-loop status, including IOB and automated insulin", icon: Cpu },
+  { scope: "therapy.read", name: "Therapy settings", description: "Basal rates, carb ratios, sensitivity and targets", icon: SlidersHorizontal },
   { scope: "alerts.read", name: "Alerts", description: "Alarms that are firing now", icon: Bell },
-  { scope: "heartrate.read", name: "Heart Rate", description: "Data from wearables", icon: HeartPulse },
-  { scope: "stepcount.read", name: "Step Count", description: "Daily activity totals", icon: Footprints },
+  { scope: "heartrate.read", name: "Heart rate", description: "Data from wearables", icon: HeartPulse },
+  { scope: "stepcount.read", name: "Step count", description: "Daily activity totals", icon: Footprints },
   { scope: "sleep.read", name: "Sleep", description: "Sleep sessions and stages", icon: Moon },
-  { scope: "food.read", name: "Food & Meals", description: "Meals and nutrition log", icon: Utensils },
+  { scope: "food.read", name: "Food & meals", description: "Meals and nutrition log", icon: Utensils },
   { scope: "reports.read", name: "Reports", description: "Shareable reports", icon: FileText },
 ];
 

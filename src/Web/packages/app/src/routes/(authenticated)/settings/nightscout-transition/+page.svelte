@@ -60,12 +60,12 @@
 		if (!status) return 'Unknown';
 		switch (status.recommendation?.status) {
 			case 'safe':
-				return 'Safe to Disconnect';
+				return 'Safe to disconnect';
 			case 'almost-ready':
-				return 'Almost Ready';
+				return 'Almost ready';
 			case 'not-ready':
 			default:
-				return 'Not Ready';
+				return 'Not ready';
 		}
 	});
 
@@ -79,7 +79,7 @@
 
 	const compatibilityBadgeLabel = $derived.by(() => {
 		const score = status?.compatibility?.compatibilityScore;
-		if (score == null) return 'No Data';
+		if (score == null) return 'No data';
 		if (score >= 95) return 'High';
 		if (score >= 80) return 'Medium';
 		return 'Low';
@@ -87,7 +87,7 @@
 </script>
 
 <svelte:head>
-	<title>Nightscout Transition - Settings - Nocturne</title>
+	<title>Nightscout transition - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -97,7 +97,7 @@
 			<ArrowRightLeft class="h-6 w-6 text-primary" />
 		</div>
 		<div>
-			<h1 class="text-2xl font-bold tracking-tight">Nightscout Transition</h1>
+			<h1 class="text-2xl font-bold tracking-tight">Nightscout transition</h1>
 			<p class="text-muted-foreground">
 				Monitor your migration from Nightscout and check disconnect readiness
 			</p>
@@ -125,7 +125,7 @@
 				<div class="flex items-center justify-between">
 					<CardTitle class="flex items-center gap-2">
 						<Database class="h-5 w-5" />
-						Migration Status
+						Migration status
 					</CardTitle>
 					<Badge variant={status.migration?.isComplete ? 'default' : 'secondary'}>
 						{#if status.migration?.isComplete}
@@ -133,7 +133,7 @@
 							Complete
 						{:else}
 							<Loader2 class="h-3 w-3 animate-spin" />
-							In Progress
+							In progress
 						{/if}
 					</Badge>
 				</div>
@@ -170,12 +170,12 @@
 				<div class="flex items-center justify-between">
 					<CardTitle class="flex items-center gap-2">
 						<Activity class="h-5 w-5" />
-						Write-Back Health (Last 24 Hours)
+						Write-back health (last 24 hours)
 					</CardTitle>
 					<Badge variant={status.writeBack?.circuitBreakerOpen ? 'destructive' : 'default'}>
 						{#if status.writeBack?.circuitBreakerOpen}
 							<ShieldAlert class="h-3 w-3" />
-							Circuit Open
+							Circuit open
 						{:else}
 							<ShieldCheck class="h-3 w-3" />
 							Healthy
@@ -226,7 +226,7 @@
 					<div class="flex items-center justify-between">
 						<CardTitle class="flex items-center gap-2">
 							<ShieldCheck class="h-5 w-5" />
-							API Compatibility
+							API compatibility
 						</CardTitle>
 						<Badge variant={compatibilityBadgeVariant}>
 							{#if compatibilityBadgeVariant === 'default'}
@@ -275,7 +275,7 @@
 			<CardHeader>
 				<CardTitle class="flex items-center gap-2">
 					<ArrowRightLeft class="h-5 w-5" />
-					Safe to Disconnect
+					Safe to disconnect
 				</CardTitle>
 				<CardDescription>
 					Recommendation on whether it is safe to stop using your Nightscout instance
@@ -321,7 +321,7 @@
 					<Separator />
 					<div>
 						<Button variant="outline" onclick={() => goto(resolve('/settings/connectors'))}>
-							Go to Connector Settings
+							Go to connector settings
 							<ArrowRightLeft class="h-4 w-4 ml-2" />
 						</Button>
 					</div>

@@ -76,7 +76,7 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Download class="h-5 w-5" />
-        Manual Sync Results
+        Manual sync results
       </Dialog.Title>
       <Dialog.Description>
         Re-sync data from all enabled connectors for the configured lookback
@@ -155,7 +155,7 @@
 
         {#if connectorResults.length > 0}
           <div class="space-y-3">
-            <h4 class="font-medium text-sm">Connector Results</h4>
+            <h4 class="font-medium text-sm">Connector results</h4>
             <div class="space-y-2">
               {#each connectorResults as [connectorId, result] (connectorId)}
                 <Item variant={result.success ? "success" : "destructive"} class="justify-between">

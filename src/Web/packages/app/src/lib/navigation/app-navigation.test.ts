@@ -36,7 +36,7 @@ const OWNER_ONLY = [
   "Meals",
   "Tools",
   "Alerts",
-  "Dev Tools",
+  "Dev tools",
   "Settings",
 ];
 
@@ -81,7 +81,7 @@ describe("buildAppNavigation", () => {
     expect(titles(GUEST)).toEqual([
       "Dashboard",
       "Calendar",
-      "Time Spans",
+      "Time spans",
       "Reports",
       "Clock",
     ]);

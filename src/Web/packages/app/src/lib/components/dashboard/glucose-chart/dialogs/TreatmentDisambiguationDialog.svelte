@@ -21,7 +21,7 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="max-w-md print:hidden">
     <Dialog.Header>
-      <Dialog.Title>Multiple Entries</Dialog.Title>
+      <Dialog.Title>Multiple entries</Dialog.Title>
       <Dialog.Description>
         Several entries occurred around this time. Select one to edit.
       </Dialog.Description>

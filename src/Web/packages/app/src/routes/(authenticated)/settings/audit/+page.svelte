@@ -149,7 +149,7 @@
 </script>
 
 <svelte:head>
-  <title>Audit Log - Settings - Nocturne</title>
+  <title>Audit log - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -158,7 +158,7 @@
       <ScrollText class="h-6 w-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Audit Log</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Audit log</h1>
       <p class="text-muted-foreground">
         View data changes and access history for compliance
       </p>
@@ -171,7 +171,7 @@
       <Card.Header>
         <Card.Title class="flex items-center gap-2">
           <Settings2 class="h-4 w-4" />
-          Audit Configuration
+          Audit configuration
         </Card.Title>
       </Card.Header>
       <Card.Content>
@@ -181,10 +181,10 @@
               checked={readAuditEnabled}
               onCheckedChange={(v: boolean) => (readAuditEnabled = v === true)}
             />
-            <Label>Read Access Logging</Label>
+            <Label>Read access logging</Label>
           </div>
           <div class="space-y-1">
-            <Label for="read-retention">Read Log Retention (days)</Label>
+            <Label for="read-retention">Read log retention (days)</Label>
             <Input
               id="read-retention"
               type="number"
@@ -194,7 +194,7 @@
             />
           </div>
           <div class="space-y-1">
-            <Label for="mutation-retention">Mutation Log Retention (days)</Label>
+            <Label for="mutation-retention">Mutation log retention (days)</Label>
             <Input
               id="mutation-retention"
               type="number"
@@ -210,7 +210,7 @@
           {#if isSaving}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
           {/if}
-          Save Configuration
+          Save configuration
         </Button>
       </Card.Footer>
     </Card.Root>
@@ -220,13 +220,13 @@
   <Tabs.Root bind:value={activeTab} class="space-y-4">
     <Tabs.List class="grid w-full grid-cols-2">
       <Tabs.Trigger value="mutations">
-        Data Changes
+        Data changes
         {#if mutationsTotal > 0}
           <Badge variant="secondary" class="ml-2">{mutationsTotal}</Badge>
         {/if}
       </Tabs.Trigger>
       <Tabs.Trigger value="reads">
-        Data Access
+        Data access
         {#if readsTotal > 0}
           <Badge variant="secondary" class="ml-2">{readsTotal}</Badge>
         {/if}

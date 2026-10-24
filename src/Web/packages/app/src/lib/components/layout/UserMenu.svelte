@@ -135,7 +135,7 @@
         <DropdownMenu.Group>
           <DropdownMenu.Item onSelect={() => (requestMembershipDialog.open = true)}>
             <UserPlus class="mr-2 h-4 w-4" />
-            <span>Request Membership</span>
+            <span>Request membership</span>
           </DropdownMenu.Item>
         </DropdownMenu.Group>
       {/if}

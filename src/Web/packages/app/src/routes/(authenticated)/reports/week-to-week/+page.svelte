@@ -57,7 +57,7 @@
   // Create resource with automatic layout registration
   const weekdayResource = contextResource(
     () => getWeekdayAverages(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Week Comparison" }
+    { errorTitle: "Error loading week comparison" }
   );
 
   const dateRangeDisplay = $derived.by(() => {

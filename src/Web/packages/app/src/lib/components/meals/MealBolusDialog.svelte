@@ -243,7 +243,7 @@
             <ArrowLeft class="h-4 w-4" />
           </Button>
           <Dialog.Title>
-            {editingBolus ? "Edit Bolus" : "Add Bolus"}
+            {editingBolus ? "Edit bolus" : "Add bolus"}
           </Dialog.Title>
         </div>
       {:else}

@@ -63,7 +63,7 @@
       Verifying...
     {:else}
       <KeyRound class="mr-2 h-5 w-5" />
-      Access Data
+      Access data
     {/if}
   </Button>
 </form>

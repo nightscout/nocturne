@@ -216,13 +216,13 @@
   });
 </script>
 
-<svelte:head><title>Google Health · Connectors & Apps</title></svelte:head>
+<svelte:head><title>Google Health · Connectors & apps</title></svelte:head>
 <section class="mx-auto max-w-5xl space-y-6 p-6">
   <a
     class="inline-flex items-center gap-2 text-sm text-muted-foreground"
     href={resolve("/settings/connectors")}
   >
-    <ArrowLeft class="h-4 w-4" />Connectors & Apps
+    <ArrowLeft class="h-4 w-4" />Connectors & apps
   </a>
   <header class="flex items-start justify-between gap-4">
     <div class="flex items-center gap-3">
@@ -247,7 +247,7 @@
   {/if}
   {#if disconnecting}
     <p role="status" class="rounded-lg border border-primary/40 p-4">
-      Disconnecting Google Health. The current scan or import is being stopped.
+      Disconnecting Google Health. Nocturne is stopping the current scan or import.
     </p>
   {/if}
   {#if notice}

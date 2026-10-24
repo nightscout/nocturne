@@ -46,14 +46,14 @@
       id: "byo-postgres",
       href: resolve("/docs/installation/byo-postgres"),
       logo: "/logos/postgresql.svg",
-      title: "Bring Your Own PostgreSQL",
+      title: "Bring your own PostgreSQL",
       desc: "Use a managed PostgreSQL service (RDS, Cloud SQL, Supabase, Neon) or an existing shared database instance. Requires a one-time role bootstrap.",
     },
     {
       id: "reverse-proxy",
       href: resolve("/docs/installation/reverse-proxy"),
       logo: "/logos/nginx.svg",
-      title: "Bring Your Own Reverse Proxy",
+      title: "Bring your own reverse proxy",
       desc: "Terminate TLS with nginx, Traefik, or an existing edge instead of the bundled Caddy. Covers the forwarded headers Nocturne requires.",
     },
   ];
@@ -72,16 +72,16 @@
 </script>
 
 <div class="max-w-3xl">
-  <h1 class="text-4xl font-bold tracking-tight mb-4">Installation Guide</h1>
+  <h1 class="text-4xl font-bold tracking-tight mb-4">Installation guide</h1>
   <p class="text-lg text-muted-foreground mb-8">
     Choose a deployment method below to get Nocturne running on your
     infrastructure. All methods use the same Docker images and configuration.
   </p>
 
-  <h2 class="text-2xl font-bold mt-8 mb-4">System Requirements</h2>
+  <h2 class="text-2xl font-bold mt-8 mb-4">System requirements</h2>
   <SystemRequirements />
 
-  <h2 class="text-2xl font-bold mt-8 mb-4">Choose Your Platform</h2>
+  <h2 class="text-2xl font-bold mt-8 mb-4">Choose your platform</h2>
   <ul class="not-prose m-0 p-0 list-none border-t border-border">
     {#each PLATFORMS as platform (platform.title)}
       <li class="border-b border-border">
@@ -101,7 +101,7 @@
     Guides for GCP, Azure, Heroku, and other cloud platforms are coming soon.
   </p>
 
-  <h2 class="text-2xl font-bold mt-12 mb-4">Managed Instances</h2>
+  <h2 class="text-2xl font-bold mt-12 mb-4">Managed instances</h2>
   <p class="text-muted-foreground mb-4">
     Prefer not to self-host? These Nocturne-as-a-Service providers handle the
     infrastructure so you can focus on your diabetes management.
@@ -149,8 +149,7 @@
   {#if showListingRequirements}
     <div class="mt-3 text-sm text-muted-foreground">
       <p class="mb-3">
-        We welcome Nocturne-as-a-Service providers. To request a listing, please
-        provide the following:
+        We welcome Nocturne-as-a-Service providers. To request a listing, provide the following:
       </p>
       <ul class="list-disc list-inside space-y-1">
         <li>Server's physical location</li>
@@ -170,7 +169,7 @@
     </div>
   {/if}
 
-  <h2 class="text-2xl font-bold mt-12 mb-4">Platform Notes</h2>
+  <h2 class="text-2xl font-bold mt-12 mb-4">Platform notes</h2>
 
   <h3 class="text-xl font-semibold mt-6 mb-3">Linux (Ubuntu/Debian)</h3>
   <p class="text-muted-foreground mb-4">

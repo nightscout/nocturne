@@ -127,7 +127,7 @@ describe("year overview page loading", () => {
           }),
       },
     });
-    const sources = page.getByRole("button", { name: "All Data Sources" });
+    const sources = page.getByRole("button", { name: "All data sources" });
     await expect.element(sources).not.toBeDisabled();
     await page.getByRole("button", { name: "Prepare print" }).click();
     await vi.waitFor(() => expect(settle).toBeDefined());

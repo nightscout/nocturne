@@ -40,7 +40,7 @@
       to: reportsParams.dateRangeMillis.to,
       cycleLimit: 50,
     }),
-    { errorTitle: "Error Loading Battery Report" }
+    { errorTitle: "Error loading battery report" }
   );
 
   const statistics = $derived<BatteryStatistics[]>(batteryResource.current?.statistics ?? []);
@@ -131,7 +131,7 @@
       <CardContent class="pt-6">
         <div class="text-center py-8">
           <Battery class="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
-          <h3 class="text-lg font-medium">No Battery Data Available</h3>
+          <h3 class="text-lg font-medium">No battery data available</h3>
           <p class="text-sm text-muted-foreground mt-2">
             Battery data is collected from devices that report uploader status.
             Make sure your CGM uploader app is sending device status data.
@@ -147,7 +147,7 @@
           size="sm"
           onclick={() => (selectedDevice = null)}
         >
-          All Devices
+          All devices
         </Button>
         {#each allDevices as device (device)}
           <Button
@@ -229,7 +229,7 @@
 
             <div class="space-y-2">
               <h4 class="text-sm font-medium text-muted-foreground">
-                Charge Patterns
+                Charge patterns
               </h4>
               <div class="grid grid-cols-2 gap-2 text-sm">
                 <div>
@@ -267,7 +267,7 @@
               <Separator />
               <div class="space-y-2">
                 <h4 class="text-sm font-medium text-muted-foreground">
-                  Time Distribution
+                  Time distribution
                 </h4>
                 <div class="space-y-1">
                   <div class="flex justify-between text-sm">
@@ -340,7 +340,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Clock class="h-5 w-5 text-muted-foreground" />
-            Recent Charge Cycles
+            Recent charge cycles
           </CardTitle>
           <CardDescription>
             History of battery charge and discharge periods
@@ -385,7 +385,7 @@
                     </div>
                     <div class="text-xs text-muted-foreground">charge time</div>
                   {:else}
-                    <Badge variant="secondary">In Progress</Badge>
+                    <Badge variant="secondary">In progress</Badge>
                   {/if}
                 </div>
               </li>

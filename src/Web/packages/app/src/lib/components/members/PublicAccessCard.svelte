@@ -97,7 +97,7 @@
         err,
         on
           ? "Could not create the link. Try again."
-          : "Could not turn off public access. Try again."
+          : "Could not disable public access. Try again."
       );
     } finally {
       busy = false;
@@ -329,7 +329,7 @@
           {:else}
             <p class="text-xs text-muted-foreground">
               Anyone who already has your link can still open the read-only view
-              without signing in, but Nocturne can no longer show you what it is.
+              without signing in. Nocturne can no longer show you what the link is.
               To get a link you can send, regenerate it. This stops the current link
               from working. Last viewed {formatDate(share?.lastAccessedAt)}.
             </p>
@@ -402,7 +402,7 @@
             {#if scopes.length === 0}
               <strong class="font-semibold">Your link is live, but nothing is shared yet.</strong>
               <span class="text-muted-foreground">
-                Turn on a category above to start sharing.
+                Enable a category above to start sharing.
               </span>
             {:else}
               <strong class="font-semibold">Anyone with the link can see</strong>

@@ -1,14 +1,18 @@
-# Rule 3.2 continued. These are softer than "should", and help text sometimes
-# reasons about a hypothetical, so they warn rather than fail.
+# Rule 3.2 continued: may, might, and could are not approved modals.
+#
+# There is no single replacement. "Can" is right only for a capability. For a
+# possibility ("the code may have expired"), "can" states a general fact and
+# drops the doubt, which in a warning makes it read as less urgent. So this
+# rule names the choice instead of suggesting a swap, and it stays a warning.
 #
 # "could not" is the past tense of "cannot", not a hypothetical, and Terms.yml
 # requires it in place of "unable to", so it is not matched.
-extends: substitution
-message: "Rule 3.2: prefer '%s' over '%s', or restructure with 'if'."
+extends: existence
+message: "Rule 3.2: '%s' is not an approved modal. For a capability, write 'can'. For a possibility, write 'possibly', or restructure with 'if'."
 link: .claude/skills/simple-english/SKILL.md
 level: warning
 ignorecase: true
-swap:
-  may: can
-  might: can
-  'could(?! not)': can
+tokens:
+  - may
+  - might
+  - 'could(?! not)'

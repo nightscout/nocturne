@@ -49,7 +49,7 @@
     </p>
     <CodeBlock code={templateUrl} class="mb-4" />
     <p class="text-muted-foreground mb-8">
-        Click <strong class="text-foreground">Save settings</strong>.
+        Select <strong class="text-foreground">Save settings</strong>.
     </p>
 
     <h3 data-install-step="2" class="text-xl font-semibold mt-6 mb-3">Step 2: Deploy from the template</h3>
@@ -58,7 +58,7 @@
             Navigate to <strong class="text-foreground">App Templates</strong> in the sidebar.
         </li>
         <li>
-            Find <strong class="text-foreground">Nocturne</strong> in the list and click it.
+            Find <strong class="text-foreground">Nocturne</strong> in the list and select it.
         </li>
         <li>
             Fill in the configuration form. Set a strong password for each PostgreSQL role and a
@@ -69,7 +69,7 @@
             <PasswordGenerator label="password" />
         </li>
         <li>
-            Click <strong class="text-foreground">Deploy the stack</strong>.
+            Select <strong class="text-foreground">Deploy the stack</strong>.
         </li>
     </ol>
 
@@ -112,13 +112,12 @@
             into the editor.
         </li>
         <li>
-            Scroll to <strong class="text-foreground">Environment variables</strong>, click
-            <strong class="text-foreground">Advanced mode</strong>, and paste your values from
+            Scroll to <strong class="text-foreground">Environment variables</strong>. Select <strong class="text-foreground">Advanced mode</strong>. Paste your values from
             <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env.example</code>
             in <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">KEY=VALUE</code> format.
         </li>
         <li>
-            Click <strong class="text-foreground">Deploy the stack</strong>.
+            Select <strong class="text-foreground">Deploy the stack</strong>.
         </li>
     </ol>
 
@@ -130,7 +129,7 @@
     </p>
     <p class="text-muted-foreground mb-8">
         Once running, the bundled Caddy proxy obtains Let's Encrypt TLS certificates
-        automatically and serves the stack at
+        automatically. It serves the stack at
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">https://your-domain</code>
         on ports 80 and 443, with no certificate files to manage. Each tenant subdomain
         gets its own certificate on demand the first time it is visited.
@@ -142,17 +141,17 @@
     </p>
     <ol class="list-decimal list-inside space-y-2 text-muted-foreground mb-8">
         <li>Navigate to your <strong class="text-foreground">nocturne</strong> stack</li>
-        <li>Click <strong class="text-foreground">Editor</strong></li>
-        <li>Click <strong class="text-foreground">Update the stack</strong></li>
+        <li>Select <strong class="text-foreground">Editor</strong></li>
+        <li>Select <strong class="text-foreground">Update the stack</strong></li>
         <li>Check <strong class="text-foreground">Re-pull image and redeploy</strong></li>
-        <li>Click <strong class="text-foreground">Update</strong></li>
+        <li>Select <strong class="text-foreground">Update</strong></li>
     </ol>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Restarts and logs</h2>
     <p class="text-muted-foreground mb-8">
         The stack uses the same restart policy and log rotation as the
         <a href={resolve("/docs/installation/docker-compose")} class="text-primary hover:underline">Docker Compose bundle</a>.
-        Portainer stacks do not read override files, so to keep your own logging driver,
+        Portainer stacks do not read override files. To keep your own logging driver,
         edit the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">logging</code>
         section of each service in the stack editor instead.
     </p>
@@ -163,7 +162,7 @@
         Nocturne UI after deployment. No compose changes are required.
     </p>
 
-    <h2 data-install-step="next-steps" class="text-2xl font-bold mt-8 mb-4">Next Steps</h2>
+    <h2 data-install-step="next-steps" class="text-2xl font-bold mt-8 mb-4">Next steps</h2>
     <NextSteps />
 
     <SupportNocturne />

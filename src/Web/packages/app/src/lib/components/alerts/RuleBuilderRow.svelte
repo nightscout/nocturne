@@ -337,7 +337,7 @@
         variant="ghost-destructive"
         size="icon-xs"
         class="shrink-0 hidden group-hover/row:inline-flex"
-        aria-label="Remove condition (shift+click shortcut)"
+        aria-label="Remove condition (hold shift and select)"
         onclick={() => removeChild(parent, index)}
       >
         <Trash2 class="h-4 w-4" />

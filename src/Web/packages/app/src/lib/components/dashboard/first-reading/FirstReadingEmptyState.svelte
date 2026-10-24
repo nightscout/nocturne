@@ -107,8 +107,7 @@
       </div>
     {:else}
       <p class="text-sm text-muted-foreground" data-testid="no-connector-intro">
-        No data source is set up yet. Pick whichever matches how you track your
-        glucose.
+        No data source is configured yet. Pick whichever matches how you track your glucose.
       </p>
       <div class="grid gap-3 @md:grid-cols-3">
         <a
@@ -130,7 +129,7 @@
           class="group flex flex-col gap-2 rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40"
         >
           <KeyRound class="h-5 w-5 text-primary" />
-          <span class="font-medium">Set up an uploader app</span>
+          <span class="font-medium">Add an uploader app</span>
           <span class="text-sm text-muted-foreground">
             Create an API token so an app like xDrip, AAPS, Loop, or Trio can
             send readings.

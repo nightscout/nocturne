@@ -171,8 +171,7 @@
       Create your <em class="not-italic font-light text-(--onb-teal)">account</em>.
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-white/50">
-      Set up the owner account for your Nocturne instance. You will be the
-      administrator.
+      Configure the owner account for your Nocturne instance. You will be the administrator.
     </p>
   </div>
 
@@ -186,7 +185,7 @@
           >
             <UserPlus class="h-6 w-6" />
           </div>
-          <h2 class="text-lg font-semibold text-white">Account Created</h2>
+          <h2 class="text-lg font-semibold text-white">Account created</h2>
           <p class="text-sm text-white/50">
             Save your recovery codes before continuing.
           </p>
@@ -195,7 +194,7 @@
         <RecoveryCodes
           codes={recoveryCodes}
           onContinue={onComplete}
-          continueLabel="Continue Setup"
+          continueLabel="Continue setup"
         />
       </div>
     {:else if authStateQuery.loading}

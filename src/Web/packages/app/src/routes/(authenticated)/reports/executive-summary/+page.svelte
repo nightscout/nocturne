@@ -52,7 +52,7 @@
   // selected range so per-day figures divide by the days the user picked.
   const reportsResource = contextResource(
     () => getReportsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Executive Summary", dateParams: reportsParams }
+    { errorTitle: "Error loading executive summary", dateParams: reportsParams }
   );
 
   const entries = $derived(reportsResource.current?.entries ?? []);
@@ -112,7 +112,7 @@
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <Target class="w-5 h-5 text-glucose-in-range" />
-              Time in Range
+              Time in range
             </CardTitle>
             <CardDescription>
               Percentage of time in the consensus target range ({bgRangeOr(edges?.targetBottom, edges?.targetTop)})
@@ -126,10 +126,10 @@
 
             <!-- Duration Breakdown -->
             <div class="space-y-2 text-xs pt-4 border-t">
-              <h4 class="font-medium text-sm">Time Breakdown (per day avg)</h4>
+              <h4 class="font-medium text-sm">Time breakdown (per day avg)</h4>
               <div class="grid grid-cols-3 gap-2">
                 <div class="flex flex-col">
-                  <span class="text-glucose-in-range font-medium print:text-foreground">In Range</span>
+                  <span class="text-glucose-in-range font-medium print:text-foreground">In range</span>
                   <span>
                     {formatMinutesDuration(dailyMinutes?.target ?? 0)}
                   </span>
@@ -193,7 +193,7 @@
                   Clinical details
                 </summary>
                 <p class="mt-2 text-muted-foreground">
-                  Calculated using the ADAG formula (NGSP %): {a1cLabel(true)} = (mean glucose in
+                  Uses the ADAG formula (NGSP %). {a1cLabel(true)} = (mean glucose in
                   mmol/L + 2.59) / 1.59. Based on mean glucose of {bgOr(stats?.mean)} {bgLabel()} over
                   {dayCount}
                   days.
@@ -208,7 +208,7 @@
           <CardHeader class="pb-2">
             <CardTitle class="flex items-center gap-2 text-base">
               <TrendingUp class="w-5 h-5" />
-              Glucose Stability
+              Glucose stability
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
@@ -253,7 +253,7 @@
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <AlertTriangle class="w-5 h-5 text-glucose-very-low" />
-              Low Glucose Events
+              Low glucose events
             </CardTitle>
             <CardDescription>
               Time spent below {bgOr(edges?.low)} {bgLabel()} (target: &lt;4%)
@@ -296,7 +296,7 @@
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <TrendingUp class="w-5 h-5 text-glucose-high" />
-              High Glucose Events
+              High glucose events
             </CardTitle>
             <CardDescription>
               Time spent above {bgOr(edges?.high)} {bgLabel()} (target: &lt;25%)
@@ -334,7 +334,7 @@
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <Activity class="w-5 h-5" />
-              Glucose Statistics
+              Glucose statistics
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -357,7 +357,7 @@
 
             <!-- Percentiles -->
             <div class="mt-4 pt-4 border-t">
-              <h4 class="text-sm font-medium mb-3">Glucose Distribution</h4>
+              <h4 class="text-sm font-medium mb-3">Glucose distribution</h4>
               <div class="grid grid-cols-4 gap-2 text-xs text-center">
                 <div>
                   <div class="font-medium">
@@ -393,13 +393,13 @@
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <Shield class="w-5 h-5" />
-              Data Quality
+              Data quality
             </CardTitle>
             <CardDescription>How complete is your CGM data?</CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
             <div class="flex items-center justify-between">
-              <span class="text-sm">CGM Active Time</span>
+              <span class="text-sm">CGM active time</span>
               <span class="font-bold">
                 {quality?.cgmActivePercent?.toFixed(0) ?? "–"}%
               </span>
@@ -413,7 +413,7 @@
             {#if (quality?.cgmActivePercent ?? 0) < 70}
               <div class="text-sm text-muted-foreground">
                 <AlertTriangle class="w-4 h-4 inline mr-1 text-warning" />
-                Limited data may affect report accuracy.
+                Limited data can affect report accuracy.
               </div>
             {/if}
             <p class="text-xs text-muted-foreground">

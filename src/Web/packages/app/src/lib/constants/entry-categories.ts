@@ -27,7 +27,7 @@ export const ENTRY_CATEGORIES = {
   },
   bgCheck: {
     id: "bgCheck" as const,
-    name: "BG Checks",
+    name: "BG checks",
     description: "Blood glucose measurements",
     icon: "droplet" as const,
     colorClass: "text-entry-bg-check",
@@ -43,7 +43,7 @@ export const ENTRY_CATEGORIES = {
   },
   deviceEvent: {
     id: "deviceEvent" as const,
-    name: "Device Events",
+    name: "Device events",
     description: "Sensor, pump, and site changes",
     icon: "smartphone" as const,
     colorClass: "text-entry-device-event",

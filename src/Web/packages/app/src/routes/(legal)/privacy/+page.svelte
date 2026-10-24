@@ -3,10 +3,10 @@
 </script>
 
 <svelte:head>
-  <title>Privacy Policy - Nocturne</title>
+  <title>Privacy policy - Nocturne</title>
 </svelte:head>
 
-<h1>Privacy Policy</h1>
+<h1>Privacy policy</h1>
 
 <p class="lead">
   Your privacy matters. This policy explains how Nocturne handles your data and protects your privacy.
@@ -22,7 +22,7 @@
   This privacy policy explains what data Nocturne collects (very little), how it is stored, and your rights.
 </p>
 
-<h2>2. Data We DON'T Collect</h2>
+<h2>2. Data we DON'T collect</h2>
 
 <p>
   Because Nocturne is self-hosted, we (the Nocturne project developers) do not have access to your data. Specifically:
@@ -58,10 +58,10 @@
 <ul>
   <li><strong>Your database:</strong> All persistent data is stored in a PostgreSQL database that you control.</li>
   <li><strong>Your hosting provider:</strong> Your hosting provider's privacy policy and security practices apply to your data. Choose a provider you trust.</li>
-  <li><strong>Browser local storage:</strong> Some temporary data (like UI preferences) may be stored in your browser's local storage. This never leaves your device.</li>
+  <li><strong>Browser local storage:</strong> Nocturne can store some temporary data (like UI preferences) in your browser's local storage. This never leaves your device.</li>
 </ul>
 
-<h2>4. Third-Party Services and Connectors</h2>
+<h2>4. Third-party services and connectors</h2>
 
 <p>
   Nocturne can connect to third-party diabetes data services to import your glucose and treatment data. When you use these integrations:
@@ -75,7 +75,7 @@
 </ul>
 
 <p>
-  <strong>Third-party services you might connect:</strong>
+  <strong>Third-party services you can connect:</strong>
 </p>
 
 <ul>
@@ -87,10 +87,10 @@
   <li>Others via community plugins</li>
 </ul>
 
-<h2>5. Optional Analytics and Error Reporting</h2>
+<h2>5. Optional analytics and error reporting</h2>
 
 <p>
-  In the future, Nocturne may offer optional, opt-in features for:
+  In the future, Nocturne will possibly offer optional, opt-in features for:
 </p>
 
 <ul>
@@ -114,7 +114,7 @@
   <strong>Current status:</strong> As of this writing, Nocturne does not include any analytics or error reporting features.
 </p>
 
-<h2>6. Your Rights and Data Control</h2>
+<h2>6. Your rights and data control</h2>
 
 <p>
   Because you self-host Nocturne, you have complete control over your data:
@@ -170,10 +170,10 @@
   If you are hosting Nocturne for your child, you have full control and responsibility for their data privacy and security.
 </p>
 
-<h2>9. Changes to This Privacy Policy</h2>
+<h2>9. Changes to this privacy policy</h2>
 
 <p>
-  We may update this privacy policy from time to time. When we do:
+  We can update this privacy policy from time to time. When we do:
 </p>
 
 <ul>
@@ -208,7 +208,7 @@
 </p>
 
 <p>
-  See also: <a href={resolve("/terms")}>Terms of Service</a>
+  See also: <a href={resolve("/terms")}>Terms of service</a>
 </p>
 
 <hr />

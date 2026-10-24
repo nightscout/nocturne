@@ -25,7 +25,7 @@
 
 <FigureStrip
   figures={[
-    { label: "Total Records", value: String(counts.all ?? 0), note: categoryBreakdown || undefined },
+    { label: "Total records", value: String(counts.all ?? 0), note: categoryBreakdown || undefined },
     {
       label: "Bolus insulin",
       value: totalInsulin.toFixed(1),

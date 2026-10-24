@@ -27,11 +27,11 @@ export function entryLabel(entry: EntryRecord): string {
         ? `${formatCarbDisplay(entry.data.carbs)}g carbs`
         : "Carbs";
     case "bgCheck":
-      return entry.data.mgdl ? `${entry.data.mgdl} mg/dL` : "BG Check";
+      return entry.data.mgdl ? `${entry.data.mgdl} mg/dL` : "BG check";
     case "note":
       return entry.data.text ?? "Note";
     case "deviceEvent":
-      return entry.data.eventType ?? "Device Event";
+      return entry.data.eventType ?? "Device event";
     case "basalInjection":
       return entry.data.units
         ? `${formatInsulinDisplay(entry.data.units)}u basal`

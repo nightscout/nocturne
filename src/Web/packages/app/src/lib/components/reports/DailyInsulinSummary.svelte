@@ -13,7 +13,7 @@
 </script>
 
 <div class="@container mt-4 bg-insulin/5 border border-insulin/20 rounded-lg p-4">
-  <h4 class="text-sm font-semibold text-foreground mb-3">Daily Summary</h4>
+  <h4 class="text-sm font-semibold text-foreground mb-3">Daily summary</h4>
   <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4 text-sm">
     <div class="space-y-2">
       <div class="flex justify-between">

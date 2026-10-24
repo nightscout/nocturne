@@ -109,7 +109,7 @@ describe("EventResponseBody", () => {
     const note = page.getByText(/grams per unit comes only from a meal/);
     await expect.element(note).toHaveTextContent(/2 meals had another event in their window,\s*3 had too little of their basal recorded,\s*1 had no insulin above schedule/);
 
-    const links = page.getByRole("link", { name: /in Day in Review/ }).elements();
+    const links = page.getByRole("link", { name: /in Day in review/ }).elements();
     expect(links).toHaveLength(3);
     expect(links[0].getAttribute("href")).toBe("/reports/day-in-review?date=2026-10-10&time=07:30");
   });
@@ -129,7 +129,7 @@ describe("EventResponseBody", () => {
     await expect.element(page.getByRole("columnheader", { name: "Peak rise" })).toBeVisible();
     await expect.element(page.getByRole("columnheader", { name: "Drop to window end" })).toBeVisible();
     await expect.element(page.getByRole("columnheader", { name: "Below range" })).toBeVisible();
-    const rows = page.getByRole("row", { name: /in Day in Review/ });
+    const rows = page.getByRole("row", { name: /in Day in review/ });
     await expect.element(rows.filter({ hasText: "Unannounced rise" })).toHaveTextContent(/\+95 mg\/dL.*–/);
     await expect.element(rows.filter({ hasText: "Correction bolus" }).first()).toHaveTextContent(/90 mg\/dL.*45 mg\/dL\/U\s*No/);
     await expect.element(rows.filter({ hasText: "Correction bolus" }).last()).toHaveTextContent(/150 mg\/dL.*75 mg\/dL\/U\s*Yes/);
@@ -149,7 +149,7 @@ describe("EventResponseBody", () => {
     render(EventResponseBody, { props: { response: eventResponse() } });
 
     await page.getByRole("button", { name: "Peak rise" }).click();
-    const firstRow = () => page.getByRole("link", { name: /in Day in Review/ }).elements()[0].getAttribute("href");
+    const firstRow = () => page.getByRole("link", { name: /in Day in review/ }).elements()[0].getAttribute("href");
     expect(firstRow()).toContain("2026-10-12");
     await expect.element(page.getByRole("columnheader", { name: "Peak rise" })).toHaveAttribute("aria-sort", "descending");
     await page.getByRole("button", { name: "Peak rise" }).click();
@@ -162,7 +162,7 @@ describe("EventResponseBody", () => {
     await expect.element(page.getByRole("slider", { name: "Glucose", exact: true })).toBeVisible();
     expect(page.getByRole("slider", { name: "Insulin on board" }).elements()).toHaveLength(0);
     await expect.element(page.getByText("Hidden: your access does not include this data").first()).toBeVisible();
-    expect(page.getByRole("link", { name: /in Day in Review/ }).elements()).toHaveLength(0);
+    expect(page.getByRole("link", { name: /in Day in review/ }).elements()).toHaveLength(0);
     expect(page.getByRole("rowheader", { name: "Observed grams per unit" }).elements()).toHaveLength(0);
     expect(page.getByText(/grams per unit comes only/).elements()).toHaveLength(0);
     await expect.element(page.getByRole("rowheader", { name: "Peak rise" })).toBeVisible();

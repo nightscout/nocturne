@@ -5,7 +5,7 @@
 </script>
 
 <div class="max-w-3xl">
-    <h1 class="text-4xl font-bold tracking-tight mb-4">Bring Your Own PostgreSQL</h1>
+    <h1 class="text-4xl font-bold tracking-tight mb-4">Bring your own PostgreSQL</h1>
 
     <p class="text-lg text-muted-foreground mb-8">
         For deployments that use a managed PostgreSQL service or an existing shared database server
@@ -97,16 +97,13 @@
         </li>
         <li>
             On managed PostgreSQL services (RDS, Cloud SQL, Supabase, Neon), run the script as the
-            database owner your provider gave you rather than the literal
+            database owner. Your provider gave you this user. Do not use the literal
             <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">postgres</code> user.
         </li>
         <li>
             At startup Nocturne sets
             <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">autovacuum_analyze_scale_factor = 0.01</code>
-            on each of its tenant-scoped tables, so a newly added tenant's rows reach the query
-            planner's statistics once they exceed about 1% of the table rather than a tenth of it.
-            The value is a ceiling: a lower value set by hand on those tables is kept, a higher or
-            missing one is replaced on the next start.
+            on each of its tenant-scoped tables. A newly added tenant's rows then reach the query planner's statistics once they exceed about 1% of the table. The default is a tenth of the table. The value is a ceiling. Nocturne keeps a lower value that you set by hand on those tables. It replaces a higher or missing value on the next start.
         </li>
     </ul>
 

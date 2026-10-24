@@ -80,7 +80,7 @@
 <div class="overflow-x-auto rounded-lg border bg-card">
   <table class="w-full text-sm tabular-nums">
     <caption class="sr-only">
-      {plural(events.length, ["# event", "# events"])}. Sort by a column, or open an event in Day in Review.
+      {plural(events.length, ["# event", "# events"])}. Sort by a column, or open an event in Day in review.
     </caption>
     <thead>
       <tr class="border-b text-xs text-muted-foreground">
@@ -91,7 +91,7 @@
           {@render header(metric.key, metric.label, "text-right")}
         {/each}
         {#if showBelowRange}<th scope="col" class="px-2 py-2 text-right font-medium">Below range</th>{/if}
-        <th scope="col" class="px-2 py-2"><span class="sr-only">Open in Day in Review</span></th>
+        <th scope="col" class="px-2 py-2"><span class="sr-only">Open in day in review</span></th>
       </tr>
     </thead>
     <tbody>
@@ -129,7 +129,7 @@
             <a
               href={resolve(`/reports/day-in-review?date=${event.date}&time=${event.time}`)}
               class="inline-flex items-center text-muted-foreground hover:text-foreground"
-              aria-label="Open {formatWeekdayDate(startOfDay(event.date ?? ''))} {localTime(event.time)} in Day in Review"
+              aria-label="Open {formatWeekdayDate(startOfDay(event.date ?? ''))} {localTime(event.time)} in Day in review"
             >
               <ArrowUpRight class="size-4" />
             </a>

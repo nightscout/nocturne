@@ -122,7 +122,7 @@
       <div>
         <CardTitle class="flex items-center gap-2">
           <Cloud class="h-5 w-5" />
-          Server Connectors
+          Server connectors
         </CardTitle>
         <CardDescription>
           Connectors that run on the server to pull data from cloud services
@@ -154,7 +154,7 @@
               Syncing...
             {:else}
               <Download class="h-4 w-4" />
-              Manual Sync
+              Manual sync
             {/if}
           </Button>
         {/if}
@@ -310,7 +310,7 @@
               {#if hasData}
                 <Badge variant="info">
                   <Database class="h-3 w-3 mr-1" />
-                  Has Data
+                  Has data
                 </Badge>
               {/if}
             {/snippet}
@@ -336,7 +336,7 @@
                 >
                   {connector.name}
                 </a>
-                <Badge variant="outline">Not Configured</Badge>
+                <Badge variant="outline">Not configured</Badge>
               </div>
               <p class="text-sm text-muted-foreground">
                 {connector.description}
@@ -365,8 +365,7 @@
       {/each}
     </div>
     <p class="text-sm text-muted-foreground mt-4">
-      Click on a connector to configure credentials and settings. Changes take
-      effect immediately.
+      Select a connector to configure credentials and settings. Changes take effect immediately.
     </p>
   </CardContent>
 </Card>

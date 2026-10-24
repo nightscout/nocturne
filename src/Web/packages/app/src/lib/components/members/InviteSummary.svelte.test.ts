@@ -31,7 +31,7 @@ describe("InviteSummary", () => {
       .element(page.getByText("Viewer", { exact: true }))
       .toBeVisible();
     await expect
-      .element(page.getByText("Blood Glucose", { exact: true }))
+      .element(page.getByText("Blood glucose", { exact: true }))
       .toBeVisible();
     await expect
       .element(page.getByText("Reports", { exact: true }))

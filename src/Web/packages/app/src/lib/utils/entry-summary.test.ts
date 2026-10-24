@@ -163,7 +163,7 @@ describe("entrySummary", () => {
   it("falls back to the category name when nothing is quantified", () => {
     expect(entrySummary(bolus({}))).toBe("Insulin");
     expect(entrySummary(carbs({}))).toBe("Carbs");
-    expect(entrySummary(deviceEvent({}))).toBe("Device Events");
+    expect(entrySummary(deviceEvent({}))).toBe("Device events");
     expect(entrySummary(basalInjection({}))).toBe("Long-acting injection");
   });
 });

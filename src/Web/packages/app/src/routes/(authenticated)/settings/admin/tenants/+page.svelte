@@ -232,7 +232,7 @@
     } catch (err) {
       createError = describeSubmitError(
         err,
-        "Failed to create tenant. Please try again."
+        "Failed to create tenant. Try again."
       );
     } finally {
       creating = false;
@@ -245,7 +245,7 @@
     <div class="flex items-center gap-3">
       <Building2 class="h-8 w-8 text-primary" />
       <div>
-        <h1 class="text-2xl font-bold">Tenant Management</h1>
+        <h1 class="text-2xl font-bold">Tenant management</h1>
         <p class="text-muted-foreground">
           Manage the current tenant's details and members
         </p>
@@ -275,7 +275,7 @@
       <Alert.Title>Multitenancy enabled</Alert.Title>
       <Alert.Description class="flex items-start justify-between gap-4">
         <span>
-          All app sessions have been invalidated. Reconfigure your apps to use
+          All app sessions were invalidated. Reconfigure your apps to use
           <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs"
             >{"{slug}"}.{transitionStatus?.baseDomain}</code
           >.
@@ -347,7 +347,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <ShieldCheck class="h-5 w-5" />
-          Platform Administrators
+          Platform administrators
         </CardTitle>
         <CardDescription>
           Platform admins can manage every tenant on this instance. Grant or
@@ -404,18 +404,18 @@
 <Dialog.Root bind:open={isEditDialogOpen}>
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
-      <Dialog.Title>Edit Tenant</Dialog.Title>
+      <Dialog.Title>Edit tenant</Dialog.Title>
       <Dialog.Description>
         Update the tenant's display name and active status
       </Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">
       <div class="space-y-2">
-        <Label for="edit-display-name">Display Name</Label>
+        <Label for="edit-display-name">Display name</Label>
         <Input
           id="edit-display-name"
           bind:value={editDisplayName}
-          placeholder="Display Name"
+          placeholder="Display name"
         />
       </div>
       <div class="flex items-center justify-between">
@@ -445,7 +445,7 @@
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
       <Dialog.Title>Create new tenant</Dialog.Title>
-      <Dialog.Description>Set up a new Nocturne instance</Dialog.Description>
+      <Dialog.Description>Configure a new Nocturne instance</Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">
       {#if createError}
@@ -479,7 +479,7 @@
         <Input
           id="new-display-name"
           bind:value={displayName}
-          placeholder="My Nocturne Instance"
+          placeholder="My Nocturne instance"
         />
       </div>
     </div>

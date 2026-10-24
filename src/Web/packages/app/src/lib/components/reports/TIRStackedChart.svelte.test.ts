@@ -34,7 +34,7 @@ describe("TIRStackedChart", () => {
       },
     });
 
-    // The stacked bar's "In Range" percentage label still renders on-chart.
+    // The stacked bar's "In range" percentage label still renders on-chart.
     await expect.element(page.getByText("70%").first()).toBeVisible();
     // The layerchart Chart measures its container via ResizeObserver, which reports
     // zero height in this unsized test harness — pixel geometry is covered by manual
@@ -54,12 +54,12 @@ describe("TIRStackedChart", () => {
       const key = page.getByTestId("band-key");
       await expect.element(key).toBeVisible();
       for (const text of [
-        "2% Very Low",
+        "2% Very low",
         "3% Low",
-        "70% In Range",
+        "70% In range",
         "40% in tight range",
         "15% High",
-        "10% Very High",
+        "10% Very high",
       ]) {
         await expect.element(key.getByText(text)).toBeVisible();
       }

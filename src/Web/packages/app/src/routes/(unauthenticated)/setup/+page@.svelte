@@ -245,7 +245,7 @@
 </script>
 
 <svelte:head>
-  <title>Get Started - Nocturne</title>
+  <title>Get started - Nocturne</title>
 </svelte:head>
 
 <!-- The onboarding surface is always dark by design. Force a `dark` theme context so
@@ -342,9 +342,9 @@
           class="rounded-2xl border border-destructive/20 bg-destructive/5 p-8"
         >
           <ShieldAlert class="mx-auto mb-4 h-12 w-12 text-destructive" />
-          <h2 class="text-xl font-semibold text-white mb-3">HTTPS Required</h2>
+          <h2 class="text-xl font-semibold text-white mb-3">HTTPS required</h2>
           <p class="text-white/60 text-sm leading-relaxed">
-            Nocturne requires a secure connection. Please access this site using <strong
+            Nocturne requires a secure connection. Access this site using <strong
               class="text-white"
             >
               https://
@@ -450,14 +450,15 @@
             <div class="flex items-center gap-3">
               <!-- Path badge -->
               <span
+                data-testid="setup-path-badge"
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold tracking-wider uppercase border border-(--onb-accent-dim) bg-(--onb-accent-dim) text-(--onb-accent)"
               >
                 {#if path === "migration"}
                   <Cable class="h-2.5 w-2.5" />
-                  Nightscout Migration
+                  Nightscout migration
                 {:else}
                   <Sprout class="h-2.5 w-2.5" />
-                  Fresh Start
+                  Fresh start
                 {/if}
               </span>
               <!-- Progress bar -->
@@ -539,7 +540,7 @@
                     <h1
                       class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
                     >
-                      Set up your <em
+                      Configure your <em
                         class="not-italic font-light text-(--onb-accent)"
                       >
                         app

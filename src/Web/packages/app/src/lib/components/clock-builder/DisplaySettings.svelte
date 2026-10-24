@@ -53,7 +53,7 @@
   </Popover.Trigger>
   <Popover.Content class="w-72" side="bottom" align="end">
     <div class="space-y-4">
-      <h4 class="font-medium">Display Settings</h4>
+      <h4 class="font-medium">Display settings</h4>
       <div class="flex items-center justify-between gap-2">
         <Label>Glucose units</Label>
         <Select.Root
@@ -96,7 +96,7 @@
         />
       </div>
       <div class="space-y-2">
-        <Label>Background Image URL</Label>
+        <Label>Background image URL</Label>
         <Input
           type="url"
           placeholder="https://..."

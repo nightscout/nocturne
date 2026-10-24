@@ -32,7 +32,7 @@ describe("the reports layout header", () => {
     const [mark] = ctx.getMountedSteps(SWITCHER);
 
     expect(mark.element.matches(".sticky")).toBe(true);
-    expect(mark.element.querySelector("h1")?.textContent).toContain("Loop Analysis");
+    expect(mark.element.querySelector("h1")?.textContent).toContain("Loop analysis");
   });
 
   it("carries no mark on another report", async () => {

@@ -89,7 +89,7 @@
 
 <div class={cn("space-y-3", className)} data-testid="tracker-thresholds">
   <div class="flex items-center justify-between">
-    <Label>Notification Thresholds</Label>
+    <Label>Notification thresholds</Label>
     <Button
       variant="outline"
       size="sm"
@@ -200,9 +200,9 @@
   {#if notifications.length > 0}
     <p class="text-xs text-muted-foreground">
       {#if mode === "Event"}
-        Negative = before event, Positive = after event.
+        Negative = before event, positive = after event.
       {:else}
-        Positive = after start, Negative = before expiration.
+        Positive = after start, negative = before expiration.
       {/if}
     </p>
   {/if}

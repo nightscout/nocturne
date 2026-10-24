@@ -78,7 +78,7 @@
     try {
       const res = await startCareLinkConnect({ server: region });
       if (!res.authorizeUrl || !res.state) {
-        error = "Could not start CareLink sign-in. Please try again.";
+        error = "Could not start CareLink sign-in. Try again.";
         return;
       }
       flowState = res.state;
@@ -102,7 +102,7 @@
         state: flowState,
       });
       if (!res.success) {
-        error = "Sign-in could not be completed. Please try again.";
+        error = "Sign-in could not be completed. Try again.";
         return;
       }
       connectedUsername = res.username ?? null;
@@ -172,7 +172,7 @@
             variant={region === "EU" ? "default" : "outline"}
             size="sm"
             onclick={() => (region = "EU")}
-            disabled={busy}>EU / Outside-US</Button
+            disabled={busy}>EU / outside-US</Button
           >
           <Button
             variant={region === "US" ? "default" : "outline"}
@@ -250,7 +250,7 @@
           <div class="mt-1 rounded bg-muted px-2 py-1 font-mono text-xs break-all text-foreground">
             {REDIRECT_PREFIX}?code=…
           </div>
-          Right-click it → <span class="font-medium text-foreground">Copy → Copy URL</span>.
+          Open its context menu → <span class="font-medium text-foreground">Copy → Copy URL</span>.
         </li>
         <li>Paste the whole thing below. You do not need to trim it.</li>
       </ol>

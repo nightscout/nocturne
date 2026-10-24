@@ -87,7 +87,7 @@ const notices = {
   selectionPaused:
     "Import settings saved. Imports are paused because no data types are selected. Previously imported data is kept.",
   statusUnavailable: "Import status is temporarily unavailable. Retrying.",
-  disconnected: "Google Health is disconnected. Your imported data has been kept.",
+  disconnected: "Google Health is disconnected. Nocturne kept your imported data.",
   alreadyRunning: errorMessages.already_running,
 };
 

@@ -117,7 +117,7 @@ describe("Google Health connector page", () => {
       .toBeDisabled();
     await expect
       .element(page.getByRole("status"))
-      .toHaveTextContent("The current scan or import is being stopped.");
+      .toHaveTextContent("Nocturne is stopping the current scan or import.");
     const disconnected = status({ configured: true });
     googleHealthMocks.status.mockResolvedValue(disconnected);
     finishDisconnect(disconnected);
@@ -127,7 +127,7 @@ describe("Google Health connector page", () => {
       .toBeEnabled();
     await expect
       .element(page.getByRole("status"))
-      .toHaveTextContent("Your imported data has been kept.");
+      .toHaveTextContent("Nocturne kept your imported data.");
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
     expect(googleHealthMocks.disconnect).toHaveBeenCalledTimes(1);
   });

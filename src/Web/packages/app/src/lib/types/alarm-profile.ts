@@ -217,13 +217,13 @@ export const BUILT_IN_SOUNDS: SoundPreset[] = [
 export const ALARM_TYPE_LABELS: Record<AlarmTriggerType, string> = {
   High: "High",
   Low: "Low",
-  UrgentHigh: "Urgent High",
-  UrgentLow: "Urgent Low",
-  RisingFast: "Rising Fast",
-  FallingFast: "Falling Fast",
-  StaleData: "Stale Data",
-  ForecastLow: "Forecast Low",
-  Custom: "Custom Range",
+  UrgentHigh: "Urgent high",
+  UrgentLow: "Urgent low",
+  RisingFast: "Rising fast",
+  FallingFast: "Falling fast",
+  StaleData: "Stale data",
+  ForecastLow: "Forecast low",
+  Custom: "Custom range",
 };
 
 /** Labels for alarm priorities */

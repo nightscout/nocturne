@@ -202,7 +202,7 @@
             href={resolve("/settings/trackers")}
             class="mt-2 text-xs text-primary hover:underline"
           >
-            Set up trackers
+            Configure trackers
           </a>
         </div>
       {:else}

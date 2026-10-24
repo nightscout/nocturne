@@ -139,6 +139,19 @@ describe("AppSidebar", () => {
     expect(visited.urls).toEqual(["https://charlie.example.com/"]);
   });
 
+  it("offers the member's own data on the apex host, where no tenant is on screen", async () => {
+    pageState.data = { effectivePermissions: ["*"] };
+    membership.tenants = TENANTS;
+
+    render(Harness, { user: MEMBER, baseDomain: "example.com" });
+    flushIdle();
+
+    await group("My data").click();
+
+    await expect.element(option("My data")).toHaveAttribute("aria-selected", "true");
+    await expect.element(option("Alpha (alpha)")).toBeVisible();
+  });
+
   it("lists the member's tenants once the page is idle, not on mount", async () => {
     pageState.data = { effectivePermissions: ["*"] };
     membership.tenants = TENANTS;

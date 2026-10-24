@@ -23,7 +23,7 @@ describe("ScheduleEditor", () => {
 		});
 
 		await expect
-			.element(page.getByText("No entries yet. Click Add to create one."))
+			.element(page.getByText("No entries yet. Select Add to create one."))
 			.toBeVisible();
 	});
 
@@ -43,7 +43,7 @@ describe("ScheduleEditor", () => {
 
 		// Should not show empty state
 		await expect
-			.element(page.getByText("No entries yet. Click Add to create one."))
+			.element(page.getByText("No entries yet. Select Add to create one."))
 			.not.toBeInTheDocument();
 	});
 
@@ -58,7 +58,7 @@ describe("ScheduleEditor", () => {
 
 		// Empty state should disappear
 		await expect
-			.element(page.getByText("No entries yet. Click Add to create one."))
+			.element(page.getByText("No entries yet. Select Add to create one."))
 			.not.toBeInTheDocument();
 
 		// Should now show the unit label

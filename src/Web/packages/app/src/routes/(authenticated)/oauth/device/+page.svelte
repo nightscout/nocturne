@@ -81,7 +81,7 @@
 </script>
 
 <svelte:head>
-  <title>{deviceInfo ? "Authorize a Device" : "Link a Device"} - Nocturne</title>
+  <title>{deviceInfo ? "Authorize a device" : "Link a device"} - Nocturne</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-background p-4">
@@ -95,7 +95,7 @@
           <Check class="h-6 w-6 text-success" />
         </div>
         <Card.Title class="text-2xl font-bold">
-          Device Authorized
+          Device authorized
         </Card.Title>
         <Card.Description>
           You can close this window and return to your device.
@@ -110,7 +110,7 @@
           <X class="h-6 w-6 text-muted-foreground" />
         </div>
         <Card.Title class="text-2xl font-bold">
-          Authorization Denied
+          Authorization denied
         </Card.Title>
         <Card.Description>
           The device will not be granted access.
@@ -124,7 +124,7 @@
         >
           <AlertTriangle class="h-6 w-6 text-muted-foreground" />
         </div>
-        <Card.Title class="text-2xl font-bold">Code Expired</Card.Title>
+        <Card.Title class="text-2xl font-bold">Code expired</Card.Title>
         <Card.Description>
           This code is no longer valid. Start the sign-in again on your device to
           get a new one.
@@ -145,7 +145,7 @@
           <Shield class="h-6 w-6 text-primary" />
         </div>
         <Card.Title class="text-2xl font-bold">
-          Authorize Application
+          Authorize application
         </Card.Title>
         <Card.Description>
           A device wants to access your Nocturne data.
@@ -262,7 +262,7 @@
           <Smartphone class="h-6 w-6 text-primary" />
         </div>
         <Card.Title class="text-2xl font-bold">
-          Link a Device
+          Link a device
         </Card.Title>
         <Card.Description>
           Enter the code shown on your device

@@ -6,7 +6,7 @@
 </script>
 
 <svelte:head>
-  <title>Guest Access - Nocturne</title>
+  <title>Guest access - Nocturne</title>
 </svelte:head>
 
 <div class="flex flex-1 items-center justify-center p-4">

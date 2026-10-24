@@ -90,11 +90,11 @@
       const lastMonthEnd = thisMonthStart.subtract({ days: 1 });
       return {
         a: {
-          label: "Last Month",
+          label: "Last month",
           from: lastMonthStart.toString(),
           to: lastMonthEnd.toString(),
         },
-        b: { label: "This Month", from: thisMonthStart.toString(), to: today },
+        b: { label: "This month", from: thisMonthStart.toString(), to: today },
       };
     }
 
@@ -109,10 +109,10 @@
   }
 
   const presetOptions: { value: Preset; label: string }[] = [
-    { value: "last7-prior7", label: "Last 7 vs Prior 7 days" },
-    { value: "last14-prior14", label: "Last 14 vs Prior 14 days" },
-    { value: "last30-prior30", label: "Last 30 vs Prior 30 days" },
-    { value: "thisMonth-lastMonth", label: "This Month vs Last Month" },
+    { value: "last7-prior7", label: "Last 7 vs prior 7 days" },
+    { value: "last14-prior14", label: "Last 14 vs prior 14 days" },
+    { value: "last30-prior30", label: "Last 30 vs prior 30 days" },
+    { value: "thisMonth-lastMonth", label: "This month vs last month" },
     { value: "custom", label: "Custom" },
   ];
 
@@ -209,16 +209,16 @@
   // Both periods register with the layout's ResourceContext, which merges them:
   // either side's failure surfaces and Retry refetches both.
   const queryA = contextResource(() => getReportsAnalysis(inputA), {
-    errorTitle: "Error Loading Comparison",
+    errorTitle: "Error loading comparison",
   });
   const queryB = contextResource(() => getReportsAnalysis(inputB), {
-    errorTitle: "Error Loading Comparison",
+    errorTitle: "Error loading comparison",
   });
   const insulinQueryA = contextResource(() => getReportsInsulinDelivery(inputA), {
-    errorTitle: "Error Loading Comparison",
+    errorTitle: "Error loading comparison",
   });
   const insulinQueryB = contextResource(() => getReportsInsulinDelivery(inputB), {
-    errorTitle: "Error Loading Comparison",
+    errorTitle: "Error loading comparison",
   });
 
   type Response = NonNullable<typeof queryA.current>;
@@ -303,7 +303,7 @@
       p.insulin?.carbCount ? pick(p.insulin) : null;
 
   const metricDefs = {
-    tirTarget: percent("Time in Range", (p) => p.analysis.timeInRange?.percentages?.target),
+    tirTarget: percent("Time in range", (p) => p.analysis.timeInRange?.percentages?.target),
     gmi: {
       label: "GMI",
       get: (p) => p.analysis.gmi?.value,
@@ -312,23 +312,23 @@
       flatBelow: 0.05,
     } satisfies MetricDef,
     cv: percent("Variability (CV)", (p) => p.analysis.glycemicVariability?.coefficientOfVariation),
-    gri: figure("Glycemic Risk Index", (p) => p.analysis.gri?.score, 0),
-    mean: glucose("Mean Glucose", (p) => p.analysis.basicStats?.mean),
+    gri: figure("Glycemic risk index", (p) => p.analysis.gri?.score, 0),
+    mean: glucose("Mean glucose", (p) => p.analysis.basicStats?.mean),
     hyperMinutesPerDay: minutes(
-      "Hyper Time / Day",
+      "Hyper time / day",
       (p) => p.analysis.timeInRange?.averageDailyMinutes?.high
     ),
     hyperEventsPerDay: figure(
-      "Hyper Events / Day",
+      "Hyper events / day",
       (p) => p.analysis.timeInRange?.averageDailyEpisodes?.aboveRange,
       2
     ),
     hypoMinutesPerDay: minutes(
-      "Hypo Time / Day",
+      "Hypo time / day",
       (p) => p.analysis.timeInRange?.averageDailyMinutes?.low
     ),
     hypoEventsPerDay: figure(
-      "Hypo Events / Day",
+      "Hypo events / day",
       (p) => p.analysis.timeInRange?.averageDailyEpisodes?.belowRange,
       2
     ),
@@ -338,12 +338,12 @@
     highPercent: percent("Time High (%)", (p) => p.analysis.timeInRange?.percentages?.high),
     veryHighPercent: percent("Time Very High (%)", (p) => p.analysis.timeInRange?.percentages?.veryHigh),
     personalRangePercent: {
-      ...percent("Time in Personal Range", (p) => p.personalRange?.inRangePercent),
+      ...percent("Time in personal range", (p) => p.personalRange?.inRangePercent),
       omitWhenAbsent: true,
     },
 
-    sd: glucose("Standard Deviation", (p) => p.analysis.glycemicVariability?.standardDeviation),
-    median: glucose("Median Glucose", (p) => p.analysis.basicStats?.median),
+    sd: glucose("Standard deviation", (p) => p.analysis.glycemicVariability?.standardDeviation),
+    median: glucose("Median glucose", (p) => p.analysis.basicStats?.median),
     lbgi: figure("LBGI", (p) => p.analysis.glycemicVariability?.lowBloodGlucoseIndex, 1),
     hbgi: figure("HBGI", (p) => p.analysis.glycemicVariability?.highBloodGlucoseIndex, 1),
     mage: glucose("MAGE", (p) => p.analysis.glycemicVariability?.meanAmplitudeGlycemicExcursions),
@@ -353,22 +353,22 @@
     ),
     adrr: figure("ADRR", (p) => p.analysis.glycemicVariability?.averageDailyRiskRange, 1),
 
-    insulinPerDay: figure("Total Insulin / Day", insulinFigure((i) => i.tdd), 1, " U"),
-    basalPerDay: figure("Basal / Day", insulinFigure((i) => i.totalBasalPerDay), 1, " U"),
-    basalPercent: percent("Basal Share of Insulin", insulinFigure((i) => i.basalPercent)),
-    bolusesPerDay: figure("Manual Boluses / Day", insulinFigure((i) => i.bolusesPerDay), 1),
-    carbsPerDay: figure("Carbs / Day", carbFigure((i) => i.carbsPerDay), 0, " g"),
+    insulinPerDay: figure("Total insulin / day", insulinFigure((i) => i.tdd), 1, " U"),
+    basalPerDay: figure("Basal / day", insulinFigure((i) => i.totalBasalPerDay), 1, " U"),
+    basalPercent: percent("Basal share of insulin", insulinFigure((i) => i.basalPercent)),
+    bolusesPerDay: figure("Manual boluses / day", insulinFigure((i) => i.bolusesPerDay), 1),
+    carbsPerDay: figure("Carbs / day", carbFigure((i) => i.carbsPerDay), 0, " g"),
     carbToInsulin: figure(
-      "Carb-to-Insulin Ratio",
+      "Carb-to-insulin ratio",
       (p) => p.insulin?.icRatio || null,
       1,
       " g/U"
     ),
 
-    cgmActivePercent: percent("CGM Active Time", (p) => p.analysis.dataQuality?.cgmActivePercent),
-    daysWithData: figure("Days with Data", (p) => p.analysis.dataSufficiency?.daysWithData, 0),
+    cgmActivePercent: percent("CGM active time", (p) => p.analysis.dataQuality?.cgmActivePercent),
+    daysWithData: figure("Days with data", (p) => p.analysis.dataSufficiency?.daysWithData, 0),
     readingsPerDay: figure(
-      "Readings / Day",
+      "Readings / day",
       (p) => p.analysis.dataSufficiency?.averageReadingsPerDay,
       0
     ),
@@ -718,7 +718,7 @@
 
   <Card.Root>
     <Card.Header>
-      <Card.Title>Time in Range: stacked comparison</Card.Title>
+      <Card.Title>Time in range: stacked comparison</Card.Title>
       <Card.Description>
         Vertical stacked bars showing the full TIR breakdown for each period.
       </Card.Description>

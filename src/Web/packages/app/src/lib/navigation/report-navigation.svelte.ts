@@ -100,12 +100,12 @@ export function reportCategories(): ReportCategory[] {
   return [
     {
       id: "overview",
-      title: "The Big Picture",
+      title: "The big picture",
       subtitle: "Your key metrics at a glance",
       icon: Gauge,
       reports: [
         {
-          title: "Executive Summary",
+          title: "Executive summary",
           description: "Time in range, average glucose and data completeness",
           href: "/reports/executive-summary",
           keywords: ["overview", "summary", "report card", "snapshot"],
@@ -114,7 +114,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Glucose Profile (AGP)",
+          title: "Glucose profile (AGP)",
           sidebarTitle: "AGP",
           description: "Your typical day of glucose, with percentile bands and time in range",
           href: "/reports/agp",
@@ -124,7 +124,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Glucose Distribution",
+          title: "Glucose distribution",
           description: "Time spent in each glucose zone",
           href: "/reports/glucose-distribution",
           keywords: ["spread"],
@@ -133,7 +133,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Data Quality",
+          title: "Data quality",
           description: "Compression lows, signal integrity, CGM comparison and rejected uploads",
           href: "/reports/data-quality",
           keywords: ["compression", "signal", "sensor", "rejected uploads"],
@@ -155,12 +155,12 @@ export function reportCategories(): ReportCategory[] {
     },
     {
       id: "patterns",
-      title: "Patterns & Trends",
+      title: "Patterns & trends",
       subtitle: "Discover what affects your glucose",
       icon: CalendarDays,
       reports: [
         {
-          title: "Year Overview",
+          title: "Year overview",
           description: "Multi-year heatmap of your diabetes data",
           href: "/reports/year-overview",
           keywords: ["annual", "yearly", "12 month", "heatmap"],
@@ -169,7 +169,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Day-by-Day View",
+          title: "Day-by-day view",
           sidebarTitle: "Readings",
           description: "Your glucose readings, one day at a time",
           href: "/reports/readings",
@@ -179,7 +179,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Day in Review",
+          title: "Day in review",
           description: "Glucose and treatments for one day",
           href: "/reports/day-in-review",
           keywords: ["daily", "today", "yesterday"],
@@ -188,7 +188,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Week to Week",
+          title: "Week to week",
           description: "Compare your glucose patterns from week to week",
           href: "/reports/week-to-week",
           keywords: ["comparison", "trend", "weekly"],
@@ -206,7 +206,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Hourly Patterns",
+          title: "Hourly patterns",
           description: "Which hours of the day spend the most and least time in range",
           href: "/reports/hourly-stats",
           keywords: ["hourly", "time of day", "best hours", "worst hours"],
@@ -218,12 +218,12 @@ export function reportCategories(): ReportCategory[] {
     },
     {
       id: "lifestyle",
-      title: "Lifestyle Impact",
+      title: "Lifestyle impact",
       subtitle: "How food, exercise & sleep affect you",
       icon: HeartPulse,
       reports: [
         {
-          title: "Step Count",
+          title: "Step count",
           sidebarTitle: "Steps",
           description: "Step count patterns with a glucose overlay",
           href: "/reports/steps",
@@ -233,7 +233,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Heart Rate",
+          title: "Heart rate",
           description: "Heart rate patterns with a glucose overlay",
           href: "/reports/heart-rate",
           keywords: ["pulse", "bpm", "cardio"],
@@ -242,7 +242,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Sleep & Overnight",
+          title: "Sleep & overnight",
           sidebarTitle: "Sleep",
           description: "Sleep patterns with a glucose overlay",
           href: "/reports/sleep",
@@ -252,7 +252,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Meal Analysis",
+          title: "Meal analysis",
           description: "See how different meals affect you",
           href: "/reports/meals",
           scopes: [READ.treatments, READ.food],
@@ -260,7 +260,7 @@ export function reportCategories(): ReportCategory[] {
           status: "coming-soon",
         },
         {
-          title: "Exercise Impact",
+          title: "Exercise impact",
           description: "Track activity's effect on glucose",
           href: "/reports/exercise",
           scopes: [READ.glucose, READ.stepCount],
@@ -271,12 +271,12 @@ export function reportCategories(): ReportCategory[] {
     },
     {
       id: "treatment",
-      title: "Treatment Insights",
+      title: "Treatment insights",
       subtitle: "Is your treatment working?",
       icon: Syringe,
       reports: [
         {
-          title: "Treatment Log",
+          title: "Treatment log",
           sidebarTitle: "Treatments",
           description: "View and edit your insulin doses and carb entries",
           href: "/reports/treatments",
@@ -286,8 +286,8 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Basal Rate Analysis",
-          sidebarTitle: "Basal Analysis",
+          title: "Basal rate analysis",
+          sidebarTitle: "Basal analysis",
           description: "Basal insulin delivery by time of day, with percentile bands",
           href: "/reports/basal-analysis",
           keywords: ["basal rate", "background insulin", "temp basal"],
@@ -296,7 +296,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Insulin Delivery",
+          title: "Insulin delivery",
           description: "Basal and bolus split, and total daily dose trends",
           href: "/reports/insulin-delivery",
           keywords: ["tdd", "total daily dose", "basal bolus ratio"],
@@ -305,7 +305,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Site Change Impact",
+          title: "Site change impact",
           description: "How pump site changes affect your glucose",
           href: "/reports/site-change-impact",
           keywords: ["infusion site", "cannula", "rotation", "set change"],
@@ -314,7 +314,7 @@ export function reportCategories(): ReportCategory[] {
           status: "available",
         },
         {
-          title: "Insulin Dosing Profile",
+          title: "Insulin dosing profile",
           sidebarTitle: "IDP",
           description: "Standardized insulin and glucose summary",
           href: "/reports/idp",
@@ -337,7 +337,7 @@ export function reportCategories(): ReportCategory[] {
     },
     {
       id: "loop",
-      title: "Loop Analysis",
+      title: "Loop analysis",
       subtitle: "What your automated insulin delivery does",
       icon: Repeat,
       pages: { href: "/reports/loop-analysis" },
@@ -405,23 +405,23 @@ export function reportTitle(category: ReportCategory, report: ReportItem): strin
 function reportSubRoutes(): Record<string, { title: string; description: string }> {
   return {
     "/reports/data-quality/compression-lows": {
-      title: "Compression Lows",
+      title: "Compression lows",
       description: "Glucose drops during sleep that can come from pressure on the sensor",
     },
     "/reports/data-quality/sensor-integrity": {
-      title: "Signal Integrity",
+      title: "Signal integrity",
       description: "Days and windows where the sensor signal was unreliable",
     },
     "/reports/data-quality/cgm-comparison": {
-      title: "CGM Comparison",
+      title: "CGM comparison",
       description: "Two CGM devices compared against each other",
     },
     "/reports/data-quality/rejected-uploads": {
-      title: "Rejected Uploads",
+      title: "Rejected uploads",
       description: "Records an uploader sent that Nocturne could not store",
     },
     "/reports/sleep/[date]": {
-      title: "Sleep Night Report",
+      title: "Sleep night report",
       description: "Sleep stages and overnight glucose for one night",
     },
   };

@@ -79,7 +79,7 @@
 <Dialog.Root bind:open>
   <Dialog.Content>
     <Dialog.Header>
-      <Dialog.Title>Record Reservoir Value</Dialog.Title>
+      <Dialog.Title>Record reservoir value</Dialog.Title>
       <Dialog.Description>
         Enter the units shown on your pump, or the amount you just filled into a
         fresh reservoir or pod. A fill also resets the reservoir age.
@@ -112,7 +112,7 @@
         />
       </div>
       <div class="space-y-2">
-        <Label for="observedAt">Observed At</Label>
+        <Label for="observedAt">Observed at</Label>
         <Input id="observedAt" type="datetime-local" bind:value={observedAt} />
       </div>
     </div>

@@ -89,7 +89,7 @@
 </script>
 
 <svelte:head>
-  <title>Connect a Data Source - Setup - Nocturne</title>
+  <title>Connect a data source - Setup - Nocturne</title>
 </svelte:head>
 
 <div class="container mx-auto max-w-2xl p-6 space-y-6">

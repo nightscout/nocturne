@@ -75,7 +75,7 @@
     <Card.Header class="pb-2">
       <Card.Title variant="destructive" class="flex items-center gap-2 text-base">
         <AlertTriangle class="h-4 w-4" />
-        Error Loading Status
+        Error loading status
       </Card.Title>
     </Card.Header>
     <Card.Content>
@@ -89,7 +89,7 @@
           onclick={() => retrospectiveQuery.refresh()}
         >
           <RefreshCw class="h-4 w-4 mr-2" />
-          Try Again
+          Try again
         </Button>
       </div>
     </Card.Content>
@@ -180,7 +180,7 @@
               </span>
               <span class="text-sm text-muted-foreground">g</span>
             </div>
-            <div class="text-xs text-muted-foreground">Carbs on Board</div>
+            <div class="text-xs text-muted-foreground">Carbs on board</div>
           {:else}
             <span class="text-lg font-semibold text-muted-foreground">—</span>
             <span class="text-xs text-muted-foreground">No data</span>

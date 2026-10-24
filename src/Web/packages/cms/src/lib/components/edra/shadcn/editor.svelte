@@ -90,7 +90,7 @@
 				},
 				onContentError: (error) => {
 					toast.error('Could not load the content', {
-						description: 'The content of this page might be corrupted.'
+						description: 'The content of this page is possibly corrupted.'
 					});
 					console.error(error);
 				},

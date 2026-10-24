@@ -49,4 +49,15 @@ describe("UploaderSetupDialog API key", () => {
     await expect.element(page.getByText("Label already used.")).toBeVisible();
     await expect.element(page.getByRole("button", { name: "Generate API key" })).toBeVisible();
   });
+
+  it("links to the uploader's website", async () => {
+    render(UploaderSetupDialog, {
+      open: true,
+      selectedUploader: { ...JUGGLUCO, url: "https://juggluco.example" },
+    });
+
+    await expect
+      .element(page.getByRole("link", { name: "Visit Juggluco website" }))
+      .toHaveAttribute("href", "https://juggluco.example");
+  });
 });

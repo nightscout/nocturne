@@ -210,12 +210,12 @@ export function summarizeCondition(
 
 function bucketLabel(bucket: string): string {
 	switch (bucket) {
-		case "very_low": return "Very Low";
+		case "very_low": return "Very low";
 		case "low": return "Low";
-		case "tight_range": return "Tight Range";
-		case "in_range": return "In Range";
+		case "tight_range": return "Tight range";
+		case "in_range": return "In range";
 		case "high": return "High";
-		case "very_high": return "Very High";
+		case "very_high": return "Very high";
 		default: return bucket;
 	}
 }
@@ -239,7 +239,7 @@ const PUMP_MODE_LABELS: Record<PumpModeState, string> = {
 	[PumpModeState.Limited]: "Limited",
 	[PumpModeState.Manual]: "in Manual",
 	[PumpModeState.Boost]: "Boosting",
-	[PumpModeState.EaseOff]: "Easing Off",
+	[PumpModeState.EaseOff]: "Easing off",
 	[PumpModeState.Sleep]: "in Sleep mode",
 	[PumpModeState.Exercise]: "in Exercise mode",
 	[PumpModeState.Liberty]: "in Liberty mode",

@@ -658,7 +658,7 @@
                         <span class="min-w-32 font-medium">{gapDate(gap)}</span><span class="sr-only">, </span>
                         <span class="min-w-16 tabular-nums">{time(atMinute(gap.startMinuteOfDay ?? 0))}</span><span class="sr-only">, </span>
                         <span class="flex-1 tabular-nums">{duration(gap.minutes)}</span>
-                        <span class="sr-only">. Open in Day in Review</span>
+                        <span class="sr-only">. Open in Day in review</span>
                         <ArrowUpRight class="size-4 text-muted-foreground" aria-hidden="true" />
                       </a>
                     </li>

@@ -60,8 +60,8 @@
     [CompletionReason.Expired]: "Expired",
     [CompletionReason.Other]: "Other",
     [CompletionReason.Failed]: "Failed",
-    [CompletionReason.FellOff]: "Fell Off",
-    [CompletionReason.ReplacedEarly]: "Replaced Early",
+    [CompletionReason.FellOff]: "Fell off",
+    [CompletionReason.ReplacedEarly]: "Replaced early",
     [CompletionReason.Empty]: "Empty",
     [CompletionReason.Refilled]: "Refilled",
     [CompletionReason.Attended]: "Attended",
@@ -253,7 +253,7 @@
     <div class="grid gap-4 py-4">
       {#if isEventMode}
         <div class="space-y-2">
-          <Label for="scheduledAt">Scheduled For</Label>
+          <Label for="scheduledAt">Scheduled for</Label>
           <Input
             type="datetime-local"
             id="scheduledAt"
@@ -265,7 +265,7 @@
         </div>
       {:else}
         <div class="space-y-2">
-          <Label for="startedAt">Start Time</Label>
+          <Label for="startedAt">Start time</Label>
           <Input
             type="datetime-local"
             id="startedAt"
@@ -288,7 +288,7 @@
       {#if startPreview.length > 0}
         <div class="rounded-lg border bg-muted/50 p-3 mt-2">
           <Label size="sm" class="mb-2 block">
-            Notification Schedule (Adjusted)
+            Notification schedule (adjusted)
           </Label>
           <div class="space-y-2">
             {#each startPreview as preview, i (i)}

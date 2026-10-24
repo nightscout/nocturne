@@ -21,7 +21,7 @@ vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
 import DndPage from "./+page.svelte";
 
 const saveButton = () => page.getByRole("button", { name: "Save" });
-const accessDenied = () => page.getByText("Access Denied");
+const accessDenied = () => page.getByText("Access denied");
 
 describe("alerts/dnd page", () => {
   beforeEach(() => {

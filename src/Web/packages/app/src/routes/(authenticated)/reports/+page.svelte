@@ -58,7 +58,7 @@
       canLoadSummary
         ? getReportsData(reportsParams.dateRangeInput)
         : { loading: false, error: null, current: undefined, refresh: () => {} },
-    { errorTitle: "Error Loading Reports", dateParams: reportsParams }
+    { errorTitle: "Error loading reports", dateParams: reportsParams }
   );
 
   const isLoading = $derived(reportsResource.loading);
@@ -148,13 +148,13 @@
         {#if visibleHrefs.has("/reports/executive-summary")}
           <Button href="/reports/executive-summary">
             <Gauge />
-            Executive Summary
+            Executive summary
           </Button>
         {/if}
         {#if visibleHrefs.has("/reports/agp")}
           <Button href="/reports/agp" variant="outline">
             <BarChart3 />
-            AGP Report
+            AGP report
           </Button>
         {/if}
         {#if visibleHrefs.has("/reports/readings")}

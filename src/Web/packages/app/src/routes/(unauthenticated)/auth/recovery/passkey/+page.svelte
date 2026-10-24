@@ -75,7 +75,7 @@
 </script>
 
 <svelte:head>
-  <title>Register a Passkey - Nocturne</title>
+  <title>Register a passkey - Nocturne</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center p-4">
@@ -91,7 +91,7 @@
         {#if registered}
           Your passkey is ready. Sign in with it to finish.
         {:else}
-          Your recovery code was accepted. It lets you set up a passkey for
+          Your recovery code was accepted. It lets you create a passkey for
           {username || "your account"} and nothing else. It expires in ten
           minutes.
         {/if}

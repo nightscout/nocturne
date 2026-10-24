@@ -173,7 +173,7 @@
         toast.error(
           describeSubmitError(
             outcome.reason,
-            "This list may be out of date. Reload the page to see the latest."
+            "This list is possibly out of date. Reload the page to see the latest."
           )
         );
       }
@@ -350,7 +350,7 @@
 </script>
 
 <svelte:head>
-  <title>Connectors & Apps - Settings - Nocturne</title>
+  <title>Connectors & apps - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -361,9 +361,9 @@
         <Wifi class="h-6 w-6 text-primary" />
       </div>
       <div>
-        <h1 class="text-2xl font-bold tracking-tight">Connectors & Apps</h1>
+        <h1 class="text-2xl font-bold tracking-tight">Connectors & apps</h1>
         <p class="text-muted-foreground">
-          Manage data sources, set up new connections, and control app access
+          Manage data sources, add new connections, and control app access
         </p>
       </div>
     </div>
@@ -386,7 +386,7 @@
           <AlertCircle class="h-12 w-12 mx-auto mb-4 text-destructive" />
           <p class="font-medium">Failed to load services</p>
           <p class="text-sm text-muted-foreground mt-1">{error}</p>
-          <Button class="mt-4" onclick={loadServices}>Try Again</Button>
+          <Button class="mt-4" onclick={loadServices}>Try again</Button>
         </div>
       </CardContent>
     </Card>
@@ -398,7 +398,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Wifi class="h-5 w-5" />
-          Active Data Sources
+          Active data sources
         </CardTitle>
         <CardDescription>
           Devices and apps currently sending data to this Nocturne instance
@@ -410,7 +410,7 @@
             <WifiOff class="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p class="font-medium">No data sources detected</p>
             <p class="text-sm">
-              Set up an uploader app to start sending data to Nocturne
+              Add an uploader app to start sending data to Nocturne
             </p>
           </div>
         {:else}
@@ -492,7 +492,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Database class="h-5 w-5" />
-            API Information
+            API information
           </CardTitle>
           <CardDescription>
             Use these endpoints to configure uploaders manually

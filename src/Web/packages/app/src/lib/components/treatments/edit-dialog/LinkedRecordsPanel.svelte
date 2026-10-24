@@ -60,7 +60,7 @@
       class="text-xs font-medium uppercase text-muted-foreground tracking-wide flex items-center gap-2"
     >
       <Link class="h-3.5 w-3.5" />
-      Linked Records
+      Linked records
       <Badge variant="secondary" size="sm" class="h-5">
         {records.length}
       </Badge>

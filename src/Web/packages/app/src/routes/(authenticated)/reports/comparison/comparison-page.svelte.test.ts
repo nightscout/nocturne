@@ -80,21 +80,21 @@ describe("hypo comparison rows", () => {
 
   it("shows per-day time and events and a positive change from a measured zero", async () => {
     render(ComparisonPage);
-    const duration = await cells("Hypo Time / Day");
+    const duration = await cells("Hypo time / day");
     expect(duration.slice(1, 3)).toEqual(["0m", "30m"]);
     expect(duration[4]).toBe("+30m");
-    const events = await cells("Hypo Events / Day");
+    const events = await cells("Hypo events / day");
     expect(events.slice(1, 3)).toEqual(["0.00", "1.50"]);
     expect(events[4]).toBe("+1.50");
-    expect((await cells("Hyper Time / Day"))[4]).toBe("±0m");
-    expect((await cells("Hyper Events / Day"))[4]).toBe("±0");
+    expect((await cells("Hyper time / day"))[4]).toBe("±0m");
+    expect((await cells("Hyper events / day"))[4]).toBe("±0");
   });
 
   it("shows a low rate that one decimal would round to zero", async () => {
     periodA = analysis(0, 0.03);
     periodB = analysis(0, 0.04);
     render(ComparisonPage);
-    const events = await cells("Hypo Events / Day");
+    const events = await cells("Hypo events / day");
     expect(events.slice(1, 3)).toEqual(["0.03", "0.04"]);
     expect(events[4]).toBe("+0.01");
   });
@@ -102,18 +102,18 @@ describe("hypo comparison rows", () => {
   it("shows a negative change when the second period has fewer lows", async () => {
     periodA = analysis(90, 3);
     render(ComparisonPage);
-    expect((await cells("Hypo Time / Day"))[4]).toBe("−1h");
-    expect((await cells("Hypo Events / Day"))[4]).toBe("−1.50");
+    expect((await cells("Hypo time / day"))[4]).toBe("−1h");
+    expect((await cells("Hypo events / day"))[4]).toBe("−1.50");
   });
 
   it("shows no data instead of comparing a missing period against zero", async () => {
     periodA = { basicStats: { count: 0 } };
     periodB = analysis(0, 0);
     render(ComparisonPage);
-    const duration = await cells("Hypo Time / Day");
+    const duration = await cells("Hypo time / day");
     expect(duration.slice(1, 3)).toEqual(["No data", "0m"]);
     expect(duration[4]).toBe("—");
-    const events = await cells("Hypo Events / Day");
+    const events = await cells("Hypo events / day");
     expect(events.slice(1, 3)).toEqual(["No data", "0.00"]);
     expect(events[4]).toBe("—");
   });
@@ -181,22 +181,22 @@ describe("grouped comparison rows", () => {
       "Time Low (%)",
       "Time High (%)",
       "Time Very High (%)",
-      "Standard Deviation",
-      "Median Glucose",
+      "Standard deviation",
+      "Median glucose",
       "LBGI",
       "HBGI",
       "MAGE",
       "CONGA",
       "ADRR",
-      "Total Insulin / Day",
-      "Basal / Day",
-      "Basal Share of Insulin",
-      "Manual Boluses / Day",
-      "Carbs / Day",
-      "Carb-to-Insulin Ratio",
-      "CGM Active Time",
-      "Days with Data",
-      "Readings / Day",
+      "Total insulin / day",
+      "Basal / day",
+      "Basal share of insulin",
+      "Manual boluses / day",
+      "Carbs / day",
+      "Carb-to-insulin ratio",
+      "CGM active time",
+      "Days with data",
+      "Readings / day",
     ]) {
       const row = await cells(label);
       expect(row[1], `${label} period A`).not.toBe("No data");
@@ -207,28 +207,28 @@ describe("grouped comparison rows", () => {
 
   it("shows the API's per-day insulin unchanged", async () => {
     render(ComparisonPage);
-    const insulin = await cells("Total Insulin / Day");
+    const insulin = await cells("Total insulin / day");
     expect(insulin.slice(1, 3)).toEqual(["44.2 U", "46.9 U"]);
     expect(insulin[4]).toBe("+2.7 U");
-    expect((await cells("Basal / Day")).slice(1, 3)).toEqual(["20.5 U", "24.6 U"]);
-    expect((await cells("Carbs / Day")).slice(1, 3)).toEqual(["150 g", "180 g"]);
-    expect((await cells("Carb-to-Insulin Ratio")).slice(1, 3)).toEqual(["11.5 g/U", "13.8 g/U"]);
+    expect((await cells("Basal / day")).slice(1, 3)).toEqual(["20.5 U", "24.6 U"]);
+    expect((await cells("Carbs / day")).slice(1, 3)).toEqual(["150 g", "180 g"]);
+    expect((await cells("Carb-to-insulin ratio")).slice(1, 3)).toEqual(["11.5 g/U", "13.8 g/U"]);
   });
 
   it("shows no data for insulin figures of a period with no insulin records", async () => {
     extrasA = { insulinDelivery: { insulinEventCount: 0, carbCount: 0, tdd: 0, carbsPerDay: 0 } };
     render(ComparisonPage);
-    const insulin = await cells("Total Insulin / Day");
+    const insulin = await cells("Total insulin / day");
     expect(insulin.slice(1, 3)).toEqual(["No data", "46.9 U"]);
     expect(insulin[4]).toBe("—");
-    expect((await cells("Carbs / Day"))[1]).toBe("No data");
+    expect((await cells("Carbs / day"))[1]).toBe("No data");
   });
 
   it("shows glucose-valued variability rows in the chosen unit", async () => {
     glucoseUnits.current = "mmol";
     try {
       render(ComparisonPage);
-      const sd = await cells("Standard Deviation");
+      const sd = await cells("Standard deviation");
       expect(sd.slice(1, 3)).toEqual(["2.2 mmol/L", "2.4 mmol/L"]);
       expect(sd[4]).toBe("+0.2 mmol/L");
     } finally {
@@ -239,14 +239,14 @@ describe("grouped comparison rows", () => {
   it("shows the personal range row only when the API returns a personal range", async () => {
     render(ComparisonPage);
     await cells("Time Very Low (%)");
-    expect(page.getByText("Time in Personal Range", { exact: true }).elements()).toHaveLength(0);
+    expect(page.getByText("Time in personal range", { exact: true }).elements()).toHaveLength(0);
   });
 
   it("shows time in the personal range for both periods when returned", async () => {
     extrasA = { ...extrasA, personalRange: { inRangePercent: 55 } };
     extrasB = { ...extrasB, personalRange: { inRangePercent: 61.5 } };
     render(ComparisonPage);
-    const row = await cells("Time in Personal Range");
+    const row = await cells("Time in personal range");
     expect(row.slice(1, 3)).toEqual(["55.0%", "61.5%"]);
     expect(row[4]).toBe("+6.5 pp");
   });

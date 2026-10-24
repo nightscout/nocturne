@@ -7,7 +7,7 @@ import type { Treatment, Bolus, CarbIntake } from "$lib/api";
 export const TREATMENT_CATEGORIES = {
   bolus: {
     id: "bolus",
-    name: "Bolus & Insulin",
+    name: "Bolus & insulin",
     description: "Insulin doses, corrections, and combo boluses",
     eventTypes: ["Snack Bolus", "Meal Bolus", "Correction Bolus", "Combo Bolus"],
     icon: "syringe" as const,
@@ -16,7 +16,7 @@ export const TREATMENT_CATEGORIES = {
   },
   basal: {
     id: "basal",
-    name: "Basal & Profiles",
+    name: "Basal & profiles",
     description: "Temp basals and profile switches",
     eventTypes: ["Temp Basal Start", "Temp Basal End", "Temp Basal", "Profile Switch"],
     icon: "activity" as const,
@@ -25,7 +25,7 @@ export const TREATMENT_CATEGORIES = {
   },
   carbs: {
     id: "carbs",
-    name: "Carbs & Nutrition",
+    name: "Carbs & nutrition",
     description: "Meals, snacks, and carb corrections",
     eventTypes: ["Carb Correction"],
     icon: "utensils" as const,
@@ -34,7 +34,7 @@ export const TREATMENT_CATEGORIES = {
   },
   device: {
     id: "device",
-    name: "Device Events",
+    name: "Device events",
     description: "Sensor, pump, and site changes",
     eventTypes: [
       "Site Change",
@@ -50,7 +50,7 @@ export const TREATMENT_CATEGORIES = {
   },
   notes: {
     id: "notes",
-    name: "Notes & Alerts",
+    name: "Notes & alerts",
     description: "Notes, announcements, and BG checks",
     eventTypes: ["BG Check", "Note", "Announcement", "Question", "D.A.D. Alert"],
     icon: "file-text" as const,

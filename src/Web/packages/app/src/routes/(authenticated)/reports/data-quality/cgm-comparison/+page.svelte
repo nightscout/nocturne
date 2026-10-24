@@ -20,7 +20,7 @@
   const params = requireDateParamsContext(14);
 
   const resource = contextResource(() => getReportsAnalysis(params.dateRangeInput), {
-    errorTitle: "Error Loading CGM Comparison",
+    errorTitle: "Error loading CGM comparison",
   });
 
   // The unattributed bucket carries no device id, so it can never be a comparison side.
@@ -82,7 +82,7 @@
         class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
-        Data Quality
+        Data quality
       </a>
       <div class="flex items-center gap-3">
         <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 print:hidden">

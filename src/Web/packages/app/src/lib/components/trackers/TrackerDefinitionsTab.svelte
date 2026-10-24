@@ -43,14 +43,14 @@
   <Card>
     <CardHeader class="flex flex-row items-center justify-between">
       <div>
-        <CardTitle>Tracker Definitions</CardTitle>
+        <CardTitle>Tracker definitions</CardTitle>
         <CardDescription>
           Reusable tracker templates with notification thresholds
         </CardDescription>
       </div>
       <Button onclick={openNewDefinition}>
         <Plus class="h-4 w-4 mr-2" />
-        New Definition
+        New definition
       </Button>
     </CardHeader>
     <CardContent>

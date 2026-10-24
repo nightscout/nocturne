@@ -15,7 +15,7 @@ describe("BolusSection", () => {
 		render(BolusSection, { bolus: {} });
 
 		await expect.element(page.getByText("Insulin (U)")).toBeVisible();
-		await expect.element(page.getByText("Bolus Type")).toBeVisible();
+		await expect.element(page.getByText("Bolus type")).toBeVisible();
 	});
 
 	it("does not show remove button when onRemove is not provided", async () => {
@@ -78,7 +78,7 @@ describe("BolusSection", () => {
 
 		await expect.element(page.getByText("Programmed (U)")).toBeVisible();
 		await expect.element(page.getByText("Delivered (U)")).toBeVisible();
-		await expect.element(page.getByText("Insulin Type")).toBeVisible();
+		await expect.element(page.getByText("Insulin type")).toBeVisible();
 		await expect.element(page.getByText("Unabsorbed (U)")).toBeVisible();
 	});
 });

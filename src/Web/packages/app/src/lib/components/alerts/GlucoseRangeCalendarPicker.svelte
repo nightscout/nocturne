@@ -244,7 +244,7 @@
       {monthLabel}
       {#if pendingStart}
         <span class="ml-2 text-xs text-muted-foreground font-normal">
-          Click end date
+          Select end date
         </span>
       {/if}
       {#if punchCardQuery.loading}

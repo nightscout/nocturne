@@ -94,7 +94,7 @@
       <Dialog.Header>
         <Dialog.Title class="flex items-center gap-2">
           <PlatformIcon class="h-5 w-5" />
-          Set up {getUploaderName(selectedUploader)}
+          Configure {getUploaderName(selectedUploader)}
         </Dialog.Title>
         <Dialog.Description>
           {getUploaderDescription(selectedUploader)}
@@ -114,7 +114,7 @@
 
         <!-- Connection Info -->
         <div class="space-y-3">
-          <h4 class="font-medium">Connection Details</h4>
+          <h4 class="font-medium">Connection details</h4>
 
           <div class="space-y-2">
             <span class="text-sm text-muted-foreground">Nocturne URL</span>
@@ -142,7 +142,7 @@
 
           {#if !hasOAuthFlow}
             <div class="space-y-2">
-              <span class="text-sm text-muted-foreground">API Key</span>
+              <span class="text-sm text-muted-foreground">API key</span>
               {#if apiToken}
                 <div class="flex gap-2">
                   <code
@@ -211,7 +211,7 @@
               rel="noopener"
             >
               <ExternalLink class="h-4 w-4" />
-              Visit {getUploaderName(selectedUploader)} Website
+              Visit {getUploaderName(selectedUploader)} website
             </Button>
           </div>
         {/if}

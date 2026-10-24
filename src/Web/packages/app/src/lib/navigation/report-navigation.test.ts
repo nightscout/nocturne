@@ -44,12 +44,12 @@ describe("reportCategories", () => {
       .flatMap((c) => c.reports)
       .find((r) => r.href === "/reports/year-overview");
 
-    expect(yearOverview?.title).toBe("Year Overview");
+    expect(yearOverview?.title).toBe("Year overview");
     expect(
       getSidebarReportItems({ grantedScopes: OWNER, anonymous: false }).find(
         (i) => i.href === "/reports/year-overview"
       )?.title
-    ).toBe("Year Overview");
+    ).toBe("Year overview");
   });
 });
 
@@ -153,12 +153,12 @@ describe("a report made of several pages", () => {
   it("is one sidebar entry at the report's address", () => {
     const items = getSidebarReportItems({ grantedScopes: OWNER, anonymous: false });
     const entries = items.filter((i) => i.href.startsWith("/reports/loop-analysis"));
-    expect(entries).toEqual([expect.objectContaining({ title: "Loop Analysis", href: "/reports/loop-analysis" })]);
+    expect(entries).toEqual([expect.objectContaining({ title: "Loop analysis", href: "/reports/loop-analysis" })]);
   });
 
   it("names each page with the report", () => {
     const category = loop();
-    expect(category.reports.map((r) => reportTitle(category, r))).toContain("Loop Analysis: Daily profile");
+    expect(category.reports.map((r) => reportTitle(category, r))).toContain("Loop analysis: Daily profile");
   });
 
   it("is found by searching for the report", () => {
@@ -168,11 +168,11 @@ describe("a report made of several pages", () => {
 
 describe("reportSubRouteTitle", () => {
   it.each([
-    ["/reports/data-quality/compression-lows", "Compression Lows"],
-    ["/reports/data-quality/sensor-integrity", "Signal Integrity"],
-    ["/reports/data-quality/cgm-comparison", "CGM Comparison"],
-    ["/reports/data-quality/rejected-uploads", "Rejected Uploads"],
-    ["/reports/sleep/2026-10-01", "Sleep Night Report"],
+    ["/reports/data-quality/compression-lows", "Compression lows"],
+    ["/reports/data-quality/sensor-integrity", "Signal integrity"],
+    ["/reports/data-quality/cgm-comparison", "CGM comparison"],
+    ["/reports/data-quality/rejected-uploads", "Rejected uploads"],
+    ["/reports/sleep/2026-10-01", "Sleep night report"],
   ])("names %s", (path, name) => {
     expect(reportSubRouteTitle(path)).toBe(name);
   });

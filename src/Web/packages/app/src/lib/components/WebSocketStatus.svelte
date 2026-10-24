@@ -116,7 +116,7 @@
     
     {#if connectionError}
       <div class="mt-2 p-2 bg-destructive/10 rounded text-xs">
-        <p class="font-medium text-destructive">Connection Error:</p>
+        <p class="font-medium text-destructive">Connection error:</p>
         <p class="text-muted-foreground">{connectionError.message}</p>
         <p class="text-muted-foreground">
           {time(new Date(connectionError.timestamp))}

@@ -93,7 +93,7 @@
 <div class="space-y-4">
   <h2 class="text-lg font-semibold flex items-center gap-2">
     <UserPlus class="h-5 w-5" />
-    Pending Requests
+    Pending requests
   </h2>
 
   {#each requests as request (request.id)}

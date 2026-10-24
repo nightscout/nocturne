@@ -332,7 +332,7 @@
             {remoteErrorMessage(punchCardError, "An error occurred")}
           </p>
           <Button class="mt-4" onclick={() => window.location.reload()}>
-            Try Again
+            Try again
           </Button>
         </div>
       </Card.Content>
@@ -342,7 +342,7 @@
   <div class="@container flex flex-col h-full">
     <div class="hidden print:block border-b pb-3 mb-4">
       <h1 class="text-xl font-bold">
-        Month-to-Month Report: {MONTH_NAMES[currentMonth]}
+        Month-to-month report: {MONTH_NAMES[currentMonth]}
         {currentYear}
       </h1>
       <p class="text-sm text-muted-foreground">

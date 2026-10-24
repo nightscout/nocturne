@@ -229,12 +229,12 @@
             </div>
             <div class="flex-1 min-w-0">
               <Card.Title class="text-sm font-medium">
-                {[device.manufacturer, device.model].filter(Boolean).join(" ") || "Unknown Device"}
+                {[device.manufacturer, device.model].filter(Boolean).join(" ") || "Unknown device"}
               </Card.Title>
               <Card.Description size="sm">
                 {device.deviceCategory
                   ? (deviceCategoryLabels[device.deviceCategory] ?? device.deviceCategory)
-                  : "Unknown Category"}
+                  : "Unknown category"}
                 {#if device.aidAlgorithm && device.aidAlgorithm !== AidAlgorithm.None}
                   &middot; {aidAlgorithmLabels[device.aidAlgorithm] ?? device.aidAlgorithm}
                 {/if}
@@ -259,7 +259,7 @@
   {#if showInlineForm}
     <Card.Root>
       <Card.Header>
-        <Card.Title class="text-sm">Add a Device</Card.Title>
+        <Card.Title class="text-sm">Add a device</Card.Title>
       </Card.Header>
       <form
         {...deviceList.createForm.enhance(async ({ submit }) => {
@@ -289,7 +289,7 @@
             </div>
 
             <div class="space-y-2">
-              <Label for="device-category">Device Category</Label>
+              <Label for="device-category">Device category</Label>
               <Select.Root
                 type="single"
                 name="deviceCategory"
@@ -323,7 +323,7 @@
 
             {#if showInlineAid}
               <div class="space-y-2">
-                <Label for="aid-algorithm">AID Algorithm</Label>
+                <Label for="aid-algorithm">AID algorithm</Label>
                 <Select.Root type="single" name="aidAlgorithm" bind:value={inlineAidAlgorithm}>
                   <Select.Trigger id="aid-algorithm">
                     {inlineAidAlgorithm
@@ -349,7 +349,7 @@
             Cancel
           </Button>
           <Button type="submit" disabled={!canAddInline || !!deviceList.createForm.pending}>
-            {deviceList.createForm.pending ? "Adding..." : "Add Device"}
+            {deviceList.createForm.pending ? "Adding..." : "Add device"}
           </Button>
         </Card.Footer>
       </form>
@@ -357,7 +357,7 @@
   {:else}
     <Button variant="outline" onclick={() => (showInlineForm = true)}>
       <Plus class="h-4 w-4 mr-1" />
-      Add Device
+      Add device
     </Button>
   {/if}
 
@@ -454,7 +454,7 @@
   <div class="pt-2">
     <Button size="sm" onclick={() => openDialog()}>
       <Plus class="mr-2 h-4 w-4" />
-      Add Device
+      Add device
     </Button>
   </div>
 
@@ -504,7 +504,7 @@
     <Dialog.Content class="sm:max-w-lg">
       <Dialog.Header>
         <Dialog.Title>
-          {editing ? "Edit Device" : "Add Device"}
+          {editing ? "Edit device" : "Add device"}
         </Dialog.Title>
         <Dialog.Description>
           {editing
@@ -575,7 +575,7 @@
 
           {#if showAidAlgorithm}
             <div class="space-y-2">
-              <Label for="device-aid">AID Algorithm</Label>
+              <Label for="device-aid">AID algorithm</Label>
               <Select.Root type="single" name="{namePrefix}aidAlgorithm" bind:value={deviceAidAlgorithm}>
                 <Select.Trigger id="device-aid">
                   {deviceAidAlgorithm
@@ -592,7 +592,7 @@
           {/if}
 
           <div class="space-y-2">
-            <Label for="device-serial">Serial Number</Label>
+            <Label for="device-serial">Serial number</Label>
             <Input
               name="{namePrefix}serialNumber"
               id="device-serial"
@@ -603,7 +603,7 @@
 
           <div class="grid gap-4 @sm:grid-cols-2">
             <div class="space-y-2">
-              <Label for="device-start">Start Date</Label>
+              <Label for="device-start">Start date</Label>
               <Input
                 name="{namePrefix}startDate"
                 id="device-start"
@@ -612,7 +612,7 @@
               />
             </div>
             <div class="space-y-2">
-              <Label for="device-end">End Date</Label>
+              <Label for="device-end">End date</Label>
               <Input
                 name="{namePrefix}endDate"
                 id="device-end"
@@ -674,7 +674,7 @@
     onOpenChange={(open) => {
       if (!open) deleteId = null;
     }}
-    title="Delete Device"
+    title="Delete device"
     confirmLabel="Delete"
     destructive
     onConfirm={handleDelete}

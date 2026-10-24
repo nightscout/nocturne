@@ -137,11 +137,11 @@
           <p>
             By signing in, you agree to our
             <a href={resolve("/terms")} class="underline hover:text-foreground">
-              Terms of Service
+              terms of service
             </a>
             and
             <a href={resolve("/privacy")} class="underline hover:text-foreground">
-              Privacy Policy
+              privacy policy
             </a>
           </p>
         </div>

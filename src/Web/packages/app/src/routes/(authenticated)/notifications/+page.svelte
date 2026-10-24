@@ -60,8 +60,8 @@
     [CompletionReason.Expired]: "Expired",
     [CompletionReason.Other]: "Other",
     [CompletionReason.Failed]: "Failed",
-    [CompletionReason.FellOff]: "Fell Off",
-    [CompletionReason.ReplacedEarly]: "Replaced Early",
+    [CompletionReason.FellOff]: "Fell off",
+    [CompletionReason.ReplacedEarly]: "Replaced early",
     [CompletionReason.Empty]: "Empty",
     [CompletionReason.Refilled]: "Refilled",
     [CompletionReason.Attended]: "Attended",
@@ -213,7 +213,7 @@
           <div>
             <CardTitle class="flex items-center gap-2">
               <Timer class="h-5 w-5 text-severity-hazard" />
-              Tracker Alerts
+              Tracker alerts
             </CardTitle>
             <CardDescription>
               Consumable and reminder notifications
@@ -286,7 +286,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <History class="h-5 w-5 text-muted-foreground" />
-            Notification History
+            Notification history
           </CardTitle>
           <CardDescription>
             Past tracker notifications and completions

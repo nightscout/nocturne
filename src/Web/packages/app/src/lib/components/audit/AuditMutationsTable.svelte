@@ -265,7 +265,7 @@
     {
       id: "ipAddress",
       accessorFn: (row) => row.ipAddress,
-      header: "IP Address",
+      header: "IP address",
       cell: ({ row }) =>
         renderSnippet(mutedTextSnippet, { text: row.original.ipAddress }),
       enableSorting: false,
@@ -433,7 +433,7 @@
 
 {#snippet entityTypeFilterHeaderSnippet({ uniqueEntityTypes, selectedEntityTypes, toggleEntityTypeFilter, clearEntityTypeFilter }: EntityTypeFilterHeaderProps)}
   <ColumnFilterPopover
-    label="Entity Type"
+    label="Entity type"
     options={uniqueEntityTypes.map((type: string) => ({
       value: type,
       label: type,
@@ -531,13 +531,13 @@
                   {/if}
                   {#if row.original.authType}
                     <div>
-                      <span class="font-medium text-muted-foreground">Auth Type:</span>
+                      <span class="font-medium text-muted-foreground">Auth type:</span>
                       <span class="ml-2">{row.original.authType}</span>
                     </div>
                   {/if}
                   {#if row.original.entityId}
                     <div>
-                      <span class="font-medium text-muted-foreground">Full Entity ID:</span>
+                      <span class="font-medium text-muted-foreground">Full entity ID:</span>
                       <span class="ml-2 font-mono text-xs">{row.original.entityId}</span>
                     </div>
                   {/if}

@@ -45,7 +45,7 @@
 <div class="space-y-6 @container">
   <div class="grid gap-4 @sm:grid-cols-2">
     <div class="space-y-2">
-      <Label for="name">Alarm Name</Label>
+      <Label for="name">Alarm name</Label>
       <Input
         id="name"
         bind:value={profile.name}
@@ -64,7 +64,7 @@
 
   <div class="grid gap-4 @sm:grid-cols-2">
     <div class="space-y-2">
-      <Label>Alarm Type</Label>
+      <Label>Alarm type</Label>
       <Select
         type="single"
         value={profile.alarmType}
@@ -122,7 +122,7 @@
   <Separator />
 
   <div class="space-y-4">
-    <h4 class="font-medium">Threshold Settings</h4>
+    <h4 class="font-medium">Threshold settings</h4>
     <div class="grid gap-4 @sm:grid-cols-2">
       <div class="space-y-2">
         <Label>
@@ -149,7 +149,7 @@
 
       {#if profile.alarmType === "Custom"}
         <div class="space-y-2">
-          <Label>Upper Threshold</Label>
+          <Label>Upper threshold</Label>
           <div class="flex items-center gap-2">
             <Input
               type="number"
@@ -163,7 +163,7 @@
 
       {#if profile.alarmType === "ForecastLow"}
         <div class="space-y-2">
-          <Label>Lead Time</Label>
+          <Label>Lead time</Label>
           <div class="flex items-center gap-2">
             <Input
               type="number"
@@ -185,7 +185,7 @@
     <div class="space-y-2">
       <div class="flex items-center gap-2">
         <Timer class="h-4 w-4 text-muted-foreground" />
-        <Label>Delayed Raise (Persistence)</Label>
+        <Label>Delayed raise (persistence)</Label>
       </div>
       <p class="text-sm text-muted-foreground mb-2">
         Only trigger alarm if condition persists for this long
@@ -208,7 +208,7 @@
 
   <div class="flex items-center justify-between">
     <div>
-      <Label>Override Quiet Hours</Label>
+      <Label>Override quiet hours</Label>
       <p class="text-sm text-muted-foreground">
         This alarm will sound even during quiet hours
       </p>

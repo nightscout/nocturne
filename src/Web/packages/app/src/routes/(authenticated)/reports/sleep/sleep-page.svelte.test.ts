@@ -33,7 +33,7 @@ import SleepPage from "./+page.svelte";
 
 function compositionColumns(container: HTMLElement): SVGRectElement[] {
   const heading = Array.from(container.querySelectorAll("[data-slot='card-title']")).find((el) =>
-    el.textContent?.includes("Sleep Composition")
+    el.textContent?.includes("Sleep composition")
   );
   const card = heading?.closest("[data-slot='card']");
   return Array.from(card?.querySelectorAll<SVGRectElement>("rect[fill='transparent']") ?? []);

@@ -35,6 +35,7 @@ const freshCard = () =>
   page.getByRole("radio", { name: /Start with a blank slate/ });
 const migrationCard = () =>
   page.getByRole("radio", { name: /Migrate my Nightscout data/ });
+const pathBadge = () => page.getByTestId("setup-path-badge");
 const continueButton = () => page.getByRole("button", { name: "Continue" });
 
 describe("setup path step", () => {
@@ -43,8 +44,8 @@ describe("setup path step", () => {
 
     await expect.element(freshCard()).toHaveAttribute("aria-checked", "true");
     await expect
-      .element(page.getByText("Fresh Start", { exact: true }))
-      .toBeVisible();
+      .element(pathBadge())
+      .toHaveTextContent("Fresh start");
   });
 
   it("stays on the path step when a card is selected", async () => {
@@ -57,8 +58,8 @@ describe("setup path step", () => {
       .toHaveAttribute("aria-checked", "true");
     await expect.element(page.getByText("Step 01 / 04")).toBeVisible();
     await expect
-      .element(page.getByText("Nightscout Migration", { exact: true }))
-      .toBeVisible();
+      .element(pathBadge())
+      .toHaveTextContent("Nightscout migration");
   });
 
   it("advances along the chosen path on Continue", async () => {
@@ -69,8 +70,8 @@ describe("setup path step", () => {
 
     await expect.element(page.getByText("Step 02 / 04")).toBeVisible();
     await expect
-      .element(page.getByText("Nightscout Migration", { exact: true }))
-      .toBeVisible();
+      .element(pathBadge())
+      .toHaveTextContent("Nightscout migration");
     await expect.element(migrationCard()).not.toBeInTheDocument();
   });
 

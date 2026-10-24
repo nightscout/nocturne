@@ -70,7 +70,7 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Sparkles class="h-5 w-5 text-demo" />
-        Demo Data
+        Demo data
       </Dialog.Title>
       <Dialog.Description>
         Manage the simulated demo data in your Nocturne instance
@@ -144,7 +144,7 @@
             Deleting...
           {:else}
             <Trash2 class="h-4 w-4" />
-            Clear Demo Data
+            Clear demo data
           {/if}
         </Button>
       {/if}

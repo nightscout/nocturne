@@ -34,7 +34,7 @@ const minimum = (metric = "TDD") =>
   page.getByRole("spinbutton", { name: `${metric} focus minimum` });
 const maximum = (metric = "TDD") =>
   page.getByRole("spinbutton", { name: `${metric} focus maximum` });
-const boundary = (n: number, metric = "Avg Glucose") =>
+const boundary = (n: number, metric = "Avg glucose") =>
   page.getByRole("spinbutton", { name: `${metric} color boundary ${n}`, exact: true });
 const addBoundary = () => page.getByRole("button", { name: "Color boundary", exact: true });
 const reset = (metric = "TDD") =>
@@ -60,7 +60,7 @@ function day(date: string, dose: number | null): DailySummaryDay {
 async function selectMetric(name: string) {
   await page
     .getByRole("button", {
-      name: /^(Avg Glucose|Time in Range|Bolus|Basal|TDD|Carbs)$/,
+      name: /^(Avg glucose|Time in range|Bolus|Basal|TDD|Carbs)$/,
     })
     .click();
   await page.getByRole("option", { name, exact: true }).click();
@@ -280,12 +280,12 @@ describe("year overview page color focus integration", () => {
 
   it("keeps glucose colors fixed to the reading while its window only dims", async () => {
     render(YearOverviewPage);
-    await minimum("Avg Glucose").fill("130");
+    await minimum("Avg glucose").fill("130");
     expect(stored()).toEqual({ avgGlucoseBand: [130, 350] });
     await expect
       .element(cell("2026-01-01"))
       .toHaveTextContent(`color-mix(in srgb, ${getGlucoseHeatmapFill(120)} 10%, transparent)`);
-    await reset("Avg Glucose").click();
+    await reset("Avg glucose").click();
     await expect.element(cell("2026-01-01")).toHaveTextContent(getGlucoseHeatmapFill(120));
   });
 
@@ -313,7 +313,7 @@ describe("year overview page color focus integration", () => {
     await screen.unmount();
     render(YearOverviewPage);
     await expect.element(boundary(1)).toHaveValue(150);
-    await page.getByRole("button", { name: "Remove Avg Glucose color boundary 1" }).click();
+    await page.getByRole("button", { name: "Remove Avg glucose color boundary 1" }).click();
     expect(stored()).toEqual({});
     await expect.element(cell("2026-01-01")).toHaveTextContent(getGlucoseHeatmapFill(120));
   });
@@ -327,11 +327,11 @@ describe("year overview page color focus integration", () => {
       const bounds = (track.element() as HTMLElement).getBoundingClientRect();
       expect(bounds.width).toBeGreaterThan(300);
       await userEvent.dragAndDrop(
-        page.getByRole("slider", { name: "Avg Glucose focus maximum" }),
+        page.getByRole("slider", { name: "Avg glucose focus maximum" }),
         track,
         { targetPosition: { x: bounds.width * 0.5, y: bounds.height / 2 } }
       );
-      const value = (maximum("Avg Glucose").element() as HTMLInputElement).valueAsNumber;
+      const value = (maximum("Avg glucose").element() as HTMLInputElement).valueAsNumber;
       expect(value).toBeGreaterThan(190);
       expect(value).toBeLessThan(200);
       expect(

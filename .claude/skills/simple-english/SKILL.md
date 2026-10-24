@@ -113,6 +113,10 @@ Vale enforces only the 25-word limit. In an instruction, hold yourself to 20.
 - **Noun clusters of three words or fewer** (2.1): "the timeout value for the
   connection" over "the connection timeout configuration value".
 - **Approved modals are can, will, and must** (3.2). "Should" reads as optional.
+  "May" has no single replacement: "can" is right only for a capability. For a
+  possibility, keep the doubt: "Your session possibly expired", or "If your
+  session expired, try again". Never swap "may" for "can" in a warning, an
+  error, or legal text without reading what the sentence claims.
 
 ## Safety copy
 

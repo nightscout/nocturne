@@ -218,7 +218,7 @@
           <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             <div class="flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-glucose-very-high"></span>
-              <span class="text-muted-foreground">Very High:</span>
+              <span class="text-muted-foreground">Very high:</span>
             </div>
             <span class="font-medium">{stats.veryHighPercent.toFixed(1)}%</span>
             <div class="flex items-center gap-1.5">
@@ -228,7 +228,7 @@
             <span class="font-medium">{stats.highPercent.toFixed(1)}%</span>
             <div class="flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-glucose-in-range"></span>
-              <span class="text-muted-foreground">In Range:</span>
+              <span class="text-muted-foreground">In range:</span>
             </div>
             <span class="font-medium">{stats.inRangePercent.toFixed(1)}%</span>
             <div class="flex items-center gap-1.5">
@@ -238,7 +238,7 @@
             <span class="font-medium">{stats.lowPercent.toFixed(1)}%</span>
             <div class="flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-glucose-very-low"></span>
-              <span class="text-muted-foreground">Very Low:</span>
+              <span class="text-muted-foreground">Very low:</span>
             </div>
             <span class="font-medium">{stats.veryLowPercent.toFixed(1)}%</span>
           </div>
@@ -249,13 +249,13 @@
             <span class="font-medium">{stats.totalBolus.toFixed(1)}U</span>
             <span class="text-muted-foreground">Basal:</span>
             <span class="font-medium">{stats.totalBasal.toFixed(1)}U</span>
-            <span class="text-muted-foreground">Avg Glucose:</span>
+            <span class="text-muted-foreground">Avg glucose:</span>
             <span class="font-medium">
               {formatGlucoseValue(stats.averageGlucose, units)} {unitLabel}
             </span>
           </div>
           <div class="text-xs text-muted-foreground italic pt-1">
-            Click to view full day report
+            Select to view full day report
           </div>
         </div>
       </Tooltip.Content>

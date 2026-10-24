@@ -32,7 +32,7 @@
     <div class="flex items-center gap-3">
       <Clock class="h-5 w-5 text-muted-foreground" />
       <div>
-        <Label>Time-Based Schedule</Label>
+        <Label>Time-based schedule</Label>
         <p class="text-sm text-muted-foreground">
           Only activate alarm during specific times
         </p>
@@ -46,18 +46,18 @@
 
     <div class="space-y-4">
       <div class="space-y-2">
-        <Label>Active Days</Label>
+        <Label>Active days</Label>
         <DayOfWeekPicker bind:activeDays={profile.schedule.activeDays} />
         <p class="text-xs text-muted-foreground">
-          Click to toggle. If none selected, alarm is active every day.
+          Select to toggle. If none selected, alarm is active every day.
         </p>
       </div>
 
       <div class="space-y-2">
         <div class="flex items-center justify-between">
-          <Label>Active Time Ranges</Label>
+          <Label>Active time ranges</Label>
           <Button variant="outline" size="sm" onclick={addTimeRange}>
-            + Add Range
+            + Add range
           </Button>
         </div>
         <div class="space-y-2">

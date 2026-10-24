@@ -140,8 +140,7 @@
         {:else if isActive}
           <DropdownMenu.Item disabled={saving} onSelect={() => setActive(false)}>
             <Bell class="h-3.5 w-3.5" />
-            Turn off
-          </DropdownMenu.Item>
+            Disable </DropdownMenu.Item>
         {:else}
           <div class="px-2 pt-1 pb-1 text-2xs uppercase tracking-wider text-muted-foreground">
             Mute alerts for

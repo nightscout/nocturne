@@ -135,7 +135,7 @@ export const CHANNEL_META: ChannelMetaEntry[] = [
     description: "Send alerts to an email address via Resend",
     logo: "/logos/email.jpg",
     platform: "resend",
-    destinationLabel: "Email Address",
+    destinationLabel: "Email address",
     destinationPlaceholder: "user@example.com",
   },
   {

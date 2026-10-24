@@ -82,7 +82,7 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <ChartPie class="h-5 w-5 text-muted-foreground" />
-      Stage Composition
+      Stage composition
     </CardTitle>
   </CardHeader>
   <CardContent class="space-y-4">

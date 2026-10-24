@@ -7,22 +7,22 @@
     const GUIDES = [
         {
             href: resolve("/docs/getting-started"),
-            title: "Quick Start",
+            title: "Quick start",
             desc: "Get up and running with Nocturne in just a few minutes.",
         },
         {
             href: resolve("/docs/installation"),
-            title: "Installation Guide",
+            title: "Installation guide",
             desc: "Step-by-step guides for deploying Nocturne with Docker Compose, Portainer, and more.",
         },
         {
             href: resolve("/docs/configuration"),
-            title: "Configuration Guide",
+            title: "Configuration guide",
             desc: "Learn how to configure connectors, settings, and customize your instance.",
         },
         {
             href: resolve("/scalar"),
-            title: "API Reference",
+            title: "API reference",
             desc: "Interactive API documentation powered by Scalar. Explore endpoints, test requests, and integrate with Nocturne.",
         },
     ];

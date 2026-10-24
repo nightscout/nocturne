@@ -131,12 +131,12 @@
     switch (itemId) {
       case "qs-dark-mode": {
         const mode = userPrefersMode.current;
-        return `Dark Mode: ${mode === "dark" ? "On" : mode === "light" ? "Off" : "System"}`;
+        return `Dark mode: ${mode === "dark" ? "On" : mode === "light" ? "Off" : "System"}`;
       }
       case "qs-glucose-units":
         return `Units: ${getGlucoseUnits() === "mg/dl" ? "mg/dL" : "mmol/L"}`;
       case "qs-chart-lookback":
-        return `Chart Lookback: ${glucoseChartLookback.current}h`;
+        return `Chart lookback: ${glucoseChartLookback.current}h`;
       default:
         return "";
     }

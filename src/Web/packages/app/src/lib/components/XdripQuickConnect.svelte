@@ -147,7 +147,7 @@
     } catch (err) {
       deviceLookupError = describeSubmitError(
         err,
-        "Invalid or expired device code. Please check and try again."
+        "Invalid or expired device code. Check the code and try again."
       );
     } finally {
       deviceLookupLoading = false;
@@ -162,7 +162,7 @@
       deviceApproved = true;
       startPolling();
     } catch (err) {
-      deviceLookupError = describeSubmitError(err, "Failed to approve. The code may have expired.");
+      deviceLookupError = describeSubmitError(err, "Could not approve the device. The code possibly expired.");
     } finally {
       deviceApproveLoading = false;
     }
@@ -189,7 +189,7 @@
 
 <div class="space-y-4">
   <div>
-    <p class="text-sm font-medium">Quick Connect</p>
+    <p class="text-sm font-medium">Quick connect</p>
     <p class="text-muted-foreground text-sm">
       Automatically configure xDrip+ with your Nocturne instance.
     </p>
@@ -246,7 +246,7 @@
   <!-- Device Authorization Code Section -->
   <div class="space-y-3">
     <div>
-      <p class="text-sm font-medium">Enter Authorization Code</p>
+      <p class="text-sm font-medium">Enter authorization code</p>
       <p class="text-muted-foreground text-sm">
         If xDrip+ shows an authorization code, enter it here.
       </p>

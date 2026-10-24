@@ -302,13 +302,13 @@
               <Axis
                 placement="bottom"
                 ticks={5}
-                label="Hypoglycemia Component (%)"
+                label="Hypoglycemia component (%)"
                 tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
               />
               <Axis
                 placement="left"
                 ticks={5}
-                label="Hyperglycemia Component (%)"
+                label="Hyperglycemia component (%)"
                 tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
               />
             </Svg>
@@ -325,7 +325,7 @@
                     </div>
 
                     <div class="flex justify-between gap-4">
-                      <span class="text-muted-foreground">GRI Score</span>
+                      <span class="text-muted-foreground">GRI score</span>
                       <span class="font-medium tabular-nums">
                         {Math.round(d.gri?.score ?? 0)}
                       </span>
@@ -333,7 +333,7 @@
 
                     {#if d.averageGlucoseMgdl != null}
                       <div class="flex justify-between gap-4">
-                        <span class="text-muted-foreground">Avg Glucose</span>
+                        <span class="text-muted-foreground">Avg glucose</span>
                         <span class="font-medium tabular-nums">
                           {formatGlucoseValue(d.averageGlucoseMgdl, glucoseUnits.current)} {getUnitLabel(glucoseUnits.current)}
                         </span>
@@ -351,7 +351,7 @@
 
                     {#if d.averageDailyCarbs != null}
                       <div class="flex justify-between gap-4">
-                        <span class="text-muted-foreground">Avg Carbs</span>
+                        <span class="text-muted-foreground">Avg carbs</span>
                         <span class="font-medium tabular-nums">
                           {Math.round(d.averageDailyCarbs)}g
                         </span>

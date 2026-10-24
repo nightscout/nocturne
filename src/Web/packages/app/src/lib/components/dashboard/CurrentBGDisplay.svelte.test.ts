@@ -98,7 +98,7 @@ describe("CurrentBGDisplay", () => {
     expect(dialog.elements()).toHaveLength(0);
 
     await page.getByRole("button", { name: /Sensor/ }).click();
-    await page.getByRole("button", { name: "Complete Tracker" }).click();
+    await page.getByRole("button", { name: "Complete tracker" }).click();
 
     await expect.element(dialog).toBeVisible();
     await expect.element(dialog.getByText("Complete Sensor")).toBeVisible();

@@ -26,6 +26,6 @@ describe("SiteChangeImpactChart x axis", () => {
   it.each([260, 340, 480])("keeps the Site Change label at %ipx wide", async (width) => {
     render(Harness, { props: { analysis: analysis(12, 24), width } });
 
-    await expect.element(page.getByText("Site Change", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Site change", { exact: true })).toBeVisible();
   });
 });

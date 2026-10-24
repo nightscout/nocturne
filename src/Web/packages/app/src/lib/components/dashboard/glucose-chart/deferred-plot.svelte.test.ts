@@ -64,7 +64,7 @@ describe("GlucoseChartCard deferred drawing", () => {
         },
       });
 
-      const title = page.getByText("Blood Glucose");
+      const title = page.getByText("Blood glucose");
       await expect.element(title).toBeVisible();
       const reservedTop = plotArea().getBoundingClientRect().top;
       expect(plotArea().childElementCount).toBe(0);
@@ -93,13 +93,13 @@ describe("GlucoseChartCard deferred drawing", () => {
     it("is reserved while the prediction status is pending", async () => {
       renderNarrow();
 
-      await expect.element(page.getByText("Blood Glucose")).toBeVisible();
+      await expect.element(page.getByText("Blood glucose")).toBeVisible();
       expect(controlsSlot().getBoundingClientRect().height).toBe(32);
     });
 
     it("collapses once the status says predictions are unavailable", async () => {
       const reportStatus = renderNarrow();
-      await expect.element(page.getByText("Blood Glucose")).toBeVisible();
+      await expect.element(page.getByText("Blood glucose")).toBeVisible();
 
       reportStatus({ available: false });
 
@@ -108,7 +108,7 @@ describe("GlucoseChartCard deferred drawing", () => {
 
     it("stays reserved once the status says predictions are available", async () => {
       const reportStatus = renderNarrow();
-      await expect.element(page.getByText("Blood Glucose")).toBeVisible();
+      await expect.element(page.getByText("Blood glucose")).toBeVisible();
 
       reportStatus({ available: true });
 

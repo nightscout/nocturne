@@ -38,7 +38,7 @@ describe("AlertHistoryCard", () => {
 			onLoadPage: () => {},
 		});
 
-		await expect.element(page.getByText("Alert History", { exact: true })).toBeVisible();
+		await expect.element(page.getByText("Alert history", { exact: true })).toBeVisible();
 		await expect
 			.element(page.getByText("Past alert excursions and their resolution"))
 			.toBeVisible();
@@ -164,5 +164,24 @@ describe("AlertHistoryCard", () => {
 		await expect
 			.element(page.getByRole("button", { name: /Next/i }))
 			.toBeDisabled();
+	});
+	it("names each condition type in its badge", async () => {
+		render(AlertHistoryCard, {
+			history: history({
+				items: [
+					excursion({ id: "roc", ruleName: "Falling", conditionType: AlertConditionType.RateOfChange }),
+					excursion({ id: "loss", ruleName: "No data", conditionType: AlertConditionType.SignalLoss }),
+					excursion({ id: "comp", ruleName: "Combined", conditionType: AlertConditionType.Composite }),
+				],
+				totalCount: 3,
+			}),
+			page: 1,
+			loading: false,
+			onLoadPage: () => {},
+		});
+
+		await expect.element(page.getByText("Rate of change")).toBeVisible();
+		await expect.element(page.getByText("Signal loss")).toBeVisible();
+		await expect.element(page.getByText("Composite", { exact: true })).toBeVisible();
 	});
 });

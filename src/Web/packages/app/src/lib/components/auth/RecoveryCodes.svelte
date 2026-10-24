@@ -64,7 +64,7 @@
   <div class="space-y-3">
     <div class="flex items-center gap-2">
       <ShieldCheck class="h-5 w-5 text-primary" />
-      <h3 class="font-medium">Recovery Codes</h3>
+      <h3 class="font-medium">Recovery codes</h3>
     </div>
     <p class="text-sm text-muted-foreground">
       Save these recovery codes in a safe place. If you lose access to your

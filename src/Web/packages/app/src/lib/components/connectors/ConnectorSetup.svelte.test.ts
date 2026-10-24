@@ -44,7 +44,15 @@ vi.mock("$lib/api/generated/services.generated.remote", () => ({
       availableConnectors: [{ id: "nightscout", name: "Nightscout" }],
     },
   }),
-  getConnectorCapabilities: () => ({ current: {}, loading: false }),
+  getConnectorCapabilities: () => ({
+    current: {
+      supportedDataTypes: ["Glucose", "Treatments"],
+      supportsHistoricalSync: true,
+      maxHistoricalDays: 90,
+      supportsManualSync: false,
+    },
+    loading: false,
+  }),
   getConnectorDataSummary: () => ({ current: { total: 0 }, loading: false }),
   deleteConnectorData: () => Promise.resolve({}),
 }));
@@ -137,5 +145,18 @@ describe("ConnectorSetup", () => {
 
       await expectReadOnly();
     });
+  });
+
+  it("lists what the connector can sync when capabilities are shown", async () => {
+    render(ConnectorSetup, {
+      props: { connectorId: "nightscout", showCapabilities: true },
+    });
+
+    await expect.element(page.getByText("Sync capabilities")).toBeVisible();
+    await expect.element(page.getByText("Glucose", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Treatments", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Supported", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Disabled", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("90", { exact: true })).toBeVisible();
   });
 });

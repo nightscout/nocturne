@@ -41,9 +41,9 @@
       case AlertConditionType.Threshold:
         return "Threshold";
       case AlertConditionType.RateOfChange:
-        return "Rate of Change";
+        return "Rate of change";
       case AlertConditionType.SignalLoss:
-        return "Signal Loss";
+        return "Signal loss";
       case AlertConditionType.Composite:
         return "Composite";
       default:
@@ -62,7 +62,7 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <Clock class="h-5 w-5" />
-      Alert History
+      Alert history
     </CardTitle>
     <CardDescription>
       Past alert excursions and their resolution

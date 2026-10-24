@@ -66,8 +66,8 @@ const cellHeight = (container: HTMLElement) =>
 
 describe("stat widgets", () => {
   it.each([
-    ["Time in Range", TirChartWidget, "in range", stats],
-    ["Total Daily Dose", TddWidget, "Basal", stats],
+    ["Time in range", TirChartWidget, "in range", stats],
+    ["Total daily dose", TddWidget, "Basal", stats],
     ["Total Daily Dose with microboluses", TddWidget, "Auto", withMicroboluses],
   ])(
     "%s keeps its height when its statistics arrive, in three columns and in one",

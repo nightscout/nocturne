@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { page as pageState } from "$app/state";
-import { AlertReceiptActorKind, type ActiveExcursionResponse } from "$api-clients";
+import { AlertConditionType, AlertReceiptActorKind, type ActiveExcursionResponse } from "$api-clients";
 import { remoteQuery } from "$lib/test-stubs/remote-resource";
 
 let activeAlerts = $state<ActiveExcursionResponse[]>([]);
@@ -79,5 +79,20 @@ describe("AlertBanner", () => {
 		await expect.element(page.getByText("Low")).toBeVisible();
 		await page.getByRole("button", { name: "Seen" }).click();
 		await expect.element(page.getByText("Low")).not.toBeInTheDocument();
+	});
+
+	it("names the condition that fired", async () => {
+		pageState.data = { hasAccount: true, effectivePermissions: ["alerts.readwrite"] };
+		activeAlerts = [
+			{ ...firing, id: "roc", ruleName: "Rule C", conditionType: AlertConditionType.RateOfChange },
+			{ ...firing, id: "loss", ruleName: "Rule D", conditionType: AlertConditionType.SignalLoss },
+			{ ...firing, id: "comp", ruleName: "Rule E", conditionType: AlertConditionType.Composite },
+		];
+
+		render(AlertBanner);
+
+		await expect.element(page.getByText("Rapid change")).toBeVisible();
+		await expect.element(page.getByText("Signal lost")).toBeVisible();
+		await expect.element(page.getByText("Composite alert")).toBeVisible();
 	});
 });

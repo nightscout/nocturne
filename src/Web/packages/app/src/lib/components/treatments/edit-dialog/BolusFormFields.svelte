@@ -71,7 +71,7 @@
     />
   </div>
   <div class="space-y-2">
-    <Label>Bolus Type</Label>
+    <Label>Bolus type</Label>
     <Select.Root
       type="single"
       value={form.bolusType ?? ""}
@@ -186,7 +186,7 @@
       variant="option"
       class="cursor-pointer"
     >
-      Basal Insulin
+      Basal insulin
     </Label>
   </div>
 </div>

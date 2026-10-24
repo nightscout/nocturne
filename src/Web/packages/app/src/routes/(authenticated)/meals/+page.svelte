@@ -355,7 +355,7 @@
       <Calendar class="h-4 w-4" />
       <span>Meals</span>
     </div>
-    <h1 class="text-3xl font-bold">Meal Attribution</h1>
+    <h1 class="text-3xl font-bold">Meal attribution</h1>
     <p class="text-muted-foreground">
       Pair carb intakes with foods when you want more detail.
     </p>

@@ -52,7 +52,7 @@
 <div class="space-y-2">
   <Label>
     <Syringe class="h-3.5 w-3.5 text-entry-basal-injection" />
-    Basal Insulin
+    Basal insulin
   </Label>
   <Select.Root
     type="single"

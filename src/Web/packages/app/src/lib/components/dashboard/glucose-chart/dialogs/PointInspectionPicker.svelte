@@ -39,7 +39,7 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="max-w-md print:hidden">
     <Dialog.Header>
-      <Dialog.Title>Inspect Point</Dialog.Title>
+      <Dialog.Title>Inspect point</Dialog.Title>
       <Dialog.Description>
         Multiple data types available at this time. Choose what to inspect.
       </Dialog.Description>

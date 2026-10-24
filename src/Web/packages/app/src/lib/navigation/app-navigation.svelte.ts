@@ -145,7 +145,7 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
     },
     {
       id: "time-spans",
-      title: "Time Spans",
+      title: "Time spans",
       href: "/time-spans",
       icon: Layers,
     },
@@ -218,7 +218,7 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
     },
     {
       id: "dev-tools",
-      title: "Dev Tools",
+      title: "Dev tools",
       icon: Terminal,
       children: [
         {
@@ -228,7 +228,7 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
           strict: true,
         },
         {
-          title: "Test Endpoint Compatibility",
+          title: "Test endpoint compatibility",
           href: "/compatibility/test",
           icon: TestTube,
         },
@@ -242,7 +242,7 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
         { title: "Setup", href: "/setup", icon: ListChecks },
         { title: "Account", href: "/settings/account", icon: User },
         {
-          title: "Patient Record",
+          title: "Patient record",
           href: "/settings/patient",
           icon: HeartPulse,
         },
@@ -254,26 +254,26 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
         },
         { title: "Therapy", href: "/settings/profile", icon: Syringe },
         {
-          title: "Data Quality",
+          title: "Data quality",
           href: "/settings/data-quality",
           icon: ShieldCheck,
         },
         {
-          title: "Notifications & Trackers",
+          title: "Notifications & trackers",
           href: "/settings/trackers",
           icon: Timer,
         },
-        { title: "Active Access", href: "/settings/access", icon: KeyRound },
-        { title: "Connectors & Apps", href: "/settings/connectors", icon: Plug },
-        { title: "Sharing & Privacy", href: "/settings/members", icon: Users },
+        { title: "Active access", href: "/settings/access", icon: KeyRound },
+        { title: "Connectors & apps", href: "/settings/connectors", icon: Plug },
+        { title: "Sharing & privacy", href: "/settings/members", icon: Users },
         {
-          title: "Support & Community",
+          title: "Support & community",
           href: "/settings/support",
           icon: HeartHandshake,
         },
         ...(viewer.isPlatformAdmin
           ? [
-              { title: "Tenant Management", href: "/settings/admin/tenants", icon: Building2 },
+              { title: "Tenant management", href: "/settings/admin/tenants", icon: Building2 },
             ]
           : []),
       ],

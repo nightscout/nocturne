@@ -45,7 +45,7 @@ async function syncing(
     },
   });
 
-  await page.getByRole("button", { name: "Sync Now" }).click();
+  await page.getByRole("button", { name: "Sync now" }).click();
 }
 
 const syncReturning = (result: SyncResult) => syncing(async () => result);
@@ -78,7 +78,7 @@ describe("ConnectorDetailsDialog", () => {
 
     await expect.element(page.getByText("Nightscout")).toBeVisible();
     expect(
-      page.getByRole("button", { name: "Sync Now" }).elements()
+      page.getByRole("button", { name: "Sync now" }).elements()
     ).toHaveLength(0);
   });
 
@@ -101,7 +101,7 @@ describe("ConnectorDetailsDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Sync Now" }))
+      .element(page.getByRole("button", { name: "Sync now" }))
       .toBeVisible();
   });
 
@@ -126,7 +126,7 @@ describe("ConnectorDetailsDialog", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Sync Now" }))
+      .element(page.getByRole("button", { name: "Sync now" }))
       .toBeVisible();
   });
 
@@ -198,7 +198,7 @@ describe("ConnectorDetailsDialog", () => {
       .element(page.getByText(/2 records could not be stored/))
       .toBeVisible();
     await expect
-      .element(page.getByRole("link", { name: "Rejected Uploads" }))
+      .element(page.getByRole("link", { name: "Rejected uploads" }))
       .toBeVisible();
   });
 

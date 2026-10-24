@@ -19,7 +19,7 @@
   const date = $derived(page.params.date ?? "");
 
   const nightResource = contextResource(() => getSingleNightByDate(date), {
-    errorTitle: "Error Loading Night Report",
+    errorTitle: "Error loading night report",
   });
 
   const report = $derived(nightResource.current);
@@ -97,7 +97,7 @@
         class="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
-        Sleep & Overnight
+        Sleep & overnight
       </a>
       <p class="mt-2 text-lg font-semibold print:hidden">{dateDisplay}</p>
       {#if timeSpan}
@@ -131,7 +131,7 @@
     <div class="grid gap-6 @lg:grid-cols-2">
       <Card class="@container">
         <CardHeader>
-          <CardTitle>Overnight Time in Range</CardTitle>
+          <CardTitle>Overnight time in range</CardTitle>
         </CardHeader>
         <CardContent class="space-y-3">
           {#if tirPercentages}

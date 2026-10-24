@@ -26,7 +26,7 @@
   const params = requireDateParamsContext(14);
 
   const resource = contextResource(() => getDataQualityReport(params.dateRangeInput), {
-    errorTitle: "Error Loading Data Quality Report",
+    errorTitle: "Error loading data quality report",
   });
 
   const integrity = $derived(resource.current?.integrity);
@@ -67,7 +67,7 @@
         class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
-        Data Quality
+        Data quality
       </a>
       <div class="flex items-center gap-3">
         <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 print:hidden">

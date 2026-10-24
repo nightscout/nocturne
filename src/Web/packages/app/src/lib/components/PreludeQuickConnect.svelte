@@ -87,7 +87,7 @@
     } catch (err) {
       deviceLookupError = describeSubmitError(
         err,
-        "Invalid or expired device code. Please check and try again."
+        "Invalid or expired device code. Check the code and try again."
       );
     } finally {
       deviceLookupLoading = false;
@@ -101,7 +101,7 @@
       await deviceApprove({ user_code: deviceInfo.userCode, approved: true });
       deviceApproved = true;
     } catch (err) {
-      deviceLookupError = describeSubmitError(err, "Failed to approve. The code may have expired.");
+      deviceLookupError = describeSubmitError(err, "Could not approve the device. The code possibly expired.");
     } finally {
       deviceApproveLoading = false;
     }
@@ -128,7 +128,7 @@
 
 <div class="space-y-4">
   <div>
-    <p class="text-sm font-medium">Quick Connect</p>
+    <p class="text-sm font-medium">Quick connect</p>
     <p class="text-muted-foreground text-sm">
       Scan the QR with Prelude, then approve the code it shows you here.
     </p>
@@ -166,7 +166,7 @@
       />
     </div>
     <p class="text-muted-foreground text-center text-sm">
-      In Prelude, tap Settings → Account → Connect with QR and scan this code
+      In Prelude, select Settings → Account → Connect with QR and scan this code
     </p>
   {/if}
 
@@ -175,7 +175,7 @@
   <!-- Device Authorization Code Section -->
   <div class="space-y-3">
     <div>
-      <p class="text-sm font-medium">Enter Authorization Code</p>
+      <p class="text-sm font-medium">Enter authorization code</p>
       <p class="text-muted-foreground text-sm">
         Prelude displays a short code after it scans. Enter it here to approve.
       </p>

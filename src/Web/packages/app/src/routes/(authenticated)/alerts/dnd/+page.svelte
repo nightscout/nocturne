@@ -267,7 +267,7 @@
         <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
           <ShieldAlert class="h-6 w-6 text-destructive" />
         </div>
-        <h2 class="text-lg font-semibold">Access Denied</h2>
+        <h2 class="text-lg font-semibold">Access denied</h2>
         <p class="mt-2 max-w-sm text-sm text-muted-foreground">
           You do not have permission to change Do Not Disturb. Contact your
           tenant administrator for access.

@@ -57,8 +57,8 @@
 
       <div class="text-lg font-medium opacity-80">
         {profile.alarmType === "StaleData"
-          ? "No Data Received"
-          : "Glucose Alert"}
+          ? "No data received"
+          : "Glucose alert"}
       </div>
 
       {#if showEmergencyButton}
@@ -69,7 +69,7 @@
             onclick={onEmergencyClick}
           >
             <AlertCircle />
-            Emergency Contacts
+            Emergency contacts
           </Button>
         </div>
       {/if}
@@ -100,7 +100,7 @@
       size="xl"
       onclick={onDismiss}
     >
-      Dismiss Alarm
+      Dismiss alarm
     </Button>
   </div>
 </div>

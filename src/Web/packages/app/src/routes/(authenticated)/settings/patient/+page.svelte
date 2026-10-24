@@ -34,7 +34,7 @@
 </script>
 
 <svelte:head>
-  <title>Patient Record - Settings - Nocturne</title>
+  <title>Patient record - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -43,7 +43,7 @@
       <HeartPulse class="h-6 w-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Patient Record</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Patient record</h1>
       <p class="text-muted-foreground">
         Manage your clinical information, devices, and insulins
       </p>
@@ -55,7 +55,7 @@
     <Card.Header>
       <div class="flex items-center gap-2">
         <HeartPulse class="h-5 w-5 text-muted-foreground" />
-        <Card.Title>Clinical Information</Card.Title>
+        <Card.Title>Clinical information</Card.Title>
       </div>
       <Card.Description>
         Basic information about your diabetes management
@@ -68,7 +68,7 @@
       <FormActions
         class="w-full"
         formId="clinical-form"
-        submitLabel="Save Changes"
+        submitLabel="Save changes"
         form={clinicalState?.form}
         pending={!!clinicalState?.weight.saving}
         error={clinicalState?.guard.submitError}

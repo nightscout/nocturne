@@ -166,7 +166,7 @@
     {#if snapshot}
       <div class="py-3">
         <p class="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-          Loop Decision
+          Loop decision
         </p>
         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           <span class="text-muted-foreground">Status</span>
@@ -177,13 +177,13 @@
               </Badge>
             {:else}
               <Badge variant="warning">
-                Suggested Only
+                Suggested only
               </Badge>
             {/if}
           </span>
 
           {#if snapshot.enactedRate != null}
-            <span class="text-muted-foreground">Enacted Rate</span>
+            <span class="text-muted-foreground">Enacted rate</span>
             <span class="font-medium">
               {snapshot.enactedRate.toFixed(2)} U/hr
               {#if snapshot.enactedDuration != null}
@@ -193,7 +193,7 @@
           {/if}
 
           {#if snapshot.enactedBolusVolume != null && snapshot.enactedBolusVolume > 0}
-            <span class="text-muted-foreground">SMB / Auto-bolus</span>
+            <span class="text-muted-foreground">SMB / auto-bolus</span>
             <span class="font-medium">{snapshot.enactedBolusVolume.toFixed(2)} U</span>
           {/if}
 
@@ -258,7 +258,7 @@
     {#if hasActiveModifiers}
       <div class="py-3">
         <p class="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-          Active Modifiers
+          Active modifiers
         </p>
         <div class="space-y-1.5 text-sm">
           {#if overrideState}
@@ -279,7 +279,7 @@
             <div class="flex items-center gap-2">
               <Syringe class="h-3.5 w-3.5 text-muted-foreground" />
               <span>
-                Temp Basal: <span class="font-medium">
+                Temp basal: <span class="font-medium">
                   {tempBasalRate.toFixed(2)} U/hr{tempBasalPercent != null
                     ? ` (${tempBasalPercent}%)`
                     : ""}
@@ -304,7 +304,7 @@
     {#if isStaleBasal}
       <div class="flex items-center gap-2 py-2 text-warning text-sm">
         <AlertTriangle class="h-4 w-4" />
-        <span>Basal data may be stale. The last update was received some time ago.</span>
+        <span>Basal data is possibly out of date. The last update arrived some time ago.</span>
       </div>
     {/if}
 

@@ -127,8 +127,8 @@ describe("CommandPalette", () => {
     pageState.data = { effectivePermissions: [], isPlatformAdmin: true };
     render(CommandPalette, { open: true });
 
-    await expect.element(item("Tenant Management")).toBeVisible();
-    await expect.element(item("Access Requests")).toBeVisible();
+    await expect.element(item("Tenant management")).toBeVisible();
+    await expect.element(item("Access requests")).toBeVisible();
   });
 
   it("withholds the platform admin pages from everyone else", async () => {
@@ -136,22 +136,22 @@ describe("CommandPalette", () => {
     render(CommandPalette, { open: true });
 
     await expect.element(item("Dashboard")).toBeVisible();
-    await expect.element(item("Tenant Management")).not.toBeInTheDocument();
-    await expect.element(item("Access Requests")).not.toBeInTheDocument();
+    await expect.element(item("Tenant management")).not.toBeInTheDocument();
+    await expect.element(item("Access requests")).not.toBeInTheDocument();
   });
 
   it("lists a report under the registry's title to a viewer holding its scopes", async () => {
     pageState.data = { effectivePermissions: ["glucose.read"] };
     render(CommandPalette, { open: true });
 
-    await expect.element(report("Day-by-Day View")).toBeVisible();
+    await expect.element(report("Day-by-day view")).toBeVisible();
   });
 
   it("withholds a report from a viewer without its scope", async () => {
     pageState.data = { effectivePermissions: ["glucose.read"] };
     render(CommandPalette, { open: true });
 
-    await expect.element(report("Day-by-Day View")).toBeVisible();
+    await expect.element(report("Day-by-day view")).toBeVisible();
     await expect.element(report("Battery")).not.toBeInTheDocument();
   });
 });

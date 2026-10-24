@@ -201,8 +201,8 @@
     [CompletionReason.Expired]: "Expired",
     [CompletionReason.Other]: "Other",
     [CompletionReason.Failed]: "Failed",
-    [CompletionReason.FellOff]: "Fell Off",
-    [CompletionReason.ReplacedEarly]: "Replaced Early",
+    [CompletionReason.FellOff]: "Fell off",
+    [CompletionReason.ReplacedEarly]: "Replaced early",
     [CompletionReason.Empty]: "Empty",
     [CompletionReason.Refilled]: "Refilled",
     [CompletionReason.Attended]: "Attended",
@@ -435,7 +435,7 @@
 </script>
 
 <svelte:head>
-  <title>Notifications & Trackers - Settings - Nocturne</title>
+  <title>Notifications & trackers - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -446,7 +446,7 @@
     </div>
     <div>
       <h1 class="text-2xl font-bold tracking-tight">
-        Notifications & Trackers
+        Notifications & trackers
       </h1>
       <p class="text-muted-foreground">
         Track consumables, appointments, and reminders
@@ -614,7 +614,7 @@
 <ConfirmDialog
   bind:open={isDeleteDefinitionDialogOpen}
   onOpenChange={(o) => { if (!o) deletingDefinitionId = null; }}
-  title="Delete Tracker Definition"
+  title="Delete tracker definition"
   confirmLabel="Delete"
   destructive
   onConfirm={confirmDeleteDefinition}
@@ -630,7 +630,7 @@
 <ConfirmDialog
   bind:open={isDeleteInstanceDialogOpen}
   onOpenChange={(o) => { if (!o) deletingInstanceId = null; }}
-  title="Delete Tracker Instance"
+  title="Delete tracker instance"
   confirmLabel="Delete"
   destructive
   onConfirm={confirmDeleteInstance}
@@ -646,15 +646,15 @@
   <Dialog.Content class="sm:max-w-[425px]">
     <Dialog.Header>
       <Dialog.Title>
-        {isNewPreset ? "New Preset" : "Edit Preset"}
+        {isNewPreset ? "New preset" : "Edit preset"}
       </Dialog.Title>
       <Dialog.Description>
-        Create a quick preset for one-click tracker activation.
+        Create a quick preset for one-step tracker activation.
       </Dialog.Description>
     </Dialog.Header>
     <div class="grid gap-4 py-4">
       <div class="space-y-2">
-        <Label for="presetName">Preset Name</Label>
+        <Label for="presetName">Preset name</Label>
         <Input
           id="presetName"
           bind:value={formPresetName}
@@ -662,7 +662,7 @@
         />
       </div>
       <div class="space-y-2">
-        <Label for="presetDefinition">Tracker Definition</Label>
+        <Label for="presetDefinition">Tracker definition</Label>
         <Select.Root type="single" bind:value={formPresetDefinitionId}>
           <Select.Trigger>
             {definitions.find((d) => d.id === formPresetDefinitionId)?.name ??
@@ -676,7 +676,7 @@
         </Select.Root>
       </div>
       <div class="space-y-2">
-        <Label for="presetNotes">Default Start Notes (optional)</Label>
+        <Label for="presetNotes">Default start notes (optional)</Label>
         <Textarea
           id="presetNotes"
           bind:value={formPresetDefaultStartNotes}
@@ -705,7 +705,7 @@
 <ConfirmDialog
   bind:open={isDeletePresetDialogOpen}
   onOpenChange={(o) => { if (!o) deletingPresetId = null; }}
-  title="Delete Preset"
+  title="Delete preset"
   confirmLabel="Delete"
   destructive
   onConfirm={confirmDeletePreset}

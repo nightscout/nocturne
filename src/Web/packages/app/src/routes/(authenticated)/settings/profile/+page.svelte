@@ -198,7 +198,7 @@
               <User class="h-8 w-8 text-muted-foreground" />
             </div>
             <div>
-              <h3 class="text-lg font-semibold">No Profile Found</h3>
+              <h3 class="text-lg font-semibold">No profile found</h3>
               <p class="text-sm text-muted-foreground max-w-md mx-auto mt-1">
                 Profiles are typically uploaded from your diabetes management
                 app (like AAPS, Loop, or xDrip+). They contain your basal rates,
@@ -208,7 +208,7 @@
             <div class="flex items-center justify-center gap-2">
               <Button variant="outline" href="/settings/connectors">
                 <Settings class="h-4 w-4 mr-2" />
-                Configure Data Sources
+                Configure data sources
               </Button>
             </div>
           </div>
@@ -393,7 +393,7 @@
         <div class="grid gap-4 @3xl:grid-cols-2">
           {#if basal?.entries && basal.entries.length > 0}
             <ScheduleView
-              title="Basal Rates"
+              title="Basal rates"
               description="Background insulin delivery rates"
               unit="U/hr"
               icon={Activity}
@@ -403,7 +403,7 @@
 
           {#if carbRatio?.entries && carbRatio.entries.length > 0}
             <ScheduleView
-              title="Carb Ratios (I:C)"
+              title="Carb ratios (I:C)"
               description="Grams of carbs per unit of insulin"
               unit="g/U"
               icon={Droplet}
@@ -414,7 +414,7 @@
 
           {#if sensitivity?.entries && sensitivity.entries.length > 0}
             <ScheduleView
-              title="Insulin Sensitivity (ISF)"
+              title="Insulin sensitivity (ISF)"
               description="BG drop per unit of insulin"
               unit="{bgLabel()}/U"
               icon={TrendingUp}
@@ -434,7 +434,7 @@
         <Card variant="muted">
           <CardHeader class="pb-3">
             <CardTitle class="text-sm font-medium">
-              Profile Settings
+              Profile settings
             </CardTitle>
           </CardHeader>
           <CardContent>
