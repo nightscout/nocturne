@@ -10,10 +10,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // SettingsEntity.Value and AdditionalPropertiesJson are [AuditRedacted] from here on; the
-            // rows written before hold their values, which can be credentials. An update keeps the
-            // record that the field changed, as the interceptor now writes it. FORCE ROW LEVEL
-            // SECURITY binds the migrator too, hence the per-tenant GUC.
+            // Settings values can be credentials, and audit rows written before SettingsEntity.Value
+            // and AdditionalPropertiesJson were [AuditRedacted] hold them. Each is rewritten in the
+            // shape MutationAuditInterceptor gives a redacted field. FORCE ROW LEVEL SECURITY binds
+            // the migrator too, hence the per-tenant GUC.
             migrationBuilder.Sql("""
                 DO $$
                 DECLARE

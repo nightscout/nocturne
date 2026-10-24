@@ -19,17 +19,21 @@ public sealed class RedactSettingsValuesInAuditLogFixture : IAsyncLifetime
     private const string PriorMigration = "20261024075043_AddAlertExcursionReceipts";
 
     internal static readonly Guid Tenant = Guid.Parse("a1111111-1111-7111-8111-111111112619");
+    internal static readonly Guid SecondTenant = Guid.Parse("b2222222-2222-7222-8222-222222222619");
 
     internal static readonly Guid SettingsUpdate = Guid.CreateVersion7();
     internal static readonly Guid SettingsDelete = Guid.CreateVersion7();
     internal static readonly Guid SettingsTimestampOnly = Guid.CreateVersion7();
     internal static readonly Guid OtherEntity = Guid.CreateVersion7();
+    internal static readonly Guid SecondTenantRestore = Guid.CreateVersion7();
 
     internal const string SettingsUpdateChanges =
         """{"Value": {"old": "{\"apiToken\":\"a-secret\"}", "new": "{}"}, "SrvModified": {"old": "2026-01-01", "new": "2026-01-02"}}""";
     internal const string SettingsDeleteChanges =
         """{"Key": "aaps", "Value": "x", "AdditionalPropertiesJson": "{\"pairing\":\"p-secret\"}"}""";
     internal const string SettingsTimestampOnlyChanges = """{"SrvModified": {"old": "2026-01-01", "new": "2026-01-02"}}""";
+    internal const string SecondTenantRestoreChanges =
+        """{"Key": "aaps", "Value": "{\"apiToken\":\"b-secret\"}", "AdditionalPropertiesJson": null}""";
     internal const string OtherEntityChanges = """{"Value": {"old": 1, "new": 2}}""";
 
     internal Dictionary<Guid, JsonNode?> After { get; } = [];
@@ -65,13 +69,17 @@ public sealed class RedactSettingsValuesInAuditLogFixture : IAsyncLifetime
         await conn.OpenAsync();
         await Execute(conn, $"""
             INSERT INTO tenants (id, slug, display_name, is_active, sys_created_at, sys_updated_at)
-            VALUES ('{Tenant}', 'tenant-a', 'Tenant A', true, now(), now());
+            VALUES ('{Tenant}', 'tenant-a', 'Tenant A', true, now(), now()),
+                   ('{SecondTenant}', 'tenant-b', 'Tenant B', true, now(), now());
             SELECT set_config('app.current_tenant_id', '{Tenant}', false);
             INSERT INTO mutation_audit_log (id, tenant_id, entity_type, entity_id, action, changes, created_at) VALUES
               ('{SettingsUpdate}', '{Tenant}', 'Settings', '{Guid.CreateVersion7()}', 'update', '{SettingsUpdateChanges}'::jsonb, now()),
               ('{SettingsDelete}', '{Tenant}', 'Settings', '{Guid.CreateVersion7()}', 'delete', '{SettingsDeleteChanges}'::jsonb, now()),
               ('{SettingsTimestampOnly}', '{Tenant}', 'Settings', '{Guid.CreateVersion7()}', 'update', '{SettingsTimestampOnlyChanges}'::jsonb, now()),
               ('{OtherEntity}', '{Tenant}', 'Food', '{Guid.CreateVersion7()}', 'update', '{OtherEntityChanges}'::jsonb, now());
+            SELECT set_config('app.current_tenant_id', '{SecondTenant}', false);
+            INSERT INTO mutation_audit_log (id, tenant_id, entity_type, entity_id, action, changes, created_at) VALUES
+              ('{SecondTenantRestore}', '{SecondTenant}', 'Settings', '{Guid.CreateVersion7()}', 'restore', '{SecondTenantRestoreChanges}'::jsonb, now());
             SELECT set_config('app.current_tenant_id', '', false);
             """);
     }
@@ -87,12 +95,15 @@ public sealed class RedactSettingsValuesInAuditLogFixture : IAsyncLifetime
     {
         await using var conn = new NpgsqlConnection(_migrator);
         await conn.OpenAsync();
-        await Execute(conn, $"SELECT set_config('app.current_tenant_id', '{Tenant}', false);");
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, changes::text FROM mutation_audit_log;";
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            After[reader.GetGuid(0)] = JsonNode.Parse(reader.GetString(1));
+        foreach (var tenant in new[] { Tenant, SecondTenant })
+        {
+            await Execute(conn, $"SELECT set_config('app.current_tenant_id', '{tenant}', false);");
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT id, changes::text FROM mutation_audit_log;";
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                After[reader.GetGuid(0)] = JsonNode.Parse(reader.GetString(1));
+        }
     }
 }
 
@@ -117,6 +128,14 @@ public class RedactSettingsValuesInAuditLogTests : IClassFixture<RedactSettingsV
     {
         var changes = _fixture.After[RedactSettingsValuesInAuditLogFixture.SettingsDelete]!;
         changes["Key"]!.GetValue<string>().Should().Be("aaps");
+        changes["Value"]!.GetValue<string>().Should().Be("[redacted]");
+        changes["AdditionalPropertiesJson"]!.GetValue<string>().Should().Be("[redacted]");
+    }
+
+    [Fact]
+    public void Every_tenant_is_scrubbed()
+    {
+        var changes = _fixture.After[RedactSettingsValuesInAuditLogFixture.SecondTenantRestore]!;
         changes["Value"]!.GetValue<string>().Should().Be("[redacted]");
         changes["AdditionalPropertiesJson"]!.GetValue<string>().Should().Be("[redacted]");
     }
