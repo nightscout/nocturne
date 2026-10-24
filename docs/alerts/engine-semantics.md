@@ -23,21 +23,23 @@ replay_parity`) and reviewed like code.
 ### 1.1 JSON options
 
 All condition JSON (rule `condition_params`, `auto_resolve_params`, snooze `conditions`)
-is read with:
+has exactly one spelling for every property name and enum value. Anything else is not read:
 
-- property naming: **snake_case lower** (`JsonNamingPolicy.SnakeCaseLower`)
-- property name matching: **case-insensitive**
-- a property name that repeats, in the same case or another, binds its **last** occurrence (`System.Text.Json`)
-- `System.DayOfWeek` accepts **string names** (`"monday"`, case-insensitive) **and**
-  integer indices (0 = Sunday … 6 = Saturday); canonical output form is the string
-- enums with `JsonStringEnumMemberName` use their snake_case wire names
-  (`TempBasalMetric`: `rate` | `percent_of_scheduled`; `GlucoseBucket`: `very_low` | `low`
-  | `tight_range` | `in_range` | `high` | `very_high`; `AlertComparisonOperator`:
-  `>` `>=` `<` `<=` `==`)
-- **exception:** `StateSpanCategory` and `PumpModeState` carry a plain
-  `JsonStringEnumConverter` with no member-name overrides — their wire form is the
-  **PascalCase member name** (`"Override"`, `"PumpConnectivity"`, `"Automatic"`,
-  `"EaseOff"`, …), read case-insensitively
+- property names are **snake_case lower** (`JsonNamingPolicy.SnakeCaseLower`), matched
+  **exactly**. A property in another case is a different property: `unknown_field` on
+  save, and the operand it was meant to be reads as absent (§1.4)
+- a property name that repeats binds its **last** occurrence
+- an enum value is a JSON string that is **exactly** one member's wire name. Another case,
+  surrounding whitespace, or an integer (ordinal) names no member
+- condition-only enums use snake_case wire names (`TempBasalMetric`: `rate` |
+  `percent_of_scheduled`; `GlucoseBucket`: `very_low` | `low` | `tight_range` | `in_range`
+  | `high` | `very_high`; `AlertWeekday`: `sunday` … `saturday`; `TrendBucket`;
+  `AlertComparisonOperator`: `>` `>=` `<` `<=` `==`; the composite operator, `direction`
+  and `alert_state` `state` words)
+- `StateSpanCategory` and `PumpModeState` are domain enums the rest of the API also
+  writes, as their **PascalCase member names** (`"Override"`, `"PumpConnectivity"`,
+  `"Automatic"`, `"EaseOff"`, …); a condition uses the same names
+- a `time_of_day` `timezone` is exactly an IANA tzdb name (§4)
 
 ### 1.2 ConditionNode
 
@@ -91,8 +93,11 @@ input is null this tick:
 | `direction_missing` | a `threshold` or `rate_of_change` with no `direction` (including the `{}` default, §1.2) |
 | `state_missing` | an `alert_state` with no `state` |
 
-Together with the reader's own failures (`not_an_object`, `invalid_field`, `too_deep`:
-the `JsonException` class of §1.1), these are the problems that **fail evaluation**:
+Together with the reader's own failures (`not_an_object`, `too_deep`, and `invalid_field`:
+a value of the wrong JSON kind, a number out of range, an enum operand read only as a
+member (every one except the composite operator, `direction`, `alert_state` `state` and
+`trend` `bucket`) that names none, or a `timezone` that is not a zone id), these are the
+problems that **fail evaluation**:
 
 - Rule body: the rule is skipped — no root, leaves, tracker transition, auto-resolve or
   timer writes. The driver returns `skipped` and the `evaluate` envelope returns an error,
@@ -106,17 +111,17 @@ rule save rejects those too, together with the shapes above:
 
 | Reason code | Shape |
 |---|---|
-| `unknown_operator` | composite operator other than `and`/`or` (case-insensitive); comparison operator other than the exact `<` `<=` `>` `>=` `==`, or missing; `time_since_*` operator ordinal outside the enum |
-| `unknown_direction` | `threshold` direction other than `above`/`below`, `rate_of_change` other than `rising`/`falling` (case-insensitive) |
-| `unknown_state` | `alert_state` state other than `firing`/`unacknowledged`/`acknowledged` (case-insensitive) |
+| `unknown_operator` | composite operator other than `and`/`or`; comparison operator other than `<` `<=` `>` `>=` `==`, or missing |
+| `unknown_direction` | `threshold` direction other than `above`/`below`, `rate_of_change` other than `rising`/`falling` |
+| `unknown_state` | `alert_state` state other than `firing`/`unacknowledged`/`acknowledged` |
 | `conditions_empty` | a composite with an empty `conditions` list |
 | `child_missing` | a `not` or `sustained` with no `child` |
 | `minutes_not_positive` | a duration `<= 0` that leaves its node never true: `sustained` `minutes`, `signal_loss` `timeout_minutes`, `predicted` `within_minutes` (no prediction is at or before now). An absent `timeout_minutes` or `within_minutes` is `field_missing` instead |
 | `minutes_negative` | a negative bound on an elapsed time: `staleness` `value`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`. Elapsed time is never negative and an absent anchor reads as infinite, so every operator compares the same way on every tick. `tracker_age` is exempt: its elapsed time is negative before a scheduled event |
 | `payload_missing` | a rule body whose `condition_params` is JSON `null` |
-| `unknown_field` | a node property other than `type` and the kinds' payload names, or a payload property its kind does not read (names match case-insensitively, as §1.1 reads them), so a misspelt operand such as `timeoutMinutes` is not silently dropped. No field is named: the property is the author's text |
+| `unknown_field` | a node property other than `type`, `_uid` and the kinds' payload names, or a payload property its kind does not read (names match exactly, §1.1), so a misspelt operand such as `timeoutMinutes` or `Value` is not silently dropped. No field is named: the property is the author's text |
 | `field_missing` | a required operand is absent (or `null` where that reads as absent): `value` on `threshold`, `staleness` and the `{operator, value}` kinds, `rate`, `timeout_minutes`, `predicted` `value`/`within_minutes`, `alert_id`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`/`tracker_age`, `is_active`, `temp_basal` `metric`, `time_since_*` `operator`, `pump_state` `mode`, `state_span_active` `category`, `tracker_definition_id`, `trend` `bucket`, `time_of_day` `from`/`to`. Each would read as its default (§1.2), which is never what was meant. A node whose payload property is absent is checked as an empty payload |
-| `unknown_value` | an enum operand no member has: an ordinal outside `temp_basal` `metric`, a `glucose_bucket` or `day_of_week` list member, `pump_state` `mode`, `state_span_active` `category`; a `trend` `bucket` naming no bucket |
+| `unknown_value` | a `trend` `bucket` naming no bucket |
 | `invalid_time` | a `time_of_day` `from` or `to` that is not exactly `HH:mm` (`"9:00"`, `"24:00"`) |
 | `empty_window` | a `time_of_day` whose `from` equals its `to`, a window that never opens |
 | `list_empty` | a `glucose_bucket` `buckets` or `day_of_week` `days` list that is absent, `null` or empty |
@@ -151,7 +156,7 @@ A container whose payload is null/absent (e.g. `{"type":"not"}` with no `not` fi
 the walkers fall through to the leaf branch). A `not` or `sustained` so shaped evaluates
 `false`; a `composite` cannot be evaluated (§1.4). **[anomaly — but normative]**
 
-### 2.2 Leaf IDs (`LeafIdentity.AssignLeafIds`)
+### 2.2 Leaf IDs
 
 Pre-order depth-first, left-to-right. Containers are unwrapped (never receive IDs);
 every non-container node gets the next sequential ID starting at 0. ID space is
@@ -197,12 +202,12 @@ below are non-strict/strict exactly as written.
 
 | Kind | Payload | Inputs | Semantics | Null / cold-start behaviour |
 |---|---|---|---|---|
-| `threshold` | `direction` (`above`\|`below`, lowercased), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null ⇒ false; unknown direction ⇒ false |
+| `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null ⇒ false; unknown direction ⇒ false |
 | `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null ⇒ false |
 | `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | both `LastReadingAt` and `LatestTimestamp` null ⇒ **false** (cold start); only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
 | `predicted` | `operator`, `value`, `within_minutes` | `Predictions[]` | true if **any** point with `OffsetMinutes <= within_minutes` satisfies `Compare(point.Mgdl, op, value)`; points beyond horizon are skipped, not range-checked below | empty predictions ⇒ false |
-| `trend` | `bucket` (wire string) | `TrendBucket` | case-insensitive equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null ⇒ false; empty/unknown configured bucket ⇒ false |
-| `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | unparseable from/to ⇒ false. Tz resolution: per-rule tz set but unknown ⇒ **false**; else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC |
+| `trend` | `bucket` (wire string) | `TrendBucket` | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null ⇒ false; empty/unknown configured bucket ⇒ false |
+| `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | unparseable from/to ⇒ false. Tz resolution: the per-rule tz when set (one that is not a zone id cannot be evaluated, §1.4); else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC |
 | `iob` | `operator`, `value` (units) | `IobUnits` | `Compare` | null ⇒ false |
 | `cob` | `operator`, `value` (grams) | `CobGrams` | `Compare` | null ⇒ false |
 | `reservoir` | `operator`, `value` (units) | `ReservoirUnits` | `Compare` | null ⇒ false |
@@ -219,9 +224,9 @@ below are non-strict/strict exactly as written.
 | `sensitivity_ratio` | `operator`, `value` | `SensitivityRatio`, `HasEverApsSensitivity` | `Compare` | guard false ⇒ false; ratio null ⇒ false |
 | `do_not_disturb` | `is_active`, `for_minutes?` | `ActiveDoNotDisturb`, now | same shape as `pump_suspended` (anchor `StartedAt`); `for_minutes` no-op on the inactive side | no guard; snapshot null = DND off |
 | `glucose_bucket` | `buckets: [..]` | `GlucoseBucket` | set membership | bucket null ⇒ false; empty/missing buckets list ⇒ false |
-| `time_since_last_carb` | `operator` (enum), `minutes` | `LastCarbAt`, now | elapsed minutes (double) compared via `AlertComparisonOperator`; **null anchor ⇒ elapsed = +∞** (so `>`/`>=` fire on cold start — intentional, opposite of loop_stale) | `==` against +∞ ⇒ false; unknown op ⇒ false |
+| `time_since_last_carb` | `operator` (enum), `minutes` | `LastCarbAt`, now | elapsed minutes (double) compared via `AlertComparisonOperator`; **null anchor ⇒ elapsed = +∞** (so `>`/`>=` fire on cold start — intentional, opposite of loop_stale) | `==` against +∞ ⇒ false |
 | `time_since_last_bolus` | same | `LastBolusAt` | same | same |
-| `day_of_week` | `days: [..]` (string names or ints) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | empty/missing days ⇒ false; tenant tz null/unknown ⇒ UTC |
+| `day_of_week` | `days: [..]` (`AlertWeekday` names) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | empty/missing days ⇒ false; tenant tz null/unknown ⇒ UTC |
 | `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpState` | `is_active:false`: true whenever active mode ≠ `mode` (**including no active span**). `is_active:true`: mode must match; `for_minutes` anchors at `StartedAt` (double, `>=`) | no guard |
 | `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `category == pump_mode` ⇒ **always false** (defence in depth). `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category" — the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard |
 | `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)` — reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, so negative `minutes` with `>=` means "within N minutes before the event" | no active instance for the definition ⇒ **false** — a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity) |
@@ -229,8 +234,8 @@ below are non-strict/strict exactly as written.
 `composite` / `not` / `sustained` (containers):
 
 - **`composite`** — `{operator, conditions[]}`. Empty `conditions` ⇒ false (a missing
-  list, missing operator or null slot cannot be evaluated, §1.4). Operator lowercased;
-  only `and` / `or` are recognised, anything else ⇒ false.
+  list, missing operator or null slot cannot be evaluated, §1.4). Only `and` / `or` are
+  recognised, anything else ⇒ false.
   Evaluates every child (§2.4).
 - **`not`** — `{child}`. Missing child ⇒ **false** (not true). Otherwise inverts the
   child. **[normative]**
@@ -263,21 +268,19 @@ in §3 plus:
   of *other* rules, for `alert_state`. State strings observed: `"firing"` (open
   excursion); `AcknowledgedAt` non-null marks acknowledged.
 - Timezone resolution order (where applicable): per-rule condition timezone → tenant
-  timezone (`TenantTimeZoneId`, IANA id) → UTC. Failure modes differ by leaf (§3:
-  `time_of_day` fails closed on a bad per-rule tz, falls back on a bad tenant tz).
+  timezone (`TenantTimeZoneId`, IANA id) → UTC.
 - **Which ids resolve** is itself normative, because it decides whether a rule fires at
-  all. The crate resolves an exact IANA id, then retries case-insensitively — connector
-  data carries mis-cased ids in bulk (production has ~240 rows spelling `Etc/GMT-2` as
-  `ETC/GMT-2`), and dropping them would make an overnight low rule silently never fire.
-  The scan is `chrono_tz::TZ_VARIANTS`, which includes tzdb *backward links*
-  (`Etc/Greenwich`, `Etc/Zulu`, `US/Pacific`, `Asia/Calcutta`, `Australia/ACT`). The corpus
-  pins evaluation given a resolved zone, not resolution itself.
-- **Windows ids** (`AUS Eastern Standard Time`) do not resolve: `chrono_tz` has no CLDR
-  mapping, so the crate leaves them unresolved (per-rule ⇒ false, tenant ⇒ UTC). The .NET
-  host rewrites a Windows id to IANA in every request it sends the crate (tenant tz and
-  per-rule `time_of_day.timezone`), and a rule save stores the IANA id and rejects a
-  `timezone` no zone resolves from (`invalid_field` on `timezone`). Another host of the
-  crate must do the same.
+  all. A per-rule `time_of_day.timezone` is condition JSON (§1.1): it is exactly an IANA
+  tzdb name, including tzdb *backward links* (`Etc/Greenwich`, `US/Pacific`,
+  `Asia/Calcutta`). Anything else, a Windows id (`AUS Eastern Standard Time`), another
+  case (`ETC/GMT-2`) or `""`, is `invalid_field` on `timezone`, so the tree cannot be
+  evaluated (§1.4).
+- The tenant zone is tenant data, not condition JSON. The crate resolves an exact IANA id,
+  then retries case-insensitively over `chrono_tz::TZ_VARIANTS`, since connector data
+  carries mis-cased ids in bulk (production has ~240 rows spelling `Etc/GMT-2` as
+  `ETC/GMT-2`). A Windows id does not resolve (`chrono_tz` has no CLDR mapping), so the
+  .NET host rewrites one to IANA before it sends the tenant zone; another host must do the
+  same. An unresolved tenant zone falls back to UTC.
 
 ---
 

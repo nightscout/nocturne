@@ -13,11 +13,10 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts.Engines;
 
 /// <summary>
-/// The wire names, in ordinal order, of every enum the Rust engine mirrors as an ordinal-indexed
-/// table. <see cref="EnumManifestTests"/> keeps the committed manifest equal to the C# enums, and
-/// the Rust suite asserts each of its tables equals the manifest, so a reordered, inserted or
-/// removed member fails a test instead of silently shifting integer-form payloads onto the wrong
-/// member.
+/// The wire names of every enum the Rust engine mirrors, in declaration order.
+/// <see cref="EnumManifestTests"/> keeps the committed manifest equal to the C# enums, and the
+/// Rust suite asserts each of its tables equals the manifest, so a member renamed, added or
+/// removed on one side only fails a test instead of leaving a value one side cannot read.
 /// <para>
 /// <c>PayloadFields</c> is each condition kind's payload property names as the condition models
 /// read them. The Rust engine strips a property its payload does not declare from a saved tree
@@ -40,7 +39,7 @@ internal static class EnumManifest
         {
             ["AlertComparisonOperator"] = WireNames<AlertComparisonOperator>(),
             ["AlertConditionType"] = WireNames<AlertConditionType>(),
-            ["DayOfWeek"] = WireNames<DayOfWeek>(),
+            ["AlertWeekday"] = WireNames<AlertWeekday>(),
             ["GlucoseBucket"] = WireNames<GlucoseBucket>(),
             ["PumpModeState"] = WireNames<PumpModeState>(),
             ["StateSpanCategory"] = WireNames<StateSpanCategory>(),
@@ -60,7 +59,7 @@ internal static class EnumManifest
     {
         var options = new JsonSerializerOptions();
         options.Converters.Add(new JsonStringEnumConverter<TEnum>());
-        return new JsonArray(ContiguousValues<TEnum>()
+        return new JsonArray(Enum.GetValues<TEnum>()
             .Select(v => (JsonNode)JsonSerializer.Deserialize<string>(JsonSerializer.Serialize(v, options))!)
             .ToArray());
     }
@@ -85,24 +84,6 @@ internal static class EnumManifest
                 .ToArray());
         }
         return fields;
-    }
-
-    /// <summary>
-    /// The Rust tables are indexed by ordinal, which is only sound while the C# values are
-    /// exactly <c>0..n-1</c>.
-    /// </summary>
-    private static TEnum[] ContiguousValues<TEnum>() where TEnum : struct, Enum
-    {
-        var values = Enum.GetValues<TEnum>().OrderBy(v => Convert.ToInt64(v)).ToArray();
-        for (var i = 0; i < values.Length; i++)
-        {
-            if (Convert.ToInt64(values[i]) != i)
-            {
-                throw new InvalidOperationException(
-                    $"{typeof(TEnum).Name} values are not contiguous from 0 ({values[i]} = {Convert.ToInt64(values[i])})");
-            }
-        }
-        return values;
     }
 }
 

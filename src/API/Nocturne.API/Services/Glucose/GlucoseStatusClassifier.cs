@@ -114,7 +114,7 @@ public class GlucoseStatusClassifier : IGlucoseStatusClassifier
         {
             if (string.IsNullOrEmpty(direction)) continue;
 
-            switch (direction.ToLowerInvariant(), severity)
+            switch (direction, severity)
             {
                 case ("below", AlertRuleSeverity.Critical):
                     urgentLow = Math.Max(urgentLow ?? double.MinValue, value);

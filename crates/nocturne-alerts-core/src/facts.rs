@@ -554,7 +554,7 @@ mod tests {
             ConditionKind::TimeSinceLastCarb | ConditionKind::TimeSinceLastBolus => {
                 json!({"operator": "<", "minutes": 60})
             }
-            ConditionKind::DayOfWeek => json!({"days": ["Tuesday"]}),
+            ConditionKind::DayOfWeek => json!({"days": ["tuesday"]}),
             ConditionKind::PumpState => json!({"mode": "Exercise", "is_active": true}),
             ConditionKind::StateSpanActive => json!({"category": "Illness", "is_active": true}),
             ConditionKind::TrackerAge => {

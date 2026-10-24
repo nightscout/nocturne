@@ -1233,27 +1233,17 @@ fn describe_signal_loss_is_a_leaf_with_its_timeout() {
 }
 
 #[test]
-fn describe_decodes_enum_ordinal_operands_to_names() {
-    let tree = describe_rule("day_of_week", json!({ "days": [0, 6] }));
-    assert_eq!(tree["kind"], json!("day_of_week"));
-    assert_eq!(tree["params"]["days"], json!(["Sunday", "Saturday"]));
-}
-
-#[test]
-fn describe_malformed_container_collapses_to_a_single_leaf() {
-    // A composite whose `conditions` is not an array fails to parse: the engine
-    // force-evaluates it as one (false) leaf, and describe matches — one leaf,
-    // kind composite, no children.
-    let tree = describe_rule(
-        "composite",
-        json!({ "operator": "and", "conditions": "nope" }),
-    );
-    assert_eq!(tree["leaf_id"], json!(0));
-    assert_eq!(tree["kind"], json!("composite"));
-    assert!(
-        tree.get("conditions").is_none(),
-        "malformed composite is a leaf, not a container"
-    );
+fn describe_a_body_that_does_not_parse_is_null() {
+    for (kind, params) in [
+        (
+            "composite",
+            json!({ "operator": "and", "conditions": "nope" }),
+        ),
+        ("pump_state", json!({ "mode": 5, "is_active": true })),
+        ("threshold", json!({ "direction": "below", "value": "70" })),
+    ] {
+        assert_eq!(describe_rule(kind, params), Value::Null, "{kind}");
+    }
 }
 
 #[test]
@@ -1437,41 +1427,65 @@ fn describe_nested_composite_preorder_ids_align_with_evaluate() {
 }
 
 #[test]
-fn describe_decodes_remaining_enum_ordinal_operands() {
+fn describe_shows_enum_operands_by_wire_name() {
+    let operand = |kind: &str, params: Value, field: &str| {
+        describe_rule(kind, params)["params"][field].clone()
+    };
     assert_eq!(
-        describe_rule(
+        operand(
+            "day_of_week",
+            json!({ "days": ["sunday", "saturday"] }),
+            "days"
+        ),
+        json!(["sunday", "saturday"])
+    );
+    assert_eq!(
+        operand(
             "temp_basal",
-            json!({ "metric": 1, "operator": ">", "value": 150 })
-        )["params"]["metric"],
+            json!({ "metric": "percent_of_scheduled", "operator": ">", "value": 150 }),
+            "metric"
+        ),
         json!("percent_of_scheduled")
     );
     assert_eq!(
-        describe_rule(
+        operand(
             "time_since_last_bolus",
-            json!({ "operator": 2, "minutes": 30 })
-        )["params"]["operator"],
+            json!({ "operator": "<", "minutes": 30 }),
+            "operator"
+        ),
         json!("<")
     );
     assert_eq!(
-        describe_rule("glucose_bucket", json!({ "buckets": [0, 5] }))["params"]["buckets"],
+        operand(
+            "glucose_bucket",
+            json!({ "buckets": ["very_low", "very_high"] }),
+            "buckets"
+        ),
         json!(["very_low", "very_high"])
     );
     assert_eq!(
-        describe_rule("pump_state", json!({ "mode": 5, "is_active": true }))["params"]["mode"],
+        operand(
+            "pump_state",
+            json!({ "mode": "Sleep", "is_active": true }),
+            "mode"
+        ),
         json!("Sleep")
     );
     assert_eq!(
-        describe_rule(
+        operand(
             "state_span_active",
-            json!({ "category": 4, "is_active": true })
-        )["params"]["category"],
+            json!({ "category": "Exercise", "is_active": true }),
+            "category"
+        ),
         json!("Exercise")
     );
-    // An out-of-range ordinal surfaces verbatim as a number (the engine accepts
-    // raw integers).
     assert_eq!(
-        describe_rule("pump_state", json!({ "mode": 99, "is_active": true }))["params"]["mode"],
-        json!(99)
+        operand(
+            "time_of_day",
+            json!({ "from": "09:00", "to": "17:00", "timezone": "Australia/Sydney" }),
+            "timezone"
+        ),
+        json!("Australia/Sydney")
     );
 }
 

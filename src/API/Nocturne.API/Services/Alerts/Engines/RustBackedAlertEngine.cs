@@ -105,11 +105,11 @@ internal sealed class RustBackedAlertEngine(
     /// <inheritdoc/>
     public Task<bool> EvaluateNodeAsync(
         Guid ruleId,
-        ConditionNode node,
+        JsonElement node,
         SensorContext context,
         string pathRoot,
         CancellationToken ct) =>
-        EvaluateNodeAsync(ruleId, RustEnvelopeMapper.BuildNode(node), pathRoot, context, ct);
+        EvaluateNodeAsync(ruleId, node, pathRoot, context, ct);
 
     /// <inheritdoc/>
     public async Task<ExcursionTransition> EvaluateAutoResolveAsync(
@@ -144,7 +144,7 @@ internal sealed class RustBackedAlertEngine(
     private bool EvaluateRuleNodeWithoutTracker(AlertRuleSnapshot rule, SensorContext context)
     {
         var wire = Conditions.AlertConditionTypeNames.ToWireString(rule.ConditionType);
-        var node = RustEnvelopeMapper.ParseNode(
+        var node = RustEnvelopeMapper.ParseJson(
             RustEnvelopeMapper.WrapPayload(wire, rule.ConditionParams));
         var response = RustAuxiliaryEvaluation.EvaluateNode(
             errors, rule.Id, node, wire, context, timeProvider.GetUtcNow().UtcDateTime,

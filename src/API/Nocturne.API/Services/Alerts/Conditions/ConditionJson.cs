@@ -5,25 +5,12 @@ namespace Nocturne.API.Services.Alerts.Conditions;
 
 /// <summary>
 /// JSON options for the condition models (<see cref="Nocturne.Core.Models.ConditionNode"/> and its
-/// payloads). Matches the shape used by the controllers and Zod schemas: snake_case property
-/// naming, case-insensitive read.
+/// payloads): snake_case property names, matched exactly (docs/alerts/engine-semantics.md §1.1).
 /// </summary>
 internal static class ConditionJson
 {
-    public static readonly JsonSerializerOptions Options = BuildOptions();
-
-    private static JsonSerializerOptions BuildOptions()
+    public static readonly JsonSerializerOptions Options = new()
     {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            PropertyNameCaseInsensitive = true,
-        };
-        // System enums can't carry [JsonConverter] attributes; register the
-        // string converter here so leaves like DayOfWeekCondition accept day
-        // names ("monday") on the wire instead of forcing integer indices.
-        // The converter is bidirectional — integer payloads still parse.
-        options.Converters.Add(new JsonStringEnumConverter<DayOfWeek>());
-        return options;
-    }
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+    };
 }

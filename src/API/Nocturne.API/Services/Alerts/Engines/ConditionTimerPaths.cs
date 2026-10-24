@@ -22,14 +22,13 @@ internal static class ConditionTimerPaths
         var paths = new HashSet<string>(StringComparer.Ordinal);
 
         var wire = AlertConditionTypeNames.ToWireString(rule.ConditionType);
-        Add(paths, () => RustEnvelopeMapper.ParseNode(RustEnvelopeMapper.WrapPayload(wire, rule.ConditionParams)), wire);
+        Add(paths, () => RustEnvelopeMapper.ParseJson(RustEnvelopeMapper.WrapPayload(wire, rule.ConditionParams)), wire);
 
         if (!string.IsNullOrWhiteSpace(rule.AutoResolveParams))
-            Add(paths, () => RustEnvelopeMapper.ParseNode(rule.AutoResolveParams), AlertConditionTypeNames.AutoResolvePathRoot);
+            Add(paths, () => RustEnvelopeMapper.ParseJson(rule.AutoResolveParams), AlertConditionTypeNames.AutoResolvePathRoot);
 
-        if (SmartSnoozeConfig.Parse(rule.ClientConfiguration).Conditions is { Count: > 0 } conditions)
-            Add(paths, () => RustEnvelopeMapper.BuildNode(SmartSnoozeConfig.ConditionTree(conditions)),
-                AlertConditionTypeNames.SnoozePathRoot);
+        if (SmartSnoozeConfig.Parse(rule.ClientConfiguration).Conditions is { } conditions)
+            Add(paths, () => SmartSnoozeConfig.ConditionTree(conditions), AlertConditionTypeNames.SnoozePathRoot);
 
         return paths;
     }

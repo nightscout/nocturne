@@ -53,14 +53,13 @@ internal static class RustEnvelopeMapper
     /// Builds the FFI rule object from the stored rule row. Malformed stored condition JSON
     /// throws <see cref="JsonException"/> into the orchestrator's per-rule catch. Auto-resolve
     /// params are sent only when auto-resolve is enabled, and unparseable ones as null. They only
-    /// gate auto-resolve, which the engine never fires for a tree that does not parse. Timezone ids go
-    /// through <see cref="ConditionTimeZones"/>.
+    /// gate auto-resolve, which the engine never fires for a tree that does not parse.
     /// </summary>
     public static RustAlertRule BuildRule(AlertRule rule) => new()
     {
         Id = rule.Id,
         ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
-        ConditionParams = ParseJson(ConditionTimeZones.CanonicaliseRule(rule.ConditionType, rule.ConditionParams)),
+        ConditionParams = ParseJson(rule.ConditionParams),
         ConfirmationReadings = rule.ConfirmationReadings,
         HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
@@ -91,9 +90,6 @@ internal static class RustEnvelopeMapper
         using var doc = JsonDocument.Parse(json);
         return doc.RootElement.Clone();
     }
-
-    /// <summary>A stored full condition node, with timezone ids through <see cref="ConditionTimeZones"/>.</summary>
-    public static JsonElement ParseNode(string nodeJson) => ParseJson(ConditionTimeZones.CanonicaliseNode(nodeJson));
 
     /// <summary>
     /// The full node <c>{"type": wire, wire: payload}</c> for a stored payload-only body, the payload
@@ -226,13 +222,6 @@ internal static class RustEnvelopeMapper
 
         return JsonSerializer.SerializeToElement(wire, AlertEnvelopeJson.Options);
     }
-
-    /// <summary>
-    /// Serialises a <see cref="ConditionNode"/> tree into the full-node JSON the FFI
-    /// expects (child <c>type</c> strings preserved verbatim).
-    /// </summary>
-    public static JsonElement BuildNode(ConditionNode node) =>
-        ConditionTimeZones.CanonicaliseNode(JsonSerializer.SerializeToElement(node, ConditionJson.Options));
 
     // -----------------------------------------------------------------------
     // Response mapping

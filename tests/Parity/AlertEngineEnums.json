@@ -41,14 +41,14 @@
     "sleep_session_active",
     "tracker_age"
   ],
-  "DayOfWeek": [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday"
+  "AlertWeekday": [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday"
   ],
   "GlucoseBucket": [
     "very_low",

@@ -142,8 +142,7 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> CreateRule(
         [FromBody] CreateAlertRuleRequest request, CancellationToken ct)
     {
-        var trees = CanonicalTrees.From(
-            request.ConditionType, request.ConditionParams, request.AutoResolveParams, request.ClientConfiguration);
+        var trees = RequestTrees.From(request.ConditionParams, request.AutoResolveParams, request.ClientConfiguration);
         if (RejectInvalidConditions(request.ConditionType, trees, request.AutoResolveEnabled) is { } invalid)
             return invalid;
 
@@ -224,15 +223,14 @@ public class AlertRulesController : ControllerBase
         if (rule is null)
             return NotFound();
 
-        var requested = CanonicalTrees.From(
-            request.ConditionType, request.ConditionParams, request.AutoResolveParams, request.ClientConfiguration);
+        var requested = RequestTrees.From(request.ConditionParams, request.AutoResolveParams, request.ClientConfiguration);
         var check = _conditionValidator.ValidateUpdate(
             request.ConditionType, requested.ConditionParams, request.AutoResolveEnabled,
             requested.AutoResolveParams, requested.ClientConfiguration,
             new StoredConditionTrees(rule.ConditionType, rule.ConditionParams, rule.AutoResolveParams, rule.ClientConfiguration));
         if (ConditionProblem(check.Issues) is { } invalid)
             return invalid;
-        var trees = new CanonicalTrees(check.ConditionParams, check.AutoResolveParams, check.ClientConfiguration);
+        var trees = new RequestTrees(check.ConditionParams, check.AutoResolveParams, check.ClientConfiguration);
 
         if (await ResolveAndValidateChannelsAsync(request.Channels, InAppRecipientsOf(rule.Channels), db, ct) is { } badChannel)
             return badChannel;
@@ -976,7 +974,7 @@ public class AlertRulesController : ControllerBase
     /// <c>{scope}:{path}</c> and each value a reason code, suffixed <c>:{field}</c> when the
     /// problem is on a field; the <c>issues</c> extension carries the same list structured.
     /// </summary>
-    private ActionResult? RejectInvalidConditions(AlertConditionType type, CanonicalTrees trees, bool autoResolveEnabled) =>
+    private ActionResult? RejectInvalidConditions(AlertConditionType type, RequestTrees trees, bool autoResolveEnabled) =>
         ConditionProblem(_conditionValidator.Validate(
             type, trees.ConditionParams, autoResolveEnabled, trees.AutoResolveParams, trees.ClientConfiguration));
 
@@ -1001,22 +999,16 @@ public class AlertRulesController : ControllerBase
     }
 
     /// <summary>
-    /// A request's condition trees serialised as they are stored, with timezone ids through
-    /// <see cref="ConditionTimeZones"/>. A null tree stays null, except the body, stored as <c>{}</c>.
+    /// A request's condition trees serialised as they are stored. A null tree stays null, except the
+    /// body, stored as <c>{}</c>.
     /// </summary>
-    private sealed record CanonicalTrees(string ConditionParams, string? AutoResolveParams, string? ClientConfiguration)
+    private sealed record RequestTrees(string ConditionParams, string? AutoResolveParams, string? ClientConfiguration)
     {
-        public static CanonicalTrees From(
-            AlertConditionType type, object? conditionParams, object? autoResolveParams, object? clientConfiguration) =>
+        public static RequestTrees From(object? conditionParams, object? autoResolveParams, object? clientConfiguration) =>
             new(
-                ConditionTimeZones.CanonicaliseRule(
-                    type, conditionParams is not null ? JsonSerializer.Serialize(conditionParams) : "{}"),
-                autoResolveParams is not null
-                    ? ConditionTimeZones.CanonicaliseNode(JsonSerializer.Serialize(autoResolveParams))
-                    : null,
-                clientConfiguration is not null
-                    ? ConditionTimeZones.CanonicaliseClientConfiguration(JsonSerializer.Serialize(clientConfiguration))
-                    : null);
+                conditionParams is not null ? JsonSerializer.Serialize(conditionParams) : "{}",
+                autoResolveParams is not null ? JsonSerializer.Serialize(autoResolveParams) : null,
+                clientConfiguration is not null ? JsonSerializer.Serialize(clientConfiguration) : null);
     }
 
     #endregion

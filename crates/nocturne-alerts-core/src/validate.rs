@@ -11,11 +11,9 @@
 
 use serde_json::{Map, Value};
 
-use crate::enums::{EnumValue, Spelled, StateSpanCategory, WireEnum};
+use crate::enums::{Spelled, StateSpanCategory, WireEnum};
 use crate::eval::clock::parse_hh_mm;
-use crate::model::{
-    ConditionKind, Node, ParseError, Payload, Reason, get_ci, get_ci_entry, parse_payload_structure,
-};
+use crate::model::{ConditionKind, Node, ParseError, Payload, Reason, parse_payload_structure};
 use crate::paths::node_child_path;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -52,12 +50,14 @@ struct Raw<'a> {
 
 impl<'a> Raw<'a> {
     fn get(self, name: &str) -> Option<&'a Value> {
-        get_ci(self.obj, name)
+        self.obj.get(name)
     }
 
-    /// The pointer to the property `name` resolves to, and its value.
+    /// The pointer to the property `name`, and its value.
     fn entry(self, name: &str) -> Option<(String, &'a Value)> {
-        get_ci_entry(self.obj, name).map(|(k, v)| (child_pointer(self.pointer, k), v))
+        self.obj
+            .get(name)
+            .map(|v| (child_pointer(self.pointer, name), v))
     }
 
     fn report_unknown(
@@ -231,7 +231,7 @@ fn check_node(
 /// the one its `type` names, which are parsed but not evaluated), or the web
 /// rule editor's node key `_uid`, which rules it saved still carry.
 fn is_node_property(name: &str) -> bool {
-    name.eq_ignore_ascii_case("type") || name == "_uid" || ConditionKind::from_name(name).is_some()
+    name == "type" || name == "_uid" || ConditionKind::from_wire(name).is_some()
 }
 
 /// `raw` is the child's JSON value and its pointer.
@@ -266,12 +266,7 @@ fn check_payload(
 ) {
     if let Some(raw) = raw {
         let fields = payload.fields();
-        raw.report_unknown(
-            |k| fields.iter().any(|f| f.eq_ignore_ascii_case(k)),
-            tier,
-            path,
-            found,
-        );
+        raw.report_unknown(|k| fields.contains(&k), tier, path, found);
         for &field in required_fields(payload) {
             if raw.get(field).is_none_or(Value::is_null) {
                 report(found, tier, path, Reason::FieldMissing(field));
@@ -371,13 +366,10 @@ fn check_payload(
             operator_problem(&p.operator)
         }
         Payload::TrackerAge(p) => operator_problem(&p.operator),
-        Payload::TempBasal(p) => {
-            undefined(p.metric, "metric", tier, path, found);
-            operator_problem(&p.operator)
-        }
+        Payload::TempBasal(p) => operator_problem(&p.operator),
         Payload::TimeSinceLastCarb(p) | Payload::TimeSinceLastBolus(p) => {
             negative(p.minutes, "minutes", tier, path, found);
-            matches!(p.operator, EnumValue::Undefined(_)).then_some(Reason::UnknownOperator)
+            None
         }
         Payload::Trend(p) => word_problem(
             &p.bucket,
@@ -391,20 +383,15 @@ fn check_payload(
         }
         Payload::GlucoseBucket(p) => list_problem(p.buckets.as_deref(), "buckets"),
         Payload::DayOfWeek(p) => list_problem(p.days.as_deref(), "days"),
-        Payload::PumpState(p) => {
-            undefined(p.mode, "mode", tier, path, found);
-            None
+        Payload::StateSpanActive(p) => {
+            (p.category == StateSpanCategory::PumpMode).then_some(Reason::PumpModeCategory)
         }
-        Payload::StateSpanActive(p) => match p.category {
-            EnumValue::Known(StateSpanCategory::PumpMode) => Some(Reason::PumpModeCategory),
-            EnumValue::Undefined(_) => Some(Reason::UnknownValue("category")),
-            EnumValue::Known(_) => None,
-        },
         Payload::SignalLoss(p) => (p.timeout_minutes <= 0 && written("timeout_minutes"))
             .then_some(Reason::MinutesNotPositive("timeout_minutes")),
         Payload::PumpSuspended(_)
         | Payload::OverrideActive(_)
         | Payload::DoNotDisturb(_)
+        | Payload::PumpState(_)
         | Payload::SleepSessionActive(_) => None,
     };
     if let Some(reason) = problem {
@@ -471,27 +458,9 @@ fn negative(bound: i32, field: &'static str, tier: Tier, path: &str, found: &mut
     }
 }
 
-fn undefined<E>(
-    value: EnumValue<E>,
-    field: &'static str,
-    tier: Tier,
-    path: &str,
-    found: &mut Found,
-) {
-    if matches!(value, EnumValue::Undefined(_)) {
-        report(found, tier, path, Reason::UnknownValue(field));
-    }
-}
-
-/// An absent or empty list matches nothing, and so does an undefined member.
-fn list_problem<E>(list: Option<&[EnumValue<E>]>, field: &'static str) -> Option<Reason> {
-    match list {
-        None | Some([]) => Some(Reason::ListEmpty(field)),
-        Some(items) => items
-            .iter()
-            .any(|v| matches!(v, EnumValue::Undefined(_)))
-            .then_some(Reason::UnknownValue(field)),
-    }
+/// An absent or empty list matches nothing.
+fn list_problem<E>(list: Option<&[E]>, field: &'static str) -> Option<Reason> {
+    matches!(list, None | Some([])).then_some(Reason::ListEmpty(field))
 }
 
 /// The bound as a time, reporting it when it is absent or not `HH:mm`.

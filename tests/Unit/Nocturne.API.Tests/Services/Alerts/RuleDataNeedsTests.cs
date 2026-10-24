@@ -374,11 +374,12 @@ public class RuleDataNeedsTests
         result.NeedsCob.Should().BeFalse();
     }
 
-    [NativeFact]
-    public void An_undefined_pump_mode_ordinal_selects_no_mode()
+    [NativeTheory]
+    [InlineData("""{"mode":8,"is_active":true}""")]
+    [InlineData("""{"mode":"suspended","is_active":true}""")]
+    public void A_pump_mode_that_is_not_a_member_name_selects_no_mode(string conditionParams)
     {
-        // The engine sends an operand it cannot name back as its integer; nothing can match it.
-        var rule = MakeRule(AlertConditionType.PumpState, """{"mode":42,"is_active":true}""");
+        var rule = MakeRule(AlertConditionType.PumpState, conditionParams);
 
         RuleDataNeeds.Walk(new[] { rule }).ReferencedPumpStates.Should().BeEmpty();
     }

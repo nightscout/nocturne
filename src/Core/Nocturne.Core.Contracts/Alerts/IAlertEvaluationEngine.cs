@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Alerts;
@@ -89,12 +90,12 @@ public interface IAlertEvaluationEngine
     /// tree are keyed by <c>(ruleId, path)</c> exactly like rule-body timers.
     /// </summary>
     /// <param name="ruleId">The rule whose timer rows the tree's sustained nodes are keyed under.</param>
-    /// <param name="node">The condition tree to evaluate.</param>
+    /// <param name="node">The condition tree to evaluate, a full condition node as stored.</param>
     /// <param name="context">Enriched sensor context.</param>
     /// <param name="pathRoot">Root path segment (e.g. <c>snooze</c>).</param>
     Task<bool> EvaluateNodeAsync(
         Guid ruleId,
-        ConditionNode node,
+        JsonElement node,
         SensorContext context,
         string pathRoot,
         CancellationToken ct);

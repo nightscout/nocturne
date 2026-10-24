@@ -23,18 +23,17 @@
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
-          "root": true,
+          "root": false,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": true
+              "value": false
             }
           ],
-          "transition": "opened",
+          "transition": "none",
           "tracker": {
-            "state": "active",
-            "confirmation_count": 0,
-            "excursion": 2
+            "state": "idle",
+            "confirmation_count": 0
           }
         },
         {
@@ -83,12 +82,10 @@
               "value": false
             }
           ],
-          "transition": "hysteresis_started",
+          "transition": "none",
           "tracker": {
-            "state": "hysteresis",
-            "confirmation_count": 0,
-            "excursion": 2,
-            "hysteresis_started_at": "2026-01-05T12:05:00Z"
+            "state": "idle",
+            "confirmation_count": 0
           }
         },
         {
@@ -136,8 +133,7 @@
               "value": false
             }
           ],
-          "transition": "closed",
-          "close_reason": "hysteresis",
+          "transition": "none",
           "tracker": {
             "state": "idle",
             "confirmation_count": 0

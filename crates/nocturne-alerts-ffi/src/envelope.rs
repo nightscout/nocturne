@@ -422,20 +422,23 @@ struct DescribeRequest {
 
 /// A rule's condition tree as leaf-id-tagged authored operands, for condition
 /// readouts (ADR 0007). Leaf ids and paths match `evaluate`'s leaf log and
-/// timer keys. A body that does not parse describes as one leaf with default
-/// operands. A request carrying `auto_resolve_params` also gets
+/// timer keys. `tree` is `null` for a body that does not parse. A request
+/// carrying `auto_resolve_params` also gets
 /// `auto_resolve_tree`, under the `auto_resolve` path root, or `null` when that
 /// tree is `null` or cannot be evaluated.
 pub(crate) fn describe(request_json: &str) -> Result<Value, String> {
     let req: DescribeRequest =
         read_request(request_json, |r: &DescribeRequest| r.body.schema_version)?;
     let kind = known_kind(&req.body.condition_type)?;
-    let payload = match &req.body.condition_params {
-        Value::Null => None,
-        v => parse_payload_structure(kind, v).ok(),
+    let node = match &req.body.condition_params {
+        Value::Null => Some(Node::from_rule(kind, None)),
+        v => parse_payload_structure(kind, v)
+            .ok()
+            .map(|payload| Node::from_rule(kind, Some(payload))),
     };
-    let node = Node::from_rule(kind, payload);
-    let tree = describe_node(Some(&node), kind.name().to_owned(), &mut 0);
+    let tree = node.map_or(Value::Null, |node| {
+        describe_node(Some(&node), kind.name().to_owned(), &mut 0)
+    });
     let mut response = Map::new();
     response.insert("tree".to_owned(), tree);
     if let Some(params) = &req.auto_resolve_params {

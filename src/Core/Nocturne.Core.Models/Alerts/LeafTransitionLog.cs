@@ -3,7 +3,7 @@ namespace Nocturne.Core.Models.Alerts;
 /// <summary>
 /// Replay output: the sequence of truth transitions for a single leaf within a rule's
 /// condition tree across the replay window. Each leaf is identified by the sequential
-/// id assigned by <see cref="LeafIdentity.AssignLeafIds"/>.
+/// pre-order leaf id (docs/alerts/engine-semantics.md §2.2).
 /// </summary>
 /// <remarks>
 /// Compressed at write time — only the points where the leaf's truth changed are

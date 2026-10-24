@@ -61,19 +61,6 @@ public class RustEnvelopeMapperTests
             .Should().Be("Australia/Sydney");
     }
 
-    [Fact]
-    public void BuildRule_sends_windows_rule_zones_as_iana()
-    {
-        var rule = new AlertRule
-        {
-            ConditionType = AlertConditionType.TimeOfDay,
-            ConditionParams = """{"from":"22:00","to":"06:00","timezone":"AUS Eastern Standard Time"}""",
-        };
-
-        RustEnvelopeMapper.BuildRule(rule).ConditionParams.GetProperty("timezone").GetString()
-            .Should().Be("Australia/Sydney");
-    }
-
     [Theory]
     [InlineData("""{"direction":"below","value":70}""", """{"type":"threshold","threshold":{"direction":"below","value":70}}""")]
     [InlineData("   ", """{"type":"threshold","threshold":null}""")]

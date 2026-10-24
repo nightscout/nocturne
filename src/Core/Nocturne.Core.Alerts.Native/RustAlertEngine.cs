@@ -250,9 +250,7 @@ public static partial class RustAlertEngine
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var response = ParseResponse<RustDescribeResponse>(AlertsInterop.Describe(Serialize(request)), "describe");
-        Require(response.Tree is { ValueKind: JsonValueKind.Object }, "describe", "tree");
-        return response;
+        return ParseResponse<RustDescribeResponse>(AlertsInterop.Describe(Serialize(request)), "describe");
     }
 
     /// <summary>

@@ -21,7 +21,7 @@
     GlucoseBucket,
     PumpModeState,
     StateSpanCategory,
-    DayOfWeek,
+    AlertWeekday,
   } from "./types";
   import { AlertComparisonOperator } from "$api-clients";
 
@@ -110,25 +110,24 @@
     [StateSpanCategory.DataExclusion]: "Data exclusion",
     [StateSpanCategory.TemporaryTarget]: "Temporary target",
   };
-  // Mon → Sun. Order is fixed to a Monday-start week for the toggle pills; the
-  // wire stores System.DayOfWeek values regardless of display order.
-  const weekdayOrder: DayOfWeek[] = [
-    DayOfWeek.Monday,
-    DayOfWeek.Tuesday,
-    DayOfWeek.Wednesday,
-    DayOfWeek.Thursday,
-    DayOfWeek.Friday,
-    DayOfWeek.Saturday,
-    DayOfWeek.Sunday,
+  // Mon → Sun. Order is fixed to a Monday-start week for the toggle pills.
+  const weekdayOrder: AlertWeekday[] = [
+    AlertWeekday.Monday,
+    AlertWeekday.Tuesday,
+    AlertWeekday.Wednesday,
+    AlertWeekday.Thursday,
+    AlertWeekday.Friday,
+    AlertWeekday.Saturday,
+    AlertWeekday.Sunday,
   ];
-  const weekdayLabels: Record<DayOfWeek, string> = {
-    [DayOfWeek.Sunday]: "Sun",
-    [DayOfWeek.Monday]: "Mon",
-    [DayOfWeek.Tuesday]: "Tue",
-    [DayOfWeek.Wednesday]: "Wed",
-    [DayOfWeek.Thursday]: "Thu",
-    [DayOfWeek.Friday]: "Fri",
-    [DayOfWeek.Saturday]: "Sat",
+  const weekdayLabels: Record<AlertWeekday, string> = {
+    [AlertWeekday.Sunday]: "Sun",
+    [AlertWeekday.Monday]: "Mon",
+    [AlertWeekday.Tuesday]: "Tue",
+    [AlertWeekday.Wednesday]: "Wed",
+    [AlertWeekday.Thursday]: "Thu",
+    [AlertWeekday.Friday]: "Fri",
+    [AlertWeekday.Saturday]: "Sat",
   };
 
   /** Label for a stored key, or undefined when the key is not one the editor offers. */
@@ -136,8 +135,8 @@
     return Object.entries(labels).find(([k]) => k === key)?.[1];
   }
 
-  function isDayOfWeek(value: number): value is DayOfWeek {
-    return Object.values(DayOfWeek).some((day) => day === value);
+  function isWeekday(value: string): value is AlertWeekday {
+    return Object.values(AlertWeekday).some((day) => day === value);
   }
 
   function parseNumber(value: string, fallback: number): number {
@@ -627,15 +626,15 @@
       type="multiple"
       size="xs"
       spacing={1}
-      value={[...selectedDays].map(String)}
+      value={[...selectedDays]}
       onValueChange={(v: string[]) => {
         if (node.day_of_week)
-          node.day_of_week.days = v.map(Number).filter(isDayOfWeek);
+          node.day_of_week.days = v.filter(isWeekday);
       }}
       class="flex-wrap"
     >
       {#each weekdayOrder as day (day)}
-        <ToggleGroup.Item value={String(day)} aria-label={weekdayLabels[day]}>
+        <ToggleGroup.Item value={day} aria-label={weekdayLabels[day]}>
           {weekdayLabels[day]}
         </ToggleGroup.Item>
       {/each}

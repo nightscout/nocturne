@@ -437,7 +437,20 @@ public record TimeSinceLastBolusCondition(AlertComparisonOperator Operator, int 
 
 /// <summary>Day-of-week condition. True when the current local day (in the tenant's timezone)
 /// falls into <see cref="Days"/>.</summary>
-public record DayOfWeekCondition(List<DayOfWeek> Days);
+public record DayOfWeekCondition(List<AlertWeekday> Days);
+
+/// <summary>A day a <see cref="DayOfWeekCondition"/> names.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<AlertWeekday>))]
+public enum AlertWeekday
+{
+    [JsonStringEnumMemberName("sunday")] Sunday,
+    [JsonStringEnumMemberName("monday")] Monday,
+    [JsonStringEnumMemberName("tuesday")] Tuesday,
+    [JsonStringEnumMemberName("wednesday")] Wednesday,
+    [JsonStringEnumMemberName("thursday")] Thursday,
+    [JsonStringEnumMemberName("friday")] Friday,
+    [JsonStringEnumMemberName("saturday")] Saturday,
+}
 
 /// <summary>Pump-mode state condition. <see cref="PumpStateCondition.IsActive"/> selects which
 /// side of the state is asserted; <see cref="PumpStateCondition.ForMinutes"/> only applies on

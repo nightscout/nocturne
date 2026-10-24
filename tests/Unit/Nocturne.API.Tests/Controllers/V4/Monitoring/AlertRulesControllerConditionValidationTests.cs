@@ -203,21 +203,20 @@ public class AlertRulesControllerConditionValidationTests
         (await db.AlertRules.AsNoTracking().SingleAsync()).ConditionParams.Should().Contain("legacyLabel");
     }
 
-    [Fact]
-    public async Task CreateRule_stores_a_windows_rule_zone_as_iana()
+    [Theory]
+    [InlineData("AUS Eastern Standard Time")]
+    [InlineData("australia/sydney")]
+    [InlineData("")]
+    public void Validator_reports_a_zone_that_is_not_exactly_an_iana_id(string zone)
     {
-        var (controller, db) = CreateController(new NoConditionIssues());
+        var issues = new AlertRuleConditionValidator().Validate(
+            AlertConditionType.TimeOfDay,
+            $$"""{"from": "22:00", "to": "06:00", "timezone": "{{zone}}"}""",
+            autoResolveEnabled: false,
+            autoResolveParamsJson: null,
+            clientConfigurationJson: null);
 
-        await controller.CreateRule(new CreateAlertRuleRequest
-        {
-            Name = "Overnight",
-            ConditionType = AlertConditionType.TimeOfDay,
-            ConditionParams = Json("""{"from": "22:00", "to": "06:00", "timezone": "AUS Eastern Standard Time"}"""),
-        }, CancellationToken.None);
-
-        var stored = await db.AlertRules.SingleAsync();
-        JsonDocument.Parse(stored.ConditionParams).RootElement.GetProperty("timezone").GetString()
-            .Should().Be("Australia/Sydney");
+        issues.Should().Equal(new RustValidationIssue("condition", "time_of_day", "invalid_field", "timezone"));
     }
 
     [Fact]

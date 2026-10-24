@@ -158,13 +158,12 @@ public class RuleReferenceResolverTests
     }
 
     [NativeFact]
-    public void A_root_alert_state_whose_alert_id_does_not_read_is_dropped()
+    public void A_body_that_does_not_read_names_no_reference()
     {
-        // The engine reads the operands as their defaults, so the rule names the nil id, which no
-        // enabled rule has. The orchestrator reports the rule's issues before this filter runs.
+        // Evaluation rejects the rule; this filter only drops references that do not resolve.
         var rule = MakeRule(Guid.NewGuid(), AlertConditionType.AlertState, """{"alert_id":"garbage","state":"active"}""");
 
-        RuleReferenceResolver.FilterEvaluable(new[] { rule }).Should().BeEmpty();
+        RuleReferenceResolver.FilterEvaluable(new[] { rule }).Should().ContainSingle();
     }
 
     private static AlertRuleSnapshot MakeRule(Guid id, AlertConditionType type, string json) =>

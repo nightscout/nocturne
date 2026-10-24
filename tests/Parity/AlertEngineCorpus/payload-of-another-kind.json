@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "name": "composite-operator-case-insensitive",
-  "description": "the composite operator is lowercased before matching: AND and Or work",
+  "name": "payload-of-another-kind",
+  "description": "a node's payload property for another kind is not the one its type reads",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
-        "operator": "AND",
+        "operator": "and",
         "conditions": [
           {
             "type": "threshold",
@@ -24,14 +24,14 @@
       "auto_resolve_enabled": false
     },
     {
-      "id": "00000000-0000-0000-0000-000000000002",
-      "name": "rule-2",
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
       "condition_type": "composite",
       "condition_params": {
-        "operator": "Or",
+        "operator": "and",
         "conditions": [
           {
-            "type": "threshold",
+            "type": "staleness",
             "threshold": {
               "direction": "below",
               "value": 70

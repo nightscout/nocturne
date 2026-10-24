@@ -131,12 +131,12 @@ public class GlucoseStatusClassifierTests
     }
 
     [Fact]
-    public void ResolveThresholds_directionCasingIsIgnored()
+    public void ResolveThresholds_readsOnlyTheExactDirection()
     {
         var resolved = GlucoseStatusClassifier.ResolveThresholds(Defaults,
             [("Below", 70, AlertRuleSeverity.Critical)]);
 
-        resolved.UrgentLow.Should().Be(70);
+        resolved.Should().Be(Defaults);
     }
 
     // ---- classification ----

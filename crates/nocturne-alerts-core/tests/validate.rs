@@ -270,20 +270,19 @@ fn a_valid_rule_has_no_issues() {
             { "type": "rate_of_change", "rate_of_change": { "direction": "falling", "rate": 2 } } } },
         { "type": "not", "not": { "child": { "type": "do_not_disturb", "do_not_disturb": { "is_active": true } } } },
         { "type": "time_since_last_carb", "time_since_last_carb": { "operator": ">=", "minutes": 30 } },
-        { "type": "alert_state", "alert_state": { "alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "Firing" } }
+        { "type": "alert_state", "alert_state": { "alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "firing" } }
     ]});
     assert_eq!(validate_rule("composite", &params), vec![]);
 }
 
 #[test]
 fn saving_reports_every_problem_in_the_tree() {
-    let params = json!({ "operator": "AND", "conditions": [
+    let params = json!({ "operator": "and", "conditions": [
         { "type": "warp_drive" },
         { "type": "Threshold", "threshold": { "direction": "below", "value": 70 } },
         { "type": "threshold", "threshold": { "direction": "sideways", "value": 70 } },
         { "type": "iob", "iob": { "operator": "=>", "value": 1 } },
-        { "type": "time_since_last_bolus", "time_since_last_bolus": { "operator": 9, "minutes": 5 } },
-        { "type": "alert_state", "alert_state": { "alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "snoozed" } },
+        { "type": "alert_state", "alert_state": { "alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "Firing" } },
         { "type": "composite", "composite": { "operator": "xor", "conditions": [low()] } },
         { "type": "composite", "composite": { "operator": "or", "conditions": [] } },
         { "type": "not", "not": {} },
@@ -299,23 +298,19 @@ fn saving_reports_every_problem_in_the_tree() {
             issue("composite[1].Threshold", Reason::UnknownKind),
             issue("composite[2].threshold", Reason::UnknownDirection),
             issue("composite[3].iob", Reason::UnknownOperator),
+            issue("composite[4].alert_state", Reason::UnknownState),
+            issue("composite[5].composite", Reason::UnknownOperator),
+            issue("composite[6].composite", Reason::ConditionsEmpty),
+            issue("composite[7].not", Reason::ChildMissing),
             issue(
-                "composite[4].time_since_last_bolus",
-                Reason::UnknownOperator
-            ),
-            issue("composite[5].alert_state", Reason::UnknownState),
-            issue("composite[6].composite", Reason::UnknownOperator),
-            issue("composite[7].composite", Reason::ConditionsEmpty),
-            issue("composite[8].not", Reason::ChildMissing),
-            issue(
-                "composite[9].sustained",
+                "composite[8].sustained",
                 Reason::MinutesNotPositive("minutes")
             ),
-            issue("composite[9].sustained", Reason::ChildMissing),
-            issue("composite[10].", Reason::ConditionMissing),
-            issue("composite[11].rate_of_change", Reason::FieldMissing("rate")),
-            issue("composite[11].rate_of_change", Reason::DirectionMissing),
-            issue("composite[12].RateOfChange", Reason::UnknownKind),
+            issue("composite[8].sustained", Reason::ChildMissing),
+            issue("composite[9].", Reason::ConditionMissing),
+            issue("composite[10].rate_of_change", Reason::FieldMissing("rate")),
+            issue("composite[10].rate_of_change", Reason::DirectionMissing),
+            issue("composite[11].RateOfChange", Reason::UnknownKind),
         ]
     );
 }
@@ -459,7 +454,7 @@ fn unknown(path: &str, pointer: &str, key: &str) -> UnknownKey {
 fn unknown_keys_name_each_property_and_the_object_holding_it() {
     let params = json!({ "operator": "and", "conditions": [
         { "type": "threshold", "note": "x",
-          "Threshold": { "direction": "below", "value": 70, "for_minutes": 5 } },
+          "threshold": { "direction": "below", "value": 70, "for_minutes": 5 } },
         { "type": "not", "not": { "child":
             { "type": "signal_loss", "signal_loss": { "timeoutMinutes": 20, "timeout_minutes": 20 } } } }
     ]});
@@ -469,7 +464,7 @@ fn unknown_keys_name_each_property_and_the_object_holding_it() {
             unknown("composite[0].threshold", "/conditions/0", "note"),
             unknown(
                 "composite[0].threshold",
-                "/conditions/0/Threshold",
+                "/conditions/0/threshold",
                 "for_minutes"
             ),
             unknown(
@@ -517,12 +512,33 @@ fn unknown_keys_name_each_property_and_the_object_holding_it() {
 }
 
 #[test]
-fn saving_accepts_property_names_in_any_case_and_other_kinds_payloads() {
+fn saving_accepts_other_kinds_payloads() {
     let params = json!({ "operator": "and", "conditions": [
-        { "Type": "threshold", "THRESHOLD": { "Direction": "below", "VALUE": 70 },
+        { "type": "threshold", "threshold": { "direction": "below", "value": 70 },
           "iob": { "operator": ">", "value": 1 } }
     ]});
     assert_eq!(validate_rule("composite", &params), vec![]);
+}
+
+#[test]
+fn a_property_name_in_another_case_is_not_read() {
+    assert_eq!(
+        parse_error(
+            &json!({ "Type": "threshold", "threshold": { "direction": "below", "value": 70 } })
+        ),
+        issue("", Reason::TypeMissing)
+    );
+    assert_eq!(
+        issues_of("threshold", json!({ "Direction": "below", "VALUE": 70 })),
+        at_leaf(
+            "threshold",
+            &[
+                Reason::UnknownField,
+                Reason::FieldMissing("value"),
+                Reason::DirectionMissing
+            ]
+        )
+    );
 }
 
 #[test]
@@ -609,29 +625,59 @@ fn saving_rejects_enum_values_no_member_has() {
             Reason::UnknownValue("bucket"),
         ),
         (
+            "trend",
+            json!({ "bucket": "FLAT" }),
+            Reason::UnknownValue("bucket"),
+        ),
+        (
             "temp_basal",
-            json!({ "metric": 7, "operator": ">", "value": 1 }),
-            Reason::UnknownValue("metric"),
+            json!({ "metric": 0, "operator": ">", "value": 1 }),
+            Reason::InvalidField("metric"),
+        ),
+        (
+            "time_since_last_bolus",
+            json!({ "operator": 1, "minutes": 5 }),
+            Reason::InvalidField("operator"),
         ),
         (
             "glucose_bucket",
-            json!({ "buckets": ["low", 42] }),
-            Reason::UnknownValue("buckets"),
+            json!({ "buckets": ["low", "LOW"] }),
+            Reason::InvalidField("buckets"),
         ),
         (
             "day_of_week",
-            json!({ "days": [9] }),
-            Reason::UnknownValue("days"),
+            json!({ "days": [1] }),
+            Reason::InvalidField("days"),
+        ),
+        (
+            "day_of_week",
+            json!({ "days": ["Monday"] }),
+            Reason::InvalidField("days"),
         ),
         (
             "pump_state",
-            json!({ "mode": 42, "is_active": false }),
-            Reason::UnknownValue("mode"),
+            json!({ "mode": "suspended", "is_active": false }),
+            Reason::InvalidField("mode"),
         ),
         (
             "state_span_active",
-            json!({ "category": 99, "is_active": true }),
-            Reason::UnknownValue("category"),
+            json!({ "category": 4, "is_active": true }),
+            Reason::InvalidField("category"),
+        ),
+        (
+            "time_of_day",
+            json!({ "from": "09:00", "to": "17:00", "timezone": "ETC/GMT-2" }),
+            Reason::InvalidField("timezone"),
+        ),
+        (
+            "time_of_day",
+            json!({ "from": "09:00", "to": "17:00", "timezone": "AUS Eastern Standard Time" }),
+            Reason::InvalidField("timezone"),
+        ),
+        (
+            "time_of_day",
+            json!({ "from": "09:00", "to": "17:00", "timezone": "" }),
+            Reason::InvalidField("timezone"),
         ),
     ];
     for (kind, payload, reason) in cases {
@@ -690,7 +736,7 @@ fn saving_rejects_a_generic_state_span_on_the_pump_mode_category() {
         vec![issue("state_span_active", Reason::PumpModeCategory)]
     );
     let nested = json!({ "minutes": 10, "child": { "type": "not", "not": { "child":
-        leaf("state_span_active", json!({ "category": 0, "is_active": false })) } } });
+        leaf("state_span_active", json!({ "category": "PumpMode", "is_active": false })) } } });
     assert_eq!(
         validate_rule("sustained", &nested),
         vec![issue(

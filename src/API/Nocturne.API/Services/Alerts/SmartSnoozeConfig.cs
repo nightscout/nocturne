@@ -1,7 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Nocturne.API.Services.Alerts.Conditions;
-using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -24,20 +22,21 @@ namespace Nocturne.API.Services.Alerts;
 /// <param name="ExtendMinutes">Length of one automatic extension.</param>
 /// <param name="MaxCount">Cap on the instance's shared snooze count.</param>
 /// <param name="Conditions">
-/// Optional predicate, evaluated as <c>composite{and, conditions}</c>. When absent or empty the
-/// sweep falls back to <see cref="SmartSnoozeTrendGate"/>.
+/// Optional predicate: the stored <c>conditions</c> list, as written, evaluated as
+/// <c>composite{and, conditions}</c> (<see cref="AndBody"/>). Null when absent or empty, and the
+/// sweep then falls back to <see cref="SmartSnoozeTrendGate"/>.
 /// </param>
 /// <param name="Malformed">True when some part of the section could not be read.</param>
 /// <param name="ConditionsUnreadable">
-/// <c>conditions</c> is a list that could not be read. The sweep clears the snooze rather than
-/// falling back to <see cref="SmartSnoozeTrendGate"/>, which would extend on a basis the user never
+/// <c>conditions</c> is present and not a list. The sweep clears the snooze rather than falling
+/// back to <see cref="SmartSnoozeTrendGate"/>, which would extend on a basis the user never
 /// configured.
 /// </param>
 internal sealed record SmartSnoozeConfig(
     bool SmartSnooze,
     int ExtendMinutes,
     int MaxCount,
-    IReadOnlyList<ConditionNode>? Conditions,
+    JsonElement? Conditions,
     bool Malformed = false,
     bool ConditionsUnreadable = false)
 {
@@ -47,9 +46,13 @@ internal sealed record SmartSnoozeConfig(
     /// <inheritdoc cref="DefaultMaxCount"/>
     public const int DefaultExtendMinutes = 10;
 
-    /// <summary><paramref name="conditions"/> as the one node the sweep evaluates.</summary>
-    public static ConditionNode ConditionTree(IReadOnlyList<ConditionNode> conditions) =>
-        new("composite", Composite: new CompositeCondition("and", conditions.ToList()));
+    /// <summary><paramref name="conditions"/> as the one node the sweep evaluates: <c>composite{and}</c>.</summary>
+    public static JsonElement ConditionTree(JsonElement conditions) =>
+        JsonSerializer.SerializeToElement(new JsonObject
+        {
+            ["type"] = "composite",
+            ["composite"] = JsonNode.Parse(AndBody(conditions)),
+        });
 
     public static SmartSnoozeConfig Default { get; } =
         new(false, DefaultExtendMinutes, DefaultMaxCount, null);
@@ -102,6 +105,14 @@ internal sealed record SmartSnoozeConfig(
             return null;
         }
     }
+
+    /// <summary>The payload-only body of the <c>composite{and}</c> <paramref name="conditions"/> evaluate as.</summary>
+    public static string AndBody(JsonElement conditions) =>
+        new JsonObject
+        {
+            ["operator"] = "and",
+            ["conditions"] = JsonNode.Parse(conditions.GetRawText()),
+        }.ToJsonString();
 
     /// <summary>The <c>conditions</c> list in a mutable <c>client_configuration</c>, whether or not smart snooze is on.</summary>
     public static JsonArray? ConditionsNode(JsonNode? clientConfiguration) =>
@@ -160,19 +171,18 @@ internal sealed record SmartSnoozeConfig(
             var extendMinutes = ReadPositiveInt(snooze, "smartSnoozeExtendMinutes", DefaultExtendMinutes, ref malformed);
             var maxCount = ReadNonNegativeInt(snooze, "maxCount", DefaultMaxCount, ref malformed);
 
-            IReadOnlyList<ConditionNode>? conditions = null;
+            JsonElement? conditions = null;
             var conditionsUnreadable = false;
-            if (ConditionList(snooze) is { } conditionsEl)
+            if (snooze.TryGetProperty(ConditionsProperty, out var conditionsEl))
             {
-                try
-                {
-                    conditions = JsonSerializer.Deserialize<List<ConditionNode>>(
-                        conditionsEl.GetRawText(), ConditionJson.Options);
-                }
-                catch (JsonException)
+                if (conditionsEl.ValueKind != JsonValueKind.Array)
                 {
                     conditionsUnreadable = true;
                     malformed = true;
+                }
+                else if (conditionsEl.GetArrayLength() > 0)
+                {
+                    conditions = conditionsEl.Clone();
                 }
             }
 

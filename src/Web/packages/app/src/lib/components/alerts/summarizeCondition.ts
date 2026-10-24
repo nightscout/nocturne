@@ -1,5 +1,5 @@
 import type { ConditionNode } from "./types";
-import { PumpModeState } from "$api-clients";
+import { AlertWeekday, PumpModeState } from "$api-clients";
 import { bg, bgLabel } from "$lib/utils/formatting";
 
 /**
@@ -220,12 +220,18 @@ function bucketLabel(bucket: string): string {
 	}
 }
 
-function dayLabel(day: number | string): string {
-	// `DayOfWeek` is wired as a numeric system enum on the wire (no string converter); the
-	// editor stores numbers but the loader may surface either form, so handle both.
-	const idx = typeof day === "number" ? day : Number(day);
-	const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-	return names[idx] ?? String(day);
+const DAY_LABELS: Record<AlertWeekday, string> = {
+	[AlertWeekday.Sunday]: "Sun",
+	[AlertWeekday.Monday]: "Mon",
+	[AlertWeekday.Tuesday]: "Tue",
+	[AlertWeekday.Wednesday]: "Wed",
+	[AlertWeekday.Thursday]: "Thu",
+	[AlertWeekday.Friday]: "Fri",
+	[AlertWeekday.Saturday]: "Sat",
+};
+
+function dayLabel(day: AlertWeekday): string {
+	return DAY_LABELS[day] ?? day;
 }
 
 const PUMP_MODE_LABELS: Record<PumpModeState, string> = {

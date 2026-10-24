@@ -7,10 +7,9 @@ namespace Nocturne.API.Services.Alerts.Conditions;
 /// key order do not matter; anything else does.
 /// </summary>
 /// <remarks>
-/// Property names match as both engines bind them: ignoring case, a repeated name binding its last
-/// occurrence. An object whose names differ only in case reads as changed: the store (jsonb)
-/// re-orders keys, so which of them the engines bind last depends on the stored order, not on the
-/// order written. A number compares by its written token, so <c>1</c> and <c>1.0</c> differ. Both
+/// Property names match exactly, as the engine reads them (docs/alerts/engine-semantics.md §1.1);
+/// a repeated name binds its last occurrence. A number compares by its written token, so <c>1</c>
+/// and <c>1.0</c> differ. Both
 /// engines read an integer field only from an integral token. The store keeps the token as
 /// written, so the two can mean different things. Identical text is always the same tree. Past
 /// that, doubt reads as changed: a tree that is not JSON compares as text.
@@ -50,7 +49,7 @@ internal static class ConditionTreeEquality
             case JsonValueKind.Object:
                 var left = Properties(a);
                 var right = Properties(b);
-                return left is not null && right is not null && left.Count == right.Count
+                return left.Count == right.Count
                        && left.All(p => right.TryGetValue(p.Key, out var other) && Same(p.Value, other));
             case JsonValueKind.Array:
                 return a.GetArrayLength() == b.GetArrayLength()
@@ -64,21 +63,12 @@ internal static class ConditionTreeEquality
         }
     }
 
-    /// <summary>
-    /// The object's properties by name as the engines bind them, or null when two names differ
-    /// only in case.
-    /// </summary>
-    private static Dictionary<string, JsonElement>? Properties(JsonElement obj)
+    /// <summary>The object's properties by name as the engine binds them.</summary>
+    private static Dictionary<string, JsonElement> Properties(JsonElement obj)
     {
-        var properties = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var properties = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var p in obj.EnumerateObject())
-        {
-            if (names.TryGetValue(p.Name, out var seen) && !string.Equals(seen, p.Name, StringComparison.Ordinal))
-                return null;
-            names[p.Name] = p.Name;
             properties[p.Name] = p.Value;
-        }
         return properties;
     }
 }

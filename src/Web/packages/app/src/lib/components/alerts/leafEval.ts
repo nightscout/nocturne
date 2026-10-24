@@ -12,12 +12,11 @@ import type { ConditionNode } from "./types";
  * Walks <paramref name="rule"/> in DFS pre-order and returns a Map from each
  * leaf node's editor `_uid` to its sequential integer id.
  *
- * Mirrors the backend <c>Nocturne.Core.Models.Alerts.LeafIdentity.Walk</c>:
+ * Mirrors the engine's leaf ids (docs/alerts/engine-semantics.md §2.2):
  * <c>composite</c>/<c>not</c>/<c>sustained</c> are containers (no id), every
  * other node type is a leaf and gets the next id. The IDs returned here MUST
  * line up with the ones the backend emits in
- * <c>AlertReplayResult.leafTransitionsByRule</c>; if you change the order
- * here, change the C# walker too.
+ * <c>AlertReplayResult.leafTransitionsByRule</c>.
  */
 export function assignLeafIds(rule: ConditionNode): Map<string, number> {
 	const out = new Map<string, number>();

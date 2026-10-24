@@ -35,8 +35,30 @@ public class SmartSnoozeConfigTests
         config.SmartSnooze.Should().BeTrue();
         config.ExtendMinutes.Should().Be(20);
         config.MaxCount.Should().Be(4);
-        config.Conditions.Should().ContainSingle()
-            .Which.Threshold!.Direction.Should().Be("above");
+        config.Conditions!.Value.GetRawText().Should().Be(
+            """[{"type":"threshold","threshold":{"direction":"above","value":70}}]""");
+        config.Malformed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Conditions_AreKeptAsWritten_ForTheEngineToRead()
+    {
+        var config = SmartSnoozeConfig.Parse("""
+            {"snooze":{"smartSnooze":true,"conditions":[{"Type":"threshold","threshold":{"Direction":"ABOVE"}}]}}
+            """);
+
+        config.Conditions!.Value.GetRawText().Should().Be(
+            """[{"Type":"threshold","threshold":{"Direction":"ABOVE"}}]""");
+        config.ConditionsUnreadable.Should().BeFalse();
+    }
+
+    [Fact]
+    public void AnEmptyConditionList_IsNone()
+    {
+        var config = SmartSnoozeConfig.Parse("""{"snooze":{"smartSnooze":true,"conditions":[]}}""");
+
+        config.Conditions.Should().BeNull();
+        config.ConditionsUnreadable.Should().BeFalse();
         config.Malformed.Should().BeFalse();
     }
 
@@ -88,12 +110,14 @@ public class SmartSnoozeConfigTests
         config.Malformed.Should().BeTrue();
     }
 
-    [Fact]
-    public void UnreadableConditions_NeverFallThroughToTheTrendFallback()
+    [Theory]
+    [InlineData("\"oops\"")]
+    [InlineData("{}")]
+    [InlineData("null")]
+    public void ConditionsThatAreNotAList_NeverFallThroughToTheTrendFallback(string conditions)
     {
-        var config = SmartSnoozeConfig.Parse("""
-            {"snooze":{"smartSnooze":true,"conditions":[{"type":"threshold","threshold":"oops"}]}}
-            """);
+        var config = SmartSnoozeConfig.Parse(
+            $$$"""{"snooze":{"smartSnooze":true,"conditions":{{{conditions}}}}}""");
 
         config.ConditionsUnreadable.Should().BeTrue();
         config.Malformed.Should().BeTrue();

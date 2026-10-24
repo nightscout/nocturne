@@ -350,7 +350,7 @@ public sealed record RustLeafPathsResponse : IRustResponseEnvelope
     /// <summary>Canonical path of every node slot in the tree, in document order.</summary>
     public List<string>? Paths { get; init; }
 
-    /// <summary>Leaf-id → path pairs (LeafIdentity pre-order ids).</summary>
+    /// <summary>Leaf-id → path pairs (pre-order leaf ids, docs/alerts/engine-semantics.md §2.2).</summary>
     public List<RustLeafPath>? Leaves { get; init; }
 }
 
@@ -579,7 +579,10 @@ public sealed record RustDescribeResponse : IRustResponseEnvelope
     /// <summary>Error message when <see cref="Ok"/> is false.</summary>
     public string? Error { get; init; }
 
-    /// <summary>The body's described tree (crates/nocturne-alerts-ffi/README.md, "Describe").</summary>
+    /// <summary>
+    /// The body's described tree (crates/nocturne-alerts-ffi/README.md, "Describe"); null when the
+    /// body does not parse.
+    /// </summary>
     public JsonElement? Tree { get; init; }
 
     /// <summary>

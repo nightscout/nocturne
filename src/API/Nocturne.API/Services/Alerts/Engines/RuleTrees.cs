@@ -91,14 +91,14 @@ internal static class RuleTrees
         });
 
     /// <summary>
-    /// The body as replay sends it: timezone ids canonicalised, and a body that is not JSON as a
-    /// JSON string, which the engine cannot read as a payload.
+    /// The body as replay sends it: a body that is not JSON goes as a JSON string, which the engine
+    /// cannot read as a payload.
     /// </summary>
     public static JsonElement Body(AlertConditionType type, string conditionParams)
     {
         try
         {
-            return RustEnvelopeMapper.ParseJson(ConditionTimeZones.CanonicaliseRule(type, conditionParams));
+            return RustEnvelopeMapper.ParseJson(conditionParams);
         }
         catch (JsonException)
         {
@@ -113,7 +113,7 @@ internal static class RuleTrees
             return null;
         try
         {
-            return RustEnvelopeMapper.ParseNode(autoResolveParams);
+            return RustEnvelopeMapper.ParseJson(autoResolveParams);
         }
         catch (JsonException)
         {
@@ -138,7 +138,8 @@ internal static class RuleTrees
             AutoResolveParams = AutoResolve(autoResolveParams),
         });
         var body = new List<ConditionLeaf>();
-        Collect(response.Tree!.Value, body);
+        if (response.Tree is { } tree)
+            Collect(tree, body);
         var all = new List<ConditionLeaf>(body);
         if (response.AutoResolveTree is { ValueKind: JsonValueKind.Object } autoResolveTree)
             Collect(autoResolveTree, all);

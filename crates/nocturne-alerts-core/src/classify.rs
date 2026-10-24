@@ -17,7 +17,7 @@
 
 use serde_json::Value;
 
-use crate::enums::{CmpOp, EnumValue, GlucoseBucket, RateDirection, ThresholdDirection};
+use crate::enums::{CmpOp, GlucoseBucket, RateDirection, ThresholdDirection};
 use crate::model::{ConditionKind, Container, Node, Payload, parse_payload};
 
 /// A rule's low/high classification.
@@ -129,8 +129,8 @@ fn walk(node: &Node, under_not: bool, acc: &mut Acc) {
     }
 }
 
-fn bucket_side(bucket: EnumValue<GlucoseBucket>) -> Option<Side> {
-    match bucket.known()? {
+fn bucket_side(bucket: GlucoseBucket) -> Option<Side> {
+    match bucket {
         GlucoseBucket::VeryLow | GlucoseBucket::Low => Some(Side::Low),
         GlucoseBucket::High | GlucoseBucket::VeryHigh => Some(Side::High),
         GlucoseBucket::TightRange | GlucoseBucket::InRange => None,
@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn glucose_bucket_low_side_is_low() {
         assert_eq!(
-            class("glucose_bucket", json!({"buckets":[0,1]})),
+            class("glucose_bucket", json!({"buckets":["very_low","low"]})),
             ScopeClass::Low
         );
     }
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn glucose_bucket_high_side_is_high() {
         assert_eq!(
-            class("glucose_bucket", json!({"buckets":[4,5]})),
+            class("glucose_bucket", json!({"buckets":["high","very_high"]})),
             ScopeClass::High
         );
     }
@@ -234,7 +234,10 @@ mod tests {
     #[test]
     fn glucose_bucket_spanning_both_is_composite() {
         assert_eq!(
-            class("glucose_bucket", json!({"buckets":[0,5]})),
+            class(
+                "glucose_bucket",
+                json!({"buckets":["very_low","very_high"]})
+            ),
             ScopeClass::Composite
         );
     }

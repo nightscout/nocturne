@@ -3,7 +3,7 @@
 
 use super::Env;
 use crate::compare::Unit;
-use crate::enums::{CmpOp, EnumValue, RateDirection, ThresholdDirection, holds};
+use crate::enums::{CmpOp, RateDirection, ThresholdDirection, holds};
 use crate::model::{
     GlucoseBucketPayload, PredictedPayload, RateOfChangePayload, StalenessPayload,
     ThresholdPayload, TrendPayload,
@@ -55,7 +55,7 @@ pub(super) fn glucose_bucket(p: &GlucoseBucketPayload, env: &Env) -> bool {
     env.ctx
         .glucose_bucket
         .zip(p.buckets.as_ref())
-        .is_some_and(|(bucket, buckets)| buckets.contains(&EnumValue::Known(bucket)))
+        .is_some_and(|(bucket, buckets)| buckets.contains(&bucket))
 }
 
 /// Minutes since the last reading vs a threshold. Cold start (both

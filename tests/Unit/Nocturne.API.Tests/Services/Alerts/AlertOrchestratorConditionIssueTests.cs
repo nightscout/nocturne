@@ -42,7 +42,7 @@ public class AlertOrchestratorConditionIssueTests
     /// <summary>A stored rule body evaluated as its root node, as the engine reads it.</summary>
     private static bool Evaluate(AlertConditionType type, string conditionParams, SensorContext context)
     {
-        var node = RustEnvelopeMapper.ParseNode(
+        var node = RustEnvelopeMapper.ParseJson(
             RustEnvelopeMapper.WrapPayload(AlertConditionTypeNames.ToWireString(type), conditionParams));
         var errors = new AlertEngineErrors(new TestMeterFactory(), TimeProvider.System);
         return RustAuxiliaryEvaluation.EvaluateNode(
@@ -111,7 +111,9 @@ public class AlertOrchestratorConditionIssueTests
                 It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([new RustValidationIssue("condition", "alert_state", "invalid_field", "alert_id")]);
 
-        await harness.EvaluateAsync(Rule("""{"alert_id": "garbage", "state": "active"}""", AlertConditionType.AlertState));
+        await harness.EvaluateAsync(Rule(
+            """{"alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "active"}""",
+            AlertConditionType.AlertState));
 
         harness.Logger.Warnings.Should().ContainSingle().Which.Should().Contain("invalid_field (alert_id)");
         harness.Engine.Verify(

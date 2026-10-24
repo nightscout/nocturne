@@ -80,9 +80,9 @@ public class TimerContinuityTests
         var trackerRepo = new InMemoryTrackerRepository([rule]);
         var rust = EngineTestHarness.BuildRustEngine(time, trackerRepo);
 
-        var node = JsonSerializer.Deserialize<ConditionNode>(
-            """{"type":"sustained","sustained":{"minutes":10,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}}""",
-            Nocturne.API.Services.Alerts.Conditions.ConditionJson.Options)!;
+        var node = JsonDocument.Parse(
+            """{"type":"sustained","sustained":{"minutes":10,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}}""")
+            .RootElement;
 
         time.SetUtcNow(T0);
         var first = await rust.EvaluateNodeAsync(RuleId, node, LowGlucoseContext(T0), "snooze", CancellationToken.None);

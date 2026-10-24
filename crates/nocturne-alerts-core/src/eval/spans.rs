@@ -2,7 +2,7 @@
 //! do_not_disturb, pump_state, state_span_active, sleep_session_active.
 
 use super::Env;
-use crate::enums::{AlertStateKind, EnumValue, StateSpanCategory};
+use crate::enums::{AlertStateKind, StateSpanCategory};
 use crate::model::{
     ActiveForPayload, AlertStatePayload, PumpStatePayload, SleepSessionPayload, StateSpanPayload,
 };
@@ -48,10 +48,7 @@ pub(super) fn do_not_disturb(p: &ActiveForPayload, env: &Env) -> bool {
 /// `is_active: false` is true whenever the active mode differs from the
 /// configured one, including when no mode is active.
 pub(super) fn pump_state(p: &PumpStatePayload, env: &Env) -> bool {
-    let in_mode = env
-        .ctx
-        .active_pump_state
-        .filter(|s| EnumValue::Known(s.mode) == p.mode);
+    let in_mode = env.ctx.active_pump_state.filter(|s| s.mode == p.mode);
     env.active_for(p.is_active, p.for_minutes, in_mode.map(|s| s.started_at))
 }
 
@@ -60,9 +57,8 @@ pub(super) fn pump_state(p: &PumpStatePayload, env: &Env) -> bool {
 /// pair; a null state means "any state of this category".
 pub(super) fn state_span_active(p: &StateSpanPayload, env: &Env) -> bool {
     let span = match p.category {
-        EnumValue::Known(StateSpanCategory::PumpMode) => return false,
-        EnumValue::Known(category) => env.ctx.active_state_spans.get(&(category, p.state.clone())),
-        EnumValue::Undefined(_) => None,
+        StateSpanCategory::PumpMode => return false,
+        category => env.ctx.active_state_spans.get(&(category, p.state.clone())),
     };
     env.active_for(p.is_active, p.for_minutes, span.map(|s| s.started_at))
 }

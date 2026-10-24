@@ -246,7 +246,7 @@ public class AlertSweepService : BackgroundService
 
         SensorContext? enrichedContext = null;
         if (tenantContext is not null
-            && tenantGroup.Any(i => configsByInstance[i.InstanceId].Conditions is { Count: > 0 }))
+            && tenantGroup.Any(i => configsByInstance[i.InstanceId].Conditions is not null))
         {
             enrichedContext = await BuildSnoozeContextAsync(
                 tenantScope.ServiceProvider, tenantContext, now, tenantGroup, configsByInstance, ct);
@@ -273,7 +273,7 @@ public class AlertSweepService : BackgroundService
                 extend = false;
                 reason = "conditions-unreadable";
             }
-            else if (cfg.Conditions is { Count: > 0 } conditions)
+            else if (cfg.Conditions is { } conditions)
             {
                 extend = enrichedContext is not null
                          && await EvaluateSnoozeConditionsAsync(
@@ -397,11 +397,10 @@ public class AlertSweepService : BackgroundService
         var syntheticRules = new List<AlertRuleSnapshot>();
         var withConditions = tenantInstances
             .Select(i => (Instance: i, configsByInstance[i.InstanceId].Conditions))
-            .Where(x => x.Conditions is { Count: > 0 });
+            .Where(x => x.Conditions is not null);
         foreach (var (instance, conditions) in withConditions)
         {
-            var composite = new CompositeCondition("and", conditions!.ToList());
-            var json = JsonSerializer.Serialize(composite, ConditionJson.Options);
+            var json = SmartSnoozeConfig.AndBody(conditions!.Value);
             syntheticRules.Add(new AlertRuleSnapshot(
                 instance.AlertRuleId,
                 tenantContext.TenantId,
@@ -441,7 +440,7 @@ public class AlertSweepService : BackgroundService
     private async Task<bool> EvaluateSnoozeConditionsAsync(
         IServiceProvider tenantServices,
         SnoozedInstanceSnapshot instance,
-        IReadOnlyList<ConditionNode> conditions,
+        JsonElement conditions,
         SensorContext enrichedContext,
         CancellationToken ct)
     {

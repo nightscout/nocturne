@@ -63,7 +63,7 @@ internal static class RustAuxiliaryEvaluation
         RustEvaluateNodeResponse response;
         try
         {
-            var node = RustEnvelopeMapper.ParseNode(rule.AutoResolveParams!);
+            var node = RustEnvelopeMapper.ParseJson(rule.AutoResolveParams!);
             response = EvaluateNode(
                 errors, rule.Id, node, AlertConditionTypeNames.AutoResolvePathRoot, context, now, timers);
         }

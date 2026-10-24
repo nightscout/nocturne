@@ -2,25 +2,26 @@
 //! `auto_resolve_params` wire format (engine-semantics.md §1).
 //!
 //! Parsing is two passes. The structural pass reads JSON the way
-//! engine-semantics.md §1.1 specifies: snake_case names matched
-//! case-insensitively, a malformed payload anywhere in the tree is a
-//! [`ParseError`], missing fields take their defaults (`null` for strings,
-//! `0` for numbers and enums, `false` for bools), and JSON `null` for a
-//! non-nullable value is an error. The evaluability pass ([`crate::validate`])
-//! then rejects the trees whose evaluation fails (§1.4). [`Node::parse`] and
-//! [`parse_payload`] run both; the `*_structure` variants run only the first.
+//! engine-semantics.md §1.1 specifies: exact snake_case property names, enum
+//! values that are exactly a member's wire name, a malformed payload anywhere
+//! in the tree is a [`ParseError`], missing fields take their defaults (`null`
+//! for strings, `0` for numbers, the first member for enums, `false` for
+//! bools), and JSON `null` for a non-nullable value is an error. The
+//! evaluability pass ([`crate::validate`]) then rejects the trees whose
+//! evaluation fails (§1.4). [`Node::parse`] and [`parse_payload`] run both;
+//! the `*_structure` variants run only the first.
 
 use std::borrow::Cow;
 
+use chrono_tz::Tz;
 use rust_decimal::Decimal;
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use crate::enums::{
-    AlertStateKind, CmpOp, CompositeOp, DayOfWeek, EnumValue, GlucoseBucket, PumpMode,
-    RateDirection, Spelled, StateSpanCategory, TempBasalMetric, ThresholdDirection, TrendBucket,
-    WireEnum,
+    AlertStateKind, CmpOp, CompositeOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection, Spelled,
+    StateSpanCategory, TempBasalMetric, ThresholdDirection, TrendBucket, WireEnum,
 };
 use crate::paths::child_path;
 
@@ -69,8 +70,7 @@ pub enum Reason {
     UnknownField,
     /// A required operand is absent, so it would read as its default.
     FieldMissing(&'static str),
-    /// An enum operand given as an ordinal no member has, or a word naming
-    /// no member.
+    /// A `trend` `bucket` naming no member.
     UnknownValue(&'static str),
     /// A `time_of_day` bound that is not `HH:mm`.
     InvalidTime(&'static str),
@@ -307,20 +307,6 @@ impl ConditionKind {
     }
 }
 
-/// Case-insensitive property lookup; a duplicated name binds its last
-/// occurrence.
-pub(crate) fn get_ci<'a>(obj: &'a Map<String, Value>, name: &str) -> Option<&'a Value> {
-    get_ci_entry(obj, name).map(|(_, v)| v)
-}
-
-/// [`get_ci`] with the property name as written.
-pub(crate) fn get_ci_entry<'a>(
-    obj: &'a Map<String, Value>,
-    name: &str,
-) -> Option<(&'a String, &'a Value)> {
-    obj.iter().rev().find(|(k, _)| k.eq_ignore_ascii_case(name))
-}
-
 /// Decimal from a JSON number literal (engine-semantics.md §1.3), with no
 /// binary-float round trip. Digits accumulate into the 96-bit mantissa until
 /// it would overflow or the scale reaches 28; the next digit rounds
@@ -464,7 +450,7 @@ struct Reader<'a> {
 
 impl Reader<'_> {
     fn get(&self, name: &str) -> Option<&Value> {
-        get_ci(self.obj, name)
+        self.obj.get(name)
     }
 }
 
@@ -527,7 +513,7 @@ impl Field for Option<String> {
 }
 
 fn read_string(obj: &Map<String, Value>, name: &'static str) -> ParseResult<Option<String>> {
-    match get_ci(obj, name) {
+    match obj.get(name) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) => Ok(Some(s.clone())),
         Some(_) => Err(invalid(name)),
@@ -554,29 +540,35 @@ impl<T: WireEnum> Field for Spelled<T> {
     }
 }
 
-/// A string matches a name ignoring ASCII case, falling back to an integer
-/// string (surrounding whitespace allowed); a number is taken raw. Either
-/// integer form must fit an `i32`.
-fn enum_value<E: WireEnum>(v: &Value) -> Option<EnumValue<E>> {
-    match v {
-        Value::String(s) => E::from_name(s)
-            .map(EnumValue::Known)
-            .or_else(|| s.trim().parse().ok().map(EnumValue::from_ordinal)),
-        Value::Number(n) => i32_from(n).map(EnumValue::from_ordinal),
-        _ => None,
+/// A string that is exactly a member's wire name.
+fn enum_value<E: WireEnum>(v: &Value) -> Option<E> {
+    v.as_str().and_then(E::from_name)
+}
+
+/// A missing value reads as the first member.
+fn read_enum<E: WireEnum>(r: &Reader<'_>, name: &'static str) -> ParseResult<E> {
+    match r.get(name) {
+        None => Ok(E::FIRST),
+        Some(v) => enum_value(v).ok_or_else(|| invalid(name)),
     }
 }
 
-impl<E: WireEnum> Field for EnumValue<E> {
+/// A zone id that is exactly an IANA tzdb name (engine-semantics.md §4).
+impl Field for Option<Tz> {
     fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
         match r.get(name) {
-            None => Ok(Self::default()),
-            Some(v) => enum_value(v).ok_or_else(|| invalid(name)),
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(id)) => id.parse().map(Some).map_err(|_| invalid(name)),
+            Some(_) => Err(invalid(name)),
         }
     }
 }
 
-impl<E: WireEnum> Field for Option<Vec<EnumValue<E>>> {
+fn zone_name<S: Serializer>(tz: &Option<Tz>, s: S) -> Result<S::Ok, S::Error> {
+    tz.map(Tz::name).serialize(s)
+}
+
+impl<E: WireEnum> Field for Option<Vec<E>> {
     fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
         match r.get(name) {
             None | Some(Value::Null) => Ok(None),
@@ -592,6 +584,18 @@ impl<E: WireEnum> Field for Option<Vec<EnumValue<E>>> {
         }
     }
 }
+
+macro_rules! enum_fields {
+    ($($e:ty),*) => {$(
+        impl Field for $e {
+            fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
+                read_enum(r, name)
+            }
+        }
+    )*};
+}
+
+enum_fields!(TempBasalMetric, CmpOp, PumpMode, StateSpanCategory);
 
 impl Field for Option<Box<Node>> {
     fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
@@ -704,7 +708,8 @@ payload!(TrendPayload {
 payload!(TimeOfDayPayload {
     from: Option<String>,
     to: Option<String>,
-    timezone: Option<String>,
+    #[serde(serialize_with = "zone_name")]
+    timezone: Option<Tz>,
 });
 
 payload!(
@@ -741,27 +746,27 @@ payload!(
 );
 
 payload!(TempBasalPayload {
-    metric: EnumValue<TempBasalMetric>,
+    metric: TempBasalMetric,
     operator: Spelled<CmpOp>,
     #[serde(serialize_with = "exact_decimal")]
     value: Decimal,
 });
 
 payload!(GlucoseBucketPayload {
-    buckets: Option<Vec<EnumValue<GlucoseBucket>>>,
+    buckets: Option<Vec<GlucoseBucket>>,
 });
 
 payload!(TimeSincePayload {
-    operator: EnumValue<CmpOp>,
+    operator: CmpOp,
     minutes: i32,
 });
 
 payload!(DayOfWeekPayload {
-    days: Option<Vec<EnumValue<DayOfWeek>>>,
+    days: Option<Vec<DayOfWeek>>,
 });
 
 payload!(PumpStatePayload {
-    mode: EnumValue<PumpMode>,
+    mode: PumpMode,
     is_active: bool,
     for_minutes: Option<i32>,
 });
@@ -777,7 +782,7 @@ payload!(
 );
 
 payload!(StateSpanPayload {
-    category: EnumValue<StateSpanCategory>,
+    category: StateSpanCategory,
     state: Option<String>,
     is_active: bool,
     for_minutes: Option<i32>,
@@ -860,7 +865,7 @@ fn parse_payload_at(
 /// before it is parsed.
 fn peek_type(v: &Value) -> Option<&str> {
     match v {
-        Value::Object(o) => get_ci(o, "type").and_then(Value::as_str),
+        Value::Object(o) => o.get("type").and_then(Value::as_str),
         _ => None,
     }
 }
@@ -870,8 +875,7 @@ fn peek_type(v: &Value) -> Option<&str> {
 /// reads.
 #[derive(Debug, Clone, Default)]
 pub struct Node {
-    /// The `type` as written (case preserved for paths), or `None` when
-    /// absent or null.
+    /// The `type` as written, or `None` when absent or null.
     pub type_str: Option<String>,
     payloads: Vec<Payload>,
 }
@@ -935,7 +939,7 @@ impl Node {
             let type_str = read_string(obj, "type")?;
             let mut payloads = Vec::new();
             for &kind in ConditionKind::ALL {
-                match get_ci(obj, kind.name()) {
+                match obj.get(kind.name()) {
                     None | Some(Value::Null) => {}
                     Some(pv @ Value::Object(_)) => {
                         payloads.push(parse_payload_at(kind, pv, level.saturating_add(1), path)?);
