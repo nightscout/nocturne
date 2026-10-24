@@ -29,7 +29,6 @@ describe("factCatalog", () => {
 
 	it("returns the right fact for a known kind", () => {
 		const f = getFact("threshold");
-		expect(f?.label).toBe("Glucose");
 		expect(f?.group).toBe("glucose");
 	});
 });

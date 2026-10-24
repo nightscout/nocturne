@@ -49,7 +49,8 @@
   import DndNoticeStrip from "$lib/components/alerts/DndNoticeStrip.svelte";
   import { isDndInEffect, isDndManualActive } from "$lib/components/alerts/dnd";
   import { refreshOnReturn } from "$lib/utils/refresh-on-return.svelte";
-  import { severity, severityLabel } from "$lib/components/alerts/severity";
+  import { severity } from "$lib/components/alerts/severity";
+  import { severityLabel } from "$lib/components/alerts/severityLabel.svelte";
 
   // Every write on this page — rule toggle/delete/test-fire, acknowledge, and
   // clearing the manual mute — is gated on alerts.readwrite server-side.

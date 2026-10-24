@@ -13,7 +13,8 @@
   import Check from "@lucide/svelte/icons/check";
   import { time } from "$lib/utils/formatting";
   import { formatTimeSince } from "./alertTime";
-  import { severity, severityLabel } from "./severity";
+  import { severity } from "./severity";
+  import { severityLabel } from "./severityLabel.svelte";
   import { seenBy } from "./receipts";
   import { conditionLabel } from "./conditionLabel.svelte";
   import { markSeenOnThisDevice, seenHere } from "./seen-here.svelte";

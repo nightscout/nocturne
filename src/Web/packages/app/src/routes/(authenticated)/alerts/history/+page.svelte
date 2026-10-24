@@ -17,7 +17,8 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { formatElapsedDuration } from "$lib/utils/duration";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
-  import { severity, severityLabel } from "$lib/components/alerts/severity";
+  import { severity } from "$lib/components/alerts/severity";
+  import { severityLabel } from "$lib/components/alerts/severityLabel.svelte";
 
   let page = $state(1);
   const historyQuery = $derived(getAlertHistory({ page, pageSize: 25 }));

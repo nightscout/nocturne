@@ -18,7 +18,9 @@
     type SummarizeContext,
   } from "./summarizeCondition";
   import { severity } from "./severity";
+  import { severityLabel } from "./severityLabel.svelte";
   import { nodeFromApi } from "./types";
+  import { conditionLabel } from "./conditionLabel.svelte";
   import { findChannelMeta } from "./channelMeta";
 
   interface Props {
@@ -52,12 +54,14 @@
   // Reconstruct the editor-side ConditionNode from the API's flat
   // (conditionType, conditionParams) pair so we can render a human chip via
   // summarizeCondition. Defensive against malformed rows: if reconstruction
-  // fails we fall back to the raw discriminator.
+  // fails we fall back to the condition-type label.
   let chip = $derived(
     (() => {
       const node = nodeFromApi(rule.conditionType, rule.conditionParams);
       const ctx: SummarizeContext = { resolveAlertName };
-      return node ? summarizeCondition(node, ctx) : (rule.conditionType ?? "");
+      return node
+        ? summarizeCondition(node, ctx)
+        : conditionLabel(rule.conditionType);
     })()
   );
 
@@ -78,7 +82,7 @@
   <!-- Severity dot -->
   <span
     class="h-2.5 w-2.5 shrink-0 rounded-full {severityClass}"
-    aria-label="Severity: {rule.severity ?? 'warning'}"
+    aria-label="Severity: {severityLabel(rule.severity ?? 'warning')}"
   ></span>
 
   <!-- Identity + condition summary chip -->

@@ -23,9 +23,6 @@ export type FactGroup =
 
 export interface FactDef {
 	kind: LeafKind;
-	label: string;
-	/** One-line description used in the picker; not shown on the row itself. */
-	description: string;
 	group: FactGroup;
 	/** Lucide icon name. Resolved by the row component to a Lucide glyph. */
 	icon: LucideIconName;
@@ -65,50 +62,50 @@ export type LucideIconName =
  */
 export const LEAF_FACTS: readonly FactDef[] = [
 	// Glucose
-	{ kind: "threshold", label: "Glucose", description: "Current CGM reading vs. a threshold", group: "glucose", icon: "droplet" },
-	{ kind: "glucose_bucket", label: "Glucose bucket", description: "Current reading falls in selected buckets (very-low … very-high)", group: "glucose", icon: "chart-line" },
-	{ kind: "predicted", label: "Predicted glucose", description: "oref/AAPS forecast crossing a threshold", group: "glucose", icon: "trending-up" },
-	{ kind: "rate_of_change", label: "Rate of change", description: "Glucose rising or falling faster than a rate", group: "glucose", icon: "trending-up" },
-	{ kind: "trend", label: "Trend", description: "Coarse direction bucket (rising fast, falling, …)", group: "glucose", icon: "trending-up" },
-	{ kind: "staleness", label: "Sensor stale", description: "No CGM reading for N minutes", group: "glucose", icon: "alert-triangle" },
+	{ kind: "threshold", group: "glucose", icon: "droplet" },
+	{ kind: "glucose_bucket", group: "glucose", icon: "chart-line" },
+	{ kind: "predicted", group: "glucose", icon: "trending-up" },
+	{ kind: "rate_of_change", group: "glucose", icon: "trending-up" },
+	{ kind: "trend", group: "glucose", icon: "trending-up" },
+	{ kind: "staleness", group: "glucose", icon: "alert-triangle" },
 
 	// Insulin
-	{ kind: "iob", label: "IOB", description: "Insulin on board", group: "insulin", icon: "syringe" },
-	{ kind: "temp_basal", label: "Temp basal", description: "Active temp basal rate or % of scheduled", group: "insulin", icon: "syringe" },
-	{ kind: "sensitivity_ratio", label: "Sensitivity", description: "Autosens ratio (AAPS / Trio only)", group: "insulin", icon: "chart-line" },
+	{ kind: "iob", group: "insulin", icon: "syringe" },
+	{ kind: "temp_basal", group: "insulin", icon: "syringe" },
+	{ kind: "sensitivity_ratio", group: "insulin", icon: "chart-line" },
 
 	// Carbs
-	{ kind: "cob", label: "COB", description: "Carbs on board", group: "carbs", icon: "apple" },
-	{ kind: "time_since_last_carb", label: "Time since last carb", description: "Minutes elapsed since the last recorded carb entry", group: "carbs", icon: "clock" },
-	{ kind: "time_since_last_bolus", label: "Time since last bolus", description: "Minutes elapsed since the last recorded bolus", group: "insulin", icon: "clock" },
+	{ kind: "cob", group: "carbs", icon: "apple" },
+	{ kind: "time_since_last_carb", group: "carbs", icon: "clock" },
+	{ kind: "time_since_last_bolus", group: "insulin", icon: "clock" },
 
 	// Device
-	{ kind: "reservoir", label: "Reservoir", description: "Pump reservoir level (units)", group: "device", icon: "fuel" },
-	{ kind: "site_age", label: "Site age", description: "Hours since last infusion site change", group: "device", icon: "calendar-clock" },
-	{ kind: "sensor_age", label: "Sensor age", description: "Days since CGM sensor start", group: "device", icon: "calendar-clock" },
-	{ kind: "tracker_age", label: "Tracker age", description: "Time since a tracker's start (Duration) or scheduled time (Event); negative before the event. A tracker with no active instance never matches", group: "device", icon: "timer" },
-	{ kind: "pump_battery", label: "Pump battery", description: "Pump battery percent", group: "device", icon: "battery" },
-	{ kind: "uploader_battery", label: "Phone battery", description: "Uploader phone battery percent", group: "device", icon: "smartphone" },
-	{ kind: "loop_stale", label: "Loop has stopped", description: "No APS cycle for N minutes", group: "device", icon: "wifi-off" },
-	{ kind: "loop_enaction_stale", label: "Loop not enacting", description: "No enacted cycle for N minutes (closed loop)", group: "device", icon: "rotate-ccw" },
-	{ kind: "signal_loss", label: "Signal loss", description: "No CGM data received for N minutes", group: "device", icon: "wifi-off" },
+	{ kind: "reservoir", group: "device", icon: "fuel" },
+	{ kind: "site_age", group: "device", icon: "calendar-clock" },
+	{ kind: "sensor_age", group: "device", icon: "calendar-clock" },
+	{ kind: "tracker_age", group: "device", icon: "timer" },
+	{ kind: "pump_battery", group: "device", icon: "battery" },
+	{ kind: "uploader_battery", group: "device", icon: "smartphone" },
+	{ kind: "loop_stale", group: "device", icon: "wifi-off" },
+	{ kind: "loop_enaction_stale", group: "device", icon: "rotate-ccw" },
+	{ kind: "signal_loss", group: "device", icon: "wifi-off" },
 
 	// Behaviour
-	{ kind: "pump_suspended", label: "Pump suspended", description: "Pump suspension state", group: "behaviour", icon: "pause-circle" },
-	{ kind: "override_active", label: "Override active", description: "An override profile is active", group: "behaviour", icon: "wand-2" },
-	{ kind: "do_not_disturb", label: "Do Not Disturb", description: "Tenant DND state (manual or scheduled)", group: "behaviour", icon: "bell-off" },
-	{ kind: "pump_state", label: "Pump mode", description: "Pump operational mode (Automatic, Manual, Boost, …)", group: "behaviour", icon: "activity" },
+	{ kind: "pump_suspended", group: "behaviour", icon: "pause-circle" },
+	{ kind: "override_active", group: "behaviour", icon: "wand-2" },
+	{ kind: "do_not_disturb", group: "behaviour", icon: "bell-off" },
+	{ kind: "pump_state", group: "behaviour", icon: "activity" },
 
 	// State spans
-	{ kind: "state_span_active", label: "State active", description: "Generic state span (override, sleep, exercise, …)", group: "state", icon: "activity" },
-	{ kind: "sleep_session_active", label: "Sleep session", description: "A recorded sleep session is in progress", group: "state", icon: "moon" },
+	{ kind: "state_span_active", group: "state", icon: "activity" },
+	{ kind: "sleep_session_active", group: "state", icon: "moon" },
 
 	// Time
-	{ kind: "time_of_day", label: "Time of day", description: "Current local time falls in a window", group: "time", icon: "clock" },
-	{ kind: "day_of_week", label: "Day of week", description: "Current local day matches selected weekdays", group: "time", icon: "calendar-days" },
+	{ kind: "time_of_day", group: "time", icon: "clock" },
+	{ kind: "day_of_week", group: "time", icon: "calendar-days" },
 
 	// Alert
-	{ kind: "alert_state", label: "Other rule state", description: "Reference another alert rule's state", group: "alert", icon: "bell" },
+	{ kind: "alert_state", group: "alert", icon: "bell" },
 ];
 
 const FACT_BY_KIND = new Map<LeafKind, FactDef>(LEAF_FACTS.map((f) => [f.kind, f]));
@@ -122,21 +119,6 @@ export function getFact(kind: LeafKind): FactDef | undefined {
 export function isLeafKind(kind: ConditionKind): kind is LeafKind {
 	return LEAF_FACTS.some((f) => f.kind === kind);
 }
-
-/**
- * Visual grouping for the picker, in display order. Group labels live here so
- * the picker's section headings stay aligned with the catalogue.
- */
-export const FACT_GROUP_LABELS: Record<FactGroup, string> = {
-	glucose: "Glucose",
-	insulin: "Insulin",
-	carbs: "Carbs",
-	device: "Device",
-	behaviour: "Behaviour",
-	state: "State spans",
-	time: "Time",
-	alert: "Alerts",
-};
 
 /** Ordered list of groups used by the picker. */
 export const FACT_GROUP_ORDER: readonly FactGroup[] = [

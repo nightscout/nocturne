@@ -30,12 +30,14 @@
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import Moon from "@lucide/svelte/icons/moon";
   import type { ConditionNode } from "./types";
-  import { isTrendBucket, type TrendBucket } from "./types";
+  import { isTrendBucket, toAlertConditionType, type TrendBucket } from "./types";
   import { Direction } from "$lib/api";
   import { getDirectionInfo } from "$lib/utils";
   import RuleBuilder from "./RuleBuilder.svelte";
   import RuleBuilderLeafEditor from "./RuleBuilderLeafEditor.svelte";
   import { FACT_GROUP_COLOURS, getFact, type LucideIconName } from "./factCatalog";
+  import { factLabel } from "./factText.svelte";
+  import { conditionLabel } from "./conditionLabel.svelte";
   import {
     eyebrow,
     removeChild,
@@ -308,7 +310,11 @@
         NOT
       </span>
     {/if}
-    <span class="text-sm font-medium shrink-0">{fact?.label ?? child.type}</span>
+    <span class="text-sm font-medium shrink-0">
+      {leafKind
+        ? factLabel(leafKind)
+        : conditionLabel(toAlertConditionType(child.type))}
+    </span>
     <RuleBuilderLeafEditor node={leafTarget} {availableRules} />
     {#if isSustained && sustainedNode?.sustained}
       <span class="text-xs text-muted-foreground shrink-0">for at least</span>

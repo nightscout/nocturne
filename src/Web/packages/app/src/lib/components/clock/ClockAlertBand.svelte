@@ -5,7 +5,8 @@
   import Eye from "@lucide/svelte/icons/eye";
   import { Button } from "$lib/components/ui/button";
   import type { ClockAlertDto } from "$lib/api";
-  import { severity, severityLabel } from "$lib/components/alerts/severity";
+  import { severity } from "$lib/components/alerts/severity";
+  import { severityLabel } from "$lib/components/alerts/severityLabel.svelte";
   import { formatTimeSince } from "$lib/components/alerts/alertTime";
 
   interface Props {

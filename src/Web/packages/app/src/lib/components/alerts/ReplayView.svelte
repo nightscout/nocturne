@@ -20,7 +20,8 @@
   import IobCobTrack from "$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
   import ThresholdRules from "$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
   import ChartTooltip from "$lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
-  import { severityLabel, severityVar } from "./severity";
+  import { severityVar } from "./severity";
+  import { severityLabel } from "./severityLabel.svelte";
   import ReplayOverlay from "./ReplayOverlay.svelte";
   import PlaybackStrip from "./PlaybackStrip.svelte";
   import RuleSidebar from "./RuleSidebar.svelte";

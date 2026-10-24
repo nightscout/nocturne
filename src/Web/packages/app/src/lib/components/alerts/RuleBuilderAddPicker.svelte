@@ -28,11 +28,15 @@
   import {
     LEAF_FACTS,
     FACT_GROUP_ORDER,
-    FACT_GROUP_LABELS,
     FACT_GROUP_COLOURS,
     type LeafKind,
     type LucideIconName,
   } from "./factCatalog";
+  import {
+    factDescription,
+    factGroupLabel,
+    factLabel,
+  } from "./factText.svelte";
 
   interface Props {
     onAddLeaf: (kind: LeafKind) => void;
@@ -85,7 +89,7 @@
       {@const facts = LEAF_FACTS.filter((f) => f.group === group)}
       {#if facts.length > 0}
         <div class="px-2 pt-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {FACT_GROUP_LABELS[group]}
+          {factGroupLabel(group)}
         </div>
         {#each facts as f (f.kind)}
           {@const c = FACT_GROUP_COLOURS[f.group]}
@@ -98,8 +102,8 @@
               <Glyph class="h-3.5 w-3.5" />
             </span>
             <span class="flex flex-col">
-              <span class="text-sm font-medium">{f.label}</span>
-              <span class="text-xs text-muted-foreground leading-tight">{f.description}</span>
+              <span class="text-sm font-medium">{factLabel(f.kind)}</span>
+              <span class="text-xs text-muted-foreground leading-tight">{factDescription(f.kind)}</span>
             </span>
           </DropdownMenu.Item>
         {/each}
