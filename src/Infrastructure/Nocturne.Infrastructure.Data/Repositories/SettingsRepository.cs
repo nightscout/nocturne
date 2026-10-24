@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -9,7 +10,9 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.Infrastructure.Data.Repositories;
 
 /// <summary>
-/// PostgreSQL repository for Settings operations
+/// PostgreSQL repository for the Nightscout v3 settings collection. The UI-settings rows share the
+/// table but are not in the collection (<see cref="SettingsKeys.UiSettingsPrefix"/>): no method reads,
+/// replaces or deletes one, and creating one is refused.
 /// </summary>
 public class SettingsRepository : ISettingsRepository
 {
@@ -33,7 +36,7 @@ public class SettingsRepository : ISettingsRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var entities = await db.Settings.AsNoTracking().OrderBy(s => s.Key).ToListAsync(cancellationToken);
+        var entities = await Documents(db.Settings).AsNoTracking().OrderBy(s => s.Key).ToListAsync(cancellationToken);
 
         return entities.Select(SettingsMapper.ToDomainModel);
     }
@@ -56,7 +59,7 @@ public class SettingsRepository : ISettingsRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var query = db.Settings.AsNoTracking().AsQueryable();
+        var query = Documents(db.Settings).AsNoTracking();
 
         // Apply find query filter if specified
         if (!string.IsNullOrEmpty(findQuery))
@@ -90,7 +93,7 @@ public class SettingsRepository : ISettingsRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var entity = await FindByIdAsync(db.Settings.AsNoTracking(), id, cancellationToken);
+        var entity = await FindByIdAsync(Documents(db.Settings).AsNoTracking(), id, cancellationToken);
 
         return entity != null ? SettingsMapper.ToDomainModel(entity) : null;
     }
@@ -107,7 +110,7 @@ public class SettingsRepository : ISettingsRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var entity = await db.Settings.AsNoTracking().FirstOrDefaultAsync(
+        var entity = await Documents(db.Settings).AsNoTracking().FirstOrDefaultAsync(
             s => s.Key == key,
             cancellationToken
         );
@@ -132,6 +135,8 @@ public class SettingsRepository : ISettingsRepository
         foreach (var setting in settings)
         {
             var entity = SettingsMapper.ToEntity(setting);
+            if (SettingsKeys.IsUiSettings(entity.Key))
+                throw new ArgumentException($"Settings key '{entity.Key}' is reserved.", nameof(settings));
             var entityId = entity.Id;
             var originalId = entity.OriginalId;
             var key = entity.Key;
@@ -141,8 +146,8 @@ public class SettingsRepository : ISettingsRepository
             // addresses its row through OriginalId, not the derived key.
             var existingEntity = (string.IsNullOrEmpty(key)
                 ? null
-                : await db.Settings.FirstOrDefaultAsync(s => s.Key == key, cancellationToken))
-                ?? await db.Settings.FirstOrDefaultAsync(
+                : await Documents(db.Settings).FirstOrDefaultAsync(s => s.Key == key, cancellationToken))
+                ?? await Documents(db.Settings).FirstOrDefaultAsync(
                     s => s.Id == entityId || (originalId != null && s.OriginalId == originalId),
                     cancellationToken
                 );
@@ -173,6 +178,9 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
+        if (SettingsKeys.IsUiSettings(id))
+            throw new ArgumentException($"Settings key '{id}' is reserved.", nameof(id));
+
         if (await ReplaceAsync(id, settings, cancellationToken))
         {
             return false;
@@ -204,7 +212,7 @@ public class SettingsRepository : ISettingsRepository
     private async Task<bool> ReplaceAsync(string id, Settings settings, CancellationToken cancellationToken)
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var entity = await FindByIdAsync(db.Settings, id, cancellationToken);
+        var entity = await FindByIdAsync(Documents(db.Settings), id, cancellationToken);
         if (entity == null)
         {
             return false;
@@ -231,7 +239,7 @@ public class SettingsRepository : ISettingsRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var entity = await FindByIdAsync(db.Settings, id, cancellationToken);
+        var entity = await FindByIdAsync(Documents(db.Settings), id, cancellationToken);
 
         if (entity == null)
         {
@@ -256,7 +264,7 @@ public class SettingsRepository : ISettingsRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var entity = await FindByIdAsync(db.Settings, id, cancellationToken);
+        var entity = await FindByIdAsync(Documents(db.Settings), id, cancellationToken);
 
         if (entity == null)
         {
@@ -268,6 +276,10 @@ public class SettingsRepository : ISettingsRepository
 
         return true;
     }
+
+    /// <summary>The rows of the v3 collection: every one but the UI-settings rows.</summary>
+    private static IQueryable<SettingsEntity> Documents(IQueryable<SettingsEntity> settings) =>
+        settings.Where(s => !s.Key.StartsWith(SettingsKeys.UiSettingsPrefix));
 
     /// <summary>
     /// Find a setting by any id a reader may hold: a legacy Mongo <c>_id</c>, the row's GUID, or
@@ -301,7 +313,7 @@ public class SettingsRepository : ISettingsRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var query = db.Settings.AsNoTracking().AsQueryable();
+        var query = Documents(db.Settings).AsNoTracking();
 
         // Apply find query filter if specified
         if (!string.IsNullOrEmpty(findQuery))

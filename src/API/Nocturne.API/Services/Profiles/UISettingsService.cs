@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
@@ -31,7 +32,7 @@ public class UISettingsService : IUISettingsService
     private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<UISettingsService> _logger;
 
-    private const string SettingsKeyPrefix = "ui:settings:";
+    private const string SettingsKeyPrefix = SettingsKeys.UiSettingsPrefix;
     private const string LegacyAggregateKey = "ui:settings:complete";
     private const string AlarmConfigurationKey = "ui:settings:notifications:alarms";
     private const string AlarmConfigurationNotes = "xDrip+-style alarm profiles configuration";
