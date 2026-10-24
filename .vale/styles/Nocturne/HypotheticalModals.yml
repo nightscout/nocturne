@@ -1,5 +1,8 @@
-# Rule 3.2 continued. These are softer than "should", and ADR rationale
-# legitimately reasons about hypotheticals, so they warn rather than fail.
+# Rule 3.2 continued. These are softer than "should", and help text sometimes
+# reasons about a hypothetical, so they warn rather than fail.
+#
+# "could not" is the past tense of "cannot", not a hypothetical, and Terms.yml
+# requires it in place of "unable to", so it is not matched.
 extends: substitution
 message: "Rule 3.2: prefer '%s' over '%s', or restructure with 'if'."
 link: .claude/skills/simple-english/SKILL.md
@@ -8,4 +11,4 @@ ignorecase: true
 swap:
   may: can
   might: can
-  could: can
+  'could(?! not)': can
