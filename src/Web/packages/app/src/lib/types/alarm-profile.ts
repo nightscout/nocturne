@@ -193,27 +193,6 @@ export interface EmergencyContactConfig {
   enabled: boolean;
 }
 
-/** Base channel configuration */
-export interface ChannelConfig {
-  enabled: boolean;
-  /** Minimum priority level to send through this channel */
-  minPriority: AlarmPriority;
-}
-
-/** Pushover-specific channel configuration */
-export interface PushoverChannelConfig extends ChannelConfig {
-  userKey?: string;
-  apiToken?: string;
-}
-
-/** Notification channels configuration */
-export interface NotificationChannelsConfig {
-  push: ChannelConfig;
-  email: ChannelConfig;
-  sms: ChannelConfig;
-  pushover?: PushoverChannelConfig;
-}
-
 /** Built-in sound presets */
 export interface SoundPreset {
   id: string;

@@ -254,6 +254,27 @@ public class UISettingsServiceTests
     }
 
     [Fact]
+    public async Task No_read_returns_pushover_credentials_a_stored_configuration_carries()
+    {
+        var context = NewContext();
+        Seed(context, AlarmsKey, new
+        {
+            profiles = new[] { new { id = "low", name = "low", alarmType = "Low", threshold = 70 } },
+            channels = new { pushover = new { enabled = true, userKey = "u-secret", apiToken = "a-secret" } },
+        });
+        await context.SaveChangesAsync();
+
+        var service = NewService(context);
+
+        var reads = (await EveryAlarmReadPath(service)).Select(c => JsonSerializer.Serialize(c, JsonOptions))
+            .Append(JsonSerializer.Serialize(await service.GetSettingsAsync(), JsonOptions));
+        foreach (var json in reads)
+        {
+            json.Should().NotContain("secret").And.NotContain("apiToken").And.NotContain("userKey");
+        }
+    }
+
+    [Fact]
     public async Task SaveSectionAsync_leavesTheOtherSectionsOfTheEarlierLayoutReadable()
     {
         var context = NewContext();
