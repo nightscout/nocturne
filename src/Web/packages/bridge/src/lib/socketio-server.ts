@@ -725,6 +725,14 @@ class SocketIOServer {
     target.emit('trackerUpdate', data);
   }
 
+  broadcastTrackerDefinitionUpdate(data: unknown, tenantSlug?: string): void {
+    const target = this.emitTarget(tenantSlug);
+    if (!target) return;
+
+    logger.debug(`Broadcasting trackerDefinitionUpdate${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
+    target.emit('trackerDefinitionUpdate', data);
+  }
+
   broadcastAnnouncement(message: unknown, tenantSlug?: string): void {
     this.broadcastToBothNamespaces('announcement', message, tenantSlug);
   }

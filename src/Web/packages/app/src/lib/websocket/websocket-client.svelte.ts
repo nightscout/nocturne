@@ -17,6 +17,7 @@ import {
   parseStatus,
   parseStorageEvent,
   parseSyncProgress,
+  parseTrackerDefinitionUpdate,
   parseTrackerUpdate,
   parseUrgentAlarm,
 } from "./payloads";
@@ -444,6 +445,12 @@ export class WebSocketClient {
       this.updateMessageStats();
       const event = parseTrackerUpdate(data);
       if (event) this.eventHandlers.trackerUpdate?.(event);
+    });
+
+    this.socket.on("trackerDefinitionUpdate", (data: unknown) => {
+      this.updateMessageStats();
+      const event = parseTrackerDefinitionUpdate(data);
+      if (event) this.eventHandlers.trackerDefinitionUpdate?.(event);
     });
 
     this.socket.on("syncProgress", (data: unknown) => {

@@ -141,6 +141,14 @@ class MessageTranslator {
     }
   }
 
+  handleTrackerDefinitionUpdate(data: unknown): void {
+    try {
+      this.socketIOServer.broadcastTrackerDefinitionUpdate(data, this.tenantSlug);
+    } catch (error) {
+      logger.error('Error handling tracker definition update:', error);
+    }
+  }
+
   handleSyncProgress(data: unknown): void {
     try {
       this.socketIOServer.broadcastSyncProgress(data, this.tenantSlug);

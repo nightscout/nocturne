@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({
   emptyPage: vi.fn(),
   getProfileSummary: vi.fn(),
   emptyList: vi.fn(),
+  getTrackerDefinitions: vi.fn(),
 }));
 
 vi.mock("$lib/api/browser-clients", () => ({
@@ -18,7 +19,7 @@ vi.mock("$lib/api/browser-clients", () => ({
   noteClient: () => ({ getAll: api.emptyPage }),
   deviceEventClient: () => ({ getAll: api.emptyPage }),
   profileClient: () => ({ getProfileSummary: api.getProfileSummary }),
-  trackersClient: () => ({ getDefinitions: api.emptyList, getActiveInstances: api.emptyList }),
+  trackersClient: () => ({ getDefinitions: api.getTrackerDefinitions, getActiveInstances: api.emptyList }),
   notificationsClient: () => ({ getNotifications: api.emptyList }),
 }));
 
@@ -42,10 +43,16 @@ import type {
   ConnectionInfo,
   StorageEvent,
   SyncProgressEvent,
+  TrackerDefinitionUpdateEvent,
   TrackerUpdateEvent,
   WebSocketConnectionStatus,
 } from "$lib/websocket/types";
-import { TrackerRealtimeAction, type SensorGlucose, type TrackerInstanceDto } from "$lib/api";
+import {
+  TrackerRealtimeAction,
+  type SensorGlucose,
+  type TrackerDefinitionDto,
+  type TrackerInstanceDto,
+} from "$lib/api";
 
 /** The realtime/backfill entry points, which the class keeps private. */
 interface StoreInternals {
@@ -68,6 +75,7 @@ interface StoreInternals {
       connect_error?: (error: Error) => void;
       syncProgress?: (event: SyncProgressEvent) => void;
       trackerUpdate?: (event: TrackerUpdateEvent) => void;
+      trackerDefinitionUpdate?: (event: TrackerDefinitionUpdateEvent) => void;
     };
   };
 }
@@ -88,6 +96,7 @@ type TestStore = StoreInternals &
     | "direction"
     | "syncProgressByConnector"
     | "trackerInstances"
+    | "trackerDefinitions"
     | "apsSnapshots"
     | "carbIntakes"
     | "treatmentRevision"
@@ -1015,6 +1024,60 @@ describe("RealtimeStore tracker updates", () => {
     });
 
     expect(store.trackerInstances.map((i) => i.id)).toEqual(["sensor"]);
+
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore tracker definition updates", () => {
+  const definition = (id: string): TrackerDefinitionDto => ({ id, name: id });
+  const instance = (id: string, definitionId: string): TrackerInstanceDto => ({ id, definitionId });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function emit(store: TestStore, definitionId: string): Promise<void> {
+    store.websocketClient.eventHandlers.trackerDefinitionUpdate?.({ definitionId });
+    await vi.waitFor(() => expect(api.getTrackerDefinitions).toHaveBeenCalled());
+    await Promise.resolve();
+  }
+
+  it("re-reads the definitions when one changes", async () => {
+    const store = makeStore();
+    store.trackerDefinitions = [definition("site")];
+    api.getTrackerDefinitions.mockResolvedValue([definition("site"), definition("sensor")]);
+
+    await emit(store, "sensor");
+
+    expect(store.trackerDefinitions.map((d) => d.id)).toEqual(["site", "sensor"]);
+
+    store.destroy();
+  });
+
+  it("clears the definitions and their running instances when the last one is deleted", async () => {
+    const store = makeStore();
+    store.trackerDefinitions = [definition("site")];
+    store.trackerInstances = [instance("run", "site")];
+    api.getTrackerDefinitions.mockResolvedValue([]);
+
+    await emit(store, "site");
+
+    expect(store.trackerDefinitions).toEqual([]);
+    expect(store.trackerInstances).toEqual([]);
+
+    store.destroy();
+  });
+
+  it("keeps the definitions when the read fails", async () => {
+    const store = makeStore();
+    store.trackerDefinitions = [definition("site")];
+    api.getTrackerDefinitions.mockRejectedValue(new Error("offline"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await emit(store, "site");
+
+    expect(store.trackerDefinitions.map((d) => d.id)).toEqual(["site"]);
 
     store.destroy();
   });

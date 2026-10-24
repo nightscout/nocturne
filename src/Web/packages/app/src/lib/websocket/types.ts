@@ -85,6 +85,10 @@ export interface TrackerUpdateEvent {
   instance: TrackerInstanceDto;
 }
 
+export interface TrackerDefinitionUpdateEvent {
+  definitionId: string;
+}
+
 export interface NotificationUpdateEvent {
   action: 'created' | 'archived' | 'updated';
   notification: InAppNotificationDto;
@@ -141,6 +145,7 @@ export interface WebSocketEventHandlers {
 
   // Tracker events
   trackerUpdate: (event: TrackerUpdateEvent) => void;
+  trackerDefinitionUpdate: (event: TrackerDefinitionUpdateEvent) => void;
 
   // In-app notification events
   notificationCreated: (notification: InAppNotificationDto) => void;
