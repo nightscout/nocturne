@@ -143,8 +143,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </svelte:head>
 
-<!-- --headroom-top sits a Headroom panel flush under the sticky report header (h-14 plus its border). -->
-<div class="@container relative min-h-full bg-background [--headroom-top:calc(var(--app-sticky-top,0px)+3.5rem+1px)]" bind:this={reportRoot} data-report-root>
+<div class="@container relative min-h-full bg-background" bind:this={reportRoot} data-report-root>
     {#if page.url.pathname !== "/reports"}
         <ReportPrintHeader title={reportName} period={printPeriod} />
 
