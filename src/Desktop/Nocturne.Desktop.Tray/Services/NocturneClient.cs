@@ -42,14 +42,18 @@ public sealed class NocturneClient : IAsyncDisposable
         _authService.AuthStateChanged += OnAuthStateChanged;
     }
 
+    /// <summary>Connects, replacing any connection already open.</summary>
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
+        await DisconnectAsync();
+
         var serverUrl = _settingsService.Settings.ServerUrl?.TrimEnd('/');
         if (string.IsNullOrEmpty(serverUrl)) return;
         if (!_authService.IsAuthenticated) return;
 
-        await ConnectSignalRAsync(serverUrl, cancellationToken);
-        StartPolling(cancellationToken);
+        _pollCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        await ConnectSignalRAsync(serverUrl, _pollCts.Token);
+        StartPolling(_pollCts.Token);
     }
 
     public async Task DisconnectAsync()
@@ -156,10 +160,10 @@ public sealed class NocturneClient : IAsyncDisposable
             SetConnected(false);
         }
 
-        await ConnectAlarmHubAsync(serverUrl, cancellationToken);
+        ConnectAlarmHub(serverUrl, cancellationToken);
     }
 
-    private async Task ConnectAlarmHubAsync(string serverUrl, CancellationToken cancellationToken)
+    private void ConnectAlarmHub(string serverUrl, CancellationToken cancellationToken)
     {
         _alarmHubConnection = new HubConnectionBuilder()
             .WithUrl($"{serverUrl}/hubs/alarms", options =>
@@ -169,38 +173,80 @@ public sealed class NocturneClient : IAsyncDisposable
             .WithAutomaticReconnect(new RetryPolicy())
             .Build();
 
-        _alarmHubConnection.Reconnected += _ => SubscribeAlarmsAsync();
+        var connection = _alarmHubConnection;
+        connection.Reconnected += _ => SubscribeAlarmsAsync(connection);
         foreach (var (eventName, kind) in AlarmHubEvents.Kinds)
         {
             var level = kind.Cleared ? AlarmLevel.Clear : kind.Urgent ? AlarmLevel.Urgent : AlarmLevel.Alarm;
-            _alarmHubConnection.On<JsonElement>(eventName, data => OnAlarm?.Invoke(new AlarmEventArgs(level, data)));
+            connection.On<JsonElement>(eventName, data => OnAlarm?.Invoke(new AlarmEventArgs(level, data)));
         }
 
+        _ = StartAlarmHubAsync(connection, serverUrl, cancellationToken);
+    }
+
+    /// <summary>
+    /// Starts the alarm hub, retrying until it connects or the connection is closed: automatic
+    /// reconnect covers only a connection that was once up, and alarms have no polling fallback.
+    /// </summary>
+    private async Task StartAlarmHubAsync(HubConnection connection, string serverUrl, CancellationToken cancellationToken)
+    {
+        var policy = new RetryPolicy();
+        for (var attempt = 0; !cancellationToken.IsCancellationRequested; attempt++)
+        {
+            try
+            {
+                await connection.StartAsync(cancellationToken);
+                await SubscribeAlarmsAsync(connection);
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex) when (IsConnectionFailure(ex))
+            {
+                _logger.LogWarning(ex, "Failed to connect to the alarm hub at {ServerUrl}; retrying", serverUrl);
+            }
+
+            try
+            {
+                await Task.Delay(policy.Delay(attempt), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Joins the tenant's alarm-subscribers group, which authenticates in-band. The server replays
+    /// the alarm that is sounding, so this runs once per connection, not on a token refresh.
+    /// </summary>
+    private async Task SubscribeAlarmsAsync(HubConnection connection)
+    {
         try
         {
-            await _alarmHubConnection.StartAsync(cancellationToken);
-            await SubscribeAlarmsAsync();
+            if (connection.State != HubConnectionState.Connected) return;
+
+            var token = await _authService.GetAccessTokenAsync();
+            if (string.IsNullOrEmpty(token)) return;
+
+            var subscribed = await connection.InvokeAsync<JsonElement>("Subscribe", new { jwtToken = token });
+            if (!subscribed.TryGetProperty("success", out var success) || success.ValueKind != JsonValueKind.True)
+            {
+                _logger.LogWarning("Alarm hub rejected the subscription; alarms will not be raised");
+            }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsConnectionFailure(ex))
         {
-            _logger.LogWarning(ex, "Failed to connect to the alarm hub at {ServerUrl}", serverUrl);
+            _logger.LogWarning(ex, "Failed to subscribe on the alarm hub; alarms will not be raised");
         }
     }
 
-    /// <summary>Joins the tenant's alarm-subscribers group, which authenticates in-band.</summary>
-    private async Task SubscribeAlarmsAsync()
-    {
-        if (_alarmHubConnection?.State != HubConnectionState.Connected) return;
-
-        var token = await _authService.GetAccessTokenAsync();
-        if (string.IsNullOrEmpty(token)) return;
-
-        var subscribed = await _alarmHubConnection.InvokeAsync<JsonElement>("Subscribe", new { jwtToken = token });
-        if (!subscribed.TryGetProperty("success", out var success) || success.ValueKind != JsonValueKind.True)
-        {
-            _logger.LogWarning("Alarm hub rejected the subscription; alarms will not be raised");
-        }
-    }
+    private static bool IsConnectionFailure(Exception ex) =>
+        ex is HttpRequestException or Microsoft.AspNetCore.SignalR.HubException or InvalidOperationException
+            or System.Net.WebSockets.WebSocketException or TimeoutException or IOException;
 
     private async Task AuthorizeHubAsync()
     {
@@ -240,8 +286,6 @@ public sealed class NocturneClient : IAsyncDisposable
             {
                 await AuthorizeHubAsync();
             }
-
-            await SubscribeAlarmsAsync();
         }
         catch (Exception ex)
         {
@@ -298,11 +342,8 @@ public sealed class NocturneClient : IAsyncDisposable
         };
     }
 
-    private void StartPolling(CancellationToken cancellationToken)
+    private void StartPolling(CancellationToken token)
     {
-        _pollCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var token = _pollCts.Token;
-
         _ = Task.Run(async () =>
         {
             while (!token.IsCancellationRequested)
@@ -351,11 +392,9 @@ public sealed class NocturneClient : IAsyncDisposable
             TimeSpan.FromSeconds(60),
         ];
 
-        public TimeSpan? NextRetryDelay(RetryContext retryContext)
-        {
-            var index = Math.Min(retryContext.PreviousRetryCount, Delays.Length - 1);
-            return Delays[index];
-        }
+        public TimeSpan? NextRetryDelay(RetryContext retryContext) => Delay(retryContext.PreviousRetryCount);
+
+        public TimeSpan Delay(long attempt) => Delays[(int)Math.Min(attempt, Delays.Length - 1)];
     }
 }
 
