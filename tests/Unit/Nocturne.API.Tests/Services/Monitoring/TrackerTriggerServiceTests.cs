@@ -369,18 +369,14 @@ public class TrackerTriggerServiceTests
         _broadcast.Verify(
             b => b.BroadcastTrackerUpdateAsync(
                 TrackerRealtimeAction.Complete,
-                It.IsAny<TrackerInstanceDto>(),
-                It.IsAny<string>(),
-                It.IsAny<TrackerVisibility>()
+                It.IsAny<TrackerInstanceDto>()
             ),
             Times.Once
         );
         _broadcast.Verify(
             b => b.BroadcastTrackerUpdateAsync(
                 TrackerRealtimeAction.Create,
-                It.IsAny<TrackerInstanceDto>(),
-                It.IsAny<string>(),
-                It.IsAny<TrackerVisibility>()
+                It.IsAny<TrackerInstanceDto>()
             ),
             Times.Once
         );
@@ -441,7 +437,7 @@ public class TrackerTriggerServiceTests
 
     private void VerifyBroadcast(TrackerRealtimeAction action, TrackerInstanceEntity instance, Times times) =>
         _broadcast.Verify(b => b.BroadcastTrackerUpdateAsync(
-            action, It.Is<TrackerInstanceDto>(d => d.Id == instance.Id), instance.UserId, It.IsAny<TrackerVisibility>()), times);
+            action, It.Is<TrackerInstanceDto>(d => d.Id == instance.Id)), times);
 
     private static readonly DateTime T0 = new(2026, 9, 11, 10, 43, 30, DateTimeKind.Utc);
 

@@ -69,7 +69,6 @@ public class WidgetSummaryService : IWidgetSummaryService
 
     /// <inheritdoc />
     public async Task<V4SummaryResponse> GetSummaryAsync(
-        string userId,
         int hours = 0,
         bool includePredictions = false,
         CancellationToken cancellationToken = default
@@ -85,7 +84,7 @@ public class WidgetSummaryService : IWidgetSummaryService
         var entryCount = hours > 0 ? (hours * 12) + 1 : 1; // 12 readings per hour (5-minute intervals)
         // Meter and calibration entries are not CGM readings, so they never become the current reading.
         var entries = (await _entryService.GetEntriesAsync("sgv", entryCount, 0, cancellationToken)).ToList();
-        var trackerInstances = await _trackerRepository.GetActiveInstancesAsync(userId, cancellationToken);
+        var trackerInstances = await _trackerRepository.GetActiveInstancesAsync(cancellationToken);
 
         // Process glucose readings
         ProcessGlucoseReadings(response, entries, hours, currentTime);

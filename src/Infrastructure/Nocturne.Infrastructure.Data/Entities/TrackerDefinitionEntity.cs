@@ -24,7 +24,8 @@ public class TrackerDefinitionEntity : ITenantScoped
     public Guid Id { get; set; }
 
     /// <summary>
-    /// User identifier this definition belongs to
+    /// The subject who created this row. It records the creator and grants nothing: trackers are
+    /// the tenant's, and any member may read or change them.
     /// </summary>
     [Column("user_id")]
     [MaxLength(255)]
@@ -127,7 +128,7 @@ public class TrackerDefinitionEntity : ITenantScoped
     public TrackerMode Mode { get; set; } = TrackerMode.Duration;
 
     /// <summary>
-    /// Visibility level for this tracker: Public or Private
+    /// Kept on the wire for older clients. It restricts nothing: every member sees every tracker.
     /// </summary>
     [Column("visibility")]
     public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Private;

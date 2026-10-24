@@ -187,7 +187,7 @@ public class DataFetchStageTests
             .ReturnsAsync(new List<TrackerDefinitionEntity>());
 
         _mockTrackerRepo
-            .Setup(r => r.GetActiveInstancesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<TrackerInstanceEntity>());
 
         _mockHeartRateService
@@ -404,7 +404,7 @@ public class DataFetchStageTests
             .Setup(r => r.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
             .Returns(() => Tracked(new List<TrackerDefinitionEntity>()));
         _mockTrackerRepo
-            .Setup(r => r.GetActiveInstancesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
             .Returns(() => Tracked(Array.Empty<TrackerInstanceEntity>()));
         _mockHeartRateService
             .Setup(s => s.GetHeartRatesByDateRangeAsync(

@@ -98,7 +98,13 @@ public class ChartDataController : ControllerBase
             cancellationToken
         );
 
-        return Ok(ChartDataReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
+        var redacted = ChartDataReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes());
+        // The markers come from the tenant's trackers, which a viewer without an account does not
+        // read; see TrackersController.ReadsNoTrackers.
+        if (DenyNoAccountViewerAttribute.Refuses(HttpContext))
+            redacted.TrackerMarkers = [];
+
+        return Ok(redacted);
     }
 
     /// <summary>

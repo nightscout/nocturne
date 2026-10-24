@@ -464,21 +464,17 @@ public class SignalRBroadcastServiceTests
     }
 
     [Fact]
-    public async Task BroadcastTrackerUpdateAsync_PublicInstance_ReachesAuthorizedGroup()
+    public async Task BroadcastTrackerUpdateAsync_ReachesTheTenantsAuthorizedGroupOnly()
     {
         var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
 
-        await _service.BroadcastTrackerUpdateAsync(
-            TrackerRealtimeAction.Create,
-            instance,
-            Guid.NewGuid().ToString(),
-            TrackerVisibility.Public
-        );
+        await _service.BroadcastTrackerUpdateAsync(TrackerRealtimeAction.Create, instance);
 
         _mockDataClients.Verify(
             x => x.Group("00000000-0000-0000-0000-000000000001:authorized"),
             Times.Once
         );
+        _mockDataClients.Verify(x => x.Group(It.Is<string>(g => g.Contains(":user-"))), Times.Never);
         _mockDataGroupProxy.Verify(
             x => x.SendCoreAsync("trackerUpdate", It.Is<object[]>(args => args.Length == 1), default),
             Times.Once
@@ -486,29 +482,23 @@ public class SignalRBroadcastServiceTests
     }
 
     [Fact]
-    public async Task BroadcastTrackerUpdateAsync_PrivateInstance_ReachesOnlyTheOwnersSubjectGroup()
+    public async Task BroadcastTrackerDefinitionUpdateAsync_SendsTheDefinitionIdToTheAuthorizedGroup()
     {
-        var owner = Guid.NewGuid();
-        var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
+        var definitionId = Guid.NewGuid();
 
-        await _service.BroadcastTrackerUpdateAsync(
-            TrackerRealtimeAction.Create,
-            instance,
-            owner.ToString(),
-            TrackerVisibility.Private
-        );
+        await _service.BroadcastTrackerDefinitionUpdateAsync(definitionId);
 
-        _mockDataClients.Verify(
-            x => x.Group($"00000000-0000-0000-0000-000000000001:user-{owner:D}"),
-            Times.Once
-        );
         _mockDataClients.Verify(
             x => x.Group("00000000-0000-0000-0000-000000000001:authorized"),
-            Times.Never
+            Times.Once
         );
-        _mockDataClients.Verify(
-            x => x.Group("00000000-0000-0000-0000-000000000001:relay"),
-            Times.Never
+        _mockDataGroupProxy.Verify(
+            x => x.SendCoreAsync(
+                "trackerDefinitionUpdate",
+                It.Is<object[]>(args => args.Length == 1
+                    && (Guid)args[0].GetType().GetProperty("definitionId")!.GetValue(args[0])! == definitionId),
+                default),
+            Times.Once
         );
     }
 

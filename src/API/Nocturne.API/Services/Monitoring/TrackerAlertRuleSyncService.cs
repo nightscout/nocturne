@@ -345,7 +345,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     }
 
     /// <summary>
-    /// Who a synced rule's in-app channel is sent to: the member who owns the tracker definition,
+    /// Who a synced rule's in-app channel is sent to: the member who created the tracker definition,
     /// or the tenant's longest-standing owner when that is not a person who may receive, as for a
     /// definition created through a site token, which belongs to the device account. Empty when
     /// the tenant has neither, which delivery records as failed.

@@ -87,7 +87,6 @@ public class SummaryController : ControllerBase
         try
         {
             var summary = await _widgetSummaryService.GetSummaryAsync(
-                userId,
                 hours,
                 includePredictions,
                 HttpContext.RequestAborted

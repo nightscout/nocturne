@@ -477,7 +477,7 @@ public class SampleDataSeeder
             return (0, 0);
 
         var userId = owner.ToString();
-        var existing = await _trackerRepository.GetDefinitionsForUserAsync(userId, ct);
+        var existing = await _trackerRepository.GetAllDefinitionsAsync(ct);
 
         var definitionsCreated = 0;
         var instancesCreated = 0;

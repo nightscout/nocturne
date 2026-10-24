@@ -475,9 +475,7 @@ public class TenantIsolationTests
 
         await service.BroadcastTrackerUpdateAsync(
             TrackerRealtimeAction.Create,
-            new TrackerInstanceDto { Id = Guid.NewGuid() },
-            "owner-123",
-            TrackerVisibility.Public
+            new TrackerInstanceDto { Id = Guid.NewGuid() }
         );
 
         dataClients.Verify(c => c.Group($"{TenantAId}:authorized"), Times.Once);

@@ -20,7 +20,7 @@ public class DeviceTrackerProvisionerTests
 
     public DeviceTrackerProvisionerTests()
     {
-        _trackers.Setup(t => t.GetDefinitionsForUserAsync(UserId, It.IsAny<CancellationToken>()))
+        _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         _trackers.Setup(t => t.CreateDefinitionAsync(It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
             .Callback<TrackerDefinitionEntity, CancellationToken>((d, _) => _created.Add(d))
@@ -74,15 +74,35 @@ public class DeviceTrackerProvisionerTests
     }
 
     [Fact]
-    public async Task ATrackerTheUserAlreadyHasIsNotCreatedAgain()
+    public async Task ATrackerTheTenantAlreadyHasIsNotCreatedAgain()
     {
-        _trackers.Setup(t => t.GetDefinitionsForUserAsync(UserId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new TrackerDefinitionEntity { Name = "omnipod dash POD" }]);
+        _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TrackerDefinitionEntity { UserId = UserId, Name = "omnipod dash POD" }]);
 
         var created = await _provisioner.ProvisionAsync(Device("omnipod-dash", DeviceCategory.InsulinPump), UserId);
 
         created.Should().Be(0);
         _created.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ATrackerAnotherMemberCreatedIsNotDuplicatedForASecondMember()
+    {
+        _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TrackerDefinitionEntity { UserId = "another-member", Name = "Omnipod DASH pod" }]);
+
+        var created = await _provisioner.ProvisionAsync(Device("omnipod-dash", DeviceCategory.InsulinPump), UserId);
+
+        created.Should().Be(0);
+        _created.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ANewTrackerRecordsTheRegisteringMemberAsItsCreator()
+    {
+        await _provisioner.ProvisionAsync(Device("omnipod-dash", DeviceCategory.InsulinPump), UserId);
+
+        _created.Single().UserId.Should().Be(UserId);
     }
 
     [Theory]

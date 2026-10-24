@@ -38,7 +38,7 @@ public class WidgetSummaryServiceStatusTests
     {
         SeedThresholdRule("above", 140, AlertRuleSeverity.Warning);
 
-        var summary = await NewService(Reading(170, minutesAgo: 2)).GetSummaryAsync("user");
+        var summary = await NewService(Reading(170, minutesAgo: 2)).GetSummaryAsync();
 
         summary.Current!.Status.Should().Be(GlucoseStatus.High,
             "the tenant's above-140 rule, not the configured 180 default, bounds the range");
@@ -50,7 +50,7 @@ public class WidgetSummaryServiceStatusTests
         SeedThresholdRule("above", 140, AlertRuleSeverity.Warning);
 
         var summary = await NewService(failingContext: false, isShare: true, Reading(170, minutesAgo: 2))
-            .GetSummaryAsync("user");
+            .GetSummaryAsync();
 
         summary.Current!.Status.Should().Be(GlucoseStatus.InRange);
     }
@@ -58,7 +58,7 @@ public class WidgetSummaryServiceStatusTests
     [Fact]
     public async Task Current_withNoRules_isClassifiedAgainstTheConfiguredDefaults()
     {
-        var summary = await NewService(Reading(170, minutesAgo: 2)).GetSummaryAsync("user");
+        var summary = await NewService(Reading(170, minutesAgo: 2)).GetSummaryAsync();
 
         summary.Current!.Status.Should().Be(GlucoseStatus.InRange);
     }
@@ -66,7 +66,7 @@ public class WidgetSummaryServiceStatusTests
     [Fact]
     public async Task Current_olderThanTheStaleWindow_isStale()
     {
-        var summary = await NewService(Reading(40, minutesAgo: 30)).GetSummaryAsync("user");
+        var summary = await NewService(Reading(40, minutesAgo: 30)).GetSummaryAsync();
 
         summary.Current!.Status.Should().Be(GlucoseStatus.Stale);
     }
@@ -75,7 +75,7 @@ public class WidgetSummaryServiceStatusTests
     public async Task History_carriesNoStatus()
     {
         var summary = await NewService(Reading(120, minutesAgo: 1), Reading(110, minutesAgo: 6))
-            .GetSummaryAsync("user", hours: 1);
+            .GetSummaryAsync(hours: 1);
 
         summary.History.Should().ContainSingle().Which.Status.Should().BeNull();
     }
@@ -85,7 +85,7 @@ public class WidgetSummaryServiceStatusTests
     {
         var summary = await NewService(
                 failingContext: true, isShare: false, Reading(120, minutesAgo: 1))
-            .GetSummaryAsync("user");
+            .GetSummaryAsync();
 
         summary.Current.Should().NotBeNull();
         summary.Current!.Status.Should().BeNull();
@@ -109,7 +109,7 @@ public class WidgetSummaryServiceStatusTests
         };
 
         var summary = await NewService(meter, newestSgv, Reading(118, minutesAgo: 8))
-            .GetSummaryAsync("user", hours: 1);
+            .GetSummaryAsync(hours: 1);
 
         summary.Current!.Mills.Should().Be(newestSgv.Mills);
         summary.Current.Sgv.Should().Be(130);
@@ -153,7 +153,7 @@ public class WidgetSummaryServiceStatusTests
                 newestFirst.Where(e => type is null || e.Type == type).Take(count));
 
         var trackers = new Mock<ITrackerRepository>();
-        trackers.Setup(t => t.GetActiveInstancesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        trackers.Setup(t => t.GetActiveInstancesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         var contextFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
