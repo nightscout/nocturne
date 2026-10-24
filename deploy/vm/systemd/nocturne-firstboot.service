@@ -1,0 +1,13 @@
+[Unit]
+Description=Nocturne first boot: per-instance secrets and setup code
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=!/opt/nocturne/.env
+
+[Service]
+Type=oneshot
+ExecStart=/opt/nocturne/firstboot.sh
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

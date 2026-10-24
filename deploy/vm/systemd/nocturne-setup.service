@@ -1,0 +1,17 @@
+[Unit]
+Description=Nocturne setup page, until the owner chooses a hostname
+Requires=docker.service
+After=docker.service nocturne-firstboot.service
+ConditionPathExists=!/opt/nocturne/.setup-complete
+
+[Service]
+# Oneshot so nocturne.service, ordered after this, waits for the owner to finish setup.
+Type=oneshot
+TimeoutStartSec=infinity
+WorkingDirectory=/opt/nocturne
+ExecStart=/usr/bin/docker compose run --rm --service-ports selfhost-setup
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
