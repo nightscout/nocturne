@@ -115,6 +115,28 @@ public class ExcursionResolutionHandlerTests
     }
 
     [Fact]
+    public async Task HandleClosed_RuleLookupFailure_StillResolvesAndClears()
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        _repository.Setup(r => r.GetExcursionRuleAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        var act = async () => await _sut.HandleClosedAsync(
+            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.AutoResolve),
+            _tenantId,
+            CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
+            _tenantId, _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.DeleteExcursionMutesAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()), Times.Once);
+        _alarmRelay.Verify(
+            r => r.ClearIfQuietAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()), Times.Once);
+        _broadcast.Verify(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()), Times.Never);
+    }
+
+    [Fact]
     public async Task HandleClosed_DeletesEveryMembersMuteOfTheExcursion()
     {
         _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))

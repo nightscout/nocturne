@@ -43,7 +43,6 @@ internal sealed class ExcursionResolutionHandler(
 
         var instances = await repository.GetInstancesForExcursionAsync(tenantId, excursionId, ct);
         var instanceIds = instances.Select(i => i.Id).ToList();
-        var rule = await repository.GetExcursionRuleAsync(tenantId, excursionId, ct);
 
         var reason = transition.CloseReason?.ToWireString();
         await repository.ResolveInstancesForExcursionAsync(tenantId, excursionId, now, reason, ct);
@@ -55,15 +54,16 @@ internal sealed class ExcursionResolutionHandler(
 
         await repository.DeleteExcursionMutesAsync(tenantId, excursionId, ct);
 
-        if (rule is null)
+        try
         {
-            // Only an excursion deleted with its rule (an FK cascade) has none.
-            logger.LogWarning(
-                "Excursion {ExcursionId} has no rule; alert_resolved not broadcast", excursionId);
-        }
-        else
-        {
-            try
+            var rule = await repository.GetExcursionRuleAsync(tenantId, excursionId, ct);
+            if (rule is null)
+            {
+                // Only an excursion deleted with its rule (an FK cascade) has none.
+                logger.LogWarning(
+                    "Excursion {ExcursionId} has no rule; alert_resolved not broadcast", excursionId);
+            }
+            else
             {
                 await broadcastService.BroadcastAlertResolvedAsync(new AlertResolvedEvent
                 {
@@ -75,10 +75,10 @@ internal sealed class ExcursionResolutionHandler(
                     Reason = transition.CloseReason,
                 });
             }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to broadcast alert_resolved for excursion {ExcursionId}", excursionId);
-            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to broadcast alert_resolved for excursion {ExcursionId}", excursionId);
         }
 
         await ArchiveInAppNotificationsAsync(tenantId, excursionId, ct);

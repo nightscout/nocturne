@@ -4,7 +4,7 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Services.Realtime;
 
 /// <summary>
-/// SignalR adapter for <see cref="IGlucoseReadingBroadcaster"/>: sends the readings as one
+/// SignalR adapter for <see cref="IGlucoseReadingBroadcaster"/>: sends the new readings as one
 /// <see cref="GlucoseReadingEvent"/>, oldest first, to the tenant's Home Assistant instances.
 /// </summary>
 public sealed class HomeAssistantGlucoseBroadcaster(ISignalRBroadcastService broadcast) : IGlucoseReadingBroadcaster

@@ -44,10 +44,9 @@ internal sealed class AlertAcknowledgementService(
     /// test fires carry a short future <c>EndedAt</c> so they surface in the active-intents
     /// snapshot; see <see cref="AlertDeliveryService.TestFireAsync"/>), applies the
     /// per-excursion mutation via <see cref="ApplyAcknowledgement"/>, saves once,
-    /// and broadcasts a single roll-up <c>alert_acknowledged</c> event naming every excursion it
-    /// acknowledged via
-    /// <see cref="ISignalRBroadcastService"/>. Broadcast failures are swallowed
-    /// and logged so the acknowledgement is not rolled back.
+    /// and broadcasts one <c>alert_acknowledged</c> event, naming every excursion it acknowledged,
+    /// through <see cref="ISignalRBroadcastService.BroadcastAlertAcknowledgedAsync"/>. Broadcast
+    /// failures are swallowed and logged so the acknowledgement is not rolled back.
     /// </remarks>
     public async Task AcknowledgeAllAsync(Guid tenantId, string acknowledgedBy, CancellationToken ct)
     {

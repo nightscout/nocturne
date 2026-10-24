@@ -35,6 +35,59 @@ public class GlucoseReadingRelayGoldenTests(V4GoldenFixture fx)
     }
 
     [Fact]
+    public async Task LiveSingleCreate_RelaysTheReading()
+    {
+        using var scope = await fx.BeginTenantScopeAsync(Guid.NewGuid());
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        fx.GlucoseReadingCapture.Clear();
+
+        var created = await repo.CreateAsync(
+            new SensorGlucose { Timestamp = T0, Mgdl = 118, DataSource = "xdrip", SyncIdentifier = "gr-single" },
+            WriteOrigin.Live, CancellationToken.None);
+
+        fx.GlucoseReadingCapture.Snapshot().Should().ContainSingle()
+            .Which.Should().ContainSingle().Which.Id.Should().Be(created.Id);
+    }
+
+    [Fact]
+    public async Task LiveCreateOlderThanTheLastReading_RelaysNothing()
+    {
+        using var scope = await fx.BeginTenantScopeAsync(Guid.NewGuid());
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        await repo.BulkCreateAsync(
+            new[] { new SensorGlucose { Timestamp = T0.AddMinutes(10), Mgdl = 140, DataSource = "dexcom", LegacyId = "gr-late-new" } },
+            WriteOrigin.Live, CancellationToken.None);
+        fx.GlucoseReadingCapture.Clear();
+
+        await repo.BulkCreateAsync(
+            new[]
+            {
+                new SensorGlucose { Timestamp = T0.AddMinutes(5), Mgdl = 135, DataSource = "dexcom", LegacyId = "gr-late-old" },
+                new SensorGlucose { Timestamp = T0.AddMinutes(15), Mgdl = 142, DataSource = "dexcom", LegacyId = "gr-late-newer" },
+            },
+            WriteOrigin.Live, CancellationToken.None);
+
+        fx.GlucoseReadingCapture.Snapshot().Should().ContainSingle()
+            .Which.Should().ContainSingle().Which.LegacyId.Should().Be("gr-late-newer");
+    }
+
+    [Fact]
+    public async Task LiveRestore_RelaysNothing()
+    {
+        using var scope = await fx.BeginTenantScopeAsync(Guid.NewGuid());
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        var created = await repo.CreateAsync(
+            new SensorGlucose { Timestamp = T0, Mgdl = 99, DataSource = "xdrip", SyncIdentifier = "gr-restore" },
+            WriteOrigin.Live, CancellationToken.None);
+        await repo.DeleteAsync(created.Id, WriteOrigin.Live, CancellationToken.None);
+        fx.GlucoseReadingCapture.Clear();
+
+        await repo.RestoreAsync(created.Id, WriteOrigin.Live, CancellationToken.None);
+
+        fx.GlucoseReadingCapture.Snapshot().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task BackfillCreate_RelaysNothing()
     {
         using var scope = await fx.BeginTenantScopeAsync(Guid.NewGuid());

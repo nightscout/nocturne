@@ -8,10 +8,10 @@ namespace Nocturne.Core.Contracts.Events;
 /// </summary>
 /// <remarks>
 /// Fired from the sensor glucose repository for <see cref="V4.WriteOrigin.Live"/> creates only, with the
-/// readings that survive canonical stream selection.
+/// readings that survive canonical stream selection and are newer than the tenant's last reading.
 /// </remarks>
 public interface IGlucoseReadingBroadcaster
 {
-    /// <summary>Relays readings a live write created.</summary>
+    /// <summary>Relays new readings a live write created.</summary>
     Task BroadcastAsync(IReadOnlyList<SensorGlucose> readings, CancellationToken ct = default);
 }

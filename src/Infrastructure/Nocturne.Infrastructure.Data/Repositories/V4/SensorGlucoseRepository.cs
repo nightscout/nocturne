@@ -47,10 +47,51 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         _readingBroadcaster = readingBroadcaster;
     }
 
-    /// <inheritdoc />
-    protected override Task OnLiveVisibleCreatedAsync(
-        IReadOnlyList<SensorGlucose> visibleCreated, CancellationToken ct) =>
-        _readingBroadcaster?.BroadcastAsync(visibleCreated, ct) ?? Task.CompletedTask;
+    /// <summary>
+    /// Relays the created readings newer than the tenant's last reading, so a restore, a gap-fill
+    /// or a late upload of older history never reaches a client as the current reading.
+    /// </summary>
+    /// <remarks>
+    /// Runs inside the write, before <see cref="AdvanceTenantLastReadingAsync"/> moves the tenant's
+    /// <c>LastReadingAt</c> past this batch, so the column still holds the newest reading before it.
+    /// </remarks>
+    protected override async Task OnLiveVisibleCreatedAsync(
+        IReadOnlyList<SensorGlucose> visibleCreated, CancellationToken ct)
+    {
+        if (_readingBroadcaster is null)
+            return;
+
+        DateTime? lastReadingAt;
+        try
+        {
+            await using var ctx = await ContextFactory.CreateAsync(ct);
+            lastReadingAt = await ctx.Tenants
+                .Where(t => t.Id == ctx.TenantId)
+                .Select(t => t.LastReadingAt)
+                .FirstOrDefaultAsync(ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
+            return;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
+            return;
+        }
+        catch (TimeoutException ex)
+        {
+            Logger.LogWarning(ex, "Could not read the tenant's last reading; glucose_reading not relayed");
+            return;
+        }
+
+        var newer = lastReadingAt is { } last
+            ? visibleCreated.Where(r => r.Timestamp > last).ToList()
+            : visibleCreated;
+        if (newer.Count > 0)
+            await _readingBroadcaster.BroadcastAsync(newer, ct);
+    }
 
     /// <inheritdoc />
     public Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
@@ -105,10 +146,11 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     protected override Entry? ProjectToLegacyEntry(SensorGlucose model) => EntryProjection.FromSensorGlucose(model);
 
     /// <summary>
-    /// Canonical-stream gate for the legacy entries projection: a live write only reaches v1/v3
-    /// realtime clients if it survives <see cref="CanonicalGlucoseStream"/> selection over the
-    /// recent window plus the just-written batch. Single-stream tenants pass through unchanged
-    /// (the selector's fast path). Failures fail open — a broadcast is better than a silent drop.
+    /// Canonical-stream gate for the single-stream surfaces: a live write only reaches v1/v3
+    /// realtime clients and the Home Assistant relay if it survives
+    /// <see cref="CanonicalGlucoseStream"/> selection over the recent window plus the just-written
+    /// batch. Single-stream tenants pass through unchanged (the selector's fast path). Failures
+    /// fail open — a broadcast is better than a silent drop.
     /// </summary>
     protected override async Task<IReadOnlyList<SensorGlucose>> FilterLegacyProjectionAsync(
         IReadOnlyList<SensorGlucose> models, CancellationToken ct)
@@ -148,17 +190,17 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         catch (OperationCanceledException) { throw; }
         catch (DbUpdateException ex)
         {
-            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
             return models;
         }
         catch (InvalidOperationException ex)
         {
-            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
             return models;
         }
         catch (TimeoutException ex)
         {
-            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical stream gate failed; broadcasting unfiltered");
             return models;
         }
     }
