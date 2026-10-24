@@ -27,7 +27,7 @@ use nocturne_alerts_core::wall_clock::references_wall_clock;
 pub(crate) const SCHEMA_VERSION: i64 = 1;
 
 fn known_kind(condition_type: &str) -> Result<ConditionKind, String> {
-    ConditionKind::from_name(condition_type).ok_or_else(|| {
+    ConditionKind::from_wire(condition_type).ok_or_else(|| {
         format!(
             "unknown condition_type '{}'",
             condition_type.escape_default()
@@ -448,8 +448,7 @@ pub(crate) fn describe(request_json: &str) -> Result<Value, String> {
 }
 
 /// Pre-order, numbering leaves as the leaf log does. A leaf shows the payload
-/// evaluation reads, so a kind reached through its member name or ordinal
-/// shows its defaults, not the operands it ignores.
+/// evaluation reads.
 fn describe_node(node: Option<&Node>, path: String, next_leaf_id: &mut usize) -> Value {
     if let Some(container) = node.and_then(Node::container) {
         let mut children = container

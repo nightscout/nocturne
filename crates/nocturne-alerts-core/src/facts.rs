@@ -97,7 +97,7 @@ impl<'a> RuleConditions<'a> {
     }
 
     pub(crate) fn kinds(&self) -> Vec<ConditionKind> {
-        let Some(root) = ConditionKind::from_name(self.condition_type) else {
+        let Some(root) = ConditionKind::from_wire(self.condition_type) else {
             return Vec::new();
         };
         let body = parse_payload(root, self.condition_params)
@@ -130,7 +130,7 @@ fn leaf_kinds(tree: &Node) -> Vec<ConditionKind> {
     collect_leaves(tree)
         .into_iter()
         .flatten()
-        .filter_map(|leaf| leaf.type_str.as_deref().and_then(ConditionKind::resolve))
+        .filter_map(|leaf| leaf.type_str.as_deref().and_then(ConditionKind::from_wire))
         .collect()
 }
 
@@ -258,7 +258,7 @@ mod tests {
     fn a_leaf_root_is_selected_by_its_own_facts_whatever_its_body() {
         let threshold = json!({"direction": "below", "value": 70});
         assert_eq!(body("threshold", &threshold), [F::Glucose]);
-        assert_eq!(body("THRESHOLD", &threshold), [F::Glucose]);
+        assert_eq!(body("THRESHOLD", &threshold), []);
         assert_eq!(body("tracker_age", &json!("not an object")), [F::Trackers]);
         let rule = RuleConditions::body("threshold", &threshold);
         assert!(references_any(&rule, &[F::Carbs, F::Glucose]));
@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn a_root_that_is_not_a_wire_name_reads_nothing() {
         let rate = json!({"direction": "falling", "rate": 2});
-        assert_eq!(body("RATE_OF_CHANGE", &rate), [F::Glucose]);
+        assert!(body("RATE_OF_CHANGE", &rate).is_empty());
         assert!(body("RateOfChange", &rate).is_empty());
         assert!(body("1", &rate).is_empty());
         assert!(body("no_such_kind", &json!({})).is_empty());
@@ -281,7 +281,7 @@ mod tests {
             "conditions": [
                 { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
                 { "type": "sustained", "sustained": { "minutes": 15, "child":
-                    { "type": "Iob", "iob": { "operator": ">", "value": 2 } } } }
+                    { "type": "iob", "iob": { "operator": ">", "value": 2 } } } }
             ]
         });
         assert_eq!(body("composite", &tree), [F::Glucose, F::Insulin]);

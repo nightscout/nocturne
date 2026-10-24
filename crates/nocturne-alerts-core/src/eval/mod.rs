@@ -2,7 +2,7 @@
 //!
 //! Evaluation cannot fail: the shapes whose evaluation fails (§1.4) are
 //! rejected when a tree is parsed. Anything else malformed, such as an unknown
-//! kind, operator or direction, a `not` or `sustained` with no child, or a
+//! operator or direction, a `not` or `sustained` with no child, or a
 //! composite with an empty list, is `false`, which `not` inverts.
 
 pub(crate) mod clock;
@@ -156,8 +156,7 @@ fn eval_composite_child(child: Option<&Node>, index: usize, path: &str, env: &mu
     eval_node(Some(node), &node_child_path(path, index, Some(node)), env)
 }
 
-/// A missing child is false, not true; otherwise the child inverted, so
-/// `not` over an unknown kind is true.
+/// A missing child is false, not true; otherwise the child inverted.
 fn not(p: &crate::model::NotPayload, path: &str, env: &mut Env) -> bool {
     let Some(child) = &p.child else {
         return false;

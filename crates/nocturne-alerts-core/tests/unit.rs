@@ -273,14 +273,6 @@ fn not_missing_child_returns_false() {
 }
 
 #[test]
-fn not_over_unknown_child_kind_returns_true() {
-    // Child of unknown kind evaluates false; not inverts to true. [normative]
-    let tree = json!({"type": "not", "not": {"child": {"type": "warp_drive"}}});
-    let ctx = glucose_ctx(Some("100"), Some("0"));
-    assert!(eval_tree(&tree, &ctx));
-}
-
-#[test]
 fn sustained_zero_minutes_never_fires() {
     let tree = json!({
         "type": "sustained",

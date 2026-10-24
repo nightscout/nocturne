@@ -502,7 +502,7 @@ fn evaluate_node_defaults_root_to_the_verbatim_type() {
 }
 
 #[test]
-fn evaluate_node_unknown_kind_is_silent_false() {
+fn evaluate_node_rejects_an_unknown_kind() {
     let request = json!({
         "schema_version": 1,
         "rule_id": "00000000-0000-0000-0000-000000000004",
@@ -511,9 +511,10 @@ fn evaluate_node_unknown_kind_is_silent_false() {
         "context": {},
         "now": "2026-01-05T12:00:00Z",
     });
-    let response = evaluate_node(&request);
-    assert_eq!(response["ok"], Value::Bool(true));
-    assert_eq!(response["value"], Value::Bool(false));
+    assert_error(
+        &evaluate_node(&request),
+        "malformed condition node: unknown_kind at 'snooze' (field 'type')",
+    );
 }
 
 #[test]
@@ -1294,7 +1295,7 @@ fn describe_auto_resolve_tree_is_rooted_at_auto_resolve() {
                 "operator": "and",
                 "conditions": [
                     { "type": "threshold", "threshold": { "direction": "above", "value": 90 } },
-                    { "type": "Iob", "iob": { "operator": "<", "value": 1 } }
+                    { "type": "iob", "iob": { "operator": "<", "value": 1 } }
                 ]
             }
         },
@@ -1377,34 +1378,7 @@ fn describe_not_without_a_child_collapses_to_a_leaf() {
 }
 
 #[test]
-fn describe_noncanonical_typed_leaf_uses_default_operands_like_the_evaluator() {
-    // A leaf whose `type` is the PascalCase enum-name (not the wire string) is
-    // evaluated with constructor defaults (eval/mod.rs gate); describe must
-    // surface the SAME defaults, not the authored operands, so the readout
-    // agrees with the leaf's truth.
-    let params = json!({
-        "operator": "or",
-        "conditions": [
-            { "type": "RateOfChange", "rate_of_change": { "direction": "falling", "rate": 2 } }
-        ]
-    });
-    let leaf = describe_rule("composite", params)["conditions"][0].clone();
-    assert_eq!(leaf["kind"], json!("rate_of_change"));
-    assert_eq!(
-        leaf["params"]["direction"],
-        Value::Null,
-        "authored operand must be ignored"
-    );
-    assert_eq!(
-        leaf["params"]["rate"],
-        json!(0),
-        "defaults surface, like the evaluator"
-    );
-}
-
-#[test]
-fn describe_canonical_typed_leaf_keeps_its_operands() {
-    // Same operands under the canonical wire `type` ARE kept (contrast above).
+fn describe_leaf_keeps_its_operands() {
     let params = json!({
         "operator": "or",
         "conditions": [

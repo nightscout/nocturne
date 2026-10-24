@@ -90,7 +90,7 @@ impl TryFrom<WireRule> for Rule {
     type Error = String;
 
     fn try_from(w: WireRule) -> Result<Self, String> {
-        let condition_type = ConditionKind::from_name(&w.condition_type).ok_or_else(|| {
+        let condition_type = ConditionKind::from_wire(&w.condition_type).ok_or_else(|| {
             format!(
                 "unknown condition_type '{}'",
                 w.condition_type.escape_default()

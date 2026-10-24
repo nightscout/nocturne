@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "scenario": "uppercase-type-discriminators",
+  "scenario": "signal-loss-in-tree",
   "ticks": [
     {
       "at": "2026-01-05T12:00:00Z",

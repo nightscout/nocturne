@@ -334,10 +334,6 @@ mod tests {
             ("TempBasalMetric", names::<TempBasalMetric>()),
             ("TrendBucket", names::<TrendBucket>()),
             ("AlertConditionType", names::<ConditionKind>()),
-            (
-                "AlertConditionTypeMembers",
-                ConditionKind::ALL.iter().map(|k| k.member()).collect(),
-            ),
         ];
         for (enum_name, ours) in tables {
             assert_eq!(listed(enum_name), ours, "{enum_name} drifted from C#");

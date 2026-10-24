@@ -97,7 +97,7 @@ internal sealed class AlertOrchestrator(
 
     /// <summary>
     /// Logs, once per version of a rule's condition, what a save of it would reject. A stored
-    /// rule keeps evaluating such a tree, where an unknown kind reads false and a missing operand
+    /// rule keeps evaluating such a tree, where an unknown operator reads false and a missing operand
     /// reads as its default, so the rule can go on never firing with nothing else to say so. A
     /// failure of the check itself is logged and never keeps the rule from evaluating.
     /// </summary>

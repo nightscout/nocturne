@@ -129,14 +129,8 @@ fn check_rule(condition_type: &str, condition_params: &Value) -> Found {
         issues: vec![ParseError::new(path, reason)],
         unknown: Vec::new(),
     };
-    let Some(kind) =
-        ConditionKind::from_name(condition_type).filter(|k| k.name() == condition_type)
-    else {
-        let reason = match ConditionKind::resolve(condition_type) {
-            Some(_) => Reason::NonCanonicalType,
-            None => Reason::UnknownKind,
-        };
-        return issue(condition_type, reason);
+    let Some(kind) = ConditionKind::from_wire(condition_type) else {
+        return issue(condition_type, Reason::UnknownKind);
     };
     if condition_params.is_null() {
         return issue(kind.name(), Reason::PayloadMissing);
@@ -223,18 +217,9 @@ fn check_node(
     let Some(payload) = node.dispatch() else {
         return report(found, tier, path, Reason::UnknownKind);
     };
-    let wire = payload.kind().name();
-    // A kind reached through its member name or ordinal reads no stored
-    // payload (engine-semantics.md §1.2).
-    if !type_str.eq_ignore_ascii_case(wire) {
-        return report(found, tier, path, Reason::PayloadUnreachable);
-    }
-    if type_str != wire {
-        report(found, tier, path, Reason::NonCanonicalType);
-    }
     // An absent or null payload is written as no properties at all.
     let empty = Map::new();
-    let entry = raw.map(|o| match o.entry(wire) {
+    let entry = raw.map(|o| match o.entry(type_str) {
         Some((pointer, v)) => (v.as_object().unwrap_or(&empty), pointer),
         None => (&empty, String::new()),
     });

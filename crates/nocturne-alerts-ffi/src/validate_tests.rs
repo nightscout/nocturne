@@ -72,7 +72,7 @@ fn validate_reports_issues_per_scope_with_paths() {
         json!([
             { "scope": "condition", "path": "composite[1].", "reason": "condition_missing", "field": null },
             { "scope": "auto_resolve", "path": "auto_resolve", "reason": "child_missing", "field": "child" },
-            { "scope": "snooze", "path": "snooze[1].RateOfChange", "reason": "payload_unreachable", "field": "type" },
+            { "scope": "snooze", "path": "snooze[1].RateOfChange", "reason": "unknown_kind", "field": "type" },
         ])
     );
 }

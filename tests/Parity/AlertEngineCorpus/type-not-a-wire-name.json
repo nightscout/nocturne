@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "name": "pascal-case-multi-word-discriminators",
-  "description": "a multi-word kind spelled by its PascalCase member name resolves its kind but reads no payload, so the rule cannot be evaluated and is skipped",
+  "name": "type-not-a-wire-name",
+  "description": "a node whose type is not exactly a kind's wire name (member name, other case, ordinal, no kind at all) cannot be evaluated, so its rule is skipped; the wire-spelled control rule fires",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -201,6 +201,123 @@
             "time_since_last_bolus": {
               "operator": ">",
               "minutes": 120
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000011",
+      "name": "rule-11",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "Threshold",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000012",
+      "name": "rule-12",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "THRESHOLD",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000013",
+      "name": "rule-13",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "0",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000014",
+      "name": "rule-14",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "or",
+        "conditions": [
+          {
+            "type": "warp_drive",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000015",
+      "name": "rule-15",
+      "condition_type": "not",
+      "condition_params": {
+        "child": {
+          "type": "warp_drive",
+          "threshold": {
+            "direction": "below",
+            "value": 70
+          }
+        }
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000016",
+      "name": "rule-16",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "below",
+              "value": 70
             }
           }
         ]

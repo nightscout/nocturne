@@ -46,15 +46,11 @@ name equals the type string for every kind (e.g. `"threshold": {…}`,
 `"rate_of_change": {…}`, `"alert_state": {…}`). Exactly one payload is expected; the
 engine only ever reads the payload matching `type`.
 
-- `type` resolves to a kind by its wire string (case-insensitive), else by its
-  `AlertConditionType` member name or integer ordinal (case-insensitive, trimmed). The
-  payload, though, is read from the field named by the **lowercased `type`**, which exists
-  only for wire strings: `"Threshold"` reads `threshold`, but `"RateOfChange"` and `"3"`
-  resolve a kind and find no payload, so the tree cannot be evaluated
-  (`payload_unreachable`, §1.4).
-- **Unknown `type` ⇒ the node evaluates `false`.** A known type whose payload is
-  null/absent evaluates the record built from `{}`, with every field at its constructor
-  default. Whether that default evaluates or throws is §1.4.
+- `type` names a kind only when it is **exactly** that kind's wire string. Any other
+  string (`"Threshold"`, `"RateOfChange"`, `"3"`, `"warp_drive"`) names no kind, and a tree
+  holding it cannot be evaluated (`unknown_kind`, §1.4).
+- A known type whose payload is null/absent evaluates the record built from `{}`, with
+  every field at its constructor default. Whether that default evaluates or throws is §1.4.
 - The full discriminator set is the
   `AlertConditionType` enum's `EnumMember` values.
 
@@ -88,7 +84,7 @@ input is null this tick:
 | Reason code | Shape |
 |---|---|
 | `type_missing` | a node with no `type` (a child, or an auto-resolve / snooze root) |
-| `payload_unreachable` | a `type` that resolves by member name or ordinal and is not the wire string in any case (`"RateOfChange"`, `"PumpState"`, `"3"`), so no stored payload is read (§1.2) |
+| `unknown_kind` | a `type` that is not exactly a kind's wire string (§1.2) |
 | `condition_missing` | a `null` slot in a composite's `conditions` |
 | `conditions_missing` | a composite with no `conditions` list, including a `composite` child with no payload |
 | `operator_missing` | a composite with non-empty `conditions` and no `operator` |
@@ -110,8 +106,6 @@ rule save rejects those too, together with the shapes above:
 
 | Reason code | Shape |
 |---|---|
-| `unknown_kind` | `type` names no kind |
-| `non_canonical_type` | `type` is the wire string in another case (`"Threshold"`, `"RATE_OF_CHANGE"`) — stored rules keep reading its payload (§1.2) |
 | `unknown_operator` | composite operator other than `and`/`or` (case-insensitive); comparison operator other than the exact `<` `<=` `>` `>=` `==`, or missing; `time_since_*` operator ordinal outside the enum |
 | `unknown_direction` | `threshold` direction other than `above`/`below`, `rate_of_change` other than `rising`/`falling` (case-insensitive) |
 | `unknown_state` | `alert_state` state other than `firing`/`unacknowledged`/`acknowledged` (case-insensitive) |
@@ -177,10 +171,8 @@ byte-for-byte:
     per-reading and sweep auto-resolve paths) and **`snooze`** (smart-snooze condition
     evaluation). Same `(rule_id, path)` timer rows are intentionally shared between the
     per-reading and sweep variants of the same scope.
-- Each descendant appends `[{childIndex}].{child.Type}` where `child.Type` is the
-  **verbatim string from the stored JSON** (case preserved — a rule stored with
-  `"Type": "Threshold"` produces `…[0].Threshold`). `not` and `sustained` children are
-  always index `[0]`.
+- Each descendant appends `[{childIndex}].{child.Type}`, the child's wire string (§1.2).
+  `not` and `sustained` children are always index `[0]`.
 - Example: `composite[0].sustained[0].threshold`, `composite[1].not[0].iob`.
 
 ### 2.4 Evaluation order
@@ -239,11 +231,9 @@ below are non-strict/strict exactly as written.
 - **`composite`** — `{operator, conditions[]}`. Empty `conditions` ⇒ false (a missing
   list, missing operator or null slot cannot be evaluated, §1.4). Operator lowercased;
   only `and` / `or` are recognised, anything else ⇒ false.
-  Evaluates every child (§2.4). A child of unknown kind evaluates false (which makes an
-  `and` false and leaves an `or` to its other children).
+  Evaluates every child (§2.4).
 - **`not`** — `{child}`. Missing child ⇒ **false** (not true). Otherwise inverts the
-  child. Consequence: `not` over an unknown/unregistered child kind ⇒ child false ⇒
-  **not ⇒ true**. **[normative]**
+  child. **[normative]**
 - **`sustained`** — `{minutes, child}`. Null child or `minutes <= 0` ⇒ false. Each
   evaluation: evaluate child first (path-extended), then:
   - child false ⇒ **clear** the `(rule_id, path)` timer, return false;
@@ -361,8 +351,8 @@ source. The crate's `facts::reads(kind)` gives the facts a kind's own evaluator 
 facts)` is whether that set meets `facts`.
 
 A rule's kinds are its root kind, the kinds of its body and, while auto-resolve is enabled,
-the kinds of its auto-resolve tree. The root `condition_type` is a kind's wire name
-ignoring ASCII case, and anything else gives the rule no kinds. The root kind counts
+the kinds of its auto-resolve tree. The root `condition_type` is exactly a kind's wire
+name, and anything else gives the rule no kinds. The root kind counts
 whatever its body. The body's kinds count only when it can be evaluated (§1.4), nested
 kinds resolving as node dispatch resolves them (§1.2). The auto-resolve tree's kinds count
 whenever auto-resolve is enabled and the tree is present, not `null` and evaluable, even
@@ -617,11 +607,11 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
 | # | Behaviour | Where | Status |
 |---|---|---|---|
 | 1 | Malformed container (null payload) is treated as a leaf by identity/path walks | §2.1 | normative |
-| 2 | Path segments preserve the stored JSON's casing of `type` | §2.3 | normative |
-| 3 | `not` over an unknown child kind yields true | §3 | normative |
+| 2 | *(retired: a `type` is exactly its wire string, so no path segment has another casing)* | §2.3 | resolved |
+| 3 | *(retired: an unknown child kind cannot be evaluated, so no `not` inverts one)* | §1.4 | resolved |
 | 4 | *(retired: `signal_loss` is an ordinary leaf evaluated on the wall clock)* | §5 | resolved |
 | 5 | *(retired: hysteresis expires against a persisted `HysteresisStartedAt`, in the tracker and the sweep)* | §6.1 | resolved |
 | 6 | Elapsed-time math mixes double→decimal casts (per-leaf, §1.3) | §1.3 | normative |
 | 7 | `loop_enaction_stale` cold-start guard is `HasEverApsCycled`, not an enaction-specific flag | §3 | normative |
 | 8 | `time_since_last_*` treats a missing anchor as +∞ (fires on cold start) — deliberately opposite to `loop_stale`'s guard | §3 | normative |
-| 9 | *(retired: a kind spelled by its member name or ordinal resolves but reads no payload, so the tree cannot be evaluated, `payload_unreachable`)* | §1.4 | resolved |
+| 9 | *(retired: a `type` that is not exactly a wire string, such as a member name or ordinal, names no kind and cannot be evaluated)* | §1.2 | resolved |

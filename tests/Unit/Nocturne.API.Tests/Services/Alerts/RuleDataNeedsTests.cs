@@ -383,18 +383,6 @@ public class RuleDataNeedsTests
         RuleDataNeeds.Walk(new[] { rule }).ReferencedPumpStates.Should().BeEmpty();
     }
 
-    [NativeFact]
-    public void A_nested_type_given_by_member_name_is_read_as_its_kind()
-    {
-        const string tree = """
-            {"operator":"and","conditions":[
-              {"type":"Iob","iob":{"operator":">","value":2}}
-            ]}
-            """;
-
-        RuleDataNeeds.Walk(new[] { MakeRule(AlertConditionType.Composite, tree) }).NeedsIob.Should().BeTrue();
-    }
-
     private static AlertRuleSnapshot MakeRule(
         AlertConditionType type, string json, bool autoResolveEnabled = false, string? autoResolveParams = null) =>
         new(Id: Guid.NewGuid(),

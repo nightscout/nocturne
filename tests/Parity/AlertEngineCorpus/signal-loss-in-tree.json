@@ -1,20 +1,19 @@
 {
   "schema_version": 1,
-  "name": "unevaluable-member-name-kind",
-  "description": "a multi-word kind spelled by its member name drops its payload, so a RateOfChange child has no direction and skips the rule",
+  "name": "signal-loss-in-tree",
+  "description": "a signal_loss node inside a tree evaluates like any other leaf",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
-        "operator": "and",
+        "operator": "or",
         "conditions": [
           {
-            "type": "RateOfChange",
-            "rate_of_change": {
-              "direction": "falling",
-              "rate": 2
+            "type": "signal_loss",
+            "signal_loss": {
+              "timeout_minutes": 15
             }
           }
         ]
@@ -28,10 +27,10 @@
     {
       "at": "2026-01-05T12:00:00Z",
       "context": {
-        "latest_value": 65,
-        "latest_timestamp": "2026-01-05T12:00:00Z",
-        "trend_rate": -3,
-        "last_reading_at": "2026-01-05T12:00:00Z",
+        "latest_value": 40,
+        "latest_timestamp": "2026-01-05T11:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T11:00:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,

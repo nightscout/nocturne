@@ -132,7 +132,7 @@ internal static class ConditionTimeZones
         if (path.Length == 0)
             path = type;
 
-        var kind = AlertConditionTypeNames.Resolve(type);
+        var kind = AlertConditionTypeNames.FromWireString(type);
         if (kind is null
             || Property(obj, AlertConditionTypeNames.ToWireString(kind.Value)) is not { } payloadKey
             || obj[payloadKey] is not JsonObject payload)

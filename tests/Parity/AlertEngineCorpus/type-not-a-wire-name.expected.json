@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "scenario": "pascal-case-multi-word-discriminators",
+  "scenario": "type-not-a-wire-name",
   "ticks": [
     {
       "at": "2026-01-05T12:00:00Z",
@@ -44,6 +44,42 @@
         {
           "rule_id": "00000000-0000-0000-0000-000000000010",
           "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000011",
+          "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000012",
+          "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000013",
+          "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000014",
+          "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000015",
+          "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000016",
+          "root": true,
+          "leaves": [
+            {
+              "leaf_id": 0,
+              "value": true
+            }
+          ],
+          "transition": "opened",
+          "tracker": {
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 1
+          }
         }
       ]
     }

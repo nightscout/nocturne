@@ -40,7 +40,6 @@ internal static class EnumManifest
         {
             ["AlertComparisonOperator"] = WireNames<AlertComparisonOperator>(),
             ["AlertConditionType"] = WireNames<AlertConditionType>(),
-            ["AlertConditionTypeMembers"] = MemberNames<AlertConditionType>(),
             ["DayOfWeek"] = WireNames<DayOfWeek>(),
             ["GlucoseBucket"] = WireNames<GlucoseBucket>(),
             ["PumpModeState"] = WireNames<PumpModeState>(),
@@ -87,9 +86,6 @@ internal static class EnumManifest
         }
         return fields;
     }
-
-    private static JsonArray MemberNames<TEnum>() where TEnum : struct, Enum =>
-        new(ContiguousValues<TEnum>().Select(v => (JsonNode)Enum.GetName(v)!).ToArray());
 
     /// <summary>
     /// The Rust tables are indexed by ordinal, which is only sound while the C# values are

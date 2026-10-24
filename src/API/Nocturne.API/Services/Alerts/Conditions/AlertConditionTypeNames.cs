@@ -27,7 +27,7 @@ internal static class AlertConditionTypeNames
 
     private static readonly Dictionary<AlertConditionType, string> ToWire = BuildToWire();
     private static readonly Dictionary<string, AlertConditionType> FromWire =
-        ToWire.ToDictionary(kv => kv.Value, kv => kv.Key, StringComparer.OrdinalIgnoreCase);
+        ToWire.ToDictionary(kv => kv.Value, kv => kv.Key, StringComparer.Ordinal);
 
     /// <summary>
     /// Returns the snake_case wire string for the given <paramref name="type"/>.
@@ -36,18 +36,10 @@ internal static class AlertConditionTypeNames
         ToWire.TryGetValue(type, out var s) ? s : type.ToString().ToLowerInvariant();
 
     /// <summary>
-    /// Resolves a wire string back to its <see cref="AlertConditionType"/>, or returns null if unknown.
+    /// The <see cref="AlertConditionType"/> whose wire string is exactly <paramref name="wire"/>, or null.
     /// </summary>
     public static AlertConditionType? FromWireString(string wire) =>
         FromWire.TryGetValue(wire, out var t) ? t : null;
-
-    /// <summary>
-    /// Resolves a <see cref="Nocturne.Core.Models.ConditionNode.Type"/> the way node dispatch does: the wire string
-    /// first, then the enum member name or ordinal, case-insensitively.
-    /// </summary>
-    public static AlertConditionType? Resolve(string type) =>
-        FromWireString(type)
-        ?? (Enum.TryParse<AlertConditionType>(type, ignoreCase: true, out var parsed) ? parsed : null);
 
     private static Dictionary<AlertConditionType, string> BuildToWire()
     {

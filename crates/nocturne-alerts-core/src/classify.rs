@@ -48,7 +48,7 @@ impl ScopeClass {
 #[must_use]
 pub fn classify(condition_type: &str, condition_params: &Value) -> ScopeClass {
     let mut acc = Acc::default();
-    if let Some(kind) = ConditionKind::resolve(condition_type)
+    if let Some(kind) = ConditionKind::from_wire(condition_type)
         && let Ok(payload) = parse_payload(kind, condition_params)
     {
         walk(&Node::from_rule(kind, Some(payload)), false, &mut acc);

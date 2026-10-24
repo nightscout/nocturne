@@ -49,13 +49,8 @@ pub enum Reason {
     StateMissing,
     /// A rule body whose `condition_params` is JSON `null`.
     PayloadMissing,
-    /// A `type` naming no condition kind.
+    /// A `type` that is not exactly a kind's wire name.
     UnknownKind,
-    /// A `type` that is its kind's wire name in another case.
-    NonCanonicalType,
-    /// A `type` that resolves to a kind by its member name or ordinal, which
-    /// reads no payload.
-    PayloadUnreachable,
     UnknownOperator,
     UnknownDirection,
     UnknownState,
@@ -103,8 +98,6 @@ impl Reason {
             Reason::StateMissing => "state_missing",
             Reason::PayloadMissing => "payload_missing",
             Reason::UnknownKind => "unknown_kind",
-            Reason::NonCanonicalType => "non_canonical_type",
-            Reason::PayloadUnreachable => "payload_unreachable",
             Reason::UnknownOperator => "unknown_operator",
             Reason::UnknownDirection => "unknown_direction",
             Reason::UnknownState => "unknown_state",
@@ -134,10 +127,7 @@ impl Reason {
             | Reason::MinutesNotPositive(f)
             | Reason::MinutesNegative(f) => Some(f),
             Reason::PumpModeCategory => Some("category"),
-            Reason::TypeMissing
-            | Reason::UnknownKind
-            | Reason::NonCanonicalType
-            | Reason::PayloadUnreachable => Some("type"),
+            Reason::TypeMissing | Reason::UnknownKind => Some("type"),
             Reason::ConditionsMissing | Reason::ConditionsEmpty => Some("conditions"),
             Reason::OperatorMissing | Reason::UnknownOperator => Some("operator"),
             Reason::DirectionMissing | Reason::UnknownDirection => Some("direction"),
@@ -164,7 +154,7 @@ impl Reason {
                 | Reason::InvalidField(_)
                 | Reason::TooDeep
                 | Reason::TypeMissing
-                | Reason::PayloadUnreachable
+                | Reason::UnknownKind
                 | Reason::ConditionMissing
                 | Reason::ConditionsMissing
                 | Reason::OperatorMissing
@@ -222,23 +212,13 @@ impl std::error::Error for ParseError {}
 
 pub type ParseResult<T> = Result<T, ParseError>;
 
-/// Declares [`ConditionKind`] (in the host enum's declaration order, the
-/// ordinal a `type` may be written as) and [`Payload`], one variant per kind.
+/// Declares [`ConditionKind`] (in the host enum's declaration order) and
+/// [`Payload`], one variant per kind.
 macro_rules! condition_kinds {
     ($($kind:ident = $wire:literal => $payload:ident),+ $(,)?) => {
         crate::enums::wire_enum! {
             /// The condition kinds. [`WireEnum::name`] is the wire name.
             pub enum ConditionKind { $($kind = $wire),+ }
-        }
-
-        impl ConditionKind {
-            /// The host enum's member name.
-            #[must_use]
-            pub fn member(self) -> &'static str {
-                match self {
-                    $(Self::$kind => stringify!($kind)),+
-                }
-            }
         }
 
         /// A parsed kind-specific payload. Serialises to its authored operands.
@@ -256,9 +236,8 @@ macro_rules! condition_kinds {
                 }
             }
 
-            /// What `kind` reads when its payload property is absent, null, or
-            /// under a `type` not spelled as the wire name: every field at its
-            /// default.
+            /// What `kind` reads when its payload property is absent or null:
+            /// every field at its default.
             #[must_use]
             pub fn default_for(kind: ConditionKind) -> Self {
                 match kind {
@@ -320,19 +299,11 @@ condition_kinds! {
 }
 
 impl ConditionKind {
-    /// The kind a node's `type` names (engine-semantics.md §1.2): its wire
-    /// name, else its member name or ordinal, trimmed and ignoring ASCII case.
+    /// The kind whose wire name is exactly `type_str` (engine-semantics.md
+    /// §1.2).
     #[must_use]
-    pub fn resolve(type_str: &str) -> Option<Self> {
-        let trimmed = type_str.trim();
-        Self::from_name(type_str)
-            .or_else(|| {
-                Self::ALL
-                    .iter()
-                    .copied()
-                    .find(|k| k.member().eq_ignore_ascii_case(trimmed))
-            })
-            .or_else(|| trimmed.parse().ok().and_then(Self::from_ordinal))
+    pub fn from_wire(type_str: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|k| k.name() == type_str)
     }
 }
 
@@ -994,22 +965,13 @@ impl Node {
     }
 
     /// The payload evaluation reads: `None` for a missing or unknown `type`.
-    /// A kind reached through its member name or ordinal (e.g.
-    /// `"RateOfChange"`) reads [`Payload::default_for`], not its stored
-    /// payload (engine-semantics.md §1.2).
     #[must_use]
     pub fn dispatch(&self) -> Option<Cow<'_, Payload>> {
-        let type_str = self.type_str.as_deref()?;
-        let kind = ConditionKind::resolve(type_str)?;
-        // §1.2 reads the payload named by the lowercased `type`. A `type` that
-        // resolves is ASCII apart from surrounding whitespace, which neither
-        // comparison matches, so folding ASCII case decides the same.
-        let stored = if type_str.eq_ignore_ascii_case(kind.name()) {
+        let kind = ConditionKind::from_wire(self.type_str.as_deref()?)?;
+        Some(
             self.payload(kind)
-        } else {
-            None
-        };
-        Some(stored.map_or_else(|| Cow::Owned(Payload::default_for(kind)), Cow::Borrowed))
+                .map_or_else(|| Cow::Owned(Payload::default_for(kind)), Cow::Borrowed),
+        )
     }
 
     /// This node's children when it is a container: a composite, not or
