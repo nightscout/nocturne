@@ -21,6 +21,8 @@ export const buttonVariants = tv({
       ghost:
         "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
       link: "text-primary underline-offset-4 hover:underline",
+      // A link that must read as one at rest, where an action sits among form controls.
+      "link-underlined": "text-primary underline underline-offset-4",
       // A quiet secondary action.
       "ghost-muted":
         "text-muted-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",

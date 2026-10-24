@@ -80,6 +80,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   }
 
   // Guest sessions bypass onboarding — the data owner's instance is already set up.
+  let onboardingComplete = false;
   if (!locals.isGuestSession && !publicViewAllowed) {
     // If the instance needs setup, redirect there regardless of auth state.
     // This covers fresh installs where no tenant or credentials exist yet.
@@ -91,6 +92,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     if (!onboarding.isComplete) {
       throw redirect(303, "/setup");
     }
+    onboardingComplete = true;
   }
 
   // A fresh instance with no resolved tenant reports "setup_required" — send it to setup rather
@@ -153,5 +155,6 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     showBackupSignInPrompt,
     isDemo,
     nextResetAt,
+    onboardingComplete,
   };
 };

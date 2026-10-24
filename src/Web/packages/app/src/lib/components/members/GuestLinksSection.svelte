@@ -36,6 +36,8 @@
   import { retainQuery } from "$lib/api/retain-query.svelte";
   import { describeSubmitError } from "$lib/forms";
 
+  let { onCreated }: { onCreated?: () => void } = $props();
+
   const canCreateGuestLinks = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "sharing.guest")
   );
@@ -174,6 +176,7 @@
       }).updates(getGuestLinks);
       createdCode = result.code ?? null;
       createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
+      onCreated?.();
     } catch (err) {
       createError = describeSubmitError(
         err,

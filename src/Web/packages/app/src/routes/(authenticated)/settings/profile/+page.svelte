@@ -12,23 +12,16 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import User from "@lucide/svelte/icons/user";
-  import Activity from "@lucide/svelte/icons/activity";
-  import Droplet from "@lucide/svelte/icons/droplet";
-  import TrendingUp from "@lucide/svelte/icons/trending-up";
   import Clock from "@lucide/svelte/icons/clock";
   import Settings from "@lucide/svelte/icons/settings";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Lock from "@lucide/svelte/icons/lock";
   import * as Alert from "$lib/components/ui/alert";
-  import { bgLabel } from "$lib/utils/formatting";
   import { getProfileSummary, setDefaultProfile } from "$api/generated/profiles.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
-  import ScheduleView from "$lib/components/schedule/ScheduleView.svelte";
+  import ProfileSchedules from "$lib/components/schedule/ProfileSchedules.svelte";
   import ProfileSwitchDialog from "$lib/components/profile/ProfileSwitchDialog.svelte";
   import ActiveProfileActivation from "$lib/components/profile/ActiveProfileActivation.svelte";
-  import TargetRangeCard from "$lib/components/schedule/TargetRangeCard.svelte";
 
   type Summary = Awaited<ReturnType<typeof getProfileSummary>>;
 
@@ -164,8 +157,7 @@
   {@const carbRatio = selectedProfileName ? getCarbRatioForProfile(data, selectedProfileName) : null}
   {@const sensitivity = selectedProfileName ? getSensitivityForProfile(data, selectedProfileName) : null}
   {@const targetRange = selectedProfileName ? getTargetRangeForProfile(data, selectedProfileName) : null}
-  {@const profileConfigured = (data?.basalSchedules ?? []).length > 0}
-  <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6" {@attach coachmark({ ...coachFor("onboarding.therapy-profile"), completedWhen: () => profileConfigured })}>
+  <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
     <!-- Header -->
     <div class="flex flex-wrap items-start justify-between gap-2">
       <div class="flex items-center gap-3">
@@ -389,46 +381,14 @@
           </CardContent>
         </Card>
 
-        <!-- Schedule Cards Grid -->
-        <div class="grid gap-4 @3xl:grid-cols-2">
-          {#if basal?.entries && basal.entries.length > 0}
-            <ScheduleView
-              title="Basal Rates"
-              description="Background insulin delivery rates"
-              unit="U/hr"
-              icon={Activity}
-              entries={basal.entries}
-            />
-          {/if}
-
-          {#if carbRatio?.entries && carbRatio.entries.length > 0}
-            <ScheduleView
-              title="Carb Ratios (I:C)"
-              description="Grams of carbs per unit of insulin"
-              unit="g/U"
-              icon={Droplet}
-              iconClass="text-success"
-              entries={carbRatio.entries}
-            />
-          {/if}
-
-          {#if sensitivity?.entries && sensitivity.entries.length > 0}
-            <ScheduleView
-              title="Insulin Sensitivity (ISF)"
-              description="BG drop per unit of insulin"
-              unit="{bgLabel()}/U"
-              icon={TrendingUp}
-              entries={sensitivity.entries}
-              sourceUnits="mg/dl"
-            />
-          {/if}
-
-          <TargetRangeCard
-            profileName={selectedProfileName}
-            schedule={targetRange}
-            readOnly={!!therapy.isExternallyManaged}
-          />
-        </div>
+        <ProfileSchedules
+          profileName={selectedProfileName}
+          {basal}
+          {carbRatio}
+          {sensitivity}
+          {targetRange}
+          readOnly={!!therapy.isExternallyManaged}
+        />
 
         <!-- Additional Therapy Metadata -->
         <Card variant="muted">

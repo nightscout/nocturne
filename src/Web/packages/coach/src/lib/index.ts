@@ -1,5 +1,6 @@
 // @nocturne/coach: progressive disclosure system
 export type {
+  CoachGates,
   CoachLabels,
   CoachMarkAdapter,
   CoachMarkOptions,
@@ -24,5 +25,5 @@ export {
 } from "./context.svelte.js";
 export { HistorySentinel } from "./history-sentinel.js";
 export type { SentinelWindow } from "./history-sentinel.js";
-export { selectActiveMark, isSequenceDone, sequenceProgress } from "./sequencing.js";
+export { selectActiveMark, isPrerequisiteMet, isSequenceDone, sequenceProgress } from "./sequencing.js";
 export type { SelectionResult } from "./sequencing.js";

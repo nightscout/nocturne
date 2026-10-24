@@ -810,7 +810,7 @@ public class PasskeyController : ControllerBase
     }
 
     /// <summary>
-    /// Mark the current tenant's onboarding as complete.
+    /// Mark the current tenant's onboarding core as complete, enrolling it in the setup hub.
     /// </summary>
     [HttpPost("onboarding/complete")]
     [Authorize]
@@ -827,6 +827,7 @@ public class PasskeyController : ControllerBase
         if (tenant.OnboardingCompletedAt == null)
         {
             tenant.OnboardingCompletedAt = DateTime.UtcNow;
+            tenant.SetupHubEnrolledAt = tenant.OnboardingCompletedAt;
             await db.SaveChangesAsync();
         }
 

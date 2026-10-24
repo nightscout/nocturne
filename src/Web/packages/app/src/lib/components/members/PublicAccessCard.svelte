@@ -30,6 +30,8 @@
   import { retainQuery } from "$lib/api/retain-query.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
+  let { onEnabled }: { onEnabled?: () => void } = $props();
+
   const canManageSharing = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "sharing.manage"),
   );
@@ -85,8 +87,10 @@
     errorMessage = null;
     pendingEnabled = on;
     try {
-      if (on) await mint(rotateShareLink);
-      else {
+      if (on) {
+        await mint(rotateShareLink);
+        onEnabled?.();
+      } else {
         await disableShareLink();
         revealedUrl = null;
         plainVisible = false;

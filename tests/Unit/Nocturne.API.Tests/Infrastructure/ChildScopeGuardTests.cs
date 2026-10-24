@@ -96,7 +96,6 @@ public class ChildScopeGuardTests
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.FindRunAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetHistoryAsync",
         "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.GetSourcesAsync",
-        "src/API/Nocturne.API/Services/Migration/MigrationJobService.cs: MigrationJobService.TestApiConnectionAsync",
 
         // Work a request starts that returns nothing it read. It writes as the system, and the caller
         // reads what it wrote back under the caller's own policies. Read as the caller, a sync or an
