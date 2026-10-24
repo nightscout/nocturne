@@ -630,6 +630,15 @@ public class MutationAuditInterceptorTests : IDisposable
         secretChange.GetProperty("new").GetString().Should().Be("[redacted]");
     }
 
+    [Theory]
+    [InlineData(nameof(SettingsEntity.Value))]
+    [InlineData(nameof(SettingsEntity.AdditionalPropertiesJson))]
+    public void Settings_values_are_redacted_since_settings_documents_carry_credentials(string property)
+    {
+        typeof(SettingsEntity).GetProperty(property)!
+            .IsDefined(typeof(AuditRedactedAttribute), inherit: true).Should().BeTrue();
+    }
+
     [Fact]
     public async Task EntityTypeNaming_RemovesEntitySuffix()
     {
