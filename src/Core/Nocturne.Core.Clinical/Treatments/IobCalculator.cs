@@ -24,6 +24,20 @@ public class IobCalculator(
     IPumpSnapshotRepository pumpSnapshotRepo
 ) : IIobCalculator
 {
+    /// <summary>
+    /// The longest DIA, in hours, an IOB calculation uses. It is as far back as every IOB reader
+    /// reads boluses (<see cref="DailyProfileCalculator.ActingMs"/>), so a longer DIA would count
+    /// insulin that only some readers can see. It limits IOB alone: the DIA a profile or an
+    /// insulin record carries is unchanged.
+    /// </summary>
+    public const int MaxIobDiaHours = 8;
+
+    /// <summary>
+    /// <paramref name="dia"/>, the record's own or else the profile's, limited to
+    /// <see cref="MaxIobDiaHours"/>.
+    /// </summary>
+    public static double IobDia(double dia) => Math.Min(dia, MaxIobDiaHours);
+
     // Constants from legacy implementation (identical to IobService)
     private const double DEFAULT_DIA = 3.0;
     private const double SCALE_FACTOR_BASE = 3.0;
@@ -86,8 +100,8 @@ public class IobCalculator(
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         // Per-bolus insulin context takes priority over profile DIA/peak
-        var dia = bolus.InsulinContext?.Dia
-            ?? therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult();
+        var dia = IobDia(bolus.InsulinContext?.Dia
+            ?? therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult());
         var peak = bolus.InsulinContext?.Peak
             ?? PEAK_MINUTES;
         var sens = sensitivity.GetSensitivityAsync(currentTime, null).GetAwaiter().GetResult();
@@ -104,7 +118,7 @@ public class IobCalculator(
         }
 
         // Same precedence as the async path: per-bolus insulin context wins, else the snapshot.
-        var dia = bolus.InsulinContext?.Dia ?? snapshot.Dia;
+        var dia = IobDia(bolus.InsulinContext?.Dia ?? snapshot.Dia);
         var peak = bolus.InsulinContext?.Peak ?? snapshot.PeakMinutes;
         var sens = snapshot.SensitivityAt(time);
 
@@ -180,7 +194,7 @@ public class IobCalculator(
             : CalcInsulinCore(
                 bolus.Insulin,
                 bolus.Mills,
-                bolus.InsulinContext?.Dia ?? profileDia.Value,
+                IobDia(bolus.InsulinContext?.Dia ?? profileDia.Value),
                 bolus.InsulinContext?.Peak ?? PEAK_MINUTES,
                 sens.Value,
                 currentTime));
@@ -289,7 +303,7 @@ public class IobCalculator(
             var contribution = CalcNetBasal(
                 piece,
                 Math.Min(piece.EndMills!.Value, cutoff),
-                piece.InsulinContext?.Dia ?? profileDia,
+                IobDia(piece.InsulinContext?.Dia ?? profileDia),
                 piece.InsulinContext?.Peak ?? profilePeak,
                 sens,
                 scheduledBasalAt,

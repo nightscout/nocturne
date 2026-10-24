@@ -86,8 +86,17 @@ public static class DailyProfileCalculator
     /// How long after a dose or carb entry it is taken to still act. Eight hours covers the
     /// longest DIA an AID profile commonly runs (Loop's and the oref systems' curves end by 6 to 8
     /// hours) and the six hours <see cref="IobCobSeries"/> lets a carb entry absorb over.
+    /// <para>
+    /// IOB readers read boluses from this far before their window. IOB uses no DIA longer than
+    /// <see cref="IobCalculator.MaxIobDiaHours"/>, the same span (<see cref="IobCalculator.IobDia"/>),
+    /// so every reader counts the same boluses.
+    /// </para>
+    /// <para>
+    /// IOB readers read temp basals from <see cref="StatisticsService.IobSeriesTempBasalReadStart"/>,
+    /// which is further back, so a temp that began earlier and is still running is counted.
+    /// </para>
     /// </summary>
-    public const long ActingMs = 8 * LocalSlotBinning.HourMs;
+    public const long ActingMs = IobCalculator.MaxIobDiaHours * LocalSlotBinning.HourMs;
 
     public static IntervalSet CalculableIobCobTime(BasalEvidence evidence, IEnumerable<long> doseAndCarbMills) =>
         evidence.Recorded.Union(evidence.Inferable)

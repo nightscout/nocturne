@@ -1,4 +1,5 @@
 using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -440,7 +441,7 @@ public class DataFetchStageTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_FetchesTempBasalsFromBufferAndSelectsThoseOverlappingDisplayWindow()
+    public async Task ExecuteAsync_FetchesTempBasalsFromTheReadStartAndSelectsThoseOverlappingDisplayWindow()
     {
         var beforeWindow = new TempBasal
         {
@@ -498,11 +499,35 @@ public class DataFetchStageTests
             },
             CancellationToken.None);
 
-        requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(BufferStartTime).UtcDateTime);
+        requestedFrom.Should().Be(StatisticsService.IobSeriesTempBasalReadStart(DateTimeOffset.FromUnixTimeMilliseconds(StartTime).UtcDateTime));
         requestedLimit.Should().Be(Nocturne.API.Services.Analytics.ChartDataService.TempBasalQueryLimit);
         requestedDescending.Should().BeFalse();
         result.TempBasalList.Should().BeEquivalentTo([beforeWindow, runningAcrossStart, atStart, inWindow]);
         result.DisplayTempBasals.Should().BeEquivalentTo([atStart, inWindow], "the temp at the window start cancels the one running across it");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ATempOpenSinceBeforeTheBuffer_IsReadAndDisplayed()
+    {
+        var openSinceTenHours = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(StartTime - 10 * 60 * 60 * 1000).UtcDateTime,
+            Rate = 0,
+            Origin = TempBasalOrigin.Suspended,
+        };
+        _mockTempBasalRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? from, DateTime? _, string? _, string? _, int _, int _, bool _, CancellationToken _) =>
+                (IEnumerable<TempBasal>)new[] { openSinceTenHours }.Where(t => t.StartTimestamp >= from).ToList());
+
+        var result = await _stage.ExecuteAsync(Window(includeHealthSeries: false), CancellationToken.None);
+
+        result.TempBasalList.Should().ContainSingle();
+        result.DisplayTempBasals.Should().ContainSingle();
     }
 
     [Fact]

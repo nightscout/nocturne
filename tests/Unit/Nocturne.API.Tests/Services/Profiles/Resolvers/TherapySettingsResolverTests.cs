@@ -67,6 +67,17 @@ public class TherapySettingsResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task GetDIA_ReturnsADiaLongerThanTheIobLookbackUncapped()
+    {
+        _repo.Setup(r => r.GetByProfileNameAsync("Default", default))
+            .ReturnsAsync(new[] { MakeSettings(dia: 10.0) });
+
+        var result = await _sut.GetDIAAsync(NoonMills);
+
+        result.Should().Be(10.0);
+    }
+
+    [Fact]
     public async Task GetDIA_ReturnsTherapySettingsDia_WhenExternallyManaged()
     {
         var settings = MakeSettings(dia: 6.0, isExternallyManaged: true);

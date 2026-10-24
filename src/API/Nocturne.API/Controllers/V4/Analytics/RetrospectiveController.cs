@@ -237,7 +237,7 @@ public class RetrospectiveController : ControllerBase
             limit: 5000, offset: 0, descending: false, ct: cancellationToken
         )).ToList();
         var tempBasals = (await _tempBasalRepository.GetAsync(
-            from: StatisticsService.TempBasalReadStart(dayStart.UtcDateTime), to: fetchTo, device: null, source: null,
+            from: StatisticsService.IobSeriesTempBasalReadStart(dayStart.UtcDateTime), to: fetchTo, device: null, source: null,
             limit: int.MaxValue, offset: 0, descending: false, ct: cancellationToken
         )).ToList();
         var carbIntakes = (await _carbIntakeRepository.GetAsync(

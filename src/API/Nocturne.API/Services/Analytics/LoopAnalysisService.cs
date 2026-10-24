@@ -49,6 +49,8 @@ internal sealed partial class LoopAnalysisService(
 {
     private const long TickMs = DailyProfileCalculator.SlotMinutes * LocalSlotBinning.MinuteMs;
 
+    private static long TickStart(long from) => from - from % TickMs;
+
     private static readonly StateSpanCategory[] MaskCategories =
     [
         StateSpanCategory.Override,
@@ -127,7 +129,7 @@ internal sealed partial class LoopAnalysisService(
     /// <remarks>
     /// Boluses are read from <see cref="DailyProfileCalculator.ActingMs"/> before the window so IOB
     /// and COB at its start see the doses still acting. Temp basals are read from
-    /// <see cref="StatisticsService.TempBasalReadStart"/>, which reaches further back, and to
+    /// <see cref="StatisticsService.IobSeriesTempBasalReadStart"/>, which reaches further back, and to
     /// <see cref="NetInsulinAboveSchedule.MaxInferredGapMs"/> past it, so a gap that straddles its end
     /// is bounded by the record that closes it.
     /// </remarks>
@@ -152,7 +154,8 @@ internal sealed partial class LoopAnalysisService(
         var glucoseTask = glucoseRepository.GetForAnalyticsAsync(fromUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct);
         var bolusTask = bolusRepository.GetAsync(lookbackUtc, toUtc, null, null, int.MaxValue, descending: false, ct: ct);
         var tempBasalTask = tempBasalRepository.GetAsync(
-            StatisticsService.TempBasalReadStart(fromUtc), ToUtc(to + NetInsulinAboveSchedule.MaxInferredGapMs), null, null, int.MaxValue, descending: false, ct: ct);
+            StatisticsService.IobSeriesTempBasalReadStart(ToUtc(TickStart(from))),
+            ToUtc(to + NetInsulinAboveSchedule.MaxInferredGapMs), null, null, int.MaxValue, descending: false, ct: ct);
         var spanTask = stateSpanRepository.GetByCategories(MaskCategories, fromUtc, toUtc, ct);
         var deviceTask = patientDeviceRepository.GetByDateRangeAsync(fromUtc, toUtc, ct);
         await Task.WhenAll(glucoseTask, bolusTask, tempBasalTask, spanTask, deviceTask);
@@ -189,7 +192,7 @@ internal sealed partial class LoopAnalysisService(
         var from = window.From;
         var to = window.To;
         var hasTherapy = await therapySettingsResolver.HasDataAsync(ct);
-        var tickStart = from - from % TickMs;
+        var tickStart = TickStart(from);
         var timeline = await therapyTimelineResolver.BuildAsync(tickStart - DailyProfileCalculator.ActingMs, to + 1, ct: ct);
 
         var scheduled = hasTherapy

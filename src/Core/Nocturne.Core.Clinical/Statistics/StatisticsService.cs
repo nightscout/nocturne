@@ -2256,6 +2256,18 @@ public partial class StatisticsService : IStatisticsService
             : windowStart - MaxOpenTempDuration;
 
     /// <summary>
+    /// Where to start reading temp basals for an IOB series over a window starting at
+    /// <paramref name="windowStart"/>: <see cref="TempBasalReadStart"/> of the point
+    /// <see cref="DailyProfileCalculator.ActingMs"/> before it, where boluses are read from. A temp
+    /// that began before that and is still running counts in the series. A reader that only totals
+    /// delivery over the window uses <see cref="TempBasalReadStart"/> alone.
+    /// </summary>
+    public static DateTime IobSeriesTempBasalReadStart(DateTime windowStart) =>
+        windowStart <= DateTime.MinValue + TimeSpan.FromMilliseconds(DailyProfileCalculator.ActingMs)
+            ? DateTime.MinValue
+            : TempBasalReadStart(windowStart.AddMilliseconds(-DailyProfileCalculator.ActingMs));
+
+    /// <summary>
     /// Temp basals as delivered: each piece of a record during which it set the pump's rate, as a
     /// copy with the piece's start and end, in start order. Every reader of basal delivery reads
     /// temp basals through this.

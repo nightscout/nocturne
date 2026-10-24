@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -33,11 +34,13 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// <see cref="ChartDataContext.DisplayCarbIntakes"/> are derived subsets trimmed to the display window.
 /// </para>
 /// <para>
-/// TempBasal records are fetched from <see cref="ChartDataContext.BufferStartTime"/> like boluses so
-/// basal IOB sees temp basals that began before the window, under the same cap as
-/// <see cref="Nocturne.API.Services.Analytics.ChartDataService"/> because the ascending read truncates the newest
-/// rows. Consumers sort for themselves. <see cref="ChartDataContext.DisplayTempBasals"/> is the
-/// delivered pieces of the whole fetch that overlap the display window, chosen by
+/// TempBasal records are fetched from <see cref="StatisticsService.IobSeriesTempBasalReadStart"/>
+/// of <see cref="ChartDataContext.StartTime"/>, which is earlier than the bolus read, so basal IOB
+/// counts a temp that began before the window and is still running. The read is capped as
+/// <see cref="Nocturne.API.Services.Analytics.ChartDataService"/> caps it, because an ascending
+/// read truncates the newest rows. Consumers sort for themselves.
+/// <see cref="ChartDataContext.DisplayTempBasals"/> is the delivered pieces of the whole fetch that
+/// overlap the display window, chosen by
 /// <see cref="Nocturne.API.Services.Analytics.ChartDataService.SelectDisplayTempBasals"/>.
 /// </para>
 /// <para>
@@ -171,7 +174,7 @@ internal sealed class DataFetchStage(
         );
 
         var tempBasalTask = tempBasalRepository.GetAsync(
-            from: MillsToDateTime(bufferStartTime),
+            from: StatisticsService.IobSeriesTempBasalReadStart(MillsToDateTime(startTime)!.Value),
             to: MillsToDateTime(endTime),
             device: null,
             source: null,

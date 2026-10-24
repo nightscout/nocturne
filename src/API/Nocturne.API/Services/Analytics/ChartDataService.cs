@@ -134,7 +134,7 @@ public class ChartDataService : IChartDataService
     )
     {
         var tempBasals = (await _tempBasalRepository.GetAsync(
-            from: DateTimeOffset.FromUnixTimeMilliseconds(startTime - DailyProfileCalculator.ActingMs).UtcDateTime,
+            from: StatisticsService.TempBasalReadStart(DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime),
             to: DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime,
             device: null,
             source: null,

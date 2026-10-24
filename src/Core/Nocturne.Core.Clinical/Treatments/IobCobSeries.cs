@@ -30,7 +30,7 @@ public readonly record struct IobCobTick(
 /// indices that advance with each tick: only boluses and temp basals within DIA hours of the tick
 /// contribute to IOB, and only carb intakes within 6 hours to COB, so the inner-loop work is
 /// O(ticks + active window) rather than O(ticks × treatments). DIA is read from the timeline at
-/// <c>endTime</c>. Temp basals count as delivered
+/// <c>endTime</c> and limited by <see cref="IobCalculator.IobDia"/>. Temp basals count as delivered
 /// (<see cref="StatisticsService.ClipOverlappingTempBasals"/>), one still running up to now or the
 /// window's end, whichever comes first,
 /// and each tick takes their net basal IOB up to the tick on the model
@@ -62,7 +62,7 @@ public static class IobCobSeries
     {
         var ticks = new List<IobCobTick>();
 
-        var diaMs = (long)(timeline.SnapshotAt(endTime).Dia * 60 * 60 * 1000);
+        var diaMs = (long)(IobCalculator.IobDia(timeline.SnapshotAt(endTime).Dia) * 60 * 60 * 1000);
 
         var sortedBoluses = boluses
             .Where(b => b.Insulin > 0)
