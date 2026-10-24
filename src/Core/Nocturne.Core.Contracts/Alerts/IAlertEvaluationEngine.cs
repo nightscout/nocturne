@@ -89,6 +89,7 @@ public interface IAlertEvaluationEngine
     /// like rule-body timers, and their deltas are written under the rule's lease and transition
     /// lock, as a rule evaluation's are. They are dropped when the rule no longer stores
     /// <paramref name="conditions"/>: an edit since they were read prunes timers to its new trees.
+    /// The result is then false, as a decision made against a replaced tree is not acted on.
     /// </summary>
     /// <param name="ruleId">The rule whose timer rows the conditions' sustained nodes are keyed under.</param>
     /// <param name="conditions">The stored <c>conditions</c> list, as read.</param>

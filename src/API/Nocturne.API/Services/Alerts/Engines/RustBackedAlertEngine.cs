@@ -118,7 +118,7 @@ internal sealed class RustBackedAlertEngine(
 
         if (response.TimerOps is { Count: > 0 } ops)
         {
-            await trackerRepository.ExecuteInTransactionAsync(
+            var current = await trackerRepository.ExecuteInTransactionAsync(
                 async (tx, token) =>
                 {
                     await tx.LockRuleAsync(ruleId, token);
@@ -136,6 +136,8 @@ internal sealed class RustBackedAlertEngine(
                     return true;
                 },
                 ct: ct);
+            if (!current)
+                return false;
         }
 
         return response.Value!.Value;

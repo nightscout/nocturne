@@ -109,9 +109,10 @@ public class TimerContinuityTests
         var rust = EngineTestHarness.BuildRustEngine(time, trackerRepo);
 
         time.SetUtcNow(T0);
-        await rust.EvaluateSnoozeConditionsAsync(
+        var held = await rust.EvaluateSnoozeConditionsAsync(
             RuleId, JsonDocument.Parse(SnoozeConditions).RootElement, LowGlucoseContext(T0), CancellationToken.None);
 
+        held.Should().BeFalse();
         (await trackerRepo.Timers.GetAllForRuleAsync(RuleId, CancellationToken.None)).Should().BeEmpty();
     }
 }
