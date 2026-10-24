@@ -47,7 +47,7 @@ describe("conditionIssuesMessage", () => {
 		for (const [reason, field] of [
 			["unknown_field", undefined],
 			["field_missing", "value"],
-			["unknown_value", "mode"],
+			["unknown_value", "bucket"],
 			["invalid_time", "from"],
 			["empty_window", undefined],
 			["list_empty", "days"],

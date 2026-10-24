@@ -63,7 +63,10 @@ The `rule`, `context` and `result` shapes are exactly the golden-corpus
 interchange shapes (`ScenarioRule`, `ScenarioContext`, `ExpectedRuleResult` in
 `tests/Parity/Nocturne.Alerts.Corpus/ScenarioModels.cs`)
 — the corpus in `tests/Parity/AlertEngineCorpus/` is the machine-checkable
-spec for all of them. Timestamps are RFC 3339 UTC; the engine emits
+spec for all of them. An enum value in the context (a state span's
+`category`, `trend_bucket`, `glucose_bucket`, the active pump state's `mode`)
+is exactly its wire name, as in condition JSON; any other spelling reads as
+absent. Timestamps are RFC 3339 UTC; the engine emits
 whole-second instants without a fraction (`2026-01-05T12:00:00Z`) and
 preserves sub-second precision when present.
 

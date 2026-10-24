@@ -52,10 +52,13 @@ public class SmartSnoozeConfigTests
         config.ConditionsUnreadable.Should().BeFalse();
     }
 
-    [Fact]
-    public void AnEmptyConditionList_IsNone()
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public void AnEmptyOrNullConditionList_IsNone(string conditions)
     {
-        var config = SmartSnoozeConfig.Parse("""{"snooze":{"smartSnooze":true,"conditions":[]}}""");
+        var config = SmartSnoozeConfig.Parse(
+            $$$"""{"snooze":{"smartSnooze":true,"conditions":{{{conditions}}}}}""");
 
         config.Conditions.Should().BeNull();
         config.ConditionsUnreadable.Should().BeFalse();
@@ -113,7 +116,6 @@ public class SmartSnoozeConfigTests
     [Theory]
     [InlineData("\"oops\"")]
     [InlineData("{}")]
-    [InlineData("null")]
     public void ConditionsThatAreNotAList_NeverFallThroughToTheTrendFallback(string conditions)
     {
         var config = SmartSnoozeConfig.Parse(

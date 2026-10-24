@@ -1379,6 +1379,15 @@ fn raw(json: &str) -> Value {
 }
 
 #[test]
+fn a_repeated_property_binds_its_last_occurrence() {
+    let ctx = glucose_ctx(Some("60"), Some("0"));
+    let last_is_70 = raw(r#"{"direction": "below", "value": 50, "value": 70}"#);
+    let last_is_50 = raw(r#"{"direction": "below", "value": 70, "value": 50}"#);
+    assert!(eval_payload(ConditionKind::Threshold, &last_is_70, &ctx));
+    assert!(!eval_payload(ConditionKind::Threshold, &last_is_50, &ctx));
+}
+
+#[test]
 fn uuid_payload_fields_accept_only_the_hyphenated_form() {
     let parses = |id: &str| {
         parse_payload(

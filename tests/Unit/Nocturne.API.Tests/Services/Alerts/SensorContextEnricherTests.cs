@@ -443,7 +443,7 @@ public class SensorContextEnricherTests
     [Theory]
     [InlineData(null)]
     [InlineData("Active")]
-    [InlineData("night")]
+    [InlineData("Night")]
     public async Task Profile_state_span_leaf_reads_the_active_profile_activation(string? state)
     {
         var enricher = BuildEnricher();

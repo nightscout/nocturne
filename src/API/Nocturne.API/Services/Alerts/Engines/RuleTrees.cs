@@ -16,12 +16,17 @@ internal readonly record struct ConditionLeaf(AlertConditionType? Kind, JsonElem
     public Guid? GuidParam(string name) =>
         StringParam(name) is { } text && Guid.TryParse(text, out var id) ? id : null;
 
-    /// <summary>The operand <paramref name="name"/> as a defined member of <typeparamref name="TEnum"/>.</summary>
-    public TEnum? EnumParam<TEnum>(string name) where TEnum : struct, Enum =>
-        StringParam(name) is { } text && Enum.TryParse<TEnum>(text, ignoreCase: true, out var value)
-                                      && Enum.IsDefined(value)
-            ? value
-            : null;
+    /// <summary>The member of <typeparamref name="TEnum"/> whose name is exactly the operand <paramref name="name"/>.</summary>
+    public TEnum? EnumParam<TEnum>(string name) where TEnum : struct, Enum
+    {
+        var text = StringParam(name);
+        foreach (var value in Enum.GetValues<TEnum>())
+        {
+            if (value.ToString() == text)
+                return value;
+        }
+        return null;
+    }
 
     /// <summary>The operand <paramref name="name"/> when it is a string.</summary>
     public string? StringParam(string name) =>
@@ -38,8 +43,8 @@ internal readonly record struct ConditionLeaf(AlertConditionType? Kind, JsonElem
 /// tree is what evaluation reads.
 /// </summary>
 /// <remarks>
-/// A body that is not JSON goes to the engine as a JSON string, as replay sends it, and reads as
-/// one leaf of the rule's own kind with no operands; live evaluation fails such a rule outright.
+/// A body that is not JSON goes to the engine as a JSON string, as replay sends it. It has no
+/// leaves, like any body the engine cannot read, and live evaluation fails such a rule outright.
 /// An auto-resolve tree that is not JSON, or that the engine cannot evaluate, has no leaves.
 /// <para>
 /// Every evaluation pass reads every rule's leaves, twice (<see cref="RuleReferenceResolver"/> and

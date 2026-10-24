@@ -23,13 +23,13 @@ namespace Nocturne.API.Services.Alerts;
 /// <param name="MaxCount">Cap on the instance's shared snooze count.</param>
 /// <param name="Conditions">
 /// Optional predicate: the stored <c>conditions</c> list, as written, evaluated as
-/// <c>composite{and, conditions}</c> (<see cref="AndBody"/>). Null when absent or empty, and the
-/// sweep then falls back to <see cref="SmartSnoozeTrendGate"/>.
+/// <c>composite{and, conditions}</c> (<see cref="AndBody"/>). Null when absent, <c>null</c> or
+/// empty, and the sweep then falls back to <see cref="SmartSnoozeTrendGate"/>.
 /// </param>
 /// <param name="Malformed">True when some part of the section could not be read.</param>
 /// <param name="ConditionsUnreadable">
-/// <c>conditions</c> is present and not a list. The sweep clears the snooze rather than falling
-/// back to <see cref="SmartSnoozeTrendGate"/>, which would extend on a basis the user never
+/// <c>conditions</c> is neither a list nor <c>null</c>. The sweep clears the snooze rather than
+/// falling back to <see cref="SmartSnoozeTrendGate"/>, which would extend on a basis the user never
 /// configured.
 /// </param>
 internal sealed record SmartSnoozeConfig(
@@ -173,7 +173,8 @@ internal sealed record SmartSnoozeConfig(
 
             JsonElement? conditions = null;
             var conditionsUnreadable = false;
-            if (snooze.TryGetProperty(ConditionsProperty, out var conditionsEl))
+            if (snooze.TryGetProperty(ConditionsProperty, out var conditionsEl)
+                && conditionsEl.ValueKind != JsonValueKind.Null)
             {
                 if (conditionsEl.ValueKind != JsonValueKind.Array)
                 {

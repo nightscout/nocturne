@@ -679,8 +679,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             return null;
 
         var matches = state is null
-            || string.Equals(state, nameof(ProfileState.Active), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(state, resolved.ProfileName, StringComparison.OrdinalIgnoreCase);
+            || string.Equals(state, nameof(ProfileState.Active), StringComparison.Ordinal)
+            || string.Equals(state, resolved.ProfileName, StringComparison.Ordinal);
         return matches ? resolved.Activation.StartTimestamp : null;
     }
 

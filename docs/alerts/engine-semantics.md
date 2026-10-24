@@ -94,10 +94,10 @@ input is null this tick:
 | `state_missing` | an `alert_state` with no `state` |
 
 Together with the reader's own failures (`not_an_object`, `too_deep`, and `invalid_field`:
-a value of the wrong JSON kind, a number out of range, an enum operand read only as a
-member (every one except the composite operator, `direction`, `alert_state` `state` and
-`trend` `bucket`) that names none, or a `timezone` that is not a zone id), these are the
-problems that **fail evaluation**:
+a value of the wrong JSON kind, a number out of range, a `timezone` that is not a zone id,
+or an enum operand that names no member, except the words below that save rejects as
+`unknown_operator`, `unknown_direction`, `unknown_state` or `unknown_value`), these are
+the problems that **fail evaluation**:
 
 - Rule body: the rule is skipped — no root, leaves, tracker transition, auto-resolve or
   timer writes. The driver returns `skipped` and the `evaluate` envelope returns an error,
@@ -111,7 +111,7 @@ rule save rejects those too, together with the shapes above:
 
 | Reason code | Shape |
 |---|---|
-| `unknown_operator` | composite operator other than `and`/`or`; comparison operator other than `<` `<=` `>` `>=` `==`, or missing |
+| `unknown_operator` | composite operator other than `and`/`or`; comparison operator other than `<` `<=` `>` `>=` `==`, or missing (every comparison except `time_since_*`'s, which is `invalid_field`) |
 | `unknown_direction` | `threshold` direction other than `above`/`below`, `rate_of_change` other than `rising`/`falling` |
 | `unknown_state` | `alert_state` state other than `firing`/`unacknowledged`/`acknowledged` |
 | `conditions_empty` | a composite with an empty `conditions` list |
