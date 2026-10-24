@@ -764,7 +764,7 @@ public class StatisticsController : ControllerBase
     /// response to the caller's scopes.
     /// </remarks>
     [HttpGet("periods")]
-    [RequireScope(Scope.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead, Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<MultiPeriodStatistics>> GetMultiPeriodStatistics(
         CancellationToken cancellationToken = default
@@ -936,11 +936,11 @@ public class StatisticsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see cref="PunchCardResponse"/> with months, days, and global maxes for chart scaling.</returns>
     /// <remarks>
-    /// For a caller without <c>treatments.read</c> no insulin or carbs are read, so every carb,
-    /// insulin and ratio figure is zero (<see cref="StatisticsReadScopeGuard"/>).
+    /// For a caller without <c>reports.read</c> or <c>treatments.read</c> no insulin or carbs are read,
+    /// so every carb, insulin and ratio figure is zero (<see cref="StatisticsReadScopeGuard"/>).
     /// </remarks>
     [HttpGet("punch-card")]
-    [RequireScope(Scope.GlucoseRead)]
+    [RequireScope(Scope.GlucoseRead, Scope.ReportsRead)]
     [RemoteQuery]
     public async Task<ActionResult<PunchCardResponse>> GetPunchCardData(
         [FromQuery] DateOnly startDate,
@@ -955,7 +955,7 @@ public class StatisticsController : ControllerBase
         var (startDt, endDt) = StatisticsService.PunchCardRange(startDate, endDate, tz);
 
         var rawGlucoseTask = _sensorGlucoseRepository.GetForAnalyticsAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken);
-        var treatmentsAllowed = StatisticsReadScopeGuard.AllowsTreatments(HttpContext.GetGrantedScopes());
+        var treatmentsAllowed = StatisticsReadScopeGuard.AllowsTreatmentAggregates(HttpContext.GetGrantedScopes());
         var carbTask = treatmentsAllowed
             ? _carbIntakeRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)
             : Task.FromResult(Enumerable.Empty<CarbIntake>());

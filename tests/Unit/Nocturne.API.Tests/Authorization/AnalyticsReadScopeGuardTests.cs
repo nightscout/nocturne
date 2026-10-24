@@ -933,6 +933,40 @@ public partial class AnalyticsReadScopeGuardTests
         result.LastDay.TreatmentCount.Should().Be(2);
     }
 
+    [Fact]
+    public void MultiPeriod_ReportsReadGrant_KeepsTreatmentAggregates()
+    {
+        var cached = AllPeriodsWithTreatments();
+
+        var result = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.ReportsRead));
+
+        Periods(result).Should().OnlyContain(p =>
+            p.TreatmentSummary != null && p.InsulinDelivery != null && p.TreatmentCount == 2);
+    }
+
+    [Theory]
+    [InlineData(Scope.GlucoseRead, false)]
+    [InlineData(Scope.ReportsRead, true)]
+    [InlineData(Scope.TreatmentsRead, true)]
+    [InlineData(Scope.TreatmentsReadWrite, true)]
+    public void AllowsTreatmentAggregates_NeedsReportsOrTreatmentsRead(string scope, bool expected)
+    {
+        StatisticsReadScopeGuard.AllowsTreatmentAggregates(Granted(scope)).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Statistics_PeriodsAndPunchCardAdmitGlucoseOrReportsRead()
+    {
+        StatisticsReadScopeGuard.AdmissionScopes.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.ReportsRead]);
+
+        foreach (var action in new[] { nameof(StatisticsController.GetMultiPeriodStatistics), nameof(StatisticsController.GetPunchCardData) })
+        {
+            var gate = GateOn<StatisticsController>(action)!;
+            gate.RequiredScopes.Should().BeEquivalentTo(StatisticsReadScopeGuard.AdmissionScopes);
+            gate.RequiresAll.Should().BeFalse("holding either scope must admit the caller");
+        }
+    }
+
     private static PeriodStatistics[] Periods(MultiPeriodStatistics data) =>
         [data.LastDay, data.Last3Days, data.LastWeek, data.LastMonth, data.Last90Days];
 

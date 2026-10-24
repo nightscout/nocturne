@@ -1998,6 +1998,27 @@ public partial class StatisticsControllerTests
         summary.AvgDailyCarbs.Should().BeApproximately(DailyCarbs, 1e-9);
     }
 
+    [Theory]
+    [InlineData(new[] { Scope.GlucoseRead }, false)]
+    [InlineData(new[] { Scope.ReportsRead }, true)]
+    [InlineData(new[] { Scope.GlucoseRead, Scope.TreatmentsRead }, true)]
+    public async Task GetPunchCardData_ServesInsulinAndCarbAggregatesOnlyToReportsOrTreatmentsRead(string[] granted, bool served)
+    {
+        SetupDailyTreatmentsForJune(1, 30, JuneReadings(1, 30));
+        var controller = CreateController(statisticsService: new StatisticsService());
+        controller.HttpContext.Items[AuthContextKeys.GrantedScopes] =
+            (IReadOnlySet<string>)new HashSet<string>(granted);
+
+        var result = await controller.GetPunchCardData(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+
+        var summary = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<PunchCardResponse>().Subject
+            .Months.Should().ContainSingle().Subject
+            .Summary!;
+        (summary.Tdd ?? 0).Should().BeApproximately(served ? DailyBolus + DailyBasalInjection : 0, 1e-9);
+        (summary.AvgDailyCarbs ?? 0).Should().BeApproximately(served ? DailyCarbs : 0, 1e-9);
+    }
+
     [Fact]
     public async Task GetPunchCardData_DividesTddAndCarbsByTheRangeDaysWhenTheMonthIsPartial()
     {
