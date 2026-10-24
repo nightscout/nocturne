@@ -6,13 +6,15 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Extensions;
+using Nocturne.Widget.Contracts;
 
 namespace Nocturne.Desktop.Tray.Services;
 
 /// <summary>
 /// SDK + SignalR client for the Nocturne API.
 /// Authenticates via Bearer tokens managed by OidcAuthService.
-/// Real-time data flows through the SignalR DataHub with HTTP polling as fallback.
+/// Real-time data flows through the SignalR DataHub with HTTP polling as fallback; alarms arrive
+/// on the AlarmHub.
 /// </summary>
 public sealed class NocturneClient : IAsyncDisposable
 {
@@ -20,6 +22,7 @@ public sealed class NocturneClient : IAsyncDisposable
     private readonly OidcAuthService _authService;
     private readonly ILogger _logger;
     private HubConnection? _hubConnection;
+    private HubConnection? _alarmHubConnection;
     private CancellationTokenSource? _pollCts;
     private bool _isConnected;
 
@@ -59,6 +62,12 @@ public sealed class NocturneClient : IAsyncDisposable
         {
             await _hubConnection.DisposeAsync();
             _hubConnection = null;
+        }
+
+        if (_alarmHubConnection is not null)
+        {
+            await _alarmHubConnection.DisposeAsync();
+            _alarmHubConnection = null;
         }
 
         SetConnected(false);
@@ -132,12 +141,6 @@ public sealed class NocturneClient : IAsyncDisposable
         _hubConnection.Closed += _ => { SetConnected(false); return Task.CompletedTask; };
 
         _hubConnection.On<JsonElement>("dataUpdate", HandleDataUpdate);
-        _hubConnection.On<JsonElement>("alarm", data =>
-            OnAlarm?.Invoke(new AlarmEventArgs(AlarmLevel.Alarm, data)));
-        _hubConnection.On<JsonElement>("urgent_alarm", data =>
-            OnAlarm?.Invoke(new AlarmEventArgs(AlarmLevel.Urgent, data)));
-        _hubConnection.On<JsonElement>("clear_alarm", data =>
-            OnAlarm?.Invoke(new AlarmEventArgs(AlarmLevel.Clear, data)));
         _hubConnection.On<JsonElement>("create", HandleStorageCreate);
 
         try
@@ -151,6 +154,51 @@ public sealed class NocturneClient : IAsyncDisposable
         {
             _logger.LogWarning(ex, "Failed to connect to SignalR hub at {ServerUrl}", serverUrl);
             SetConnected(false);
+        }
+
+        await ConnectAlarmHubAsync(serverUrl, cancellationToken);
+    }
+
+    private async Task ConnectAlarmHubAsync(string serverUrl, CancellationToken cancellationToken)
+    {
+        _alarmHubConnection = new HubConnectionBuilder()
+            .WithUrl($"{serverUrl}/hubs/alarms", options =>
+            {
+                options.AccessTokenProvider = () => _authService.GetAccessTokenAsync();
+            })
+            .WithAutomaticReconnect(new RetryPolicy())
+            .Build();
+
+        _alarmHubConnection.Reconnected += _ => SubscribeAlarmsAsync();
+        foreach (var (eventName, kind) in AlarmHubEvents.Kinds)
+        {
+            var level = kind.Cleared ? AlarmLevel.Clear : kind.Urgent ? AlarmLevel.Urgent : AlarmLevel.Alarm;
+            _alarmHubConnection.On<JsonElement>(eventName, data => OnAlarm?.Invoke(new AlarmEventArgs(level, data)));
+        }
+
+        try
+        {
+            await _alarmHubConnection.StartAsync(cancellationToken);
+            await SubscribeAlarmsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to connect to the alarm hub at {ServerUrl}", serverUrl);
+        }
+    }
+
+    /// <summary>Joins the tenant's alarm-subscribers group, which authenticates in-band.</summary>
+    private async Task SubscribeAlarmsAsync()
+    {
+        if (_alarmHubConnection?.State != HubConnectionState.Connected) return;
+
+        var token = await _authService.GetAccessTokenAsync();
+        if (string.IsNullOrEmpty(token)) return;
+
+        var subscribed = await _alarmHubConnection.InvokeAsync<JsonElement>("Subscribe", new { jwtToken = token });
+        if (!subscribed.TryGetProperty("success", out var success) || success.ValueKind != JsonValueKind.True)
+        {
+            _logger.LogWarning("Alarm hub rejected the subscription; alarms will not be raised");
         }
     }
 
@@ -192,6 +240,8 @@ public sealed class NocturneClient : IAsyncDisposable
             {
                 await AuthorizeHubAsync();
             }
+
+            await SubscribeAlarmsAsync();
         }
         catch (Exception ex)
         {
