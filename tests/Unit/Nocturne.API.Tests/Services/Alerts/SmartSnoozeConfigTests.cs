@@ -95,8 +95,7 @@ public class SmartSnoozeConfigTests
             {"snooze":{"smartSnooze":true,"conditions":[{"type":"threshold","threshold":"oops"}]}}
             """);
 
-        config.Conditions.Should().NotBeNullOrEmpty(
-            "an empty list would route the instance to the trend fallback the user did not configure");
+        config.ConditionsUnreadable.Should().BeTrue();
         config.Malformed.Should().BeTrue();
     }
 }

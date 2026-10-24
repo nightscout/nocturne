@@ -69,8 +69,8 @@ pub fn reads(kind: ConditionKind) -> &'static [ContextFact] {
 
 /// A stored rule's condition trees, as [`WireRule`] carries them.
 ///
-/// The root kind is `condition_type`, a kind's wire name ignoring ASCII case;
-/// anything else gives the rule no kinds. The root kind counts whatever the
+/// The root kind is `condition_type`, exactly a kind's wire name; anything
+/// else gives the rule no kinds. The root kind counts whatever the
 /// body. The body's kinds count only when it can be evaluated, nested kinds
 /// resolving as node dispatch resolves them (engine-semantics.md §1.2). The
 /// auto-resolve tree's kinds count whenever `auto_resolve_enabled` and the

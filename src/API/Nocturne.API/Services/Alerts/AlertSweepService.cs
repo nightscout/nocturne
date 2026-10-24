@@ -268,6 +268,11 @@ public class AlertSweepService : BackgroundService
                 extend = false;
                 reason = "max-count";
             }
+            else if (cfg.ConditionsUnreadable)
+            {
+                extend = false;
+                reason = "conditions-unreadable";
+            }
             else if (cfg.Conditions is { Count: > 0 } conditions)
             {
                 extend = enrichedContext is not null

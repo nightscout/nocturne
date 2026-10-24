@@ -28,12 +28,18 @@ namespace Nocturne.API.Services.Alerts;
 /// sweep falls back to <see cref="SmartSnoozeTrendGate"/>.
 /// </param>
 /// <param name="Malformed">True when some part of the section could not be read.</param>
+/// <param name="ConditionsUnreadable">
+/// <c>conditions</c> is a list that could not be read. The sweep clears the snooze rather than
+/// falling back to <see cref="SmartSnoozeTrendGate"/>, which would extend on a basis the user never
+/// configured.
+/// </param>
 internal sealed record SmartSnoozeConfig(
     bool SmartSnooze,
     int ExtendMinutes,
     int MaxCount,
     IReadOnlyList<ConditionNode>? Conditions,
-    bool Malformed = false)
+    bool Malformed = false,
+    bool ConditionsUnreadable = false)
 {
     /// <summary>Mirrored by <c>defaultClientConfig()</c> in the web app's <c>alerts/types.ts</c>.</summary>
     public const int DefaultMaxCount = 3;
@@ -151,6 +157,7 @@ internal sealed record SmartSnoozeConfig(
             var maxCount = ReadNonNegativeInt(snooze, "maxCount", DefaultMaxCount, ref malformed);
 
             IReadOnlyList<ConditionNode>? conditions = null;
+            var conditionsUnreadable = false;
             if (ConditionList(snooze) is { } conditionsEl)
             {
                 try
@@ -160,15 +167,13 @@ internal sealed record SmartSnoozeConfig(
                 }
                 catch (JsonException)
                 {
-                    // An unreadable predicate must not fall through to the trend fallback, which
-                    // would extend on a basis the user never configured. A lone unknown-kind node
-                    // evaluates false, so the snooze clears.
-                    conditions = [new ConditionNode("unparseable")];
+                    conditionsUnreadable = true;
                     malformed = true;
                 }
             }
 
-            return new SmartSnoozeConfig(smartSnooze, extendMinutes, maxCount, conditions, malformed);
+            return new SmartSnoozeConfig(
+                smartSnooze, extendMinutes, maxCount, conditions, malformed, conditionsUnreadable);
         }
     }
 

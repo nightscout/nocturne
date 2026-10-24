@@ -165,14 +165,14 @@ byte-for-byte:
 
 - Root segment: the root node's kind, **no index**.
   - In the live orchestrator the root path is the **canonical wire string** of the
-    rule's `ConditionType` (`AlertConditionTypeNames.ToWireString`), regardless of how
-    the stored JSON spells it.
+    rule's `ConditionType` (`AlertConditionTypeNames.ToWireString`).
   - Auxiliary evaluation scopes use reserved roots instead: **`auto_resolve`** (both the
     per-reading and sweep auto-resolve paths) and **`snooze`** (smart-snooze condition
     evaluation). Same `(rule_id, path)` timer rows are intentionally shared between the
     per-reading and sweep variants of the same scope.
-- Each descendant appends `[{childIndex}].{child.Type}`, the child's wire string (§1.2).
-  `not` and `sustained` children are always index `[0]`.
+- Each descendant appends `[{childIndex}].{child.Type}`, the child's `type` as written,
+  which in an evaluable tree is its wire string (§1.2). `not` and `sustained` children
+  are always index `[0]`.
 - Example: `composite[0].sustained[0].threshold`, `composite[1].not[0].iob`.
 
 ### 2.4 Evaluation order

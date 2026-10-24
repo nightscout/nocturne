@@ -67,7 +67,7 @@ pub fn parse_auto_resolve(params: Option<&Value>) -> Option<Node> {
 #[derive(Debug, Clone, Deserialize)]
 pub struct WireRule {
     pub id: Uuid,
-    /// A kind's wire name, ignoring ASCII case.
+    /// Exactly a kind's wire name.
     pub condition_type: String,
     #[serde(default)]
     pub condition_params: Value,

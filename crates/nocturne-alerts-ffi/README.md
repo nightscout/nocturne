@@ -131,8 +131,8 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
 }
 ```
 
-Failure modes that are **data**, not errors: unknown leaf types,
-unrecognised operators or directions, a `not` or `sustained` with no child, a
+Failure modes that are **data**, not errors: unrecognised operators or
+directions, a `not` or `sustained` with no child, a
 composite with an empty `conditions` list, a JSON `null` rule body — these
 evaluate `false` inside `result` (and `not` inverts them). Envelope-level
 errors (`ok: false`) are reserved for unusable requests: malformed JSON, wrong
@@ -209,8 +209,7 @@ auto-resolve (`root: "auto_resolve"`).
 }
 ```
 
-Unknown node kinds and missing leaf payloads evaluate `false`. A `node` that
-is malformed, or that cannot be evaluated (`docs/alerts/engine-semantics.md`
+A missing leaf payload evaluates its defaults. A `node` that is malformed, or that cannot be evaluated (`docs/alerts/engine-semantics.md`
 §1.4, with paths under `root`), is an envelope error (`ok: false`), which a
 host treats as `false`. Timers are keyed by
 the same `(rule_id, path)` identity as `evaluate`; sharing rows between the
@@ -318,8 +317,7 @@ Response:
 
 A rule's kinds are read as evaluation reads them:
 
-- `condition_type` is a kind's wire name, ignoring ASCII case. Anything else (a
-  member name such as `SignalLoss`, an ordinal, an unknown kind) gives the rule
+- `condition_type` is exactly a kind's wire name. Anything else gives the rule
   no kinds, so the answer is `false`, not an error.
 - The root kind counts whatever its body, so a wall-clock root is swept and
   its `evaluate` rejects the body as it would per reading.
@@ -449,8 +447,8 @@ Response — a recursive `tree`:
 
 The save-time check of a rule's condition trees: everything
 `docs/alerts/engine-semantics.md` §1.4 rejects, both the shapes that cannot be
-evaluated and the ones that evaluate but can never mean what was written
-(unknown kinds, unrecognised operators, empty groups, …). Hosts call it before
+evaluated (unknown kinds among them) and the ones that evaluate but can never
+mean what was written (unrecognised operators, empty groups, …). Hosts call it before
 storing a rule and refuse the save when `valid` is false; the backend does so in
 `AlertRulesController` (a 400).
 
