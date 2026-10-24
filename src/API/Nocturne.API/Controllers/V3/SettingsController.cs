@@ -277,7 +277,7 @@ public class SettingsController : BaseV3Controller<Settings>
             );
         }
 
-        if (SettingsKeys.IsUiSettings(id))
+        if (SettingsKeys.IsReserved(id))
         {
             return CreateV3ErrorResponse(400, "Invalid request data", $"Settings key '{id}' is reserved.");
         }

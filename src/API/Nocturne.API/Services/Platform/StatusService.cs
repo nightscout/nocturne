@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
@@ -686,7 +687,7 @@ public class StatusService : IStatusService
             .Select(f => (DateTime?)f.SysUpdatedAt)
             .FirstOrDefaultAsync());
 
-        var settingsTask = ReadableLastModifiedAsync("settings", ctx => ctx.Settings.AsNoTracking()
+        var settingsTask = ReadableLastModifiedAsync("settings", ctx => ctx.Settings.V3Documents().AsNoTracking()
             .OrderByDescending(s => s.SrvModified ?? s.SysUpdatedAt)
             .Select(s =>
                 (DateTime?)(s.SrvModified.HasValue ? s.SrvModified.Value.UtcDateTime : s.SysUpdatedAt))

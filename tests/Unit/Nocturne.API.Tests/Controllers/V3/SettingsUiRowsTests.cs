@@ -16,14 +16,16 @@ using Xunit;
 namespace Nocturne.API.Tests.Controllers.V3;
 
 /// <summary>
-/// The UI-settings rows share the settings table with the v3 settings collection but are not in
-/// it: their sections have their own read and write scopes, which the v3 collection's
-/// <c>therapy.read</c> / <c>therapy.readwrite</c> must not bypass.
+/// The rows Nocturne owns (UI settings, connector settings) share the settings table with the v3
+/// settings collection but are not in it: they have their own read and write scopes, which the v3
+/// collection's <c>therapy.read</c> / <c>therapy.readwrite</c> must not bypass.
 /// </summary>
 [Trait("Category", "Unit")]
 public class SettingsUiRowsTests : IDisposable
 {
     private const string AlarmsKey = "ui:settings:notifications:alarms";
+    private const string ConnectorKey = "connectors:myfitnesspal:matching-settings";
+    private static readonly Guid AlarmsId = Guid.CreateVersion7();
 
     private readonly NocturneDbContext _context;
     private readonly SettingsRepository _repository;
@@ -35,11 +37,12 @@ public class SettingsUiRowsTests : IDisposable
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
         _context.Settings.Add(new SettingsEntity
         {
-            Id = Guid.CreateVersion7(),
+            Id = AlarmsId,
             Key = AlarmsKey,
             Value = """{"emergencyContacts":[{"phone":"+1 555 0100"}],"channels":{"pushover":{"apiToken":"a-secret"}}}""",
         });
         _context.Settings.Add(new SettingsEntity { Id = Guid.CreateVersion7(), Key = "ui:settings:complete", Value = "{}" });
+        _context.Settings.Add(new SettingsEntity { Id = Guid.CreateVersion7(), Key = ConnectorKey, Value = "{}" });
         _context.Settings.Add(new SettingsEntity { Id = Guid.CreateVersion7(), Key = "aaps", Value = "{}" });
         _context.SaveChanges();
         _repository = new SettingsRepository(_context.AsFactory());
@@ -66,6 +69,8 @@ public class SettingsUiRowsTests : IDisposable
         (await _repository.GetSettingsWithAdvancedFilterAsync(findQuery: "secret")).Should().BeEmpty();
         (await _repository.CountSettingsAsync()).Should().Be(1);
         (await _repository.GetSettingsByIdAsync(AlarmsKey)).Should().BeNull();
+        (await _repository.GetSettingsByIdAsync(AlarmsId.ToString())).Should().BeNull();
+        (await _repository.GetSettingsByIdAsync(ConnectorKey)).Should().BeNull();
         (await _repository.GetSettingsByKeyAsync(AlarmsKey)).Should().BeNull();
 
         var byId = await _controller.GetSettingsById(AlarmsKey);
@@ -76,7 +81,7 @@ public class SettingsUiRowsTests : IDisposable
     public async Task No_write_through_the_collection_reaches_a_ui_settings_row()
     {
         (await _repository.DeleteSettingsAsync(AlarmsKey)).Should().BeFalse();
-        (await _repository.UpdateSettingsAsync(AlarmsKey, new Settings { Key = AlarmsKey })).Should().BeNull();
+        (await _repository.UpdateSettingsAsync(AlarmsKey, new Settings { Key = "aaps" })).Should().BeNull();
         await FluentActions.Awaiting(() => _repository.CreateSettingsAsync([new Settings { Key = AlarmsKey }]))
             .Should().ThrowAsync<ArgumentException>();
         await FluentActions.Awaiting(() => _repository.PutSettingsAsync(AlarmsKey, new Settings()))
@@ -84,6 +89,12 @@ public class SettingsUiRowsTests : IDisposable
 
         var put = await _controller.UpdateSettings(AlarmsKey, JsonDocument.Parse("{}").RootElement.Clone());
         put.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
+        await FluentActions.Awaiting(() => _repository.UpdateSettingsAsync("aaps", new Settings { Key = ConnectorKey }))
+            .Should().ThrowAsync<ArgumentException>();
+
+        var post = await _controller.CreateSettings(
+            JsonDocument.Parse($$"""{"key":"aaps2","_id":"{{AlarmsId}}"}""").RootElement.Clone());
+        post.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
 
         _context.ChangeTracker.Clear();
         _context.Settings.Single(s => s.Key == AlarmsKey).Value.Should().Contain("a-secret");
