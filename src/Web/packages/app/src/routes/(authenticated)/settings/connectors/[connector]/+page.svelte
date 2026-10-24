@@ -65,7 +65,7 @@
                 <div class="flex-1 pt-1">
                   <p class="font-medium">Install HACS</p>
                   <p class="text-sm text-muted-foreground mt-1">
-                    If you haven't already, install the Home Assistant Community Store (HACS) by following the instructions at hacs.xyz.
+                    If you do not have the Home Assistant Community Store (HACS), install it with the instructions at hacs.xyz.
                   </p>
                 </div>
               </li>

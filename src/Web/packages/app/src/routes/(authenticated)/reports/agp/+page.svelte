@@ -63,7 +63,7 @@
     <div class="flex items-center justify-between flex-wrap gap-4">
       <div class="print:hidden">
         <p class="text-muted-foreground">
-          Your typical daily glucose pattern — a standardized clinical report
+          Your typical daily glucose pattern: a standardized clinical report
         </p>
       </div>
       <div class="flex items-center gap-2 print:hidden">
@@ -112,7 +112,7 @@
         <div class="mt-2 space-y-2 pl-4 border-l border-info/30">
           <p>
             <strong>The dark line</strong>
-            is your median (middle) glucose at each hour — what happens most often.
+            is your median (middle) glucose at each hour. It shows what happens most often.
           </p>
           <p>
             <strong>The darker shaded area</strong>

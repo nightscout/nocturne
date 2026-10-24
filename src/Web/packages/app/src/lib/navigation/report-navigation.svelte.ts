@@ -316,7 +316,7 @@ export function reportCategories(): ReportCategory[] {
         {
           title: "Insulin Dosing Profile",
           sidebarTitle: "IDP",
-          description: "Standardised insulin and glucose summary",
+          description: "Standardized insulin and glucose summary",
           href: "/reports/idp",
           keywords: ["insulin dosing profile", "daily insulin", "dose adjustment"],
           scopes: [READ.treatments, READ.reports],

@@ -238,7 +238,7 @@
       This forces a full re-pull of history for every configured connector on
       the selected tenant. Re-ingested records dedupe on their idempotency keys,
       so it is safe to re-run. A large re-pull can take several minutes, so it
-      runs as a background job &mdash; progress appears below and you can leave
+      runs as a background job. Progress appears below, and you can leave
       this page while it finishes.
     </Alert.Description>
   </Alert.Root>
@@ -365,7 +365,7 @@
               {#if jobStatus.errorMessage}
                 <span class="text-destructive">
                   {jobStatus.errorMessage === "connector_reset_failed"
-                    ? "One or more connectors failed; review the connector details and retry the failed range."
+                    ? "One or more connectors failed. Review the connector details and retry the failed range."
                     : jobStatus.errorMessage}
                 </span>
               {/if}
@@ -450,7 +450,7 @@
       from {fromDate}
     {:else}
       from the beginning
-    {/if}. This starts a background job &mdash; you can watch per-connector
+    {/if}. This starts a background job. You can watch per-connector
     progress here or leave the page while it runs.
   {/snippet}
 </ConfirmDialog>

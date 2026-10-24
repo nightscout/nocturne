@@ -342,8 +342,8 @@
         <Card.Description>
           {a1cLabel(true)} estimates what a lab {a1cLabel()} test would read on a
           given day. For each day, it takes the average glucose from every reading
-          in the trailing 90 days and weights each day's contribution by recency —
-          the most recent ~30 days count for roughly half the estimate, tapering off
+          in the trailing 90 days and weights each day's contribution by recency.
+          The most recent ~30 days count for roughly half the estimate, tapering off
           exponentially for older days, similar to how glycated hemoglobin reflects
           glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted
           average glucose is then converted to NGSP percent with the ADAG formula:
@@ -373,7 +373,7 @@
         </p>
       {:else if chartData.length === 0}
         <div class="flex h-[320px] items-center justify-center text-muted-foreground">
-          Not enough glucose history yet — each point needs at least a month of readings within
+          Not enough glucose history yet. Each point needs at least a month of readings within
           the trailing 90 days.
         </div>
       {:else}
@@ -486,7 +486,7 @@
         {a1cLabel(true)} calculation.
       </p>
       <Card.Description class="print:hidden">
-        Enter a lab {a1cLabel()} result here — shown as a triangle marker on the chart
+        Enter a lab {a1cLabel()} result here. It shows as a triangle marker on the chart
         above, so you can see how closely the {a1cLabel(true)} estimate tracks an
         actual lab draw. Lab results are not included in the {a1cLabel(true)} calculation
         itself. The date below is the date the blood was drawn, not the date you enter

@@ -365,7 +365,7 @@
     <div class="bg-card rounded-lg shadow p-6">
       <h2 class="text-xl font-semibold mb-4">Discrepancies</h2>
       <p class="text-muted-foreground">
-        No discrepancies found. The responses match perfectly!
+        No discrepancies found. The responses match.
       </p>
     </div>
   {/if}

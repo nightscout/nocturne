@@ -128,7 +128,7 @@
       granularSyncResult = await requestSync(
         connectorId,
         supportsHistoricalSync ? selectedRange() : {},
-        "We couldn't start the sync. Please try again."
+        "We could not start the sync. Try again."
       );
       await notifyComplete();
     } finally {
@@ -146,7 +146,7 @@
       foodOnlySyncResult = await requestSync(
         connectorId,
         { ...selectedRange(), dataTypes: [SyncDataType.Food] },
-        "We couldn't download the food data. Please try again."
+        "We could not download the food data. Try again."
       );
       if (foodOnlySyncResult.success) await notifyComplete();
     } finally {

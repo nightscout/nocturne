@@ -285,7 +285,7 @@
             {@const stack = dev && e instanceof Error ? e.stack : undefined}
             <Card.Root class="mx-auto mt-10 max-w-2xl">
               <Card.Header>
-                <Card.Title>Something went wrong</Card.Title>
+                <Card.Title>An error occurred</Card.Title>
               </Card.Header>
               <Card.Content class="space-y-4">
                 <p class="text-destructive">{message}</p>

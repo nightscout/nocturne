@@ -209,6 +209,6 @@
 
   <p class="text-xs text-muted-foreground">
     Each threshold is delivered through a managed alert rule. Use Channels to
-    open that rule; a new threshold gets its rule after the tracker is saved.
+    open that rule. A new threshold gets its rule after you save the tracker.
   </p>
 </div>

@@ -38,7 +38,7 @@
     } catch (err) {
       errorMessage = describeSubmitError(
         err,
-        "Couldn't update membership requests. Please try again."
+        "Could not update membership requests. Try again."
       );
     } finally {
       busy = false;
@@ -60,9 +60,9 @@
       <div class="min-w-0 flex-1">
         <h2 class="text-lg font-semibold">Membership requests</h2>
         <p class="mt-0.5 max-w-prose text-sm text-muted-foreground">
-          Let anyone who reaches your profile ask to become a member — this works
-          whether public access is on or off. Requests never grant access
-          automatically; each one waits in your queue for approval.
+          Let anyone who reaches your profile ask to become a member. This works
+          when public access is on or off. Requests never grant access
+          automatically. Each request waits in your queue for approval.
         </p>
         {#if errorMessage}
           <p class="mt-2 text-sm text-destructive">{errorMessage}</p>

@@ -86,6 +86,6 @@ describe("LockedOutMembers", () => {
     members = [];
     render(LockedOutMembers);
 
-    expect(page.getByText("Members who can't sign in").elements()).toHaveLength(0);
+    expect(page.getByText("Members who cannot sign in").elements()).toHaveLength(0);
   });
 });

@@ -1,0 +1,11 @@
+# Rule 1.14, the -ize family. A curated stem list, not a generic "-ise" pattern,
+# because the generic form mangles advise, exercise, precise, rise, and promise.
+#
+# Add a stem when a new word turns up. Do NOT loosen this into a wildcard.
+extends: existence
+message: "Rule 1.14: '%s' is British. American English uses -ize and -ization."
+link: .claude/skills/simple-english/SKILL.md
+level: error
+ignorecase: true
+tokens:
+  - '\b(?:amorti|apologi|authori|categori|centrali|characteri|customi|decentrali|deseriali|digiti|emphasi|finali|formali|generali|initiali|itemi|locali|materiali|maximi|minimi|moderni|normali|optimi|organi|parameteri|personali|prioriti|reali|recogni|saniti|seriali|speciali|standardi|summari|synchroni|tokeni|utili|visuali)s(?:e|es|ed|ing|ation|ations|er|ers)\b'

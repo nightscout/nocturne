@@ -181,7 +181,7 @@
             {/if}
             {#if !linked && opt?.platform}
               <div class="text-xs text-status-warning mt-0.5">
-                {platformLabel(opt.platform)} not linked — won't deliver until connected.
+                {platformLabel(opt.platform)} not linked. Nothing is delivered until it is connected.
               </div>
             {/if}
           </div>
@@ -238,7 +238,7 @@
               </p>
             {:else}
               <p class="text-xs text-muted-foreground">
-                Shown in this person's Nocturne notification centre.
+                Shown in this person's Nocturne notification center.
               </p>
             {/if}
           </div>
@@ -285,7 +285,7 @@
                   type="password"
                   autocomplete="off"
                   size="sm"
-                  placeholder={ch.hasSecret ? "Saved — type to replace" : "Shared with your receiver"}
+                  placeholder={ch.hasSecret ? "Saved. Type to replace" : "Shared with your receiver"}
                   aria-describedby="channel-secret-helper-{i}"
                   value={ch.secret ?? ""}
                   oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -311,7 +311,7 @@
                 Set this to have Nocturne sign each request with an
                 <code>X-Nocturne-Signature</code> header your receiver can verify. Leave blank if
                 your receiver does not check signatures.{#if ch.hasSecret}
-                  Changing the URL above does not carry the saved secret over — enter it again.
+                  Changing the URL above does not carry the saved secret over. Enter it again.
                 {/if}
               </p>
             </div>
@@ -364,7 +364,7 @@
           disabled={pending || unavailable}
           title={linked
             ? undefined
-            : `${platformLabel(o.platform!)} not linked — connect it in Connectors & Apps to enable delivery.`}
+            : `${platformLabel(o.platform!)} not linked. Connect it in Connectors & Apps to enable delivery.`}
           onSelect={() => addChannel(o)}
         >
           <span

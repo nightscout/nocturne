@@ -56,7 +56,7 @@
     } catch (err) {
       if (read === reads) {
         settings = null;
-        errorMessage = remoteErrorMessage(err, "Couldn't load Do Not Disturb.");
+        errorMessage = remoteErrorMessage(err, "Could not load Do Not Disturb.");
       }
     } finally {
       loading = false;
@@ -84,7 +84,7 @@
     } catch (e) {
       errorMessage = describeSubmitError(
         e,
-        "Couldn't change Do Not Disturb. Please try again.",
+        "Could not change Do Not Disturb. Try again.",
       );
     } finally {
       saving = false;

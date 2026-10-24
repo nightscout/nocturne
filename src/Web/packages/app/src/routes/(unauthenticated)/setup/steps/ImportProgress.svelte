@@ -282,8 +282,8 @@
       across.
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-white/50">
-      We're streaming entries, treatments, and profiles from your Nightscout
-      into Nocturne's store. You can navigate away &mdash; this continues in the
+      We are streaming entries, treatments, and profiles from your Nightscout
+      into Nocturne's store. You can leave this page. The import continues in the
       background.
     </p>
   </div>

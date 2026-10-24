@@ -49,7 +49,7 @@
       [AuthErrorCode.InvalidRequest]:
         "There was a problem with the authentication request. Please try again.",
       [AuthErrorCode.CallbackFailed]:
-        "The authentication process was interrupted. Please try logging in again.",
+        "The authentication process was interrupted. Try signing in again.",
       [AuthErrorCode.ProviderError]:
         "There was an issue with the authentication provider. Please try again later.",
       [AuthErrorCode.OidcDisabled]:
@@ -57,7 +57,7 @@
     };
     return (
       (code && suggestions[code]) ||
-      "Please try logging in again. If the problem persists, contact your administrator."
+      "Try signing in again. If the problem continues, contact your administrator."
     );
   }
 </script>

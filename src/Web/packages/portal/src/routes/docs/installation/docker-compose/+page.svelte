@@ -70,7 +70,7 @@
     <h2 data-install-step="2" class="text-2xl font-bold mt-8 mb-4">Step 2: Configure environment variables</h2>
     <p class="text-muted-foreground mb-4">
         Edit <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code> and fill in your
-        values. The required fields come first and are left blank; optional bot integrations are commented out.
+        values. The required fields come first and are left blank. Optional bot integrations are commented out.
         Use the generator below for each password field and <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">INSTANCE_KEY</code>.
     </p>
     <PasswordGenerator label="password" />
@@ -102,7 +102,7 @@
         </li>
         <li>
             This replaces the default <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code>
-            command in Step 3 below; do not run both commands. Start the stack with both files. Keep both <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code>
+            command in Step 3 below. Do not run both commands. Start the stack with both files. Keep both <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code>
             arguments on every later Compose command, including updates and shutdown:
             <CodeBlock code="docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml up -d" class="mt-3" />
         </li>
@@ -165,8 +165,8 @@
             <p class="text-muted-foreground">
                 Do not use <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">down -v</code>
                 during migration or rollback. It deletes named volumes. If the new database has
-                accepted writes, it is no longer equivalent to the untouched original volume;
-                plan any rollback or restore before reopening the service to users.
+                accepted writes, it is no longer equivalent to the untouched original volume.
+                Plan any rollback or restore before reopening the service to users.
             </p>
         </div>
     </details>
@@ -228,7 +228,7 @@
         restart policy and log rotation below were added, download the new bundle and
         run <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code>
         to pick them up. That first run recreates the containers, which clears their
-        old logs; your database data is kept. If you installed before Caddy was excluded from
+        old logs. Your database data is kept. If you installed before Caddy was excluded from
         Watchtower, set <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">com.centurylinklabs.watchtower.enable</code>
         to <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">"false"</code> on the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">caddy</code> service, or download the new bundle, then run
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code> to recreate it.

@@ -259,7 +259,7 @@
           Temporary Guest Links
         </h2>
         <p class="text-sm text-muted-foreground mt-0.5">
-          Share read-only access with someone who doesn't have an account
+          Share read-only access with someone who does not have an account
         </p>
       </div>
       {#if !showCreateForm}

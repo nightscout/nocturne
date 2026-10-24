@@ -1,0 +1,14 @@
+# Nocturne runs on phones as often as on desktops, so "click" is wrong for half
+# of its readers. "Select" is right for both.
+extends: substitution
+message: "Write '%s' instead of '%s'. It is correct for touch and for a mouse."
+link: .claude/skills/simple-english/SKILL.md
+level: warning
+ignorecase: true
+swap:
+  click: select
+  clicks: selects
+  clicking: selecting
+  clicked: selected
+  tap: select
+  tapping: selecting

@@ -292,7 +292,7 @@
       {#if !status}
         <p>Loading connection status…</p>
       {:else if unavailable && !status.connected}
-        <p>Your Nocturne operator hasn't enabled Google Health on this server.</p>
+        <p>Your Nocturne operator did not enable Google Health on this server.</p>
         <!-- eslint-disable svelte/no-navigation-without-resolve -- an absolute URL to the docs site, not an app route -->
         <a
           class="inline-block text-sm underline"
@@ -352,7 +352,7 @@
           <p class="text-sm text-muted-foreground">
             If a historical import stops or needs to be repeated, reset the Google
             Health connector from a chosen date. The reset runs in the background,
-            re-reads the range and keeps the normal duplicate protection; platform
+            reads the range again and keeps the normal duplicate protection. Platform
             administrators can monitor or cancel it.
           </p>
           <a
@@ -387,8 +387,8 @@
             <div role="status" class="rounded-lg border border-primary p-4">
               <p class="font-medium">Next step: confirm what to import</p>
               <p class="mt-1 text-sm">
-                Google access is authorised, but nothing is imported until you
-                confirm a selection. Review the data types below, tick the ones
+                Google access is authorized, but nothing is imported until you
+                confirm a selection. Review the data types below, select the ones
                 you want, then save.
               </p>
             </div>
@@ -410,8 +410,8 @@
             more history. The field clears once the requested history is
             complete. {lookbackSentence(status.historyDays)} Automatic sync does
             not re-import that period each time, and an empty field does not
-            remove older records. Empty results are not errors. Clear all
-            selections and save to pause imports; previously imported data is
+            remove older records. Empty results are not errors. To pause imports,
+            clear all selections and save. Data that was already imported is
             kept.
           </p>
           {#if inventoryBusy}

@@ -91,14 +91,14 @@
     <h1 class="text-xl font-semibold">Timezone history</h1>
     <p class="text-muted-foreground text-sm">
       Some sources (like Glooko) record times in local clock time. Tell Nocturne where you were over time
-      so those readings land at the right moment. Add an entry when you move or travel; daylight saving is
-      handled automatically.
+      so those readings land at the right moment. Add an entry when you move or travel. Nocturne handles
+      daylight saving automatically.
     </p>
   </div>
 
   <Card.Root>
     <Card.Header>
-      <Card.Title>Where you've been</Card.Title>
+      <Card.Title>Where you were</Card.Title>
     </Card.Header>
     <Card.Content class="space-y-4">
       {#if entries.length === 0}

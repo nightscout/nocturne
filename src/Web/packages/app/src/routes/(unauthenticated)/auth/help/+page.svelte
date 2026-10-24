@@ -13,7 +13,7 @@
 </script>
 
 <svelte:head>
-  <title>Login Help - Nocturne</title>
+  <title>Sign-in Help - Nocturne</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-background p-4">
@@ -25,7 +25,7 @@
         >
           <HelpCircle class="h-6 w-6 text-primary" />
         </div>
-        <Card.Title class="text-2xl font-bold">Login Help</Card.Title>
+        <Card.Title class="text-2xl font-bold">Sign-in Help</Card.Title>
         <Card.Description>
           Learn about the different ways to sign in to Nocturne
         </Card.Description>
@@ -45,15 +45,15 @@
       </Card.Header>
       <Card.Content>
         <p class="text-sm leading-relaxed text-muted-foreground">
-          Passkeys are the primary way to sign in to Nocturne. They use your
-          device's built-in security — like a fingerprint sensor, face
-          recognition, or a hardware security key — so there's no password to
+          Passkeys are the primary way to sign in to Nocturne. They use the
+          built-in security of your device, such as a fingerprint sensor, face
+          recognition, or a hardware security key. There is no password to
           remember.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          On the login page, tap
-          <strong>{signInMethodLabels.passkey}</strong> and follow your device's
-          prompt. If you have multiple accounts, choose
+          On the sign-in page, select
+          <strong>{signInMethodLabels.passkey}</strong> and follow the prompt on
+          your device. If you have multiple accounts, choose
           <strong>{signInMethodLabels.username}</strong> and enter your username
           first.
         </p>
@@ -78,9 +78,9 @@
           that refreshes every 30 seconds, and each code can be used once.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          If you've set one up, the login page asks for the code straight after
-          your passkey. You can set up an authenticator in your account settings
-          after signing in.
+          If you set one up, enter the code from the app on the sign-in page,
+          straight after your passkey. You can set up an authenticator in your
+          account settings after you sign in.
         </p>
       </Card.Content>
     </Card.Root>
@@ -99,17 +99,17 @@
       <Card.Content>
         <p class="text-sm leading-relaxed text-muted-foreground">
           Recovery codes are one-time backup codes you received when you first
-          set up your account. Use them if you can't access your passkey or
+          set up your account. Use them if you cannot access your passkey or
           authenticator app.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          On the login page, choose
-          <strong>{signInMethodLabels.recoveryCode}</strong>, enter your username
-          and one of your remaining codes. Each code can only be used once, so
+          On the sign-in page, choose
+          <strong>{signInMethodLabels.recoveryCode}</strong>, then enter your
+          username and one of your remaining codes. Each code works only once, so
           cross it off your list after use.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          A code doesn't sign you in on its own: it gives you ten minutes to set
+          A code does not sign you in on its own: it gives you ten minutes to set
           up a new passkey, and you sign in with that.
         </p>
       </Card.Content>
@@ -128,14 +128,14 @@
       </Card.Header>
       <Card.Content>
         <p class="text-sm leading-relaxed text-muted-foreground">
-          Your Nocturne instance may allow you to sign in with an external
-          account like Google, GitHub, or Microsoft. If available, you'll see
-          provider buttons on the login page.
+          Your Nocturne instance can allow you to sign in with an external
+          account, such as Google, GitHub, or Microsoft. If it does, you will see
+          provider buttons on the sign-in page.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          External providers are configured by your instance administrator. If
-          you don't see any provider buttons on the login page, this sign-in
-          method isn't enabled for your instance.
+          Your instance administrator configures external providers. If you do
+          not see any provider buttons on the sign-in page, this sign-in method is
+          not enabled for your instance.
         </p>
       </Card.Content>
     </Card.Root>
@@ -143,7 +143,7 @@
     <div class="flex justify-center">
       <Button href="/auth/login" variant="outline">
         <ArrowLeft class="mr-2 h-4 w-4" />
-        Back to login
+        Back to sign-in
       </Button>
     </div>
   </div>

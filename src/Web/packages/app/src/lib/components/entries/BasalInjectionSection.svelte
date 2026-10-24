@@ -100,7 +100,7 @@
       >
         <AlertTriangle class="h-3.5 w-3.5 mt-0.5 shrink-0" />
         <span>
-          This insulin is used for both bolus and basal &mdash; log the basal
+          This insulin is used for both bolus and basal. Log the basal
           portion only.
         </span>
       </div>
@@ -122,7 +122,7 @@
         class="flex items-start gap-1.5 text-xs text-warning"
       >
         <AlertTriangle class="h-3.5 w-3.5 mt-0.5 shrink-0" />
-        <span>Confirm the dose &mdash; this is higher than typical.</span>
+        <span>Confirm the dose. This dose is higher than typical.</span>
       </div>
     {/if}
   </div>

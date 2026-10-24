@@ -29,7 +29,7 @@
              catch the slot renders nothing, forever, with no trace of why. -->
         <WidgetCard title="Widget unavailable">
           <p class="text-muted-foreground text-xs">
-            This widget couldn't be loaded. Reload the page to try again.
+            This widget could not be loaded. Reload the page to try again.
           </p>
         </WidgetCard>
       {/await}

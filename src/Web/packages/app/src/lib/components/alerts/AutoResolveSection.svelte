@@ -76,7 +76,7 @@
     <RuleBuilder bind:node={condition} {availableRules} />
   {:else if enabled}
     <p class="text-sm text-muted-foreground">
-      Add a condition that signals the alert should resolve.
+      Add a condition that signals when the alert resolves.
     </p>
   {/if}
 </div>

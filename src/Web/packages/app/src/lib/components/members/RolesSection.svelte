@@ -311,7 +311,7 @@
       <Dialog.Title>{isEditReadonly ? "View Role" : "Edit Role"}</Dialog.Title>
       <Dialog.Description>
         {isEditReadonly
-          ? "System roles are managed by Nocturne and can't be changed."
+          ? "System roles are managed by Nocturne and cannot be changed."
           : "Update the role name, description, and permissions."}
       </Dialog.Description>
     </Dialog.Header>

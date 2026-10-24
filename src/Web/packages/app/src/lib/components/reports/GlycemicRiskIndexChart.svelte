@@ -380,7 +380,7 @@
           </dd>
         </dl>
         <p class="mt-1 max-w-40 text-2xs leading-tight text-muted-foreground">
-          Risk is indicated in percentiles &mdash; 0 is lowest risk and 100 is
+          Risk is indicated in percentiles: 0 is lowest risk and 100 is
           highest risk
         </p>
       </div>

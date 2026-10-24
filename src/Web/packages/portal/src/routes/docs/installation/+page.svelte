@@ -103,7 +103,7 @@
 
   <h2 class="text-2xl font-bold mt-12 mb-4">Managed Instances</h2>
   <p class="text-muted-foreground mb-4">
-    Don't want to self-host? These Nocturne-as-a-Service providers handle the
+    Prefer not to self-host? These Nocturne-as-a-Service providers handle the
     infrastructure so you can focus on your diabetes management.
   </p>
   <ul class="not-prose m-0 mb-4 p-0 list-none border-t border-border">

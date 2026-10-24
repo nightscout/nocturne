@@ -96,14 +96,14 @@
 	</div>
 {:else if mode === "error"}
 	<div class="flex flex-col items-center justify-center min-h-screen gap-4 p-6 text-center">
-		<h1 class="text-2xl font-bold">Can't Complete This Link</h1>
+		<h1 class="text-2xl font-bold">Cannot Complete This Link</h1>
 		<p class="text-destructive max-w-md">{errorMessage}</p>
 	</div>
 {:else if mode === "slug-prompt"}
 	<div class="flex flex-col items-center justify-center min-h-screen gap-4 p-6">
 		<h1 class="text-2xl font-bold">Which Nocturne Instance?</h1>
 		<p class="text-muted-foreground max-w-md text-center">
-			Enter the slug of the Nocturne instance you'd like to link your chat account to.
+			Enter the slug of the Nocturne instance that you want to link your chat account to.
 		</p>
 		{#if slugError}
 			<p class="text-destructive">{slugError}</p>

@@ -93,7 +93,7 @@
                   class="mt-1 text-sm text-muted-foreground"
                   data-testid="connector-not-synced"
                 >
-                  It hasn't run its first sync yet. This can take a few minutes.
+                  Its first sync is not done yet. This can take a few minutes.
                 </p>
               {/if}
             </div>

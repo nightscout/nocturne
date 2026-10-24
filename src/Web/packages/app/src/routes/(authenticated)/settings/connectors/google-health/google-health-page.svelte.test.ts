@@ -349,7 +349,7 @@ describe("Google Health connector page", () => {
     render(GoogleHealthPage);
     await expect
       .element(
-        page.getByText("Your Nocturne operator hasn't enabled Google Health on this server.")
+        page.getByText("Your Nocturne operator did not enable Google Health on this server.")
       )
       .toBeVisible();
     await expect
@@ -543,7 +543,7 @@ describe("Google Health connector page", () => {
         connectionState: GoogleHealthConnectionState.ReviewRequired,
       });
     const guidance = () =>
-      page.getByText("Google access is authorised, but nothing is imported", {
+      page.getByText("Google access is authorized, but nothing is imported", {
         exact: false,
       });
 

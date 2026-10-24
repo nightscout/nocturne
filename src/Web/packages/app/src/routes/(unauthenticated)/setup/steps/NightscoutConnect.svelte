@@ -18,7 +18,7 @@
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-white/50">
       Enter the URL and API secret for the Nightscout instance you want to copy
-      across. We read only &mdash; your existing site isn't modified.
+      across. Nocturne only reads data. Your existing site is not modified.
     </p>
   </div>
 

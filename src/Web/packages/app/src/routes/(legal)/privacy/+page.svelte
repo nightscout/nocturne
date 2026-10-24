@@ -19,7 +19,7 @@
 </p>
 
 <p>
-  This privacy policy explains what data Nocturne collects (spoiler: very little), how it's stored, and your rights.
+  This privacy policy explains what data Nocturne collects (very little), how it is stored, and your rights.
 </p>
 
 <h2>2. Data We DON'T Collect</h2>
@@ -30,10 +30,10 @@
 
 <ul>
   <li><strong>No analytics:</strong> Nocturne does not send usage analytics or telemetry to us by default.</li>
-  <li><strong>No tracking:</strong> We don't track your usage, browsing, or behavior.</li>
+  <li><strong>No tracking:</strong> We do not track your usage, browsing, or behavior.</li>
   <li><strong>No data collection:</strong> Your glucose readings, treatments, meals, and health data never leave your server unless you choose to share them.</li>
-  <li><strong>No selling data:</strong> We don't sell your data because we don't have access to it in the first place.</li>
-  <li><strong>No cloud storage:</strong> Nocturne doesn't store your data in our cloud or servers. It's all on your infrastructure.</li>
+  <li><strong>No selling data:</strong> We do not sell your data because we do not have access to it.</li>
+  <li><strong>No cloud storage:</strong> Nocturne does not store your data in our cloud or on our servers. All of it stays on your infrastructure.</li>
 </ul>
 
 <h2>3. Data Storage</h2>
@@ -43,7 +43,7 @@
 </p>
 
 <ul>
-  <li>Glucose readings (blood sugar, CGM data)</li>
+  <li>Glucose readings (CGM data)</li>
   <li>Treatments (insulin, medications)</li>
   <li>Meals and nutrition data</li>
   <li>Activity and exercise logs</li>
@@ -69,8 +69,8 @@
 
 <ul>
   <li><strong>Third-party privacy policies apply:</strong> Services like Dexcom, FreeStyle Libre, Glooko, and Tidepool have their own privacy policies. Review them before connecting.</li>
-  <li><strong>We don't control third parties:</strong> We cannot control what data these services collect about you or how they use it.</li>
-  <li><strong>Credentials storage:</strong> Your API keys and login credentials for third-party services are stored <strong>encrypted</strong> in your database. Only your Nocturne instance can decrypt them.</li>
+  <li><strong>We do not control third parties:</strong> We cannot control what data these services collect about you or how they use it.</li>
+  <li><strong>Credentials storage:</strong> Your API keys and sign-in credentials for third-party services are stored <strong>encrypted</strong> in your database. Only your Nocturne instance can decrypt them.</li>
   <li><strong>Data transfer:</strong> When you connect to a third-party service, data flows between that service and your Nocturne instance. We (the Nocturne developers) do not see or have access to this data.</li>
 </ul>
 
@@ -104,8 +104,8 @@
 
 <ul>
   <li>They will be <strong>opt-in only</strong> - disabled by default</li>
-  <li>You'll have clear control to enable or disable them</li>
-  <li>We'll clearly explain what data would be collected</li>
+  <li>You will have clear control to enable or disable them</li>
+  <li>We will clearly explain what data would be collected</li>
   <li>Data will be anonymized and aggregated when possible</li>
   <li>No health data or personally identifiable information will be included</li>
 </ul>
@@ -122,11 +122,11 @@
 
 <ul>
   <li><strong>You own your data:</strong> All data belongs to you. We make no claims to it.</li>
-  <li><strong>Export anytime:</strong> You can export your data at any time. It's just a PostgreSQL database - you have full access.</li>
+  <li><strong>Export anytime:</strong> You can export your data at any time. It is a PostgreSQL database, and you have full access.</li>
   <li><strong>Delete anytime:</strong> You can delete any or all of your data whenever you want.</li>
   <li><strong>Control access:</strong> You decide who can access your Nocturne instance and what they can see.</li>
   <li><strong>Move your data:</strong> You can migrate your database to a different server or hosting provider at any time.</li>
-  <li><strong>Backup your data:</strong> You're responsible for backing up your database. We recommend regular backups.</li>
+  <li><strong>Backup your data:</strong> You are responsible for backing up your database. We recommend regular backups.</li>
 </ul>
 
 <h2>7. Security</h2>
@@ -143,7 +143,7 @@
 </ul>
 
 <p>
-  <strong>Your responsibility:</strong> As a self-hosted application, you're responsible for:
+  <strong>Your responsibility:</strong> As a self-hosted application, you are responsible for:
 </p>
 
 <ul>
@@ -167,7 +167,7 @@
 </ul>
 
 <p>
-  If you're hosting Nocturne for your child, you have full control and responsibility for their data privacy and security.
+  If you are hosting Nocturne for your child, you have full control and responsibility for their data privacy and security.
 </p>
 
 <h2>9. Changes to This Privacy Policy</h2>
@@ -183,7 +183,7 @@
 </ul>
 
 <p>
-  Because Nocturne is self-hosted, privacy policy changes don't affect data you've already collected - it stays under your control regardless.
+  Because Nocturne is self-hosted, privacy policy changes do not affect data you already collected. That data stays under your control.
 </p>
 
 <h2>10. Contact</h2>
@@ -198,13 +198,13 @@
 </ul>
 
 <p>
-  For questions about your specific Nocturne instance's privacy and data handling, contact your instance administrator (which might be you if you're self-hosting).
+  For questions about your specific Nocturne instance's privacy and data handling, contact your instance administrator (this can be you if you are self-hosting).
 </p>
 
 <h2>Summary</h2>
 
 <p>
-  The key point: <strong>Nocturne is self-hosted, which means you control your data</strong>. We (the developers) don't collect it, don't have access to it, and can't sell it or share it. Your privacy is protected by design.
+  The key point: <strong>Nocturne is self-hosted, which means you control your data</strong>. We (the developers) do not collect it, do not have access to it, and cannot sell it or share it. Your privacy is protected by design.
 </p>
 
 <p>

@@ -66,7 +66,7 @@
       errorMessage = describePasskeyError(
         err,
         "register",
-        "We couldn't register a passkey. A recovery code is only good for ten minutes — sign in with another one to try again."
+        "We could not register a passkey. A recovery code is valid for ten minutes only. Sign in with another recovery code to try again."
       );
     } finally {
       isRegistering = false;
@@ -92,7 +92,7 @@
           Your passkey is ready. Sign in with it to finish.
         {:else}
           Your recovery code was accepted. It lets you set up a passkey for
-          {username || "your account"} — nothing else — and it expires in ten
+          {username || "your account"} and nothing else. It expires in ten
           minutes.
         {/if}
       </Card.Description>

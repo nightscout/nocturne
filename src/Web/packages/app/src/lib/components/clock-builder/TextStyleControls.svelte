@@ -163,7 +163,7 @@
   <div class="space-y-2">
     <Label>Custom CSS</Label>
     <p class="text-xs text-muted-foreground">
-      Add custom CSS properties (e.g., text-shadow, letter-spacing)
+      Add custom CSS properties (for example, text-shadow, letter-spacing)
     </p>
 
     {#if element.style?.custom}

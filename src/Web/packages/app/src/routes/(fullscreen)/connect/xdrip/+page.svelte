@@ -49,7 +49,7 @@
       <CardHeader>
         <CardTitle>Connect xDrip+</CardTitle>
         <CardDescription>
-          xDrip+ didn't open automatically. You can try these options:
+          xDrip+ did not open automatically. You can try these options:
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
@@ -81,7 +81,7 @@
         </div>
 
         <div class="pt-2">
-          <p class="text-muted-foreground text-sm">Don't have xDrip+ installed?</p>
+          <p class="text-muted-foreground text-sm">xDrip+ not installed?</p>
           <Button
             href="https://github.com/NightscoutFoundation/xDrip/releases"
             target="_blank"

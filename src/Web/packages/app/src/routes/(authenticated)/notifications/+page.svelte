@@ -66,7 +66,7 @@
     [CompletionReason.Refilled]: "Refilled",
     [CompletionReason.Attended]: "Attended",
     [CompletionReason.Rescheduled]: "Rescheduled",
-    [CompletionReason.Cancelled]: "Cancelled",
+    [CompletionReason.Cancelled]: "Canceled",
     [CompletionReason.Missed]: "Missed",
   };
 
@@ -241,7 +241,7 @@
           {#if trackerNotifications.length === 0}
             <div class="text-center py-8 text-muted-foreground">
               <Check class="h-12 w-12 mx-auto mb-3 text-success opacity-50" />
-              <p>All caught up! No active tracker alerts.</p>
+              <p>No active tracker alerts.</p>
             </div>
           {:else}
             <div class="space-y-3">

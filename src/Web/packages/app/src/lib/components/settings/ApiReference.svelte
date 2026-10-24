@@ -38,8 +38,8 @@
       errorMessage = describeSubmitError(
         err,
         on
-          ? "Couldn't publish the API reference. Please try again."
-          : "Couldn't hide the API reference. Please try again."
+          ? "Could not publish the API reference. Try again."
+          : "Could not hide the API reference. Try again."
       );
     } finally {
       busy = false;
@@ -62,8 +62,8 @@
         <h2 class="text-lg font-semibold">API reference</h2>
         <p class="mt-0.5 max-w-prose text-sm text-muted-foreground">
           Publishes the interactive API reference and its OpenAPI specification
-          on this address, for anyone who visits — no sign-in required. Turn it
-          on if you're building against the API; leave it off otherwise. Your
+          on this address, for anyone who visits. No sign-in is required. Turn it
+          on if you are building against the API. Otherwise, leave it off. Your
           data stays behind the same sign-in either way.
         </p>
       </div>

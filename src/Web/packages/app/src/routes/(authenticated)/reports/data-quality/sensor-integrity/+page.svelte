@@ -173,8 +173,8 @@
     <div class="flex items-start gap-2 rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
       <Info class="mt-0.5 h-4 w-4 shrink-0" />
       <p>
-        This is a retrospective analysis of recorded readings. A flagged window indicates a pattern
-        that is statistically unlikely to be physiologic; it does not by itself identify the cause.
+        This is a retrospective analysis of recorded readings. A flagged window shows a pattern
+        that is statistically unlikely to be physiologic. The flag alone does not identify the cause.
         Boundaries are determined after the fact from surrounding readings.
       </p>
     </div>

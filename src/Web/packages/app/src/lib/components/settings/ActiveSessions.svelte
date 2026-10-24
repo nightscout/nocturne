@@ -141,7 +141,7 @@
         {#snippet description()}
           Sign out {otherSessionCount}
           {otherSessionCount === 1 ? "other session" : "other sessions"}?
-          This device stays signed in. The other devices will need to log
+          This device stays signed in. The other devices will need to sign
           in again.
         {/snippet}
       </ConfirmDialog>
@@ -255,7 +255,7 @@
                   logs you out here.
                 {:else}
                   Sign out {session.deviceDescription ?? "this device"}?
-                  It will need to log in again.
+                  It will need to sign in again.
                 {/if}
               {/snippet}
             </ConfirmDialog>

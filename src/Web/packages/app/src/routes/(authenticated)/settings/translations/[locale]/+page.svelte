@@ -355,7 +355,7 @@
           {#if saveState === "saving"}
             <span class="text-sm text-muted-foreground">Saving…</span>
           {:else if saveState === "error"}
-            <span class="text-sm text-destructive">Draft save failed — edits retry on next change</span>
+            <span class="text-sm text-destructive">Draft save failed. Edits retry on next change</span>
           {/if}
           <Button
             variant="outline"

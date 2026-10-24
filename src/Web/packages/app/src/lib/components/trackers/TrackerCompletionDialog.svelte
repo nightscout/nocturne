@@ -93,7 +93,7 @@
     [CompletionReason.Refilled]: "Refilled",
     [CompletionReason.Attended]: "Attended",
     [CompletionReason.Rescheduled]: "Rescheduled",
-    [CompletionReason.Cancelled]: "Cancelled",
+    [CompletionReason.Cancelled]: "Canceled",
     [CompletionReason.Missed]: "Missed",
   };
 

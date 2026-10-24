@@ -88,13 +88,13 @@ describe("EventResponseBody", () => {
   it("compares each cohort's figures side by side, with how many came back and why grams per unit is missing", async () => {
     render(EventResponseBody, { props: { response: eventResponse({ comparison: true }) } });
 
-    await expect.element(page.getByText("The charts show the comparison range as dashed outlines in the colour of each cohort.")).toBeVisible();
+    await expect.element(page.getByText("The charts show the comparison range as dashed outlines in the color of each cohort.")).toBeVisible();
     await expect.element(page.getByRole("rowheader", { name: "Observed grams per unit" })).toBeVisible();
     await expect.element(page.getByText("9.5 g/U").first()).toBeVisible();
     await expect.element(page.getByText(/Compared 9.5 g\/U/).first()).toBeVisible();
     await expect.element(page.getByText("8 of 12 events returned to within 25 mg/dL of the start glucose")).toBeVisible();
     const note = page.getByText(/grams per unit comes only from a meal/);
-    await expect.element(note).toHaveTextContent(/2 meals had another event in their window;\s*3 had too little of their basal recorded;\s*1 had no insulin above schedule/);
+    await expect.element(note).toHaveTextContent(/2 meals had another event in their window,\s*3 had too little of their basal recorded,\s*1 had no insulin above schedule/);
 
     const links = page.getByRole("link", { name: /in Day in Review/ }).elements();
     expect(links).toHaveLength(3);

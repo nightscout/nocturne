@@ -235,7 +235,7 @@
             <CardHeader class="pb-3">
               <CardTitle class="text-base">Paired readings</CardTitle>
               <CardDescription>
-                Each point is one matched pair; the dashed line is where the two read the same
+                Each point is one matched pair. The dashed line is where the two read the same
                 value.
               </CardDescription>
             </CardHeader>

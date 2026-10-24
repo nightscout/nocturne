@@ -460,6 +460,9 @@ Design notes:
 - **No frontend-only models.** All TypeScript interfaces derive from the NSwag-generated client.
 - **Always use remote functions**, never raw fetch/requests on the frontend. Use the remote functions attribute to automatically generate type-safe API calls with Zod validation.
 - **Strings/messages live on the frontend** (translation layer).
+- **UI copy is Simplified Technical English (ASD-STE100), in American English.** Follow the
+  `simple-english` skill. `cd src/Web && pnpm run lint:copy` runs the Vale rules in
+  `.vale/styles/Nocturne` over every extracted string. CI fails on errors.
 - **No emoji.** Use Lucide icons for UI elements.
 - **Comments carry only what the code cannot.** No narration, no benefit tails, no change history,
   no step-by-step banners. Rationale lives at one site and is referenced elsewhere with

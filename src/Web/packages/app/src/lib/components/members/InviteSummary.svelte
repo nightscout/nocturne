@@ -28,7 +28,7 @@
       <strong>{invite.createdByName}</strong>
       has invited you to join
     {:else}
-      You've been invited to join
+      You have been invited to join
     {/if}
     <strong>{siteName}</strong>
     on Nocturne.
@@ -52,7 +52,7 @@
   {:else}
     <p class="text-muted-foreground">
       Nocturne is a website for viewing diabetes information, such as glucose
-      (blood sugar) readings, that someone has chosen to share with you.
+      readings, that someone has chosen to share with you.
     </p>
 
     <div class="space-y-2 rounded-md border p-3">
@@ -61,7 +61,7 @@
           Your role: <strong>{roleNames.join(", ")}</strong>
         </p>
       {/if}
-      <p class="text-muted-foreground">What you'll have access to:</p>
+      <p class="text-muted-foreground">What you will have access to:</p>
       <PermissionSummary permissions={invite.permissions ?? []} />
     </div>
 
@@ -70,7 +70,7 @@
         <li class="flex items-start gap-2">
           <Eye class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <span>
-            You can view this information. You can't change records, treatment
+            You can view this information. You cannot change records, treatment
             settings or who has access.
           </span>
         </li>
@@ -78,16 +78,15 @@
       {#if invite.limitTo24Hours}
         <li class="flex items-start gap-2">
           <Clock class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <span>You'll only see the last 24 hours of data.</span>
+          <span>You will see only the last 24 hours of data.</span>
         </li>
       {/if}
       <li class="flex items-start gap-2">
         <Bell class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <span>
-          While you have Nocturne open, you'll see alerts as they happen.
-          Getting alerts when Nocturne isn't open, for example on your phone,
-          depends on how alerts have been set up. Ask the person who invited
-          you.
+          While Nocturne is open, you will see alerts as they happen. Alerts
+          when Nocturne is not open, for example on your phone, depend on how
+          alerts are set up. Ask the person who invited you.
         </span>
       </li>
       <li class="flex items-start gap-2">
@@ -107,10 +106,10 @@
 
     <p>
       {#if signedIn}
-        Next, accept the invite below. You'll then go to the {siteName} dashboard.
+        Next, accept the invite below. Then you will go to the {siteName} dashboard.
       {:else}
-        Next, choose how you'd like to sign in below. Once you're in, you'll go
-        to the {siteName} dashboard.
+        Next, choose how to sign in below. After you sign in, you will go to the
+        {siteName} dashboard.
       {/if}
     </p>
   {/if}

@@ -1188,7 +1188,7 @@ export function regionFormatLabel(tag: RegionFormat): string {
 
   const sample = REGION_SAMPLE_DATE.toLocaleDateString(tag);
   const weekStart = weekStartName(tag, preferredLanguage.current);
-  return `${name} — ${sample}, weeks start ${weekStart}`;
+  return `${name}: ${sample}, weeks start ${weekStart}`;
 }
 
 /**

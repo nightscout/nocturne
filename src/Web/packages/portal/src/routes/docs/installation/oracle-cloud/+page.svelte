@@ -21,12 +21,12 @@
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-8">
         <li>
             An <a href="https://www.oracle.com/cloud/free/" class="text-primary hover:underline">Oracle Cloud account</a>.
-            Sign-up asks for a payment card to verify your identity. The region you pick at sign-up becomes your home region. The free server can only be created there, and the choice cannot be changed later, so pick the region closest to you. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage. Oracle halved the cores and memory in June 2026, so older guides that quote 4 cores and 24 GB are out of date. This guide uses half the cores and memory and a quarter of the storage, which stays well inside the free allowance.
+            Sign-up requires a payment card to verify your identity. The region you pick at sign-up becomes your home region. The free server can only be created there, and the choice cannot be changed later, so pick the region closest to you. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage. Oracle halved the cores and memory in June 2026, so older guides that quote 4 cores and 24 GB are out of date. This guide uses half the cores and memory and a quarter of the storage, which stays well inside the free allowance.
         </li>
         <li>
             A domain name. Nocturne gives every site its own subdomain, so the DNS provider
             must support wildcard records. If you do not have a domain, a free one from DuckDNS
-            works well; <a href="#duckdns" class="text-primary hover:underline">see below</a>.
+            works well: <a href="#duckdns" class="text-primary hover:underline">see below</a>.
         </li>
         <li>
             A decision about how to keep the server from being reclaimed as idle. It changes
@@ -69,7 +69,7 @@
         changes the command in <a href="#step-2" class="text-primary hover:underline">Step 2</a>,
         so pick now rather than later.
     </p>
-    <Callout type="tip" title="Which one should you pick?">
+    <Callout type="tip" title="Which option to choose">
         Pay As You Go suits most people: it is a single change in the Oracle console, adds
         nothing to the server, and paying accounts are served first when Ampere capacity is
         scarce. The trade-off is that the card already on file <em>can</em> be charged if
@@ -132,7 +132,7 @@
     <h2 id="step-1" data-install-step="1" class="text-2xl font-bold mt-8 mb-4 scroll-mt-24">Step 1: Open Cloud Shell</h2>
     <p class="text-muted-foreground mb-8">
         Sign in to the <a href="https://cloud.oracle.com" class="text-primary hover:underline">Oracle Cloud console</a>
-        and click the terminal icon in the top-right toolbar, labelled <strong>Developer tools</strong>,
+        and select the terminal icon in the top-right toolbar, labeled <strong>Developer tools</strong>,
         then <strong>Cloud Shell</strong>. A terminal opens at the bottom of the page. It is already
         signed in as you, so there is nothing to install or configure.
     </p>
@@ -174,10 +174,10 @@
             <li>Sets up a spending alert that emails you if the account is ever charged, and a quota policy that stops the account creating anything outside the Always Free compute shapes</li>
             <li>Creates a virtual network with ports 80 and 443 open, in your home region</li>
             <li>Reserves a public IP address so it never changes</li>
-            <li>Points your DuckDNS name at that address when you give it the token; for any other domain, it prints the two records to create by hand</li>
+            <li>Points your DuckDNS name at that address when you give it the token. For any other domain, it prints the two records to create by hand</li>
             <li>Generates an SSH key in your Cloud Shell home if you do not have one</li>
             <li>Starts an Ampere A1 server with 1 core and 6 GB of memory, half the Always Free allowance, retrying when Oracle has no free capacity</li>
-            <li>Installs Folding@home on a nightly schedule if you asked for it above</li>
+            <li>Installs Folding@home on a nightly schedule if you chose it above</li>
             <li>On the server: opens the firewall, installs Docker, downloads the Nocturne release bundle, generates the database passwords and starts everything once DNS resolves, checking each of these again on every run</li>
         </ul>
         <CodeBlock code={installScript} class="mt-2" maxHeight="400px" />
@@ -186,7 +186,7 @@
         <p class="mb-2">
             Ampere A1 servers are popular and regions often run out. The installer tries every
             availability domain in your region and keeps retrying for 30 minutes. It already
-            asks for the smallest size the installer offers, 1 core and 6 GB, so there is
+            requests the smallest size the installer offers, 1 core and 6 GB, so there is
             nothing smaller to fall back to. If it gives up, run the command again
             later: it remembers your domain, so the command no longer needs it, and everything
             already created is reused. Upgrading to Pay As You Go also tends to end these
@@ -215,7 +215,7 @@
     <CodeBlock code={"nocturne.example.com      A   <the IP address>\n*.nocturne.example.com    A   <the IP address>"} class="mb-4" />
     <p class="text-muted-foreground mb-8">
         The second one is a wildcard. It makes every site's subdomain resolve without a record
-        each. If you use Cloudflare, leave the proxy off for both records, shown as a grey cloud.
+        each. If you use Cloudflare, leave the proxy off for both records, shown as a gray cloud.
         Cloudflare's proxy cannot carry the certificates Nocturne issues for its own subdomains.
     </p>
 

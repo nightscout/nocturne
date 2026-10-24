@@ -616,7 +616,7 @@
 
   <Card.Root>
     <Card.Header>
-      <Card.Title>Time in Range — stacked comparison</Card.Title>
+      <Card.Title>Time in Range: stacked comparison</Card.Title>
       <Card.Description>
         Vertical stacked bars showing the full TIR breakdown for each period.
       </Card.Description>

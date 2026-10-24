@@ -25,7 +25,7 @@
         <p class="text-xs text-muted-foreground mt-1">
             Replace <code class="bg-muted/50 px-1 py-0.5 rounded">your-domain</code> with your
             <code class="bg-muted/50 px-1 py-0.5 rounded">BASE_DOMAIN</code>. The bundled Caddy proxy
-            serves HTTPS on ports 80 and 443; you should receive a JSON response with server status.
+            serves HTTPS on ports 80 and 443. The server returns a JSON response with its status.
             (With a bring-your-own reverse proxy, query the gateway on host port 8080 instead.)
         </p>
     </div>

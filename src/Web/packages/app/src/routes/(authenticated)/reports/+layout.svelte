@@ -69,7 +69,7 @@
             );
         } catch (error) {
             console.error("Failed to prepare report for printing:", error);
-            toast.error("Unable to load the complete report. Please try again before printing.");
+            toast.error("Could not load the complete report. Try again before printing.");
         } finally {
             printCtx.printing = false;
         }

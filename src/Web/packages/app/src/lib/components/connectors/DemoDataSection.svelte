@@ -111,14 +111,14 @@
           class="rounded-lg border border-demo/30 bg-demo/5 p-4"
         >
           <p class="text-sm text-demo">
-            <strong>This is demo data</strong>
-            — synthetic glucose readings generated for testing and demonstration purposes.
+            <strong>This is demo data</strong>:
+            synthetic glucose readings generated for testing and demonstration purposes.
           </p>
         </div>
 
         <div class="space-y-3">
           <p class="text-sm text-muted-foreground">
-            You can safely delete all demo data. It's very easy to regenerate:
+            You can safely delete all demo data. It is easy to regenerate:
           </p>
           <ul
             class="text-sm text-muted-foreground list-disc list-inside space-y-1"

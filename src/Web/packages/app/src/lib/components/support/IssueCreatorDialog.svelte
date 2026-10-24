@@ -41,7 +41,7 @@
     bug: {
       label: "Bug Report",
       icon: Bug,
-      description: "Report something that isn't working correctly",
+      description: "Report something that is not working correctly",
     },
     feature: {
       label: "Feature Request",
@@ -366,7 +366,7 @@
     {#if formState === "success"}
       <div class="flex flex-col items-center gap-4 py-8">
         <CheckCircle class="h-12 w-12 text-success" />
-        <h3 class="text-lg font-semibold">Issue Submitted!</h3>
+        <h3 class="text-lg font-semibold">Issue submitted</h3>
         {#if useOperatorSupport}
           <p class="text-sm text-muted-foreground text-center">
             Your issue has been submitted to the support team.
@@ -388,11 +388,11 @@
     {:else if formState === "error"}
       <div class="flex flex-col items-center gap-4 py-8">
         <AlertTriangle class="h-12 w-12 text-warning" />
-        <h3 class="text-lg font-semibold">Couldn't Create Issue</h3>
+        <h3 class="text-lg font-semibold">Could not create issue</h3>
         <p class="text-sm text-muted-foreground text-center">
-          We've opened a pre-filled GitHub issue form in a new tab as a
-          fallback. You can paste your screenshots there manually. Your entries
-          are kept here if you'd like to try again.
+          A pre-filled GitHub issue form is open in a new tab as a fallback.
+          You can paste your screenshots there manually. Your entries stay here
+          if you want to try again.
         </p>
         <div class="flex items-center gap-2">
           <Button
@@ -497,7 +497,7 @@
                   <Textarea
                     id="issue-expected"
                     bind:value={expectedBehavior}
-                    placeholder="What should happen..."
+                    placeholder="What you expected to happen..."
                     rows={2}
                   />
                 </div>
@@ -596,7 +596,7 @@
               </p>
               <p class="text-xs text-muted-foreground">
                 Your report is filed as a public issue on GitHub. Anything you turn on
-                here is published with it and can be read by anyone — check the preview
+                here is published with it, and anyone can read it. Check the preview
                 before you send.
               </p>
 
@@ -627,7 +627,7 @@
                     <p class="text-xs text-muted-foreground">
                       {recentFailureCount === 0
                         ? "No failed requests recorded this session"
-                        : `${recentFailureCount} failed ${recentFailureCount === 1 ? "request" : "requests"} — time, status, page and message`}
+                        : `${recentFailureCount} failed ${recentFailureCount === 1 ? "request" : "requests"}: time, status, page and message`}
                     </p>
                   </div>
                   <Switch bind:checked={includeRecentLogs} disabled={recentFailureCount === 0} />

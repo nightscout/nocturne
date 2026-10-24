@@ -313,7 +313,7 @@
             {@render TimeValueEditor({
               title: "Carb Ratios (I:C)",
               description:
-                "Grams of carbohydrates covered by one unit of insulin",
+                "Grams of carbs covered by one unit of insulin",
               unit: "g/U",
               icon: Droplet,
               field: "carbratio",
@@ -532,7 +532,7 @@
   {/snippet}
 
   {#snippet description()}
-    This profile is managed by an external source (e.g., Glooko). <br />
+    This profile is managed by an external source (for example, Glooko). <br />
     Any changes made here will
     <strong>NOT</strong>
     be reflected on your device (pump/CGM). They will only affect how data is

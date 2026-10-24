@@ -59,7 +59,7 @@ describe("settings/admin/connector-cursors", () => {
     await expect
       .element(
         page.getByText(
-          "One or more connectors failed; review the connector details and retry the failed range."
+          "One or more connectors failed. Review the connector details and retry the failed range."
         )
       )
       .toBeVisible();

@@ -271,7 +271,7 @@
     <form method="POST" action="/auth/logout" class="w-full @sm:w-auto">
       <Button variant="destructive" type="submit" class="w-full">
         <LogOut class="mr-2 h-4 w-4" />
-        Log Out
+        Sign out
       </Button>
     </form>
   </Card.Footer>

@@ -19,7 +19,7 @@ vi.mock("$api/generated/services.generated.remote", () => ({
 // The dialog uses Tooltip.Root, whose provider the app layout supplies; the wrapper stands in for it.
 import ConnectorDetailsDialog from "./connector-details-dialog-test-wrapper.svelte";
 
-const FALLBACK = "We couldn't start the sync. Please try again.";
+const FALLBACK = "We could not start the sync. Try again.";
 
 async function syncing(
   impl: () => Promise<SyncResult>,

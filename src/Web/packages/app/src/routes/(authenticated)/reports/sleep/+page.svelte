@@ -313,7 +313,7 @@
           </CardTitle>
           {#if sourceFilter !== "all"}
             <CardDescription>
-              Showing all {sourceLabel} sessions — nights aren't deduplicated across devices.
+              Showing all {sourceLabel} sessions. Nights are not deduplicated across devices.
             </CardDescription>
           {:else}
             <CardDescription class="hidden print:block">Source: {sourceLabel}</CardDescription>

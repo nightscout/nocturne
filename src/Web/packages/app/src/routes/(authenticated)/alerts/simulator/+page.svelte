@@ -47,7 +47,7 @@
     <CardHeader>
       <CardTitle class="text-base">Replay window</CardTitle>
       <CardDescription size="sm">
-        Pick a window — rules are evaluated tick-by-tick over the data you actually had.
+        Pick a window. Rules are evaluated tick-by-tick over the data you actually had.
       </CardDescription>
     </CardHeader>
     <CardContent>

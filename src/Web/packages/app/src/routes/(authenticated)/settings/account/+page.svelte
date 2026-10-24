@@ -579,8 +579,8 @@
     <Dialog.Header>
       <Dialog.Title>Name your passkey</Dialog.Title>
       <Dialog.Description>
-        Give this passkey a name to help you identify it later (e.g. "MacBook
-        Touch ID", "YubiKey 5").
+        Give this passkey a name to help you identify it later, for example "MacBook
+        Touch ID" or "YubiKey 5".
       </Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">

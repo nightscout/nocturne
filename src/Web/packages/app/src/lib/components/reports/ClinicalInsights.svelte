@@ -169,7 +169,7 @@
   <CardContent class="space-y-3">
     {#if insights.length === 0}
       <p class="py-4 text-center text-sm text-muted-foreground">
-        Not enough data yet to generate insights. Keep tracking!
+        Not enough data yet to generate insights. Keep tracking.
       </p>
     {:else}
       {#each insights as insight, i (i)}

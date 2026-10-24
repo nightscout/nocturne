@@ -121,7 +121,7 @@
       <Dialog.Description>
         {#if roleCreatedFromSubjectDialog}
           Create a role with fine-grained permissions for your subject. After
-          saving, you'll return to the subject dialog with this role selected.
+          saving, you will return to the subject dialog with this role selected.
         {:else if isNewRole}
           Create a new role with specific permissions.
         {:else}

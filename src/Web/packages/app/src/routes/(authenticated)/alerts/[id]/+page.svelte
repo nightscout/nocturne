@@ -345,7 +345,7 @@
             <div class="space-y-1.5">
               <CardTitle>Identity</CardTitle>
               <CardDescription>
-                What should this alert be called?
+                What is the name of this alert?
               </CardDescription>
             </div>
             <div class="flex items-center gap-2 shrink-0">
@@ -380,7 +380,7 @@
               <Textarea
                 id="rule-desc"
                 rows={2}
-                placeholder="Why this alert exists, what it should trigger"
+                placeholder="Why this alert exists and what it triggers"
                 value={editor.description}
                 oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) => {
                   editor.description = e.currentTarget.value;
@@ -434,8 +434,8 @@
           <CardHeader>
             <CardTitle>Condition</CardTitle>
             <CardDescription>
-              Define when this alert fires. Mix facts with AND/OR; nest with
-              brackets.
+              Define when this alert fires. Mix facts with AND/OR. Nest them
+              with brackets.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -143,7 +143,7 @@
           name="preferredName"
           autocomplete="nickname"
           bind:value={clinical.preferredName}
-          placeholder="How you'd like to be addressed"
+          placeholder="How you want to be addressed"
         />
       {/snippet}
     </FormField>
@@ -178,11 +178,11 @@
       {#snippet hint()}
         {#if clinical.timezoneAutoDetected}
           <p class="text-xs text-muted-foreground">
-            Auto-detected from your browser. Save to confirm — alerts with time-of-day rules use this to interpret window hours in your local time, starting from when you save.
+            Detected automatically from your browser. Save to confirm. Alerts with time-of-day rules use this time zone to read window hours in your local time, starting from when you save.
           </p>
         {:else}
           <p class="text-xs text-muted-foreground">
-            Used by alerts, schedules, and analytics. Changing it takes effect from when you save — past data isn't reinterpreted.
+            Used by alerts, schedules, and analytics. A change takes effect when you save. Past data is not reinterpreted.
           </p>
         {/if}
       {/snippet}
@@ -191,7 +191,7 @@
     <FormField
       label="Weight (kg)"
       id="weight"
-      description="Recorded to your weight history when you save — only if it's changed."
+      description="Recorded to your weight history when you save, but only if it changed."
       issues={clinical.weight.saveError}
     >
       {#snippet control(field)}

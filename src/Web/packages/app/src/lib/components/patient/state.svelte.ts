@@ -116,7 +116,7 @@ export class ClinicalState {
       }),
       navBlockMessage: "You have unsaved changes. Leave anyway?",
       submitErrorMessage:
-        "We couldn't save your patient record. Your changes are still here — please try again.",
+        "We could not save your patient record. Your changes are still here. Try again.",
       onreset: (snapshot) => {
         this.diabetesType = snapshot.diabetesType;
         this.diabetesTypeOther = snapshot.diabetesTypeOther ?? "";

@@ -389,7 +389,7 @@
       class="flex items-center gap-2 rounded bg-success/10 p-3 text-sm text-success"
     >
       <CheckCircle class="h-4 w-4" />
-      Connected! Data is flowing from xDrip+.
+      Connected. Data is flowing from xDrip+.
     </div>
   {:else if connectionState === "timeout"}
     <div
@@ -398,7 +398,7 @@
       aria-atomic="true"
       class="bg-muted space-y-2 rounded p-3 text-sm"
     >
-      <p>No data from xDrip+ yet. This is normal if xDrip+ hasn't had a new reading.</p>
+      <p>No data from xDrip+ yet. This is normal when xDrip+ has no new reading.</p>
       <Button variant="outline" size="sm" onclick={retryCheck}>
         Check now
       </Button>

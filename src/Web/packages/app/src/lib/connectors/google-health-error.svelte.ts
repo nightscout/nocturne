@@ -35,7 +35,7 @@ function explain(http: number | undefined): string {
   if (http === 429) return "Too many requests were made. Try again in a few minutes.";
   if (http !== undefined && http >= 500)
     return "Nocturne could not process the request. Check the server log for this attempt.";
-  return "A page or connection error occurred. Reload the page; if this continues, report the technical code.";
+  return "A page or connection error occurred. Reload the page. If this continues, report the technical code.";
 }
 
 /**

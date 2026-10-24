@@ -155,8 +155,8 @@
       Connect your CareLink account
     </CardTitle>
     <CardDescription>
-      Sign in to Medtronic CareLink in your browser. Your password is never sent to Nocturne — only a
-      revocable access token is stored.
+      Sign in to Medtronic CareLink in your browser. Your password is never sent to Nocturne. Nocturne stores only a
+      revocable access token.
     </CardDescription>
   </CardHeader>
   <CardContent class="space-y-4">
@@ -197,7 +197,7 @@
         </p>
         <p class="text-xs text-muted-foreground">
           The desktop app opens the CareLink sign-in in its own window and captures the code
-          automatically — no developer tools needed. Generate a link code and open it in the app.
+          automatically. You do not need developer tools. Generate a link code and open it in the app.
         </p>
         <a
           href={DESKTOP_DOWNLOAD_URL}
@@ -228,7 +228,7 @@
             </span>
           </div>
           <p class="text-xs text-muted-foreground">
-            If nothing opens, the app isn't installed yet — copy the code and paste it into the app
+            If nothing opens, the app is not installed yet. Copy the code and paste it into the app
             instead.
           </p>
         {/if}
@@ -239,10 +239,10 @@
       <ol class="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
         <li>In the CareLink tab that opened, sign in and solve the captcha.</li>
         <li>
-          When you finish, the page won't visibly move — it's redirecting to a link your browser
-          can't open. You need to copy that link. Open developer tools first:
+          When you finish, the page does not visibly move. It redirects to a link that your browser
+          cannot open. You need to copy that link. Open developer tools first:
           <span class="font-medium text-foreground">press <kbd class="px-1 rounded border bg-muted">F12</kbd></span>,
-          go to the <span class="font-medium text-foreground">Network</span> tab, and tick
+          go to the <span class="font-medium text-foreground">Network</span> tab, and select
           <span class="font-medium text-foreground">Preserve log</span> before signing in.
         </li>
         <li>
@@ -252,7 +252,7 @@
           </div>
           Right-click it → <span class="font-medium text-foreground">Copy → Copy URL</span>.
         </li>
-        <li>Paste the whole thing below — you don't need to trim it.</li>
+        <li>Paste the whole thing below. You do not need to trim it.</li>
       </ol>
 
       <div class="space-y-2">
@@ -293,7 +293,7 @@
           <p class="text-muted-foreground">
             {connectedUsername
               ? `Signed in as ${connectedUsername}. `
-              : ""}Your refresh token is stored — syncing will use it automatically.
+              : ""}Your refresh token is stored. Syncing uses it automatically.
           </p>
         </div>
       </div>

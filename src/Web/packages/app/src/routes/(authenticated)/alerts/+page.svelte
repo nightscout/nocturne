@@ -173,7 +173,7 @@
       </div>
       <div>
         <h1 class="text-2xl font-bold tracking-tight">Alerts</h1>
-        <p class="text-sm text-muted-foreground">Rules that decide when, how, and where you're notified.</p>
+        <p class="text-sm text-muted-foreground">Rules that decide when, how, and where you are notified.</p>
       </div>
     </div>
     {#if canManageAlerts}

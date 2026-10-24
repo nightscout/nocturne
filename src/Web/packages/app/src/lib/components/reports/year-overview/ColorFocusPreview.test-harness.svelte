@@ -6,7 +6,7 @@
 </script>
 
 <div class="year-overview bg-card text-card-foreground p-4" data-testid="preview-card">
-  <h1 class="mb-3 text-lg font-semibold">Average glucose — Year Overview</h1>
+  <h1 class="mb-3 text-lg font-semibold">Average glucose: Year Overview</h1>
   <ColorFocusRange
     metricLabel="Average glucose"
     glucose

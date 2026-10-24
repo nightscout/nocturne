@@ -57,6 +57,8 @@ jobs:
               - *shared
               - 'src/Web/**'
               - 'src/API/**'
+              - '.vale.ini'
+              - '.vale/**'
             e2e:
               - *shared
               - 'src/**'
@@ -415,6 +417,32 @@ jobs:
           path: src/Web/packages/*/coverage/cobertura-coverage.xml
           if-no-files-found: ignore
           retention-days: 7
+
+  # Lints every user-facing string against the ASD-STE100 rules in .vale/styles/Nocturne (the
+  # simple-english skill). wuchale extracts the strings from source into locales/en.po first, so the
+  # check reads this commit's strings, not the catalog the sync job last committed. Errors fail.
+  ui-copy:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Pinned so CI and a workstation run the same rule engine.
+      VALE_VERSION: 3.24.0
+    defaults:
+      run:
+        working-directory: src/Web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-pnpm
+        with:
+          install: src/Web
+      - name: Install Vale
+        run: |
+          curl -sSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz"             | sudo tar -xz -C /usr/local/bin vale
+          vale --version
+      - name: Lint UI copy
+        run: pnpm run lint:copy --min=error
 
   integration-db:
     needs: [changes, build]
@@ -783,6 +811,7 @@ jobs:
       - desktop-rust
       - web-static
       - web-app-tests
+      - ui-copy
       - integration-db
       - integration-api
       - images

@@ -8,7 +8,7 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<DeadEndCard icon={Link2Off} title="This share link isn't working">
+<DeadEndCard icon={Link2Off} title="This share link is not working">
   <!-- A rotated link, an inactive tenant and an API that is briefly unready all land here and
        are indistinguishable from the browser, so the copy names none of them. Prompting for a
        replacement link first would be actively harmful: rotating is how the owner would supply
@@ -18,7 +18,7 @@
     unavailable.
   </p>
   <p>
-    Try again in a few minutes. If it still doesn't work, ask the person who
+    Try again in a few minutes. If it still does not work, ask the person who
     shared it to check the link.
   </p>
 </DeadEndCard>

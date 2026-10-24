@@ -75,7 +75,7 @@
 
           <!-- Description -->
           <p class="text-sm leading-relaxed text-white/50">
-            I'm new to open-source diabetes data, or I'd rather not bring old
+            I am new to open-source diabetes data, or I prefer not to bring old
             data with me.
           </p>
 

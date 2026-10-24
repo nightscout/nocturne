@@ -7,7 +7,7 @@ vi.mock("$lib/utils", () => ({ copyToClipboard: vi.fn() }));
 vi.mock("svelte-sonner", () => ({ toast: { error: vi.fn() } }));
 
 const FAILURE_MESSAGE =
-  "Couldn't copy to the clipboard. Copy it manually instead.";
+  "Could not copy to the clipboard. Copy it manually instead.";
 
 const roots: Array<() => void> = [];
 

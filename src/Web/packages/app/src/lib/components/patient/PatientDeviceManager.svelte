@@ -464,7 +464,7 @@
       <div>
         <h4 class="text-sm font-medium">Discovered sources</h4>
         <p class="text-xs text-muted-foreground">
-          Streams seen in recent readings that aren't linked to a device yet. Register one to
+          Streams seen in recent readings that are not linked to a device yet. Register one to
           attribute its readings.
         </p>
       </div>

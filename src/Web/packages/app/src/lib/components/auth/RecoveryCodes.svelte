@@ -114,7 +114,7 @@
         >
           <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <p class="text-sm text-destructive">
-            The codes weren't copied — your browser blocked clipboard access.
+            The codes were not copied. Your browser blocked clipboard access.
             Download them, or write them down and confirm below.
           </p>
         </div>
@@ -127,7 +127,7 @@
             onCheckedChange={(checked: boolean) =>
               (confirmedWrittenDown = checked)}
           />
-          <span>I've written down my recovery codes</span>
+          <span>I wrote down my recovery codes</span>
         </label>
       {/if}
 

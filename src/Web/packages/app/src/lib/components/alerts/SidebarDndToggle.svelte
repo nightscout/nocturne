@@ -132,7 +132,7 @@
     <p
       class="px-2 pb-1 text-xs text-destructive group-data-[collapsible=icon]:hidden"
     >
-      Couldn't change Do Not Disturb. Please try again.
+      Could not change Do Not Disturb. Try again.
     </p>
   {/if}
 {/if}

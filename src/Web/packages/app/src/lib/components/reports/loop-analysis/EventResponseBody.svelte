@@ -268,7 +268,7 @@
         <div class="space-y-5 rounded-lg border bg-card p-3 @md:p-4" data-testid="loop-analysis-event-curves" {@attach loopAnalysisMark("loop-analysis-meals-and-events.curves")}>
           {#if comparing}
             <p class="text-xs text-muted-foreground">
-              The charts show the comparison range as dashed outlines in the colour of each cohort.
+              The charts show the comparison range as dashed outlines in the color of each cohort.
             </p>
           {/if}
 

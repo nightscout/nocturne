@@ -89,7 +89,7 @@
 					editor = props.editor;
 				},
 				onContentError: (error) => {
-					toast.error('Unable to load the content', {
+					toast.error('Could not load the content', {
 						description: 'The content of this page might be corrupted.'
 					});
 					console.error(error);

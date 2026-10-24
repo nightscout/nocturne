@@ -82,7 +82,7 @@
       console.error("Accepting the invite failed:", err);
       acceptError = describeSubmitError(
         err,
-        "We couldn't add you to this instance. Please try again in a moment."
+        "We could not add you to this instance. Try again in a moment."
       );
     } finally {
       isAccepting = false;
@@ -148,7 +148,7 @@
       passkeyError = describePasskeyError(
         err,
         "register",
-        "We couldn't create your account. Please try again."
+        "We could not create your account. Try again."
       );
     } finally {
       isRegistering = false;
@@ -195,9 +195,9 @@
         >
           <Check class="h-6 w-6 text-success" />
         </div>
-        <Card.Title class="text-2xl font-bold">You're In</Card.Title>
+        <Card.Title class="text-2xl font-bold">You Are In</Card.Title>
         <Card.Description>
-          Your account has been created and you've joined
+          We created your account and added you to
           {inviteInfo.tenantName ?? "the site"}.
         </Card.Description>
       </Card.Header>
@@ -217,7 +217,7 @@
         >
           <Check class="h-6 w-6 text-primary" />
         </div>
-        <Card.Title class="text-2xl font-bold">You're Already In</Card.Title>
+        <Card.Title class="text-2xl font-bold">You Are Already a Member</Card.Title>
         <Card.Description>
           You already have access to
           <strong>{inviteInfo.tenantName ?? "this site"}</strong>.
@@ -240,7 +240,7 @@
         <Card.Title class="text-2xl font-bold">Accept Invite</Card.Title>
         {#if viewer?.name}
           <Card.Description>
-            You're signed in as <strong>{viewer.name}</strong>
+            You are signed in as <strong>{viewer.name}</strong>
           </Card.Description>
         {/if}
       </Card.Header>

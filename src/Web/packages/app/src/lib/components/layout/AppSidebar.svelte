@@ -222,7 +222,7 @@
       <p class="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Eye class="h-3 w-3 shrink-0" />
         <span
-          >Viewing <span class="font-medium text-foreground">{currentSlug}</span> — you
+          >Viewing <span class="font-medium text-foreground">{currentSlug}</span>: you
           are not a member</span
         >
       </p>

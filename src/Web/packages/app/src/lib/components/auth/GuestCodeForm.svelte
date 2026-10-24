@@ -15,7 +15,7 @@
   let code = $state(untrack(() => initialCode));
 
   const submission = useSubmission({
-    fallback: "We couldn't check that code just now. Please try again.",
+    fallback: "We could not check that code. Try again.",
   });
 
   const pending = $derived(activateGuestCode.pending > 0);

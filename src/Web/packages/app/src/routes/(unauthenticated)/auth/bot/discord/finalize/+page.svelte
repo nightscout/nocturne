@@ -39,7 +39,7 @@
 						? "This link is expired or invalid. Please try again from Settings."
 						: describeSubmitError(
 								err,
-								"We couldn't complete the Discord link. It may have expired. Please try again from Settings.",
+								"We could not complete the Discord link. If the link expired, try again from Settings.",
 							);
 		} finally {
 			isConfirming = false;
@@ -64,7 +64,7 @@
 			Back to Settings
 		</a>
 	{:else if pending === null || claimQuery?.error}
-		<h1 class="text-2xl font-bold">Can't complete this link</h1>
+		<h1 class="text-2xl font-bold">Cannot complete this link</h1>
 		<p class="text-destructive max-w-md">
 			This link has expired, or was started from another browser or account. Start linking your
 			Discord account again from Settings.

@@ -253,7 +253,7 @@
             success: false,
             message: describeSubmitError(
               e,
-              "We couldn't start this sync. Please try again."
+              "We could not start this sync. Try again."
             ),
           };
         }
@@ -285,7 +285,7 @@
       await loadConnectorStatuses();
     } catch (e) {
       toast.error(
-        describeSubmitError(e, "We couldn't start the sync. Please try again.")
+        describeSubmitError(e, "We could not start the sync. Try again.")
       );
     } finally {
       quickSyncingById = { ...quickSyncingById, [connectorId]: false };

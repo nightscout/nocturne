@@ -207,7 +207,7 @@
     [CompletionReason.Refilled]: "Refilled",
     [CompletionReason.Attended]: "Attended",
     [CompletionReason.Rescheduled]: "Rescheduled",
-    [CompletionReason.Cancelled]: "Cancelled",
+    [CompletionReason.Cancelled]: "Canceled",
     [CompletionReason.Missed]: "Missed",
   };
 
@@ -622,7 +622,7 @@
   {#snippet description()}
     Are you sure you want to delete this tracker definition? This action
     cannot be undone. Any active instances using this definition will
-    remain, but you won't be able to start new ones.
+    remain, but you will not be able to start new ones.
   {/snippet}
 </ConfirmDialog>
 

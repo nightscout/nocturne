@@ -69,8 +69,8 @@
   <div class="space-y-1">
     <h1 class="text-xl font-semibold">Weight history</h1>
     <p class="text-muted-foreground text-sm">
-      Your weight over time. Each entry is dated when it was recorded — editing your current weight
-      on the Patient Record page adds a new entry here rather than overwriting the last one.
+      Your weight over time. Each entry is dated when it was recorded. When you edit your current weight
+      on the Patient Record page, a new entry is added here. The last entry is not overwritten.
     </p>
   </div>
 

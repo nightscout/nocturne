@@ -96,8 +96,8 @@
       errorMessage = describeSubmitError(
         err,
         on
-          ? "Couldn't create the link. Please try again."
-          : "Couldn't turn off public access. Please try again."
+          ? "Could not create the link. Try again."
+          : "Could not turn off public access. Try again."
       );
     } finally {
       busy = false;
@@ -112,7 +112,7 @@
     try {
       await mint(rotateShareLink);
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Couldn't regenerate the link. Please try again.");
+      errorMessage = describeSubmitError(err, "Could not regenerate the link. Try again.");
     } finally {
       busy = false;
     }
@@ -139,7 +139,7 @@
       revealSucceeded = link.canReveal ?? revealedUrl != null;
       return revealedUrl;
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Couldn't show the link. Please try again.");
+      errorMessage = describeSubmitError(err, "Could not show the link. Try again.");
       return null;
     } finally {
       revealing = false;
@@ -162,7 +162,7 @@
     try {
       await setShareLinkScopes({ scopes: list });
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Couldn't update what's shared. Please try again.");
+      errorMessage = describeSubmitError(err, "Could not update what is shared. Try again.");
     } finally {
       // Hold the optimistic value until every concurrent toggle settles, then fall back to
       // server truth — the generated command already refreshed getShareLink.
@@ -177,7 +177,7 @@
     try {
       await setShareLinkFullHistory({ fullHistory: fh });
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Couldn't update the time window. Please try again.");
+      errorMessage = describeSubmitError(err, "Could not update the time window. Try again.");
     } finally {
       pendingFullHistory = null;
     }
@@ -214,8 +214,8 @@
       <div class="min-w-0 flex-1">
         <h2 class="text-lg font-semibold">Public access</h2>
         <p class="mt-0.5 max-w-prose text-sm text-muted-foreground">
-          Anyone with your link can view selected data without signing in. No
-          account, no invite — so choose carefully what they can see.
+          Anyone with your link can view selected data without signing in. They
+          need no account and no invite. Choose carefully what they can see.
         </p>
       </div>
       <Switch
@@ -330,7 +330,7 @@
             <p class="text-xs text-muted-foreground">
               Anyone who already has your link can still open the read-only view
               without signing in, but Nocturne can no longer show you what it is.
-              To get a link you can send, regenerate it; that stops the current one
+              To get a link you can send, regenerate it. This stops the current link
               from working. Last viewed {formatDate(share?.lastAccessedAt)}.
             </p>
           {/if}
@@ -426,7 +426,7 @@
         </div>
         <p class="text-sm text-muted-foreground">
           <strong class="font-medium text-foreground">Public access is off.</strong>
-          Only signed-in members and people you've shared a guest link with can see
+          Only signed-in members and people with a guest link from you can see
           your data. Turn it on to share a read-only public link.
         </p>
       </div>

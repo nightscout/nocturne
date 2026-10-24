@@ -15,7 +15,7 @@
 <h2>1. Introduction</h2>
 
 <p>
-  Nocturne is an open-source, self-hosted platform for managing your diabetes data with full Nightscout API compatibility. It's built by the diabetes community, for the diabetes community.
+  Nocturne is an open-source, self-hosted platform for managing your diabetes data with full Nightscout API compatibility. It is built by the diabetes community, for the diabetes community.
 </p>
 
 <p>
@@ -30,13 +30,13 @@
 
 <ul>
   <li><strong>No medical advice:</strong> Nocturne is not a medical device and does not provide medical advice. Always consult with healthcare professionals for medical decisions.</li>
-  <li><strong>No reliability guarantee:</strong> We don't guarantee the software will work perfectly, be error-free, or be available at all times.</li>
-  <li><strong>No fitness guarantee:</strong> We don't warrant that Nocturne is suitable for any particular purpose or meets your specific needs.</li>
+  <li><strong>No reliability guarantee:</strong> We do not guarantee the software will work perfectly, be error-free, or be available at all times.</li>
+  <li><strong>No fitness guarantee:</strong> We do not warrant that Nocturne is suitable for any particular purpose or meets your specific needs.</li>
   <li><strong>Use at your own risk:</strong> You assume all risk when using Nocturne. We are not liable for any harm, data loss, or issues that may arise.</li>
 </ul>
 
 <p>
-  This is standard for open-source software. You're free to inspect the code, modify it, and use it as you see fit, but we can't guarantee outcomes.
+  This is standard for open-source software. You are free to inspect the code, modify it, and use it as you see fit, but we cannot guarantee outcomes.
 </p>
 
 <h2>3. Third-Party Data Connectors</h2>
@@ -59,7 +59,7 @@
 </p>
 
 <ul>
-  <li><strong>We don't control these services:</strong> Third-party services have their own terms of service, privacy policies, and data practices. You are responsible for reviewing and agreeing to their terms.</li>
+  <li><strong>We do not control these services:</strong> Third-party services have their own terms of service, privacy policies, and data practices. You are responsible for reviewing and agreeing to their terms.</li>
   <li><strong>Data accuracy:</strong> The accuracy of your data in Nocturne depends on the accuracy of data provided by these third-party sources. We cannot guarantee the accuracy of third-party data.</li>
   <li><strong>Service availability:</strong> Third-party services may change their APIs, terms, or shut down at any time. We are not responsible for service interruptions or changes to third-party integrations.</li>
   <li><strong>Your agreements:</strong> By connecting a third-party service to Nocturne, you agree that you have the right to access that data and are in compliance with that service's terms.</li>
@@ -73,9 +73,9 @@
 </p>
 
 <ul>
-  <li><strong>Self-hosted:</strong> Your data lives in your own database on your own server. We don't have access to it.</li>
+  <li><strong>Self-hosted:</strong> Your data lives in your own database on your own server. We do not have access to it.</li>
   <li><strong>No data collection:</strong> The Nocturne software does not send data to us without your explicit consent.</li>
-  <li><strong>You're in control:</strong> You decide where to host Nocturne, who has access, and how your data is used.</li>
+  <li><strong>You are in control:</strong> You decide where to host Nocturne, who has access, and how your data is used.</li>
 </ul>
 
 <p>
@@ -96,7 +96,7 @@
 </ul>
 
 <p>
-  If you're hosting Nocturne for others (family, friends, community), you're responsible for ensuring acceptable use by those users.
+  If you host Nocturne for others (family, friends, community), you are responsible for ensuring acceptable use by those users.
 </p>
 
 <h2>6. Changes to These Terms</h2>
@@ -112,13 +112,13 @@
 </ul>
 
 <p>
-  For significant changes, we'll announce them in the project's GitHub repository.
+  We will announce significant changes in the project's GitHub repository.
 </p>
 
 <h2>7. Open Source License</h2>
 
 <p>
-  Nocturne is released under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU Affero General Public License v3.0 (AGPL-3.0)</a>. This means you're free to:
+  Nocturne is released under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU Affero General Public License v3.0 (AGPL-3.0)</a>. This means you are free to:
 </p>
 
 <ul>

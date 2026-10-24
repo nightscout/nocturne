@@ -26,12 +26,12 @@ export function coachCopy() {
     "feature-intro.calendar-trackers": {
       title: "Tracker events",
       description:
-        "Tracker events appear on your calendar \u2014 coloured by urgency.",
+        "Tracker events appear on your calendar, colored by urgency.",
     },
     "feature-intro.meals-matching": {
       title: "Smart matching",
       description:
-        "Nocturne suggests food matches based on your history \u2014 review them here.",
+        "Nocturne suggests food matches based on your history. Review them here.",
     },
     "feature-intro.appearance-widgets": {
       title: "Widget order",
@@ -40,7 +40,7 @@ export function coachCopy() {
     "setup-reports.categories": {
       title: "Start with Executive Summary",
       description:
-        "It combines your key metrics into a single page \u2014 great for clinic visits or sharing with your endo.",
+        "It combines your key metrics into a single page. Use it for clinic visits or to share with your endo.",
     },
     "setup-connectors.sources": {
       title: "Waiting for data",
@@ -50,7 +50,7 @@ export function coachCopy() {
     "setup-connectors.server-connectors": {
       title: "Cloud connectors",
       description:
-        "Pull data directly from Dexcom, LibreLink, or Glooko \u2014 no uploader app needed.",
+        "Pull data directly from Dexcom, LibreLink, or Glooko. No uploader app is necessary.",
     },
     "onboarding.sharing": {
       title: "Share with a caretaker",
@@ -70,7 +70,7 @@ export function coachCopy() {
     "onboarding.patient-details": {
       title: "Why this matters",
       description:
-        "Your diabetes type determines how Nocturne calculates bolus suggestions and categorises treatments. Select your type and save.",
+        "Your diabetes type determines how Nocturne calculates bolus suggestions and categorizes treatments. Select your type and save.",
     },
     "onboarding.devices": {
       title: "Add your current device",
@@ -120,7 +120,7 @@ export function coachCopy() {
     "loop-analysis-meals-and-events.curves": {
       title: "Before and after each event",
       description:
-        "The charts align all the events of a cohort at 0. The dashed line at 0 is the time of the event. Each colour is one cohort. The line is the median of its events.",
+        "The charts align all the events of a cohort at 0. The dashed line at 0 is the time of the event. Each color is one cohort. The line is the median of its events.",
     },
     "loop-analysis-meals-and-events.metrics": {
       title: "Results after each event",
@@ -140,7 +140,7 @@ export function coachCopy() {
     "loop-analysis-prediction-accuracy.hours": {
       title: "Bias by hour",
       description:
-        "Each row is one hour of the day. Each column is one horizon. The colour of a cell shows if the predictions from that hour were too high or too low. If there is more than one curve, select a curve at the top of By hour and context.",
+        "Each row is one hour of the day. Each column is one horizon. The color of a cell shows if the predictions from that hour were too high or too low. If there is more than one curve, select a curve at the top of By hour and context.",
     },
     "loop-analysis-prediction-accuracy.contexts": {
       title: "Bias by context",
@@ -191,7 +191,7 @@ export function coachFor(
 export function inviteLinkCopy(expiryLabel: string): CoachMarkStep {
   return {
     title: "Send the link",
-    description: `The link expires in ${expiryLabel}. They'll need to sign in or create an account to accept.`,
+    description: `The link expires in ${expiryLabel}. They must sign in or create an account to accept.`,
   };
 }
 

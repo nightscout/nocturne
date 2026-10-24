@@ -89,7 +89,7 @@
       { id: "path", label: "Choose your path", short: "Path" },
       { id: "cgm", label: "Connect a data source", short: "Source" },
       { id: "sync", label: "Configure & sync", short: "Setup" },
-      { id: "finish", label: "You\u2019re in", short: "Done" },
+      { id: "finish", label: "Setup complete", short: "Done" },
     ],
     migration: [
       { id: "path", label: "Choose your path", short: "Path" },
@@ -522,7 +522,7 @@
                     <p
                       class="max-w-140 text-base leading-relaxed text-white/50"
                     >
-                      Enter your credentials and we'll start syncing your data.
+                      Enter your credentials. Nocturne then starts to sync your data.
                     </p>
                   </div>
                   <ConnectorSetup

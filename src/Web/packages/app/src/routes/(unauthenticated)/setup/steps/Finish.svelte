@@ -98,7 +98,7 @@
           home.
         </em>
       {:else}
-        You're <em
+        You are <em
           class="not-italic font-light text-(--onb-accent)"
         >
           in.
@@ -110,8 +110,8 @@
     <p class="text-lg leading-relaxed text-muted-foreground max-w-130">
       {#if path === "migration"}
         All your entries, treatments, and profiles are in Nocturne. Your
-        existing uploaders keep working — you don't need to change them until
-        you're ready.
+        existing uploaders keep working. You do not need to change them until
+        you are ready.
       {:else}
         Your CGM is connected, your target range is set, and the dashboard is
         waiting. The next reading will land any minute.

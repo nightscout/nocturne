@@ -50,7 +50,7 @@
     <div role="status">
         {#if answer === "yes"}
             <p class="m-0 text-sm text-muted-foreground">
-                Thanks! Please consider
+                Thank you. Consider
                 <a
                     href={donateUrl}
                     target="_blank"
@@ -60,7 +60,7 @@
                     class="inline-flex items-center gap-0.5 font-semibold text-brand hover:underline"
                     >donating<ArrowUpRight class="size-3.5" aria-hidden="true" /></a
                 >
-                to help support our work.
+                to support our work.
             </p>
         {:else if answer === "no"}
             <p class="m-0 text-sm text-muted-foreground">

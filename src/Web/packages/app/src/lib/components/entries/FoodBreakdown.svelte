@@ -57,7 +57,7 @@
       breakdown = await getCarbIntakeFoodBreakdown(id).run();
     } catch (err) {
       console.error("Failed to load food breakdown:", err);
-      loadError = remoteErrorMessage(err, "Unable to load food breakdown.");
+      loadError = remoteErrorMessage(err, "Could not load food breakdown.");
     } finally {
       isLoading = false;
     }

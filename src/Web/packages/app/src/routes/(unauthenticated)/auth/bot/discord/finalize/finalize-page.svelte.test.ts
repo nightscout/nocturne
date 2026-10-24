@@ -22,7 +22,7 @@ describe("finalizing a Discord link", () => {
   it.each([
     [409, "This Discord account is already linked to another member."],
     [400, "This link is expired or invalid. Please try again from Settings."],
-    [500, "We couldn't complete the Discord link. It may have expired. Please try again from Settings."],
+    [500, "We could not complete the Discord link. If the link expired, try again from Settings."],
   ])("tells the member why a %i refusal linked nothing", async (status, message) => {
     confirm_discord_link.mockRejectedValue({ status, body: { message: "server wording" } });
     render(FinalizePage);

@@ -126,9 +126,9 @@
   <div class="flex min-h-[60vh] items-center justify-center px-4">
     <div class="max-w-md space-y-4 text-center">
       <AlertTriangle class="mx-auto size-6 text-destructive" aria-hidden="true" />
-      <h2 class="text-xl font-semibold">Unable to load reports</h2>
+      <h2 class="text-xl font-semibold">Could not load reports</h2>
       <p class="text-muted-foreground">
-        {remoteErrorMessage(reportsResource.error, "Something went wrong")}
+        {remoteErrorMessage(reportsResource.error, "An error occurred")}
       </p>
       <Button variant="outline" onclick={() => reportsResource.refresh()}>
         Try again
@@ -242,8 +242,8 @@
           <CardContent class="text-center">
             <h2 class="mb-2 text-lg font-semibold">No data in this range</h2>
             <p class="mx-auto max-w-md text-muted-foreground">
-              There aren't enough glucose readings between these dates to
-              summarise. Choose a longer date range.
+              There are not enough glucose readings between these dates to
+              summarize. Choose a longer date range.
             </p>
           </CardContent>
         </Card>

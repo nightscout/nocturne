@@ -20,7 +20,7 @@
       <Card.Title class="text-2xl font-bold">Enter guest code</Card.Title>
       <Card.Description>
         Enter the code shared with you to view health data. The code works
-        once — this device stays signed in for 48 hours.
+        once. This device stays signed in for 48 hours.
       </Card.Description>
     </Card.Header>
 

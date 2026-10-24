@@ -40,7 +40,7 @@
 
   {#if state.filteredFoods.length > PAGE_SIZE}
     <div class="border-t border-border py-3.5 text-center text-xs text-muted-foreground/60">
-      Showing {PAGE_SIZE} of {state.filteredFoods.length} — scroll or refine search to see more
+      Showing {PAGE_SIZE} of {state.filteredFoods.length}. Scroll or refine the search to see more.
     </div>
   {/if}
 </div>

@@ -53,7 +53,7 @@
       console.error("Creating the instance failed:", err);
       submitError = describeSubmitError(
         err,
-        "We couldn't create your instance. Please try again in a moment.",
+        "We could not create your instance. Try again in a moment.",
       );
     } finally {
       submitting = false;

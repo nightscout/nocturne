@@ -34,7 +34,7 @@
     class="font-brand text-4xl font-hairline leading-tight tracking-tight text-white"
   >
     {#if path === "fresh"}
-      Let's get your data <em class="not-italic text-(--onb-accent)">flowing.</em>
+      Get your data <em class="not-italic text-(--onb-accent)">flowing.</em>
     {:else}
       Bring your <em class="not-italic text-(--onb-accent)">decade</em> of data with you.
     {/if}
@@ -46,7 +46,7 @@
       Four short steps. Nothing to uninstall later, nothing sent off-server.
       You can change every choice in Settings afterwards.
     {:else}
-      We'll connect to your Nightscout instance, copy your entries over, and
+      We will connect to your Nightscout instance, copy your entries over, and
       keep your uploaders pointing at the new host. No data loss, no downtime.
     {/if}
   </p>

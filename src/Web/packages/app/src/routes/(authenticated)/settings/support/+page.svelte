@@ -74,7 +74,7 @@
     resettingTutorials = true;
     try {
       await coachCtx.resetAll();
-      toast.success("Tutorials reset — they'll appear as you navigate the app");
+      toast.success("Tutorials reset. They will appear as you use the app");
     } catch (err) {
       toast.error(describeSubmitError(err, "Failed to reset tutorials"));
     } finally {
@@ -126,7 +126,7 @@
     },
     {
       name: "Request a Feature",
-      description: "Have an idea? We'd love to hear it",
+      description: "Have an idea? Tell us about it",
       icon: Lightbulb,
       template: "feature",
     },
@@ -396,7 +396,7 @@
         <Button variant="outline" onclick={copyLogs}>
           {#if copy.isCopied()}
             <CheckCircle class="h-4 w-4 text-success" />
-            Copied!
+            Copied
           {:else}
             <Copy class="h-4 w-4" />
             Copy to Clipboard

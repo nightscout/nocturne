@@ -47,7 +47,7 @@
       <h1 class="text-2xl font-bold tracking-tight">Food Editor</h1>
       <div class="mt-0.5 text-xs text-muted-foreground">
         {#if state.foods.length === 0 && !state.loading}
-          No foods yet — add one to get started
+          No foods yet. Add one to get started.
         {:else}
           {state.foods.length} foods
         {/if}
@@ -159,8 +159,8 @@
         </div>
         <div class="text-lg font-semibold text-foreground">Build your food database</div>
         <div class="max-w-[380px] text-sm leading-relaxed">
-          Add the foods you eat regularly with their carb counts. Once they're here,
-          logging a meal takes a couple of taps anywhere in Nocturne.
+          Add the foods you eat regularly with their carb counts. When they are in this list,
+          you can log a meal from anywhere in Nocturne in a few steps.
         </div>
         <div class="mt-1.5 flex gap-2">
           <Button size="sm" onclick={() => (state.composerOpen = true)}><Plus class="h-3.5 w-3.5" /> Add your first food</Button>

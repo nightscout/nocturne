@@ -342,7 +342,7 @@
   <div class="@container flex flex-col h-full">
     <div class="hidden print:block border-b pb-3 mb-4">
       <h1 class="text-xl font-bold">
-        Month-to-Month Report — {MONTH_NAMES[currentMonth]}
+        Month-to-Month Report: {MONTH_NAMES[currentMonth]}
         {currentYear}
       </h1>
       <p class="text-sm text-muted-foreground">

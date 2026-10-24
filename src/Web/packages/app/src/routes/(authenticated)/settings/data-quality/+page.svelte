@@ -24,7 +24,7 @@
 	const historyLinks: SettingsLink[] = [
 		{
 			title: 'Timezone History',
-			description: "Where you've lived and travelled, for correct timestamps.",
+			description: "Where you lived and traveled, for correct timestamps.",
 			href: '/settings/timezone',
 			icon: Globe
 		},
@@ -202,8 +202,8 @@
 				<div class="rounded-lg border border-muted bg-muted/50 p-4">
 					<p class="text-sm text-muted-foreground">
 						Compression lows are falsely low CGM readings caused by sleeping on your sensor. When
-						detected, you'll be notified to review and confirm them. Reviewing keeps a record for
-						you; it does not remove the readings from your reports or statistics.
+						Nocturne detects them, it notifies you to review and confirm them. Reviewing keeps a
+						record for you. It does not remove the readings from your reports or statistics.
 					</p>
 				</div>
 			</CardContent>

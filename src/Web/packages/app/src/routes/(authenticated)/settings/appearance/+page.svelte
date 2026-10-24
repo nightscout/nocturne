@@ -379,12 +379,12 @@
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #808080"
-                title="Pill Grey"
+                title="Pill Gray"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #bdbdbd"
-                title="Text Grey"
+                title="Text Gray"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
@@ -1042,7 +1042,7 @@
           <div class="space-y-0.5">
             <Label>Show tracker pills</Label>
             <p class="text-sm text-muted-foreground">
-              Display active tracker ages (sensor, pump site, etc.) on homepage
+              Display active tracker ages (such as sensor and pump site) on homepage
             </p>
           </div>
           <Switch

@@ -31,7 +31,7 @@
 <Banner variant="warning">
   <div class="flex items-center gap-2">
     <Eye class="h-4 w-4 shrink-0" />
-    <span>Guest access &mdash; read only</span>
+    <span>Guest access: read only</span>
   </div>
   <span class="shrink-0 font-medium">{remaining}</span>
 </Banner>

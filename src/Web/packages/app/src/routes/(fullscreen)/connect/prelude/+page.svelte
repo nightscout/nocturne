@@ -49,7 +49,7 @@
       <CardHeader>
         <CardTitle>Connect Prelude</CardTitle>
         <CardDescription>
-          Prelude didn't open automatically. You can try these options:
+          Prelude did not open automatically. You can try these options:
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
@@ -82,7 +82,7 @@
         </div>
 
         <div class="pt-2">
-          <p class="text-muted-foreground text-sm">Don't have Prelude installed?</p>
+          <p class="text-muted-foreground text-sm">Prelude not installed?</p>
           <Button
             href="https://github.com/nightscout/prelude/releases"
             target="_blank"

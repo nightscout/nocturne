@@ -1,0 +1,11 @@
+# Rule 3.2 continued. These are softer than "should", and ADR rationale
+# legitimately reasons about hypotheticals, so they warn rather than fail.
+extends: substitution
+message: "Rule 3.2: prefer '%s' over '%s', or restructure with 'if'."
+link: .claude/skills/simple-english/SKILL.md
+level: warning
+ignorecase: true
+swap:
+  may: can
+  might: can
+  could: can

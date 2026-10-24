@@ -1,0 +1,26 @@
+# Words that carry no fact. Delete them rather than replace them.
+#
+# Deliberately absent: "just", which does real positional work in this domain
+# ("the pivot sits just proud of the carcase side").
+extends: existence
+message: "'%s' carries no fact. Delete it, or give the measurable property."
+link: .claude/skills/simple-english/SKILL.md
+level: warning
+ignorecase: true
+tokens:
+  - simply
+  - seamlessly
+  - effortlessly
+  - robust
+  - performant
+  - 'blazingly fast'
+  - 'state-of-the-art'
+  - 'best-in-class'
+  - 'needless to say'
+  - elegant
+  - elegantly
+  - crucially
+  - importantly
+  - 'the beauty of'
+  - 'the key insight'
+  - please

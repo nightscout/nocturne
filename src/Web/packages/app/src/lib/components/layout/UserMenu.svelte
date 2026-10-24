@@ -149,7 +149,7 @@
             <!-- eslint-disable-next-line no-restricted-syntax -- DropdownMenu.Item styles its child as the menu item -->
             <button {...props} type="submit">
               <LogOut class="mr-2 h-4 w-4" />
-              <span>Log out</span>
+              <span>Sign out</span>
             </button>
           {/snippet}
         </DropdownMenu.Item>

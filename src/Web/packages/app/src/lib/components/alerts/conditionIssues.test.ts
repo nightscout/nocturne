@@ -36,11 +36,11 @@ describe("conditionIssuesMessage", () => {
 		expect(
 			conditionIssuesMessage(rejected(400, [issue("invalid_field", "timezone")]))
 		).toBe(
-			"A time-of-day condition has a time zone that isn't recognised. Pick one from its time zone list, or clear it to use the profile's, and save again."
+			"A time-of-day condition has a time zone that is not recognized. Pick one from its time zone list, or clear it to use the profile's, and save again."
 		);
 		expect(
 			conditionIssuesMessage(rejected(400, [issue("invalid_field", "value")]))
-		).toBe("Part of this rule's conditions is malformed, so it can't be saved.");
+		).toBe("Part of this rule's conditions is malformed, so it cannot be saved.");
 	});
 
 	it("has a sentence for every reason the engine reports", () => {
@@ -102,7 +102,7 @@ describe("storedConditionIssuesMessage", () => {
 		expect(
 			storedConditionIssuesMessage([issue("field_missing", "value"), issue("constructor")])
 		).toBe(
-			"A condition is missing a setting it needs. Fill it in and save again. Part of this rule's conditions is malformed, so the rule can't run as set. Edit its conditions and save it."
+			"A condition is missing a setting it needs. Fill it in and save again. Part of this rule's conditions is malformed, so the rule cannot run as set. Edit its conditions and save it."
 		);
 	});
 });

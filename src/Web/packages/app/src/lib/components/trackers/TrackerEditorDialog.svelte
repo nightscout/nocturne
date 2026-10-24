@@ -356,7 +356,7 @@
     >
       <Select.Trigger>
         {#if formDashboardVisibility === DashboardVisibility.Off}
-          Off - Don't show on dashboard
+          Off - Do not show on dashboard
         {:else if formDashboardVisibility === DashboardVisibility.Always}
           Always show
         {:else if formDashboardVisibility === DashboardVisibility.Info}
@@ -374,7 +374,7 @@
       <Select.Content>
         <Select.Item
           value={DashboardVisibility.Off}
-          label="Off - Don't show on dashboard"
+          label="Off - Do not show on dashboard"
         />
         <Select.Item value={DashboardVisibility.Always} label="Always show" />
         <Select.Item
@@ -443,7 +443,7 @@
       <EventTypeCombobox
         bind:value={formStartEventType}
         onSelect={(type) => (formStartEventType = type)}
-        placeholder="None - don't create event"
+        placeholder="None - do not create event"
       />
     </div>
 
@@ -454,7 +454,7 @@
       <EventTypeCombobox
         bind:value={formCompletionEventType}
         onSelect={(type) => (formCompletionEventType = type)}
-        placeholder="None - don't create event"
+        placeholder="None - do not create event"
       />
     </div>
   </div>

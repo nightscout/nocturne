@@ -1,0 +1,10 @@
+# Rule 3.4: no auxiliary verbs for complex constructions.
+extends: existence
+message: "Rule 3.4: '%s' is a perfect tense. Use simple past or simple present."
+link: .claude/skills/simple-english/SKILL.md
+level: warning
+ignorecase: true
+tokens:
+  - '\b(?:has|have|had) been\b'
+  - '\bis to be \w+ed\b'
+  - '\b(?:is|are|was|were) being\b'

@@ -40,7 +40,7 @@
       <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
         <HistoryIcon class="h-5 w-5" /> Alert history
       </h1>
-      <p class="text-sm text-muted-foreground">Every real fire from this tenant. Test fires aren't shown.</p>
+      <p class="text-sm text-muted-foreground">Every real fire from this tenant. Test fires are not shown.</p>
     </div>
   </div>
 

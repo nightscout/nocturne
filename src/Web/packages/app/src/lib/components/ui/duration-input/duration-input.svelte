@@ -212,32 +212,32 @@
         <p class="font-medium mb-1">Supported formats:</p>
         <ul class="text-sm space-y-0.5">
           <li>
-            <code class="bg-muted px-1 rounded">168</code>
-            — plain hours
+            <code class="bg-muted px-1 rounded">168</code>:
+            plain hours
           </li>
           <li>
             <code class="bg-muted px-1 rounded">7x24</code>
             or
-            <code class="bg-muted px-1 rounded">7*24</code>
-            — multiplication
+            <code class="bg-muted px-1 rounded">7*24</code>:
+            multiplication
           </li>
           <li>
             <code class="bg-muted px-1 rounded">7d</code>
             or
-            <code class="bg-muted px-1 rounded">7 days</code>
-            — days to hours
+            <code class="bg-muted px-1 rounded">7 days</code>:
+            days to hours
           </li>
           <li>
             <code class="bg-muted px-1 rounded">1w</code>
             or
-            <code class="bg-muted px-1 rounded">1 week</code>
-            — weeks to hours
+            <code class="bg-muted px-1 rounded">1 week</code>:
+            weeks to hours
           </li>
           <li>
             <code class="bg-muted px-1 rounded">-24</code>
             or
-            <code class="bg-muted px-1 rounded">-2d</code>
-            — before expiration/event
+            <code class="bg-muted px-1 rounded">-2d</code>:
+            before expiration/event
           </li>
         </ul>
       </Tooltip.Content>

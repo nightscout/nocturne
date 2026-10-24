@@ -51,7 +51,7 @@
     <Dialog.Header>
       <Dialog.Title>Source Default Rules</Dialog.Title>
       <Dialog.Description>
-        Configure glucose processing defaults per uploading client. Rules are evaluated top-to-bottom; first match wins.
+        Configure glucose processing defaults per uploading client. Rules are evaluated from top to bottom. The first match wins.
       </Dialog.Description>
     </Dialog.Header>
 

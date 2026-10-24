@@ -166,17 +166,17 @@
     list.push(
       hidden(LoopAnalysisSeries.LoopActivity)
         ? hiddenFigure("Closed loop")
-        : shareFigure("Closed loop", (r) => r?.activity?.closedLoop, "Percent of the analysed time when the loop controlled basal delivery")
+        : shareFigure("Closed loop", (r) => r?.activity?.closedLoop, "Percent of the analyzed time when the loop controlled basal delivery")
     );
     list.push(
       hidden(LoopAnalysisSeries.CgmActivity)
         ? hiddenFigure("CGM active")
-        : shareFigure("CGM active", (r) => r?.activity?.cgm, "Percent of the analysed time when glucose readings arrived")
+        : shareFigure("CGM active", (r) => r?.activity?.cgm, "Percent of the analyzed time when glucose readings arrived")
     );
     list.push(
       hidden(LoopAnalysisSeries.LoopActivity)
         ? hiddenFigure("Pump active")
-        : shareFigure("Pump active", (r) => r?.activity?.pump, "Percent of the analysed time when the loop uploaded a cycle. If there are no cycles, the report uses the delivery records.")
+        : shareFigure("Pump active", (r) => r?.activity?.pump, "Percent of the analyzed time when the loop uploaded a cycle. If there are no cycles, the report uses the delivery records.")
     );
     list.push(
       gapsFigure("Loop gaps", LoopAnalysisSeries.LoopGaps, "loopGaps", `No gap of more than ${gapThreshold} between loop cycles`)
@@ -482,7 +482,7 @@
               slotHeading={false}
               id={strip.id}
               title={strip.title}
-              unit="Share of analysed time, %"
+              unit="Share of analyzed time, %"
               {cursor}
               {pickHelp}
               yDomain={[0, 100]}

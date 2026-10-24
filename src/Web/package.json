@@ -12,6 +12,7 @@
     "check": "pnpm --recursive check",
     "test": "pnpm --recursive test",
     "translations:sync": "cd packages/app && wuchale",
+    "lint:copy": "cd packages/app && wuchale -l warn && cd ../.. && node utils/lintUiCopy/index.ts",
     "clean": "pnpm --recursive clean && rm -rf node_modules",
     "generate-api-client": "cd ../API/Nocturne.API && nswag run nswag.json",
     "generate-zod-schemas": "node utils/generateZodSchemas/index.ts",

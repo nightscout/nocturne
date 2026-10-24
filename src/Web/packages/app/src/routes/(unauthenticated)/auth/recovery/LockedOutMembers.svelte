@@ -36,7 +36,7 @@
       issuedFor = subjectId;
       issuedLink = link.toString();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Couldn't create a recovery link.");
+      errorMessage = describeSubmitError(err, "Could not create a recovery link.");
     } finally {
       issuingFor = null;
     }
@@ -46,7 +46,7 @@
 {#if members.current && members.current.length > 0}
   <Card.Root class="w-full max-w-md">
     <Card.Header>
-      <Card.Title class="text-base">Members who can't sign in</Card.Title>
+      <Card.Title class="text-base">Members who cannot sign in</Card.Title>
       <Card.Description>
         Send a member a one-time recovery link so they can register a new passkey. It works once
         and expires after 24 hours.
@@ -81,7 +81,7 @@
           </div>
           {#if member.hasRecoveryCodes && !member.operatorOnly}
             <p class="text-xs text-muted-foreground">
-              They still have recovery codes of their own. If they've lost them, a link cancels
+              They still have recovery codes of their own. If they lost them, a link cancels
               those codes once it is used.
             </p>
           {/if}

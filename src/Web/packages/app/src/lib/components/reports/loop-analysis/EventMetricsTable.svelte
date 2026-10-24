@@ -129,11 +129,11 @@
     <p>
       {cohort ? cohortLabel(cohort) : ""}: grams per unit comes only from a meal with no other meal,
       correction or rise in its window. The pump records must also show all the insulin in that window.
-      {plural(r.gramsPerUnitNotIsolated ?? 0, ["# meal had another event in its window", "# meals had another event in their window"])};
+      {plural(r.gramsPerUnitNotIsolated ?? 0, ["# meal had another event in its window", "# meals had another event in their window"])},
       {plural(r.gramsPerUnitUncovered ?? 0, [
         "# had too little of its basal recorded",
         "# had too little of their basal recorded",
-      ])}; {plural(r.gramsPerUnitNoNetInsulin ?? 0, [
+      ])}, {plural(r.gramsPerUnitNoNetInsulin ?? 0, [
         "# had no insulin above schedule",
         "# had no insulin above schedule",
       ])}.

@@ -1,0 +1,36 @@
+# The slop-to-simple table from SKILL.md. Not part of ASD-STE100 itself.
+# These carry a replacement, so they are actionable. Words that carry no fact
+# at all are in Filler.yml.
+extends: substitution
+message: "Write '%s' instead of '%s'."
+link: .claude/skills/simple-english/SKILL.md
+level: warning
+ignorecase: true
+swap:
+  leverage: use
+  utilise: use
+  'in order to': to
+  'prior to': before
+  ensure: 'make sure that'
+  ensures: 'makes sure that'
+  ensuring: 'making sure that'
+  functionality: 'function, or feature'
+  facilitate: 'help, or make possible'
+  facilitates: 'helps, or makes possible'
+  'due to the fact that': because
+  'in the event that': if
+  'when it comes to': for
+  'it is worth noting that': '(delete this)'
+  'enables you to': 'you can'
+  'allows you to': 'you can'
+  'is designed to': '(say what it does)'
+  'aims to': '(say what it does)'
+  'out of the box': 'by default'
+  'under the hood': internally
+  streamline: 'make simpler, or make faster'
+  plethora: many
+  myriad: many
+  'dive into': 'read, or examine'
+  'delve into': 'read, or examine'
+  'gracefully handles': '(say what it does)'
+  'and/or': 'X, or Y, or both'

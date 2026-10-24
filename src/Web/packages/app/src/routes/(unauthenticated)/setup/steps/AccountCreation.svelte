@@ -95,7 +95,7 @@
       console.error("Starting the external sign-in failed:", err);
       oidcError = describeSubmitError(
         err,
-        "We couldn't start sign-in with that provider. Please try again.",
+        "We could not start sign-in with that provider. Try again.",
       );
       isRedirecting = false;
       selectedProvider = null;
@@ -151,7 +151,7 @@
       passkeyError = describePasskeyError(
         err,
         "register",
-        "We couldn't create your account. Please try again."
+        "We could not create your account. Try again."
       );
     } finally {
       isRegistering = false;
