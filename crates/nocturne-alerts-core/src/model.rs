@@ -451,22 +451,14 @@ impl Reader<'_> {
 
     /// The JSON array `name`, which must hold at least one item.
     fn list(&self, name: &'static str) -> Option<&Vec<Value>> {
-        let items = match self.get(name) {
-            None => None,
-            Some(Value::Array(items)) => Some(items),
-            Some(_) => return self.ok(Err(Reason::InvalidField(name))),
+        let reason = match self.get(name) {
+            Some(Value::Array(items)) if !within_depth(self.level) => Reason::TooDeep,
+            Some(Value::Array(items)) if !items.is_empty() => return Some(items),
+            Some(Value::Array(_)) | None => Reason::ListEmpty(name),
+            Some(_) => Reason::InvalidField(name),
         };
-        if !within_depth(self.level) {
-            self.report(Reason::TooDeep);
-            return None;
-        }
-        match items {
-            Some(items) if !items.is_empty() => Some(items),
-            _ => {
-                self.report(Reason::ListEmpty(name));
-                None
-            }
-        }
+        self.report(reason);
+        None
     }
 }
 

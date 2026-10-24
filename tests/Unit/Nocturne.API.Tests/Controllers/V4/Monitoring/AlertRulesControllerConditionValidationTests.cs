@@ -57,8 +57,8 @@ public class AlertRulesControllerConditionValidationTests
             .Setup(v => v.Validate(AlertConditionType.Composite, It.IsAny<string>(), true, It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns(
             [
-                new RustValidationIssue("condition", "composite[1].composite", "conditions_empty", "conditions"),
-                new RustValidationIssue("condition", "composite[1].composite", "unknown_operator", "operator"),
+                new RustValidationIssue("condition", "composite[1].composite", "list_empty", "conditions"),
+                new RustValidationIssue("condition", "composite[1].composite", "unknown_value", "operator"),
                 new RustValidationIssue("auto_resolve", "auto_resolve", "not_an_object", null),
             ]);
         var (controller, db) = CreateController(validator.Object);
@@ -76,7 +76,7 @@ public class AlertRulesControllerConditionValidationTests
             .Should().BeOfType<ValidationProblemDetails>().Which;
         problem.Errors.Should().BeEquivalentTo(new Dictionary<string, string[]>
         {
-            ["condition:composite[1].composite"] = ["conditions_empty:conditions", "unknown_operator:operator"],
+            ["condition:composite[1].composite"] = ["list_empty:conditions", "unknown_value:operator"],
             ["auto_resolve:auto_resolve"] = ["not_an_object"],
         });
         problem.Extensions["issues"].Should().BeAssignableTo<IReadOnlyList<RustValidationIssue>>()

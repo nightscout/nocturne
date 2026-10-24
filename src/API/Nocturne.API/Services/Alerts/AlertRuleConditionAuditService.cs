@@ -5,10 +5,10 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
-/// Startup scan that logs a warning for every enabled alert rule whose condition trees a save
-/// would now reject (<see cref="IAlertRuleConditionValidator"/>). A rule stored before that check
-/// existed may be skipped on every evaluation or never able to fire. The log names the rule and
-/// each problem's path and reason code, so an operator can find and fix it. Changes nothing.
+/// Startup scan that logs a warning for every enabled alert rule with a condition tree that cannot
+/// be evaluated (<see cref="IAlertRuleConditionValidator"/>), such as one stored before saves
+/// checked it. The log names the rule and each problem's path and reason code, so an operator can
+/// find and fix it. Changes nothing.
 /// </summary>
 /// <remarks>
 /// Per tenant because <c>alert_rules</c> is RLS-scoped and fail-closed; see
@@ -63,7 +63,7 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
             if (flagged > 0)
             {
                 _logger.LogWarning(
-                    "{Count} enabled alert rule(s) have conditions a save would reject", flagged);
+                    "{Count} enabled alert rule(s) have conditions that cannot be evaluated", flagged);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -120,7 +120,7 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
 
             flagged++;
             _logger.LogWarning(
-                "Alert rule {AlertRuleId} for tenant {TenantId} has conditions a save would reject: {Issues}",
+                "Alert rule {AlertRuleId} for tenant {TenantId} has conditions that cannot be evaluated: {Issues}",
                 rule.Id,
                 tenantId,
                 string.Join("; ", issues.Select(i => $"{i.Scope} {i.Path}: {i.Reason}")));

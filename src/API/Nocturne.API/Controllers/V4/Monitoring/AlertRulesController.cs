@@ -1057,9 +1057,9 @@ public class AlertRuleResponse
     /// <summary>Why a data repair changed or disabled this rule (<see cref="AlertRuleReviewReasons"/>);
     /// null when none did. Cleared by the next edit.</summary>
     public string? ReviewReason { get; set; }
-    /// <summary>What a save of the rule's stored conditions would reject. A stored rule keeps
-    /// evaluating with them, so a non-empty list can mean a condition that never fires as
-    /// written.</summary>
+    /// <summary>Every problem that keeps one of the rule's stored condition trees from being
+    /// evaluated: with one in its body the rule is skipped, in its auto-resolve tree it never
+    /// resolves, and in its smart-snooze conditions the snooze clears.</summary>
     public List<RustValidationIssue> ConditionIssues { get; set; } = [];
     public bool AutoResolveEnabled { get; set; }
     public object? AutoResolveParams { get; set; }

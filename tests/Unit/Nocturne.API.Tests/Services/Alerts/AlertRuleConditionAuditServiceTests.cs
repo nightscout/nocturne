@@ -36,7 +36,7 @@ public class AlertRuleConditionAuditServiceTests
         _validator
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns((AlertConditionType _, string body, bool _, string? _, string? _) => body == Rejected
-                ? [new RustValidationIssue("condition", "composite", "conditions_empty", "conditions")]
+                ? [new RustValidationIssue("condition", "composite", "list_empty", "conditions")]
                 : []);
     }
 
@@ -88,7 +88,7 @@ public class AlertRuleConditionAuditServiceTests
 
         _logger.Warnings.Should().HaveCount(2);
         _logger.Warnings.Should().ContainSingle(w =>
-            w.Contains(FlaggedRule.ToString()) && w.Contains("condition composite: conditions_empty"));
+            w.Contains(FlaggedRule.ToString()) && w.Contains("condition composite: list_empty"));
         _logger.Warnings.Should().ContainSingle(w => w.StartsWith("1 enabled alert rule(s)"));
     }
 
@@ -124,7 +124,7 @@ public class AlertRuleConditionAuditServiceTests
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), Rejected, It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns(() => ++calls == 1
                 ? throw new InvalidOperationException("boom")
-                : [new RustValidationIssue("condition", "composite", "conditions_empty", "conditions")]);
+                : [new RustValidationIssue("condition", "composite", "list_empty", "conditions")]);
 
         await RunAsync();
 

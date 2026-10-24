@@ -102,7 +102,7 @@ describe("storedConditionIssuesMessage", () => {
 		expect(
 			storedConditionIssuesMessage([issue("field_missing", "value"), issue("constructor")])
 		).toBe(
-			"A condition is missing a setting it needs. Fill it in and save again. Part of this rule's conditions is malformed, so the rule may not alert as set. Edit its conditions and save it."
+			"A condition is missing a setting it needs. Fill it in and save again. Part of this rule's conditions is malformed, so the rule can't run as set. Edit its conditions and save it."
 		);
 	});
 });

@@ -2,7 +2,7 @@ import type { RustValidationIssue } from "$api-clients";
 import { errorIssues } from "$lib/forms/submit-error";
 
 const MALFORMED = "Part of this rule's conditions is malformed, so it can't be saved.";
-const STORED_MALFORMED = "Part of this rule's conditions is malformed, so the rule may not alert as set. Edit its conditions and save it.";
+const STORED_MALFORMED = "Part of this rule's conditions is malformed, so the rule can't run as set. Edit its conditions and save it.";
 
 /**
  * Sentences for the reason codes a rule save is rejected with

@@ -8,7 +8,7 @@ using Nocturne.Core.Models.Alerts;
 namespace Nocturne.API.Services.Alerts.Engines;
 
 /// <summary>One leaf of a rule's condition tree as the engine reads it.</summary>
-/// <param name="Kind">The kind node dispatch resolves, or null for an unknown or empty slot.</param>
+/// <param name="Kind">The leaf's kind, or null for one this host does not know.</param>
 /// <param name="Params">The operands the engine decoded, or JSON null when there are none.</param>
 internal readonly record struct ConditionLeaf(AlertConditionType? Kind, JsonElement Params)
 {

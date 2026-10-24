@@ -67,7 +67,7 @@ public class MetadataController : ControllerBase
         {
             Sample = new ConditionNode("threshold"),
             TempBasalMetrics = Enum.GetValues<TempBasalMetric>(),
-            ValidationIssue = new RustValidationIssue("condition", "root", "conditions_empty", null),
+            ValidationIssue = new RustValidationIssue("condition", "composite", "list_empty", "conditions"),
             Description = "Polymorphic ConditionNode shape used by alert rules.",
         });
     }

@@ -134,11 +134,7 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
 }
 ```
 
-Failure modes that are **data**, not errors: unrecognised operators or
-directions, a `not` or `sustained` with no child, a
-composite with an empty `conditions` list, a JSON `null` rule body — these
-evaluate `false` inside `result` (and `not` inverts them). Envelope-level
-errors (`ok: false`) are reserved for unusable requests: malformed JSON, wrong
+Envelope-level errors (`ok: false`) are reserved for unusable requests: malformed JSON, wrong
 `schema_version`, unknown root `condition_type`, a tracker `state` without
 `updated_at`, an instant (`now`, a timer, a tracker or context timestamp)
 before 0001-01-01 or from 10000-01-01 UTC on, and a rule body that cannot be evaluated — malformed anywhere in the tree, or one of the shapes in
@@ -256,11 +252,8 @@ Response:
 }
 ```
 
-Container nodes whose payload or child is missing are leaves (§2.2); a
-JSON-null child slot of a composite is a leaf whose
-path has an empty type segment (`composite[2].`). Pruning timers to the
-`paths` set is always safe — it is a superset of every path a timer can be
-keyed under for that tree.
+Pruning timers to the `paths` set is always safe — it is every path a timer
+can be keyed under for that tree.
 
 ## Classify (`nocturne_alerts_classify`)
 

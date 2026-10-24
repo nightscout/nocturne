@@ -258,8 +258,7 @@ in §3 plus:
 |---|---|---|---|
 | `timeout_minutes` (int) | `LastReadingAt`, `LatestTimestamp`, now | `now - LastReadingAt >= timeout_minutes`, compared as exact durations (no minute rounding) | both `LastReadingAt` and `LatestTimestamp` null ⇒ false (cold start); only `LastReadingAt` null ⇒ infinitely stale ⇒ true |
 
-It is `staleness{operator: ">=", value: timeout_minutes}` with an exact-duration compare
-and the non-positive-timeout guard.
+It is `staleness{operator: ">=", value: timeout_minutes}` with an exact-duration compare.
 
 The leaf can only turn true *between* readings — a reading arriving sets `LastReadingAt`
 to the reading's time — so per-reading evaluation alone never fires it. It is one of the

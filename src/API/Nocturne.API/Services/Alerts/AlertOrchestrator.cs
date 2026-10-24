@@ -80,12 +80,7 @@ internal sealed class AlertOrchestrator(
             }
             catch (RustAlertEngineException ex) when (ex.IsConditionRejection)
             {
-                if (conditionLog.FirstFor(rule.Id, rule.ConditionType, rule.ConditionParams))
-                {
-                    logger.LogWarning(ex,
-                        "Condition tree of alert rule {AlertRuleId} cannot be evaluated; the rule is skipped until it is edited",
-                        rule.Id);
-                }
+                // The rule is skipped; ReportConditionIssues has logged why.
             }
             catch (Exception ex)
             {
@@ -96,10 +91,10 @@ internal sealed class AlertOrchestrator(
     }
 
     /// <summary>
-    /// Logs, once per version of a rule's condition, what a save of it would reject. A stored
-    /// rule keeps evaluating such a tree, where an unknown operator reads false and a missing operand
-    /// reads as its default, so the rule can go on never firing with nothing else to say so. A
-    /// failure of the check itself is logged and never keeps the rule from evaluating.
+    /// Logs, once per version of a rule's condition, every problem that keeps one of its trees
+    /// from being evaluated (docs/alerts/engine-semantics.md §1.4): a body skips the rule, an
+    /// auto-resolve tree never resolves, and smart-snooze conditions clear the snooze. A failure
+    /// of the check itself is logged and never keeps the rule from evaluating.
     /// </summary>
     private void ReportConditionIssues(AlertRuleSnapshot rule, Guid tenantId)
     {
@@ -123,7 +118,7 @@ internal sealed class AlertOrchestrator(
             return;
 
         logger.LogWarning(
-            "Alert rule {AlertRuleId} for tenant {TenantId} evaluates conditions a save would reject, so it may not fire as written: {Issues}",
+            "Alert rule {AlertRuleId} for tenant {TenantId} has conditions that cannot be evaluated until it is edited: {Issues}",
             rule.Id,
             tenantId,
             string.Join("; ", issues.Select(i => $"{i.Scope} {i.Path}: {i.Reason}{(i.Field is null ? "" : $" ({i.Field})")}")));

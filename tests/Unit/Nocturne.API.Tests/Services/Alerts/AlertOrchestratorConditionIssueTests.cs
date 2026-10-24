@@ -18,8 +18,8 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts;
 
 /// <summary>
-/// The shapes the setup wizard stored before the alerts redesign (issue #853) evaluate without
-/// error and never fire as set, so evaluation reports what a save would reject about a rule.
+/// The shapes the setup wizard stored before the alerts redesign (issue #853) cannot be evaluated,
+/// so evaluation reports every problem with a rule's conditions.
 /// </summary>
 [Trait("Category", "Unit")]
 public class AlertOrchestratorConditionIssueTests
@@ -143,7 +143,7 @@ public class AlertOrchestratorConditionIssueTests
         harness.Validator
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(),
                 It.IsAny<string?>(), It.IsAny<string?>()))
-            .Returns([new RustValidationIssue("condition", "composite", "operator_missing", "operator")]);
+            .Returns([new RustValidationIssue("condition", "composite", "field_missing", "operator")]);
         const string operatorless = """{"conditions": [{"type": "threshold", "threshold": {"direction": "below", "value": 70}}]}""";
 
         await harness.EvaluateAsync(Rule(operatorless, AlertConditionType.Composite));

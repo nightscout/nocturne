@@ -61,6 +61,27 @@ internal sealed record SmartSnoozeConfig(
     private const string SmartSnoozeProperty = "smartSnooze";
     private const string ConditionsProperty = "conditions";
 
+    /// <summary>
+    /// The raw <see cref="Conditions"/> list, whether or not smart snooze is on. Null when there is
+    /// none or the JSON is unreadable.
+    /// </summary>
+    public static JsonElement? StoredConditions(string? clientConfiguration)
+    {
+        if (string.IsNullOrWhiteSpace(clientConfiguration))
+            return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(clientConfiguration);
+            return Section(doc.RootElement) is { } snooze && ConditionList(snooze) is { } conditions
+                ? conditions.Clone()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>The payload-only body of the <c>composite{and}</c> <paramref name="conditions"/> evaluate as.</summary>
     public static string AndBody(JsonElement conditions) =>
         new JsonObject
