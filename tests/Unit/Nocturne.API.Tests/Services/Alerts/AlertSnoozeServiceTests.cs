@@ -209,11 +209,11 @@ public class AlertSnoozeServiceTests
         time.SetUtcNow(Now);
         var engine = EngineTestHarness.BuildRustEngine(time, new InMemoryTrackerRepository([]));
         var escalation = JsonDocument.Parse(
-            $$$"""{"type":"alert_state","alert_state":{"alert_id":"{{{seeded.RuleId}}}","state":"unacknowledged","for_minutes":15}}""")
+            $$$"""[{"type":"alert_state","alert_state":{"alert_id":"{{{seeded.RuleId}}}","state":"unacknowledged","for_minutes":15}}]""")
             .RootElement;
 
-        var unacknowledged = await engine.EvaluateNodeAsync(
-            Guid.NewGuid(), escalation, context, "escalation", CancellationToken.None);
+        var unacknowledged = await engine.EvaluateSnoozeConditionsAsync(
+            Guid.NewGuid(), escalation, context, CancellationToken.None);
 
         unacknowledged.Should().BeTrue();
     }

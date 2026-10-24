@@ -70,28 +70,48 @@ public class TimerContinuityTests
             .Should().Contain("sustained", T0, "the first-true instant the first instance recorded must survive untouched");
     }
 
-    [NativeFact]
-    public async Task Aux_scope_timers_thread_through_the_evaluate_node_path()
-    {
-        // EvaluateNodeAsync (the snooze / sweep auto-resolve surface) must honour and
-        // persist (rule_id, path) timers exactly like the rule-body path.
-        var rule = BuildSustainedRule();
-        var time = new ManualTimeProvider();
-        var trackerRepo = new InMemoryTrackerRepository([rule]);
-        var rust = EngineTestHarness.BuildRustEngine(time, trackerRepo);
+    private const string SnoozeConditions =
+        """[{"type":"sustained","sustained":{"minutes":10,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}}]""";
 
-        var node = JsonDocument.Parse(
-            """{"type":"sustained","sustained":{"minutes":10,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}}""")
-            .RootElement;
+    private static AlertRule WithSnoozeConditions(string conditions)
+    {
+        var rule = BuildSustainedRule();
+        rule.ClientConfiguration = $$$"""{"snooze":{"smartSnooze":true,"conditions":{{{conditions}}}}}""";
+        return rule;
+    }
+
+    [NativeFact]
+    public async Task Snooze_timers_thread_through_the_snooze_path_root()
+    {
+        var time = new ManualTimeProvider();
+        var trackerRepo = new InMemoryTrackerRepository([WithSnoozeConditions(SnoozeConditions)]);
+        var rust = EngineTestHarness.BuildRustEngine(time, trackerRepo);
+        var conditions = JsonDocument.Parse(SnoozeConditions).RootElement;
 
         time.SetUtcNow(T0);
-        var first = await rust.EvaluateNodeAsync(RuleId, node, LowGlucoseContext(T0), "snooze", CancellationToken.None);
+        var first = await rust.EvaluateSnoozeConditionsAsync(RuleId, conditions, LowGlucoseContext(T0), CancellationToken.None);
         first.Should().BeFalse("the window starts on the first true tick");
         (await trackerRepo.Timers.GetAllForRuleAsync(RuleId, CancellationToken.None))
-            .Should().Contain("snooze", T0, "aux-scope timers key under the path root, not the rule body");
+            .Should().Contain("snooze[0].sustained", T0, "snooze timers key under the snooze root, not the rule body");
 
         time.SetUtcNow(T0.AddMinutes(10));
-        var done = await rust.EvaluateNodeAsync(RuleId, node, LowGlucoseContext(T0.AddMinutes(10)), "snooze", CancellationToken.None);
+        var done = await rust.EvaluateSnoozeConditionsAsync(
+            RuleId, conditions, LowGlucoseContext(T0.AddMinutes(10)), CancellationToken.None);
         done.Should().BeTrue("10 sustained minutes elapsed since the recorded first-true");
+    }
+
+    [NativeFact]
+    public async Task Snooze_conditions_an_edit_replaced_write_no_timer()
+    {
+        var time = new ManualTimeProvider();
+        var edited = """[{"type":"sustained","sustained":{"minutes":20,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}}]""";
+        var trackerRepo = new InMemoryTrackerRepository([WithSnoozeConditions(edited)]);
+        var rust = EngineTestHarness.BuildRustEngine(time, trackerRepo);
+
+        time.SetUtcNow(T0);
+        await rust.EvaluateSnoozeConditionsAsync(
+            RuleId, JsonDocument.Parse(SnoozeConditions).RootElement, LowGlucoseContext(T0), CancellationToken.None);
+
+        (await trackerRepo.Timers.GetAllForRuleAsync(RuleId, CancellationToken.None)).Should().BeEmpty();
     }
 }
