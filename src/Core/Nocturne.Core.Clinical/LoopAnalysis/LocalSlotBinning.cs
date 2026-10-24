@@ -87,6 +87,12 @@ public static class LocalSlotBinning
         return days;
     }
 
+    /// <summary>The UTC day of an instant, for a report with no tenant zone that says so on its response.</summary>
+    public static DateOnly UtcDay(long mills) => LocalDay(mills, TimeZoneInfo.Utc);
+
+    /// <summary>The UTC days <paramref name="from"/> to <paramref name="to"/> touch, for a report with no tenant zone that says so on its response.</summary>
+    public static IReadOnlyList<DateOnly> UtcDays(DateTime from, DateTime to) => LocalDays(from, to, TimeZoneInfo.Utc);
+
     /// <summary>
     /// The local days <paramref name="from"/> to <paramref name="to"/> (exclusive) touch, whole: day
     /// <c>d</c> runs from <c>Starts[d]</c> to <c>Starts[d + 1]</c>, so <c>Starts</c> holds one more

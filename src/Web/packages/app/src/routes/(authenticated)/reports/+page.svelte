@@ -20,6 +20,7 @@
   import { satisfiesAllScopes } from "$lib/authorization/scopes";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -181,6 +182,14 @@
                 <p class="text-xl text-muted-foreground">No data</p>
               {/if}
               <p class="text-sm text-muted-foreground">Consensus target: at least 70% of time in range.</p>
+              {#if queryData?.timeZoneUnavailableReason}
+                <p class="text-sm text-muted-foreground">
+                  <TimeZoneNote reason={queryData.timeZoneUnavailableReason}>
+                    Time in a personal target range that changes through the day is not shown.
+                    Days of data are counted on UTC days.
+                  </TimeZoneNote>
+                </p>
+              {/if}
               {#if analysis?.reliability?.meetsReliabilityCriteria === false}
                 <ReliabilityBadge reliability={analysis.reliability} />
               {/if}

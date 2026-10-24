@@ -110,8 +110,9 @@ public class SleepReportController : ControllerBase
         var fromUtc = DateTime.SpecifyKind(from, DateTimeKind.Utc);
         var toUtc   = DateTime.SpecifyKind(to, DateTimeKind.Utc);
 
-        var (zone, _) = await _tenantClock.ResolveAsync(cancellationToken);
-        var report = await _service.GetTrendsReportAsync(fromUtc, toUtc, source, zone, cancellationToken);
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
+        var report = await _service.GetTrendsReportAsync(fromUtc, toUtc, source, clock.Zone, cancellationToken);
+        report.TimeZoneUnavailableReason = clock.Reason;
         return Ok(report);
     }
 }

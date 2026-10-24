@@ -6,7 +6,7 @@ import { TimeZoneUnavailableReason } from "$lib/api";
 const weekday = vi.hoisted(() => ({ current: undefined as unknown }));
 
 vi.mock("layerchart", async () => ({
-  LineChart: (await import("./LineChartStub.test.svelte")).default,
+  LineChart: (await import("$lib/components/reports/LineChartStub.test.svelte")).default,
 }));
 vi.mock("$api/reports.remote", () => ({ getWeekdayAverages: vi.fn() }));
 vi.mock("$lib/hooks/date-params.svelte", () => ({

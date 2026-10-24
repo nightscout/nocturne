@@ -45,6 +45,7 @@ export const getIdpData = query(DateRangeSchema.optional(), async (input) => {
     activeSchedules: activeSchedules ?? [],
     analysis: rangeAnalytics.analysis,
     averagedStats: rangeAnalytics.averagedStats,
+    timeZoneUnavailableReason: rangeAnalytics.timeZoneUnavailableReason,
     aidSystemMetrics,
     dateRange: {
       from: startDate,

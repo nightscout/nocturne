@@ -273,6 +273,7 @@ public class StatisticsController : ControllerBase
         {
             return NoContent();
         }
+        result.TimeZoneUnavailableReason = clock.Reason;
         return Ok(result);
     }
 
@@ -397,7 +398,7 @@ public class StatisticsController : ControllerBase
             request.Config,
             timeZone: clock.Zone
         );
-        return Ok(result);
+        return Ok(Annotated(result, clock));
     }
 
     /// <summary>
@@ -425,7 +426,7 @@ public class StatisticsController : ControllerBase
             request.Config,
             clock.Zone
         );
-        return Ok(result);
+        return Ok(Annotated(result, clock));
     }
 
     /// <summary>
@@ -482,14 +483,16 @@ public class StatisticsController : ControllerBase
 
         var result = new ReportAnalysisResult
         {
-            Analysis = _statisticsService.AnalyzeGlucoseDataExtended(
-                entries,
-                boluses,
-                carbs,
-                StatisticsService.WindowDays(startDt, endDt),
-                population,
-                timeZone: clock.Zone
-            ),
+            Analysis = Annotated(
+                _statisticsService.AnalyzeGlucoseDataExtended(
+                    entries,
+                    boluses,
+                    carbs,
+                    StatisticsService.WindowDays(startDt, endDt),
+                    population,
+                    timeZone: clock.Zone
+                ),
+                clock),
             AveragedStats = _statisticsService.CalculateAveragedStats(entries, clock.Zone).ToList(),
             HourlyBandThresholds = _statisticsService.HourlyBandThresholds,
             ContributingDevices = _statisticsService.CalculateContributingDevices(rawGlucose, devices).ToList(),
@@ -564,6 +567,16 @@ public class StatisticsController : ControllerBase
         var patterns = _statisticsService.CalculateHourlyPatterns(entries, clock.Zone);
         patterns.TimeZoneUnavailableReason = clock.Reason;
         return Ok(patterns);
+    }
+
+    private static T Annotated<T>(T analytics, TenantClock clock) where T : GlucoseAnalytics
+    {
+        analytics.TimeZoneUnavailableReason = clock.Reason;
+        if (analytics.GlycemicVariability is { } variability)
+            variability.TimeZoneUnavailableReason = clock.Reason;
+        if (analytics is ExtendedGlucoseAnalytics extended)
+            extended.DataSufficiency.TimeZoneUnavailableReason = clock.Reason;
+        return analytics;
     }
 
     /// <summary>
@@ -662,6 +675,7 @@ public class StatisticsController : ControllerBase
             request.ExpectedReadingsPerDay,
             clock.Zone
         );
+        result.TimeZoneUnavailableReason = clock.Reason;
         return Ok(result);
     }
 
@@ -838,6 +852,9 @@ public class StatisticsController : ControllerBase
         // Map results to the response object
         foreach (var periodResult in periodResults)
         {
+            if (periodResult.Statistics.Analytics is { } analytics)
+                Annotated(analytics, clock);
+
             switch (periodResult.Days)
             {
                 case 1:

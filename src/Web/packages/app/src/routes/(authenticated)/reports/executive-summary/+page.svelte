@@ -180,7 +180,10 @@
                   An estimate needs enough readings to compute a mean glucose.
                 </p>
               {/if}
-              <ReliabilityBadge reliability={analysis?.reliability} />
+              <ReliabilityBadge
+                reliability={analysis?.reliability}
+                timeZoneUnavailableReason={reportsResource.current?.timeZoneUnavailableReason}
+              />
             </div>
 
             <div class="text-sm space-y-2 border-t pt-3">

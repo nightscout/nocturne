@@ -10,6 +10,7 @@
   import * as Select from "$lib/components/ui/select";
   import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
   import {
     getReportsAnalysis,
@@ -220,6 +221,10 @@
   const insulinQueryB = contextResource(() => getReportsInsulinDelivery(inputB), {
     errorTitle: "Error Loading Comparison",
   });
+
+  const timeZoneUnavailableReason = $derived(
+    queryA.current?.timeZoneUnavailableReason ?? queryB.current?.timeZoneUnavailableReason
+  );
 
   type Response = NonNullable<typeof queryA.current>;
   type Analysis = NonNullable<Response["analysis"]>;
@@ -701,6 +706,15 @@
           {/each}
         {/each}
       </div>
+
+      {#if timeZoneUnavailableReason}
+        <p class="text-sm text-muted-foreground">
+          <TimeZoneNote reason={timeZoneUnavailableReason}>
+            The average daily risk range (ADRR) is not shown for either period, and days with data
+            are counted on UTC days.
+          </TimeZoneNote>
+        </p>
+      {/if}
 
       <div class="flex justify-between text-xs text-muted-foreground">
         <span class="inline-flex items-center gap-1">

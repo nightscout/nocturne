@@ -145,7 +145,10 @@
       ]}
     />
 
-    <ReliabilityBadge reliability={analysis?.reliability} />
+    <ReliabilityBadge
+      reliability={analysis?.reliability}
+      timeZoneUnavailableReason={reportsResource.current?.timeZoneUnavailableReason}
+    />
 
     <!-- Main AGP Chart -->
     <Card>

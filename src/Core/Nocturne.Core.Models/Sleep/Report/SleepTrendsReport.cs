@@ -9,4 +9,7 @@ public class SleepTrendsReport
     /// <summary>Per-week aggregates covering the requested range, oldest first. Weeks with no recorded night are included.</summary>
     public IReadOnlyList<SleepWeekSummary> Weeks { get; set; } = [];
     public SleepTrendsSummary Summary { get; set; } = new();
+
+    /// <summary>Why <see cref="Days"/> and <see cref="Weeks"/> are UTC days; null when the days are the patient's.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }

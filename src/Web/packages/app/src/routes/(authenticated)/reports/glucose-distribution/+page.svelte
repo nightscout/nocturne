@@ -253,7 +253,10 @@
                     )}
               </span>
             </div>
-            <ReliabilityBadge reliability={report.analysis?.reliability} />
+            <ReliabilityBadge
+              reliability={report.analysis?.reliability}
+              timeZoneUnavailableReason={report.timeZoneUnavailableReason}
+            />
           </Card.Content>
         </Card.Root>
 

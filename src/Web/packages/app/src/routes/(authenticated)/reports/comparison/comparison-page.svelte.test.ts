@@ -8,6 +8,7 @@ import type {
   PersonalRangeTimeInRange,
 } from "$api/generated/nocturne-api-client";
 import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { TimeZoneUnavailableReason } from "$lib/api";
 
 type Extras = {
   insulinDelivery?: InsulinDeliveryStatistics;
@@ -20,13 +21,14 @@ let periodA: ExtendedGlucoseAnalytics;
 let periodB: ExtendedGlucoseAnalytics;
 let extrasA: Extras;
 let extrasB: Extras;
+let zoneReason: TimeZoneUnavailableReason | undefined;
 
 vi.mock("$api/reports.remote", () => ({
   getReportsAnalysis: (input: { from: string }) =>
     remoteQuery(() =>
       input.from === "2026-09-01"
-        ? { analysis: periodA, personalRange: extrasA.personalRange }
-        : { analysis: periodB, personalRange: extrasB.personalRange }
+        ? { analysis: periodA, personalRange: extrasA.personalRange, timeZoneUnavailableReason: zoneReason }
+        : { analysis: periodB, personalRange: extrasB.personalRange, timeZoneUnavailableReason: zoneReason }
     ),
   getReportsInsulinDelivery: (input: { from: string }) =>
     remoteQuery(
@@ -155,6 +157,20 @@ describe("grouped comparison rows", () => {
     periodB = rich(1.1);
     extrasA = { insulinDelivery: delivery(44.2) };
     extrasB = { insulinDelivery: delivery(46.9, 1.2) };
+    zoneReason = undefined;
+  });
+
+  it("names ADRR in the time zone note when the analytics carry a reason", async () => {
+    zoneReason = TimeZoneUnavailableReason.NotConfigured;
+    render(ComparisonPage);
+    await expect.element(page.getByText(/average daily risk range \(ADRR\) is not shown/)).toBeVisible();
+    await expect.element(page.getByText(/do not have a time zone/)).toBeVisible();
+  });
+
+  it("shows no time zone note when the analytics carry no reason", async () => {
+    render(ComparisonPage);
+    await cells("ADRR");
+    await expect.element(page.getByText(/average daily risk range \(ADRR\) is not shown/)).not.toBeInTheDocument();
   });
 
   it("renders each group heading in order, the overview first", async () => {

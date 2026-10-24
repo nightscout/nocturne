@@ -551,12 +551,7 @@ public partial class StatisticsService : IStatisticsService
             };
         }
 
-        var dayZone = timeZone ?? TimeZoneInfo.Utc;
-        var daysWithData = entriesList
-            .Where(e => e.Mills > 0)
-            .Select(e => LocalSlotBinning.LocalDay(e.Mills, dayZone))
-            .Distinct()
-            .Count();
+        var daysWithData = DaysWithReadings(entriesList, timeZone);
         var actualReadings = entriesList.Count;
         var completeness = expectedTotal > 0 ? (double)actualReadings / expectedTotal * 100 : 0;
         var avgPerDay = daysWithData > 0 ? (double)actualReadings / daysWithData : 0;
@@ -844,7 +839,7 @@ public partial class StatisticsService : IStatisticsService
     /// </summary>
     /// <param name="values">Collection of glucose values</param>
     /// <param name="entries">Collection of glucose entries with timestamps</param>
-    /// <param name="timeZone">Tenant zone that bounds the days of <see cref="CalculateADRR"/>; null is UTC.</param>
+    /// <param name="timeZone">Tenant zone that bounds the days of <see cref="CalculateADRR"/>.</param>
     /// <returns>
     /// Comprehensive glycemic variability metrics, or null for fewer than two plausible readings.
     /// The individual metrics have differing data floors; this one governs all of them. Values
@@ -886,7 +881,7 @@ public partial class StatisticsService : IStatisticsService
             StandardDeviation = Math.Round(standardDeviation * 10) / 10,
             MeanAmplitudeGlycemicExcursions = Math.Round(mage * 10) / 10,
             ContinuousOverlappingNetGlycemicAction = Math.Round(conga * 10) / 10,
-            AverageDailyRiskRange = Math.Round(adrr * 10) / 10,
+            AverageDailyRiskRange = adrr is { } risk ? Math.Round(risk * 10) / 10 : null,
             LabilityIndex = Math.Round(labilityIndex * 10) / 10,
             JIndex = Math.Round(jIndex * 10) / 10,
             HighBloodGlucoseIndex = Math.Round(hbgi * 100) / 100,
@@ -1033,15 +1028,30 @@ public partial class StatisticsService : IStatisticsService
     }
 
     /// <summary>
+    /// Days holding a reading: tenant-local when the zone resolved, else UTC days.
+    /// </summary>
+    private static int DaysWithReadings(IEnumerable<SensorGlucose> entries, TimeZoneInfo? timeZone) =>
+        entries
+            .Where(e => e.Mills > 0)
+            .Select(e => timeZone is null
+                ? LocalSlotBinning.UtcDay(e.Mills)
+                : LocalSlotBinning.LocalDay(e.Mills, timeZone))
+            .Distinct()
+            .Count();
+
+    /// <summary>
     /// Average Daily Risk Range (Kovatchev et al., Diabetes Care 2006;29:2433): for each tenant-local
     /// day, the largest hypoglycaemic risk plus the largest hyperglycaemic risk, averaged over every
-    /// day with at least one plausible reading. Zero when there is no such day.
+    /// day with at least one plausible reading. Zero when there is no such day. Each day contributes
+    /// its own extremes, so a different day boundary changes the figure: null without a zone.
     /// </summary>
     /// <param name="entries">Glucose entries with timestamps.</param>
-    /// <param name="timeZone">Tenant zone the days are bounded in; null is UTC.</param>
-    public double CalculateADRR(IEnumerable<SensorGlucose> entries, TimeZoneInfo? timeZone)
+    /// <param name="timeZone">Tenant zone the days are bounded in.</param>
+    public double? CalculateADRR(IEnumerable<SensorGlucose> entries, TimeZoneInfo? timeZone)
     {
-        var tz = timeZone ?? TimeZoneInfo.Utc;
+        if (timeZone is not { } tz)
+            return null;
+
         var dailyRanges = entries
             .Where(entry => entry.Mills > 0 && IsPlausibleReading(entry))
             .GroupBy(entry => LocalSlotBinning.LocalDay(entry.Mills, tz))
@@ -3132,11 +3142,7 @@ public partial class StatisticsService : IStatisticsService
         var timeStart = sortedEntries.FirstOrDefault()?.Mills ?? 0;
         var timeEnd = sortedEntries.LastOrDefault()?.Mills ?? 0;
 
-        var tz = timeZone ?? TimeZoneInfo.Utc;
-        var daysOfData = sortedEntries
-            .Select(e => LocalSlotBinning.LocalDay(e.Mills, tz))
-            .Distinct()
-            .Count();
+        var daysOfData = DaysWithReadings(sortedEntries, timeZone);
         var reliability = AssessReliability(daysOfData, sortedEntries.Count, windowDays);
 
         return new GlucoseAnalytics

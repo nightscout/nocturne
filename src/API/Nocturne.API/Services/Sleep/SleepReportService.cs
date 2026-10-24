@@ -196,7 +196,9 @@ public class SleepReportService : ISleepReportService
         TimeZoneInfo? zone = null,
         CancellationToken ct = default)
     {
-        var localDays = LocalSlotBinning.LocalDays(from, to, zone ?? TimeZoneInfo.Utc);
+        var localDays = zone is { } tenantZone
+            ? LocalSlotBinning.LocalDays(from, to, tenantZone)
+            : LocalSlotBinning.UtcDays(from, to);
         var days = localDays.Select(d => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)).ToList();
         var allSessions = await _sessions.GetSessionsAsync(
             from:              from,

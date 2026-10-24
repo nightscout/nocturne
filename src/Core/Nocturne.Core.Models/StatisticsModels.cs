@@ -102,7 +102,11 @@ public class GlycemicVariability
     /// </summary>
     public double ContinuousOverlappingNetGlycemicAction { get; set; }
 
-    public double AverageDailyRiskRange { get; set; }
+    /// <summary>Null when the tenant has no timezone to bound the days in.</summary>
+    public double? AverageDailyRiskRange { get; set; }
+
+    /// <summary>Why <see cref="AverageDailyRiskRange"/> is null; null when a zone was applied.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 
     public double LabilityIndex { get; set; }
 
@@ -752,6 +756,12 @@ public class GlucoseAnalytics
     /// Clinical assessment with insights, strengths, and priority areas
     /// </summary>
     public ClinicalTargetAssessment? ClinicalAssessment { get; set; }
+
+    /// <summary>
+    /// Why the tenant's timezone was unavailable. Without a zone, <see cref="GlycemicVariability"/> has no
+    /// average daily risk range and <see cref="Reliability"/> counts days of data on UTC days. Null when a zone was applied.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 public class AnalysisTime
@@ -1310,7 +1320,7 @@ public class StatisticReliability
     /// <summary>Whether the data meets clinical reliability criteria for this analysis</summary>
     public bool MeetsReliabilityCriteria { get; set; }
 
-    /// <summary>Number of days with glucose data in this analysis window</summary>
+    /// <summary>Number of days with glucose data in this analysis window, counted on UTC days when the tenant has no timezone</summary>
     public int DaysOfData { get; set; }
 
     /// <summary>Minimum days recommended by clinical guidelines for reliable results</summary>
@@ -1421,7 +1431,7 @@ public class DataSufficiencyAssessment
     /// <summary>Number of days in the period</summary>
     public int TotalDays { get; set; }
 
-    /// <summary>Number of days with any data</summary>
+    /// <summary>Number of days with any data, counted on UTC days when <see cref="TimeZoneUnavailableReason"/> is set.</summary>
     public int DaysWithData { get; set; }
 
     /// <summary>Expected number of readings (based on sensor type)</summary>
@@ -1435,7 +1445,7 @@ public class DataSufficiencyAssessment
     /// <summary>Minimum required completeness for valid report (typically 70%)</summary>
     public double MinimumRequiredCompleteness { get; set; } = 70;
 
-    /// <summary>Average readings per day</summary>
+    /// <summary>Average readings per day, over the days of <see cref="DaysWithData"/></summary>
     public double AverageReadingsPerDay { get; set; }
 
     /// <summary>Longest data gap in hours</summary>
@@ -1448,6 +1458,9 @@ public class DataSufficiencyAssessment
     public string WarningMessage { get; set; } = string.Empty;
 
     public string Recommendation { get; set; } = string.Empty;
+
+    /// <summary>Why <see cref="DaysWithData"/> and <see cref="AverageReadingsPerDay"/> are counted on UTC days; null when a zone was applied.</summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 public class ExtendedGlucoseAnalytics : GlucoseAnalytics
@@ -1496,9 +1509,9 @@ public class ReportAnalysisResult
 
     /// <summary>
     /// Why the tenant's timezone was unavailable. Without a zone, <see cref="AveragedStats"/> groups
-    /// readings by their own UTC offset, day-bounded figures in <see cref="Analysis"/> use UTC days,
-    /// and <see cref="PersonalRange"/> is null unless the target schedule has one entry. Null when a
-    /// zone was applied.
+    /// readings by their own UTC offset, <see cref="Analysis"/> has no average daily risk range and
+    /// counts days of data on UTC days, and <see cref="PersonalRange"/> is null unless the target
+    /// schedule has one entry. Null when a zone was applied.
     /// </summary>
     public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }

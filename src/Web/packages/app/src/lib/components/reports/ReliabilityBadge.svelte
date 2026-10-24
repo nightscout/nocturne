@@ -2,14 +2,16 @@
   import Info from "@lucide/svelte/icons/info";
   import { Badge } from "$lib/components/ui/badge";
   import { cn } from "$lib/utils";
-  import type { StatisticReliability } from "$lib/api";
+  import type { StatisticReliability, TimeZoneUnavailableReason } from "$lib/api";
+  import TimeZoneNote from "./TimeZoneNote.svelte";
 
   interface Props {
     reliability?: StatisticReliability | null;
+    timeZoneUnavailableReason?: TimeZoneUnavailableReason | null;
     class?: string;
   }
 
-  let { reliability, class: className }: Props = $props();
+  let { reliability, timeZoneUnavailableReason, class: className }: Props = $props();
 
   const daysOfData = $derived(reliability?.daysOfData ?? 0);
 </script>
@@ -26,6 +28,9 @@
     <span class="min-w-0">
       Based on {daysOfData} {daysOfData === 1 ? "day" : "days"} of data ({reliability.recommendedMinimumDays ??
         14} recommended)
+      {#if timeZoneUnavailableReason}
+        <TimeZoneNote reason={timeZoneUnavailableReason}>Days of data are counted on UTC days.</TimeZoneNote>
+      {/if}
     </span>
   </Badge>
 {/if}

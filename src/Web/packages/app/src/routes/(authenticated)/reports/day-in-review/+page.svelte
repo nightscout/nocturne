@@ -375,7 +375,7 @@
             </div>
           </div>
         </div>
-        <ReliabilityBadge reliability={analysis?.reliability} class="print:hidden" />
+        <ReliabilityBadge reliability={analysis?.reliability} timeZoneUnavailableReason={analysis?.timeZoneUnavailableReason} class="print:hidden" />
       </Card.Content>
     </Card.Root>
 

@@ -20,6 +20,7 @@
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import GlycemicRiskIndexChart from "$lib/components/reports/GlycemicRiskIndexChart.svelte";
   import ScheduledBasalRateChart from "$lib/components/reports/ScheduledBasalRateChart.svelte";
@@ -53,6 +54,7 @@
     analysis: reportsResource.current?.analysis,
     averagedStats: reportsResource.current?.averagedStats,
     aidSystemMetrics: reportsResource.current?.aidSystemMetrics,
+    timeZoneUnavailableReason: reportsResource.current?.timeZoneUnavailableReason,
   });
 
   // Derived values from data
@@ -101,6 +103,15 @@
 
   {#if analysis?.reliability}
     <ReliabilityBadge reliability={analysis.reliability} />
+  {/if}
+
+  {#if data.timeZoneUnavailableReason}
+    <p class="text-sm text-muted-foreground">
+      <TimeZoneNote reason={data.timeZoneUnavailableReason}>
+        The hourly figures place each reading at the local time its device reported. Days of data
+        are counted on UTC days.
+      </TimeZoneNote>
+    </p>
   {/if}
 
   <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6">

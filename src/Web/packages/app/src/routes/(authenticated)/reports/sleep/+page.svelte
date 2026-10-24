@@ -25,6 +25,7 @@
   import FigureStrip, { type Figure } from "$lib/components/reports/FigureStrip.svelte";
   import SleepCompositionChart from "$lib/components/reports/sleep/SleepCompositionChart.svelte";
   import SleepWeeklyBreakdown from "$lib/components/reports/sleep/SleepWeeklyBreakdown.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import { SleepSource } from "$api";
   import { laneForStage, laneTexture } from "$lib/utils/sleep-stages";
   import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
@@ -272,6 +273,13 @@
     <FigureStrip figures={sleepFigures} />
     {#if overnightFigures.length > 0}
       <FigureStrip figures={overnightFigures} />
+    {/if}
+    {#if trendsResource.current?.timeZoneUnavailableReason}
+      <p class="text-sm text-muted-foreground">
+        <TimeZoneNote reason={trendsResource.current.timeZoneUnavailableReason}>
+          Days in range, the weekly breakdown and the composition chart use UTC days.
+        </TimeZoneNote>
+      </p>
     {/if}
 
     {#if hasTrendsNights && sleepWeeks.length > 0}

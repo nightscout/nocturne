@@ -1,4 +1,6 @@
 import { render } from "vitest-browser-svelte";
+import { page } from "vitest/browser";
+import { TimeZoneUnavailableReason } from "$lib/api";
 import { describe, expect, it, vi } from "vitest";
 
 const hoisted = vi.hoisted(() => ({ trends: {} as Record<string, unknown> }));
@@ -60,5 +62,50 @@ describe("sleep report page", () => {
     const { container } = render(SleepPage);
 
     await expect.poll(() => compositionColumns(container).length).toBe(3);
+  });
+
+  const NOTE = /Days in range, the weekly breakdown and the composition chart use\s+UTC days/;
+
+  it("says why the days are UTC days when the trends report carries a reason", async () => {
+    hoisted.trends = {
+      days: ["2026-01-10"],
+      nights: [{
+          sessionId: "a",
+          displayDate: "2026-01-10",
+          deepMinutes: 60,
+          remMinutes: 90,
+          lightMinutes: 240,
+          sleepMinutes: 390,
+        }],
+      weeks: [],
+      summary: { nightCount: 1 },
+      timeZoneUnavailableReason: TimeZoneUnavailableReason.NotConfigured,
+    };
+
+    render(SleepPage);
+
+    await expect.element(page.getByText(NOTE)).toBeVisible();
+    await expect.element(page.getByText(/do not have a time zone/)).toBeVisible();
+  });
+
+  it("shows no note when the trends report carries no reason", async () => {
+    hoisted.trends = {
+      days: ["2026-01-10"],
+      nights: [{
+          sessionId: "a",
+          displayDate: "2026-01-10",
+          deepMinutes: 60,
+          remMinutes: 90,
+          lightMinutes: 240,
+          sleepMinutes: 390,
+        }],
+      weeks: [],
+      summary: { nightCount: 1 },
+    };
+
+    render(SleepPage);
+
+    await expect.element(page.getByText("Nights tracked")).toBeVisible();
+    await expect.element(page.getByText(NOTE)).not.toBeInTheDocument();
   });
 });

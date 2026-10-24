@@ -446,6 +446,24 @@ public class SleepReportServiceTests
     }
 
     [Fact]
+    public async Task GetTrendsReportAsync_WithoutAZone_CountsUtcDays()
+    {
+        _sessionRepo
+            .Setup(r => r.GetSessionsAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<SleepSessionType?>(),
+                It.IsAny<SleepSource?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<SleepSession>());
+
+        var result = await _sut.GetTrendsReportAsync(
+            new DateTime(2026, 1, 9, 13, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 11, 12, 59, 59, 999, DateTimeKind.Utc),
+            zone: null);
+
+        result.Days.Should().Equal("2026-01-09", "2026-01-10", "2026-01-11");
+    }
+
+    [Fact]
     public async Task GetTrendsReportAsync_ServesTheDaysWithNoSessions()
     {
         _sessionRepo

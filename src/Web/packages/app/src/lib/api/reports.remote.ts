@@ -101,7 +101,7 @@ export const getReportsData = query(
     const { apiClient } = locals;
     const { startDate, endDate } = await resolveReportRange(input);
 
-    const [entries, { analysis, averagedStats, personalRange }] = await Promise.all([
+    const [entries, { analysis, averagedStats, personalRange, timeZoneUnavailableReason }] = await Promise.all([
       fetchAllGlucose(apiClient, startDate, endDate),
       apiClient.statistics.getRangeAnalytics(startDate, endDate),
     ]);
@@ -111,6 +111,7 @@ export const getReportsData = query(
       analysis,
       averagedStats,
       personalRange,
+      timeZoneUnavailableReason,
       dateRange: {
         from: startDate,
         to: endDate,
@@ -131,8 +132,14 @@ export const getReportsAnalysis = query(
     const { apiClient } = locals;
     const { startDate, endDate } = await resolveReportRange(input);
 
-    const { analysis, averagedStats, hourlyBandThresholds, personalRange, contributingDevices } =
-      await apiClient.statistics.getRangeAnalytics(startDate, endDate);
+    const {
+      analysis,
+      averagedStats,
+      hourlyBandThresholds,
+      personalRange,
+      contributingDevices,
+      timeZoneUnavailableReason,
+    } = await apiClient.statistics.getRangeAnalytics(startDate, endDate);
 
     return {
       analysis,
@@ -140,6 +147,7 @@ export const getReportsAnalysis = query(
       hourlyBandThresholds,
       personalRange,
       contributingDevices,
+      timeZoneUnavailableReason,
       dateRange: {
         from: startDate,
         to: endDate,
