@@ -101,7 +101,7 @@ services:
         condition: service_healthy
       mocks:
         condition: service_healthy
-    mem_limit: 512m
+    mem_limit: 768m
     cpus: 2.0
     healthcheck:
       # The aspnet base image carries no curl or wget; bash's /dev/tcp does the probe.
