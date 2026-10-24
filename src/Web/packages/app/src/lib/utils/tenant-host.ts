@@ -106,8 +106,6 @@ export interface TenantSwitcherTarget {
 
 export interface TenantSwitcher {
   targets: TenantSwitcherTarget[];
-  /** How many tenants this user has to move between; below two there is nothing to switch. */
-  totalCount: number;
 }
 
 /**
@@ -120,7 +118,6 @@ export function resolveTenantSwitcher(
   const active = activeTenants(tenants);
 
   return {
-    totalCount: active.length,
     targets: active
       .filter((t): t is TenantListEntry & { slug: string } => !!t.slug)
       .map((t) => ({

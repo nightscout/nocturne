@@ -104,6 +104,7 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies, depends
     refusedAsDemoSubject: permissions.refusedAsDemoSubject ?? false,
     isPlatformAdmin: locals.isPlatformAdmin,
     isPlatformAccessGrant: locals.isPlatformAccessGrant ?? false,
+    hasMultipleTenants: locals.hasMultipleTenants ?? false,
     tenantSlug,
     tenantless,
     baseDomain,

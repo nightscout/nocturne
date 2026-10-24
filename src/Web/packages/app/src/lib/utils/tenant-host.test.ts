@@ -171,18 +171,15 @@ describe("resolveTenantSwitcher", () => {
       { slug: "alice", displayName: "Alice" },
       { slug: "bob", displayName: "Bob" },
     ]);
-    expect(switcher.totalCount).toBe(2);
   });
 
   it("never offers an inactive tenant as a switch target", () => {
-    // totalCount > 1 is what renders the switcher and the Tenants nav entry.
     const switcher = resolveTenantSwitcher([
       { ...alice, isActive: true },
       { ...bob, isActive: false },
     ]);
 
     expect(switcher.targets.map((t) => t.slug)).toEqual(["alice"]);
-    expect(switcher.totalCount).toBe(1);
   });
 
   it("treats an absent isActive as active", () => {
@@ -192,7 +189,6 @@ describe("resolveTenantSwitcher", () => {
     ]);
 
     expect(switcher.targets.map((t) => t.slug)).toEqual(["alice", "bob"]);
-    expect(switcher.totalCount).toBe(2);
   });
 
   it("drops a tenant with no slug, having no host to send anyone to", () => {
@@ -205,7 +201,6 @@ describe("resolveTenantSwitcher", () => {
     for (const tenants of [[], null, undefined]) {
       const switcher = resolveTenantSwitcher(tenants);
       expect(switcher.targets).toEqual([]);
-      expect(switcher.totalCount).toBe(0);
     }
   });
 

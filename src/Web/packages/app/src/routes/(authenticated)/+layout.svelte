@@ -244,7 +244,7 @@
   <CoachParamHandler />
   <ChartPrintPatterns />
   <Sidebar.Provider>
-    <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} currentSlug={data.tenantSlug} baseDomain={data.baseDomain} tenantless={data.tenantless} />
+    <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} currentSlug={data.tenantSlug} baseDomain={data.baseDomain} tenantless={data.tenantless} hasMultipleTenants={data.hasMultipleTenants} />
     <!-- --app-sticky-top is the top of the usable viewport below the app chrome (the visible
          MobileHeader plus the banner strip); page-level sticky bars pin to it with the
          header's 300ms transition. -->

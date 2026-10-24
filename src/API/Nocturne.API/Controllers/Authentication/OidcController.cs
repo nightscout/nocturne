@@ -654,6 +654,9 @@ public class OidcController : ControllerBase
                 authContext.SubjectId.Value, authContext.TenantId.Value);
         }
 
+        var hasMultipleTenants = authContext.SubjectId is { } subjectId
+            && await _tenantMemberService.HasMultipleActiveTenantsAsync(subjectId);
+
         return Ok(
             new SessionInfo
             {
@@ -670,6 +673,7 @@ public class OidcController : ControllerBase
                 IsPlatformAccessGrant = authContext.AuthType == AuthType.PlatformAccess,
                 AvatarUrl = userInfo?.AvatarUrl,
                 Grant = await MyPermissionsController.TryBuildAsync(HttpContext),
+                HasMultipleTenants = hasMultipleTenants,
             }
         );
     }
@@ -868,6 +872,12 @@ public class SessionInfo
     /// null where that endpoint would refuse the caller.
     /// </summary>
     public MyPermissionsResponse? Grant { get; set; }
+
+    /// <summary>
+    /// Whether the subject belongs to more than one active tenant; false for a credential with no
+    /// subject. See <see cref="ITenantMemberService.HasMultipleActiveTenantsAsync"/>.
+    /// </summary>
+    public bool HasMultipleTenants { get; set; }
 }
 
 /// <summary>

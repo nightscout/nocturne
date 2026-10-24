@@ -101,6 +101,10 @@ declare global {
 			 */
 			isPlatformAccessGrant: boolean;
 			/**
+			 * Whether the current user belongs to more than one active tenant
+			 */
+			hasMultipleTenants?: boolean;
+			/**
 			 * Whether the current session is a guest link session (read-only, no subjectId)
 			 */
 			isGuestSession?: boolean;

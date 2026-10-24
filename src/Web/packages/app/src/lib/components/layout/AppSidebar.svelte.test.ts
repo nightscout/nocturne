@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { page as pageState } from "$app/state";
-import { createQueryResource, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { createQueryResource, remoteQuery, remoteQueryError } from "$lib/test-stubs/remote-resource";
 import { flushIdle, resetIdle } from "$lib/test-stubs/when-idle";
 
 vi.mock("$lib/utils/when-idle", () => import("$lib/test-stubs/when-idle"));
@@ -52,7 +52,7 @@ const TENANTS = [
 ];
 
 /** The sidebar as a member of every tenant above sees it, viewing one that is not the first. */
-function renderViewingBravo() {
+function renderViewingBravo({ flush = true } = {}) {
   pageState.data = { effectivePermissions: ["*"] };
   membership.tenants = TENANTS;
 
@@ -60,8 +60,9 @@ function renderViewingBravo() {
     user: MEMBER,
     currentSlug: "bravo",
     baseDomain: "example.com",
+    hasMultipleTenants: true,
   });
-  flushIdle();
+  if (flush) flushIdle();
 }
 
 describe("AppSidebar", () => {
@@ -139,7 +140,7 @@ describe("AppSidebar", () => {
     expect(visited.urls).toEqual(["https://charlie.example.com/"]);
   });
 
-  it("lists the member's tenants once the page is idle, not on mount", async () => {
+  it("draws the switcher and the Tenants entry on first render, and fills the list once the page is idle", async () => {
     pageState.data = { effectivePermissions: ["*"] };
     membership.tenants = TENANTS;
 
@@ -147,9 +148,11 @@ describe("AppSidebar", () => {
       user: MEMBER,
       currentSlug: "bravo",
       baseDomain: "example.com",
+      hasMultipleTenants: true,
     });
 
-    await expect.element(link("Dashboard")).toBeVisible();
+    await expect.element(link("Tenants")).toBeVisible();
+    await expect.element(group("bravo")).toBeVisible();
     expect(getMyTenants).not.toHaveBeenCalled();
     await expect.element(group("Bravo (bravo)")).not.toBeInTheDocument();
 
@@ -182,12 +185,52 @@ describe("AppSidebar", () => {
     expect(getDnd).toHaveBeenCalledOnce();
   });
 
+  it("reads the tenant list when the switcher is opened before the page is idle", async () => {
+    renderViewingBravo({ flush: false });
+
+    await group("bravo").click();
+
+    await expect.element(option("Alpha (alpha)")).toBeVisible();
+    expect(getMyTenants).toHaveBeenCalled();
+  });
+
+  it("hides the switcher when the tenant list cannot be read", async () => {
+    getMyTenants.mockImplementation(() => remoteQueryError(new Error("down")));
+    renderViewingBravo();
+
+    await vi.waitFor(() => expect(getMyTenants).toHaveBeenCalled());
+    await expect.element(page.getByText("Viewing data for")).not.toBeInTheDocument();
+  });
+
+  it("offers a single-tenant member no switcher and never reads the tenant list", async () => {
+    pageState.data = { effectivePermissions: ["*"] };
+    membership.tenants = [TENANTS[0]];
+
+    render(Harness, {
+      user: MEMBER,
+      currentSlug: "alpha",
+      baseDomain: "example.com",
+      hasMultipleTenants: false,
+    });
+    flushIdle();
+
+    await expect.element(link("Dashboard")).toBeVisible();
+    await expect.element(link("Tenants")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Viewing data for")).not.toBeInTheDocument();
+    expect(getMyTenants).not.toHaveBeenCalled();
+  });
+
   it("never lists tenants for a guest or a signed-out viewer", async () => {
     pageState.data = { effectivePermissions: ["*"] };
     membership.tenants = TENANTS;
 
-    render(Harness, { user: MEMBER, isGuestSession: true, baseDomain: "example.com" });
-    render(Harness, { baseDomain: "example.com" });
+    render(Harness, {
+      user: MEMBER,
+      isGuestSession: true,
+      baseDomain: "example.com",
+      hasMultipleTenants: true,
+    });
+    render(Harness, { baseDomain: "example.com", hasMultipleTenants: true });
     flushIdle();
 
     await expect.element(link("Dashboard").first()).toBeVisible();

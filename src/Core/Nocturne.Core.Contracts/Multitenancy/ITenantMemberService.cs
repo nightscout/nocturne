@@ -22,6 +22,13 @@ public interface ITenantMemberService
     Task<List<Guid>> GetTenantIdsForSubjectAsync(Guid subjectId, CancellationToken ct = default);
 
     /// <summary>
+    /// Whether the subject belongs to more than one active tenant, counting the tenants
+    /// <see cref="ITenantService.GetTenantsForSubjectAsync"/> lists as active.
+    /// </summary>
+    /// <param name="subjectId">The subject (user) identifier.</param>
+    Task<bool> HasMultipleActiveTenantsAsync(Guid subjectId, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns the names of the roles assigned to the specified subject within the given tenant.
     /// </summary>
     /// <param name="subjectId">The subject (user) identifier.</param>
