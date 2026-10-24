@@ -23,7 +23,7 @@ vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
 
 import DndPanel from "./DndPanel.svelte";
 
-const dndToggle = () => page.getByRole("button", { name: /Do Not Disturb/i });
+const dndToggle = () => page.getByRole("button", { name: /Do not disturb/i });
 
 describe("DndPanel", () => {
   beforeEach(() => {

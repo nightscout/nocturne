@@ -216,7 +216,7 @@ describe("summarizeCondition", () => {
 			type: "do_not_disturb",
 			do_not_disturb: { is_active: true, for_minutes: 30 },
 		};
-		expect(summarizeCondition(node)).toBe("Do Not Disturb on for 30m");
+		expect(summarizeCondition(node)).toBe("Do not disturb on for 30m");
 	});
 
 	it("renders a pump mode from the wire enum member, not the raw value", () => {

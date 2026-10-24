@@ -46,7 +46,7 @@ describe("alerts/dnd page", () => {
 
     await expect.element(saveButton()).toBeVisible();
     await expect
-      .element(page.getByText("Do Not Disturb is currently"))
+      .element(page.getByText("Do not disturb is currently"))
       .toBeVisible();
     await expect.element(accessDenied()).not.toBeInTheDocument();
   });

@@ -22,6 +22,7 @@
   import { nodeFromApi } from "./types";
   import { conditionLabel } from "./conditionLabel.svelte";
   import { findChannelMeta } from "./channelMeta";
+  import { channelLabel } from "./channelText.svelte";
 
   interface Props {
     rule: AlertRuleResponse;
@@ -124,7 +125,7 @@
         {@const meta = findChannelMeta(ch.channelType)}
         <span
           class="grid h-6 w-6 place-items-center rounded bg-muted text-muted-foreground overflow-hidden"
-          title={ch.destinationLabel ?? ch.channelType ?? ""}
+          title={ch.destinationLabel ?? (meta ? channelLabel(meta.type) : ch.channelType) ?? ""}
         >
           {#if meta?.logo}
             <img src={meta.logo} alt="" class="h-4 w-4 object-contain" />

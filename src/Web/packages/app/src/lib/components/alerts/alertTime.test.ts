@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { formatRange, formatTimeSince } from "./alertTime";
+import { formatRange, formatTimeSince } from "./alertTime.svelte";
 
 describe("alertTime", () => {
   describe("formatRange", () => {

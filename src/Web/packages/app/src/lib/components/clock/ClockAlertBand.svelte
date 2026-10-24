@@ -7,7 +7,7 @@
   import type { ClockAlertDto } from "$lib/api";
   import { severity } from "$lib/components/alerts/severity";
   import { severityLabel } from "$lib/components/alerts/severityLabel.svelte";
-  import { formatTimeSince } from "$lib/components/alerts/alertTime";
+  import { formatTimeSince } from "$lib/components/alerts/alertTime.svelte";
 
   interface Props {
     alerts: ClockAlertDto[];

@@ -1016,10 +1016,10 @@ public class AlertRuleResponse
     public bool IsEnabled { get; set; }
     public int SortOrder { get; set; }
     public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Warning;
-    /// <summary>When true, this rule still fires while the tenant is in Do Not Disturb mode.
+    /// <summary>When true, this rule still fires while the tenant is in Do not disturb mode.
     /// Critical rules implicitly bypass DND regardless of this flag.</summary>
     public bool AllowThroughDnd { get; set; }
-    /// <summary>Low/high classification for scoped Do Not Disturb (ADR 0004), derived by the
+    /// <summary>Low/high classification for scoped Do not disturb (ADR 0004), derived by the
     /// shared engine from the rule's directional leaves. Read-only — computed server-side on
     /// create/update; a scoped <c>lows</c>/<c>highs</c> window silences a rule only when its
     /// class matches.</summary>

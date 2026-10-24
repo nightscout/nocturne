@@ -12,7 +12,7 @@
   import BellOff from "@lucide/svelte/icons/bell-off";
   import Check from "@lucide/svelte/icons/check";
   import { time } from "$lib/utils/formatting";
-  import { formatTimeSince } from "./alertTime";
+  import { formatTimeSince } from "./alertTime.svelte";
   import { severity } from "./severity";
   import { severityLabel } from "./severityLabel.svelte";
   import { seenBy } from "./receipts";

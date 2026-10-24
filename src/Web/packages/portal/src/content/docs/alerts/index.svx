@@ -92,7 +92,7 @@ see [Example rules](/docs/alerts/recipes) for common starting points.
 - [Conditions that must last](/docs/alerts/sustained): the "for at least"
   setting, and why it matters.
 - [When an alert fires](/docs/alerts/when-an-alert-fires): severity, clearing,
-  auto-resolve, acknowledging, snoozing, Do Not Disturb.
+  auto-resolve, acknowledging, snoozing, Do not disturb.
 - [Example rules](/docs/alerts/recipes): rules for common situations.
 - [Testing rules](/docs/alerts/testing): the replay tool, and a sandbox where
   you can build any rule and run it.

@@ -51,7 +51,7 @@ and other data Nocturne had at each moment. That makes it good at answering
 - **It cannot replay what people did.** Snoozes and acknowledgements are not
   replayed, so a replay shows every time a rule would have fired, not what
   would have been sent after someone snoozed it.
-- **Do Not Disturb:** times you switched Do Not Disturb on by hand are replayed,
+- **Do not disturb:** times you switched Do not disturb on by hand are replayed,
   and fires during them are marked as silenced. Your recurring quiet-hours
   schedule is not, because Nocturne does not keep a history of changes to it.
 - **Gaps in readings** are filled with the last reading, checked every 5

@@ -15,7 +15,7 @@ using Nocturne.API.Authorization;
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
 /// <summary>
-/// Tenant-level alert configuration: Do Not Disturb (manual toggle with optional
+/// Tenant-level alert configuration: Do not disturb (manual toggle with optional
 /// auto-expire and a recurring scheduled window). The schedule is interpreted in the
 /// patient's timezone (<see cref="Nocturne.Core.Models.V4.PatientRecord.Timezone"/>) — set there, not here.
 /// The row is created lazily on first access.
@@ -84,7 +84,7 @@ public class TenantAlertSettingsController : ControllerBase
     /// creates/clears the tenant's <c>scope=all</c> window; scheduled fields persist on the row.
     /// </summary>
     /// <remarks>
-    /// Requires <see cref="Scope.AlertsReadWrite"/>: this toggles tenant-wide Do Not Disturb,
+    /// Requires <see cref="Scope.AlertsReadWrite"/>: this toggles tenant-wide Do not disturb,
     /// which suppresses delivery of every non-critical alert. The class-level <c>[Authorize]</c>
     /// alone is satisfied by read-only credentials such as a guest-link session, which holds
     /// <c>alerts.read</c>.

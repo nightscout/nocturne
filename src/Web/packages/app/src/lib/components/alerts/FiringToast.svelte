@@ -14,7 +14,7 @@
   import BellOff from "@lucide/svelte/icons/bell-off";
   import X from "@lucide/svelte/icons/x";
   import { severity } from "./severity";
-  import { formatTimeSince } from "./alertTime";
+  import { formatTimeSince } from "./alertTime.svelte";
   import { markSeenOnThisDevice, seenHere } from "./seen-here.svelte";
   import { Now } from "$lib/hooks/now.svelte";
 

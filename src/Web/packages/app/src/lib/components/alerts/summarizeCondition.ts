@@ -153,7 +153,7 @@ export function summarizeCondition(
 		case "do_not_disturb": {
 			const p = node.do_not_disturb;
 			if (!p) return "";
-			const verb = p.is_active ? "Do Not Disturb on" : "Do Not Disturb off";
+			const verb = p.is_active ? "Do not disturb on" : "Do not disturb off";
 			return p.for_minutes ? `${verb} for ${formatMinutes(p.for_minutes)}` : verb;
 		}
 		case "signal_loss": {

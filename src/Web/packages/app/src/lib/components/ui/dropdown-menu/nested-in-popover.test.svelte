@@ -14,7 +14,7 @@
   <Popover.Content>
     <p>Popover body</p>
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger>Do Not Disturb</DropdownMenu.Trigger>
+      <DropdownMenu.Trigger>Do not disturb</DropdownMenu.Trigger>
       <DropdownMenu.Content>
         <DropdownMenu.Item onSelect={onselect}>30 minutes</DropdownMenu.Item>
       </DropdownMenu.Content>

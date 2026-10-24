@@ -12,12 +12,12 @@ title: When an alert fires
 
 When a rule's condition becomes true, Nocturne opens an alert. This page
 covers what happens next: who is told, how the alert ends, and what
-acknowledging, snoozing and Do Not Disturb each do.
+acknowledging, snoozing and Do not disturb each do.
 
 ## What happens straight away
 
 1. The alert is recorded in **Alerts > History**, with the time it started.
-2. Unless Do Not Disturb holds it back, it is sent to **every channel** on the
+2. Unless Do not disturb holds it back, it is sent to **every channel** on the
    rule at once.
 3. In the Nocturne app, it shows as an active alert until it ends.
 
@@ -94,7 +94,7 @@ When an alert card appears in the app, it offers:
 
 A snooze silences an alert on every channel for the time you choose. The alert
 stays open. When the snooze runs out, if the alert is still there, it has not
-been acknowledged, and Do Not Disturb does not cover it, it is sent again.
+been acknowledged, and Do not disturb does not cover it, it is sent again.
 
 - An alert can be snoozed **3 times** by default. After that, snoozing it is
   refused until the alert ends.
@@ -122,10 +122,10 @@ while glucose is climbing back.
   than 1 mg/dL in 5 minutes or more than 2 mg/dL in 10 minutes. Every other
   alert is sent again when its snooze ends.
 
-## Do Not Disturb
+## Do not disturb
 
-Do Not Disturb holds back alerts for a while. Open it from **Alerts > Do Not
-Disturb**.
+Do not disturb holds back alerts for a while. Open it from **Alerts > Do not
+disturb**.
 
 <Screenshot id="alerts-dnd" />
 
@@ -133,22 +133,22 @@ Disturb**.
 - **Schedule** turns it on every day between two times: quiet hours. The times
   use the time zone on your patient record, and can cross midnight.
 
-While Do Not Disturb is on:
+While Do not disturb is on:
 
 - **Critical** rules still reach you, always.
-- Rules with **Allow through Do Not Disturb** ticked still reach you.
+- Rules with **Allow through Do not disturb** ticked still reach you.
 - Every other alert still **fires** and is recorded in history as silenced by
-  Do Not Disturb. It is just not sent.
+  Do not disturb. It is just not sent.
 
 Some apps that connect to Nocturne can also hold back only low alerts, or only
 high alerts, for a while. A rule that watches for both lows and highs, or for
-something that is neither, is only held back by Do Not Disturb for everything.
+something that is neither, is only held back by Do not disturb for everything.
 
 <Callout type="warning" title="Quiet hours are when lows happen">
 
   Overnight is when people are least likely to notice a low on their own. If you
   use quiet hours, make sure the rules that matter most at night are Critical, or
-  have **Allow through Do Not Disturb** ticked.
+  have **Allow through Do not disturb** ticked.
 
 </Callout>
 

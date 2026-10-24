@@ -27,7 +27,7 @@
     AlertRuleResponse,
     ReplayRuleDefinition,
   } from "$api-clients";
-  import { formatRange } from "./alertTime";
+  import { formatRange } from "./alertTime.svelte";
   import { formatMediumDate } from "$lib/utils/formatting";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
   import ReplayView from "./ReplayView.svelte";

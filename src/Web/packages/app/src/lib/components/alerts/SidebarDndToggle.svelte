@@ -43,8 +43,8 @@
     isManualActive || !isScheduled
       ? undefined
       : isDndScheduleActiveNow(settings)
-        ? "Scheduled Do Not Disturb window is on now"
-        : "Scheduled Do Not Disturb window configured",
+        ? "Scheduled Do not disturb window is on now"
+        : "Scheduled Do not disturb window configured",
   );
 
   const href = "/alerts/dnd";
@@ -118,21 +118,21 @@
       {:else}
         <Bell class="size-4 shrink-0" />
       {/if}
-      <span class="truncate">Do Not Disturb</span>
+      <span class="truncate">Do not disturb</span>
     </a>
     <Switch
       class="scale-75 -mr-1"
       checked={isManualActive}
       onCheckedChange={toggleManual}
       disabled={saving || settings === null}
-      aria-label="Toggle Do Not Disturb"
+      aria-label="Toggle Do not disturb"
     />
   </div>
   {#if failed}
     <p
       class="px-2 pb-1 text-xs text-destructive group-data-[collapsible=icon]:hidden"
     >
-      Could not change Do Not Disturb. Try again.
+      Could not change Do not disturb. Try again.
     </p>
   {/if}
 {/if}

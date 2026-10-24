@@ -862,7 +862,7 @@ export interface RuleEditorState {
 	clientConfig: ClientConfiguration;
 	/** Flat list of delivery channels. */
 	channels: ChannelDef[];
-	/** When true, this rule still fires while the tenant is in Do Not Disturb
+	/** When true, this rule still fires while the tenant is in Do not disturb
 	 *  mode. Critical-severity rules implicitly bypass DND regardless. */
 	allowThroughDnd: boolean;
 }
