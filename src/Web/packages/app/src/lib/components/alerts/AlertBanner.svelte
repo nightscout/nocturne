@@ -1,12 +1,4 @@
 <script lang="ts">
-  import { isoNow } from "$lib/utils/now";
-  import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import {
-    getActiveAlerts,
-    acknowledgeExcursion,
-    markSeen,
-  } from "$api/generated/alerts.generated.remote";
   import { Button } from "$lib/components/ui/button";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import BellOff from "@lucide/svelte/icons/bell-off";
@@ -15,37 +7,14 @@
   import { formatTimeSince } from "./alertTime";
   import { severity, severityLabel } from "./severity";
   import { seenBy } from "./receipts";
-  import { markSeenOnThisDevice, seenHere } from "./seen-here.svelte";
+  import { createAlertActions, SNOOZE_MINUTES } from "./alert-actions.svelte";
 
-  // Reactive query: reading `.current` subscribes this component, so an
-  // optimistic withOverride from any acknowledge (here or the fresh-fire
-  // toast) shows immediately and is reconciled by the single-flight refresh.
-  const activeAlerts = getActiveAlerts();
-
-  let acknowledgingId = $state<string | null>(null);
-
-  // Without alerts.readwrite the server mutes the alert for this member only,
-  // so the button has to say that rather than promise to stop it for everyone.
-  const acknowledgesForEveryone = $derived(
-    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite")
-  );
-
-  // A share or guest link cannot acknowledge or mute; it records that it saw
-  // the alarm, which takes it off this device and changes nothing elsewhere.
-  const hasAccount = $derived(!!page.data.hasAccount);
-  const viewer = $derived({
-    hasAccount,
-    isShareHost: !!page.data.isShareHost,
-  });
-
-  // Acknowledging or muting is the only way off this surface for a member. The
-  // X that used to sit here hid a live, unacknowledged alert for the rest of
-  // the session while recording nothing server-side and halting no escalation.
-  const visibleAlerts = $derived(
-    (activeAlerts.current ?? []).filter(
-      (a) => !a.acknowledgedAt && !a.mutedByCaller && !seenHere(a, viewer)
-    )
-  );
+  // The one surface that lists open alerts. A row leaves when the server closes
+  // the excursion, or when the caller acknowledges, mutes or marks it seen. It
+  // has no close button: that hid a live alert while recording nothing
+  // server-side and halting no escalation.
+  const actions = createAlertActions();
+  const visibleAlerts = $derived(actions.alerts.filter((a) => actions.isOutstanding(a)));
 
   function getConditionLabel(conditionType: string | undefined): string {
     switch (conditionType) {
@@ -63,56 +32,15 @@
         return conditionType ?? "Alert";
     }
   }
-
-  async function handleSeen(id: string) {
-    acknowledgingId = id;
-    try {
-      await markSeen(id);
-      markSeenOnThisDevice(id);
-    } catch {
-      // The alarm closed, or the press was throttled: the next poll shows
-      // which, and the banner stays up until it does.
-      await activeAlerts.refresh();
-    } finally {
-      acknowledgingId = null;
-    }
-  }
-
-  async function handleAcknowledge(id: string) {
-    acknowledgingId = id;
-    try {
-      // Optimistically drop this excursion out of visibleAlerts at once; the
-      // single-flight refresh confirms server-side.
-      await acknowledgeExcursion({
-        excursionId: id,
-        // Who acknowledged is taken from the session server-side; sending a
-        // fixed "web_user" made this unanswerable on a multi-caregiver tenant.
-        request: {},
-      }).updates(
-        activeAlerts.withOverride((current) =>
-          (current ?? []).map((a) =>
-            a.id !== id
-              ? a
-              : acknowledgesForEveryone
-                ? { ...a, acknowledgedAt: isoNow() }
-                : { ...a, mutedByCaller: true }
-          )
-        )
-      );
-    } finally {
-      acknowledgingId = null;
-    }
-  }
-
 </script>
 
 {#if visibleAlerts.length > 0}
-  <div class="border-b print:hidden">
+  <div class="border-b print:hidden" role="region" aria-label="Active alerts">
     {#each visibleAlerts as alert (alert.id)}
       <!-- Coloured by the rule's own severity: styling every banner as
            destructive made an info rule indistinguishable from a critical low. -->
       <div
-        class="container mx-auto flex items-center gap-3 border-b px-4 py-2 max-w-7xl last:border-b-0 {severity(
+        class="container mx-auto flex flex-wrap items-center gap-3 border-b px-4 py-2 max-w-7xl last:border-b-0 {severity(
           alert.severity,
           'strip'
         )}"
@@ -143,31 +71,45 @@
               Snoozed until {time(alert.snoozedUntil)}
             </span>
           {/if}
-          {#if hasAccount && seenBy(alert.receipts)}
+          {#if actions.hasAccount && seenBy(alert.receipts)}
             <span class="ml-2 text-xs text-muted-foreground">
               {seenBy(alert.receipts)}
             </span>
           {/if}
         </div>
-        <div class="flex items-center gap-2 shrink-0">
-          {#if !hasAccount}
+        <div class="flex items-center gap-1 shrink-0">
+          {#if !alert.snoozedUntil && actions.snoozableInstance(alert)}
+            <span class="text-xs text-muted-foreground">Snooze</span>
+            {#each SNOOZE_MINUTES as minutes (minutes)}
+              <Button
+                variant="ghost"
+                size="xs"
+                onclick={() => actions.snooze(alert, minutes)}
+                disabled={actions.busyId === alert.id}
+                aria-label="Snooze for {minutes} minutes"
+              >
+                {minutes}m
+              </Button>
+            {/each}
+          {/if}
+          {#if !actions.hasAccount}
             <Button
               variant="outline"
               size="xs"
-              onclick={() => handleSeen(alert.id ?? "")}
-              disabled={acknowledgingId === alert.id}
+              onclick={() => actions.seen(alert.id ?? "")}
+              disabled={actions.busyId === alert.id}
             >
               <Check class="h-3 w-3 mr-1" />
               Seen
             </Button>
-          {:else if !alert.acknowledgedAt}
+          {:else}
             <Button
               variant="outline"
               size="xs"
-              onclick={() => handleAcknowledge(alert.id ?? "")}
-              disabled={acknowledgingId === alert.id}
+              onclick={() => actions.acknowledge(alert.id ?? "")}
+              disabled={actions.busyId === alert.id}
             >
-              {#if acknowledgesForEveryone}
+              {#if actions.acknowledgesForEveryone}
                 <Check class="h-3 w-3 mr-1" />
                 Acknowledge
               {:else}
@@ -176,7 +118,6 @@
               {/if}
             </Button>
           {/if}
-
         </div>
       </div>
     {/each}

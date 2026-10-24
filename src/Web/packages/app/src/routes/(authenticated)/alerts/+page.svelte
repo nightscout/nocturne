@@ -136,7 +136,7 @@
     try {
       // Optimistically badge every unacknowledged excursion so the card updates
       // at once; the command's GetActiveAlerts invalidation reconciles it in the
-      // same round-trip (same pattern as AlertBanner/FiringToast).
+      // same round-trip (same pattern as createAlertActions).
       await acknowledge({}).updates(
         activeAlertsQuery.withOverride((current) =>
           (current ?? []).map((a) =>
@@ -283,8 +283,8 @@
       </a>
     </div>
 
-    <!-- Active alerts banner (kept as a persistent surface separate from the
-         FiringToast which handles fresh-fire moments). -->
+    <!-- Active alerts on this page, beside the app-wide AlertBanner and
+         CriticalAlertTakeover. -->
     {#if activeAlerts.length > 0}
       <Card variant="destructive">
         <CardHeader>

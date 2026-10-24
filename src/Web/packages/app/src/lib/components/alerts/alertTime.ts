@@ -23,7 +23,7 @@ export function formatRange(
  * Relative: "Just now", "12m ago", "3h 5m ago", "2d ago".
  *
  * `now` defaults to the current time; pass a reactive value to let a
- * long-lived card age without being re-created (e.g. FiringToast).
+ * long-lived surface age without being re-created (e.g. CriticalAlertTakeover).
  */
 export function formatTimeSince(
   at: Date | string | undefined,
