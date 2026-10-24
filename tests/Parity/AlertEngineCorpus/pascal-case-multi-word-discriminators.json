@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "pascal-case-multi-word-discriminators",
-  "description": "a multi-word kind spelled by its PascalCase member name resolves its kind but reads no payload: each leaf evaluates its default record or, where the default cannot be evaluated, skips the rule",
+  "description": "a multi-word kind spelled by its PascalCase member name resolves its kind but reads no payload, so the rule cannot be evaluated and is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

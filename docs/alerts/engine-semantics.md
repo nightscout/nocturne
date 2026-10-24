@@ -50,10 +50,11 @@ engine only ever reads the payload matching `type`.
   `AlertConditionType` member name or integer ordinal (case-insensitive, trimmed). The
   payload, though, is read from the field named by the **lowercased `type`**, which exists
   only for wire strings: `"Threshold"` reads `threshold`, but `"RateOfChange"` and `"3"`
-  resolve a kind and find no payload.
+  resolve a kind and find no payload, so the tree cannot be evaluated
+  (`payload_unreachable`, §1.4).
 - **Unknown `type` ⇒ the node evaluates `false`.** A known type whose payload is
-  null/absent (or unreachable, as above) evaluates the record built from `{}`, with every
-  field at its constructor default. Whether that default evaluates or throws is §1.4.
+  null/absent evaluates the record built from `{}`, with every field at its constructor
+  default. Whether that default evaluates or throws is §1.4.
 - The full discriminator set is the
   `AlertConditionType` enum's `EnumMember` values.
 
@@ -87,6 +88,7 @@ input is null this tick:
 | Reason code | Shape |
 |---|---|
 | `type_missing` | a node with no `type` (a child, or an auto-resolve / snooze root) |
+| `payload_unreachable` | a `type` that resolves by member name or ordinal and is not the wire string in any case (`"RateOfChange"`, `"PumpState"`, `"3"`), so no stored payload is read (§1.2) |
 | `condition_missing` | a `null` slot in a composite's `conditions` |
 | `conditions_missing` | a composite with no `conditions` list, including a `composite` child with no payload |
 | `operator_missing` | a composite with non-empty `conditions` and no `operator` |
@@ -109,7 +111,7 @@ rule save rejects those too, together with the shapes above:
 | Reason code | Shape |
 |---|---|
 | `unknown_kind` | `type` names no kind |
-| `non_canonical_type` | `type` resolves but is not the exact wire string (`"Threshold"`, `"RateOfChange"`) — stored rules keep the §1.2 resolution |
+| `non_canonical_type` | `type` is the wire string in another case (`"Threshold"`, `"RATE_OF_CHANGE"`) — stored rules keep reading its payload (§1.2) |
 | `unknown_operator` | composite operator other than `and`/`or` (case-insensitive); comparison operator other than the exact `<` `<=` `>` `>=` `==`, or missing; `time_since_*` operator ordinal outside the enum |
 | `unknown_direction` | `threshold` direction other than `above`/`below`, `rate_of_change` other than `rising`/`falling` (case-insensitive) |
 | `unknown_state` | `alert_state` state other than `firing`/`unacknowledged`/`acknowledged` (case-insensitive) |
@@ -622,4 +624,4 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
 | 6 | Elapsed-time math mixes double→decimal casts (per-leaf, §1.3) | §1.3 | normative |
 | 7 | `loop_enaction_stale` cold-start guard is `HasEverApsCycled`, not an enaction-specific flag | §3 | normative |
 | 8 | `time_since_last_*` treats a missing anchor as +∞ (fires on cold start) — deliberately opposite to `loop_stale`'s guard | §3 | normative |
-| 9 | A multi-word kind spelled by its member name (`"RateOfChange"`, `"PumpState"`) or ordinal resolves the kind but not its payload, and evaluates the `{}` defaults | §1.2 | normative for stored rules; rejected on save (§1.4) |
+| 9 | *(retired: a kind spelled by its member name or ordinal resolves but reads no payload, so the tree cannot be evaluated, `payload_unreachable`)* | §1.4 | resolved |

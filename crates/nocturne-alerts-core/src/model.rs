@@ -51,8 +51,11 @@ pub enum Reason {
     PayloadMissing,
     /// A `type` naming no condition kind.
     UnknownKind,
-    /// A `type` that resolves to a kind but is not its wire name.
+    /// A `type` that is its kind's wire name in another case.
     NonCanonicalType,
+    /// A `type` that resolves to a kind by its member name or ordinal, which
+    /// reads no payload.
+    PayloadUnreachable,
     UnknownOperator,
     UnknownDirection,
     UnknownState,
@@ -101,6 +104,7 @@ impl Reason {
             Reason::PayloadMissing => "payload_missing",
             Reason::UnknownKind => "unknown_kind",
             Reason::NonCanonicalType => "non_canonical_type",
+            Reason::PayloadUnreachable => "payload_unreachable",
             Reason::UnknownOperator => "unknown_operator",
             Reason::UnknownDirection => "unknown_direction",
             Reason::UnknownState => "unknown_state",
@@ -130,7 +134,10 @@ impl Reason {
             | Reason::MinutesNotPositive(f)
             | Reason::MinutesNegative(f) => Some(f),
             Reason::PumpModeCategory => Some("category"),
-            Reason::TypeMissing | Reason::UnknownKind | Reason::NonCanonicalType => Some("type"),
+            Reason::TypeMissing
+            | Reason::UnknownKind
+            | Reason::NonCanonicalType
+            | Reason::PayloadUnreachable => Some("type"),
             Reason::ConditionsMissing | Reason::ConditionsEmpty => Some("conditions"),
             Reason::OperatorMissing | Reason::UnknownOperator => Some("operator"),
             Reason::DirectionMissing | Reason::UnknownDirection => Some("direction"),
@@ -157,6 +164,7 @@ impl Reason {
                 | Reason::InvalidField(_)
                 | Reason::TooDeep
                 | Reason::TypeMissing
+                | Reason::PayloadUnreachable
                 | Reason::ConditionMissing
                 | Reason::ConditionsMissing
                 | Reason::OperatorMissing

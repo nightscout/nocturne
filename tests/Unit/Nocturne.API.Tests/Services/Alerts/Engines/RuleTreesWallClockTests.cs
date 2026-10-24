@@ -28,7 +28,6 @@ public class RuleTreesWallClockTests
     [InlineData("""{"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}}""")]
     [InlineData("""{"type": "not", "not": {"child": {"type": "staleness", "staleness": {"operator": ">", "value": 5}}}}""")]
     [InlineData("""{"type": "sustained", "sustained": {"minutes": 10, "child": {"type": "loop_stale", "loop_stale": {"operator": ">", "minutes": 30}}}}""")]
-    [InlineData("""{"type": "SignalLoss", "signal_loss": {"timeout_minutes": 15}}""")]
     public void Wall_clock_leaf_anywhere_in_the_tree_is_selected(string child)
     {
         var tree = """{"operator": "and", "conditions": [{"type": "threshold", "threshold": {"direction": "below", "value": 70}}, """

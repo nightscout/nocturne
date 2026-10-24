@@ -145,7 +145,7 @@ mod tests {
                 { "type": "not", "not": { "child": {
                     "type": "sustained",
                     "sustained": { "minutes": 10, "child": {
-                        "type": "SignalLoss", "signal_loss": { "timeout_minutes": 15 }
+                        "type": "signal_loss", "signal_loss": { "timeout_minutes": 15 }
                     } }
                 } } }
             ]

@@ -43,6 +43,7 @@ const ISSUE_MESSAGES: Record<string, string> = {
 	type_missing: MALFORMED,
 	unknown_kind: MALFORMED,
 	non_canonical_type: MALFORMED,
+	payload_unreachable: MALFORMED,
 	payload_missing: MALFORMED,
 	not_an_object: MALFORMED,
 	invalid_field: MALFORMED,

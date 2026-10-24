@@ -130,16 +130,39 @@ fn threshold_and_rate_of_change_without_a_direction_cannot_be_evaluated() {
 }
 
 #[test]
-fn a_multi_word_kind_spelled_by_its_member_name_drops_its_payload() {
-    // "RateOfChange" resolves the kind but not the payload key, so the
-    // evaluator sees the default payload, whose direction is missing.
-    let tree = composite(
-        "and",
-        json!([{ "type": "RateOfChange", "rate_of_change": { "direction": "falling", "rate": 3 } }]),
-    );
-    assert_eq!(
-        parse_error(&tree),
-        issue("composite[0].RateOfChange", Reason::DirectionMissing)
+fn a_kind_spelled_by_its_member_name_or_ordinal_cannot_be_evaluated() {
+    for (tree, path) in [
+        (
+            json!({ "type": "RateOfChange", "rate_of_change": { "direction": "falling", "rate": 3 } }),
+            "RateOfChange",
+        ),
+        (
+            json!({ "type": "TimeSinceLastCarb", "TimeSinceLastCarb": { "operator": ">", "minutes": 60 } }),
+            "TimeSinceLastCarb",
+        ),
+        (
+            json!({ "type": "0", "threshold": { "direction": "below", "value": 70 } }),
+            "0",
+        ),
+        (
+            composite(
+                "and",
+                json!([{ "type": "PumpState", "pump_state": { "mode": "Suspended", "is_active": true } }]),
+            ),
+            "composite[0].PumpState",
+        ),
+    ] {
+        assert_eq!(
+            parse_error(&tree),
+            issue(path, Reason::PayloadUnreachable),
+            "{tree}"
+        );
+    }
+    assert!(
+        Node::parse(
+            &json!({ "type": "THRESHOLD", "threshold": { "direction": "below", "value": 70 } })
+        )
+        .is_ok()
     );
 }
 
@@ -177,7 +200,7 @@ fn problems_that_only_evaluate_false_or_true_still_parse() {
         composite("and", json!([])),
         json!({ "type": "threshold", "threshold": { "direction": "sideways", "value": 70 } }),
         json!({ "type": "iob", "iob": { "operator": "=>", "value": 1 } }),
-        json!({ "type": "PumpState", "pump_state": { "mode": "Suspended", "is_active": true } }),
+        json!({ "type": "Threshold", "threshold": { "direction": "below", "value": 70 } }),
     ] {
         assert!(Node::parse(&tree).is_ok(), "{tree}");
     }
@@ -270,7 +293,8 @@ fn saving_reports_every_problem_in_the_tree() {
         { "type": "not", "not": {} },
         { "type": "sustained", "sustained": { "minutes": 0 } },
         null,
-        { "type": "rate_of_change" }
+        { "type": "rate_of_change" },
+        { "type": "RateOfChange", "rate_of_change": { "direction": "falling" } }
     ]});
     assert_eq!(
         validate_rule("composite", &params),
@@ -295,6 +319,7 @@ fn saving_reports_every_problem_in_the_tree() {
             issue("composite[10].", Reason::ConditionMissing),
             issue("composite[11].rate_of_change", Reason::FieldMissing("rate")),
             issue("composite[11].rate_of_change", Reason::DirectionMissing),
+            issue("composite[12].RateOfChange", Reason::PayloadUnreachable),
         ]
     );
 }

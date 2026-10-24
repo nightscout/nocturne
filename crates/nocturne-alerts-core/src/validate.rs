@@ -224,19 +224,20 @@ fn check_node(
         return report(found, tier, path, Reason::UnknownKind);
     };
     let wire = payload.kind().name();
+    // A kind reached through its member name or ordinal reads no stored
+    // payload (engine-semantics.md §1.2).
+    if !type_str.eq_ignore_ascii_case(wire) {
+        return report(found, tier, path, Reason::PayloadUnreachable);
+    }
     if type_str != wire {
         report(found, tier, path, Reason::NonCanonicalType);
     }
-    // A kind reached through its member name or ordinal reads the default
-    // payload, not the stored one, so no written payload is evaluated. An
-    // absent or null payload is written as no properties at all.
+    // An absent or null payload is written as no properties at all.
     let empty = Map::new();
-    let entry = raw
-        .filter(|_| type_str.eq_ignore_ascii_case(wire))
-        .map(|o| match o.entry(wire) {
-            Some((pointer, v)) => (v.as_object().unwrap_or(&empty), pointer),
-            None => (&empty, String::new()),
-        });
+    let entry = raw.map(|o| match o.entry(wire) {
+        Some((pointer, v)) => (v.as_object().unwrap_or(&empty), pointer),
+        None => (&empty, String::new()),
+    });
     let raw_payload = entry.as_ref().map(|(obj, pointer)| Raw { obj, pointer });
     check_payload(&payload, raw_payload, path, tier, found);
 }
