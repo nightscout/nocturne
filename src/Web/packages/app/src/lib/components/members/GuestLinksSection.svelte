@@ -177,7 +177,7 @@
     } catch (err) {
       createError = describeSubmitError(
         err,
-        "Failed to create guest link. Please try again."
+        "Failed to create guest link. Try again."
       );
     } finally {
       isCreating = false;
@@ -256,7 +256,7 @@
       <div>
         <h2 class="text-lg font-semibold flex items-center gap-2">
           <Clock class="h-5 w-5" />
-          Temporary Guest Links
+          Temporary guest links
         </h2>
         <p class="text-sm text-muted-foreground mt-0.5">
           Share read-only access with someone who does not have an account
@@ -269,7 +269,7 @@
           onclick={() => (showCreateForm = true)}
         >
           <Link class="mr-1.5 h-3.5 w-3.5" />
-          Create Guest Link
+          Create guest link
         </Button>
       {/if}
     </div>
@@ -278,7 +278,7 @@
     {#if showCreateForm}
       <Card.Root>
         <Card.Header>
-          <Card.Title class="text-lg">Create Guest Link</Card.Title>
+          <Card.Title class="text-lg">Create guest link</Card.Title>
           <Card.Description>
             Generate a temporary link for read-only access to the categories
             you choose. The code works once: the first device to enter it stays
@@ -437,7 +437,7 @@
                   {#if isCreating}
                     <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
                   {/if}
-                  Create Link
+                  Create link
                 </Button>
               </div>
             </div>

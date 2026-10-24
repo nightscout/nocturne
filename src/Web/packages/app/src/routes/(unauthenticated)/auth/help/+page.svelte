@@ -13,7 +13,7 @@
 </script>
 
 <svelte:head>
-  <title>Sign-in Help - Nocturne</title>
+  <title>Sign-in help - Nocturne</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-background p-4">
@@ -25,7 +25,7 @@
         >
           <HelpCircle class="h-6 w-6 text-primary" />
         </div>
-        <Card.Title class="text-2xl font-bold">Sign-in Help</Card.Title>
+        <Card.Title class="text-2xl font-bold">Sign-in help</Card.Title>
         <Card.Description>
           Learn about the different ways to sign in to Nocturne
         </Card.Description>
@@ -68,7 +68,7 @@
           >
             <Smartphone class="h-5 w-5 text-primary" />
           </div>
-          <Card.Title class="text-lg">Authenticator App</Card.Title>
+          <Card.Title class="text-lg">Authenticator app</Card.Title>
         </div>
       </Card.Header>
       <Card.Content>
@@ -78,9 +78,7 @@
           that refreshes every 30 seconds, and each code can be used once.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          If you set one up, enter the code from the app on the sign-in page,
-          straight after your passkey. You can set up an authenticator in your
-          account settings after you sign in.
+          If you configure one, enter the code from the app on the sign-in page, straight after your passkey. You can configure an authenticator in your account settings after you sign in.
         </p>
       </Card.Content>
     </Card.Root>
@@ -93,14 +91,12 @@
           >
             <KeyRound class="h-5 w-5 text-primary" />
           </div>
-          <Card.Title class="text-lg">Recovery Codes</Card.Title>
+          <Card.Title class="text-lg">Recovery codes</Card.Title>
         </div>
       </Card.Header>
       <Card.Content>
         <p class="text-sm leading-relaxed text-muted-foreground">
-          Recovery codes are one-time backup codes you received when you first
-          set up your account. Use them if you cannot access your passkey or
-          authenticator app.
+          Recovery codes are one-time backup codes you received when you first created your account. Use them if you cannot access your passkey or authenticator app.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
           On the sign-in page, choose
@@ -109,8 +105,7 @@
           cross it off your list after use.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          A code does not sign you in on its own: it gives you ten minutes to set
-          up a new passkey, and you sign in with that.
+          A code does not sign you in on its own. It gives you ten minutes to create a new passkey, and you sign in with that.
         </p>
       </Card.Content>
     </Card.Root>
@@ -123,7 +118,7 @@
           >
             <Globe class="h-5 w-5 text-primary" />
           </div>
-          <Card.Title class="text-lg">External Providers</Card.Title>
+          <Card.Title class="text-lg">External providers</Card.Title>
         </div>
       </Card.Header>
       <Card.Content>

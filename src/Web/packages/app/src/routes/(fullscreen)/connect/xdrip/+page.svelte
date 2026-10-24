@@ -76,7 +76,7 @@
             </Button>
           </div>
           <p class="text-muted-foreground text-sm">
-            Then tap "Connect to Nocturne" to authorize.
+            Then select "Connect to Nocturne" to authorize.
           </p>
         </div>
 

@@ -19,7 +19,7 @@ describe("ResourceContext", () => {
     expect(ctx.loading).toBe(false);
     expect(ctx.error).toBeNull();
     expect(ctx.hasData).toBe(false);
-    expect(ctx.errorTitle).toBe("Error Loading Data");
+    expect(ctx.errorTitle).toBe("Error loading data");
   });
 
   it("is loading while any one resource is loading", () => {

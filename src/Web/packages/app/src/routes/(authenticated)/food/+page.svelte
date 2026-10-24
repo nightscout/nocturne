@@ -37,14 +37,14 @@
 </script>
 
 <svelte:head>
-  <title>Food Editor - Nocturne</title>
+  <title>Food editor - Nocturne</title>
 </svelte:head>
 
 <div class="@container flex-1 overflow-auto p-5">
   <!-- Header -->
   <div class="mb-5 flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Food Editor</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Food editor</h1>
       <div class="mt-0.5 text-xs text-muted-foreground">
         {#if state.foods.length === 0 && !state.loading}
           No foods yet. Add one to get started.

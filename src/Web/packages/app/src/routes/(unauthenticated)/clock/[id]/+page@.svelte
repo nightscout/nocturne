@@ -124,7 +124,7 @@
     <p class="text-lg">{error}</p>
     <Button variant="outline" onclick={() => goto(resolve("/clock"))}>
       <ArrowLeft class="mr-2 size-4" />
-      Back to Clock Faces
+      Back to clock faces
     </Button>
   </div>
 {:else if clockConfig}
@@ -146,7 +146,7 @@
     <div class="flex items-center gap-2">
       {#if demoMode}
         <Badge variant="overlay">
-          Demo Mode
+          Demo mode
         </Badge>
       {/if}
       <Button

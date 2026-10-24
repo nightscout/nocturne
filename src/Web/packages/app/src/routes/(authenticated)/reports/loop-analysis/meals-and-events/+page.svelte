@@ -50,7 +50,7 @@
 </script>
 
 <svelte:head>
-  <title>Meals and events - Loop Analysis - Nocturne Reports</title>
+  <title>Meals and events - Loop analysis - Nocturne reports</title>
   <meta name="description" content="Glucose and insulin before and after meals, corrections and other events." />
 </svelte:head>
 

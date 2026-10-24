@@ -71,7 +71,7 @@
 <div class="grid grid-cols-1 @lg:grid-cols-3 gap-4">
   <Card>
     <CardHeader class="pb-2">
-      <CardTitle class="text-sm font-medium">BG Delta</CardTitle>
+      <CardTitle class="text-sm font-medium">BG delta</CardTitle>
     </CardHeader>
     <CardContent>
       <div class="text-2xl font-bold">
@@ -85,7 +85,7 @@
   {#await batteryStatusPromise}
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium">Last Updated</CardTitle>
+        <CardTitle class="text-sm font-medium">Last updated</CardTitle>
       </CardHeader>
       <CardContent>
         <div class="text-2xl font-bold">
@@ -101,7 +101,7 @@
       currentStatus && Object.keys(currentStatus.devices ?? {}).length > 0}
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium">Last Updated</CardTitle>
+        <CardTitle class="text-sm font-medium">Last updated</CardTitle>
       </CardHeader>
       <CardContent>
         <div class="text-2xl font-bold">
@@ -144,7 +144,7 @@
   {:catch}
     <Card>
       <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium">Last Updated</CardTitle>
+        <CardTitle class="text-sm font-medium">Last updated</CardTitle>
       </CardHeader>
       <CardContent>
         <div class="text-2xl font-bold">

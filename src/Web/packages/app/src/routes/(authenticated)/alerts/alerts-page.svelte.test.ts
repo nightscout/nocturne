@@ -79,7 +79,7 @@ describe("alerts page", () => {
 
     await expect.element(page.getByText(/Do Not Disturb is on/)).toBeVisible();
     await expect
-      .element(page.getByRole("button", { name: "Turn off" }))
+      .element(page.getByRole("button", { name: "Disable" }))
       .not.toBeInTheDocument();
   });
 
@@ -91,7 +91,7 @@ describe("alerts page", () => {
 
     await expect.element(page.getByText(/Do Not Disturb is on/)).toBeVisible();
     await expect
-      .element(page.getByRole("button", { name: "Turn off" }))
+      .element(page.getByRole("button", { name: "Disable" }))
       .toBeVisible();
   });
 

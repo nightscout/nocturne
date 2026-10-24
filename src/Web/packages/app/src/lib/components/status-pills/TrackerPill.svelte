@@ -180,19 +180,19 @@
       <div class="flex justify-between items-center text-sm">
         <span class="text-muted-foreground flex items-center gap-1.5">
           <Clock class="h-3.5 w-3.5" />
-          Running Time
+          Running time
         </span>
         <span class="font-medium">{ageDisplay}</span>
       </div>
       {#if definition?.lifespanHours}
         <div class="flex justify-between items-center text-sm">
-          <span class="text-muted-foreground">Expected Lifespan</span>
+          <span class="text-muted-foreground">Expected lifespan</span>
           <span class="font-medium">
             {formatLifespan(definition.lifespanHours)}
           </span>
         </div>
         <div class="flex justify-between items-center text-sm">
-          <span class="text-muted-foreground">Time Remaining</span>
+          <span class="text-muted-foreground">Time remaining</span>
           <span
             class={cn(
               "font-medium",
@@ -233,7 +233,7 @@
         onclick={handleComplete}
       >
         <Check class="h-4 w-4 mr-2" />
-        Complete Tracker
+        Complete tracker
       </Button>
     </div>
   </Popover.Content>

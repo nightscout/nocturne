@@ -120,7 +120,7 @@
       {#if targetSegments.length > 0}
         <div class="flex items-center gap-2">
           <span class="w-28 shrink-0 text-muted-foreground font-medium">
-            Correction Range
+            Correction range
           </span>
           <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
             {#each targetSegments as seg, i (i)}
@@ -145,7 +145,7 @@
       {#if carbSegments.length > 0}
         <div class="flex items-center gap-2">
           <span class="w-28 shrink-0 text-muted-foreground font-medium">
-            Carb Ratio
+            Carb ratio
           </span>
           <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
             {#each carbSegments as seg, i (i)}
@@ -170,7 +170,7 @@
       {#if sensitivitySegments.length > 0}
         <div class="flex items-center gap-2">
           <span class="w-28 shrink-0 text-muted-foreground font-medium">
-            Correction Factor
+            Correction factor
           </span>
           <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
             {#each sensitivitySegments as seg, i (i)}

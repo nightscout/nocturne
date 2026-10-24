@@ -125,7 +125,7 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <LayoutGrid class="h-5 w-5" />
-      Dashboard Widgets
+      Dashboard widgets
     </CardTitle>
     <CardDescription>
       Customize the {maxWidgets} widgets shown above the glucose chart. Drag to reorder.
@@ -145,7 +145,7 @@
       {/if}
       <!-- Selected widgets (draggable) -->
       <div class="space-y-2">
-        <span class="text-sm font-medium">Active Widgets</span>
+        <span class="text-sm font-medium">Active widgets</span>
         <div class="space-y-2">
           {#each selectedWidgets as widgetId, index (widgetId)}
             {@const Icon = WIDGET_ICONS[widgetId]}
@@ -198,7 +198,7 @@
       {#if availableWidgets.length > 0}
         <div class="space-y-2">
           <span class="text-sm font-medium text-muted-foreground">
-            Available Widgets {#if !canAddMore}(max {maxWidgets} reached){/if}
+            Available widgets {#if !canAddMore}(max {maxWidgets} reached){/if}
           </span>
           <div class="grid grid-cols-1 @sm:grid-cols-2 gap-2">
             {#each availableWidgets as widget (widget.id)}

@@ -129,7 +129,7 @@
         {#if saving}Saving...{:else if selectedId}Editing{:else}No content selected{/if}
       </span>
       <Button variant="secondary" size="sm" onclick={handleSave} disabled={!selectedId || saving}>
-        Save Draft
+        Save draft
       </Button>
       <Button size="sm" onclick={handlePublish} disabled={!selectedId}>
         Publish

@@ -33,8 +33,8 @@
 
   const bolusTypeLabels: Record<BolusType, string> = {
     [BolusType.Normal]: "Normal",
-    [BolusType.Square]: "Square Wave",
-    [BolusType.Dual]: "Dual Wave",
+    [BolusType.Square]: "Square wave",
+    [BolusType.Dual]: "Dual wave",
   };
 </script>
 
@@ -65,7 +65,7 @@
     </div>
 
     <div class="space-y-1.5">
-      <Label for="bolus-type">Bolus Type</Label>
+      <Label for="bolus-type">Bolus type</Label>
       <Select.Root
         type="single"
         value={bolus.bolusType ?? BolusType.Normal}
@@ -148,7 +148,7 @@
         </div>
 
         <div class="space-y-1.5">
-          <Label for="bolus-insulin-type">Insulin Type</Label>
+          <Label for="bolus-insulin-type">Insulin type</Label>
           <Input
             id="bolus-insulin-type"
             type="text"

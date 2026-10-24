@@ -68,7 +68,7 @@ export const groupMeta: Record<CommandPaletteGroup, { label: string; order: numb
 	reports: { label: "Reports", order: 1 },
 	pages: { label: "Pages", order: 2 },
 	settings: { label: "Settings", order: 3 },
-	"quick-settings": { label: "Quick Settings", order: 4 },
+	"quick-settings": { label: "Quick settings", order: 4 },
 	actions: { label: "Actions", order: 5 },
 };
 
@@ -180,7 +180,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "page-time-spans",
-		label: "Time Spans",
+		label: "Time spans",
 		group: "pages",
 		keywords: ["time spans", "ranges", "periods"],
 		icon: Clock,
@@ -188,7 +188,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "page-tenants",
-		label: "Tenant Management",
+		label: "Tenant management",
 		group: "settings",
 		keywords: ["tenants", "organizations", "accounts", "platform admin"],
 		icon: Building,
@@ -197,7 +197,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "page-access-requests",
-		label: "Access Requests",
+		label: "Access requests",
 		group: "settings",
 		keywords: ["access requests", "join", "approve", "pending users"],
 		icon: UserPlus,
@@ -269,7 +269,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "settings-data-quality",
-		label: "Data Quality",
+		label: "Data quality",
 		group: "settings",
 		keywords: ["data quality", "gaps", "thresholds"],
 		icon: Shield,
@@ -293,7 +293,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "settings-sharing-privacy",
-		label: "Sharing & Privacy",
+		label: "Sharing & privacy",
 		group: "settings",
 		keywords: [
 			"sharing",
@@ -332,7 +332,7 @@ export const items: CommandPaletteItem[] = [
 	// ─── Quick Settings ──────────────────────────────────────────────────
 	{
 		id: "qs-dark-mode",
-		label: "Toggle Dark Mode",
+		label: "Toggle dark mode",
 		group: "quick-settings",
 		description: "Switch between light and dark themes",
 		keywords: ["dark mode", "light mode", "theme", "toggle"],
@@ -340,7 +340,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "qs-glucose-units",
-		label: "Switch Glucose Units",
+		label: "Switch glucose units",
 		group: "quick-settings",
 		description: "Toggle between mg/dL and mmol/L",
 		keywords: ["glucose units", "mg/dl", "mmol/l", "units"],
@@ -348,7 +348,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "qs-chart-lookback",
-		label: "Change Chart Lookback",
+		label: "Change chart lookback",
 		group: "quick-settings",
 		description: "Adjust the time window for charts",
 		keywords: ["lookback", "time range", "chart period", "hours"],
@@ -358,7 +358,7 @@ export const items: CommandPaletteItem[] = [
 	// ─── Actions ─────────────────────────────────────────────────────────
 	{
 		id: "action-add-treatment",
-		label: "Add Treatment",
+		label: "Add treatment",
 		group: "actions",
 		description: "Log a new treatment entry",
 		keywords: ["add treatment", "log", "bolus", "carbs"],
@@ -366,7 +366,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "action-add-food",
-		label: "Add Food Entry",
+		label: "Add food entry",
 		group: "actions",
 		description: "Add a food item to the database",
 		keywords: ["add food", "nutrition", "new food"],
@@ -374,7 +374,7 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "action-manual-sync",
-		label: "Manual Sync",
+		label: "Manual sync",
 		group: "actions",
 		description: "Trigger a manual data sync",
 		keywords: ["sync", "refresh", "fetch", "update"],

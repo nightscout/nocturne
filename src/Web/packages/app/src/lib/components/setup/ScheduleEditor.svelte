@@ -40,7 +40,7 @@
   </div>
 
   {#if entries.length === 0}
-    <p class="text-sm text-muted-foreground">No entries yet. Click Add to create one.</p>
+    <p class="text-sm text-muted-foreground">No entries yet. Select Add to create one.</p>
   {:else}
     <div class="space-y-2">
       {#each entries as entry, i (entry)}

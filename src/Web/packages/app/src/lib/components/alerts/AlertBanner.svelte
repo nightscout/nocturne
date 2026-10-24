@@ -50,15 +50,15 @@
   function getConditionLabel(conditionType: string | undefined): string {
     switch (conditionType) {
       case "threshold_low":
-        return "Low Glucose";
+        return "Low glucose";
       case "threshold_high":
-        return "High Glucose";
+        return "High glucose";
       case "rate_of_change":
-        return "Rapid Change";
+        return "Rapid change";
       case "signal_loss":
-        return "Signal Lost";
+        return "Signal lost";
       case "composite":
-        return "Composite Alert";
+        return "Composite alert";
       default:
         return conditionType ?? "Alert";
     }

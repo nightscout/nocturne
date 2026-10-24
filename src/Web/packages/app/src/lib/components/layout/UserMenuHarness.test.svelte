@@ -5,6 +5,6 @@
 
 <Sidebar.Provider>
   <Sidebar.Menu>
-    <UserMenu user={{ subjectId: "guest-1", name: "Guest User", roles: [], permissions: [] }} isGuestSession />
+    <UserMenu user={{ subjectId: "guest-1", name: "Guest user", roles: [], permissions: [] }} isGuestSession />
   </Sidebar.Menu>
 </Sidebar.Provider>

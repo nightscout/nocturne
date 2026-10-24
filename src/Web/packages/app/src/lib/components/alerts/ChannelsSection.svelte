@@ -364,7 +364,7 @@
           disabled={pending || unavailable}
           title={linked
             ? undefined
-            : `${platformLabel(o.platform!)} not linked. Connect it in Connectors & Apps to enable delivery.`}
+            : `${platformLabel(o.platform!)} not linked. Connect it in Connectors & apps to enable delivery.`}
           onSelect={() => addChannel(o)}
         >
           <span

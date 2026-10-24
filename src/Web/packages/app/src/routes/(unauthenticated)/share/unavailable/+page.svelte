@@ -14,8 +14,7 @@
        replacement link first would be actively harmful: rotating is how the owner would supply
        one, and it permanently breaks the link for every other recipient. -->
   <p>
-    It may have been turned off or replaced, or the service may be temporarily
-    unavailable.
+    It can be turned off or replaced. The service can also be temporarily unavailable.
   </p>
   <p>
     Try again in a few minutes. If it still does not work, ask the person who

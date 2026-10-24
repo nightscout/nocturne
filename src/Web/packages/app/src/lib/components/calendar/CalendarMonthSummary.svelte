@@ -32,14 +32,14 @@
           {unitLabel}
         </span>
       </div>
-      <div class="text-sm text-muted-foreground">Avg Glucose</div>
+      <div class="text-sm text-muted-foreground">Avg glucose</div>
     </div>
     <div class="text-center">
       <div class="text-2xl font-bold">
         {monthSummary?.avgDailyCarbs != null ? `${monthSummary.avgDailyCarbs.toFixed(0)}g` : "n/a"}
       </div>
       <div class="text-sm text-muted-foreground">
-        Avg Daily Carbs
+        Avg daily carbs
       </div>
     </div>
     <div class="text-center">

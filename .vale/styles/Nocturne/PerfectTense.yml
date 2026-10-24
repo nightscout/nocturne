@@ -2,7 +2,7 @@
 extends: existence
 message: "Rule 3.4: '%s' is a perfect tense. Use simple past or simple present."
 link: .claude/skills/simple-english/SKILL.md
-level: warning
+level: error
 ignorecase: true
 tokens:
   - '\b(?:has|have|had) been\b'

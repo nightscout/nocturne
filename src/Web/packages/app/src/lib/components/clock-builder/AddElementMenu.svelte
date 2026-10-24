@@ -32,7 +32,7 @@
     align="center"
   >
     <div class="space-y-3">
-      <h4 class="font-medium">Add Element</h4>
+      <h4 class="font-medium">Add element</h4>
       {#each ELEMENT_GROUPS as group (group.name)}
         <div>
           <p class="mb-1 text-xs font-medium text-muted-foreground">

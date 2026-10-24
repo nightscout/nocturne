@@ -218,7 +218,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Palette class="h-5 w-5" />
-          Color Theme
+          Color theme
         </CardTitle>
         <CardDescription>
           Choose a color theme and light/dark mode
@@ -249,7 +249,7 @@
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: oklch(0.6 0.118 184.704)"
-                title="In Range"
+                title="In range"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
@@ -259,7 +259,7 @@
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: oklch(0.577 0.245 27.325)"
-                title="Very Low"
+                title="Very low"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
@@ -329,17 +329,17 @@
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #006493"
-                title="Primary Blue"
+                title="Primary blue"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #006A5F"
-                title="Teal Secondary"
+                title="Teal secondary"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #00FF00"
-                title="In Range"
+                title="In range"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
@@ -369,27 +369,27 @@
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #000000"
-                title="Black Background"
+                title="Black background"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #4cff00"
-                title="Neon Green"
+                title="Neon green"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #808080"
-                title="Pill Gray"
+                title="Pill gray"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #bdbdbd"
-                title="Text Gray"
+                title="Text gray"
               ></div>
               <div
                 class="h-4 w-4 rounded-full"
                 style="background: #0099ff"
-                title="Classic Blue"
+                title="Classic blue"
               ></div>
             </div>
           </RadioGroup.Card>
@@ -551,7 +551,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Globe class="h-5 w-5" />
-          Units & Formats
+          Units & formats
         </CardTitle>
         <CardDescription>
           Configure measurement units and display formats. These preferences sync
@@ -704,11 +704,11 @@
             <p class="font-medium">{browserTimezone}</p>
           </div>
           <div class="space-y-1">
-            <Label size="sm" variant="muted">UTC Offset</Label>
+            <Label size="sm" variant="muted">UTC offset</Label>
             <p class="font-medium">{timezoneOffset}</p>
           </div>
           <div class="space-y-1">
-            <Label size="sm" variant="muted">Current Time</Label>
+            <Label size="sm" variant="muted">Current time</Label>
             <p class="font-medium font-mono">{currentTime}</p>
           </div>
         </div>
@@ -724,7 +724,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Eye class="h-5 w-5" />
-          Chart Options
+          Chart options
         </CardTitle>
         <CardDescription>Configure chart display preferences</CardDescription>
       </CardHeader>
@@ -952,7 +952,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Activity class="h-5 w-5" />
-          Glucose Processing
+          Glucose processing
         </CardTitle>
         <CardDescription>
           Choose how glucose values are displayed when both smoothed and unsmoothed readings are available
@@ -1031,7 +1031,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Timer class="h-5 w-5" />
-          Tracker Pills
+          Tracker pills
         </CardTitle>
         <CardDescription>
           Show active tracker ages on the dashboard

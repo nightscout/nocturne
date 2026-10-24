@@ -22,11 +22,11 @@ export const biologicalSexLabels: Record<BiologicalSex, string> = {
 };
 
 export const deviceCategoryLabels: Record<DeviceCategory, string> = {
-  [DeviceCategory.InsulinPump]: "Insulin Pump",
+  [DeviceCategory.InsulinPump]: "Insulin pump",
   [DeviceCategory.CGM]: "CGM",
-  [DeviceCategory.GlucoseMeter]: "Glucose Meter",
-  [DeviceCategory.InsulinPen]: "Insulin Pen",
-  [DeviceCategory.SmartPen]: "Smart Pen",
+  [DeviceCategory.GlucoseMeter]: "Glucose meter",
+  [DeviceCategory.InsulinPen]: "Insulin pen",
+  [DeviceCategory.SmartPen]: "Smart pen",
   [DeviceCategory.Uploader]: "Uploader",
 };
 
@@ -45,11 +45,11 @@ export const aidAlgorithmLabels: Record<AidAlgorithm, string> = {
 };
 
 export const insulinCategoryLabels: Record<InsulinCategory, string> = {
-  [InsulinCategory.RapidActing]: "Rapid Acting",
-  [InsulinCategory.ShortActing]: "Short Acting",
-  [InsulinCategory.IntermediateActing]: "Intermediate Acting",
-  [InsulinCategory.LongActing]: "Long Acting",
-  [InsulinCategory.UltraLongActing]: "Ultra Long Acting",
+  [InsulinCategory.RapidActing]: "Rapid acting",
+  [InsulinCategory.ShortActing]: "Short acting",
+  [InsulinCategory.IntermediateActing]: "Intermediate acting",
+  [InsulinCategory.LongActing]: "Long acting",
+  [InsulinCategory.UltraLongActing]: "Ultra long acting",
   [InsulinCategory.Premixed]: "Premixed",
 };
 

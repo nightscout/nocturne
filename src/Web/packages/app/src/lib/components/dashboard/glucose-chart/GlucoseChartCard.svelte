@@ -358,7 +358,7 @@
   <CardHeader class={isMobile.current ? "pb-2 px-1" : "pb-2 px-3 @md:px-6"}>
     <div class="flex items-center justify-between flex-wrap gap-2">
       <CardTitle class="flex items-center gap-2">
-        Blood Glucose
+        Blood glucose
         {#if displayDemoMode}
           <Badge variant="demo">
             Demo

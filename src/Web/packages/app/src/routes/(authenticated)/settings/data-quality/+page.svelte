@@ -23,13 +23,13 @@
 	// hydratable_missing_but_required during hydration.
 	const historyLinks: SettingsLink[] = [
 		{
-			title: 'Timezone History',
+			title: 'Timezone history',
 			description: "Where you lived and traveled, for correct timestamps.",
 			href: '/settings/timezone',
 			icon: Globe
 		},
 		{
-			title: 'Weight History',
+			title: 'Weight history',
 			description: 'Your recorded weights over time.',
 			href: '/settings/weight',
 			icon: Weight
@@ -92,7 +92,7 @@
 </script>
 
 <svelte:head>
-	<title>Data Quality - Settings - Nocturne</title>
+	<title>Data quality - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -102,7 +102,7 @@
 			<Activity class="h-6 w-6 text-primary" />
 		</div>
 		<div>
-			<h1 class="text-2xl font-bold tracking-tight">Data Quality</h1>
+			<h1 class="text-2xl font-bold tracking-tight">Data quality</h1>
 			<p class="text-muted-foreground">Configure how Nocturne handles data quality and analysis</p>
 		</div>
 	</div>
@@ -124,7 +124,7 @@
 			<CardHeader>
 				<CardTitle class="flex items-center gap-2">
 					<Moon class="h-5 w-5" />
-					Sleep Schedule
+					Sleep schedule
 				</CardTitle>
 				<CardDescription>
 					Your typical sleep times are used for overnight analysis features
@@ -177,7 +177,7 @@
 			<CardHeader>
 				<CardTitle class="flex items-center gap-2">
 					<Activity class="h-5 w-5" />
-					Compression Low Detection
+					Compression low detection
 				</CardTitle>
 				<CardDescription>
 					Automatically detect potential compression lows during sleep

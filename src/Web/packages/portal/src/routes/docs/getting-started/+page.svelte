@@ -9,7 +9,7 @@
 
     <div class="mt-12 flex gap-4 not-prose">
         <Button href="/docs/installation" variant="outline">
-            Full Installation Guide
+            Full installation guide
             <ArrowRight class="w-4 h-4" />
         </Button>
     </div>

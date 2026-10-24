@@ -29,7 +29,7 @@
         minute: "2-digit",
       });
       const amount = `${formatCarbDisplay(data.lastCarbs.carbs)}g`;
-      items.push({ label: "Last Carbs", value: `${amount} @ ${timeStr}` });
+      items.push({ label: "Last carbs", value: `${amount} @ ${timeStr}` });
 
       // Food description if available
       if (data.lastCarbs.food) {

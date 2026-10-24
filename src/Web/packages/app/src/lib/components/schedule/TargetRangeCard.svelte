@@ -106,7 +106,7 @@
   <Card>
     <CardContent class="space-y-4 pt-6">
       <ScheduleView
-        title="Target Range"
+        title="Target range"
         description="Desired blood glucose range"
         unit={bgLabel()}
         icon={Target}
@@ -134,7 +134,7 @@
   </Card>
 {:else if schedule?.entries?.length}
   <ScheduleView
-    title="Target Range"
+    title="Target range"
     description="Desired blood glucose range"
     unit={bgLabel()}
     icon={Target}
@@ -159,7 +159,7 @@
           <Target class="h-5 w-5 text-glucose-in-range" />
         </div>
         <div>
-          <CardTitle class="text-base">Target Range</CardTitle>
+          <CardTitle class="text-base">Target range</CardTitle>
           <CardDescription size="sm">Desired blood glucose range</CardDescription>
         </div>
       </div>
@@ -168,7 +168,7 @@
       <p class="text-sm text-muted-foreground">No target range configured.</p>
       {#if !readOnly}
         <Button variant="outline" size="sm" class="mt-3" onclick={startEdit}>
-          Set Target Range
+          Set target range
         </Button>
       {/if}
     </CardContent>

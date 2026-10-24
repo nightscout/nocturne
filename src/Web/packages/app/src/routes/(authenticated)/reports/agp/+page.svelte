@@ -36,7 +36,7 @@
   // selected range so the header and footer never disagree with the query.
   const reportsResource = contextResource(
     () => getReportsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading AGP Report", dateParams: reportsParams }
+    { errorTitle: "Error loading AGP report", dateParams: reportsParams }
   );
 
   const entries = $derived(reportsResource.current?.entries ?? []);
@@ -49,7 +49,7 @@
 </script>
 
 <svelte:head>
-  <title>Ambulatory Glucose Profile - Nocturne Reports</title>
+  <title>Ambulatory glucose profile - Nocturne reports</title>
   <meta
     name="description"
     content="Standard AGP report with glucose pattern overlay, percentile bands, and time-in-range analysis"
@@ -101,7 +101,7 @@
     </CardHeader>
     <CardContent size="sm" class="space-y-2">
       <p>
-        The <strong>Ambulatory Glucose Profile</strong>
+        The <strong>ambulatory glucose profile</strong>
         shows what a "typical" day looks like for your glucose levels. It overlays
         all your daily readings to reveal consistent patterns.
       </p>
@@ -156,7 +156,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <BarChart3 class="w-5 h-5" />
-          Glucose Pattern (24-hour overlay)
+          Glucose pattern (24-hour overlay)
         </CardTitle>
         <CardDescription>
           Median glucose with percentile bands showing your typical daily
@@ -174,7 +174,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Target class="w-5 h-5 text-glucose-in-range" />
-            Time in Range Distribution
+            Time in range distribution
           </CardTitle>
           <CardDescription>
             How your time is distributed across glucose ranges
@@ -190,7 +190,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <TrendingUp class="w-5 h-5" />
-            Measured Against Consensus Targets
+            Measured against consensus targets
           </CardTitle>
           <CardDescription>
             Each figure from this window next to the international consensus
@@ -259,7 +259,7 @@
     <CardContent class="pt-6">
       <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6 text-sm">
         <div>
-          <h4 class="font-semibold mb-2">About This Report</h4>
+          <h4 class="font-semibold mb-2">About this report</h4>
           <p class="text-muted-foreground">
             The AGP is a standardized report format recommended by diabetes
             organizations worldwide. It shows how glucose varies across a typical
@@ -267,7 +267,7 @@
           </p>
         </div>
         <div>
-          <h4 class="font-semibold mb-2">For Healthcare Providers</h4>
+          <h4 class="font-semibold mb-2">For healthcare providers</h4>
           <p class="text-muted-foreground">
             This AGP follows international consensus guidelines. The modal day
             view with 10th-90th percentile bands helps identify variability

@@ -38,7 +38,7 @@ describe("AlertHistoryCard", () => {
 			onLoadPage: () => {},
 		});
 
-		await expect.element(page.getByText("Alert History", { exact: true })).toBeVisible();
+		await expect.element(page.getByText("Alert history", { exact: true })).toBeVisible();
 		await expect
 			.element(page.getByText("Past alert excursions and their resolution"))
 			.toBeVisible();

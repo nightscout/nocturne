@@ -19,10 +19,10 @@ export type DocsNavSection = {
 export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     {
         id: "getting-started",
-        title: "Getting Started",
+        title: "Getting started",
         items: [
             { href: "/docs", label: "Overview" },
-            { href: "/docs/getting-started", label: "Quick Start" },
+            { href: "/docs/getting-started", label: "Quick start" },
         ],
     },
     {
@@ -33,8 +33,8 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
             { href: "/docs/installation/docker-compose", label: "Docker Compose" },
             { href: "/docs/installation/portainer", label: "Portainer" },
             { href: "/docs/installation/oracle-cloud", label: "Oracle Cloud" },
-            { href: "/docs/installation/byo-postgres", label: "Bring Your Own PostgreSQL" },
-            { href: "/docs/installation/reverse-proxy", label: "Bring Your Own Reverse Proxy" },
+            { href: "/docs/installation/byo-postgres", label: "Bring your own PostgreSQL" },
+            { href: "/docs/installation/reverse-proxy", label: "Bring your own reverse proxy" },
         ],
     },
     {
@@ -51,7 +51,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "sharing",
-        title: "Sharing & Privacy",
+        title: "Sharing & privacy",
         items: [
             { href: "/docs/sharing", label: "Overview" },
             { href: "/docs/sharing/public-link", label: "Public share link" },
@@ -62,7 +62,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "food",
-        title: "Food & Carbs",
+        title: "Food & carbs",
         items: [
             { href: "/docs/food", label: "Overview" },
             { href: "/docs/food/carbs", label: "Carb entries" },
@@ -75,7 +75,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
         id: "reports",
         title: "Reports",
         items: [
-            { href: "/docs/reports/loop-analysis", label: "Loop Analysis" },
+            { href: "/docs/reports/loop-analysis", label: "Loop analysis" },
             { href: "/docs/reports/loop-analysis/daily-profile", label: "Daily profile" },
             { href: "/docs/reports/loop-analysis/meals-and-events", label: "Meals and events" },
             { href: "/docs/reports/loop-analysis/prediction-accuracy", label: "Prediction accuracy" },
@@ -109,7 +109,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "bots",
-        title: "Chat Bots",
+        title: "Chat bots",
         items: [
             { href: "/docs/bots", label: "Overview" },
             { href: "/docs/bots/discord", label: "Discord" },
@@ -120,13 +120,13 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "data-sources",
-        title: "Data Sources",
+        title: "Data sources",
         items: [{ href: "/docs/data-sources/google-health", label: "Google Health" }],
     },
     {
         id: "configuration",
         title: "Configuration",
-        items: [{ href: "/docs/configuration", label: "Configuration Guide" }],
+        items: [{ href: "/docs/configuration", label: "Configuration guide" }],
     },
     {
         id: "observability",
@@ -135,12 +135,12 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "windows-widget",
-        title: "Windows Widget",
+        title: "Windows widget",
         items: [{ href: "/docs/windows-widget", label: "Overview & setup" }],
     },
     {
         id: "connecting-apps",
-        title: "Connecting Apps",
+        title: "Connecting apps",
         items: [
             { href: "/docs/connecting-apps", label: "App authorization (PKCE)" },
             { href: "/docs/connecting-apps/device-flow", label: "Mobile & device flow" },
@@ -153,7 +153,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "api-reference",
-        title: "API Reference",
-        items: [{ href: "/scalar", label: "Interactive API Docs" }],
+        title: "API reference",
+        items: [{ href: "/scalar", label: "Interactive API docs" }],
     },
 ];

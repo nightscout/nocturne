@@ -28,7 +28,7 @@
       <strong>{invite.createdByName}</strong>
       has invited you to join
     {:else}
-      You have been invited to join
+      You were invited to join
     {/if}
     <strong>{siteName}</strong>
     on Nocturne.
@@ -84,9 +84,7 @@
       <li class="flex items-start gap-2">
         <Bell class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <span>
-          While Nocturne is open, you will see alerts as they happen. Alerts
-          when Nocturne is not open, for example on your phone, depend on how
-          alerts are set up. Ask the person who invited you.
+          While Nocturne is open, you will see alerts as they happen. Alerts when Nocturne is not open, for example on your phone, depend on how alerts are configured. Ask the person who invited you.
         </span>
       </li>
       <li class="flex items-start gap-2">

@@ -239,8 +239,7 @@
           {needsReview === 1
             ? "1 alert rule needs review."
             : `${needsReview} alert rules need review.`}
-          An update changed or turned off rules set up in an older format, or their conditions
-          may not alert as set. They are marked below.
+          An update changed or turned off rules created in an older format. Their conditions can also fail to alert as set. They are marked below.
         </p>
       </div>
     {/if}

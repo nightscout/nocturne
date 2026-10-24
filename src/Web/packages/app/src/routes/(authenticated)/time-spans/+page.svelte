@@ -56,7 +56,7 @@
   });
 
   const CATEGORIES = [
-    { key: "pumpModes", label: "Pump Modes", color: "var(--pump-mode-automatic)" },
+    { key: "pumpModes", label: "Pump modes", color: "var(--pump-mode-automatic)" },
     { key: "profiles", label: "Profiles", color: "var(--chart-1)" },
     { key: "basal", label: "Basal", color: "var(--insulin-basal)" },
     { key: "overrides", label: "Overrides", color: "var(--chart-2)" },
@@ -119,7 +119,7 @@
         <!-- Back button -->
         <Button variant="ghost" size="sm" onclick={goBack}>
           <ArrowLeft class="h-4 w-4 mr-2" />
-          Back to Dashboard
+          Back to dashboard
         </Button>
 
         <!-- Date Navigation -->
@@ -148,7 +148,7 @@
   <!-- Timeline Card -->
   <Card.Root>
     <Card.Header class="pb-2">
-      <Card.Title>State Spans Timeline</Card.Title>
+      <Card.Title>State spans timeline</Card.Title>
       <Card.Description>
         View pump modes, profiles, temp basals, overrides, and activities over time
       </Card.Description>

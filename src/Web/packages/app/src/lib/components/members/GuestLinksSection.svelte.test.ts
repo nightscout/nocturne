@@ -38,7 +38,7 @@ import {
 } from "$api/generated/guestLinks.generated.remote";
 import GuestLinksSection from "./GuestLinksSection.svelte";
 
-const FALLBACK = "Failed to create guest link. Please try again.";
+const FALLBACK = "Failed to create guest link. Try again.";
 const REISSUE_FALLBACK =
   "Failed to create a new code. Active links are limited to 5 at a time.";
 
@@ -52,9 +52,9 @@ const existingLink: GuestLinkInfo = {
 async function attemptCreate() {
   render(GuestLinksSection);
 
-  await page.getByRole("button", { name: "Create Guest Link" }).click();
+  await page.getByRole("button", { name: "Create guest link" }).click();
   await page.getByRole("textbox").fill("Dr Smith");
-  await page.getByRole("button", { name: "Create Link" }).click();
+  await page.getByRole("button", { name: "Create link" }).click();
 }
 
 async function attemptReissue() {
@@ -92,11 +92,11 @@ describe("GuestLinksSection", () => {
     };
     render(GuestLinksSection);
 
-    await page.getByRole("button", { name: "Create Guest Link" }).click();
+    await page.getByRole("button", { name: "Create guest link" }).click();
     await page.getByRole("textbox").fill("Daycare");
     await page.getByRole("switch", { name: "Alerts" }).click();
-    await page.getByRole("switch", { name: "Therapy Settings" }).click();
-    await page.getByRole("button", { name: "Create Link" }).click();
+    await page.getByRole("switch", { name: "Therapy settings" }).click();
+    await page.getByRole("button", { name: "Create link" }).click();
 
     await expect.element(page.getByText("ABCD")).toBeInTheDocument();
     expect(sent?.toSorted()).toEqual(["glucose.read", "therapy.read"]);

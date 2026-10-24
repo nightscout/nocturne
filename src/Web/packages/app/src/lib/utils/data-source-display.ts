@@ -26,17 +26,17 @@ const DATA_SOURCE_DISPLAY_NAMES: Record<string, string> = {
   trio: "Trio",
 
   // Manual entry
-  manual: "Manual Entry",
+  manual: "Manual entry",
   careportal: "Careportal",
-  "api-client": "API Client",
+  "api-client": "API client",
 
   // Food
   "myfitnesspal-connector": "MyFitnessPal",
 
   // Import / migration
-  "mongodb-import": "MongoDB Import",
-  "csv-import": "CSV Import",
-  "tidepool-import": "Tidepool Import",
+  "mongodb-import": "MongoDB import",
+  "csv-import": "CSV import",
+  "tidepool-import": "Tidepool import",
 
   // System
   "demo-service": "Demo",

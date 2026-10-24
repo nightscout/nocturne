@@ -31,7 +31,7 @@
       ],
     },
     {
-      name: "API - Device Status",
+      name: "API - Device status",
       permissions: [
         "api:devicestatus:read",
         "api:devicestatus:create",
@@ -55,7 +55,7 @@
       ],
     },
     {
-      name: "Care Portal",
+      name: "Care portal",
       permissions: [
         "careportal:read",
         "careportal:create",
@@ -116,7 +116,7 @@
   <Dialog.Content class="max-w-2xl max-h-[85vh] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>
-        {isNewRole ? "New Role" : "Edit Role"}
+        {isNewRole ? "New role" : "Edit role"}
       </Dialog.Title>
       <Dialog.Description>
         {#if roleCreatedFromSubjectDialog}
@@ -176,7 +176,7 @@
 
           <!-- Custom permission input -->
           <div class="border rounded-lg p-3">
-            <h4 class="text-sm font-medium mb-2">Custom Permission</h4>
+            <h4 class="text-sm font-medium mb-2">Custom permission</h4>
             <div class="flex gap-2">
               <Input
                 bind:value={customPermission}
@@ -200,7 +200,7 @@
           {#if roleFormPermissions.length > 0}
             <div class="border rounded-lg p-3">
               <h4 class="text-sm font-medium mb-2">
-                Selected Permissions ({roleFormPermissions.length})
+                Selected permissions ({roleFormPermissions.length})
               </h4>
               <div class="flex flex-wrap gap-1">
                 {#each roleFormPermissions as perm, i (i)}

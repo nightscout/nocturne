@@ -57,7 +57,7 @@
 </script>
 
 {#if !batteryStatusPromise}
-  <WidgetCard title="Last Updated">
+  <WidgetCard title="Last updated">
     <div class="text-2xl font-bold">
       {age}
     </div>
@@ -67,7 +67,7 @@
   </WidgetCard>
 {:else}
 {#await batteryStatusPromise}
-  <WidgetCard title="Last Updated">
+  <WidgetCard title="Last updated">
     <div class="text-2xl font-bold">
       {age}
     </div>
@@ -78,7 +78,7 @@
 {:then currentStatus}
   {@const hasDevices =
     currentStatus && Object.keys(currentStatus.devices ?? {}).length > 0}
-  <WidgetCard title="Last Updated">
+  <WidgetCard title="Last updated">
     <div class="text-2xl font-bold">
       {age}
     </div>
@@ -113,7 +113,7 @@
     {/if}
   </WidgetCard>
 {:catch}
-  <WidgetCard title="Last Updated">
+  <WidgetCard title="Last updated">
     <div class="text-2xl font-bold">
       {age}
     </div>

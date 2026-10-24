@@ -90,7 +90,7 @@ it.each([
     await expect.element(a1cCard.getByText("Target: below 7.0%", { exact: true })).toBeVisible();
     await expect.element(a1cCard.getByText(a1cState, { exact: true })).toBeVisible();
 
-    const cvCard = cardWith(container, "Glucose Stability");
+    const cvCard = cardWith(container, "Glucose stability");
     await expect.element(cvCard.getByText("32%", { exact: true })).toBeVisible();
     await expect.element(cvCard.getByText("Target: ≤36%", { exact: true })).toBeVisible();
     await expect.element(cvCard.getByText(cvState, { exact: true })).toBeVisible();
@@ -120,7 +120,7 @@ it("shows no CV state when the assessment did not assess it", async () => {
   report.variability = { coefficientOfVariation: 31.6, coefficientOfVariationTarget: 36 };
   report.cvStatus = TargetStatus.NotAssessed;
   const { container } = render(ExecutiveSummary);
-  const cvCard = cardWith(container, "Glucose Stability");
+  const cvCard = cardWith(container, "Glucose stability");
   await expect.element(cvCard.getByText("32%", { exact: true })).toBeVisible();
   await expect.element(cvCard.getByText(/^Target (not )?met$/)).not.toBeInTheDocument();
 });

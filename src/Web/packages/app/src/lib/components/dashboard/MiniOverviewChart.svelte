@@ -132,7 +132,7 @@
   <div
     class="w-full flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground"
   >
-    <span class="font-medium">Full Range Overview</span>
+    <span class="font-medium">Full range overview</span>
     {#if showReset}
       <Button variant="link" size="xs" onclick={resetSelection}>
         <RotateCcw size={10} />

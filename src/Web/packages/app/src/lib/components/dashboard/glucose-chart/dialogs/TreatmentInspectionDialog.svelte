@@ -208,11 +208,11 @@
           <span class="font-medium">{unifiedSourceName}</span>
         {:else}
           {#if bolusSourceName}
-            <span class="text-muted-foreground">Bolus Source</span>
+            <span class="text-muted-foreground">Bolus source</span>
             <span class="font-medium">{bolusSourceName}</span>
           {/if}
           {#if carbSourceName}
-            <span class="text-muted-foreground">Carb Source</span>
+            <span class="text-muted-foreground">Carb source</span>
             <span class="font-medium">{carbSourceName}</span>
           {/if}
         {/if}
@@ -223,11 +223,11 @@
     {#if bolusCalc}
       <div class="py-3">
         <p class="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-          Decision Audit
+          Decision audit
         </p>
         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           {#if bolusCalc.bloodGlucoseInput != null}
-            <span class="text-muted-foreground">BG Input</span>
+            <span class="text-muted-foreground">BG input</span>
             <span class="font-medium">
               {bg(bolusCalc.bloodGlucoseInput, glucoseUnits)} {bgLabel(glucoseUnits)}
               {#if bolusCalc.bloodGlucoseInputSource}
@@ -239,12 +239,12 @@
           {/if}
 
           {#if bolusCalc.carbInput != null}
-            <span class="text-muted-foreground">Carb Input</span>
+            <span class="text-muted-foreground">Carb input</span>
             <span class="font-medium">{bolusCalc.carbInput} g</span>
           {/if}
 
           {#if bolusCalc.carbRatio != null}
-            <span class="text-muted-foreground">Carb Ratio</span>
+            <span class="text-muted-foreground">Carb ratio</span>
             <span class="font-medium">1:{bolusCalc.carbRatio}</span>
           {/if}
 
@@ -259,12 +259,12 @@
           {/if}
 
           {#if bolusCalc.insulinOnBoard != null}
-            <span class="text-muted-foreground">IOB Correction</span>
+            <span class="text-muted-foreground">IOB correction</span>
             <span class="font-medium">{bolusCalc.insulinOnBoard.toFixed(2)} U</span>
           {/if}
 
           {#if bolusCalc.calculationType}
-            <span class="text-muted-foreground">Calculation Type</span>
+            <span class="text-muted-foreground">Calculation type</span>
             <span>
               <Badge variant={calcTypeBadgeVariant}>
                 {bolusCalc.calculationType}
@@ -273,7 +273,7 @@
           {/if}
 
           {#if bolusCalc.splitNow != null && bolusCalc.splitExt != null}
-            <span class="text-muted-foreground">Split Bolus</span>
+            <span class="text-muted-foreground">Split bolus</span>
             <span class="font-medium">{bolusCalc.splitNow}% now / {bolusCalc.splitExt}% ext</span>
           {/if}
 
@@ -301,7 +301,7 @@
     {#if correlatedRecords && correlatedRecords.length > 0}
       <div class="py-3">
         <p class="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-          Related Entries
+          Related entries
         </p>
         <div class="space-y-2">
           {#each correlatedRecords as record, i (record.data.id ?? `${record.data.mills}-${i}`)}

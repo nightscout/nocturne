@@ -14,7 +14,7 @@
         </li>
         <li>
             Connect a data source (Dexcom, LibreLinkUp, CareLink, Glooko, or your existing Nightscout)
-            under <strong>Settings &rsaquo; Connectors &amp; Apps</strong>.
+            under <strong>Settings &rsaquo; Connectors &amp; apps</strong>.
         </li>
         <li>
             Point your CGM app or loop system at your new Nocturne URL. See
@@ -29,7 +29,7 @@
 
     <div class="flex gap-4 not-prose">
         <Button href={resolve("/docs/configuration")} variant="outline">
-            Configuration Guide
+            Configuration guide
             <ArrowRight class="w-4 h-4" />
         </Button>
     </div>

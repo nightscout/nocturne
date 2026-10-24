@@ -71,7 +71,7 @@
   </div>
 
   <div class="space-y-1.5">
-    <Label>Basal Insulin</Label>
+    <Label>Basal insulin</Label>
     <Select.Root
       type="single"
       value={selectedId ?? ""}

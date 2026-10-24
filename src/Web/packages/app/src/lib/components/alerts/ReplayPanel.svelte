@@ -240,7 +240,7 @@
       allRules = rulesList;
       result = replayResult ?? null;
     } catch (err) {
-      runError = describeSubmitError(err, "Failed to run replay. Please try again.");
+      runError = describeSubmitError(err, "Failed to run replay. Try again.");
     } finally {
       running = false;
     }
@@ -344,7 +344,7 @@
         href={dayInReviewHref}
         size="sm"
         class="ml-auto"
-        title="Open Day in Review for this day"
+        title="Open day in review for this day"
       >
         <CalendarDays class="h-3.5 w-3.5 text-muted-foreground" />
         <span class="hidden @sm:inline">Day in review</span>

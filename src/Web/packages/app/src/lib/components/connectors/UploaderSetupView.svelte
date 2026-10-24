@@ -135,7 +135,7 @@
     } catch (err) {
       deviceLookupError = describeSubmitError(
         err,
-        "Invalid or expired device code. Please check and try again."
+        "Invalid or expired device code. Check the code and try again."
       );
     } finally {
       deviceLookupLoading = false;
@@ -150,7 +150,7 @@
       deviceApproved = true;
       startPolling();
     } catch (err) {
-      deviceLookupError = describeSubmitError(err, "Failed to approve. The code may have expired.");
+      deviceLookupError = describeSubmitError(err, "Failed to approve. Check if the code expired.");
     } finally {
       deviceApproveLoading = false;
     }
@@ -255,7 +255,7 @@
                 <Check class="h-5 w-5 text-success" />
               </div>
               <div>
-                <p class="font-medium text-success">Device Authorized</p>
+                <p class="font-medium text-success">Device authorized</p>
                 <p class="text-sm text-muted-foreground">
                   {app ? getUploaderName(app) : ''} is now connected. You can return to your device.
                 </p>
@@ -272,7 +272,7 @@
             <Card.Content class="flex items-center gap-3 pt-6">
               <CheckCircle class="h-5 w-5 text-success" />
               <div>
-                <p class="font-medium text-success">Receiving Data</p>
+                <p class="font-medium text-success">Receiving data</p>
                 <p class="text-sm text-muted-foreground">
                   {app ? getUploaderName(app) : ''} is sending data. {ds.entriesLast24h ?? 0} entries in the last 24 hours.
                 </p>
@@ -281,7 +281,7 @@
           </Card.Root>
 
           <div class="flex justify-end">
-            <Button onclick={onConnected}>Continue to Dashboard</Button>
+            <Button onclick={onConnected}>Continue to dashboard</Button>
           </div>
         {:else}
           <Card.Root>
@@ -305,7 +305,7 @@
               <X class="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <p class="font-medium">Authorization Denied</p>
+              <p class="font-medium">Authorization denied</p>
               <p class="text-sm text-muted-foreground">The device will not be granted access.</p>
             </div>
           </Card.Content>
@@ -318,7 +318,7 @@
             <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
               <Shield class="h-6 w-6 text-primary" />
             </div>
-            <Card.Title class="text-lg">Authorize Application</Card.Title>
+            <Card.Title class="text-lg">Authorize application</Card.Title>
             <Card.Description>A device wants to access your Nocturne data.</Card.Description>
           </Card.Header>
           <Card.Content class="space-y-4">
@@ -389,7 +389,7 @@
         <!-- Step 1: QR code + code entry -->
         <Card.Root>
           <Card.Header class="text-center pb-3">
-            <Card.Title class="text-sm">Scan to Connect</Card.Title>
+            <Card.Title class="text-sm">Scan to connect</Card.Title>
             <Card.Description>
               Scan this QR code with your phone's camera to open {app ? getUploaderName(app) : ''} and start the connection.
             </Card.Description>
@@ -409,7 +409,7 @@
 
         <Card.Root>
           <Card.Header class="pb-3">
-            <Card.Title class="text-sm">Enter Authorization Code</Card.Title>
+            <Card.Title class="text-sm">Enter authorization code</Card.Title>
             <Card.Description>
               After scanning, {app ? getUploaderName(app) : ''} will show an 8-character code. Enter it here to approve the connection.
             </Card.Description>
@@ -454,7 +454,7 @@
       <!-- ── Manual setup (API key + Base URL) ── -->
       <Card.Root>
         <Card.Header class="pb-3">
-          <Card.Title class="text-sm">Connection Details</Card.Title>
+          <Card.Title class="text-sm">Connection details</Card.Title>
           <Card.Description>
             Enter these values in {app ? getUploaderName(app) : 'your app'}'s Nightscout settings.
           </Card.Description>
@@ -483,7 +483,7 @@
 
           <!-- API Key -->
           <div class="space-y-1.5">
-            <p class="text-xs font-medium text-muted-foreground">API Key</p>
+            <p class="text-xs font-medium text-muted-foreground">API key</p>
             {#if apiTokenLoading}
               <div class="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
                 <Loader2 class="h-4 w-4 animate-spin" />
@@ -527,7 +527,7 @@
           <Card.Content class="flex items-center gap-3 pt-6">
             <CheckCircle class="h-5 w-5 text-success" />
             <div>
-              <p class="font-medium text-success">Receiving Data</p>
+              <p class="font-medium text-success">Receiving data</p>
               <p class="text-sm text-muted-foreground">
                 {app ? getUploaderName(app) : ''} is sending data. {ds.entriesLast24h ?? 0} entries in the last 24 hours.
               </p>
@@ -536,7 +536,7 @@
         </Card.Root>
 
         <div class="flex justify-end">
-          <Button onclick={onConnected}>Continue to Dashboard</Button>
+          <Button onclick={onConnected}>Continue to dashboard</Button>
         </div>
       {:else}
         <Card.Root>
@@ -559,7 +559,7 @@
         <div>
           <p class="font-medium">Failed to load setup instructions</p>
           <p class="text-sm text-muted-foreground">
-            Could not load setup details for {app ? getUploaderName(app) : ''}. Please try again.
+            Could not load setup details for {app ? getUploaderName(app) : ''}. Try again.
           </p>
         </div>
       </Card.Content>

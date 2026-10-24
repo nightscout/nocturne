@@ -112,7 +112,7 @@
 </script>
 
 <svelte:head>
-  <title>Create Account - Setup - Nocturne</title>
+  <title>Create account - Setup - Nocturne</title>
 </svelte:head>
 
 <div class="flex flex-1 items-center justify-center p-4">
@@ -128,10 +128,9 @@
       </Card.Header>
     {:else if registrationComplete}
       <Card.Header class="space-y-1 text-center">
-        <Card.Title class="text-2xl font-bold">Account Created</Card.Title>
+        <Card.Title class="text-2xl font-bold">Account created</Card.Title>
         <Card.Description>
-          Your admin account has been created. Save your recovery codes before
-          continuing.
+          Your admin account was created. Save your recovery codes before continuing.
         </Card.Description>
       </Card.Header>
 
@@ -139,7 +138,7 @@
         <RecoveryCodes
           codes={recoveryCodes}
           onContinue={handleContinueToSetup}
-          continueLabel="Continue Setup"
+          continueLabel="Continue setup"
         />
       </Card.Content>
     {:else if !isAuthenticated}
@@ -149,9 +148,9 @@
         >
           <UserPlus class="h-6 w-6 text-primary" />
         </div>
-        <Card.Title class="text-2xl font-bold">Create Your Account</Card.Title>
+        <Card.Title class="text-2xl font-bold">Create your account</Card.Title>
         <Card.Description>
-          Set up the admin account for your Nocturne instance.
+          Configure the admin account for your Nocturne instance.
         </Card.Description>
       </Card.Header>
 

@@ -155,7 +155,7 @@
         savedBody = buildBody(editor);
       }
     } catch (e) {
-      const described = describeSubmitError(e, "Failed to save the alert rule. Please try again.");
+      const described = describeSubmitError(e, "Failed to save the alert rule. Try again.");
       error = conditionIssuesMessage(e) ?? described;
     } finally {
       saving = false;
@@ -171,7 +171,7 @@
       await deleteRule(ruleId);
       await goto(resolve("/alerts"));
     } catch (e) {
-      error = describeSubmitError(e, "Failed to delete the alert rule. Please try again.");
+      error = describeSubmitError(e, "Failed to delete the alert rule. Try again.");
     } finally {
       deleting = false;
     }
@@ -185,7 +185,7 @@
     try {
       await testFire(ruleId);
     } catch (e) {
-      error = describeSubmitError(e, "Failed to send a test alert. Please try again.");
+      error = describeSubmitError(e, "Failed to send a test alert. Try again.");
     } finally {
       testingSaved = false;
     }
@@ -418,7 +418,7 @@
               />
               <div class="space-y-0.5">
                 <Label class="cursor-pointer" for="rule-allow-dnd">
-                  Allow through Do Not Disturb
+                  Allow through do not disturb
                 </Label>
                 <p class="text-xs text-muted-foreground">
                   Critical-severity rules implicitly bypass DND regardless of
@@ -434,8 +434,7 @@
           <CardHeader>
             <CardTitle>Condition</CardTitle>
             <CardDescription>
-              Define when this alert fires. Mix facts with AND/OR. Nest them
-              with brackets.
+              Define when this alert fires. Mix facts with AND or OR. Nest them with brackets.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -580,8 +579,7 @@
               <HistoryIcon class="h-4 w-4" /> Historic firings
             </CardTitle>
             <CardDescription size="sm">
-              Real fires for this rule. Click any to replay the day in the
-              simulator.
+              Real fires for this rule. Select any to replay the day in the simulator.
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-1.5">

@@ -40,12 +40,12 @@
   <div class="space-y-4">
     <h4 class="font-medium flex items-center gap-2">
       <Timer class="h-4 w-4" />
-      Snooze Settings
+      Snooze settings
     </h4>
 
     <div class="grid gap-4 @sm:grid-cols-2">
       <div class="space-y-2">
-        <Label>Default Snooze</Label>
+        <Label>Default snooze</Label>
         <div class="flex items-center gap-2">
           <Input
             type="number"
@@ -57,7 +57,7 @@
         </div>
       </div>
       <div class="space-y-2">
-        <Label>Maximum Snooze</Label>
+        <Label>Maximum snooze</Label>
         <div class="flex items-center gap-2">
           <Input
             type="number"
@@ -71,7 +71,7 @@
     </div>
 
     <div class="space-y-2">
-      <Label>Quick Snooze Options</Label>
+      <Label>Quick snooze options</Label>
       <div class="flex flex-wrap gap-2">
         {#each profile.snooze.options as minutes, i (i)}
           <Badge
@@ -108,7 +108,7 @@
       <div class="flex items-center gap-3">
         <RotateCcw class="h-5 w-5 text-muted-foreground" />
         <div>
-          <Label>Re-raise if Unacknowledged</Label>
+          <Label>Re-raise if unacknowledged</Label>
           <p class="text-sm text-muted-foreground">
             Repeat alarm if not acknowledged
           </p>
@@ -133,7 +133,7 @@
         </div>
         <div class="flex items-center justify-between">
           <div>
-            <Label>Escalate Volume</Label>
+            <Label>Escalate volume</Label>
             <p class="text-sm text-muted-foreground">
               Get louder each time
             </p>

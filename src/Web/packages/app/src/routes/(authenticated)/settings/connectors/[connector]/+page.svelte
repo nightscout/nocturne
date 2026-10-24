@@ -49,7 +49,7 @@
       {#if isHomeAssistant}
         <Card>
           <CardHeader>
-            <CardTitle>Setup Guide</CardTitle>
+            <CardTitle>Setup guide</CardTitle>
             <CardDescription>
               Connect Home Assistant to Nocturne using the HACS custom integration
             </CardDescription>

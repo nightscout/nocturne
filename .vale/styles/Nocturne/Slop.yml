@@ -1,10 +1,10 @@
-# The slop-to-simple table from SKILL.md. Not part of ASD-STE100 itself.
+# Words that read as AI or marketing prose. Not part of ASD-STE100 itself.
 # These carry a replacement, so they are actionable. Words that carry no fact
 # at all are in Filler.yml.
 extends: substitution
 message: "Write '%s' instead of '%s'."
 link: .claude/skills/simple-english/SKILL.md
-level: warning
+level: error
 ignorecase: true
 swap:
   leverage: use

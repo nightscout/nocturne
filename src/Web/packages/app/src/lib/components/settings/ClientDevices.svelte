@@ -75,7 +75,7 @@
       editingId = null;
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to rename device. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to rename device. Try again.");
       clearMessages();
     } finally {
       isSaving = null;
@@ -90,7 +90,7 @@
       successMessage = "Device revoked.";
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to revoke device. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to revoke device. Try again.");
       clearMessages();
     } finally {
       isRevoking = null;

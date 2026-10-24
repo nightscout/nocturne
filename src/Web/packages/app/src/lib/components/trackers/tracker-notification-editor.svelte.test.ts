@@ -14,7 +14,7 @@ describe("TrackerNotificationEditor", () => {
 		render(TrackerNotificationEditor, { notifications: [] });
 
 		await expect
-			.element(page.getByText("Notification Thresholds", { exact: true }))
+			.element(page.getByText("Notification thresholds", { exact: true }))
 			.toBeVisible();
 		await expect
 			.element(page.getByRole("button", { name: /Add/i }))
@@ -65,7 +65,7 @@ describe("TrackerNotificationEditor", () => {
 		});
 
 		await expect
-			.element(page.getByText(/Positive = after start, Negative = before expiration/))
+			.element(page.getByText(/Positive = after start, negative = before expiration/))
 			.toBeVisible();
 	});
 
@@ -78,7 +78,7 @@ describe("TrackerNotificationEditor", () => {
 		});
 
 		await expect
-			.element(page.getByText(/Negative = before event, Positive = after event/))
+			.element(page.getByText(/Negative = before event, positive = after event/))
 			.toBeVisible();
 	});
 

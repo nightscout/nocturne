@@ -59,7 +59,7 @@
 
 	const suggestionsResource = contextResource(
 		() => getCompressionLowSuggestions({}),
-		{ errorTitle: 'Error Loading Compression Low History' }
+		{ errorTitle: 'Error loading compression low history' }
 	);
 
 	const suggestions = $derived(suggestionsResource.current ?? []);
@@ -84,7 +84,7 @@
 	});
 
 	setReportPrintMeta(() => ({
-		title: 'Compression Lows',
+		title: 'Compression lows',
 		period: nightSpan ?? { label: 'All recorded nights' }
 	}));
 
@@ -347,7 +347,7 @@
 </script>
 
 <svelte:head>
-	<title>Compression Lows - Nocturne</title>
+	<title>Compression lows - Nocturne</title>
 </svelte:head>
 
 {#if suggestionsResource.current}
@@ -412,7 +412,7 @@
 					<div class="flex flex-col items-center gap-4 print:hidden">
 						<div class="flex flex-col items-center gap-2 @sm:flex-row @sm:items-end">
 							<div class="flex flex-col gap-1">
-								<label for="start-date" class="text-sm text-muted-foreground">Start Date</label>
+								<label for="start-date" class="text-sm text-muted-foreground">Start date</label>
 								<Input
 									id="start-date"
 									type="date"
@@ -422,7 +422,7 @@
 							</div>
 							<div class="flex flex-col gap-1">
 								<label for="end-date" class="text-sm text-muted-foreground"
-									>End Date (optional)</label
+									>End date (optional)</label
 								>
 								<Input
 									id="end-date"
@@ -438,7 +438,7 @@
 								class="@sm:mt-5"
 							>
 								<RefreshCw class="mr-2 h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
-								Run Detection
+								Run detection
 							</Button>
 						</div>
 						{#if detectionResult}
@@ -623,7 +623,7 @@
 								{#if brushDomain}
 									<div class="mb-6 border-b border-border pb-4">
 										<p class="text-sm text-muted-foreground">
-											{isPending ? 'Selected Range' : 'Marked Range'}
+											{isPending ? 'Selected range' : 'Marked range'}
 										</p>
 										<p class="font-medium tabular-nums">
 											{time(brushDomain[0])} - {time(brushDomain[1])}
@@ -648,7 +648,7 @@
 												disabled={isLoading}
 											>
 												<Check class="mr-1 h-3 w-3" />
-												Accept All
+												Accept all
 											</Button>
 											<Button
 												size="sm"
@@ -657,7 +657,7 @@
 												disabled={isLoading}
 											>
 												<X class="mr-1 h-3 w-3" />
-												Dismiss All
+												Dismiss all
 											</Button>
 											<Button
 												size="sm"
@@ -666,7 +666,7 @@
 												disabled={isLoading}
 											>
 												<Trash2 class="mr-1 h-3 w-3" />
-												Delete All
+												Delete all
 											</Button>
 										</div>
 									</div>

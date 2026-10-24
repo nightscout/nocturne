@@ -189,7 +189,7 @@
           {:else if selectedConnector.state === "BackingOff"}
             <Badge variant="warning">
               <Clock class="h-3 w-3 mr-1" />
-              Backing Off
+              Backing off
             </Badge>
           {:else if selectedConnector.isHealthy}
             <Badge variant="success">
@@ -247,7 +247,7 @@
           >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
-              <span class="font-medium">Connector Disabled</span>
+              <span class="font-medium">Connector disabled</span>
             </div>
             <p class="text-sm text-muted-foreground mt-1">
               This connector is not currently enabled, but historical data from
@@ -261,7 +261,7 @@
           >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
-              <span class="font-medium">Connector Not Running</span>
+              <span class="font-medium">Connector not running</span>
             </div>
             <p class="text-sm text-muted-foreground mt-1">
               This connector is not currently running, but data from previous
@@ -387,7 +387,7 @@
           >
             <div class="flex items-center gap-2 text-muted-foreground">
               <WifiOff class="h-5 w-5" />
-              <span class="font-medium">Connector Offline</span>
+              <span class="font-medium">Connector offline</span>
             </div>
             <p class="text-sm text-muted-foreground mt-1">
               This connector is not currently running or cannot be reached.
@@ -402,7 +402,7 @@
           <div class="space-y-3">
             <div class="flex items-center gap-2">
               <Download class="h-4 w-4" />
-              <h4 class="font-medium text-sm">Manual Sync</h4>
+              <h4 class="font-medium text-sm">Manual sync</h4>
             </div>
             {#if selectedConnectorCapabilities?.supportsHistoricalSync === false}
               <p class="text-xs text-muted-foreground">
@@ -471,7 +471,7 @@
                 Syncing...
               {:else}
                 <RefreshCw class="h-3 w-3" />
-                Sync Now
+                Sync now
               {/if}
             </Button>
           </div>
@@ -482,7 +482,7 @@
             <div class="space-y-3">
               <div class="flex items-center gap-2">
                 <Database class="h-4 w-4" />
-                <h4 class="font-medium text-sm">Food Definitions</h4>
+                <h4 class="font-medium text-sm">Food definitions</h4>
               </div>
               <p class="text-xs text-muted-foreground">
                 Download food data from MyFitnessPal for the date range above,
@@ -526,7 +526,7 @@
                   Downloading...
                 {:else}
                   <Download class="h-3 w-3" />
-                  Download Food Definitions
+                  Download food definitions
                 {/if}
               </Button>
             </div>

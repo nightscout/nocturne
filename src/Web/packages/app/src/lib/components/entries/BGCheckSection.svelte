@@ -31,7 +31,7 @@
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
       <Droplet class="h-4 w-4 text-entry-bg-check" />
-      BG Check
+      BG check
     </div>
     {#if onRemove}
       <Button variant="ghost" size="icon-xs" onclick={onRemove}>

@@ -451,7 +451,7 @@
             <ActiveKindIcon class="mr-1 h-3.5 w-3.5" />
             {activeCategory.name}
           </Badge>
-          {isCreate ? "Add Record" : "Edit Record"}
+          {isCreate ? "Add record" : "Edit record"}
         </Dialog.Title>
         <Dialog.Description>
           {isCreate
@@ -493,7 +493,7 @@
 
         <!-- Date and Time -->
         <div class="space-y-2">
-          <Label for="datetime">Date & Time</Label>
+          <Label for="datetime">Date & time</Label>
           <Input
             id="datetime"
             type="datetime-local"
@@ -575,8 +575,8 @@
             {isLoading
               ? "Saving..."
               : isCreate
-                ? "Create Record"
-                : "Save Changes"}
+                ? "Create record"
+                : "Save changes"}
           </Button>
         </Dialog.Footer>
       </form>
@@ -600,7 +600,7 @@
           })}
         >
           <div class="flex items-center justify-between">
-            <h4 class="text-sm font-medium">Add New Insulin</h4>
+            <h4 class="text-sm font-medium">Add new insulin</h4>
           </div>
           <div class="space-y-4">
             <InsulinFormFields
@@ -634,16 +634,16 @@
               size="sm"
               disabled={!addCategory || !addName.trim() || addSaving}
             >
-              {addSaving ? "Adding..." : "Add Insulin"}
+              {addSaving ? "Adding..." : "Add insulin"}
             </Button>
           </div>
         </form>
       {/if}
     {:else}
       <Dialog.Header>
-        <Dialog.Title>No Record Selected</Dialog.Title>
+        <Dialog.Title>No record selected</Dialog.Title>
         <Dialog.Description>
-          Click on a row in the table to view and edit its details.
+          Select a row in the table to view and edit its details.
         </Dialog.Description>
       </Dialog.Header>
     {/if}

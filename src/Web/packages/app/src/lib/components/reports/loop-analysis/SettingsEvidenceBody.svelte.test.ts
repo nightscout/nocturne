@@ -183,7 +183,7 @@ describe("SettingsEvidenceBody", () => {
     await expect.element(page.getByText(/negative when the loop gave less basal than the schedule/).first()).toBeVisible();
     const link = isf.getByRole("link");
     await expect.element(link).toHaveAttribute("href", "/reports/day-in-review?date=2026-06-12&time=14:00");
-    await expect.element(link).toHaveAccessibleName(/in Day in Review/);
+    await expect.element(link).toHaveAccessibleName(/in Day in review/);
 
     const night = block("Basal", /^\s*2/).first();
     await night.getByText(/1\.05/).click();

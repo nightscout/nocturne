@@ -227,7 +227,7 @@
 </script>
 
 <svelte:head>
-  <title>Data Migration - Settings - Nocturne</title>
+  <title>Data migration - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -237,7 +237,7 @@
       <Import class="h-6 w-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Data Migration</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Data migration</h1>
       <p class="text-muted-foreground">
         Import your data from Nightscout or MongoDB
       </p>
@@ -261,11 +261,9 @@
     {#if pendingConfig?.hasPendingConfig}
       <Alert.Root class="mb-6">
         <Info class="h-4 w-4" />
-        <Alert.Title>Migration Configuration Detected</Alert.Title>
+        <Alert.Title>Migration configuration detected</Alert.Title>
         <Alert.Description>
-          Your deployment is configured for migration. The form below has been
-          pre-populated with your settings. Review and start the migration when
-          ready.
+          Your deployment is configured for migration. The form below is pre-populated with your settings. Review and start the migration when ready.
         </Alert.Description>
       </Alert.Root>
     {/if}
@@ -274,7 +272,7 @@
       <Tabs.List class="grid w-full grid-cols-3">
         <Tabs.Trigger value="migrate">
           <Play class="h-4 w-4" />
-          New Migration
+          New migration
         </Tabs.Trigger>
         <Tabs.Trigger value="progress">
           <RefreshCw class="h-4 w-4" />
@@ -296,7 +294,7 @@
       <Tabs.Content value="migrate">
         <Card>
           <CardHeader>
-            <CardTitle>Start New Migration</CardTitle>
+            <CardTitle>Start new migration</CardTitle>
             <CardDescription>
               Import entries and treatments from an existing Nightscout
               instance.
@@ -305,7 +303,7 @@
           <CardContent class="space-y-6">
             <!-- Mode Selector -->
             <div class="space-y-3">
-              <Label>Migration Source</Label>
+              <Label>Migration source</Label>
               <RadioGroup.Root bind:value={mode} class="flex gap-4">
                 <div class="flex items-center space-x-2">
                   <RadioGroup.Item value="Api" id="mode-api" />
@@ -318,7 +316,7 @@
                   <RadioGroup.Item value="MongoDb" id="mode-mongodb" />
                   <Label for="mode-mongodb" class="flex items-center">
                     <Database class="h-4 w-4" />
-                    MongoDB (Advanced)
+                    MongoDB (advanced)
                   </Label>
                 </div>
               </RadioGroup.Root>
@@ -336,7 +334,7 @@
                   />
                 </div>
                 <div class="space-y-2">
-                  <Label for="api-secret">API Secret</Label>
+                  <Label for="api-secret">API secret</Label>
                   <Input
                     id="api-secret"
                     type="password"
@@ -350,7 +348,7 @@
               <div class="space-y-4">
                 <div class="space-y-2">
                   <Label for="mongo-connection">
-                    MongoDB Connection String
+                    MongoDB connection string
                   </Label>
                   <Input
                     id="mongo-connection"
@@ -360,7 +358,7 @@
                   />
                 </div>
                 <div class="space-y-2">
-                  <Label for="mongo-database">Database Name</Label>
+                  <Label for="mongo-database">Database name</Label>
                   <Input
                     id="mongo-database"
                     placeholder="nightscout"
@@ -372,14 +370,14 @@
 
             <!-- Date Range -->
             <div class="space-y-3">
-              <Label>Date Range (Optional)</Label>
+              <Label>Date range (optional)</Label>
               <p class="text-sm text-muted-foreground">
                 Leave empty to import all data, or specify a range to import
                 partial data.
               </p>
               <div class="grid gap-4 @lg:grid-cols-2">
                 <div class="space-y-2">
-                  <Label for="date-start">Start Date</Label>
+                  <Label for="date-start">Start date</Label>
                   <Input
                     id="date-start"
                     type="date"
@@ -387,7 +385,7 @@
                   />
                 </div>
                 <div class="space-y-2">
-                  <Label for="date-end">End Date</Label>
+                  <Label for="date-end">End date</Label>
                   <Input id="date-end" type="date" bind:value={dateRangeEnd} />
                 </div>
               </div>
@@ -407,8 +405,8 @@
                 {/if}
                 <Alert.Title>
                   {connectionTestResult.success
-                    ? "Connection Successful"
-                    : "Connection Failed"}
+                    ? "Connection successful"
+                    : "Connection failed"}
                 </Alert.Title>
                 <Alert.Description>
                   {connectionTestResult.message}
@@ -460,7 +458,7 @@
                   {:else}
                     <Server class="h-4 w-4 mr-2" />
                   {/if}
-                  Test Connection
+                  Test connection
                 </Button>
               </form>
               <form
@@ -504,7 +502,7 @@
                   {:else}
                     <Play class="h-4 w-4 mr-2" />
                   {/if}
-                  Start Migration
+                  Start migration
                 </Button>
               </form>
             </div>
@@ -517,7 +515,7 @@
         <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
-              Active Migration
+              Active migration
               {#if hasActiveMigration}
                 <Badge variant="default" live>Running</Badge>
               {/if}
@@ -544,7 +542,7 @@
                 {#if activeMigration.currentOperation}
                   <div class="p-4 bg-muted rounded-lg">
                     <p class="text-sm text-muted-foreground mb-1">
-                      Current Operation
+                      Current operation
                     </p>
                     <p class="font-medium">
                       {activeMigration.currentOperation}
@@ -555,7 +553,7 @@
                 <!-- Collection Progress -->
                 {#if activeMigration.collectionProgress && Object.keys(activeMigration.collectionProgress).length > 0}
                   <div class="space-y-3">
-                    <Label>Collection Progress</Label>
+                    <Label>Collection progress</Label>
                     {#each Object.entries(activeMigration.collectionProgress) as [name, collection] (name)}
                       <div
                         class="flex justify-between items-center p-3 border rounded-lg"
@@ -589,7 +587,7 @@
                   {:else}
                     <Square class="h-4 w-4 mr-2" />
                   {/if}
-                  Cancel Migration
+                  Cancel migration
                 </Button>
               </div>
             {:else}
@@ -609,7 +607,7 @@
       <Tabs.Content value="history">
         <Card>
           <CardHeader>
-            <CardTitle>Migration History</CardTitle>
+            <CardTitle>Migration history</CardTitle>
             <CardDescription>
               View past migrations and their results.
             </CardDescription>
@@ -638,7 +636,7 @@
                       </div>
                       <div>
                         <div class="font-medium flex items-center gap-2">
-                          {job.sourceDescription || "Unknown Source"}
+                          {job.sourceDescription || "Unknown source"}
                           <Badge variant={badge.variant}>
                             {badge.label}
                           </Badge>
@@ -675,7 +673,7 @@
         {#if sources.length > 0}
           <Card class="mt-6">
             <CardHeader>
-              <CardTitle>Known Sources</CardTitle>
+              <CardTitle>Known sources</CardTitle>
               <CardDescription>
                 Previously used migration sources with their last sync
                 timestamps.

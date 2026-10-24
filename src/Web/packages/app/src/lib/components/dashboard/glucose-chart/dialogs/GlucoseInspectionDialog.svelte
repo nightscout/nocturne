@@ -72,11 +72,11 @@
     () => timestamp,
   );
 
-  // Determine range status (at-threshold is "In Range", matching getGlucoseColor)
+  // Determine range status (at-threshold is "In range", matching getGlucoseColor)
   const rangeStatus = $derived.by(() => {
     if (glucoseValue > highThreshold) return "High";
     if (glucoseValue < lowThreshold) return "Low";
-    return "In Range";
+    return "In range";
   });
 
   // eslint-disable-next-line shadcn/require-static-classes -- the only badge tinted by glucose range; a Badge variant per range would serve this one call site.
@@ -150,7 +150,7 @@
       {/if}
 
       {#if pumpMode}
-        <span class="text-muted-foreground">Pump Mode</span>
+        <span class="text-muted-foreground">Pump mode</span>
         <span class="font-medium">{pumpMode}</span>
       {/if}
 

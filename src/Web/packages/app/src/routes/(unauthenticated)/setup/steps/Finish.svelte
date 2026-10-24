@@ -50,7 +50,7 @@
     {
       icon: Bell,
       title: "Alerts",
-      subtitle: "Set up alerts",
+      subtitle: "Configure alerts",
       coachUrl: "/alerts?coach=setup-alerts",
     },
     ...(path === "migration"

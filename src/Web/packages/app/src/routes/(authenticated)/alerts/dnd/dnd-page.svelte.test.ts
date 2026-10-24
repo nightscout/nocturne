@@ -21,7 +21,7 @@ vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
 import DndPage from "./+page.svelte";
 
 const saveButton = () => page.getByRole("button", { name: "Save" });
-const accessDenied = () => page.getByText("Access Denied");
+const accessDenied = () => page.getByText("Access denied");
 
 describe("alerts/dnd page", () => {
   beforeEach(() => {
@@ -46,7 +46,7 @@ describe("alerts/dnd page", () => {
 
     await expect.element(saveButton()).toBeVisible();
     await expect
-      .element(page.getByText("Do Not Disturb is currently"))
+      .element(page.getByText("Do not disturb is currently"))
       .toBeVisible();
     await expect.element(accessDenied()).not.toBeInTheDocument();
   });

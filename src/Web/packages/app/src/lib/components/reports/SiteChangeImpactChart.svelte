@@ -34,7 +34,7 @@
   // Format hours for X-axis (ticks are always on hour boundaries)
   function formatHoursFromChange(minutes: number): string {
     const hours = Math.round(minutes / 60);
-    if (hours === 0) return "Site Change";
+    if (hours === 0) return "Site change";
     if (hours > 0) return `+${hours}h`;
     return `${hours}h`;
   }
@@ -44,7 +44,7 @@
 
   // Hour ticks anchored on the change itself, thinned so labels never touch. Ordered by distance
   // from the change: occlusion with priority "start" keeps the first tick it can, so the
-  // "Site Change" label always survives and the rest thin outwards from it.
+  // "Site change" label always survives and the rest thin outwards from it.
   const hourlyTicks = $derived.by(() => {
     const [minMinutes, maxMinutes] = xDomain;
     const startHour = Math.ceil(minMinutes / 60);
@@ -249,7 +249,7 @@
       class="flex h-[400px] w-full flex-col items-center justify-center text-muted-foreground"
     >
       <AlertCircle class="mx-auto h-10 w-10 opacity-30" />
-      <p class="mt-2 font-medium">Insufficient Data</p>
+      <p class="mt-2 font-medium">Insufficient data</p>
       <p class="text-sm text-center max-w-md">
         {#if (analysis.siteChangeCount ?? 0) < 2}
           At least 2 site changes are required for meaningful analysis.

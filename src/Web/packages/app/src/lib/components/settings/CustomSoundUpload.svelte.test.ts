@@ -32,8 +32,8 @@ function silentWav(): Uint8Array<ArrayBuffer> {
 
 async function upload(file: File) {
   render(CustomSoundUpload);
-  await page.getByRole("button", { name: "Upload Sound" }).click();
-  await page.getByLabelText("Audio File").upload(file);
+  await page.getByRole("button", { name: "Upload sound" }).click();
+  await page.getByLabelText("Audio file").upload(file);
   await page.getByRole("button", { name: "Upload", exact: true }).click();
 }
 

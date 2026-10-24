@@ -11,7 +11,7 @@ describe("TimeZoneNote", () => {
   it.each([
     [TimeZoneUnavailableReason.Share, /A shared link does not show the time zone/, undefined],
     [TimeZoneUnavailableReason.LookupFailed, /The time zone of this data did not load/, /reload the report later/],
-    [TimeZoneUnavailableReason.Unrecognised, /does not recognise the time zone/, /correct the time zone/],
+    [TimeZoneUnavailableReason.Unrecognised, /does not recognize the time zone/, /correct the time zone/],
     [TimeZoneUnavailableReason.NotConfigured, /do not have a time zone/, /set a time zone/],
   ])("states why there is no zone for %s, then the page sentence", async (reason, cause, remedy) => {
     const { container } = render(TimeZoneNote, { props: { reason, children: pageSentence } });

@@ -69,7 +69,7 @@
   <Dialog.Content class="max-w-lg">
     <Dialog.Header>
       <Dialog.Title>
-        {isNew ? "New User" : "Edit User"}
+        {isNew ? "New user" : "Edit user"}
       </Dialog.Title>
       <Dialog.Description>
         {isNew
@@ -123,7 +123,7 @@
             <!-- Show custom roles if any -->
             {#if roles.filter((r: TenantRoleDto) => !r.isSystem).length > 0}
               <div class="pt-2 border-t">
-                <p class="text-xs text-muted-foreground mb-2">Custom Roles</p>
+                <p class="text-xs text-muted-foreground mb-2">Custom roles</p>
                 {#each roles.filter((r: TenantRoleDto) => !r.isSystem) as role (role.id)}
                   <label class="flex items-center gap-2 cursor-pointer">
                     <Checkbox
@@ -145,7 +145,7 @@
       {#if hasAdminRoleSelected}
         <Alert.Root variant="destructive">
           <TriangleAlert class="h-4 w-4" />
-          <Alert.Title>Full Admin Access</Alert.Title>
+          <Alert.Title>Full admin access</Alert.Title>
           <Alert.Description>
             This user will have complete control of this Nocturne instance,
             including the ability to manage other users, modify all data,

@@ -18,7 +18,7 @@ export type PropertyMeta = {
 export const connectorPropertyMeta = {
   // Base configuration
   TimezoneOffset: {
-    label: 'Timezone Offset',
+    label: 'Timezone offset',
     description: 'Hours offset from UTC for timestamp adjustments',
     category: 'General',
   },
@@ -28,110 +28,110 @@ export const connectorPropertyMeta = {
     category: 'General',
   },
   MaxRetryAttempts: {
-    label: 'Max Attempts',
+    label: 'Max attempts',
     description: 'Total connection attempts per sync before giving up (minimum 1)',
     category: 'Advanced',
   },
   BatchSize: {
-    label: 'Batch Size',
+    label: 'Batch size',
     description: 'Number of records to process per batch',
     category: 'Advanced',
   },
   SyncIntervalMinutes: {
-    label: 'Sync Interval',
+    label: 'Sync interval',
     description: 'How often to sync data from the source (in minutes)',
     category: 'Sync',
   },
 
   // Sync toggles
   SyncGlucose: {
-    label: 'Sync Glucose',
+    label: 'Sync glucose',
     description: 'Sync continuous glucose monitor (CGM) readings',
     category: 'Sync',
   },
   SyncManualBG: {
-    label: 'Sync Manual BG',
+    label: 'Sync manual BG',
     description: 'Sync manual blood glucose meter readings',
     category: 'Sync',
   },
   SyncBoluses: {
-    label: 'Sync Boluses',
+    label: 'Sync boluses',
     description: 'Sync insulin bolus delivery records',
     category: 'Sync',
   },
   SyncBasalInjections: {
-    label: 'Sync Basal Injections',
+    label: 'Sync basal injections',
     description: 'Sync long-acting basal insulin injections',
     category: 'Sync',
   },
   SyncCarbIntake: {
-    label: 'Sync Carb Intake',
+    label: 'Sync carb intake',
     description: 'Sync carbohydrate intake entries',
     category: 'Sync',
   },
   SyncBolusCalculations: {
-    label: 'Sync Bolus Calculations',
+    label: 'Sync bolus calculations',
     description: 'Sync bolus calculator recommendations and inputs',
     category: 'Sync',
   },
   SyncNotes: {
-    label: 'Sync Notes',
+    label: 'Sync notes',
     description: 'Sync user notes and annotations',
     category: 'Sync',
   },
   SyncDeviceEvents: {
-    label: 'Sync Device Events',
+    label: 'Sync device events',
     description: 'Sync device-specific events such as prime, rewind, and calibration',
     category: 'Sync',
   },
   SyncStateSpans: {
-    label: 'Sync State Spans',
+    label: 'Sync state spans',
     description:
       'Sync device state periods like suspend, resume, and mode changes. Turning this off also declines the active-profile and basal-program periods, so the therapy timeline and chart bands lose them.',
     category: 'Sync',
   },
   SyncTempBasals: {
-    label: 'Sync Temp Basals',
+    label: 'Sync temp basals',
     description: 'Sync temporary basal rate adjustments',
     category: 'Sync',
   },
   SyncProfiles: {
-    label: 'Sync Profiles',
+    label: 'Sync profiles',
     description: 'Sync basal rate profiles and settings',
     category: 'Sync',
   },
   SyncDeviceStatus: {
-    label: 'Sync Device Status',
+    label: 'Sync device status',
     description: 'Sync device status updates including battery and reservoir levels',
     category: 'Sync',
   },
   SyncActivity: {
-    label: 'Sync Activity',
+    label: 'Sync activity',
     description: 'Sync activity and exercise data',
     category: 'Sync',
   },
   SyncFood: {
-    label: 'Sync Food',
+    label: 'Sync food',
     description: 'Sync food database entries and meal records',
     category: 'Sync',
   },
   SyncSteps: {
-    label: 'Sync Steps',
+    label: 'Sync steps',
     description: 'Sync step-count measurements',
     category: 'Sync',
   },
   SyncHeartRate: {
-    label: 'Sync Heart Rate',
+    label: 'Sync heart rate',
     description: 'Sync heart-rate measurements',
     category: 'Sync',
   },
   SyncBodyWeight: {
-    label: 'Sync Body Weight',
+    label: 'Sync body weight',
     description: 'Sync body-weight measurements',
     category: 'Sync',
   },
   SyncSleep: {
-    label: 'Sync Sleep',
+    label: 'Sync sleep',
     description: 'Sync sleep sessions',
     category: 'Sync',
   },
@@ -158,17 +158,17 @@ export const connectorPropertyMeta = {
     category: 'Credentials',
   },
   ImportFrom: {
-    label: 'Import From',
+    label: 'Import from',
     description: 'Earliest date to retrieve from the provider',
     category: 'Sync',
   },
   PreviewOnly: {
-    label: 'Preview Only',
+    label: 'Preview only',
     description: 'Inspect available data before enabling imports',
     category: 'Advanced',
   },
   GrantedScopes: {
-    label: 'Granted Scopes',
+    label: 'Granted scopes',
     description: 'OAuth permissions granted by the provider',
     category: 'Credentials',
   },
@@ -197,12 +197,12 @@ export const connectorPropertyMeta = {
     category: 'Credentials',
   },
   PatientUsername: {
-    label: 'Patient Username',
+    label: 'Patient username',
     description: 'Username of the patient to follow when the account follows more than one',
     category: 'Credentials',
   },
   RefreshToken: {
-    label: 'Refresh Token',
+    label: 'Refresh token',
     description: 'Long-lived token used in place of the password once issued',
     category: 'Credentials',
   },
@@ -219,12 +219,12 @@ export const connectorPropertyMeta = {
     category: 'Advanced',
   },
   ApiSecret: {
-    label: 'API Secret',
+    label: 'API secret',
     description: 'Nightscout API_SECRET for authentication',
     category: 'Credentials',
   },
   MaxCount: {
-    label: 'Max Count',
+    label: 'Max count',
     description: 'Maximum number of records to fetch per request',
     category: 'Advanced',
   },
@@ -242,12 +242,12 @@ export const connectorPropertyMeta = {
     category: 'Advanced',
   },
   V3IncludeCgmBackfill: {
-    label: 'Include CGM Backfill',
+    label: 'Include CGM backfill',
     description: 'Include historical CGM data when using V3 API',
     category: 'Advanced',
   },
   AutoClockCorrection: {
-    label: 'Automatic Clock Correction',
+    label: 'Automatic clock correction',
     description:
       'Let device-clock evidence from the account correct imported timestamps and keep the timezone timeline current',
     category: 'Advanced',
@@ -260,84 +260,84 @@ export const connectorPropertyMeta = {
     category: 'Advanced',
   },
   EnableMealCarbConsolidation: {
-    label: 'Consolidate Meal Carbs',
+    label: 'Consolidate meal carbs',
     description: 'Combine multiple carb entries from the same meal',
     category: 'Advanced',
   },
   EnableTempBasalConsolidation: {
-    label: 'Consolidate Temp Basals',
+    label: 'Consolidate temp basals',
     description: 'Combine consecutive temporary basal segments',
     category: 'Advanced',
   },
   TempBasalConsolidationWindowMinutes: {
-    label: 'Temp Basal Window',
+    label: 'Temp basal window',
     description: 'Time window in minutes for consolidating temp basals',
     category: 'Advanced',
   },
   AppPlatform: {
-    label: 'App Platform',
+    label: 'App platform',
     description: 'Mobile platform identifier (iOS/Android)',
     category: 'Advanced',
   },
   AppVersion: {
-    label: 'App Version',
+    label: 'App version',
     description: 'Mobile app version string',
     category: 'Advanced',
   },
 
   // MyFitnessPal and Glooko
   LookbackDays: {
-    label: 'Lookback Days',
+    label: 'Lookback days',
     description: 'How many days back each sync reaches',
     category: 'Sync',
   },
   LastFullWalkAt: {
-    label: 'Last Full Walk',
+    label: 'Last full walk',
     description: 'When the diary was last read back to its first entry',
     category: 'Advanced',
   },
 
   // CareLink-specific
   CountryCode: {
-    label: 'Country Code',
+    label: 'Country code',
     description: 'Two-letter country code of the CareLink account',
     category: 'General',
   },
   LanguageCode: {
-    label: 'Language Code',
+    label: 'Language code',
     description: 'Two-letter language code of the CareLink account',
     category: 'General',
   },
 
   // Tandem-specific
   PumpSerialNumber: {
-    label: 'Pump Serial Number',
+    label: 'Pump serial number',
     description: 'Serial number of the pump to follow when the account has more than one',
     category: 'General',
   },
   FetchAllEventTypes: {
-    label: 'Fetch All Event Types',
+    label: 'Fetch all event types',
     description: 'Read every pump history event type rather than the default filtered set',
     category: 'Advanced',
   },
   IgnoreZeroUnitBasal: {
-    label: 'Ignore Zero-Unit Basal',
+    label: 'Ignore zero-unit basal',
     description: 'Skip basal entries that resolve to a near-zero rate',
     category: 'Advanced',
   },
   // OAuth and Webhooks
   AccessToken: {
-    label: 'Access Token',
+    label: 'Access token',
     description: 'OAuth access token for the service',
     category: 'Credentials',
   },
   WebhookEnabled: {
-    label: 'Webhook Enabled',
+    label: 'Webhook enabled',
     description: 'Enable real-time updates via webhooks',
     category: 'Sync',
   },
   WebhookSecret: {
-    label: 'Webhook Secret',
+    label: 'Webhook secret',
     description: 'Secret key for validating webhook requests',
     category: 'Credentials',
   },
@@ -354,17 +354,17 @@ export const connectorPropertyMeta = {
   },
   // Write-back
   WriteBackEnabled: {
-    label: 'Enable Write-back',
+    label: 'Enable write-back',
     description: 'Allow writing data back to the source service',
     category: 'Advanced',
   },
   WriteBackBatchSize: {
-    label: 'Write-back Batch Size',
+    label: 'Write-back batch size',
     description: 'Number of records to write back per batch',
     category: 'Advanced',
   },
   GlucoseProcessing: {
-    label: 'Glucose Processing',
+    label: 'Glucose processing',
     description: 'How the connector labels its glucose readings (smoothed or unsmoothed)',
     category: 'General',
   },

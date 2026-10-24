@@ -1,11 +1,11 @@
 # Words that carry no fact. Delete them rather than replace them.
 #
-# Deliberately absent: "just", which does real positional work in this domain
-# ("the pivot sits just proud of the carcase side").
+# Deliberately absent: "just", which carries time ("just now") and quantity
+# ("just under 4 mmol/L").
 extends: existence
 message: "'%s' carries no fact. Delete it, or give the measurable property."
 link: .claude/skills/simple-english/SKILL.md
-level: warning
+level: error
 ignorecase: true
 tokens:
   - simply

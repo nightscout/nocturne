@@ -87,8 +87,8 @@
     [CompletionReason.Expired]: "Expired",
     [CompletionReason.Other]: "Other",
     [CompletionReason.Failed]: "Failed",
-    [CompletionReason.FellOff]: "Fell Off",
-    [CompletionReason.ReplacedEarly]: "Replaced Early",
+    [CompletionReason.FellOff]: "Fell off",
+    [CompletionReason.ReplacedEarly]: "Replaced early",
     [CompletionReason.Empty]: "Empty",
     [CompletionReason.Refilled]: "Refilled",
     [CompletionReason.Attended]: "Attended",
@@ -232,7 +232,7 @@
     </Dialog.Header>
     <div class="space-y-4 py-4">
       <div class="space-y-2">
-        <Label for="completedAt">Completed At</Label>
+        <Label for="completedAt">Completed at</Label>
         <Input
           id="completedAt"
           type="datetime-local"
@@ -240,7 +240,7 @@
         />
       </div>
       <div class="space-y-2">
-        <Label for="reason">Completion Reason</Label>
+        <Label for="reason">Completion reason</Label>
         <Select.Root type="single" bind:value={completionReason}>
           <Select.Trigger>
             {completionReasonLabels[completionReason]}

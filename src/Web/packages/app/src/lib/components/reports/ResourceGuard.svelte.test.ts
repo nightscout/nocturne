@@ -56,7 +56,7 @@ describe("ResourceGuard", () => {
 			.element(page.getByText("Network error occurred"))
 			.toBeVisible();
 		await expect
-			.element(page.getByText("Error Loading Data"))
+			.element(page.getByText("Error loading data"))
 			.toBeVisible();
 	});
 

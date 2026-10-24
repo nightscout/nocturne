@@ -42,15 +42,15 @@
       let lead: string | undefined;
       let actionText = "";
       if (data.lastEnacted.bolusVolume) {
-        lead = "Automatic Bolus";
+        lead = "Automatic bolus";
         actionText = ` ${data.lastEnacted.bolusVolume}U`;
         if (data.lastEnacted.type === "cancel") {
           actionText += " (Temp Basal Canceled)";
         }
       } else if (data.lastEnacted.type === "cancel") {
-        lead = "Temp Basal Canceled";
+        lead = "Temp basal canceled";
       } else if (data.lastEnacted.rate != null) {
-        lead = "Temp Basal Started";
+        lead = "Temp basal started";
         actionText = ` ${data.lastEnacted.rate.toFixed(2)}U/hour for ${data.lastEnacted.duration}m`;
       }
 

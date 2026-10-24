@@ -41,7 +41,7 @@
   // selected range, so the page has one day count rather than two.
   const reportsResource = contextResource(
     () => getIdpData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading IDP Report", dateParams: reportsParams }
+    { errorTitle: "Error loading IDP report", dateParams: reportsParams }
   );
 
   const data = $derived({
@@ -69,10 +69,10 @@
 </script>
 
 <svelte:head>
-  <title>Insulin Dosing Profile - Nocturne Reports</title>
+  <title>Insulin dosing profile - Nocturne reports</title>
   <meta
     name="description"
-    content="Insulin Dosing Profile report with delivery statistics, glucose metrics, basal analysis, and bolus distribution"
+    content="Insulin dosing profile report with delivery statistics, glucose metrics, basal analysis, and bolus distribution"
   />
 </svelte:head>
 
@@ -99,7 +99,7 @@
 
   <FigureStrip
     figures={[
-      { label: "Avg Total Daily Dose", value: insulinStats?.tdd?.toFixed(1) ?? "--", unit: "U/day" },
+      { label: "Avg total daily dose", value: insulinStats?.tdd?.toFixed(1) ?? "--", unit: "U/day" },
       { label: "Average", value: stats.mean ? String(bg(stats.mean)) : "--", unit: bgLabel() },
       { label: a1cLabel(true), value: formatA1cValue(variability.estimatedA1cDisplay), unit: a1cUnitLabel(), note: "From mean glucose", },
       { label: "CV", value: variability.coefficientOfVariation?.toFixed(0) ?? "--", unit: "%", note: variability.coefficientOfVariationTarget != null ? `Target: ≤${variability.coefficientOfVariationTarget}%` : undefined },
@@ -115,7 +115,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Syringe class="w-5 h-5 text-insulin" />
-          Insulin Summary
+          Insulin summary
         </CardTitle>
         <CardDescription>
           Daily insulin delivery breakdown
@@ -158,11 +158,11 @@
 
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <div class="text-muted-foreground">Avg Delivered Basal</div>
+            <div class="text-muted-foreground">Avg delivered basal</div>
             <div class="font-semibold">{avgBasal?.toFixed(1) ?? "--"} U/day</div>
           </div>
           <div>
-            <div class="text-muted-foreground">Avg Scheduled Basal</div>
+            <div class="text-muted-foreground">Avg scheduled basal</div>
             <div class="font-semibold">{avgScheduled?.toFixed(1) ?? "--"} U/day</div>
           </div>
         </div>
@@ -175,17 +175,17 @@
             <div class="font-semibold">{insulinStats?.bolusesPerDay?.toFixed(1) ?? "--"}</div>
           </div>
           <div>
-            <div class="text-muted-foreground">Avg Bolus Size</div>
+            <div class="text-muted-foreground">Avg bolus size</div>
             <div class="font-semibold">{insulinStats?.avgBolus?.toFixed(1) ?? "--"} U</div>
           </div>
           <div>
-            <div class="text-muted-foreground">Meal Boluses/Day</div>
+            <div class="text-muted-foreground">Meal boluses/day</div>
             <div class="font-semibold">
               {insulinStats?.mealBoluses != null ? (insulinStats.mealBoluses / dayCount).toFixed(1) : "--"}
             </div>
           </div>
           <div>
-            <div class="text-muted-foreground">Correction Boluses/Day</div>
+            <div class="text-muted-foreground">Correction boluses/day</div>
             <div class="font-semibold">
               {insulinStats?.correctionBoluses != null ? (insulinStats.correctionBoluses / dayCount).toFixed(1) : "--"}
             </div>
@@ -198,7 +198,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Droplets class="w-5 h-5 text-glucose-in-range" />
-          Glucose Metrics
+          Glucose metrics
         </CardTitle>
         <CardDescription>
           Key glucose indicators for this period
@@ -208,7 +208,7 @@
         {#if analysis}
           {@const tir = analysis.timeInRange?.percentages ?? {}}
           <div class="space-y-2">
-            <div class="text-sm font-medium">Time in Range</div>
+            <div class="text-sm font-medium">Time in range</div>
             <div class="h-56 w-full">
               <TIRStackedChart percentages={tir} />
             </div>
@@ -229,7 +229,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Target class="w-5 h-5" />
-          Glycemic Risk Index
+          Glycemic risk index
         </CardTitle>
         <CardDescription>
           Composite metric of hypo and hyperglycemia risk
@@ -251,7 +251,7 @@
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Activity class="w-5 h-5" />
-        Glucose Pattern
+        Glucose pattern
       </CardTitle>
       <CardDescription>
         Daily glucose overlay with basal rate, bolus distribution, and dosing profile
@@ -263,14 +263,14 @@
       </div>
 
       <div>
-        <h4 class="text-sm font-semibold text-muted-foreground mb-1">Scheduled Basal Rate</h4>
+        <h4 class="text-sm font-semibold text-muted-foreground mb-1">Scheduled basal rate</h4>
         <div class="h-24 w-full">
           <ScheduledBasalRateChart entries={data.profileSummary?.basalSchedules?.[0]?.entries ?? []} />
         </div>
       </div>
 
       <div class="w-full">
-        <h4 class="text-sm font-semibold text-muted-foreground mb-1">User-Initiated Boluses Per Day</h4>
+        <h4 class="text-sm font-semibold text-muted-foreground mb-1">User-initiated boluses per day</h4>
         <HourlyBolusChart {boluses} {dayCount} />
       </div>
 

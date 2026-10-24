@@ -193,14 +193,14 @@
       </div>
       <Button variant="outline" size="sm" onclick={addEntry}>
         <Plus class="h-4 w-4 mr-1" />
-        Add Time Block
+        Add time block
       </Button>
     </div>
 
     <Table.Root>
       <Table.Header>
         <Table.Row>
-          <Table.Head>Start Time</Table.Head>
+          <Table.Head>Start time</Table.Head>
           {#if isRange}
             <Table.Head class="text-right">Low ({unit})</Table.Head>
             <Table.Head class="text-right">High ({unit})</Table.Head>
@@ -272,7 +272,7 @@
         {:else}
           <Table.Row>
             <Table.Cell variant="muted" colspan={isRange ? 4 : 3} class="text-center py-4">
-              No time blocks configured. Click "Add Time Block" to get started.
+              No time blocks configured. Select "Add time block" to get started.
             </Table.Cell>
           </Table.Row>
         {/each}

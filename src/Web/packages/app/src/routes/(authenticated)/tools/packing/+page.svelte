@@ -71,7 +71,7 @@
     <div>
       <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
         <Luggage class="h-6 w-6" />
-        Packing Calculator
+        Packing calculator
       </h1>
       <p class="text-muted-foreground text-sm">
         Configure what you need, then generate a shareable packing list.
@@ -126,7 +126,7 @@
       </p>
       <Button size="lg" disabled={totalItems === 0} onclick={generateList}>
         <ListChecks class="h-4 w-4" />
-        Generate Packing List
+        Generate packing list
       </Button>
     </CardContent>
   </Card>

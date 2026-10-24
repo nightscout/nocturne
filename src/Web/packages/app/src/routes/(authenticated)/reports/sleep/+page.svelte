@@ -34,7 +34,7 @@
 
   const VISIBLE_DAYS = 14;
 
-  const report = useActogramReport("Error Loading Sleep Report");
+  const report = useActogramReport("Error loading sleep report");
   const { params: reportsParams, resource: actogramResource } = report;
 
   /**
@@ -72,7 +72,7 @@
         ...reportsParams.dateRangeInput,
         source: sourceFilter === "all" ? undefined : sourceFilter,
       }),
-    { errorTitle: "Error Loading Sleep Report" }
+    { errorTitle: "Error loading sleep report" }
   );
 
   // Unpadded, user-selected day range for the composition chart — includes
@@ -257,7 +257,7 @@
 </script>
 
 <svelte:head>
-  <title>Sleep & Overnight - Nocturne Reports</title>
+  <title>Sleep & overnight - Nocturne reports</title>
   <meta
     name="description"
     content="Sleep pattern actogram with glucose overlay"
@@ -294,7 +294,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <CalendarRange class="h-5 w-5 text-report-lifestyle" />
-            Weekly Breakdown
+            Weekly breakdown
           </CardTitle>
           <CardDescription class="print:hidden">Each tracked night links to its full report.</CardDescription>
         </CardHeader>
@@ -309,7 +309,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Moon class="h-5 w-5 text-report-lifestyle" />
-            Sleep Composition
+            Sleep composition
           </CardTitle>
           {#if sourceFilter !== "all"}
             <CardDescription>
@@ -353,7 +353,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Moon class="h-5 w-5 text-report-lifestyle" />
-          Sleep Actogram
+          Sleep actogram
         </CardTitle>
       </CardHeader>
       <CardContent class="w-full overflow-x-auto print:overflow-visible">

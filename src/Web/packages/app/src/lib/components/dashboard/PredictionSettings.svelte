@@ -109,7 +109,7 @@
         </ToggleGroup.Item>
         <ToggleGroup.Item
           value="zt"
-          title="Zero Temp"
+          title="Zero temp"
         >
           ZT
         </ToggleGroup.Item>

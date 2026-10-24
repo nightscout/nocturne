@@ -107,7 +107,7 @@
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
         <ListChecks class="h-6 w-6" />
-        Packing List
+        Packing list
       </h1>
       {#if totalCount > 0}
         <span class="text-sm text-muted-foreground tabular-nums">

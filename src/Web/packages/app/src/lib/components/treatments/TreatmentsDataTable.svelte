@@ -94,10 +94,10 @@
   // Map category IDs to display labels
   const categoryLabels: Record<EntryCategoryId, string> = {
     bolus: "Bolus",
-    carbs: "Carb Intake",
-    bgCheck: "BG Check",
+    carbs: "Carb intake",
+    bgCheck: "BG check",
     note: "Note",
-    deviceEvent: "Device Event",
+    deviceEvent: "Device event",
     basalInjection: "Long-acting injection",
   };
 

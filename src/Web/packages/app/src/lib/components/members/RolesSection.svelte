@@ -123,7 +123,7 @@
       resetCreateForm();
       clearMessages();
     } catch (err) {
-      dialogError = describeSubmitError(err, "Failed to create role. Please try again.");
+      dialogError = describeSubmitError(err, "Failed to create role. Try again.");
     } finally {
       isCreating = false;
     }
@@ -145,7 +145,7 @@
       isEditOpen = false;
       clearMessages();
     } catch (err) {
-      dialogError = describeSubmitError(err, "Failed to update role. Please try again.");
+      dialogError = describeSubmitError(err, "Failed to update role. Try again.");
     } finally {
       isEditing = false;
     }
@@ -160,7 +160,7 @@
       isDeleteOpen = false;
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to delete role. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to delete role. Try again.");
       clearMessages();
     } finally {
       isDeleting = false;
@@ -266,7 +266,7 @@
 <Dialog.Root bind:open={isCreateOpen} onOpenChange={(open) => { if (!open) resetCreateForm(); }}>
   <Dialog.Content class="max-w-lg max-h-[85vh] overflow-y-auto">
     <Dialog.Header>
-      <Dialog.Title>Create Role</Dialog.Title>
+      <Dialog.Title>Create role</Dialog.Title>
       <Dialog.Description>
         Define a new role with a name and set of permissions.
       </Dialog.Description>
@@ -308,7 +308,7 @@
 <Dialog.Root bind:open={isEditOpen}>
   <Dialog.Content class="max-w-lg max-h-[85vh] overflow-y-auto">
     <Dialog.Header>
-      <Dialog.Title>{isEditReadonly ? "View Role" : "Edit Role"}</Dialog.Title>
+      <Dialog.Title>{isEditReadonly ? "View role" : "Edit role"}</Dialog.Title>
       <Dialog.Description>
         {isEditReadonly
           ? "System roles are managed by Nocturne and cannot be changed."

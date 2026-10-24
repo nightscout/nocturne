@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-  <title>Settings evidence - Loop Analysis - Nocturne Reports</title>
+  <title>Settings evidence - Loop analysis - Nocturne reports</title>
   <meta name="description" content="Your profile settings compared with what your data shows." />
 </svelte:head>
 

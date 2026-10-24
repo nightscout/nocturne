@@ -149,7 +149,7 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Link2 class="h-5 w-5 text-primary" />
-        Deduplicate Records
+        Deduplicate records
       </Dialog.Title>
       <Dialog.Description>
         Link records from multiple data sources that represent the same
@@ -172,7 +172,7 @@
         <div class="rounded-lg border border-success/30 bg-success/10 p-4">
           <div class="flex items-center gap-2 text-success">
             <CheckCircle class="h-5 w-5" />
-            <span class="font-medium">Deduplication Complete</span>
+            <span class="font-medium">Deduplication complete</span>
           </div>
           {#if deduplicationStatus.result}
             <div class="mt-3 space-y-1 text-sm text-success">
@@ -201,7 +201,7 @@
         <div class="rounded-lg border border-warning/30 bg-warning/10 p-4">
           <div class="flex items-center gap-2 text-warning">
             <AlertTriangle class="h-5 w-5" />
-            <span class="font-medium">Job Canceled</span>
+            <span class="font-medium">Job canceled</span>
           </div>
         </div>
       {:else if isDeduplicating}
@@ -250,9 +250,7 @@
       {:else}
         <div class="rounded-lg border bg-muted/50 p-4">
           <p class="text-sm text-muted-foreground">
-            This process will scan all your glucose records, treatments, and
-            state spans to identify and link records that represent the same
-            event from different data sources.
+            This process scans all your glucose records, treatments, and state spans. It links records that represent the same event from different data sources.
           </p>
           <ul class="mt-3 text-sm text-muted-foreground list-disc list-inside space-y-1">
             <li>Records within 30 seconds are considered potential matches</li>
@@ -270,12 +268,12 @@
       </Button>
       {#if isDeduplicating}
         <Button variant="destructive" onclick={cancelDeduplication}>
-          Cancel Job
+          Cancel job
         </Button>
       {:else if !deduplicationStatus || deduplicationStatus.state === DeduplicationJobState.Failed || deduplicationStatus.state === DeduplicationJobState.Cancelled}
         <Button onclick={startDeduplication}>
           <Link2 class="h-4 w-4" />
-          Start Deduplication
+          Start deduplication
         </Button>
       {/if}
     </Dialog.Footer>

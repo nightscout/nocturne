@@ -162,7 +162,7 @@
       expandedMember = null;
       clearMessages();
     } catch (e) {
-      memberSaveError = describeSubmitError(e, "Failed to update member. Please try again.");
+      memberSaveError = describeSubmitError(e, "Failed to update member. Try again.");
     } finally {
       isSavingMember = false;
     }
@@ -178,7 +178,7 @@
       successMessage = "Membership request approved.";
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to approve request. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to approve request. Try again.");
       clearMessages();
     }
   }
@@ -190,14 +190,14 @@
       successMessage = "Membership request denied.";
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to deny request. Try again.");
       clearMessages();
     }
   }
 </script>
 
 <svelte:head>
-  <title>Sharing & Privacy - Settings - Nocturne</title>
+  <title>Sharing & privacy - Settings - Nocturne</title>
 </svelte:head>
 
 <div
@@ -211,7 +211,7 @@
         <Users class="h-6 w-6 text-primary" />
       </div>
       <div>
-        <h1 class="text-2xl font-bold tracking-tight">Sharing &amp; Privacy</h1>
+        <h1 class="text-2xl font-bold tracking-tight">Sharing &amp; privacy</h1>
         <p class="text-muted-foreground">
           Control who can see your data, and what they can do with it.
         </p>
@@ -309,7 +309,7 @@
                   successMessage = "Member removed successfully.";
                   clearMessages();
                 } catch (e) {
-                  errorMessage = describeSubmitError(e, "Failed to remove member. Please try again.");
+                  errorMessage = describeSubmitError(e, "Failed to remove member. Try again.");
                   clearMessages();
                 }
               }}
@@ -341,7 +341,7 @@
             })}
           >
             <Link class="h-4 w-4" />
-            Create Invite Link
+            Create invite link
           </Button>
         {/if}
       {/if}
@@ -362,7 +362,7 @@
             } catch (err) {
               errorMessage = describeSubmitError(
                 err,
-                "Failed to revoke invite. Please try again."
+                "Failed to revoke invite. Try again."
               );
               clearMessages();
             } finally {
@@ -387,7 +387,7 @@
   {#if canViewAudit}
     <SettingsLinkCard
       link={{
-        title: "Audit Log",
+        title: "Audit log",
         description: "Review changes and access history.",
         href: "/settings/audit",
         icon: ScrollText,
@@ -401,7 +401,7 @@
         <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
           <ShieldAlert class="h-6 w-6 text-destructive" />
         </div>
-        <h2 class="text-lg font-semibold">Access Denied</h2>
+        <h2 class="text-lg font-semibold">Access denied</h2>
         <p class="mt-2 max-w-sm text-sm text-muted-foreground">
           You do not have permission to manage sharing or members. Contact your
           tenant administrator for access.

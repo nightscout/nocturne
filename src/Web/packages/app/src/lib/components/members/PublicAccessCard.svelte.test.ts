@@ -197,7 +197,7 @@ describe("PublicAccessCard", () => {
       ).toBeNull()
     );
     expect(document.body.textContent?.replace(/\s+/g, " ")).toContain(
-      "Nocturne can no longer show you what it is"
+      "Nocturne can no longer show you what the link is"
     );
   });
 
@@ -214,7 +214,7 @@ describe("PublicAccessCard", () => {
     // Normalised: the copy wraps across source lines, so the rendered text carries
     // the template's own newlines and indentation mid-sentence.
     expect(document.body.textContent?.replace(/\s+/g, " ")).toContain(
-      "Nocturne can no longer show you what it is"
+      "Nocturne can no longer show you what the link is"
     );
   });
 });

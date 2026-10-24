@@ -84,11 +84,11 @@
   const vertical = $derived(orientation === "vertical");
 
   const bandLabel = $derived<Record<BandKey, string>>({
-    veryLow: "Very Low",
+    veryLow: "Very low",
     low: "Low",
-    target: "In Range",
+    target: "In range",
     high: "High",
-    veryHigh: "Very High",
+    veryHigh: "Very high",
   });
 
   const pct = $derived({
@@ -216,7 +216,7 @@
           />
           {#if row.key === "target" && pct.tightTarget > 0}
             <Tooltip.Item
-              label="Tight Range"
+              label="Tight range"
               format="percent"
               value={pct.tightTarget / 100}
               color="var(--glucose-tight-range)"
@@ -319,7 +319,7 @@
   {#if showThresholds || personalRange}
     <div class={["mt-2 shrink-0 text-center text-muted-foreground", compact ? "text-2xs" : "text-xs"].join(" ")}>
       {#if showThresholds}
-        <p><span class="font-semibold text-foreground">Target Range:</span> {bgRange(thresholds.low, thresholds.high)}</p>
+        <p><span class="font-semibold text-foreground">Target range:</span> {bgRange(thresholds.low, thresholds.high)}</p>
       {/if}
       {#if personalRange}
         <p>{personalRange.label}</p>

@@ -100,7 +100,7 @@ export class ResourceContext {
 
   /** Title for the error card, taken from whichever resource failed. */
   get errorTitle(): string {
-    return this.#failed?.errorTitle ?? this.#all[0]?.errorTitle ?? "Error Loading Data";
+    return this.#failed?.errorTitle ?? this.#all[0]?.errorTitle ?? "Error loading data";
   }
 
   /** Retry every registered resource. */
@@ -183,7 +183,7 @@ export function useResourceContext(config: {
       error: config.error(),
       hasData: config.hasData(),
       refreshing: config.loading() && config.hasData(),
-      errorTitle: config.errorTitle ?? "Error Loading Data",
+      errorTitle: config.errorTitle ?? "Error loading data",
       refetch: config.refetch,
     })
   );
@@ -228,7 +228,7 @@ export function contextResource<T>(
   queryFn: () => QueryResult<T>,
   options: ContextResourceOptions & { dateParams?: ReportsParamsReturn } = {}
 ): ContextResourceBase<T> | ContextResourceWithDate<T> {
-  const { errorTitle = "Error Loading Data", dateParams, active } = options;
+  const { errorTitle = "Error loading data", dateParams, active } = options;
 
   // Create the query in a $derived tracking context so reactive queries
   // are never constructed inside an $effect (which would trigger a Svelte warning).

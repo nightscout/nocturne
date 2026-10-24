@@ -24,12 +24,12 @@
   import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
   import type { GlucoseCluster } from "$lib/api";
 
-  setReportPrintMeta(() => ({ title: "Signal Integrity" }));
+  setReportPrintMeta(() => ({ title: "Signal integrity" }));
 
   const params = requireDateParamsContext(14);
 
   const resource = contextResource(() => getDataQualityReport(params.dateRangeInput), {
-    errorTitle: "Error Loading Data Quality Report",
+    errorTitle: "Error loading data quality report",
   });
 
   const integrity = $derived(resource.current?.integrity);
@@ -62,7 +62,7 @@
 </script>
 
 <svelte:head>
-  <title>Signal Integrity - Nocturne Reports</title>
+  <title>Signal integrity - Nocturne reports</title>
 </svelte:head>
 
 {#if resource.current}
@@ -74,7 +74,7 @@
         class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
-        Data Quality
+        Data quality
       </a>
       <div class="flex items-center gap-3">
         <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 print:hidden">

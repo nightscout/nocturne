@@ -25,7 +25,7 @@
     slack: "Slack",
     telegram: "Telegram",
     whatsapp: "WhatsApp",
-    resend: "Resend (Email)",
+    resend: "Resend (email)",
   };
 
   const TELEGRAM_SET_WEBHOOK =
@@ -157,9 +157,7 @@
                 <Alert.Description>
                   <p>
                     Telegram webhook calls are refused until one is set. Choose a random value of
-                    letters, digits, <code>_</code> or <code>-</code> (for example from
-                    <code>openssl rand -hex 32</code>), save it here with the bot enabled, then
-                    register the webhook again with the same value:
+                    letters, digits, <code>_</code> or <code>-</code> (for example from <code>openssl rand -hex 32</code>). Save it here with the bot enabled. Then register the webhook again with the same value:
                   </p>
                   <code class="block whitespace-pre-wrap break-all">{TELEGRAM_SET_WEBHOOK}</code>
                 </Alert.Description>

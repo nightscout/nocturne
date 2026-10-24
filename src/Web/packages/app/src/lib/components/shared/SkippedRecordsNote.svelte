@@ -48,6 +48,6 @@
     {:else}
       {formatNumber(refused)} records could not be stored. They are listed under
     {/if}
-    <a href={resolve("/reports/data-quality/rejected-uploads")} class="underline">Rejected Uploads</a>.
+    <a href={resolve("/reports/data-quality/rejected-uploads")} class="underline">Rejected uploads</a>.
   </p>
 {/if}

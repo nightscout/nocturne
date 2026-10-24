@@ -18,7 +18,7 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <Activity class="w-5 h-5" />
-      AID System Use
+      AID system use
     </CardTitle>
     <CardDescription>
       Automated insulin delivery system metrics
@@ -42,11 +42,11 @@
         <div class="font-semibold text-lg">{metrics?.pumpDeviceNames ?? '--'}</div>
       </div>
       <div>
-        <div class="text-muted-foreground">CGM Active</div>
+        <div class="text-muted-foreground">CGM active</div>
         <div class="font-semibold text-lg">{metrics?.cgmActivePercent != null ? `${Math.round(metrics.cgmActivePercent)}%` : '--'}</div>
       </div>
       <div>
-        <div class="text-muted-foreground">AID Active</div>
+        <div class="text-muted-foreground">AID active</div>
         <div class="font-semibold text-lg">{metrics?.aidActivePercent != null ? `${Math.round(metrics.aidActivePercent)}%` : '--'}</div>
       </div>
       <div>
@@ -54,7 +54,7 @@
         <div class="font-semibold text-lg">{metrics?.targetLow != null && metrics?.targetHigh != null ? `${bg(metrics.targetLow)}-${bg(metrics.targetHigh)} ${bgLabel()}` : '--'}</div>
       </div>
       <div>
-        <div class="text-muted-foreground">Site Changes</div>
+        <div class="text-muted-foreground">Site changes</div>
         <div class="font-semibold text-lg">{metrics?.siteChangeCount != null ? metrics.siteChangeCount : '--'}</div>
       </div>
     </div>

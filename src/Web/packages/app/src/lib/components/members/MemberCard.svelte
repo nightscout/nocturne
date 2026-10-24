@@ -298,7 +298,7 @@
             {#if isSaving}
               <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
             {/if}
-            Save Changes
+            Save changes
           </Button>
         </div>
       {/if}

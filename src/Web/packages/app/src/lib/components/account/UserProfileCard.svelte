@@ -187,7 +187,7 @@
       <h3
         class="text-sm font-medium text-muted-foreground uppercase tracking-wider"
       >
-        Account Details
+        Account details
       </h3>
 
       <div class="grid gap-4 @sm:grid-cols-2">
@@ -200,7 +200,7 @@
 
         {#if user.expiresAt}
           <div class="space-y-1">
-            <p class="text-sm text-muted-foreground">Session Expires</p>
+            <p class="text-sm text-muted-foreground">Session expires</p>
             <p class="text-sm flex items-center gap-2">
               <Clock class="h-4 w-4 text-muted-foreground" />
               {formatMediumDateTime(user.expiresAt)}
@@ -266,7 +266,7 @@
   <Card.Footer class="flex flex-col @sm:flex-row gap-2 border-t pt-6">
     <Button variant="outline" href="/settings" class="w-full @sm:w-auto">
       <Settings class="mr-2 h-4 w-4" />
-      Back to Settings
+      Back to settings
     </Button>
     <form method="POST" action="/auth/logout" class="w-full @sm:w-auto">
       <Button variant="destructive" type="submit" class="w-full">

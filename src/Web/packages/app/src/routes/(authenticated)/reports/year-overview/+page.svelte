@@ -72,8 +72,8 @@
     | "carbs";
 
   const METRIC_OPTIONS: { value: HeatmapMetric; label: string }[] = [
-    { value: "avgGlucose", label: "Avg Glucose" },
-    { value: "tir", label: "Time in Range" },
+    { value: "avgGlucose", label: "Avg glucose" },
+    { value: "tir", label: "Time in range" },
     { value: "bolus", label: "Bolus" },
     { value: "basal", label: "Basal" },
     { value: "tdd", label: "TDD" },
@@ -298,7 +298,7 @@
   const sortedYears = $derived([...availableYears].sort((a, b) => b - a));
 
   setReportPrintMeta(() => {
-    const title = "Year Overview";
+    const title = "Year overview";
     if (sortedYears.length === 0) return { title };
     const first = sortedYears.at(-1);
     const last = sortedYears[0];
@@ -581,7 +581,7 @@
 </script>
 
 <svelte:head>
-  <title>Year Overview - Nocturne</title>
+  <title>Year overview - Nocturne</title>
   <meta
     name="description"
     content="Multi-year heatmap overview of all your diabetes data"
@@ -657,7 +657,7 @@
           >
             <CalendarDays class="h-8 w-8 text-muted-foreground" />
           </div>
-          <h2 class="text-xl font-semibold">No Data Available</h2>
+          <h2 class="text-xl font-semibold">No data available</h2>
           <p class="text-muted-foreground">
             There is no data to display yet. Connect a data source in your
             settings to get started.
@@ -667,7 +667,7 @@
             variant="outline"
             class="print:hidden"
           >
-            Configure Data Sources
+            Configure data sources
           </Button>
         </div>
       </div>

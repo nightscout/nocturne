@@ -14,7 +14,7 @@
 </script>
 
 <svelte:head>
-  <title>Active Access - Nocturne</title>
+  <title>Active access - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -25,7 +25,7 @@
       <KeyRound class="h-6 w-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Active Access</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Active access</h1>
       <p class="text-muted-foreground">
         The browsers signed in to this account, and where to find everything
         else that can reach your data.

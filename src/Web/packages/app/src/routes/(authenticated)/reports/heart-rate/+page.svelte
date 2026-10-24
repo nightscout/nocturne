@@ -21,7 +21,7 @@
   const VISIBLE_DAYS = 14;
   const print = new PrintMode();
 
-  const report = useActogramReport("Error Loading Heart Rate Report");
+  const report = useActogramReport("Error loading heart rate report");
   const { params: reportsParams, resource: actogramResource } = report;
 
   // HR data as ActogramPoints
@@ -67,7 +67,7 @@
 </script>
 
 <svelte:head>
-  <title>Heart Rate - Nocturne Reports</title>
+  <title>Heart rate - Nocturne reports</title>
   <meta
     name="description"
     content="Heart rate actogram with glucose overlay"
@@ -85,7 +85,7 @@
     figures={[
       { label: "Average", value: String(avgBpm), unit: "bpm" },
       { label: "Resting estimate", value: String(restingBpm), unit: "bpm" },
-      { label: "Min / Max", value: `${minBpm} / ${maxBpm}`, unit: "bpm" },
+      { label: "Min / max", value: `${minBpm} / ${maxBpm}`, unit: "bpm" },
       { label: "Readings", value: formatNumber(selectedRates.length) },
     ]}
   />
@@ -94,7 +94,7 @@
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <HeartPulse class="h-5 w-5 text-heart-rate" />
-        Heart Rate Actogram
+        Heart rate actogram
       </CardTitle>
     </CardHeader>
     <CardContent class="w-full overflow-x-auto print:overflow-visible">
@@ -119,7 +119,7 @@
       >
         {#snippet tooltipValue({ point })}
           {@const bpm = typeof point.bpm === "number" ? point.bpm : 0}
-          <span class="text-muted-foreground">Heart Rate</span>
+          <span class="text-muted-foreground">Heart rate</span>
           <span class="ml-auto font-medium tabular-nums">{bpm} bpm</span>
         {/snippet}
         {#snippet row(ctx: ActogramRowContext)}

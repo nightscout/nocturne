@@ -36,8 +36,8 @@
     <BellOff class="h-4 w-4" />
   </span>
   <div class="flex-1 text-sm font-medium">
-    Do Not Disturb is on. Only critical rules and rules allowed through Do Not
-    Disturb will fire.
+    Do not disturb is on. Only critical rules and rules allowed through do not
+    disturb will fire.
   </div>
   {#if onDisableDnd}
     <Button
@@ -47,7 +47,7 @@
       onclick={onDisableDnd}
       disabled={disablingDnd}
     >
-      Turn off
+      Disable
     </Button>
   {/if}
 </div>

@@ -75,9 +75,9 @@
     return minutesAgo(lastUpdated, currentTime.getTime());
   }
 
-  // Status text - show "Connection Error" when disconnected
+  // Status text - show "Connection error" when disconnected
   const statusText = $derived.by(() =>
-    isDisconnected ? "Connection Error" : formatTimeSinceLastReading()
+    isDisconnected ? "Connection error" : formatTimeSinceLastReading()
   );
 
   const statusTooltip = $derived.by(
@@ -204,7 +204,7 @@
         {#if displayDemoMode}
           <Badge variant="demo">
             <span class="size-2 rounded-full bg-demo animate-pulse" aria-hidden="true"></span>
-            Demo Mode
+            Demo mode
           </Badge>
         {/if}
         {#if showPills}

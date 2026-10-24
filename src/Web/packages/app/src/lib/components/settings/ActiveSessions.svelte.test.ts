@@ -58,7 +58,7 @@ describe("ActiveSessions", () => {
     await attemptRevoke();
 
     await expect
-      .element(page.getByText("Failed to sign out the session. Please try again."))
+      .element(page.getByText("Failed to sign out the session. Try again."))
       .toBeInTheDocument();
   });
 
@@ -68,7 +68,7 @@ describe("ActiveSessions", () => {
     await attemptRevoke();
 
     await expect
-      .element(page.getByText("Failed to sign out the session. Please try again."))
+      .element(page.getByText("Failed to sign out the session. Try again."))
       .toBeInTheDocument();
     await expect
       .element(page.getByText("npgsql: connection reset"))

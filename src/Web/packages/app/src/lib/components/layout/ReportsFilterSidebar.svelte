@@ -41,7 +41,7 @@
   ];
 
   // === DRAFT STATE ===
-  // The pending date range selection before clicking "Apply Filters".
+  // The pending date range selection before clicking "Apply filters".
   // This is the single source of truth; the highlighted preset is derived from it.
   let draftCalendarValue = $state<DateRange | undefined>(undefined);
 
@@ -152,7 +152,7 @@
       <div class="flex items-center justify-between">
         <Sheet.Title class="flex items-center gap-2">
           <Filter class="h-5 w-5" />
-          Report Filters
+          Report filters
         </Sheet.Title>
       </div>
       <Sheet.Description>
@@ -168,7 +168,7 @@
       <div class="px-6 py-4 space-y-6">
         <!-- Quick Date Presets -->
         <div class="space-y-3">
-          <Label>Quick Selection</Label>
+          <Label>Quick selection</Label>
           <div class="grid grid-cols-3 gap-2">
             {#each dayPresets as preset (preset.days)}
               <Button
@@ -188,7 +188,7 @@
         <div class="space-y-3">
           <Label class="flex items-center">
             <Calendar class="h-4 w-4" />
-            Custom Date Range
+            Custom date range
           </Label>
           <div class="text-sm text-muted-foreground mb-2">
             {dateRangeText}
@@ -218,7 +218,7 @@
           <RotateCcw class="h-4 w-4 mr-2" />
           Reset
         </Button>
-        <Button class="flex-1" onclick={applyFilters}>Apply Filters</Button>
+        <Button class="flex-1" onclick={applyFilters}>Apply filters</Button>
       </div>
     </div>
   </Sheet.Content>

@@ -43,7 +43,7 @@ describe("setup path step", () => {
 
     await expect.element(freshCard()).toHaveAttribute("aria-checked", "true");
     await expect
-      .element(page.getByText("Fresh Start", { exact: true }))
+      .element(page.getByText("Fresh start", { exact: true }).first())
       .toBeVisible();
   });
 
@@ -57,7 +57,7 @@ describe("setup path step", () => {
       .toHaveAttribute("aria-checked", "true");
     await expect.element(page.getByText("Step 01 / 04")).toBeVisible();
     await expect
-      .element(page.getByText("Nightscout Migration", { exact: true }))
+      .element(page.getByText("Nightscout migration", { exact: true }))
       .toBeVisible();
   });
 
@@ -69,7 +69,7 @@ describe("setup path step", () => {
 
     await expect.element(page.getByText("Step 02 / 04")).toBeVisible();
     await expect
-      .element(page.getByText("Nightscout Migration", { exact: true }))
+      .element(page.getByText("Nightscout migration", { exact: true }))
       .toBeVisible();
     await expect.element(migrationCard()).not.toBeInTheDocument();
   });

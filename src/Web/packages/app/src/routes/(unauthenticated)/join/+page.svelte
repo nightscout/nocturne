@@ -59,7 +59,7 @@
   // record with its validity flags set — the details of a spent invite aren't served to whoever
   // holds the link.
   const inviteError = $derived.by(() => {
-    if (!token) return "No invite token provided. Please check the link you were given.";
+    if (!token) return "No invite token provided. Check the link you were given.";
     if (inviteInfoQuery?.error)
       return describeSubmitError(
         inviteInfoQuery.error,
@@ -174,7 +174,7 @@
         >
           <AlertTriangle class="h-6 w-6 text-destructive" />
         </div>
-        <Card.Title class="text-2xl font-bold">Invite Unavailable</Card.Title>
+        <Card.Title class="text-2xl font-bold">Invite unavailable</Card.Title>
         <Card.Description>{inviteError}</Card.Description>
       </Card.Header>
     {:else if !inviteInfo}
@@ -195,7 +195,7 @@
         >
           <Check class="h-6 w-6 text-success" />
         </div>
-        <Card.Title class="text-2xl font-bold">You Are In</Card.Title>
+        <Card.Title class="text-2xl font-bold">You are in</Card.Title>
         <Card.Description>
           We created your account and added you to
           {inviteInfo.tenantName ?? "the site"}.
@@ -217,7 +217,7 @@
         >
           <Check class="h-6 w-6 text-primary" />
         </div>
-        <Card.Title class="text-2xl font-bold">You Are Already a Member</Card.Title>
+        <Card.Title class="text-2xl font-bold">You are already a member</Card.Title>
         <Card.Description>
           You already have access to
           <strong>{inviteInfo.tenantName ?? "this site"}</strong>.
@@ -237,7 +237,7 @@
         >
           <UserPlus class="h-6 w-6 text-primary" />
         </div>
-        <Card.Title class="text-2xl font-bold">Accept Invite</Card.Title>
+        <Card.Title class="text-2xl font-bold">Accept invite</Card.Title>
         {#if viewer?.name}
           <Card.Description>
             You are signed in as <strong>{viewer.name}</strong>
@@ -263,7 +263,7 @@
                 Joining...
               {:else}
                 <UserPlus class="mr-2 h-5 w-5" />
-                Accept Invite
+                Accept invite
               {/if}
             </Button>
           {/if}

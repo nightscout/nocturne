@@ -226,17 +226,17 @@
           {:else if syncProgress?.phase === "Completed"}
             <Badge variant="success">
               <CheckCircle class="h-3 w-3 mr-1" />
-              Sync Complete
+              Sync complete
             </Badge>
           {:else if syncProgress?.phase === "Failed"}
             <Badge variant="destructive">
               <AlertCircle class="h-3 w-3 mr-1" />
-              Sync Failed
+              Sync failed
             </Badge>
           {:else if status === "backing-off"}
             <Badge variant="warning">
               <Clock class="h-3 w-3 mr-1" />
-              Backing Off
+              Backing off
             </Badge>
           {:else if status === "error"}
             <Badge variant="destructive">

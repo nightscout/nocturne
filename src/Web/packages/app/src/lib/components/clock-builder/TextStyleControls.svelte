@@ -44,7 +44,7 @@
 
 <Separator class="my-4" />
 <div class="space-y-4">
-  <h5 class="text-sm font-medium">Text Style</h5>
+  <h5 class="text-sm font-medium">Text style</h5>
 
   <div class="space-y-2">
     <Label>

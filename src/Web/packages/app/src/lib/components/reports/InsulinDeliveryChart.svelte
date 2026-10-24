@@ -71,7 +71,7 @@
         key: "scheduledBasal",
         value: (d) => d.scheduledBasal ?? 0,
         color: "var(--insulin-scheduled-basal)",
-        label: "Scheduled Basal",
+        label: "Scheduled basal",
         texture: "insulin-scheduled-basal",
       });
     if (hasTempBasalData)
@@ -79,7 +79,7 @@
         key: "tempBasal",
         value: (d) => d.tempBasal ?? 0,
         color: "var(--insulin-additional-basal)",
-        label: "Temp Basal",
+        label: "Temp basal",
         texture: "insulin-temp-basal",
       });
     if (basal.length === 0)
@@ -95,7 +95,7 @@
         key: "manualBolus",
         value: (d) => d.manualBolus ?? 0,
         color: "var(--insulin-bolus)",
-        label: "Manual Bolus",
+        label: "Manual bolus",
         texture: "insulin-bolus",
       },
     ];
@@ -104,7 +104,7 @@
         key: "automaticBolus",
         value: (d) => d.automaticBolus ?? 0,
         color: "var(--iob-temporary)",
-        label: "Automatic Bolus",
+        label: "Automatic bolus",
         texture: "insulin-automatic-bolus",
       });
     return [...basal, ...bolus];
@@ -121,7 +121,7 @@
             key: "basal",
             value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
             color: "var(--basal)",
-            label: "Basal Insulin",
+            label: "Basal insulin",
           },
         ]
   );
@@ -144,7 +144,7 @@
             format: formatHour,
           },
           yAxis: {
-            label: "Avg Insulin (U)",
+            label: "Avg insulin (U)",
           },
         }}
         padding={{ top: 20, right: 20, bottom: 40, left: 50 }}

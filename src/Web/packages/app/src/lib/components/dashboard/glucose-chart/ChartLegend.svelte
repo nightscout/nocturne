@@ -257,9 +257,9 @@
   class="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs @md:gap-4 @md:text-sm text-muted-foreground pt-2"
 >
   <!-- Glucose range indicators -->
-  {@render glucoseRangeIndicator("bg-glucose-in-range", "In Range", `${bg(lowThreshold, glucoseUnits)}–${bg(highThreshold, glucoseUnits)}`)}
+  {@render glucoseRangeIndicator("bg-glucose-in-range", "In range", `${bg(lowThreshold, glucoseUnits)}–${bg(highThreshold, glucoseUnits)}`)}
   {#if glucoseData.some((d) => d.sgv > veryHighThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-very-high", "Very High", `>${bg(veryHighThreshold, glucoseUnits)}`)}
+    {@render glucoseRangeIndicator("bg-glucose-very-high", "Very high", `>${bg(veryHighThreshold, glucoseUnits)}`)}
   {/if}
   {#if glucoseData.some((d) => d.sgv > highThreshold && d.sgv <= veryHighThreshold)}
     {@render glucoseRangeIndicator("bg-glucose-high", "High", `>${bg(highThreshold, glucoseUnits)}`)}
@@ -268,7 +268,7 @@
     {@render glucoseRangeIndicator("bg-glucose-low", "Low", `<${bg(lowThreshold, glucoseUnits)}`)}
   {/if}
   {#if glucoseData.some((d) => d.sgv < veryLowThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-very-low", "Very Low", `<${bg(veryLowThreshold, glucoseUnits)}`)}
+    {@render glucoseRangeIndicator("bg-glucose-very-low", "Very low", `<${bg(veryLowThreshold, glucoseUnits)}`)}
   {/if}
   {@render printKey(rangeLimitSwatch, `Range limits ${bg(lowThreshold, glucoseUnits)} / ${bg(highThreshold, glucoseUnits)}`)}
   {#if targetLabel}

@@ -48,9 +48,9 @@
   let platformFilter = $state<PlatformFilter>("all");
 
   const categoryLabels: Record<string, string> = {
-    [UploaderCategory.Cgm]: "CGM Apps",
-    [UploaderCategory.AidSystem]: "AID Systems",
-    [UploaderCategory.Uploader]: "General Uploaders",
+    [UploaderCategory.Cgm]: "CGM apps",
+    [UploaderCategory.AidSystem]: "AID systems",
+    [UploaderCategory.Uploader]: "General uploaders",
   };
 
   const categoryOrder = [UploaderCategory.Cgm, UploaderCategory.AidSystem, UploaderCategory.Uploader];
@@ -98,7 +98,7 @@
 </script>
 
 <div>
-  <h1 class="text-2xl font-bold tracking-tight">Connect a Data Source</h1>
+  <h1 class="text-2xl font-bold tracking-tight">Connect a data source</h1>
   <p class="text-muted-foreground">
     Choose a cloud service or phone app to start sending glucose and treatment data to Nocturne.
   </p>
@@ -125,7 +125,7 @@
       <div class="space-y-3">
         <h2 class="text-sm font-medium text-muted-foreground flex items-center gap-2">
           <Cloud class="h-4 w-4" />
-          Cloud Services
+          Cloud services
         </h2>
         <div class="grid gap-3 @xl:grid-cols-2">
           {#each connectors as connector (connector.id)}
@@ -172,7 +172,7 @@
         <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
           <h2 class="text-sm font-medium text-muted-foreground flex items-center gap-2">
             <Smartphone class="h-4 w-4" />
-            Phone Apps
+            Phone apps
           </h2>
           <div class="flex flex-wrap items-center gap-1 shrink-0">
             <Button

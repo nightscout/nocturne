@@ -10,10 +10,9 @@
     separate permission from a tenant's <strong>owner</strong> role, so being the owner
     of your instance is not enough on its own. Opening
     <code>/settings/admin</code> without it sends you back to <strong>Settings</strong>.
-    On a new install the permission goes to the owner of the first tenant, granted when
-    that owner finishes setting up their passkey or sign-in provider.
+    On a new install, the permission goes to the owner of the first tenant. It is granted when that owner finishes configuring their passkey or sign-in provider.
     <br /><br />
-    If you set your instance up on an earlier version, the grant only ran while the API
+    If you configured your instance on an earlier version, the grant only ran while the API
     was starting, so the owner never received it. Restart the Nocturne API container
     once and sign in again. That works as long as nobody currently holds the
     permission. If someone does, have them grant it to you from

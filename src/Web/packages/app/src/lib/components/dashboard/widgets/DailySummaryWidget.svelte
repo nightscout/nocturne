@@ -81,7 +81,7 @@
   });
 </script>
 
-<WidgetCard title="Today's Summary">
+<WidgetCard title="Today's summary">
   {#if !realtimeStore.currentReadingLoaded}
     <WidgetStatSkeleton shape="summary" />
   {:else if dailyStats}

@@ -60,7 +60,7 @@ describe("ConnectorConfigForm", () => {
 			},
 		});
 
-		await expect.element(page.getByText("Sync Glucose")).toBeVisible();
+		await expect.element(page.getByText("Sync glucose")).toBeVisible();
 		const toggle = page.getByRole("switch");
 		await expect.element(toggle).toBeVisible();
 	});

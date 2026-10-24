@@ -3,7 +3,7 @@
 extends: substitution
 message: "Write '%s' instead of '%s'. It is correct for touch and for a mouse."
 link: .claude/skills/simple-english/SKILL.md
-level: warning
+level: error
 ignorecase: true
 swap:
   click: select

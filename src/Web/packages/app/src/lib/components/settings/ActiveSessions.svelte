@@ -75,7 +75,7 @@
     } catch (err) {
       errorMessage = describeSubmitError(
         err,
-        "Failed to sign out the session. Please try again."
+        "Failed to sign out the session. Try again."
       );
       clearMessages();
     } finally {
@@ -94,7 +94,7 @@
     } catch (err) {
       errorMessage = describeSubmitError(
         err,
-        "Failed to sign out other sessions. Please try again."
+        "Failed to sign out other sessions. Try again."
       );
       clearMessages();
     } finally {

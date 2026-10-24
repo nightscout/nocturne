@@ -51,7 +51,7 @@
          Save button would appear to do nothing. The requirement is enforced by
          the guard's schema, which reports it on the field. -->
     <FormField
-      label="Diabetes Type"
+      label="Diabetes type"
       id="diabetes-type"
       required
       issues={clinical.guard.issuesFor("diabetesType")}
@@ -78,7 +78,7 @@
     </FormField>
 
     {#if clinical.diabetesType === DiabetesType.Other}
-      <FormField label="Specify Type" id="diabetes-type-other">
+      <FormField label="Specify type" id="diabetes-type-other">
         {#snippet control(field)}
           <Input
             {...field}
@@ -90,7 +90,7 @@
       </FormField>
     {/if}
 
-    <FormField label="Diagnosis Date" id="diagnosis-date">
+    <FormField label="Diagnosis date" id="diagnosis-date">
       {#snippet control(field)}
         <Input
           {...field}
@@ -102,7 +102,7 @@
       {/snippet}
     </FormField>
 
-    <FormField label="Date of Birth" id="date-of-birth">
+    <FormField label="Date of birth" id="date-of-birth">
       {#snippet control(field)}
         <Input
           {...field}
@@ -136,7 +136,7 @@
       {/snippet}
     </FormField>
 
-    <FormField label="Preferred Name" id="preferred-name">
+    <FormField label="Preferred name" id="preferred-name">
       {#snippet control(field)}
         <Input
           {...field}

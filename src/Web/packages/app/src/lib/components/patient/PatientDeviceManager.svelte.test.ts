@@ -88,7 +88,7 @@ describe("PatientDeviceManager", () => {
     ];
     render(PatientDeviceManager, { variant: "dialog" });
 
-    await page.getByRole("button", { name: "Add Device" }).click();
+    await page.getByRole("button", { name: "Add device" }).click();
     await page.getByRole("combobox", { name: "Device" }).click();
     await page.getByPlaceholder("Search or type a device name...").fill("g7");
 
@@ -109,7 +109,7 @@ describe("PatientDeviceManager", () => {
     ];
     render(PatientDeviceManager, { variant: "dialog" });
 
-    await page.getByRole("button", { name: "Add Device" }).click();
+    await page.getByRole("button", { name: "Add device" }).click();
     await page.getByRole("combobox", { name: "Device" }).click();
     await expect.element(page.getByRole("option", { name: /Custom Pump/ })).not.toBeInTheDocument();
 

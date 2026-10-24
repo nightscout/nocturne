@@ -25,7 +25,7 @@
   }
 </script>
 
-<WidgetCard title="Total Daily Dose">
+<WidgetCard title="Total daily dose">
   {#snippet subtitleSnippet()}
     <Button
       variant="ghost-muted"
@@ -109,7 +109,7 @@
     {:catch err}
       <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
         <p class="text-xs">Failed to load data</p>
-        <p class="text-xs text-destructive">{remoteErrorMessage(err, "Please try again.")}</p>
+        <p class="text-xs text-destructive">{remoteErrorMessage(err, "Try again.")}</p>
       </div>
     {/await}
   {/if}

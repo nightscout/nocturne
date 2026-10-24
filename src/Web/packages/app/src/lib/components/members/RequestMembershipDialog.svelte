@@ -34,7 +34,7 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="max-w-md" data-testid="request-membership-dialog">
     <Dialog.Header>
-      <Dialog.Title>Request Membership</Dialog.Title>
+      <Dialog.Title>Request membership</Dialog.Title>
       <Dialog.Description>
         Introduce yourself to the site owner so they know who you are.
       </Dialog.Description>
@@ -52,7 +52,7 @@
     </div>
     <Dialog.Footer>
       <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
-      <Button onclick={handleSubmit}>Continue to Sign Up</Button>
+      <Button onclick={handleSubmit}>Continue to sign up</Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

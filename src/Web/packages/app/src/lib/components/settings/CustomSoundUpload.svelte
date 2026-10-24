@@ -173,7 +173,7 @@
 <div class="space-y-4">
   <div class="flex items-center justify-between">
     <div>
-      <Label size="lg">Custom Sounds</Label>
+      <Label size="lg">Custom sounds</Label>
       <p class="text-sm text-muted-foreground">
         Upload your own alarm sounds ({FORMATS}, up to {MAX_CUSTOM_SOUND_SIZE_MB} MB)
       </p>
@@ -184,13 +184,13 @@
         {#snippet child({ props }: { props: Record<string, unknown> })}
           <Button variant="outline" size="sm" {...props}>
             <Upload class="h-4 w-4 mr-2" />
-            Upload Sound
+            Upload sound
           </Button>
         {/snippet}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Upload Custom Sound</DialogTitle>
+          <DialogTitle>Upload custom sound</DialogTitle>
           <DialogDescription>
             Upload an audio file to use as a custom alarm sound.
           </DialogDescription>
@@ -207,7 +207,7 @@
           {/if}
 
           <div class="space-y-2">
-            <Label for="audio-file">Audio File</Label>
+            <Label for="audio-file">Audio file</Label>
             <div class="flex items-center gap-2">
               <Input
                 id="audio-file"
@@ -227,11 +227,11 @@
           </div>
 
           <div class="space-y-2">
-            <Label for="sound-name">Display Name</Label>
+            <Label for="sound-name">Display name</Label>
             <Input
               id="sound-name"
               type="text"
-              placeholder="My Custom Alarm"
+              placeholder="My custom alarm"
               bind:value={customName}
             />
             <p class="text-xs text-muted-foreground">
@@ -272,7 +272,7 @@
     >
       <Music class="h-8 w-8 mb-2 opacity-50" />
       <p class="text-sm">No custom sounds uploaded yet</p>
-      <p class="text-xs">Click "Upload Sound" to add your own</p>
+      <p class="text-xs">Select "Upload sound" to add your own</p>
     </div>
   {:else}
     <div class="space-y-2">

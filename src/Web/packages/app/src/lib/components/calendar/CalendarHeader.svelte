@@ -103,7 +103,7 @@
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
         <div class="flex items-center gap-1.5">
           <div class="h-3 w-3 rounded bg-glucose-very-high"></div>
-          <span class="text-sm">Very High</span>
+          <span class="text-sm">Very high</span>
         </div>
         <div class="flex items-center gap-1.5">
           <div class="h-3 w-3 rounded bg-glucose-high"></div>
@@ -111,7 +111,7 @@
         </div>
         <div class="flex items-center gap-1.5">
           <div class="h-3 w-3 rounded bg-glucose-in-range"></div>
-          <span class="text-sm">In Range</span>
+          <span class="text-sm">In range</span>
         </div>
         <div class="flex items-center gap-1.5">
           <div class="h-3 w-3 rounded bg-glucose-low"></div>
@@ -119,7 +119,7 @@
         </div>
         <div class="flex items-center gap-1.5">
           <div class="h-3 w-3 rounded bg-glucose-very-low"></div>
-          <span class="text-sm">Very Low</span>
+          <span class="text-sm">Very low</span>
         </div>
       </div>
 
@@ -135,7 +135,7 @@
       {/if}
     </div>
     <div class="hidden @xl:block text-sm text-muted-foreground">
-      Click any day to view detailed report
+      Select any day to view detailed report
     </div>
   </div>
 </div>

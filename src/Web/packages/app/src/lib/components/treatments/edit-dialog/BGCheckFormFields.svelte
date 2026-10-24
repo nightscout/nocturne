@@ -34,7 +34,7 @@
 
 <div class="grid grid-cols-2 gap-4">
   <div class="space-y-2">
-    <Label>Glucose Type</Label>
+    <Label>Glucose type</Label>
     <Select.Root
       type="single"
       value={form.glucoseType ?? ""}

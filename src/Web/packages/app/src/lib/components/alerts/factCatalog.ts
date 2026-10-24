@@ -96,7 +96,7 @@ export const LEAF_FACTS: readonly FactDef[] = [
 	// Behaviour
 	{ kind: "pump_suspended", label: "Pump suspended", description: "Pump suspension state", group: "behaviour", icon: "pause-circle" },
 	{ kind: "override_active", label: "Override active", description: "An override profile is active", group: "behaviour", icon: "wand-2" },
-	{ kind: "do_not_disturb", label: "Do Not Disturb", description: "Tenant DND state (manual or scheduled)", group: "behaviour", icon: "bell-off" },
+	{ kind: "do_not_disturb", label: "Do not disturb", description: "Tenant DND state (manual or scheduled)", group: "behaviour", icon: "bell-off" },
 	{ kind: "pump_state", label: "Pump mode", description: "Pump operational mode (Automatic, Manual, Boost, …)", group: "behaviour", icon: "activity" },
 
 	// State spans
