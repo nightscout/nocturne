@@ -58,12 +58,6 @@ public class AlertRulesControllerDisableTests
 
         var validator = new Mock<IAlertRuleConditionValidator>();
         validator
-            .Setup(v => v.ValidateUpdate(
-                It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<StoredConditionTrees>()))
-            .Returns((AlertConditionType _, string body, bool _, string? autoResolve, string? client, StoredConditionTrees _) =>
-                new ConditionUpdateCheck([], body, autoResolve, client, []));
-        validator
             .Setup(v => v.Validate(
                 It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([]);

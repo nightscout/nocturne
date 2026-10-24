@@ -33,18 +33,12 @@ pub struct Rule {
 }
 
 impl Rule {
-    /// The body as the full node `{"type": <wire>, "<wire>": <payload>}`,
-    /// parsed and checked for evaluability (engine-semantics.md §1.4). A JSON
-    /// `null` body has no payload property, and its root evaluates false.
+    /// The body as the node `{"type": <wire>, "<wire>": <payload>}`.
     ///
     /// # Errors
-    /// The body cannot be evaluated.
+    /// The body cannot be evaluated (engine-semantics.md §1.4).
     pub fn parse_body(&self) -> ParseResult<Node> {
-        let payload = match &self.condition_params {
-            Value::Null => None,
-            v => Some(parse_payload(self.condition_type, v)?),
-        };
-        Ok(Node::from_rule(self.condition_type, payload))
+        parse_payload(self.condition_type, &self.condition_params).map(Node::from)
     }
 
     /// The auto-resolve tree when it is present, not `null` and evaluable.
@@ -314,9 +308,7 @@ pub(crate) fn evaluate_body(
 ) -> BodyOutcome {
     let wire = rule.condition_type.name();
     let mut env = Env::new(now, rule.id, ctx, timers);
-    let root = body
-        .payload(rule.condition_type)
-        .is_some_and(|p| eval_payload(p, wire, &mut env));
+    let root = eval_payload(body.payload(), wire, &mut env);
 
     // Leaves evaluate alone, at the rule's root path;
     // a leaf touches no timers.
@@ -367,5 +359,5 @@ pub(crate) fn auto_resolve_holds(
         return false;
     };
     let mut env = Env::new(now, rule_id, ctx, timers);
-    eval_node(Some(tree), AUTO_RESOLVE_ROOT, &mut env)
+    eval_node(tree, AUTO_RESOLVE_ROOT, &mut env)
 }

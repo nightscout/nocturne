@@ -78,7 +78,7 @@ public class AlertReferenceServiceTests
         var target = await SeedRuleAsync(AlertConditionType.Threshold,
             new ThresholdCondition("below", 70m));
         var referencingId = await SeedRuleAsync(AlertConditionType.AlertState,
-            new AlertStateCondition(target, "active", null));
+            new AlertStateCondition(target, "firing", null));
 
         var refs = await _sut.FindReferencingRulesAsync(target, CancellationToken.None);
 
@@ -93,7 +93,7 @@ public class AlertReferenceServiceTests
         var nested = new CompositeCondition("and", new List<ConditionNode>
         {
             new("threshold", Threshold: new ThresholdCondition("above", 250m)),
-            new("alert_state", AlertState: new AlertStateCondition(target, "active", null)),
+            new("alert_state", AlertState: new AlertStateCondition(target, "firing", null)),
         });
         var referencingId = await SeedRuleAsync(AlertConditionType.Composite, nested);
 
@@ -131,7 +131,7 @@ public class AlertReferenceServiceTests
         // ruleA -> ruleB -> ruleA  (we're updating ruleA's tree to reference ruleB)
         var ruleA = Guid.NewGuid();
         var ruleB = await SeedRuleAsync(AlertConditionType.AlertState,
-            new AlertStateCondition(ruleA, "active", null));
+            new AlertStateCondition(ruleA, "firing", null));
 
         var cycle = await _sut.DetectCycleAsync(ruleA, [ruleB], CancellationToken.None);
 
@@ -146,7 +146,7 @@ public class AlertReferenceServiceTests
         var ruleC = await SeedRuleAsync(AlertConditionType.Threshold,
             new ThresholdCondition("below", 70m));
         var ruleB = await SeedRuleAsync(AlertConditionType.AlertState,
-            new AlertStateCondition(ruleC, "active", null));
+            new AlertStateCondition(ruleC, "firing", null));
 
         var cycle = await _sut.DetectCycleAsync(ruleA, [ruleB], CancellationToken.None);
 

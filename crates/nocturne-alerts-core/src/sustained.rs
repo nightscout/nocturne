@@ -110,20 +110,12 @@ impl TimerStore {
     }
 }
 
-/// A missing child or `minutes <= 0` is false, with the child unevaluated and
-/// the timer untouched. Otherwise the child evaluates first: false clears the
-/// timer keyed by this node's path; the first true sets it and is false; later
-/// trues hold once `minutes` fractional minutes have passed since it was set.
+/// The child evaluates first: false clears the timer keyed by this node's
+/// path; the first true sets it and is false; later trues hold once `minutes`
+/// fractional minutes have passed since it was set.
 pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) -> bool {
-    let Some(child) = &p.child else {
-        return false;
-    };
-    if p.minutes <= 0 {
-        return false;
-    }
-
     let now = env.now;
-    let child_result = eval_node(Some(child), &node_child_path(path, 0, Some(child)), env);
+    let child_result = eval_node(&p.child, &node_child_path(path, 0, &p.child), env);
 
     if !child_result {
         env.timers.clear(env.rule_id, path);
@@ -135,6 +127,6 @@ pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) ->
             env.timers.set_first_true(env.rule_id, path, now);
             false
         }
-        Some(first) => env.held_for(first, p.minutes),
+        Some(first) => env.held_for(first, p.minutes.get()),
     }
 }

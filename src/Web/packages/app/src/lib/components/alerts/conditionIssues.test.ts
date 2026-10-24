@@ -19,9 +19,9 @@ describe("conditionIssuesMessage", () => {
 		expect(
 			conditionIssuesMessage(
 				rejected(400, [
-					issue("conditions_empty"),
+					issue("list_empty", "conditions"),
 					issue("minutes_not_positive", "minutes"),
-					issue("conditions_empty"),
+					issue("list_empty", "conditions"),
 				])
 			)
 		).toBe(
@@ -43,11 +43,18 @@ describe("conditionIssuesMessage", () => {
 		).toBe("Part of this rule's conditions is malformed, so it can't be saved.");
 	});
 
-	it("has a sentence for every save-only reason the engine reports", () => {
+	it("has a sentence for every reason the engine reports", () => {
 		for (const [reason, field] of [
 			["unknown_field", undefined],
 			["field_missing", "value"],
+			["field_missing", "operator"],
+			["field_missing", "direction"],
+			["field_missing", "state"],
+			["field_missing", "child"],
 			["unknown_value", "bucket"],
+			["unknown_value", "operator"],
+			["unknown_value", "mode"],
+			["list_empty", "conditions"],
 			["invalid_time", "from"],
 			["empty_window", undefined],
 			["list_empty", "days"],

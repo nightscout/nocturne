@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "unevaluable-null-leaf-payload",
-  "description": "a leaf whose payload property is an explicit null reads as an absent payload, so a threshold without a direction skips the rule",
+  "description": "a leaf whose payload property is an explicit null has no payload, which cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

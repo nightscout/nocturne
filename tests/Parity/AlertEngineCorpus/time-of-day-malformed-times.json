@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "time-of-day-malformed-times",
-  "description": "unparseable from/to strings (not exact HH:mm) evaluate false",
+  "description": "from/to strings that are not exactly HH:mm cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

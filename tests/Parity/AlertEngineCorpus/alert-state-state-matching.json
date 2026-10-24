@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "alert-state-state-matching",
-  "description": "firing matches state == firing; unacknowledged additionally requires a null AcknowledgedAt; acknowledged only requires a non-null AcknowledgedAt; missing snapshot and unknown state are false",
+  "description": "firing matches state == firing; unacknowledged additionally requires a null AcknowledgedAt; acknowledged only requires a non-null AcknowledgedAt; a missing snapshot is false; an unknown state cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

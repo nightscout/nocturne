@@ -54,18 +54,7 @@
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000004",
-          "root": false,
-          "leaves": [
-            {
-              "leaf_id": 0,
-              "value": false
-            }
-          ],
-          "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
+          "skipped": true
         }
       ]
     },
@@ -123,18 +112,7 @@
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000004",
-          "root": false,
-          "leaves": [
-            {
-              "leaf_id": 0,
-              "value": false
-            }
-          ],
-          "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
+          "skipped": true
         }
       ]
     },
@@ -193,18 +171,7 @@
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000004",
-          "root": false,
-          "leaves": [
-            {
-              "leaf_id": 0,
-              "value": false
-            }
-          ],
-          "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
+          "skipped": true
         }
       ]
     }

@@ -256,7 +256,7 @@ public static partial class RustAlertEngine
     /// <summary>
     /// Every problem saving the rule's condition trees should reject, each with its scope,
     /// condition path and reason code, in <see cref="RustValidateResponse.Issues"/>; empty when
-    /// the rule is valid. For an edit, also what was stripped (<see cref="RustValidateRequest.Stored"/>).
+    /// the rule is valid.
     /// </summary>
     /// <exception cref="RustAlertEngineException">
     /// The engine rejected the request (<c>ok: false</c>, a malformed envelope) or returned an
@@ -268,7 +268,6 @@ public static partial class RustAlertEngine
 
         var response = ParseResponse<RustValidateResponse>(AlertsInterop.Validate(Serialize(request)), "validate");
         Require(response.Issues is not null, "validate", "issues");
-        Require(request.Stored is null || response.Stripped is not null, "validate", "stripped");
         return response;
     }
 

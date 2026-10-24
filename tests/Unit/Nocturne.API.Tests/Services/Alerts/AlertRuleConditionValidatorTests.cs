@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
@@ -23,17 +22,17 @@ public class AlertRuleConditionValidatorTests
             """{"operator":"and","conditions":[{"type":"threshold","threshold":{"value":70}}]}""",
             false, null, null);
 
-        issues.Should().Equal(new RustValidationIssue("condition", "composite[0].threshold", "direction_missing", "direction"));
+        issues.Should().Equal(new RustValidationIssue("condition", "composite[0].threshold", "field_missing", "direction"));
     }
 
     [NativeFact]
     public void Rejects_an_auto_resolve_tree_that_cannot_be_evaluated_only_while_enabled()
     {
-        const string autoResolve = """{"type":"composite","composite":{"conditions":[{"type":"trend"}]}}""";
+        const string autoResolve = """{"type":"composite","composite":{"conditions":[{"type":"trend","trend":{}}]}}""";
 
         new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"direction":"below","value":70}""", true, autoResolve, null)
             .Should().Equal(
-                new RustValidationIssue("auto_resolve", "auto_resolve", "operator_missing", "operator"),
+                new RustValidationIssue("auto_resolve", "auto_resolve", "field_missing", "operator"),
                 new RustValidationIssue("auto_resolve", "auto_resolve[0].trend", "field_missing", "bucket"));
         new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"direction":"below","value":70}""", false, autoResolve, null)
             .Should().BeEmpty();
@@ -43,9 +42,26 @@ public class AlertRuleConditionValidatorTests
     public void Rejects_smart_snooze_conditions_only_when_smart_snooze_is_on()
     {
         new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"direction":"below","value":70}""", false, null, SmartSnoozeOn)
-            .Should().Equal(new RustValidationIssue("snooze", "snooze[0].threshold", "direction_missing", "direction"));
+            .Should().Equal(new RustValidationIssue("snooze", "snooze[0].threshold", "field_missing", "direction"));
         new AlertRuleConditionValidator().Validate(AlertConditionType.Threshold, """{"direction":"below","value":70}""", false, null, SmartSnoozeOff)
             .Should().BeEmpty();
+    }
+
+    [NativeTheory]
+    [InlineData("""{"snooze":{"smartSnooze":true,"conditions":"oops"}}""", true)]
+    [InlineData("""{"snooze":{"smartSnooze":true,"conditions":{}}}""", true)]
+    [InlineData("""{"snooze":{"smartSnooze":true,"conditions":null}}""", false)]
+    [InlineData("""{"snooze":{"smartSnooze":true,"conditions":[]}}""", false)]
+    [InlineData("""{"snooze":{"smartSnooze":false,"conditions":"oops"}}""", false)]
+    public void Rejects_smart_snooze_conditions_the_sweep_cannot_read(string clientConfiguration, bool rejected)
+    {
+        var issues = new AlertRuleConditionValidator().Validate(
+            AlertConditionType.Threshold, """{"direction":"below","value":70}""", false, null, clientConfiguration);
+
+        if (rejected)
+            issues.Should().Equal(new RustValidationIssue("snooze", "snooze", "invalid_field", "conditions"));
+        else
+            issues.Should().BeEmpty();
     }
 
     [NativeTheory]
@@ -99,56 +115,5 @@ public class AlertRuleConditionValidatorTests
     {
         new AlertRuleConditionValidator().Validate(type, body, autoResolveEnabled, autoResolve, clientConfiguration)
             .Should().Equal(expected);
-    }
-
-    private const string LegacyLow = """{"direction":"below","value":70,"legacyLabel":"Low"}""";
-
-    private static StoredConditionTrees Stored(
-        string conditionParams, string? autoResolve = null, string clientConfiguration = "{}") =>
-        new(AlertConditionType.Threshold, conditionParams, autoResolve, clientConfiguration);
-
-    [NativeFact]
-    public void An_edit_strips_an_unknown_property_the_stored_rule_already_had()
-    {
-        var check = new AlertRuleConditionValidator().ValidateUpdate(
-            AlertConditionType.Threshold, """{"direction":"below","value":65,"legacyLabel":"Low"}""", false, null, "{}",
-            Stored(LegacyLow));
-
-        check.Issues.Should().BeEmpty();
-        check.Stripped.Should().Equal(new RustStrippedField("condition", "threshold", "legacyLabel"));
-        check.ConditionParams.Should().Be("""{"direction":"below","value":65}""");
-    }
-
-    [NativeFact]
-    public void An_edit_still_rejects_an_unknown_property_the_stored_rule_did_not_have()
-    {
-        var check = new AlertRuleConditionValidator().ValidateUpdate(
-            AlertConditionType.SignalLoss, """{"timeoutMinutes":20}""", false, null, "{}",
-            new StoredConditionTrees(AlertConditionType.SignalLoss, """{"timeout_minutes":20}""", null, "{}"));
-
-        check.Issues.Should().Contain(new RustValidationIssue("condition", "signal_loss", "unknown_field", null));
-        check.Stripped.Should().BeEmpty();
-    }
-
-    [NativeFact]
-    public void An_edit_strips_stored_unknown_properties_from_the_auto_resolve_tree_and_snooze_conditions()
-    {
-        const string autoResolve = """{"type":"threshold","note":"x","threshold":{"direction":"above","value":90}}""";
-        const string snooze = """{"snooze":{"smartSnooze":true,"maxCount":2,"conditions":[{"type":"iob","iob":{"operator":">","value":1,"units":"U"}}]}}""";
-        const string snoozeOff = """{"snooze":{"smartSnooze":false,"conditions":[{"type":"iob","iob":{"operator":">","value":2,"units":"U"}}]}}""";
-
-        var check = new AlertRuleConditionValidator().ValidateUpdate(
-            AlertConditionType.Threshold, """{"direction":"below","value":70}""", true, autoResolve, snooze,
-            Stored("""{"direction":"below","value":70}""", autoResolve, snoozeOff));
-
-        check.Issues.Should().BeEmpty();
-        check.Stripped.Should().Equal(
-            new RustStrippedField("auto_resolve", "auto_resolve", "note"),
-            new RustStrippedField("snooze", "snooze[0].iob", "units"));
-        check.AutoResolveParams.Should().Be("""{"type":"threshold","threshold":{"direction":"above","value":90}}""");
-        JsonNode.DeepEquals(
-                JsonNode.Parse(check.ClientConfiguration!),
-                JsonNode.Parse("""{"snooze":{"smartSnooze":true,"maxCount":2,"conditions":[{"type":"iob","iob":{"operator":">","value":1}}]}}"""))
-            .Should().BeTrue(check.ClientConfiguration);
     }
 }

@@ -789,16 +789,11 @@ fn leaf_paths_honours_root_override() {
 }
 
 #[test]
-fn leaf_paths_treats_container_with_missing_child_as_leaf() {
-    // A sustained node without a child fails the container guard and IS a
-    // leaf (LeafIdentity anomaly — normative).
+fn leaf_paths_rejects_a_node_that_cannot_be_evaluated() {
     let node = json!({ "type": "sustained", "sustained": { "minutes": 10 } });
-    let response = call_json(nocturne_alerts_leaf_paths, &node.to_string());
-    assert_eq!(response["ok"], Value::Bool(true));
-    assert_eq!(response["paths"], json!(["sustained"]));
-    assert_eq!(
-        response["leaves"],
-        json!([{ "leaf_id": 0, "path": "sustained" }])
+    assert_error(
+        &call_json(nocturne_alerts_leaf_paths, &node.to_string()),
+        "malformed condition node: field_missing at 'sustained' (field 'child')",
     );
 }
 
@@ -1233,8 +1228,15 @@ fn describe_signal_loss_is_a_leaf_with_its_timeout() {
 }
 
 #[test]
-fn describe_a_body_that_does_not_parse_is_null() {
+fn describe_a_body_that_cannot_be_evaluated_is_null() {
+    let low = json!({ "type": "threshold", "threshold": { "direction": "below", "value": 70 } });
     for (kind, params) in [
+        (
+            "composite",
+            json!({ "operator": "or", "conditions": [low, null] }),
+        ),
+        ("not", json!({})),
+        ("threshold", Value::Null),
         (
             "composite",
             json!({ "operator": "and", "conditions": "nope" }),
@@ -1244,23 +1246,6 @@ fn describe_a_body_that_does_not_parse_is_null() {
     ] {
         assert_eq!(describe_rule(kind, params), Value::Null, "{kind}");
     }
-}
-
-#[test]
-fn describe_null_composite_slot_is_a_typeless_leaf() {
-    let params = json!({
-        "operator": "or",
-        "conditions": [
-            { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
-            null
-        ]
-    });
-    let tree = describe_rule("composite", params);
-    let conds = tree["conditions"].as_array().unwrap();
-    assert_eq!(conds[0]["leaf_id"], json!(0));
-    assert_eq!(conds[1]["leaf_id"], json!(1));
-    assert_eq!(conds[1]["type"], Value::Null);
-    assert_eq!(conds[1]["kind"], Value::Null);
 }
 
 #[test]
@@ -1358,13 +1343,6 @@ fn describe_not_unwraps_to_its_child() {
     );
     assert_eq!(tree["child"]["leaf_id"], json!(0));
     assert_eq!(tree["child"]["kind"], json!("threshold"));
-}
-
-#[test]
-fn describe_not_without_a_child_collapses_to_a_leaf() {
-    let tree = describe_rule("not", json!({}));
-    assert_eq!(tree["leaf_id"], json!(0));
-    assert_eq!(tree["kind"], json!("not"));
 }
 
 #[test]

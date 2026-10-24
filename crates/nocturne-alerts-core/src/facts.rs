@@ -102,7 +102,7 @@ impl<'a> RuleConditions<'a> {
         };
         let body = parse_payload(root, self.condition_params)
             .ok()
-            .map(|payload| Node::from_rule(root, Some(payload)));
+            .map(Node::from);
         let auto_resolve = self
             .auto_resolve_enabled
             .then(|| parse_auto_resolve(self.auto_resolve_params))
@@ -127,11 +127,7 @@ impl<'a> From<&'a WireRule> for RuleConditions<'a> {
 }
 
 fn leaf_kinds(tree: &Node) -> Vec<ConditionKind> {
-    collect_leaves(tree)
-        .into_iter()
-        .flatten()
-        .filter_map(|leaf| leaf.type_str.as_deref().and_then(ConditionKind::from_wire))
-        .collect()
+    collect_leaves(tree).into_iter().map(Node::kind).collect()
 }
 
 /// Every fact any kind of `rule` ([`RuleConditions`]) reads, once each, in
@@ -314,12 +310,12 @@ mod tests {
     }
 
     #[test]
-    fn a_container_without_its_payload_reads_nothing() {
+    fn a_container_without_its_payload_makes_the_body_unevaluable() {
         let tree = json!({
             "operator": "or",
             "conditions": [ { "type": "not" }, { "type": "sustained" } ]
         });
-        assert!(parse_payload(ConditionKind::Composite, &tree).is_ok());
+        assert!(parse_payload(ConditionKind::Composite, &tree).is_err());
         let rule = RuleConditions::body("composite", &tree);
         assert!(rule_reads(&rule).is_empty());
         assert!(!references_wall_clock(&rule));
@@ -518,12 +514,13 @@ mod tests {
     }
 
     /// A payload that is true in `context(reads(kind))` and false in
-    /// `context(&[])`; a container's default payload.
+    /// `context(&[])`; for a container, one over a `threshold`.
     fn sample(kind: ConditionKind) -> Payload {
+        let low = json!({"type": "threshold", "threshold": {"direction": "below", "value": 70}});
         let params = match kind {
-            ConditionKind::Composite | ConditionKind::Not | ConditionKind::Sustained => {
-                return Payload::default_for(kind);
-            }
+            ConditionKind::Composite => json!({"operator": "and", "conditions": [low]}),
+            ConditionKind::Not => json!({"child": low}),
+            ConditionKind::Sustained => json!({"minutes": 5, "child": low}),
             ConditionKind::Threshold => json!({"direction": "below", "value": 70}),
             ConditionKind::RateOfChange => json!({"direction": "falling", "rate": 2}),
             ConditionKind::SignalLoss => json!({"timeout_minutes": 15}),
@@ -594,8 +591,8 @@ mod tests {
     }
 
     #[test]
-    fn no_kind_moves_with_a_fact_it_does_not_read() {
-        for &kind in ConditionKind::ALL {
+    fn no_leaf_kind_moves_with_a_fact_it_does_not_read() {
+        for &kind in ConditionKind::ALL.iter().filter(|&&k| !is_container(k)) {
             let own = reads(kind);
             let others: Vec<ContextFact> = ContextFact::ALL
                 .iter()

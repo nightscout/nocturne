@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "spellings-not-exact",
-  "description": "a property name, enum value or zone id is read only when it is exactly its one spelling: another case, an ordinal or a Windows-style id reads as nothing; the canonical control rule fires",
+  "description": "a property name, enum value or zone id is read only when it is exactly its one spelling: another case, an ordinal or a Windows-style id cannot be evaluated, so its rule is skipped; the canonical control rule fires",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

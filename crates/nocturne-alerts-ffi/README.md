@@ -78,7 +78,7 @@ preserves sub-second precision when present.
   "rule": {                                 // ScenarioRule corpus shape
     "id": "00000000-0000-0000-0000-000000000001",
     "condition_type": "sustained",          // canonical wire string
-    "condition_params": { /* payload */ },  // payload object as stored; null allowed
+    "condition_params": { /* payload */ },  // payload object as stored
     "confirmation_readings": 1,             // default 1
     "hysteresis_minutes": 0,                // default 0
     "auto_resolve_enabled": false,          // default false
@@ -189,7 +189,7 @@ auto-resolve (`root: "auto_resolve"`).
   "rule_id": "00000000-0000-0000-0000-000000000001", // keys sustained timers
   "node": { "type": "composite", "composite": { /* … */ } }, // full ConditionNode
   "root": "snooze",                         // optional root path segment;
-                                            // defaults to the node's verbatim type
+                                            // defaults to the node's type
   "context": { /* ScenarioContext corpus shape */ },
   "now": "2026-01-05T12:00:00Z",
   "timers": {                               // optional; default {}
@@ -212,9 +212,9 @@ auto-resolve (`root: "auto_resolve"`).
 }
 ```
 
-A missing leaf payload evaluates its defaults. A `node` that is malformed, or that cannot be evaluated (`docs/alerts/engine-semantics.md`
-§1.4, with paths under `root`), is an envelope error (`ok: false`), which a
-host treats as `false`. Timers are keyed by
+A `node` that cannot be evaluated (`docs/alerts/engine-semantics.md` §1.4,
+with paths under `root`) is an envelope error (`ok: false`) naming every
+problem, which a host treats as `false`. Timers are keyed by
 the same `(rule_id, path)` identity as `evaluate`; sharing rows between the
 per-reading and sweep variants of a scope is intentional (see
 `docs/alerts/engine-semantics.md` §2.3).
@@ -222,12 +222,13 @@ per-reading and sweep variants of a scope is intentional (see
 ## Leaf paths (`nocturne_alerts_leaf_paths`)
 
 For hosts that prune stale timers: given a condition tree, returns the
-condition path of every node slot and each leaf's path by leaf id
-(`docs/alerts/engine-semantics.md` §2.2–2.3).
+condition path of every node and each leaf's path by leaf id
+(`docs/alerts/engine-semantics.md` §2.2–2.3). A tree that cannot be evaluated
+is an envelope error.
 
 Input is either a full condition node, or a wrapper naming the root path
-segment (default: the node's `type` as written; pass `"auto_resolve"` for
-auto-resolve trees):
+segment (default: the node's `type`; pass `"auto_resolve"` for auto-resolve
+trees):
 
 ```jsonc
 { "type": "composite", "composite": { … } }
@@ -403,7 +404,7 @@ Response — a recursive `tree`:
   "tree": {
     "type": "composite",
     "path": "composite",
-    "operator": "and",                       // and | or (null if unset)
+    "operator": "and",                       // and | or
     "conditions": [
       { "leaf_id": 0, "path": "composite[0].threshold",
         "type": "threshold", "kind": "threshold",
@@ -423,18 +424,16 @@ Response — a recursive `tree`:
   persisted first-true instant for a "11 of 15 min" countdown.
 - **Containers** (`composite`, `not`, `sustained`) carry structure only —
   `operator` / `minutes` / nested `conditions`/`child` — and **no `leaf_id`**.
-- **Leaves** carry `leaf_id`, the verbatim `type`, the resolved canonical
-  `kind` (or `null` for an unknown/`null` slot), and decoded `params`.
+- **Leaves** carry `leaf_id`, `type` and `kind` (both the kind's wire name),
+  and decoded `params`.
 - **Leaf ids match `evaluate` exactly.** Both number the same node's leaves in
-  the same pre-order walk, so a malformed container
-  (missing `child`/`conditions`) collapses to a single leaf and a JSON-`null`
-  composite slot is a typeless leaf — identical to the force-eval log.
+  the same pre-order walk.
 - **Operands are rendered as read:** enum operands by wire name; decimal
   operands round-trip **exactly** (the crate's `serde_json` uses
   `arbitrary_precision`).
 - Like `evaluate`, an **unknown `condition_type`** (or a malformed envelope /
-  wrong `schema_version`) is an error envelope. A body that does not parse is
-  not: its `tree` is `null`.
+  wrong `schema_version`) is an error envelope. A body that cannot be evaluated
+  is not: its `tree` is `null`.
 - **Auto-resolve tree.** A request may also carry `auto_resolve_params`, a full
   condition node as a rule stores it. The response then has
   `auto_resolve_tree`, described the same way with paths under the
@@ -447,12 +446,11 @@ Response — a recursive `tree`:
 
 ## Validate (`nocturne_alerts_validate`)
 
-The save-time check of a rule's condition trees: everything
-`docs/alerts/engine-semantics.md` §1.4 rejects, both the shapes that cannot be
-evaluated (unknown kinds among them) and the ones that evaluate but can never
-mean what was written (unrecognised operators, empty groups, …). Hosts call it before
-storing a rule and refuse the save when `valid` is false; the backend does so in
-`AlertRulesController` (a 400).
+The save-time check of a rule's condition trees: every problem that keeps a
+tree from being evaluated (`docs/alerts/engine-semantics.md` §1.4). Hosts call
+it before storing a rule and refuse the save when `valid` is false; the backend
+does so in `AlertRulesController` (a 400), and shows a stored rule's problems
+in the rule editor.
 
 Request:
 
@@ -462,28 +460,13 @@ Request:
   "condition_type": "composite",                     // wire name, checked exactly
   "condition_params": { "operator": "and", "conditions": [ /* … */ ] },
   "auto_resolve_params": { "type": "threshold", /* … */ },  // optional; null/absent = not checked
-  "snooze_conditions": [ /* ConditionNode, … */ ],   // optional; checked as composite{and}
-  "stored": {                                        // optional; the rule being edited, as stored
-    "condition_type": "composite",
-    "condition_params": { /* … */ },
-    "auto_resolve_params": null,                     // every tree it holds, evaluated or not
-    "snooze_conditions": null
-  }
+  "snooze_conditions": [ /* ConditionNode, … */ ]    // optional; checked as composite{and}
 }
 ```
 
 Pass `auto_resolve_params` only when auto-resolve is enabled, and
 `snooze_conditions` only when smart snooze is on — the trees the rule actually
 evaluates. An empty `snooze_conditions` list is valid (the trend fallback).
-
-`stored` makes the request an edit. A property that would be `unknown_field`
-and that the stored tree of the same scope already has, at the same condition
-path, in the same object and under the same name, is removed from the request
-tree instead of reported: neither engine reads it, so removing it cannot change
-what the rule does, and the rule editor sends back whatever it loaded. Rules
-stored before the check (the alerts-redesign migration copied legacy payloads
-verbatim) stay editable. A property the stored rule does not have is still
-reported, so a new misspelling is not dropped silently.
 
 Response:
 
@@ -499,18 +482,12 @@ Response:
 }
 ```
 
-With `stored`, the response also carries `stripped`, one
-`{ "scope", "path", "field" }` per property removed (`field` is its name as
-written), and, for each scope that lost one, the tree to store in its place:
-`condition_params`, `auto_resolve_params` or `snooze_conditions`. `issues` are
-those of the trees after removal.
-
 `scope` is `condition`, `auto_resolve` or `snooze`; `path` is the offending
 node's condition path under that scope's root (a null slot's path ends in
 `.`); `reason` is a stable code from §1.4 and `field` the payload field it is
-on, when there is one. Neither ever carries a payload value. A malformed tree
-reports only its first structural error, as the reader stops there. A rule with
-issues is `ok: true`; only an unusable envelope is the error envelope.
+on, when there is one. Neither ever carries a payload value. Issues are listed
+in pre-order. A rule with issues is `ok: true`; only an unusable envelope is the
+error envelope.
 
 ## Tracker (`nocturne_alerts_tracker_*`)
 

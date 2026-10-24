@@ -2,7 +2,7 @@
 //! do_not_disturb, pump_state, state_span_active, sleep_session_active.
 
 use super::Env;
-use crate::enums::{AlertStateKind, StateSpanCategory};
+use crate::enums::AlertStateKind;
 use crate::model::{
     ActiveForPayload, AlertStatePayload, PumpStatePayload, SleepSessionPayload, StateSpanPayload,
 };
@@ -16,13 +16,13 @@ pub(super) fn alert_state(p: &AlertStatePayload, env: &Env) -> bool {
         return false;
     };
     let firing = snapshot.state.eq_ignore_ascii_case("firing");
-    let anchor = match p.state.value {
-        Some(AlertStateKind::Firing) if firing => Some(snapshot.triggered_at),
-        Some(AlertStateKind::Unacknowledged) if firing && snapshot.acknowledged_at.is_none() => {
+    let anchor = match p.state {
+        AlertStateKind::Firing if firing => Some(snapshot.triggered_at),
+        AlertStateKind::Unacknowledged if firing && snapshot.acknowledged_at.is_none() => {
             Some(snapshot.triggered_at)
         }
-        Some(AlertStateKind::Acknowledged) => snapshot.acknowledged_at,
-        _ => None,
+        AlertStateKind::Acknowledged => snapshot.acknowledged_at,
+        AlertStateKind::Firing | AlertStateKind::Unacknowledged => None,
     };
     anchor.is_some_and(|at| p.for_minutes.is_none_or(|m| env.held_for(at, m)))
 }
@@ -52,14 +52,13 @@ pub(super) fn pump_state(p: &PumpStatePayload, env: &Env) -> bool {
     env.active_for(p.is_active, p.for_minutes, in_mode.map(|s| s.started_at))
 }
 
-/// Generic state-span leaf. The PumpMode category is always false (pump
-/// modes are `pump_state`'s). The lookup key is the exact `(category, state)`
+/// Generic state-span leaf. The lookup key is the exact `(category, state)`
 /// pair; a null state means "any state of this category".
 pub(super) fn state_span_active(p: &StateSpanPayload, env: &Env) -> bool {
-    let span = match p.category {
-        StateSpanCategory::PumpMode => return false,
-        category => env.ctx.active_state_spans.get(&(category, p.state.clone())),
-    };
+    let span = env
+        .ctx
+        .active_state_spans
+        .get(&(p.category, p.state.clone()));
     env.active_for(p.is_active, p.for_minutes, span.map(|s| s.started_at))
 }
 

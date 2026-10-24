@@ -56,7 +56,7 @@ public class ClassifyParityTests
         // A directional leaf under NOT taints the whole rule to undirected.
         { "not", """{ "child": { "type": "threshold", "threshold": { "direction": "above", "value": 250 } } }""", "undirected" },
         // Sustained passes its child's direction through.
-        { "sustained", """{ "child": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } } }""", "low" },
+        { "sustained", """{ "minutes": 15, "child": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } } }""", "low" },
         // Unknown type / malformed input silent-fail to the all-only default.
         { "teleport", "{}", "undirected" },
     };

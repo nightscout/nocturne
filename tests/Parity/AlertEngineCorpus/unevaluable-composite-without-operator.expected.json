@@ -11,13 +11,7 @@
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
-          "root": false,
-          "leaves": [],
-          "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
+          "skipped": true
         }
       ]
     }

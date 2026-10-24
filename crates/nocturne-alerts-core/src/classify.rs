@@ -51,7 +51,7 @@ pub fn classify(condition_type: &str, condition_params: &Value) -> ScopeClass {
     if let Some(kind) = ConditionKind::from_wire(condition_type)
         && let Ok(payload) = parse_payload(kind, condition_params)
     {
-        walk(&Node::from_rule(kind, Some(payload)), false, &mut acc);
+        walk(&Node::from(payload), false, &mut acc);
     }
     acc.resolve()
 }
@@ -92,37 +92,37 @@ impl Acc {
 fn walk(node: &Node, under_not: bool, acc: &mut Acc) {
     if let Some(container) = node.container() {
         let under_not = under_not || matches!(container, Container::Not(_));
-        for child in container.children().flatten() {
+        for child in container.children() {
             walk(child, under_not, acc);
         }
         return;
     }
-    match node.dispatch().as_deref() {
-        Some(Payload::Threshold(p)) => acc.mark(
-            p.direction.value.map(|d| match d {
+    match node.payload() {
+        Payload::Threshold(p) => acc.mark(
+            Some(match p.direction {
                 ThresholdDirection::Below => Side::Low,
                 ThresholdDirection::Above => Side::High,
             }),
             under_not,
         ),
-        Some(Payload::RateOfChange(p)) => acc.mark(
-            p.direction.value.map(|d| match d {
+        Payload::RateOfChange(p) => acc.mark(
+            Some(match p.direction {
                 RateDirection::Falling => Side::Low,
                 RateDirection::Rising => Side::High,
             }),
             under_not,
         ),
-        Some(Payload::Predicted(p)) => acc.mark(
-            match p.operator.value {
-                Some(CmpOp::Lt | CmpOp::Le) => Some(Side::Low),
-                Some(CmpOp::Gt | CmpOp::Ge) => Some(Side::High),
-                Some(CmpOp::Eq) | None => None,
+        Payload::Predicted(p) => acc.mark(
+            match p.operator {
+                CmpOp::Lt | CmpOp::Le => Some(Side::Low),
+                CmpOp::Gt | CmpOp::Ge => Some(Side::High),
+                CmpOp::Eq => None,
             },
             under_not,
         ),
-        Some(Payload::GlucoseBucket(p)) => {
-            for bucket in p.buckets.iter().flatten() {
-                acc.mark(bucket_side(*bucket), under_not);
+        Payload::GlucoseBucket(p) => {
+            for &bucket in &p.buckets {
+                acc.mark(bucket_side(bucket), under_not);
             }
         }
         _ => {}
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn sustained_passes_through_to_child_direction() {
-        let params = json!({ "child": threshold("below") });
+        let params = json!({ "minutes": 15, "child": threshold("below") });
         assert_eq!(class("sustained", params), ScopeClass::Low);
     }
 
@@ -314,7 +314,7 @@ mod tests {
         // sustained nested inside a composite still passes its child's direction up.
         let params = json!({
             "operator": "and",
-            "conditions": [{ "type": "sustained", "sustained": { "child": threshold("below") } }]
+            "conditions": [{ "type": "sustained", "sustained": { "minutes": 15, "child": threshold("below") } }]
         });
         assert_eq!(class("composite", params), ScopeClass::Low);
     }

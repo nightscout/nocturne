@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "payload-of-another-kind",
-  "description": "a node's payload property for another kind is not the one its type reads",
+  "description": "a node that also carries another kind's payload property cannot be evaluated, so its rule is skipped; the control rule fires",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

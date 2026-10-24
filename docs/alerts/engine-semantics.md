@@ -26,8 +26,8 @@ All condition JSON (rule `condition_params`, `auto_resolve_params`, snooze `cond
 has exactly one spelling for every property name and enum value. Anything else is not read:
 
 - property names are **snake_case lower** (`JsonNamingPolicy.SnakeCaseLower`), matched
-  **exactly**. A property in another case is a different property: `unknown_field` on
-  save, and the operand it was meant to be reads as absent (§1.4)
+  **exactly**. A property in another case is a different property, so the tree has an
+  unknown property and is missing the operand it was meant to be (§1.4)
 - a property name that repeats binds its **last** occurrence
 - an enum value is a JSON string that is **exactly** one member's wire name. Another case,
   surrounding whitespace, or an integer (ordinal) names no member
@@ -45,14 +45,12 @@ has exactly one spelling for every property name and enum value. Anything else i
 
 A node is `{ "type": "<discriminator>", "<payload-field>": { … } }`. The payload field
 name equals the type string for every kind (e.g. `"threshold": {…}`,
-`"rate_of_change": {…}`, `"alert_state": {…}`). Exactly one payload is expected; the
-engine only ever reads the payload matching `type`.
+`"rate_of_change": {…}`, `"alert_state": {…}`). A node holds exactly its `type`, that one
+payload, and optionally the rule editor's `_uid` key.
 
 - `type` names a kind only when it is **exactly** that kind's wire string. Any other
-  string (`"Threshold"`, `"RateOfChange"`, `"3"`, `"warp_drive"`) names no kind, and a tree
-  holding it cannot be evaluated (`unknown_kind`, §1.4).
-- A known type whose payload is null/absent evaluates the record built from `{}`, with
-  every field at its constructor default. Whether that default evaluates or throws is §1.4.
+  string (`"Threshold"`, `"RateOfChange"`, `"3"`, `"warp_drive"`) names no kind.
+- A node with no payload property for its `type`, or a `null` one, has no payload.
 - The full discriminator set is the
   `AlertConditionType` enum's `EnumMember` values.
 
@@ -78,69 +76,44 @@ math in f64, and the conversion to decimal only where the list above says.
 
 ### 1.4 Evaluability
 
-Some trees cannot be evaluated. A rule holding one is broken whether or not a given tick
-reaches the broken node, so the engine rejects these shapes **before evaluating anything**,
-anywhere in the tree, including under a `sustained` whose `minutes <= 0`, or a leaf whose
-input is null this tick:
+A tree is evaluated only as written. The engine reads a whole tree before evaluating
+anything, and rejects it when any node, anywhere, has one of these problems, whether or not
+a given tick would reach that node (under an `or` already true, a leaf whose input is null
+this tick):
 
 | Reason code | Shape |
 |---|---|
+| `not_an_object` | a node or payload that is not a JSON object |
+| `too_deep` | nesting past the reader's limit (§1.1) |
 | `type_missing` | a node with no `type` (a child, or an auto-resolve / snooze root) |
 | `unknown_kind` | a `type` that is not exactly a kind's wire string (§1.2) |
+| `payload_missing` | a node with no payload for its `type`, or a rule body whose `condition_params` is JSON `null` |
 | `condition_missing` | a `null` slot in a composite's `conditions` |
-| `conditions_missing` | a composite with no `conditions` list, including a `composite` child with no payload |
-| `operator_missing` | a composite with non-empty `conditions` and no `operator` |
-| `direction_missing` | a `threshold` or `rate_of_change` with no `direction` (including the `{}` default, §1.2) |
-| `state_missing` | an `alert_state` with no `state` |
+| `unknown_field` | a node property other than `type`, `_uid` and its own kind's payload, or a payload property its kind does not read (names match exactly, §1.1), so a misspelt operand such as `timeoutMinutes` or `Value` is not silently dropped. No field is named: the property is the author's text |
+| `field_missing` | a required operand is absent or `null`: every operand except `for_minutes`, `timezone` and `state_span_active` `state`, and the `child` of a `not` or `sustained` |
+| `invalid_field` | a value of the wrong JSON kind, a number out of range, an enum operand that is not a string, or a `timezone` that is not exactly an IANA zone id (§4) |
+| `unknown_value` | an enum operand naming no member (§1.1): the composite `operator`, a comparison `operator`, `direction`, `alert_state` `state`, `trend` `bucket`, `temp_basal` `metric`, `pump_state` `mode`, `state_span_active` `category`, or a `glucose_bucket` or `day_of_week` list member |
+| `list_empty` | a composite's `conditions`, a `glucose_bucket` `buckets` or a `day_of_week` `days` that is absent, `null` or empty |
+| `minutes_not_positive` | a duration `<= 0` that leaves its node never true: `sustained` `minutes`, `signal_loss` `timeout_minutes`, `predicted` `within_minutes` (no prediction is at or before now) |
+| `minutes_negative` | a negative bound on an elapsed time: `staleness` `value`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`. Elapsed time is never negative and an absent anchor reads as infinite, so every operator would compare the same way on every tick. `tracker_age` is exempt: its elapsed time is negative before a scheduled event |
+| `invalid_time` | a `time_of_day` `from` or `to` that is not exactly `HH:mm` (`"9:00"`, `"24:00"`) |
+| `empty_window` | a `time_of_day` whose `from` equals its `to`, a window that never opens |
+| `pump_mode_category` | a `state_span_active` on the `PumpMode` category; pump modes are `pump_state`'s |
 
-Together with the reader's own failures (`not_an_object`, `too_deep`, and `invalid_field`:
-a value of the wrong JSON kind, a number out of range, a `timezone` that is not a zone id,
-or an enum operand that names no member, except the words below that save rejects as
-`unknown_operator`, `unknown_direction`, `unknown_state` or `unknown_value`), these are
-the problems that **fail evaluation**:
+A tree that cannot be evaluated:
 
 - Rule body: the rule is skipped — no root, leaves, tracker transition, auto-resolve or
   timer writes. The driver returns `skipped` and the `evaluate` envelope returns an error,
   which the host's per-rule catch treats as the same skip, so a live alert keeps its state
   rather than resolving.
 - Auto-resolve tree: never resolves (§7 step 5, as for malformed JSON).
-- Snooze conditions: evaluate false, so the snooze clears.
+- Snooze conditions: the snooze clears.
 
-Everything else malformed stays evaluable and silently false (or true under `not`). A
-rule save rejects those too, together with the shapes above:
-
-| Reason code | Shape |
-|---|---|
-| `unknown_operator` | composite operator other than `and`/`or`; comparison operator other than `<` `<=` `>` `>=` `==`, or missing (every comparison except `time_since_*`'s, which is `invalid_field`) |
-| `unknown_direction` | `threshold` direction other than `above`/`below`, `rate_of_change` other than `rising`/`falling` |
-| `unknown_state` | `alert_state` state other than `firing`/`unacknowledged`/`acknowledged` |
-| `conditions_empty` | a composite with an empty `conditions` list |
-| `child_missing` | a `not` or `sustained` with no `child` |
-| `minutes_not_positive` | a duration `<= 0` that leaves its node never true: `sustained` `minutes`, `signal_loss` `timeout_minutes`, `predicted` `within_minutes` (no prediction is at or before now). An absent `timeout_minutes` or `within_minutes` is `field_missing` instead |
-| `minutes_negative` | a negative bound on an elapsed time: `staleness` `value`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`. Elapsed time is never negative and an absent anchor reads as infinite, so every operator compares the same way on every tick. `tracker_age` is exempt: its elapsed time is negative before a scheduled event |
-| `payload_missing` | a rule body whose `condition_params` is JSON `null` |
-| `unknown_field` | a node property other than `type`, `_uid` and the kinds' payload names, or a payload property its kind does not read (names match exactly, §1.1), so a misspelt operand such as `timeoutMinutes` or `Value` is not silently dropped. No field is named: the property is the author's text |
-| `field_missing` | a required operand is absent (or `null` where that reads as absent): `value` on `threshold`, `staleness` and the `{operator, value}` kinds, `rate`, `timeout_minutes`, `predicted` `value`/`within_minutes`, `alert_id`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`/`tracker_age`, `is_active`, `temp_basal` `metric`, `time_since_*` `operator`, `pump_state` `mode`, `state_span_active` `category`, `tracker_definition_id`, `trend` `bucket`, `time_of_day` `from`/`to`. Each would read as its default (§1.2), which is never what was meant. A node whose payload property is absent is checked as an empty payload |
-| `unknown_value` | a `trend` `bucket` naming no bucket |
-| `invalid_time` | a `time_of_day` `from` or `to` that is not exactly `HH:mm` (`"9:00"`, `"24:00"`) |
-| `empty_window` | a `time_of_day` whose `from` equals its `to`, a window that never opens |
-| `list_empty` | a `glucose_bucket` `buckets` or `day_of_week` `days` list that is absent, `null` or empty |
-| `pump_mode_category` | a `state_span_active` on the `PumpMode` category, which evaluates false (§3); pump modes are `pump_state`'s |
-
-Optional operands (`for_minutes`, `timezone`, `state_span_active` `state`) and a node's
-payloads for kinds other than its `type` are not reported. Stored rules keep evaluating
-every shape in this table as §3 describes.
-
-The crate's `validate` entry point is the single implementation of the save-time check;
-`AlertRulesController` returns its issues as a 400. Each issue carries its scope
-(`condition`, `auto_resolve`, `snooze`), the node's condition path (§2.3; a null slot's
-path ends in `.`), the reason code and, where there is one, the payload field. Reason
-codes never carry payload values.
-
-An edit of a stored rule does not reject an `unknown_field` property the stored rule
-already has at the same scope, path and object: it is removed from the saved tree, which
-cannot change what either engine does, since neither reads it. A property the stored rule
-lacks is still rejected.
+The crate's `validate` entry point reports every problem in a rule's evaluated trees, in
+pre-order; `AlertRulesController` returns them as a 400, and a rule's stored problems are
+shown in the rule editor. Each issue carries its scope (`condition`, `auto_resolve`,
+`snooze`), the node's condition path (§2.3; a null slot's path ends in `.`), the reason
+code and, where there is one, the field. Reason codes never carry payload values.
 
 ---
 
@@ -151,10 +124,7 @@ lacks is still rejected.
 Exactly three kinds are containers: `composite` (N children), `not` (1 child),
 `sustained` (1 child). Everything else is a leaf.
 
-A container whose payload is null/absent (e.g. `{"type":"not"}` with no `not` field) is
-**treated as a leaf** by the identity walk and the path walk (the `when`-guards fail, so
-the walkers fall through to the leaf branch). A `not` or `sustained` so shaped evaluates
-`false`; a `composite` cannot be evaluated (§1.4). **[anomaly — but normative]**
+A container always has its children: one without them cannot be evaluated (§1.4).
 
 ### 2.2 Leaf IDs
 
@@ -175,9 +145,9 @@ byte-for-byte:
     per-reading and sweep auto-resolve paths) and **`snooze`** (smart-snooze condition
     evaluation). Same `(rule_id, path)` timer rows are intentionally shared between the
     per-reading and sweep variants of the same scope.
-- Each descendant appends `[{childIndex}].{child.Type}`, the child's `type` as written,
-  which in an evaluable tree is its wire string (§1.2). `not` and `sustained` children
-  are always index `[0]`.
+- Each descendant appends `[{childIndex}].{child.Type}`, the child's wire string (§1.2).
+  An issue on a node that cannot be read (§1.4) names its `type` as written, or an empty
+  segment when it has none. `not` and `sustained` children are always index `[0]`.
 - Example: `composite[0].sustained[0].threshold`, `composite[1].not[0].iob`.
 
 ### 2.4 Evaluation order
@@ -197,23 +167,23 @@ containers are never force-evaluated). A leaf evaluation that throws is recorded
 ## 3. Leaf semantics
 
 Shared comparison helper (`ComparisonOps.Compare(actual, op, threshold)`): operators are
-the exact strings `<` `<=` `>` `>=` `==`; **any other string ⇒ false**. All comparisons
-below are non-strict/strict exactly as written.
+`<` `<=` `>` `>=` `==` (§1.4). All comparisons below are non-strict/strict exactly as
+written. Every operand below is present and valid (§1.4).
 
 | Kind | Payload | Inputs | Semantics | Null / cold-start behaviour |
 |---|---|---|---|---|
-| `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null ⇒ false; unknown direction ⇒ false |
+| `threshold` | `direction` (`above`\|`below`), `value` | `LatestValue` | below: `v < value`; above: `v > value` (**strict**) | `LatestValue` null ⇒ false |
 | `rate_of_change` | `direction` (`rising`\|`falling`), `rate` | `TrendRate` (mg/dL/min) | falling: `rate' <= -rate`; rising: `rate' >= rate` (**inclusive**) | `TrendRate` null ⇒ false |
 | `staleness` | `operator`, `value` (minutes, int) | `LastReadingAt`, `LatestTimestamp`, now | `Compare((decimal)(now-last).TotalMinutes, op, value)` | both `LastReadingAt` and `LatestTimestamp` null ⇒ **false** (cold start); only `LastReadingAt` null ⇒ elapsed = +∞: `>`/`>=` ⇒ true, others ⇒ false |
 | `predicted` | `operator`, `value`, `within_minutes` | `Predictions[]` | true if **any** point with `OffsetMinutes <= within_minutes` satisfies `Compare(point.Mgdl, op, value)`; points beyond horizon are skipped, not range-checked below | empty predictions ⇒ false |
-| `trend` | `bucket` (wire string) | `TrendBucket` | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null ⇒ false; empty/unknown configured bucket ⇒ false |
-| `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | unparseable from/to ⇒ false. Tz resolution: the per-rule tz when set (one that is not a zone id cannot be evaluated, §1.4); else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC |
+| `trend` | `bucket` (wire string) | `TrendBucket` | equality of wire forms (`rising_fast` … `falling_fast`, `unknown`) | `TrendBucket` null ⇒ false |
+| `time_of_day` | `from`, `to` (`HH:mm` exact, invariant), `timezone` (IANA, nullable) | now | half-open `[from, to)` in resolved tz; `from > to` wraps midnight (`current >= from \|\| current < to`) | Tz resolution: the per-rule tz when set; else tenant tz (`TenantTimeZoneId`), unknown tenant tz ⇒ **UTC**; both absent ⇒ UTC |
 | `iob` | `operator`, `value` (units) | `IobUnits` | `Compare` | null ⇒ false |
 | `cob` | `operator`, `value` (grams) | `CobGrams` | `Compare` | null ⇒ false |
 | `reservoir` | `operator`, `value` (units) | `ReservoirUnits` | `Compare` | null ⇒ false |
 | `site_age` | `operator`, `value` (**hours**) | `LastSiteChangeAt`, now | `Compare((decimal)(now-anchor).TotalHours, op, value)` | null ⇒ false |
 | `sensor_age` | `operator`, `value` (**days**) | `LastSensorStartAt`, now | `Compare((decimal)(now-anchor).TotalDays, op, value)` | null ⇒ false |
-| `alert_state` | `alert_id` (Guid), `state`, `for_minutes?` | `ActiveAlerts[alert_id]`, now | `firing`: snapshot.State == "firing" (ci). `unacknowledged`: State == "firing" **and** AcknowledgedAt null. `acknowledged`: AcknowledgedAt non-null (State irrelevant). Then if `for_minutes` set: elapsed since anchor `>= for_minutes` (double); anchor = AcknowledgedAt for `acknowledged`, TriggeredAt otherwise | no snapshot for id ⇒ false; unknown state string ⇒ false |
+| `alert_state` | `alert_id` (Guid), `state`, `for_minutes?` | `ActiveAlerts[alert_id]`, now | `firing`: snapshot.State == "firing" (ci). `unacknowledged`: State == "firing" **and** AcknowledgedAt null. `acknowledged`: AcknowledgedAt non-null (State irrelevant). Then if `for_minutes` set: elapsed since anchor `>= for_minutes` (double); anchor = AcknowledgedAt for `acknowledged`, TriggeredAt otherwise | no snapshot for id ⇒ false |
 | `loop_stale` | `operator`, `minutes` | `LastApsCycleAt`, `HasEverApsCycled`, now | `Compare((decimal)(now-cycle).TotalMinutes, op, minutes)` | `HasEverApsCycled` false ⇒ false; `LastApsCycleAt` null ⇒ false (no infinity convention here) |
 | `loop_enaction_stale` | `operator`, `minutes` | `LastApsEnactedAt`, `HasEverApsCycled` | same as `loop_stale` against the enacted timestamp | same guards (note: guard is `HasEverApsCycled`, not a separate enaction flag) |
 | `pump_suspended` | `is_active`, `for_minutes?` | `ActivePumpSuspension`, `HasEverPumpSnapshot`, now | `(suspension != null) == is_active`; then if `for_minutes` set **and** `is_active` true: `(now - StartedAt).TotalMinutes >= for_minutes` (double); `for_minutes` with `is_active:false` is a no-op (true) | `HasEverPumpSnapshot` false ⇒ false |
@@ -223,30 +193,26 @@ below are non-strict/strict exactly as written.
 | `override_active` | `is_active`, `for_minutes?` | `ActiveOverride`, now | same shape as `pump_suspended` | **no** HasEver guard (absence of override is legitimate) |
 | `sensitivity_ratio` | `operator`, `value` | `SensitivityRatio`, `HasEverApsSensitivity` | `Compare` | guard false ⇒ false; ratio null ⇒ false |
 | `do_not_disturb` | `is_active`, `for_minutes?` | `ActiveDoNotDisturb`, now | same shape as `pump_suspended` (anchor `StartedAt`); `for_minutes` no-op on the inactive side | no guard; snapshot null = DND off |
-| `glucose_bucket` | `buckets: [..]` | `GlucoseBucket` | set membership | bucket null ⇒ false; empty/missing buckets list ⇒ false |
+| `glucose_bucket` | `buckets: [..]` | `GlucoseBucket` | set membership | bucket null ⇒ false |
 | `time_since_last_carb` | `operator` (enum), `minutes` | `LastCarbAt`, now | elapsed minutes (double) compared via `AlertComparisonOperator`; **null anchor ⇒ elapsed = +∞** (so `>`/`>=` fire on cold start — intentional, opposite of loop_stale) | `==` against +∞ ⇒ false |
 | `time_since_last_bolus` | same | `LastBolusAt` | same | same |
-| `day_of_week` | `days: [..]` (`AlertWeekday` names) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | empty/missing days ⇒ false; tenant tz null/unknown ⇒ UTC |
+| `day_of_week` | `days: [..]` (`AlertWeekday` names) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | tenant tz null/unknown ⇒ UTC |
 | `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpState` | `is_active:false`: true whenever active mode ≠ `mode` (**including no active span**). `is_active:true`: mode must match; `for_minutes` anchors at `StartedAt` (double, `>=`) | no guard |
-| `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `category == pump_mode` ⇒ **always false** (defence in depth). `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category" — the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard |
+| `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category" — the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard |
 | `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)` — reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, so negative `minutes` with `>=` means "within N minutes before the event" | no active instance for the definition ⇒ **false** — a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity) |
 
 `composite` / `not` / `sustained` (containers):
 
-- **`composite`** — `{operator, conditions[]}`. Empty `conditions` ⇒ false (a missing
-  list, missing operator or null slot cannot be evaluated, §1.4). Only `and` / `or` are
-  recognised, anything else ⇒ false.
+- **`composite`** — `{operator, conditions[]}`, `and` or `or` over at least one child.
   Evaluates every child (§2.4).
-- **`not`** — `{child}`. Missing child ⇒ **false** (not true). Otherwise inverts the
-  child. **[normative]**
-- **`sustained`** — `{minutes, child}`. Null child or `minutes <= 0` ⇒ false. Each
-  evaluation: evaluate child first (path-extended), then:
+- **`not`** — `{child}`. Inverts the child.
+- **`sustained`** — `{minutes, child}`, `minutes > 0`. Each evaluation: evaluate child
+  first (path-extended), then:
   - child false ⇒ **clear** the `(rule_id, path)` timer, return false;
   - child true, no timer ⇒ **set** timer to `now`, return **false** (a 0-elapsed check
     does not happen on the set tick);
   - child true, timer exists ⇒ return `(now - first).TotalMinutes >= minutes` (double).
   - The timer key path is the path **of the sustained node itself**, not the child.
-  - Note `minutes` must be `> 0`; a `sustained{minutes:0}` never fires.
 
 ---
 
@@ -290,7 +256,7 @@ in §3 plus:
 
 | Payload | Inputs | Semantics | Null / guard behaviour |
 |---|---|---|---|
-| `timeout_minutes` (int) | `LastReadingAt`, `LatestTimestamp`, now | `now - LastReadingAt >= timeout_minutes`, compared as exact durations (no minute rounding) | `timeout_minutes <= 0` (including an absent field) ⇒ false; both `LastReadingAt` and `LatestTimestamp` null ⇒ false (cold start); only `LastReadingAt` null ⇒ infinitely stale ⇒ true |
+| `timeout_minutes` (int) | `LastReadingAt`, `LatestTimestamp`, now | `now - LastReadingAt >= timeout_minutes`, compared as exact durations (no minute rounding) | both `LastReadingAt` and `LatestTimestamp` null ⇒ false (cold start); only `LastReadingAt` null ⇒ infinitely stale ⇒ true |
 
 It is `staleness{operator: ">=", value: timeout_minutes}` with an exact-duration compare
 and the non-positive-timeout guard.
@@ -542,8 +508,8 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
 **Driver**, given the rules in any order and the ticks in time order:
 
 - **Order.** Rules are topologically sorted by `alert_state` references (parents first).
-  References are read from every payload property a node carries, whatever its `type`,
-  and only to rules in the set. A cycle keeps the given order for every rule. Two rules
+  References are read from the `alert_state` leaves of a body that can be evaluated, and
+  only to rules in the set. A cycle keeps the given order for every rule. Two rules
   with one id are an error.
 - **State.** One fresh timer store for the whole call; nothing is read from or written to
   persistent state. The excursion tracker is **not** consulted: confirmation and
@@ -609,7 +575,7 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
 
 | # | Behaviour | Where | Status |
 |---|---|---|---|
-| 1 | Malformed container (null payload) is treated as a leaf by identity/path walks | §2.1 | normative |
+| 1 | *(retired: a container without its children cannot be evaluated, so none is a leaf)* | §2.1 | resolved |
 | 2 | *(retired: a `type` is exactly its wire string, so no path segment has another casing)* | §2.3 | resolved |
 | 3 | *(retired: an unknown child kind cannot be evaluated, so no `not` inverts one)* | §1.4 | resolved |
 | 4 | *(retired: `signal_loss` is an ordinary leaf evaluated on the wall clock)* | §5 | resolved |

@@ -19,8 +19,8 @@ namespace Nocturne.API.Tests.Services.Alerts.Engines;
 /// removed on one side only fails a test instead of leaving a value one side cannot read.
 /// <para>
 /// <c>PayloadFields</c> is each condition kind's payload property names as the condition models
-/// read them. The Rust engine strips a property its payload does not declare from a saved tree
-/// (docs/alerts/engine-semantics.md §1.4), so its tables must match these.
+/// read them. A property the Rust engine's payload does not declare keeps a tree from being
+/// evaluated (docs/alerts/engine-semantics.md §1.4), so its tables must match these.
 /// </para>
 /// </summary>
 internal static class EnumManifest

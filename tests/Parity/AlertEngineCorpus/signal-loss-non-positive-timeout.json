@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "signal-loss-non-positive-timeout",
-  "description": "timeout_minutes of zero or less (or absent) is false, even when the last reading is hours old",
+  "description": "a timeout_minutes of zero or less, or none, cannot be evaluated, so its rule is skipped, even when the last reading is hours old",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

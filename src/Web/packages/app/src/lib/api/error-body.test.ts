@@ -76,7 +76,7 @@ describe("parseErrorBody", () => {
 
   it("recovers the structured issues beside the validation map", () => {
     const issues = [
-      { scope: "condition", path: "root", reason: "conditions_empty", field: null },
+      { scope: "condition", path: "root", reason: "list_empty", field: null },
     ];
     const body = parseErrorBody(
       apiException(JSON.stringify({ detail: "Rejected.", issues }), 400)
@@ -88,7 +88,7 @@ describe("parseErrorBody", () => {
   it("drops an issues entry that is not a validation issue", () => {
     const body = parseErrorBody(
       apiException(
-        JSON.stringify({ issues: [{ reason: "conditions_empty" }, "boom"] }),
+        JSON.stringify({ issues: [{ reason: "list_empty" }, "boom"] }),
         400
       )
     );
@@ -98,7 +98,7 @@ describe("parseErrorBody", () => {
 
   it("drops issues the far end sent as the wrong type", () => {
     const body = parseErrorBody(
-      apiException(JSON.stringify({ issues: "conditions_empty" }), 400)
+      apiException(JSON.stringify({ issues: "list_empty" }), 400)
     );
 
     expect(body?.issues).toBeUndefined();

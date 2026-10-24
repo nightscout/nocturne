@@ -50,21 +50,21 @@ public class AlertOrchestratorConditionIssueTests
     }
 
     [NativeFact]
-    public void A_wizard_urgent_low_never_fires_however_low_glucose_is()
+    public void A_wizard_urgent_low_cannot_be_evaluated()
     {
-        Evaluate(AlertConditionType.Threshold, WizardUrgentLow, Reading(40))
-            .Should().BeFalse("with no value the threshold reads as 0, and no reading is below 0");
+        var act = () => Evaluate(AlertConditionType.Threshold, WizardUrgentLow, Reading(40));
+        act.Should().Throw<RustAlertEngineException>().WithMessage("*field_missing*(field 'value')*");
         Evaluate(AlertConditionType.Threshold, """{"direction": "below", "value": 54}""", Reading(40))
             .Should().BeTrue("the shape the repair gives it fires");
     }
 
     [NativeFact]
-    public void A_wizard_signal_loss_never_fires_however_long_the_gap()
+    public void A_wizard_signal_loss_cannot_be_evaluated()
     {
         var gap = Reading(120, lastReadingAt: Now.AddHours(-3));
 
-        Evaluate(AlertConditionType.SignalLoss, WizardSensorLost, gap)
-            .Should().BeFalse("with no timeout_minutes the timeout reads as 0, which never fires");
+        var act = () => Evaluate(AlertConditionType.SignalLoss, WizardSensorLost, gap);
+        act.Should().Throw<RustAlertEngineException>().WithMessage("*field_missing*(field 'timeout_minutes')*");
         Evaluate(AlertConditionType.SignalLoss, """{"timeout_minutes": 15}""", gap)
             .Should().BeTrue("the shape the repair gives it fires");
     }
@@ -112,7 +112,7 @@ public class AlertOrchestratorConditionIssueTests
             .Returns([new RustValidationIssue("condition", "alert_state", "invalid_field", "alert_id")]);
 
         await harness.EvaluateAsync(Rule(
-            """{"alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "active"}""",
+            """{"alert_id": "00000000-0000-0000-0000-0000000000aa", "state": "firing"}""",
             AlertConditionType.AlertState));
 
         harness.Logger.Warnings.Should().ContainSingle().Which.Should().Contain("invalid_field (alert_id)");

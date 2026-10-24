@@ -151,7 +151,7 @@ public class RuleReferenceResolverTests
         var rule = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"above","value":180}""") with
         {
             AutoResolveEnabled = true,
-            AutoResolveParams = $$$"""{"type":"alert_state","alert_state":{"alert_id":"{{{Guid.NewGuid()}}}","state":"active"}}""",
+            AutoResolveParams = $$$"""{"type":"alert_state","alert_state":{"alert_id":"{{{Guid.NewGuid()}}}","state":"firing"}}""",
         };
 
         RuleReferenceResolver.FilterEvaluable(new[] { rule }).Should().Equal(rule);

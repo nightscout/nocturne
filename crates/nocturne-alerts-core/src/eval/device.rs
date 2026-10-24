@@ -13,14 +13,14 @@ use crate::model::{ActiveForPayload, ComparePayload, MinutesComparePayload, Trac
 pub(super) fn site_age(p: &ComparePayload, env: &Env) -> bool {
     env.ctx
         .last_site_change_at
-        .is_some_and(|at| env.compare_elapsed(at, Unit::Hours, p.operator.value, p.value))
+        .is_some_and(|at| env.compare_elapsed(at, Unit::Hours, p.operator, p.value))
 }
 
 /// Sensor age in days; no sensor start is false.
 pub(super) fn sensor_age(p: &ComparePayload, env: &Env) -> bool {
     env.ctx
         .last_sensor_start_at
-        .is_some_and(|at| env.compare_elapsed(at, Unit::Days, p.operator.value, p.value))
+        .is_some_and(|at| env.compare_elapsed(at, Unit::Days, p.operator, p.value))
 }
 
 /// Minutes since the active tracker instance's reference timestamp (negative
@@ -30,7 +30,7 @@ pub(super) fn tracker_age(p: &TrackerAgePayload, env: &Env) -> bool {
     env.ctx
         .active_trackers
         .get(&p.tracker_definition_id)
-        .is_some_and(|&at| env.compare_elapsed(at, Unit::Minutes, p.operator.value, p.minutes))
+        .is_some_and(|&at| env.compare_elapsed(at, Unit::Minutes, p.operator, p.minutes))
 }
 
 /// loop_stale against the last cycle, loop_enaction_stale against the last
@@ -43,7 +43,7 @@ pub(super) fn loop_stale(
 ) -> bool {
     env.ctx.has_ever_aps_cycled
         && anchor
-            .is_some_and(|at| env.compare_elapsed(at, Unit::Minutes, p.operator.value, p.minutes))
+            .is_some_and(|at| env.compare_elapsed(at, Unit::Minutes, p.operator, p.minutes.get()))
 }
 
 /// Guarded by `has_ever_pump_snapshot`.
@@ -57,14 +57,14 @@ pub(super) fn pump_suspended(p: &ActiveForPayload, env: &Env) -> bool {
 }
 
 pub(super) fn pump_battery(p: &ComparePayload, env: &Env) -> bool {
-    env.ctx.has_ever_pump_snapshot && holds(p.operator.value, env.ctx.pump_battery_percent, p.value)
+    env.ctx.has_ever_pump_snapshot && holds(p.operator, env.ctx.pump_battery_percent, p.value)
 }
 
 pub(super) fn uploader_battery(p: &ComparePayload, env: &Env) -> bool {
     env.ctx.has_ever_uploader_snapshot
-        && holds(p.operator.value, env.ctx.uploader_battery_percent, p.value)
+        && holds(p.operator, env.ctx.uploader_battery_percent, p.value)
 }
 
 pub(super) fn sensitivity_ratio(p: &ComparePayload, env: &Env) -> bool {
-    env.ctx.has_ever_aps_sensitivity && holds(p.operator.value, env.ctx.sensitivity_ratio, p.value)
+    env.ctx.has_ever_aps_sensitivity && holds(p.operator, env.ctx.sensitivity_ratio, p.value)
 }

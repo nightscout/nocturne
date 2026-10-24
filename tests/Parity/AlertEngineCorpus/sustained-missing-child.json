@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "sustained-missing-child",
-  "description": "a sustained payload without a child is false and never touches the timer store",
+  "description": "a sustained payload without a child cannot be evaluated, so its rule is skipped, with the timer store untouched",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

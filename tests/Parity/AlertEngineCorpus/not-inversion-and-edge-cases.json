@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "not-inversion-and-edge-cases",
-  "description": "not inverts its child; a missing child is false (not true)",
+  "description": "not inverts its child; a not with no child cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

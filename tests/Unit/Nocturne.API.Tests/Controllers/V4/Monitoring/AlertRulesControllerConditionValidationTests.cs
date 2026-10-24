@@ -95,11 +95,8 @@ public class AlertRulesControllerConditionValidationTests
     {
         var validator = new Mock<IAlertRuleConditionValidator>();
         validator
-            .Setup(v => v.ValidateUpdate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<StoredConditionTrees>()))
-            .Returns((AlertConditionType _, string body, bool _, string? autoResolve, string? client, StoredConditionTrees _) =>
-                new ConditionUpdateCheck(
-                    [new RustValidationIssue("condition", "threshold", "direction_missing", "direction")],
-                    body, autoResolve, client, []));
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([new RustValidationIssue("condition", "threshold", "field_missing", "direction")]);
         var (controller, db) = CreateController(validator.Object);
         var id = Guid.NewGuid();
         db.AlertRules.Add(new AlertRuleEntity
@@ -128,11 +125,8 @@ public class AlertRulesControllerConditionValidationTests
     {
         var validator = new Mock<IAlertRuleConditionValidator>();
         validator
-            .Setup(v => v.ValidateUpdate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<StoredConditionTrees>()))
-            .Returns((AlertConditionType _, string body, bool _, string? autoResolve, string? client, StoredConditionTrees _) =>
-                new ConditionUpdateCheck(
-                    [new RustValidationIssue("condition", "threshold", "direction_missing", "direction")],
-                    body, autoResolve, client, []));
+            .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Returns([new RustValidationIssue("condition", "threshold", "field_missing", "direction")]);
         var (controller, _) = CreateController(validator.Object);
 
         var result = await controller.UpdateRule(Guid.NewGuid(), new UpdateAlertRuleRequest
@@ -155,31 +149,7 @@ public class AlertRulesControllerConditionValidationTests
     };
 
     [NativeFact]
-    public async Task UpdateRule_saves_a_legacy_rule_without_the_properties_no_condition_reads()
-    {
-        var logger = new ListLogger<AlertRulesController>();
-        var (controller, db) = CreateController(
-            new AlertRuleConditionValidator(), logger);
-        var id = Guid.NewGuid();
-        db.AlertRules.Add(LegacyRule(id));
-        await db.SaveChangesAsync();
-
-        var result = await controller.UpdateRule(id, new UpdateAlertRuleRequest
-        {
-            Name = "Low",
-            ConditionType = AlertConditionType.Threshold,
-            ConditionParams = Json("""{"direction": "below", "value": 65, "legacyLabel": "Low"}"""),
-        }, CancellationToken.None);
-
-        result.Result.Should().BeOfType<OkObjectResult>();
-        JsonNode.Parse((await db.AlertRules.AsNoTracking().SingleAsync()).ConditionParams)!.AsObject()
-            .Select(p => p.Key).Should().Equal("direction", "value");
-        logger.Warnings.Should().ContainSingle().Which.Should().Contain("legacyLabel").And.Contain(id.ToString())
-            .And.NotContain("Low");
-    }
-
-    [NativeFact]
-    public async Task UpdateRule_rejects_an_unknown_property_the_stored_rule_did_not_have()
+    public async Task UpdateRule_rejects_an_unknown_property_even_one_the_stored_rule_has()
     {
         var (controller, db) = CreateController(
             new AlertRuleConditionValidator());
@@ -191,7 +161,7 @@ public class AlertRulesControllerConditionValidationTests
         {
             Name = "Low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = Json("""{"direction": "below", "value": 65, "legacyLabel": "Low", "forMinutes": 10}"""),
+            ConditionParams = Json("""{"direction": "below", "value": 65, "legacyLabel": "Low"}"""),
         }, CancellationToken.None);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value
@@ -250,7 +220,8 @@ public class AlertRulesControllerConditionValidationTests
         issues.Should().Equal(
             new RustValidationIssue("condition", "composite[0].sustained", "minutes_not_positive", "minutes"),
             new RustValidationIssue("auto_resolve", "auto_resolve", "invalid_field", "alert_id"),
-            new RustValidationIssue("snooze", "snooze[0].composite", "conditions_empty", "conditions"));
+            new RustValidationIssue("auto_resolve", "auto_resolve", "field_missing", "state"),
+            new RustValidationIssue("snooze", "snooze[0].composite", "list_empty", "conditions"));
     }
 
     [NativeFact]

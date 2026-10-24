@@ -6,14 +6,10 @@
 //! which the backend's `EnumManifestTests` keeps equal to the C# enums, and
 //! `enums_match_manifest` pins each one to it.
 
-use serde::{Serialize, Serializer};
-
 /// An enum with a fixed set of wire names.
 pub trait WireEnum: Copy + Eq + 'static {
     /// Every member, in declaration order.
     const ALL: &'static [Self];
-    /// The member a missing field reads as.
-    const FIRST: Self;
 
     fn name(self) -> &'static str;
 
@@ -41,20 +37,12 @@ macro_rules! wire_enum {
 
         impl $crate::enums::WireEnum for $name {
             const ALL: &'static [Self] = &[Self::$first, $(Self::$variant),*];
-            const FIRST: Self = Self::$first;
 
             fn name(self) -> &'static str {
                 match self {
                     Self::$first => $first_wire,
                     $(Self::$variant => $wire),*
                 }
-            }
-        }
-
-        /// The member a missing field reads as.
-        impl Default for $name {
-            fn default() -> Self {
-                Self::$first
             }
         }
 
@@ -68,36 +56,6 @@ macro_rules! wire_enum {
 }
 
 pub(crate) use wire_enum;
-
-/// A string payload field as written, with the member it names.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Spelled<T> {
-    pub text: Option<String>,
-    pub value: Option<T>,
-}
-
-impl<T> Default for Spelled<T> {
-    fn default() -> Self {
-        Self {
-            text: None,
-            value: None,
-        }
-    }
-}
-
-impl<T: WireEnum> Spelled<T> {
-    pub(crate) fn new(text: Option<String>) -> Self {
-        let value = text.as_deref().and_then(T::from_name);
-        Self { text, value }
-    }
-}
-
-/// Serialises as written.
-impl<T> Serialize for Spelled<T> {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        self.text.serialize(s)
-    }
-}
 
 wire_enum! {
     /// `AlertComparisonOperator`, and the operators a decimal comparison
@@ -124,11 +82,10 @@ impl CmpOp {
     }
 }
 
-/// `op` applied to `actual`; false when either is absent.
+/// `op` applied to `actual`; false when it is absent.
 #[must_use]
-pub fn holds<T: PartialOrd>(op: Option<CmpOp>, actual: Option<T>, threshold: T) -> bool {
-    op.zip(actual)
-        .is_some_and(|(op, actual)| op.apply(actual, threshold))
+pub fn holds<T: PartialOrd>(op: CmpOp, actual: Option<T>, threshold: T) -> bool {
+    actual.is_some_and(|actual| op.apply(actual, threshold))
 }
 
 wire_enum! {
@@ -281,8 +238,8 @@ mod tests {
         }
     }
 
-    /// A property the Rust payload does not declare is stripped from a saved
-    /// tree, so each payload must declare exactly what the C# model reads.
+    /// A property the Rust payload does not declare keeps a tree from being
+    /// evaluated, so each payload must declare exactly what the C# model reads.
     #[test]
     fn payload_fields_match_the_csharp_models() {
         let path = concat!(
@@ -302,7 +259,7 @@ mod tests {
                 .iter()
                 .map(|v| v.as_str().expect("field name is a string"))
                 .collect();
-            let mut ours = crate::model::Payload::default_for(kind).fields().to_vec();
+            let mut ours = crate::model::Payload::fields(kind).to_vec();
             ours.sort_unstable();
             assert_eq!(ours, theirs, "{} fields drifted from C#", kind.name());
         }

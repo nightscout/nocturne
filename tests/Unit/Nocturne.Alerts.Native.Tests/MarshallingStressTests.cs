@@ -129,52 +129,22 @@ public class MarshallingStressTests
         JsonNode.Parse(mismatch.Result!.Value.GetRawText())!["root"]!.GetValue<bool>().Should().BeFalse();
     }
 
-    [NativeFact]
-    public void Null_condition_params_evaluates_false()
+    [NativeTheory]
+    [InlineData("null", "payload_missing at 'threshold'")]
+    [InlineData("{}", "field_missing at 'threshold' (field 'direction'); field_missing at 'threshold' (field 'value')")]
+    public void Condition_params_that_cannot_be_evaluated_throw_typed_exception(string conditionParams, string issues)
     {
         var rule = new RustAlertRule
         {
             Id = RuleId,
             ConditionType = "threshold",
-            ConditionParams = JsonSerializer.SerializeToElement<object?>(null),
-        };
-
-        var response = RustAlertEngine.Evaluate(rule, EmptyContext(), new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
-
-        var result = JsonNode.Parse(response.Result!.Value.GetRawText())!;
-        result["root"]!.GetValue<bool>().Should().BeFalse("a null condition record evaluates false");
-        result["leaves"]!.AsArray().Should().HaveCount(1);
-    }
-
-    [NativeFact]
-    public void Empty_condition_params_evaluates_with_defaults()
-    {
-        var rule = new RustAlertRule
-        {
-            Id = RuleId,
-            ConditionType = "iob",
-            ConditionParams = Element(new JsonObject()),
-        };
-
-        var response = RustAlertEngine.Evaluate(rule, EmptyContext(), new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
-
-        JsonNode.Parse(response.Result!.Value.GetRawText())!["root"]!.GetValue<bool>().Should().BeFalse();
-    }
-
-    [NativeFact]
-    public void Condition_params_whose_defaults_cannot_be_evaluated_throw_typed_exception()
-    {
-        var rule = new RustAlertRule
-        {
-            Id = RuleId,
-            ConditionType = "threshold",
-            ConditionParams = Element(new JsonObject()),
+            ConditionParams = JsonDocument.Parse(conditionParams).RootElement.Clone(),
         };
 
         var act = () => RustAlertEngine.Evaluate(rule, EmptyContext(), new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
 
         act.Should().Throw<RustAlertEngineException>()
-            .WithMessage("*malformed condition_params for 'threshold': direction_missing at 'threshold'*")
+            .WithMessage($"*malformed condition_params for 'threshold': {issues}*")
             .Which.IsConditionRejection.Should().BeTrue();
     }
 
