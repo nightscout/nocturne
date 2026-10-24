@@ -237,7 +237,8 @@ public class V4ReadLimitClampTests
             Mock.Of<ISensitivityScheduleRepository>(),
             Mock.Of<ITargetRangeScheduleRepository>(),
             Mock.Of<IProfileProjectionService>(),
-            TempBasalTestDeps.NoReresolution());
+            TempBasalTestDeps.NoReresolution(),
+            Mock.Of<IRawMmolProfileDetector>());
 
     private static void VerifyTherapySettingsFetched(Mock<ITherapySettingsRepository> repo, int limit, int offset) =>
         repo.Verify(r => r.GetAsync(null, null, null, null, limit, offset, true, It.IsAny<CancellationToken>()), Times.Once);

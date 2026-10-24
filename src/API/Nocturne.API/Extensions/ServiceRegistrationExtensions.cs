@@ -937,6 +937,8 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService<TempBasalOriginCorroborationService>();
         services.AddScoped<IActivityDecomposer, ActivityDecomposer>();
         services.AddScoped<IProfileDecomposer, ProfileDecomposer>();
+        services.AddScoped<IRawMmolProfileDetector, RawMmolProfileDetector>();
+        services.AddSingleton<RawMmolProfileNotifier>();
 
         // Unified generic decomposer registrations
         services.AddScoped<IDecomposer<Entry>>(sp =>

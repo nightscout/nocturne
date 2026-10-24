@@ -32,12 +32,16 @@ public sealed class RepairRawMmolProfilesFixture : IAsyncLifetime
     internal Dictionary<Guid, (string Json, DateTime Updated)> AfterSecondUp { get; } = [];
     internal List<string> Notices { get; } = [];
 
+    /// <summary>The database as the runtime role, for reads after the migration.</summary>
+    internal string AppConnectionString { get; private set; } = string.Empty;
+
     private string _migrator = string.Empty;
 
     public async Task InitializeAsync()
     {
         var database = await SharedPostgres.CreateEmptyDatabaseAsync("repair_raw_mmol_profiles");
         _migrator = database.MigratorConnectionString;
+        AppConnectionString = database.AppConnectionString;
 
         await MigrateToAsync(PriorMigration);
         await SeedAsync();
@@ -218,6 +222,7 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
         new("raw", TenantA, "AAPS", "mmol", "docA:AAPS", Guid.CreateVersion7(), RawTargets, RawIsf),
         new("raw by correlation", TenantA, "Loop", "mmol/L", null, Guid.CreateVersion7(), RawTargets, RawIsf),
         new("other tenant, raw", TenantB, "Night", "mmol", "docB:Night", null, RawTargets, RawIsf),
+        new("other tenant, no isf", TenantB, "NightNoIsf", "mmol", "docB:NightNoIsf", null, RawTargets, null),
         new("isf 59 s after its targets", TenantA, "Within", "mmol", "docA:Within", null, RawTargets, RawIsf,
             IsfUpdated: Seeded.AddSeconds(59)),
         new("isf 12", TenantA, "Isf12", "mmol", "docA:Isf12", null, RawTargets, V(12)),
@@ -277,6 +282,12 @@ public class RepairRawMmolProfilesTests : IClassFixture<RepairRawMmolProfilesFix
         new("raw store beside a store whose targets were retimed", TenantA, "Retimed", "mmol", "d1:Retimed", null, RawTargets, RawIsf),
         new("store with targets edited later beside its raw isf", TenantA, "Retimed", "mmol", "d2:Retimed", null, T((100, 110)), V(3.0),
             Timestamp: Seeded.AddDays(1), TargetTimestamp: Seeded.AddDays(2)),
+        new("store for the decomposer upload", TenantA, "Upload", "mmol", "d3:Upload", null, T((100, 110)), V(3.0),
+            Timestamp: Seeded.AddDays(1), TargetTimestamp: Seeded.AddDays(2)),
+        new("raw targets and isf 12 to be corrected by hand", TenantA, "HandEdit", "mmol", "d4:HandEdit", null, RawTargets, V(12),
+            IsfUpdated: Seeded.AddSeconds(61)),
+        new("raw targets and isf 12 to be uploaded again", TenantA, "Reupload", "mmol", "d5:Reupload", null, RawTargets, V(12),
+            IsfUpdated: Seeded.AddSeconds(61)),
         new("mmol store with mg/dL targets and isf 5", TenantA, "Under9", "mmol", "docA:Under9", null, CorrectTargets, V(5)),
         new("raw store beside a newer mg/dL isf", TenantA, "Switched", "mmol", "d1:Switched", null, RawTargets, RawIsf),
         new("newer mg/dL store with isf 15", TenantA, "Switched", "mg/dl", "d2:Switched", null, CorrectTargets, V(15),

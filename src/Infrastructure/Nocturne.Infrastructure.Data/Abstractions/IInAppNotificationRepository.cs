@@ -75,6 +75,16 @@ public interface IInAppNotificationRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Whether a user has ever been sent a notification of this type and source identifier, read or
+    /// archived included
+    /// </summary>
+    Task<bool> AnyBySourceAsync(
+        string userId,
+        string type,
+        string sourceId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Finds a notification by its source identifier and type for a user
     /// </summary>
     Task<InAppNotificationEntity?> FindBySourceAsync(
