@@ -43,6 +43,7 @@ internal sealed class ExcursionResolutionHandler(
 
         var instances = await repository.GetInstancesForExcursionAsync(tenantId, excursionId, ct);
         var instanceIds = instances.Select(i => i.Id).ToList();
+        var rule = await repository.GetExcursionRuleAsync(tenantId, excursionId, ct);
 
         var reason = transition.CloseReason?.ToWireString();
         await repository.ResolveInstancesForExcursionAsync(tenantId, excursionId, now, reason, ct);
@@ -54,19 +55,30 @@ internal sealed class ExcursionResolutionHandler(
 
         await repository.DeleteExcursionMutesAsync(tenantId, excursionId, ct);
 
-        try
+        if (rule is null)
         {
-            await broadcastService.BroadcastAlertEventAsync("alert_resolved", new
-            {
-                excursionId,
-                tenantId,
-                resolvedAt = now,
-                reason,
-            });
+            // Only an excursion deleted with its rule (an FK cascade) has none.
+            logger.LogWarning(
+                "Excursion {ExcursionId} has no rule; alert_resolved not broadcast", excursionId);
         }
-        catch (Exception ex)
+        else
         {
-            logger.LogWarning(ex, "Failed to broadcast alert_resolved for excursion {ExcursionId}", excursionId);
+            try
+            {
+                await broadcastService.BroadcastAlertResolvedAsync(new AlertResolvedEvent
+                {
+                    TenantId = tenantId,
+                    ExcursionId = excursionId,
+                    AlertRuleId = rule.AlertRuleId,
+                    RuleName = rule.Name,
+                    ResolvedAt = now,
+                    Reason = transition.CloseReason,
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to broadcast alert_resolved for excursion {ExcursionId}", excursionId);
+            }
         }
 
         await ArchiveInAppNotificationsAsync(tenantId, excursionId, ct);

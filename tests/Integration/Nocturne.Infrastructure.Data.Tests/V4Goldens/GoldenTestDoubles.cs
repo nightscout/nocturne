@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
@@ -152,6 +153,37 @@ internal sealed class CapturingEntrySink(EntryCapture capture) : IDataEventSink<
     public Task OnDeletedAsync(Entry? item, CancellationToken ct = default)
     {
         if (item is not null) capture.Add(new EntryProjectionEvent("deleted", [item]));
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Thread-safe singleton collector of the readings the sensor glucose chokepoint relays through
+/// <see cref="IGlucoseReadingBroadcaster"/>, one list per relay, in fire order.
+/// </summary>
+public sealed class GlucoseReadingCapture
+{
+    private readonly ConcurrentQueue<IReadOnlyList<SensorGlucose>> _relays = new();
+
+    /// <summary>Record one relay.</summary>
+    public void Add(IReadOnlyList<SensorGlucose> readings) => _relays.Enqueue(readings);
+
+    /// <summary>Drop all captured relays — call at the start of each scenario.</summary>
+    public void Clear() => _relays.Clear();
+
+    /// <summary>Point-in-time snapshot of the captured relays in fire order.</summary>
+    public IReadOnlyList<IReadOnlyList<SensorGlucose>> Snapshot() => _relays.ToArray();
+}
+
+/// <summary>
+/// Capturing <see cref="IGlucoseReadingBroadcaster"/> that records into <see cref="GlucoseReadingCapture"/>
+/// instead of touching SignalR.
+/// </summary>
+internal sealed class CapturingGlucoseReadingBroadcaster(GlucoseReadingCapture capture) : IGlucoseReadingBroadcaster
+{
+    public Task BroadcastAsync(IReadOnlyList<SensorGlucose> readings, CancellationToken ct = default)
+    {
+        capture.Add(readings);
         return Task.CompletedTask;
     }
 }

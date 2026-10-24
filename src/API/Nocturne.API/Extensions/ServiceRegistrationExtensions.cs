@@ -959,6 +959,7 @@ public static class ServiceRegistrationExtensions
         // categories. Open generic so every V4 model type resolves; the repository chokepoint fires it
         // for live writes only. Additive to the legacy v1 IDataEventSink<T> projections above.
         services.AddScoped(typeof(IV4RecordBroadcaster<>), typeof(SignalRV4RecordBroadcaster<>));
+        services.AddScoped<IGlucoseReadingBroadcaster, HomeAssistantGlucoseBroadcaster>();
 
         // Push notifications
         services.AddScoped<INotificationV2Service, NotificationV2Service>();

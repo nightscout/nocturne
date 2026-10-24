@@ -36,6 +36,13 @@ public interface IAlertRepository
     Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
 
     /// <summary>
+    /// The rule an excursion belongs to, or null when the excursion does not exist.
+    /// </summary>
+    /// <param name="tenantId">The tenant that owns the excursion, used to scope the query.</param>
+    /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
+    Task<ExcursionRuleSnapshot?> GetExcursionRuleAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
+
+    /// <summary>
     /// Resolves all active alert instances for the specified excursion, marking them
     /// with the given resolution timestamp and reason.
     /// </summary>

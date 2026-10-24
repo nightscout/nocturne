@@ -171,6 +171,21 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <inheritdoc/>
+    public virtual async Task<ExcursionRuleSnapshot?> GetExcursionRuleAsync(
+        Guid tenantId, Guid excursionId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
+
+        return await context.AlertExcursions
+            .AsNoTracking()
+            .Where(e => e.Id == excursionId)
+            .Join(context.AlertRules, e => e.AlertRuleId, r => r.Id,
+                (e, r) => new ExcursionRuleSnapshot(r.Id, r.Name))
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <inheritdoc/>
     public virtual async Task ResolveInstancesForExcursionAsync(
         Guid tenantId, Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct)
     {

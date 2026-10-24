@@ -5,8 +5,10 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Models.OAuth;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Controllers;
 
@@ -114,6 +116,24 @@ public class MetadataController : ControllerBase
     }
 
     /// <summary>
+    /// Get the Home Assistant hub's message shapes. Exists so the OpenAPI document, and every SDK
+    /// generated from it, carries the payload of each message <c>/hubs/home-assistant</c> sends.
+    /// </summary>
+    [HttpGet("home-assistant-hub-messages")]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(HomeAssistantHubMessagesMetadata), 200)]
+    public ActionResult<HomeAssistantHubMessagesMetadata> GetHomeAssistantHubMessages()
+    {
+        return Ok(
+            new HomeAssistantHubMessagesMetadata
+            {
+                AcknowledgeOutcomes = Enum.GetValues<AlertAcknowledgementOutcome>(),
+                Description = "Payloads of the messages the Home Assistant hub sends, keyed by message name",
+            }
+        );
+    }
+
+    /// <summary>
     /// Get TOTP setup failure codes metadata
     /// This endpoint ensures NSwag generates TypeScript types for TotpSetupFailure, which the
     /// verify-setup endpoint returns as the <c>detail</c> of its 400 and the web app turns into copy
@@ -203,6 +223,41 @@ public class AuthErrorCodesMetadata
 
     /// <summary>
     /// Description of the auth error codes
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// The messages <see cref="Hubs.HomeAssistantHub"/> sends, one property per message, named for it.
+/// Each property is null in the response; it exists for its type.
+/// </summary>
+public class HomeAssistantHubMessagesMetadata
+{
+    /// <summary>
+    /// <c>glucose_reading</c>, to an instance whose credential may read glucose: a live sensor glucose
+    /// write on the canonical stream.
+    /// </summary>
+    public GlucoseReadingEvent? GlucoseReading { get; set; }
+
+    /// <summary>
+    /// <c>alert_dispatch</c>, to the instance an alert is addressed to: an alert fired, or a delivery
+    /// that failed while the instance was offline, replayed on <c>Subscribe</c>.
+    /// </summary>
+    public AlertPayload? AlertDispatch { get; set; }
+
+    /// <summary><c>alert_resolved</c>, to every instance of the tenant: an excursion closed.</summary>
+    public AlertResolvedEvent? AlertResolved { get; set; }
+
+    /// <summary>
+    /// <c>alert_acknowledged</c>, to every instance of the tenant: excursions were acknowledged for everyone.
+    /// </summary>
+    public AlertAcknowledgedEvent? AlertAcknowledged { get; set; }
+
+    /// <summary>All values the hub's <c>Acknowledge</c> method can return.</summary>
+    public AlertAcknowledgementOutcome[] AcknowledgeOutcomes { get; set; } = [];
+
+    /// <summary>
+    /// Description of the messages
     /// </summary>
     public string Description { get; set; } = string.Empty;
 }

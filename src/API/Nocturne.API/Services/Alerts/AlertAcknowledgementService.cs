@@ -44,7 +44,8 @@ internal sealed class AlertAcknowledgementService(
     /// test fires carry a short future <c>EndedAt</c> so they surface in the active-intents
     /// snapshot; see <see cref="AlertDeliveryService.TestFireAsync"/>), applies the
     /// per-excursion mutation via <see cref="ApplyAcknowledgement"/>, saves once,
-    /// and broadcasts a single roll-up <c>alert_acknowledged</c> event via
+    /// and broadcasts a single roll-up <c>alert_acknowledged</c> event naming every excursion it
+    /// acknowledged via
     /// <see cref="ISignalRBroadcastService"/>. Broadcast failures are swallowed
     /// and logged so the acknowledgement is not rolled back.
     /// </remarks>
@@ -84,12 +85,12 @@ internal sealed class AlertAcknowledgementService(
 
         try
         {
-            await broadcastService.BroadcastAlertEventAsync("alert_acknowledged", new
+            await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
             {
-                tenantId,
-                acknowledgedBy,
-                acknowledgedAt = now,
-                excursionCount = excursions.Count,
+                TenantId = tenantId,
+                ExcursionIds = excursions.Select(e => e.Id).ToList(),
+                AcknowledgedBy = acknowledgedBy,
+                AcknowledgedAt = now,
             });
         }
         catch (Exception ex)
@@ -156,12 +157,12 @@ internal sealed class AlertAcknowledgementService(
         {
             try
             {
-                await broadcastService.BroadcastAlertEventAsync("alert_acknowledged", new
+                await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
                 {
-                    tenantId = excursion.TenantId,
-                    excursionId,
-                    acknowledgedBy,
-                    acknowledgedAt = now,
+                    TenantId = excursion.TenantId,
+                    ExcursionIds = [excursionId],
+                    AcknowledgedBy = acknowledgedBy,
+                    AcknowledgedAt = now,
                 });
             }
             catch (Exception ex)

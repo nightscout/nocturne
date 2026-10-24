@@ -122,7 +122,7 @@ public class AlertAcknowledgementServiceTests
         instance.Status.Should().Be("acknowledged");
 
         _broadcast.Verify(
-            x => x.BroadcastAlertEventAsync("alert_acknowledged", It.IsAny<object>()),
+            x => x.BroadcastAlertAcknowledgedAsync(It.IsAny<AlertAcknowledgedEvent>()),
             Times.Once);
     }
 
@@ -191,7 +191,7 @@ public class AlertAcknowledgementServiceTests
         instance.Status.Should().Be("acknowledged");
 
         _broadcast.Verify(
-            x => x.BroadcastAlertEventAsync("alert_acknowledged", It.IsAny<object>()),
+            x => x.BroadcastAlertAcknowledgedAsync(It.IsAny<AlertAcknowledgedEvent>()),
             Times.Once);
     }
 
@@ -247,7 +247,7 @@ public class AlertAcknowledgementServiceTests
         mute.AlertExcursionId.Should().Be(excursionId);
         mute.TenantId.Should().Be(_tenantId);
 
-        _broadcast.Verify(x => x.BroadcastAlertEventAsync("alert_acknowledged", It.IsAny<object>()), Times.Never);
+        _broadcast.Verify(x => x.BroadcastAlertAcknowledgedAsync(It.IsAny<AlertAcknowledgedEvent>()), Times.Never);
         _broadcast.Verify(
             x => x.BroadcastDeviceActionToSubjectAsync(
                 viewer,
@@ -316,7 +316,7 @@ public class AlertAcknowledgementServiceTests
         (await db.AlertInstances.IgnoreQueryFilters().FirstAsync(i => i.Id == instanceId))
             .Status.Should().Be("acknowledged");
         (await MutesAsync()).Should().BeEmpty();
-        _broadcast.Verify(x => x.BroadcastAlertEventAsync("alert_acknowledged", It.IsAny<object>()), Times.Once);
+        _broadcast.Verify(x => x.BroadcastAlertAcknowledgedAsync(It.IsAny<AlertAcknowledgedEvent>()), Times.Once);
         _alarmRelay.Verify(
             r => r.ClearIfQuietAsync(
                 It.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { excursionId })),
@@ -435,8 +435,47 @@ public class AlertAcknowledgementServiceTests
         allInst.First(i => i.Id == iOther).Status.Should().Be("triggered");
 
         _broadcast.Verify(
-            x => x.BroadcastAlertEventAsync("alert_acknowledged", It.IsAny<object>()),
+            x => x.BroadcastAlertAcknowledgedAsync(It.IsAny<AlertAcknowledgedEvent>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task AcknowledgeAll_BroadcastNamesEveryExcursionItAcknowledged()
+    {
+        var (e1, _) = await SeedActiveExcursionAsync();
+        var (e2, _) = await SeedActiveExcursionAsync();
+        await SeedActiveExcursionAsync(endedAt: DateTime.UtcNow.AddMinutes(-1));
+        AlertAcknowledgedEvent? sent = null;
+        _broadcast.Setup(x => x.BroadcastAlertAcknowledgedAsync(It.IsAny<AlertAcknowledgedEvent>()))
+            .Callback<AlertAcknowledgedEvent>(e => sent = e)
+            .Returns(Task.CompletedTask);
+
+        await _service.AcknowledgeAllAsync(_tenantId, "user:bob", CancellationToken.None);
+
+        sent.Should().NotBeNull();
+        sent!.TenantId.Should().Be(_tenantId);
+        sent.ExcursionIds.Should().BeEquivalentTo([e1, e2]);
+        sent.AcknowledgedBy.Should().Be("user:bob");
+        sent.AcknowledgedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_BroadcastNamesTheExcursion()
+    {
+        var (excursionId, _) = await SeedActiveExcursionAsync();
+        AlertAcknowledgedEvent? sent = null;
+        _broadcast.Setup(x => x.BroadcastAlertAcknowledgedAsync(It.IsAny<AlertAcknowledgedEvent>()))
+            .Callback<AlertAcknowledgedEvent>(e => sent = e)
+            .Returns(Task.CompletedTask);
+
+        await _service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:bob", AlertAcknowledgementAuthority.System,
+            broadcast: true, CancellationToken.None);
+
+        sent.Should().NotBeNull();
+        sent!.TenantId.Should().Be(_tenantId);
+        sent.ExcursionIds.Should().Equal(excursionId);
+        sent.AcknowledgedBy.Should().Be("user:bob");
     }
 
     [Fact]

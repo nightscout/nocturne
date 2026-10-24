@@ -111,6 +111,30 @@ public class AlertRepositoryTenantScopingTests
     }
 
     [Fact]
+    public async Task GetExcursionRuleAsync_ReturnsTheExcursionsRule_WithinTheRequestedTenantOnly()
+    {
+        var options = NewStore();
+        var lowRule = NewRule(TenantA, "Overnight Low");
+        var otherRule = NewRule(TenantB, "High");
+        var excursion = Guid.NewGuid();
+        var otherTenantExcursion = Guid.NewGuid();
+        await SeedAsync(options, ctx =>
+        {
+            ctx.Tenants.AddRange(NewTenant(TenantA), NewTenant(TenantB));
+            ctx.AlertRules.AddRange(lowRule, otherRule);
+            ctx.AlertExcursions.AddRange(
+                new AlertExcursionEntity { Id = excursion, TenantId = TenantA, AlertRuleId = lowRule.Id, StartedAt = DateTime.UtcNow },
+                new AlertExcursionEntity { Id = otherTenantExcursion, TenantId = TenantB, AlertRuleId = otherRule.Id, StartedAt = DateTime.UtcNow });
+        });
+        var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: TenantB));
+
+        (await repo.GetExcursionRuleAsync(TenantA, excursion, CancellationToken.None))
+            .Should().Be(new ExcursionRuleSnapshot(lowRule.Id, "Overnight Low"));
+        (await repo.GetExcursionRuleAsync(TenantA, otherTenantExcursion, CancellationToken.None))
+            .Should().BeNull();
+    }
+
+    [Fact]
     public async Task DeleteExcursionMutesAsync_DeletesEveryMuteOfTheClosedExcursionAndNoOther()
     {
         // SQLite rather than InMemory: the delete is a set-based ExecuteDelete.

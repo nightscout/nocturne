@@ -56,6 +56,9 @@ public class V4GoldenFixture : IAsyncLifetime
         // chokepoint's entries projection fires into EntryCapture (additive — non-glucose goldens ignore it).
         services.AddSingleton<EntryCapture>();
         services.AddScoped<IDataEventSink<Entry>>(sp => new CapturingEntrySink(sp.GetRequiredService<EntryCapture>()));
+        services.AddSingleton<GlucoseReadingCapture>();
+        services.AddScoped<IGlucoseReadingBroadcaster>(sp =>
+            new CapturingGlucoseReadingBroadcaster(sp.GetRequiredService<GlucoseReadingCapture>()));
         RegisterV4Repositories(services);
         _provider = services.BuildServiceProvider();
     }
@@ -65,6 +68,9 @@ public class V4GoldenFixture : IAsyncLifetime
 
     /// <summary>The shared legacy-Entry projection collector recording the glucose-family chokepoint's entries fan-out.</summary>
     public EntryCapture EntryCapture => _provider!.GetRequiredService<EntryCapture>();
+
+    /// <summary>The shared collector of the sensor glucose chokepoint's <c>glucose_reading</c> relays.</summary>
+    public GlucoseReadingCapture GlucoseReadingCapture => _provider!.GetRequiredService<GlucoseReadingCapture>();
 
     /// <summary>
     /// Registers the V4 record repositories under test. In production these are registered by the API

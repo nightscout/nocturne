@@ -54,7 +54,7 @@ flowchart TD
         Resolution["<b>IExcursionResolutionHandler</b><br/>HandleClosedAsync(transition, tenantId)<br/><i>single seam used by per-reading,<br/>auto-resolve, and sweep</i>"]
         Stamp["repository.ResolveInstancesForExcursionAsync<br/>stamps resolution_reason from CloseReason<br/>(hysteresis | auto | manual | rule-disabled)"]
         Expire["repository.ExpirePendingDeliveriesAsync"]
-        BroadcastResolved["broadcastService<br/>BroadcastAlertEventAsync('alert_resolved')"]
+        BroadcastResolved["broadcastService<br/>BroadcastAlertResolvedAsync"]
         ArchiveInApp["For each InApp recipient:<br/>notificationService.ArchiveBySourceAsync<br/>(ConditionMet)"]
 
         Resolution --> Stamp --> Expire --> BroadcastResolved --> ArchiveInApp

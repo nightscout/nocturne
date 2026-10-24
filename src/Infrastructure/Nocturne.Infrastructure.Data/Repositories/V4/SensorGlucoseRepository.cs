@@ -27,6 +27,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
 {
     private readonly IDeduplicationService _deduplicationService;
+    private readonly IGlucoseReadingBroadcaster? _readingBroadcaster;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SensorGlucoseRepository"/> class.
@@ -37,12 +38,19 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         IAuditContext auditContext,
         ILogger<SensorGlucoseRepository> logger,
         IV4RecordBroadcaster<SensorGlucose>? broadcaster = null,
-        IDataEventSink<Entry>? entrySink = null
+        IDataEventSink<Entry>? entrySink = null,
+        IGlucoseReadingBroadcaster? readingBroadcaster = null
     )
         : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
         _deduplicationService = deduplicationService;
+        _readingBroadcaster = readingBroadcaster;
     }
+
+    /// <inheritdoc />
+    protected override Task OnLiveVisibleCreatedAsync(
+        IReadOnlyList<SensorGlucose> visibleCreated, CancellationToken ct) =>
+        _readingBroadcaster?.BroadcastAsync(visibleCreated, ct) ?? Task.CompletedTask;
 
     /// <inheritdoc />
     public Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(

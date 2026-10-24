@@ -56,6 +56,11 @@ public record UpdateAlertInstanceRequest(Guid TenantId, Guid Id, string? Status 
 public record HysteresisExcursionSnapshot(Guid Id, Guid TenantId, Guid AlertRuleId, DateTime? HysteresisStartedAt);
 
 /// <summary>
+/// The <see cref="AlertRule"/> an <see cref="AlertExcursion"/> belongs to.
+/// </summary>
+public record ExcursionRuleSnapshot(Guid AlertRuleId, string Name);
+
+/// <summary>
 /// Pairing of an open excursion with its owning rule, restricted to rules
 /// that have <see cref="AlertRule.AutoResolveEnabled"/> set. Returned by
 /// <see cref="Nocturne.Core.Contracts.Alerts.IAlertRepository.GetAutoResolveExcursionsAsync"/>

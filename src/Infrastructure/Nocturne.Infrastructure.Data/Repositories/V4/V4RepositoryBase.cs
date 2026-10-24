@@ -87,11 +87,12 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     protected virtual Entry? ProjectToLegacyEntry(TModel model) => null;
 
     /// <summary>
-    /// Filters the models that reach the legacy <see cref="Entry"/> projection. The legacy surface
-    /// is single-stream: SensorGlucose overrides this with canonical stream selection so a losing
-    /// CGM's live writes don't interleave into v1/v3 clients' dataUpdate feed. Deletes are never
-    /// filtered — a previously-broadcast record must always emit its removal. The native V4
-    /// broadcast is unaffected (multi-stream access is a V4 concern).
+    /// Filters the models that reach the single-stream surfaces: the legacy <see cref="Entry"/>
+    /// projection and <see cref="OnLiveVisibleCreatedAsync"/>. SensorGlucose overrides this with
+    /// canonical stream selection so a losing CGM's live writes don't interleave into v1/v3 clients'
+    /// dataUpdate feed or the Home Assistant glucose relay. Deletes are never filtered — a
+    /// previously-broadcast record must always emit its removal. The native V4 broadcast is
+    /// unaffected (multi-stream access is a V4 concern).
     /// </summary>
     protected virtual Task<IReadOnlyList<TModel>> FilterLegacyProjectionAsync(
         IReadOnlyList<TModel> models, CancellationToken ct) => Task.FromResult(models);
@@ -199,8 +200,16 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <summary>
-    /// Projects glucose-family writes to the legacy <see cref="Entry"/> shape and fires the legacy entry
-    /// sink — gated to <see cref="WriteOrigin.Live"/>, and a no-op when no sink is wired or the type has no
+    /// Hook for live creates that survive <see cref="FilterLegacyProjectionAsync"/>. Default is a no-op;
+    /// SensorGlucose relays them as the Home Assistant hub's <c>glucose_reading</c>.
+    /// </summary>
+    protected virtual Task OnLiveVisibleCreatedAsync(IReadOnlyList<TModel> visibleCreated, CancellationToken ct) =>
+        Task.CompletedTask;
+
+    /// <summary>
+    /// Runs the single-stream surfaces of a live write: <see cref="OnLiveVisibleCreatedAsync"/>, then the
+    /// legacy entry sink with the write projected to the <see cref="Entry"/> shape. Gated to
+    /// <see cref="WriteOrigin.Live"/>; the projection is a no-op when no sink is wired or the type has no
     /// projection (<see cref="ProjectToLegacyEntry"/> returns null).
     /// </summary>
     private async Task RaiseEntriesProjectionAsync(
@@ -210,10 +219,16 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         WriteOrigin origin,
         CancellationToken ct)
     {
-        if (origin != WriteOrigin.Live || _entrySink is null)
+        if (origin != WriteOrigin.Live)
             return;
 
         var visibleCreated = created.Count > 0 ? await FilterLegacyProjectionAsync(created, ct) : created;
+        if (visibleCreated.Count > 0)
+            await OnLiveVisibleCreatedAsync(visibleCreated, ct);
+
+        if (_entrySink is null)
+            return;
+
         var createdEntries = visibleCreated.Select(ProjectToLegacyEntry).OfType<Entry>().ToList();
         if (createdEntries.Count > 0)
             await _entrySink.OnCreatedAsync(createdEntries, ct);
