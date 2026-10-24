@@ -82,7 +82,7 @@ public class TotalIobAgreementTests
     public TotalIobAgreementTests()
     {
         var therapy = new Mock<ITherapySettingsResolver>();
-        therapy.Setup(t => t.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(3.0);
+        therapy.Setup(t => t.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => _dia);
         var sensitivity = new Mock<ISensitivityResolver>();
         sensitivity.Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(95.0);
         var basalRate = new Mock<IBasalRateResolver>();
@@ -116,14 +116,13 @@ public class TotalIobAgreementTests
                 It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var snapshot = new TherapySnapshot(
-            3.0, 75, 30.0, null, null, 0,
-            [new ScheduleEntry { TimeAsSeconds = 0, Value = 95.0 }], null,
-            [new ScheduleEntry { TimeAsSeconds = 0, Value = 1.0 }]);
         _timelines
             .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
-                new TherapyTimeline([new TherapySegment(from, to, snapshot)]));
+                new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(
+                    _dia, 75, 30.0, null, null, 0,
+                    [new ScheduleEntry { TimeAsSeconds = 0, Value = 95.0 }], null,
+                    [new ScheduleEntry { TimeAsSeconds = 0, Value = 1.0 }]))]));
     }
 
     private List<ApsIobCobPoint> ApsPoints(DateTime from, DateTime to) =>
@@ -148,6 +147,7 @@ public class TotalIobAgreementTests
         Origin = TempBasalOrigin.Suspended,
     };
 
+    private double _dia = 3.0;
     private bool _noTreatments;
 
     private IIobCobReader Reader(long at) =>
@@ -483,6 +483,64 @@ public class TotalIobAgreementTests
         temps.Verify(r => r.GetAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
             ChartDataService.TempBasalQueryLimit, It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task V1Hourly_CountsASuspendOpenSinceBeforeTheInsulinLookback()
+    {
+        var suspend = new TempBasal
+        {
+            StartTimestamp = Reading.AddHours(-10).UtcDateTime,
+            Rate = 0,
+            Origin = TempBasalOrigin.Suspended,
+        };
+        var temps = new Mock<ITempBasalRepository>();
+        temps
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? from, DateTime? _, string? _, string? _, int _, int _, bool _, CancellationToken _) =>
+                (IEnumerable<TempBasal>)new[] { suspend }.Where(t => t.StartTimestamp >= from).ToList());
+        var controller = new IobController(
+            _calculator, _cob.Object, _timelines.Object, _aps.Object, _pump.Object, Boluses(ReadingMills), temps.Object,
+            Reader(ReadingMills), NullLogger<IobController>.Instance);
+
+        var response = (await controller.GetHourlyIob(intervalMinutes: 60, hours: 1, startTime: ReadingMills)).Result
+            .Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<HourlyIobResponse>().Subject;
+
+        response.Data.Single().BasalIOB.Should().BeNegative();
+    }
+
+    [Fact]
+    public async Task ASuspendRunningNineHoursUnderAProfileDiaOfTen_SeriesAndSingleTickAgree()
+    {
+        _dia = 10.0;
+        var suspend = new TempBasal
+        {
+            StartTimestamp = Reading.AddHours(-9).UtcDateTime,
+            Rate = 0,
+            Origin = TempBasalOrigin.Suspended,
+        };
+        var temps = new Mock<ITempBasalRepository>();
+        temps
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime? from, DateTime? _, string? _, string? _, int _, int _, bool _, CancellationToken _) =>
+                (IEnumerable<TempBasal>)new[] { suspend }.Where(t => t.StartTimestamp >= from).ToList());
+        _noTreatments = true;
+        var reader = new IobCobReader(
+            _calculator, _cob.Object, Boluses(ReadingMills), temps.Object, _carbs.Object, TestTenantCache.Create(), NullLogger<IobCobReader>.Instance);
+        var controller = new IobController(
+            _calculator, _cob.Object, _timelines.Object, _aps.Object, _pump.Object, Boluses(ReadingMills), temps.Object,
+            reader, NullLogger<IobController>.Instance);
+
+        var singleTick = (await reader.ReadTotalAsync(ReadingMills, live: false)).Iob;
+        var series = (await controller.GetHourlyIob(intervalMinutes: 60, hours: 1, startTime: ReadingMills)).Result
+            .Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<HourlyIobResponse>().Subject;
+
+        singleTick.BasalIob.Should().BeNegative();
+        series.Data.Single().BasalIOB.Should().BeApproximately(singleTick.BasalIob!.Value, 0.0005);
     }
 
     [Fact]

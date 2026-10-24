@@ -38,7 +38,7 @@ public sealed class IobCobReader(
             from: insulinFrom, to: to, device: null, source: null,
             limit: Limit, offset: 0, descending: false, ct: ct);
         var tempBasals = await tempBasalRepository.GetAsync(
-            from: StatisticsService.TempBasalReadStart(insulinFrom), to: to, device: null, source: null,
+            from: StatisticsService.IobSeriesTempBasalReadStart(to), to: to, device: null, source: null,
             limit: ChartDataService.TempBasalQueryLimit, offset: 0, descending: false, ct: ct);
         var carbIntakes = await carbIntakeRepository.GetAsync(
             from: to.AddHours(-IIobCobReader.CarbLookbackHours), to: to, device: null, source: null,

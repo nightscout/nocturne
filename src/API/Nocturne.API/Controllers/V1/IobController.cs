@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -189,7 +190,9 @@ public class IobController : ControllerBase
                 limit: 2000, offset: 0, descending: false, ct: cancellationToken
             )).ToList();
             var tempBasals = (await _tempBasalRepository.GetAsync(
-                from: fetchFrom, to: fetchTo, device: null, source: null,
+                from: StatisticsService.IobSeriesTempBasalReadStart(
+                    DateTimeOffset.FromUnixTimeMilliseconds(calculationStartTime).UtcDateTime),
+                to: fetchTo, device: null, source: null,
                 limit: ChartDataService.TempBasalQueryLimit, offset: 0, descending: false, ct: cancellationToken
             )).ToList();
 

@@ -25,8 +25,8 @@ public class IobCobSeriesTests
         new Mock<IApsSnapshotRepository>(MockBehavior.Strict).Object,
         new Mock<IPumpSnapshotRepository>(MockBehavior.Strict).Object);
 
-    private static TherapySnapshot Snapshot(double basalRate) => new(
-        dia: 3.0,
+    private static TherapySnapshot Snapshot(double basalRate, double dia = 3.0) => new(
+        dia: dia,
         peakMinutes: 75,
         carbsPerHour: 30.0,
         timezone: null,
@@ -36,8 +36,8 @@ public class IobCobSeriesTests
         carbRatioEntries: null,
         basalEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = basalRate }]);
 
-    private static TherapyTimeline Flat(double basalRate) =>
-        new([new TherapySegment(Now - 24 * 60 * Minute, Now + 1, Snapshot(basalRate))]);
+    private static TherapyTimeline Flat(double basalRate, double dia = 3.0) =>
+        new([new TherapySegment(Now - 24 * 60 * Minute, Now + 1, Snapshot(basalRate, dia))]);
 
     private static TempBasal Temp(long start, long? end, double rate, TempBasalOrigin origin = TempBasalOrigin.Algorithm) => new()
     {
@@ -64,6 +64,74 @@ public class IobCobSeriesTests
 
         Assert.Equal(-1.333, tick.Iob, 9);
         Assert.Equal(-1.333, tick.BasalIob);
+    }
+
+    [Fact]
+    public void ProfileDiaAboveTheReadLookback_CountsNoBolusOlderThanIt()
+    {
+        var old = new Bolus { Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(Now - 9 * 60 * Minute).UtcDateTime, Insulin = 2 };
+
+        var tick = TickAtNow([old], [], Flat(1.0, dia: 10.0));
+
+        Assert.Equal(0, tick.Iob);
+    }
+
+    private static Bolus BolusWithOwnDia(long agoMinutes, double dia) => new()
+    {
+        Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(Now - agoMinutes * Minute).UtcDateTime,
+        Insulin = 2,
+        InsulinContext = new TreatmentInsulinContext { Dia = dia, Peak = 75 },
+    };
+
+    [Theory]
+    [InlineData(420)]
+    [InlineData(540)]
+    public void BolusWithItsOwnDiaOfTen_IsCappedTheSameInTheSeriesAndTheSingleTick(long agoMinutes)
+    {
+        var bolus = BolusWithOwnDia(agoMinutes, 10.0);
+        var timeline = Flat(1.0, dia: 10.0);
+
+        var series = TickAtNow([bolus], [], timeline).BolusIob;
+        var singleTick = Calculator.FromBoluses([bolus], timeline.SnapshotAt(Now), Now).Iob;
+
+        Assert.Equal(singleTick, series);
+        Assert.Equal(agoMinutes == 420, singleTick > 0);
+    }
+
+    [Fact]
+    public void TempPieceEndedBetweenEightAndTenHoursAgoUnderProfileDiaOfTen_CountsNothingInTheSeriesAndTheSingleTick()
+    {
+        var piece = Temp(Now - 570 * Minute, Now - 510 * Minute, rate: 0, TempBasalOrigin.Suspended);
+        var timeline = Flat(1.0, dia: 10.0);
+
+        var series = TickAtNow([], [piece], timeline).BasalIob;
+        var singleTick = Calculator.FromTempBasals([piece], timeline.SnapshotAt(Now), _ => 1.0, Now, Now).BasalIob;
+
+        Assert.Equal(singleTick, series);
+        Assert.Equal(0, singleTick);
+    }
+
+    [Fact]
+    public void BolusesAllCarryingTheirOwnDia_NeverAskTheProfileForOne()
+    {
+        var therapy = new Mock<ITherapySettingsResolver>(MockBehavior.Strict);
+        var sensitivity = new Mock<ISensitivityResolver>();
+        sensitivity.Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(95.0);
+        var calculator = new IobCalculator(
+            therapy.Object, sensitivity.Object,
+            new Mock<IBasalRateResolver>(MockBehavior.Strict).Object,
+            new Mock<IApsSnapshotRepository>(MockBehavior.Strict).Object,
+            new Mock<IPumpSnapshotRepository>(MockBehavior.Strict).Object);
+
+        calculator.FromBoluses([BolusWithOwnDia(60, 4.0), BolusWithOwnDia(120, 10.0)], Now);
+
+        therapy.Verify(t => t.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void ProfileDiaIsNotCapped()
+    {
+        Assert.Equal(10.0, Snapshot(1.0, dia: 10.0).Dia);
     }
 
     [Fact]
