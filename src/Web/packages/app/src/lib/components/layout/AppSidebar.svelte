@@ -40,6 +40,8 @@
     baseDomain?: string | null;
     /** Whether this host serves the cross-tenant dashboard rather than one tenant (from layout data) */
     tenantless?: boolean;
+    /** Whether the user belongs to more than one active tenant (from layout data) */
+    hasMultipleTenants?: boolean;
   }
 
   const {
@@ -50,6 +52,7 @@
     currentSlug = null,
     baseDomain = null,
     tenantless = false,
+    hasMultipleTenants = false,
   }: Props = $props();
 
   const sidebar = Sidebar.useSidebar();
@@ -65,10 +68,6 @@
   $effect(() => {
     langPrefKnown = hasLanguagePreference();
   });
-
-  // Tenant switcher state
-  let tenantTargets = $state<TenantSwitcherTarget[]>([]);
-  let totalTenantCount = $state(0);
 
   /**
    * Platform-admin "access" mode: the session is a short-lived platform-access grant on a
@@ -90,12 +89,12 @@
   // Available tenants for the subdomain switcher. The switcher is valued by slug, so a host that
   // names no tenant needs a sentinel; a slug can never be one, having no underscores.
   const TENANTLESS = "__self__";
-  // Read once the page is idle: the list decides whether the switcher and the Tenants nav item
-  // render.
+  // The layout says whether to render the switcher; the list only fills it, so it is read, once
+  // the page is idle or the switcher is opened, for a member who has more than one tenant to pick from.
   let idle = $state(false);
   $effect(() => whenIdle(() => (idle = true)));
   const isMember = $derived(user !== null && !isGuestSession);
-  const myTenantsQuery = $derived(idle && isMember ? getMyTenants() : null);
+  const myTenantsQuery = $derived(idle && isMember && hasMultipleTenants ? getMyTenants() : null);
   retainQuery(() => myTenantsQuery);
 
   function handleTenantChange(value: string | undefined) {
@@ -112,17 +111,9 @@
       : target.slug;
   }
 
-  // Use $effect (not onMount) so this also runs when `user` becomes available
-  // after client-side login navigation.
-  $effect(() => {
-    if (!user || isGuestSession) return;
-    const tenants = myTenantsQuery?.current;
-    if (tenants === undefined) return;
-
-    const switcher = resolveTenantSwitcher(tenants);
-    totalTenantCount = switcher.totalCount;
-    tenantTargets = switcher.targets;
-  });
+  const tenantTargets: TenantSwitcherTarget[] = $derived(
+    resolveTenantSwitcher(myTenantsQuery?.current).targets,
+  );
 
   // A platform-access grant views a tenant the operator is not a member of, so the host's slug
   // can name a tenant the list does not carry.
@@ -138,7 +129,7 @@
       isGuestSession,
       isPlatformAdmin,
       grantedScopes: page.data.effectivePermissions ?? [],
-      tenantCount: totalTenantCount,
+      hasMultipleTenants,
       tenantless,
     }),
   );
@@ -236,7 +227,7 @@
 
   <!-- The switcher needs a host to navigate to, so unlike the Tenants nav item it stays gated
        on baseDomain. -->
-  {#if baseDomain && totalTenantCount > 1 && tenantTargets.length > 0 && !isGuestSession}
+  {#if baseDomain && hasMultipleTenants && !isGuestSession && !myTenantsQuery?.error}
     <div class="border-b px-3 py-2 group-data-[collapsible=icon]:hidden">
       <p
         class="mb-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5"
@@ -248,6 +239,7 @@
         type="single"
         value={currentSlug ?? TENANTLESS}
         onValueChange={handleTenantChange}
+        onOpenChange={(open) => open && (idle = true)}
       >
         <Select.Trigger size="sm" class="w-full">
           {viewedTenantLabel}

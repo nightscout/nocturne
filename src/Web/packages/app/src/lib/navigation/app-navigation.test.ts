@@ -11,7 +11,7 @@ const MEMBER: NavViewer = {
   isGuestSession: false,
   isPlatformAdmin: false,
   grantedScopes: ["*"],
-  tenantCount: 1,
+  hasMultipleTenants: false,
   tenantless: false,
 };
 /** A share link on its default categories. */
@@ -118,8 +118,8 @@ describe("buildAppNavigation", () => {
   });
 
   it("offers the tenant switcher only to a member holding more than one", () => {
-    expect(titles({ ...MEMBER, tenantCount: 2 })).toContain("Tenants");
-    expect(titles({ ...REPORTING_SHARE, tenantCount: 2 })).not.toContain(
+    expect(titles({ ...MEMBER, hasMultipleTenants: true })).toContain("Tenants");
+    expect(titles({ ...REPORTING_SHARE, hasMultipleTenants: true })).not.toContain(
       "Tenants"
     );
   });

@@ -7,16 +7,16 @@ namespace Nocturne.API.Services.Identity;
 
 /// <summary>
 /// Provides tenant membership lookups: checking whether a subject belongs to a tenant and
-/// listing all tenants a subject has access to. Uses a factory-created <see cref="NocturneDbContext"/>
+/// listing or counting the tenants a subject has access to. Uses a factory-created <see cref="NocturneDbContext"/>
 /// per operation to avoid context lifetime issues in singleton-scoped callers.
 /// </summary>
 /// <remarks>
 /// Each operation pins its context to the tenant it was asked about, so the lookup carries its
 /// own RLS reach rather than inheriting the caller's. This runs on the authentication hot path
 /// (<c>AuthenticationMiddleware</c>) and from SignalR and OIDC, where no ambient tenant is
-/// resolved. <see cref="GetTenantIdsForSubjectAsync"/> is the one cross-tenant read and pins the
-/// subject instead — it answers "which tenants does this person belong to", which no single
-/// tenant pin can express.
+/// resolved. <see cref="GetTenantIdsForSubjectAsync"/> and <see cref="HasMultipleActiveTenantsAsync"/>
+/// are the cross-tenant reads and pin the subject instead; they answer "which tenants does this
+/// person belong to", which no single tenant pin can express.
 /// </remarks>
 /// <seealso cref="ITenantMemberService"/>
 public class TenantMemberService : ITenantMemberService
@@ -42,6 +42,16 @@ public class TenantMemberService : ITenantMemberService
             .Where(tm => tm.SubjectId == subjectId)
             .Select(tm => tm.TenantId)
             .ToListAsync(ct);
+    }
+
+    public async Task<bool> HasMultipleActiveTenantsAsync(Guid subjectId, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreateForSubjectAsync(subjectId, ct);
+        var active = await context.TenantMembers.AsNoTracking()
+            .Where(tm => tm.SubjectId == subjectId && tm.Tenant!.IsActive)
+            .Take(2)
+            .CountAsync(ct);
+        return active > 1;
     }
 
     public async Task<List<string>> GetMemberRoleNamesAsync(Guid subjectId, Guid tenantId, CancellationToken ct = default)

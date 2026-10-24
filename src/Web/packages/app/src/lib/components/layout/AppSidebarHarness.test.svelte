@@ -9,11 +9,13 @@
     isGuestSession = false,
     currentSlug = null,
     baseDomain = null,
+    hasMultipleTenants = false,
   }: {
     user?: AuthUser | null;
     isGuestSession?: boolean;
     currentSlug?: string | null;
     baseDomain?: string | null;
+    hasMultipleTenants?: boolean;
   } = $props();
 
   // The glucose widget reads the store from context. Never initialized, so no socket opens.
@@ -28,5 +30,5 @@
 </script>
 
 <Sidebar.Provider>
-  <AppSidebar {user} {isGuestSession} {currentSlug} {baseDomain} />
+  <AppSidebar {user} {isGuestSession} {currentSlug} {baseDomain} {hasMultipleTenants} />
 </Sidebar.Provider>

@@ -33,6 +33,8 @@
   import { getCurrentTenantId } from "../../current-tenant.remote";
   import { getTransitionStatus } from "$api/generated/platforms.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import { invalidate } from "$app/navigation";
+  import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
   import { remoteErrorMessage } from "$lib/api/remote-error";
 
   const tenantIdQuery = getCurrentTenantId();
@@ -229,6 +231,7 @@
       });
       createdSlug = normalizedSlug;
       isCreateDialogOpen = false;
+      void invalidate(SHELL_DATA_KEY);
     } catch (err) {
       createError = describeSubmitError(
         err,

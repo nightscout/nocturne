@@ -89,8 +89,8 @@ export interface NavViewer {
   isPlatformAdmin: boolean;
   /** The viewer's granted scopes, as `page.data.effectivePermissions` carries them. */
   grantedScopes: readonly string[];
-  /** How many tenants the viewer can switch between. */
-  tenantCount: number;
+  /** Whether the viewer has more than one tenant to switch between. */
+  hasMultipleTenants: boolean;
   /** Whether this host serves the cross-tenant dashboard rather than one tenant. */
   tenantless: boolean;
 }
@@ -173,7 +173,7 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
   const readOnly = readOnlyNav(items, viewer);
   if (readOnly) return readOnly;
 
-  if (viewer.tenantCount > 1) {
+  if (viewer.hasMultipleTenants) {
     items.push({
       id: "tenants",
       title: "Tenants",
