@@ -23,7 +23,7 @@ namespace Nocturne.API.Services.Identity;
 /// <see cref="ITenantRoleService"/> default role seeding, and per-tenant <see cref="IMemoryCache"/> caching.
 /// </summary>
 /// <remarks>
-/// Slugs must match a <c>[a-z0-9][a-z0-9\-]{1,62}[a-z0-9]</c> pattern and cannot be reserved words.
+/// Slugs must match a <c>[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]</c> pattern and cannot be reserved words.
 /// Tenant lookups by slug are cached with a short TTL to reduce database round-trips on every request.
 /// </remarks>
 /// <seealso cref="ITenantService"/>
@@ -64,7 +64,7 @@ public partial class TenantService : ITenantService
         "nightscout", "cgm", "patient", "clinic", "provider",
     ];
 
-    [GeneratedRegex(@"^[a-z0-9][a-z0-9\-]{1,62}[a-z0-9]$")]
+    [GeneratedRegex(@"^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$")]
     private static partial Regex SlugPattern();
 
     /// <summary>
@@ -380,7 +380,7 @@ public partial class TenantService : ITenantService
         var normalized = slug.ToLowerInvariant().Trim();
 
         if (!SlugPattern().IsMatch(normalized))
-            return new SlugValidationResult(false, "Slug must be 3-64 characters, alphanumeric and hyphens only, no leading/trailing hyphens");
+            return new SlugValidationResult(false, "Slug must be 3-63 characters, alphanumeric and hyphens only, no leading/trailing hyphens");
 
         if (ReservedSlugs.Contains(normalized))
             return new SlugValidationResult(false, "This name is reserved");

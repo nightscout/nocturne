@@ -47,7 +47,7 @@ export const buildTenantRedirectUrl = query(
   async ({ slug, stateToken }) => {
     const trimmedSlug = slug.trim().toLowerCase();
 
-    if (!trimmedSlug || !/^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]?$/.test(trimmedSlug)) {
+    if (!trimmedSlug || !/^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]?$/.test(trimmedSlug)) {
       return { error: "Please enter a valid instance slug (letters, digits, hyphens)." };
     }
 

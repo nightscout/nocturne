@@ -118,7 +118,7 @@
 					type="text"
 					bind:value={slug}
 					required
-					pattern="[a-z0-9][a-z0-9\-]{'{ 0,62}'}[a-z0-9]?"
+					pattern={"[a-z0-9][a-z0-9\\-]{0,61}[a-z0-9]?"}
 					placeholder="e.g. myfamily"
 				/>
 			</label>
