@@ -632,7 +632,7 @@ public partial class AnalyticsReadScopeGuardTests
         var service = new Mock<IWidgetSummaryService>();
         service
             .Setup(s => s.GetSummaryAsync(
-                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Summary());
 
         var context = ContextWith(Granted(Scope.GlucoseRead));

@@ -43,7 +43,6 @@
     TrackerCategory,
     CompletionReason,
     DashboardVisibility,
-    TrackerVisibility,
     TrackerMode,
     ReservoirReportKind,
     type TrackerDefinitionDto,
@@ -118,7 +117,6 @@
   let formDashboardVisibility = $state<DashboardVisibility>(
     DashboardVisibility.Always
   );
-  let formVisibility = $state<TrackerVisibility>(TrackerVisibility.Private);
   let formMode = $state<TrackerMode>(TrackerMode.Duration);
   let formStartEventType = $state<string | undefined>(undefined);
   let formCompletionEventType = $state<string | undefined>(undefined);
@@ -292,7 +290,6 @@
     formNotifications = [];
     formIsFavorite = false;
     formDashboardVisibility = DashboardVisibility.Always;
-    formVisibility = TrackerVisibility.Private;
     formMode = TrackerMode.Duration;
     formStartEventType = undefined;
     formCompletionEventType = undefined;
@@ -318,7 +315,6 @@
     formIsFavorite = def.isFavorite ?? false;
     formDashboardVisibility =
       def.dashboardVisibility ?? DashboardVisibility.Always;
-    formVisibility = def.visibility ?? TrackerVisibility.Private;
     formMode = def.mode ?? TrackerMode.Duration;
     formStartEventType = def.startEventType ?? undefined;
     formCompletionEventType = def.completionEventType ?? undefined;
@@ -566,7 +562,6 @@
   bind:formNotifications
   bind:formIsFavorite
   bind:formDashboardVisibility
-  bind:formVisibility
   bind:formMode
   bind:formStartEventType
   bind:formCompletionEventType

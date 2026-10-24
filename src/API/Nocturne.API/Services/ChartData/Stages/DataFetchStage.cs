@@ -241,10 +241,7 @@ internal sealed class DataFetchStage(
             );
 
             var trackerDefs = await trackerRepository.GetAllDefinitionsAsync(cancellationToken);
-            var trackerInstances = await trackerRepository.GetActiveInstancesAsync(
-                userId: null,
-                cancellationToken: cancellationToken
-            );
+            var trackerInstances = await trackerRepository.GetActiveInstancesAsync(cancellationToken);
 
             List<HeartRate> heartRateList = [];
             List<StepCount> stepCountList = [];

@@ -105,10 +105,9 @@ public class TrackerTriggerService : IDeviceEventReactor
         if (created.Count == 0)
             return;
 
-        // Definitions are read tenant-wide rather than per-user: a device event is a fact about the
-        // tenant's hardware, so every tracker configured to follow that event advances, and the new
-        // instance is owned by whoever owns the definition. There is no user on a connector-ingested
-        // event to scope this by, and the managed alert rules trackers sync are already tenant-visible.
+        // Every tracker configured to follow the event advances: a device event is a fact about the
+        // tenant's hardware, and trackers are the tenant's. The new instance records the definition's
+        // creator, since a connector-ingested event carries no user.
         var definitions = await _trackerRepository.GetAllDefinitionsAsync(ct);
 
         var triggers = definitions
@@ -173,11 +172,11 @@ public class TrackerTriggerService : IDeviceEventReactor
                 run.Definition.Name);
 
             await _broadcast.BroadcastTrackerUpdateAsync(
-                TrackerRealtimeAction.Delete, TrackerInstanceDto.FromEntity(revert.Removed), run.Definition.UserId, run.Definition.Visibility);
+                TrackerRealtimeAction.Delete, TrackerInstanceDto.FromEntity(revert.Removed));
             foreach (var reopened in revert.Reopened)
             {
                 await _broadcast.BroadcastTrackerUpdateAsync(
-                    TrackerRealtimeAction.Reopen, TrackerInstanceDto.FromEntity(reopened), run.Definition.UserId, run.Definition.Visibility);
+                    TrackerRealtimeAction.Reopen, TrackerInstanceDto.FromEntity(reopened));
                 if (reopened.StartTreatmentId is { } startedBy && deletedIds.Contains(startedBy))
                     pending.Push(reopened);
             }

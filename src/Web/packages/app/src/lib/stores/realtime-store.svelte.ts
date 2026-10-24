@@ -20,6 +20,7 @@ import type {
   AnnouncementEvent,
   AlarmEvent,
   TrackerUpdateEvent,
+  TrackerDefinitionUpdateEvent,
   SyncProgressEvent,
 } from "$lib/websocket/types";
 import type {
@@ -495,8 +496,8 @@ export class RealtimeStore {
       ]);
       const rest = Promise.all([
         profileClient().getProfileSummary().catch(() => null),
-        trackersClient().getDefinitions().catch(() => []),
-        trackersClient().getActiveInstances().catch(() => []),
+        trackersClient().getDefinitions().catch(() => null),
+        trackersClient().getActiveInstances().catch(() => null),
         notificationsClient().getNotifications().catch(() => []),
         bolusClient().getAll(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load boluses:", e); return []; }),
         nutritionClient().getCarbIntakes(oneDayAgo, now, CARE_RECORD_CAP).then((r) => r.data ?? []).catch((e) => { console.error("Failed to load carbIntakes:", e); return []; }),
@@ -541,10 +542,11 @@ export class RealtimeStore {
       if (profileData) {
         this.profile = profileData;
       }
-      if (trackerDefs.length > 0) {
+      // An empty list is an answer (no trackers, or none running); only a failed read keeps state.
+      if (trackerDefs) {
         this.trackerDefinitions = trackerDefs;
       }
-      if (trackerActive.length > 0) {
+      if (trackerActive) {
         this.trackerInstances = trackerActive;
       }
       if (notifications.length > 0) {
@@ -631,6 +633,10 @@ export class RealtimeStore {
 
     this.websocketClient.on("trackerUpdate", (event: TrackerUpdateEvent) => {
       this.handleTrackerUpdate(event);
+    });
+
+    this.websocketClient.on("trackerDefinitionUpdate", (_event: TrackerDefinitionUpdateEvent) => {
+      void this.refreshTrackers();
     });
 
     // In-app notification events
@@ -847,6 +853,30 @@ export class RealtimeStore {
     alarmState.clear();
 
     toast.success("Glucose alarm cleared");
+  }
+
+  private trackersRead = 0;
+
+  /** Re-reads the tenant's tracker definitions and running instances together after a definition
+   *  was created, changed or deleted: an instance carries its definition's name, icon and schedule,
+   *  and a deleted definition takes its instances with it. Only the latest read is kept. */
+  private async refreshTrackers(): Promise<void> {
+    const read = ++this.trackersRead;
+    let definitions: TrackerDefinitionDto[];
+    let instances: TrackerInstanceDto[];
+    try {
+      [definitions, instances] = await Promise.all([
+        trackersClient().getDefinitions(),
+        trackersClient().getActiveInstances(),
+      ]);
+    } catch (error) {
+      console.error("Failed to refresh trackers:", error);
+      return;
+    }
+    if (read !== this.trackersRead) return;
+
+    this.trackerDefinitions = definitions;
+    this.trackerInstances = instances;
   }
 
   /** Handle tracker updates from SignalR */

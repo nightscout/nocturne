@@ -570,6 +570,34 @@ describe('SocketIOServer tracker broadcast fan-out', () => {
     server.getIO()!.close();
   });
 
+  it('re-emits a trackerDefinitionUpdate to the tenant room', async () => {
+    const server = await startedServer();
+
+    const emitted: { room: string; event: string; payload: unknown }[] = [];
+    vi.spyOn(server.getIO()!, 'to').mockImplementation(
+      (room: string) =>
+        ({
+          emit: (event: string, payload: unknown) => emitted.push({ room, event, payload }),
+        }) as never,
+    );
+
+    const payload = { definitionId: 'definition-1' };
+    server.broadcastTrackerDefinitionUpdate(payload, 'rhys');
+
+    expect(emitted).toEqual([{ room: 'tenant:rhys', event: 'trackerDefinitionUpdate', payload }]);
+    server.getIO()!.close();
+  });
+
+  it('refuses to broadcast a trackerDefinitionUpdate without a tenant slug', async () => {
+    const server = await startedServer();
+    const toSpy = vi.spyOn(server.getIO()!, 'to');
+
+    server.broadcastTrackerDefinitionUpdate({ definitionId: 'definition-1' });
+
+    expect(toSpy).not.toHaveBeenCalled();
+    server.getIO()!.close();
+  });
+
   it('refuses to broadcast a trackerUpdate without a tenant slug', async () => {
     const server = await startedServer();
     const toSpy = vi.spyOn(server.getIO()!, 'to');

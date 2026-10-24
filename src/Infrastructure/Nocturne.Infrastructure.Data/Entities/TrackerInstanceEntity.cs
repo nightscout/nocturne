@@ -24,7 +24,8 @@ public class TrackerInstanceEntity : ITenantScoped
     public Guid Id { get; set; }
 
     /// <summary>
-    /// User identifier this instance belongs to
+    /// The subject who created this row. It records the creator and grants nothing: trackers are
+    /// the tenant's, and any member may read or change them.
     /// </summary>
     [Column("user_id")]
     [MaxLength(255)]

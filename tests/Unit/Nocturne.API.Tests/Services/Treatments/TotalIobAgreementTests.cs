@@ -351,7 +351,7 @@ public class TotalIobAgreementTests
         entries.Setup(e => e.GetEntriesAsync(It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         var trackers = new Mock<ITrackerRepository>();
-        trackers.Setup(t => t.GetActiveInstancesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        trackers.Setup(t => t.GetActiveInstancesAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var service = new WidgetSummaryService(
             entries.Object, Reader(now),
             _aps.Object, trackers.Object, Mock.Of<INotificationV1Service>(),
@@ -359,7 +359,7 @@ public class TotalIobAgreementTests
             MockTenantAccessor.Create().Object, Mock.Of<ICategoryReadContext>(),
             NullLogger<WidgetSummaryService>.Instance);
 
-        var summary = await service.GetSummaryAsync("user");
+        var summary = await service.GetSummaryAsync();
 
         return summary.Iob;
     }

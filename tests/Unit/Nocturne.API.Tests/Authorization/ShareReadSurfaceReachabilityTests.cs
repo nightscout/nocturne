@@ -86,8 +86,8 @@ public class ShareReadSurfaceReachabilityTests
     /// Reads that serve the share surface through the <c>HasPermissions</c> fallback rather than a
     /// scope gate, keyed <c>Controller.Action</c>. The tracker tables carry no
     /// <see cref="ShareDataCategories"/> category, so RLS hides their rows from a share and the
-    /// endpoints return the public-visibility set — but they must stay reachable, because the
-    /// calendar renders them beside glucose a share can see.
+    /// endpoints return an empty list — but they must stay reachable, because the calendar asks for
+    /// them beside glucose a share can see.
     /// </summary>
     /// <remarks>
     /// Reachability here means the absence of an <see cref="IAuthorizeData"/> requirement, not the

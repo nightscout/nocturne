@@ -25,9 +25,10 @@ namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
 /// <item><description>The tracker read actions are not <c>[AllowAnonymous]</c>, so the fallback
 /// authorization policy gates them and a private tenant exposes no tracker to a bare
 /// unauthenticated caller (whose permission trie is empty).</description></item>
-/// <item><description>A create request that omits visibility defaults to
-/// <see cref="TrackerVisibility.Private"/>, and an update that omits visibility keeps the current
-/// value — so no request ever makes a tracker Public by omission.</description></item>
+/// <item><description>The visibility older clients send and read still round-trips: a create
+/// request that omits it stores <see cref="TrackerVisibility.Private"/>, and an update that omits it
+/// keeps the stored value. It restricts no read (see
+/// <see cref="TrackersControllerTenantAccessTests"/>).</description></item>
 /// </list>
 /// </summary>
 [Trait("Category", "Unit")]

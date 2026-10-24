@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Moq;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -15,17 +16,22 @@ public class DeviceTrackerProvisionerTests
     private const string UserId = "user-1";
 
     private readonly Mock<ITrackerRepository> _trackers = new();
+    private readonly Mock<ISignalRBroadcastService> _broadcast = new();
     private readonly List<TrackerDefinitionEntity> _created = [];
     private readonly DeviceTrackerProvisioner _provisioner;
 
     public DeviceTrackerProvisionerTests()
     {
-        _trackers.Setup(t => t.GetDefinitionsForUserAsync(UserId, It.IsAny<CancellationToken>()))
+        _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         _trackers.Setup(t => t.CreateDefinitionAsync(It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
             .Callback<TrackerDefinitionEntity, CancellationToken>((d, _) => _created.Add(d))
-            .ReturnsAsync((TrackerDefinitionEntity d, CancellationToken _) => d);
-        _provisioner = new DeviceTrackerProvisioner(_trackers.Object);
+            .ReturnsAsync((TrackerDefinitionEntity d, CancellationToken _) =>
+            {
+                d.Id = Guid.NewGuid();
+                return d;
+            });
+        _provisioner = new DeviceTrackerProvisioner(_trackers.Object, _broadcast.Object);
     }
 
     private static PatientDevice Device(string catalogId, DeviceCategory category) =>
@@ -74,15 +80,56 @@ public class DeviceTrackerProvisionerTests
     }
 
     [Fact]
-    public async Task ATrackerTheUserAlreadyHasIsNotCreatedAgain()
+    public async Task ATrackerTheTenantAlreadyHasIsNotCreatedAgain()
     {
-        _trackers.Setup(t => t.GetDefinitionsForUserAsync(UserId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new TrackerDefinitionEntity { Name = "omnipod dash POD" }]);
+        _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TrackerDefinitionEntity { UserId = UserId, Name = "omnipod dash POD" }]);
 
         var created = await _provisioner.ProvisionAsync(Device("omnipod-dash", DeviceCategory.InsulinPump), UserId);
 
         created.Should().Be(0);
         _created.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ATrackerAnotherMemberCreatedIsNotDuplicatedForASecondMember()
+    {
+        _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TrackerDefinitionEntity { UserId = "another-member", Name = "Omnipod DASH pod" }]);
+
+        var created = await _provisioner.ProvisionAsync(Device("omnipod-dash", DeviceCategory.InsulinPump), UserId);
+
+        created.Should().Be(0);
+        _created.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task EachCreatedTrackerIsAnnouncedToTheTenant()
+    {
+        await _provisioner.ProvisionAsync(Device("dana-i", DeviceCategory.InsulinPump), UserId);
+
+        foreach (var definition in _created)
+            _broadcast.Verify(b => b.BroadcastTrackerDefinitionUpdateAsync(definition.Id), Times.Once);
+        _broadcast.Verify(b => b.BroadcastTrackerDefinitionUpdateAsync(It.IsAny<Guid>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task NothingIsAnnouncedWhenNothingIsCreated()
+    {
+        _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TrackerDefinitionEntity { Name = "Omnipod DASH pod" }]);
+
+        await _provisioner.ProvisionAsync(Device("omnipod-dash", DeviceCategory.InsulinPump), UserId);
+
+        _broadcast.Verify(b => b.BroadcastTrackerDefinitionUpdateAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ANewTrackerRecordsTheRegisteringMemberAsItsCreator()
+    {
+        await _provisioner.ProvisionAsync(Device("omnipod-dash", DeviceCategory.InsulinPump), UserId);
+
+        _created.Single().UserId.Should().Be(UserId);
     }
 
     [Theory]

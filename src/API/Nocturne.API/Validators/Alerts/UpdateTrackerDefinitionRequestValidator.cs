@@ -10,9 +10,9 @@ namespace Nocturne.API.Validators.Alerts;
 /// <remarks>
 /// <list type="bullet">
 /// <item><description>Visibility, when supplied, must be a valid <see cref="TrackerVisibility"/> value.</description></item>
-/// <item><description>Visibility must not be <see cref="TrackerVisibility.RoleRestricted"/>, which has no
-/// view rule behind it: <c>TrackersController.CanViewTracker</c> grants only the owner and admins, and
-/// the tracker carries no roles to match a viewer against.</description></item>
+/// <item><description>Visibility must not be <see cref="TrackerVisibility.RoleRestricted"/>, a value
+/// that was never implemented and whose stored rows were migrated to Private. Visibility itself
+/// restricts no read.</description></item>
 /// </list>
 /// </remarks>
 /// <seealso cref="UpdateTrackerDefinitionRequest"/>

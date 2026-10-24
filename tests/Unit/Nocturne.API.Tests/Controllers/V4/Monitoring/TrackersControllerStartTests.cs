@@ -42,7 +42,7 @@ public class TrackersControllerStartTests
                 Func<ITrackerRepository, TrackerSuccessionResult, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(_repository.Object, ct));
     }
 
-    private TrackersController CreateController(string subjectId = OwnerId, bool isAdmin = false)
+    private TrackersController CreateController(string subjectId = OwnerId)
     {
         var controller = new TrackersController(
             _repository.Object,
@@ -59,12 +59,6 @@ public class TrackersControllerStartTests
             IsAuthenticated = true,
             SubjectId = Guid.Parse(subjectId),
         };
-        if (isAdmin)
-        {
-            var trie = new PermissionTrie();
-            trie.Add("*");
-            httpContext.Items["PermissionTrie"] = trie;
-        }
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
         return controller;
     }
@@ -136,59 +130,36 @@ public class TrackersControllerStartTests
             old.Id, CompletionReason.ReplacedEarly, null, null, Now, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    [Fact]
-    public async Task StartInstance_ByAnAdminOnAMembersPrivateTracker_CompleteAndCreateReachOnlyTheOwner()
+    /// <summary>A member who neither created the tracker nor started its run.</summary>
+    private const string MemberId = "22222222-2222-2222-2222-222222222222";
+
+    private List<TrackerRealtimeAction> RecordBroadcasts()
+    {
+        var sent = new List<TrackerRealtimeAction>();
+        _broadcast
+            .Setup(b => b.BroadcastTrackerUpdateAsync(It.IsAny<TrackerRealtimeAction>(), It.IsAny<TrackerInstanceDto>()))
+            .Callback((TrackerRealtimeAction action, TrackerInstanceDto _) => sent.Add(action))
+            .Returns(Task.CompletedTask);
+        return sent;
+    }
+
+    [Theory]
+    [InlineData(TrackerVisibility.Private)]
+    [InlineData(TrackerVisibility.Public)]
+    public async Task StartInstance_ByAnotherMember_ReplacesTheRunAndBroadcastsBoth(TrackerVisibility visibility)
     {
         var old = Running(Now.AddDays(-3));
-        var definition = ArrangeDefinition(TrackerMode.Duration, old);
-        var sent = new List<(TrackerRealtimeAction Action, string Owner, TrackerVisibility Visibility)>();
-        _broadcast
-            .Setup(b => b.BroadcastTrackerUpdateAsync(
-                It.IsAny<TrackerRealtimeAction>(), It.IsAny<TrackerInstanceDto>(), It.IsAny<string>(), It.IsAny<TrackerVisibility>()))
-            .Callback((TrackerRealtimeAction action, TrackerInstanceDto _, string owner, TrackerVisibility visibility) =>
-                sent.Add((action, owner, visibility)))
-            .Returns(Task.CompletedTask);
+        var definition = ArrangeDefinition(TrackerMode.Duration, visibility, old);
+        var sent = RecordBroadcasts();
 
-        var result = await CreateController(AdminId, isAdmin: true).StartInstance(
+        var result = await CreateController(MemberId).StartInstance(
             new StartTrackerInstanceRequest { DefinitionId = definition.Id, StartedAt = Now });
 
         result.Result.Should().BeOfType<CreatedAtActionResult>();
-        sent.Should().Equal(
-            (TrackerRealtimeAction.Complete, OwnerId, TrackerVisibility.Private),
-            (TrackerRealtimeAction.Create, OwnerId, TrackerVisibility.Private));
-    }
-
-    [Fact]
-    public async Task StartInstance_ByAnAdminOnAMembersPublicTracker_CompleteAndCreateShareOneAudience()
-    {
-        var old = Running(Now.AddDays(-3));
-        var definition = ArrangeDefinition(TrackerMode.Duration, TrackerVisibility.Public, old);
-        var sent = new List<(TrackerRealtimeAction Action, string Owner, TrackerVisibility Visibility)>();
-        _broadcast
-            .Setup(b => b.BroadcastTrackerUpdateAsync(
-                It.IsAny<TrackerRealtimeAction>(), It.IsAny<TrackerInstanceDto>(), It.IsAny<string>(), It.IsAny<TrackerVisibility>()))
-            .Callback((TrackerRealtimeAction action, TrackerInstanceDto _, string owner, TrackerVisibility visibility) =>
-                sent.Add((action, owner, visibility)))
-            .Returns(Task.CompletedTask);
-
-        await CreateController(AdminId, isAdmin: true).StartInstance(
-            new StartTrackerInstanceRequest { DefinitionId = definition.Id, StartedAt = Now });
-
-        sent.Should().Equal(
-            (TrackerRealtimeAction.Complete, OwnerId, TrackerVisibility.Public),
-            (TrackerRealtimeAction.Create, OwnerId, TrackerVisibility.Public));
-    }
-
-    private List<(TrackerRealtimeAction Action, string Owner, TrackerVisibility Visibility)> RecordBroadcasts()
-    {
-        var sent = new List<(TrackerRealtimeAction Action, string Owner, TrackerVisibility Visibility)>();
-        _broadcast
-            .Setup(b => b.BroadcastTrackerUpdateAsync(
-                It.IsAny<TrackerRealtimeAction>(), It.IsAny<TrackerInstanceDto>(), It.IsAny<string>(), It.IsAny<TrackerVisibility>()))
-            .Callback((TrackerRealtimeAction action, TrackerInstanceDto _, string owner, TrackerVisibility visibility) =>
-                sent.Add((action, owner, visibility)))
-            .Returns(Task.CompletedTask);
-        return sent;
+        sent.Should().Equal(TrackerRealtimeAction.Complete, TrackerRealtimeAction.Create);
+        _repository.Verify(r => r.StartInstanceAsync(
+            definition.Id, MemberId, It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private TrackerInstanceEntity ArrangeAdminStartedRun()
@@ -208,26 +179,29 @@ public class TrackersControllerStartTests
     }
 
     [Fact]
-    public async Task CompleteInstance_OnAnAdminStartedRun_ReachesTheDefinitionsOwner()
+    public async Task CompleteInstance_ByAMemberWhoNeitherCreatedNorStartedIt_CompletesAndBroadcasts()
     {
         var run = ArrangeAdminStartedRun();
         var sent = RecordBroadcasts();
 
-        await CreateController(AdminId, isAdmin: true).CompleteInstance(
+        var result = await CreateController(MemberId).CompleteInstance(
             run.Id, new CompleteTrackerInstanceRequest { Reason = CompletionReason.Completed });
 
-        sent.Should().Equal((TrackerRealtimeAction.Complete, OwnerId, TrackerVisibility.Private));
+        result.Result.Should().BeOfType<OkObjectResult>();
+        sent.Should().Equal(TrackerRealtimeAction.Complete);
     }
 
     [Fact]
-    public async Task DeleteInstance_OnAnAdminStartedRun_ReachesTheDefinitionsOwner()
+    public async Task DeleteInstance_ByAMemberWhoNeitherCreatedNorStartedIt_DeletesAndBroadcasts()
     {
         var run = ArrangeAdminStartedRun();
         var sent = RecordBroadcasts();
 
-        await CreateController(AdminId, isAdmin: true).DeleteInstance(run.Id);
+        var result = await CreateController(MemberId).DeleteInstance(run.Id);
 
-        sent.Should().Equal((TrackerRealtimeAction.Delete, OwnerId, TrackerVisibility.Private));
+        result.Should().BeOfType<NoContentResult>();
+        _repository.Verify(r => r.DeleteInstanceAsync(run.Id, It.IsAny<CancellationToken>()), Times.Once);
+        sent.Should().Equal(TrackerRealtimeAction.Delete);
     }
 
     [Fact]
@@ -310,13 +284,13 @@ public class TrackersControllerStartTests
     }
 
     [Fact]
-    public async Task ApplyPreset_BelongingToSomeoneElse_IsForbidden()
+    public async Task ApplyPreset_CreatedByAnotherMember_StartsARunRecordedAsTheCaller()
     {
         var definition = ArrangeDefinition(TrackerMode.Duration);
         var preset = new TrackerPresetEntity
         {
             Id = Guid.NewGuid(),
-            UserId = "22222222-2222-2222-2222-222222222222",
+            UserId = MemberId,
             DefinitionId = definition.Id,
             Definition = definition,
         };
@@ -326,10 +300,10 @@ public class TrackersControllerStartTests
 
         var result = await CreateController().ApplyPreset(preset.Id);
 
-        result.Result.Should().BeOfType<ForbidResult>();
+        result.Result.Should().BeOfType<OkObjectResult>();
         _repository.Verify(r => r.StartInstanceAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(),
-            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+            definition.Id, OwnerId, It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

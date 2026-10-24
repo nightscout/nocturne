@@ -550,7 +550,7 @@ public class V4ReadLimitClampTests
 
         await CreateTrackersController(repo).GetInstanceHistory(Ceiling);
 
-        repo.Verify(r => r.GetCompletedInstancesAsync(null, Ceiling, It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(r => r.GetCompletedInstancesAsync(Ceiling, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -560,7 +560,7 @@ public class V4ReadLimitClampTests
 
         await CreateTrackersController(repo).GetInstanceHistory(AboveCeiling);
 
-        repo.Verify(r => r.GetCompletedInstancesAsync(null, Ceiling, It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(r => r.GetCompletedInstancesAsync(Ceiling, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private static TrackersController CreateTrackersController(Mock<ITrackerRepository> repo) =>
@@ -573,6 +573,23 @@ public class V4ReadLimitClampTests
             Mock.Of<IAlertAcknowledgementService>(),
             Mock.Of<ILogger<TrackersController>>())
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    Items =
+                    {
+                        ["AuthContext"] = new Nocturne.Core.Models.Authorization.AuthContext
+                        {
+                            IsAuthenticated = true,
+                            SubjectId = Guid.NewGuid(),
+                        },
+                        ["GrantedScopes"] = new HashSet<string>
+                        {
+                            Nocturne.Core.Models.Authorization.Scope.AlertsRead,
+                        },
+                    },
+                },
+            },
         };
 }

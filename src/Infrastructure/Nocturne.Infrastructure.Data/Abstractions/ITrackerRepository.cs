@@ -6,36 +6,25 @@ namespace Nocturne.Infrastructure.Data.Abstractions;
 /// <summary>
 /// Repository port for Tracker operations (definitions, instances, presets)
 /// </summary>
+/// <remarks>
+/// Trackers are the tenant's, not a member's: every read returns the whole tenant's rows, scoped
+/// by the tenant filter and RLS alone. The <c>UserId</c> a row carries records who created it.
+/// </remarks>
 public interface ITrackerRepository
 {
     // Definitions
 
     /// <summary>
-    /// Gets all tracker definitions accessible to a user
-    /// </summary>
-    Task<List<TrackerDefinitionEntity>> GetDefinitionsForUserAsync(
-        string userId,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets all tracker definitions in the system
+    /// Gets all tracker definitions
     /// </summary>
     Task<List<TrackerDefinitionEntity>> GetAllDefinitionsAsync(
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets tracker definitions for a user filtered by category
+    /// Gets the tracker definitions in <paramref name="category"/>
     /// </summary>
     Task<List<TrackerDefinitionEntity>> GetDefinitionsByCategoryAsync(
-        string userId,
         TrackerCategory category,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets tracker definitions marked as favorites by a user
-    /// </summary>
-    Task<TrackerDefinitionEntity[]> GetFavoriteDefinitionsAsync(
-        string userId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -78,10 +67,9 @@ public interface ITrackerRepository
     // Instances
 
     /// <summary>
-    /// Gets all active tracker instances, optionally filtered by user
+    /// Gets all active tracker instances, newest first
     /// </summary>
     Task<TrackerInstanceEntity[]> GetActiveInstancesAsync(
-        string? userId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -104,18 +92,16 @@ public interface ITrackerRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets completed tracker instances, optionally filtered by user, with an optional limit
+    /// Gets the most recently completed tracker instances, up to <paramref name="limit"/>
     /// </summary>
     Task<TrackerInstanceEntity[]> GetCompletedInstancesAsync(
-        string? userId,
         int limit = 100,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets upcoming scheduled tracker instances for a user within a date range
+    /// Gets the active instances whose lifespan ends between <paramref name="from"/> and <paramref name="to"/>
     /// </summary>
     Task<TrackerInstanceEntity[]> GetUpcomingInstancesAsync(
-        string? userId,
         DateTime from,
         DateTime to,
         CancellationToken cancellationToken = default);
@@ -212,10 +198,9 @@ public interface ITrackerRepository
     // Presets
 
     /// <summary>
-    /// Gets all tracker presets defined by a user
+    /// Gets all tracker presets
     /// </summary>
-    Task<TrackerPresetEntity[]> GetPresetsForUserAsync(
-        string userId,
+    Task<TrackerPresetEntity[]> GetPresetsAsync(
         CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -10,6 +10,7 @@ import type {
   StorageEvent,
   SyncMessageType,
   SyncProgressEvent,
+  TrackerDefinitionUpdateEvent,
   TrackerUpdateEvent,
 } from "./types";
 
@@ -128,6 +129,12 @@ export function parseTrackerUpdate(data: unknown): TrackerUpdateEvent | null {
     action: fields.action,
     instance,
   };
+}
+
+/** A definition event names the definition that was created, changed or deleted. */
+export function parseTrackerDefinitionUpdate(data: unknown): TrackerDefinitionUpdateEvent | null {
+  const definitionId = nonEmptyString(fieldsOf(data).definitionId);
+  return definitionId === undefined ? null : { definitionId };
 }
 
 const SYNC_PHASES = [

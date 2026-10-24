@@ -98,7 +98,11 @@ public class ChartDataController : ControllerBase
             cancellationToken
         );
 
-        return Ok(ChartDataReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));
+        var redacted = ChartDataReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes());
+        if (!TrackerReadAccess.Allows(HttpContext))
+            redacted.TrackerMarkers = [];
+
+        return Ok(redacted);
     }
 
     /// <summary>

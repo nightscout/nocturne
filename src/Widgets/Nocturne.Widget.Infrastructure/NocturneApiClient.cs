@@ -388,6 +388,7 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
 
         // Device-age tracker recomputation (drives the Ages widget).
         connection.On<JsonElement>("trackerUpdate", _ => RaiseDataUpdated("tracker"));
+        connection.On<JsonElement>("trackerDefinitionUpdate", _ => RaiseDataUpdated("tracker"));
     }
 
     private void ConfigureAlarmHubHandlers(HubConnection connection)

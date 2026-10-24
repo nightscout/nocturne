@@ -95,18 +95,14 @@ public static class TrackerSuccession
             );
             await broadcast.BroadcastTrackerUpdateAsync(
                 TrackerRealtimeAction.Complete,
-                TrackerInstanceDto.FromEntity(instance),
-                definition.UserId,
-                definition.Visibility
+                TrackerInstanceDto.FromEntity(instance)
             );
         }
 
         if (result.Started is { } started)
             await broadcast.BroadcastTrackerUpdateAsync(
                 TrackerRealtimeAction.Create,
-                TrackerInstanceDto.FromEntity(started),
-                definition.UserId,
-                definition.Visibility
+                TrackerInstanceDto.FromEntity(started)
             );
 
         return result;

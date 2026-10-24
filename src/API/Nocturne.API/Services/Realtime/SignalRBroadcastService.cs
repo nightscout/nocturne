@@ -80,20 +80,16 @@ public interface ISignalRBroadcastService
     Task BroadcastStorageDeleteAsync(string collectionName, object data);
 
     /// <summary>
-    /// Broadcast a tracker instance update, routed by its definition's visibility: a Public instance
-    /// reaches the tenant's authorized clients, a Private one only its owner's subject group.
+    /// Broadcast a tracker instance update to the tenant's authorized clients, as a
+    /// <c>trackerUpdate</c> event.
     /// </summary>
-    /// <remarks>
-    /// Mirrors the HTTP read rule in
-    /// <see cref="Nocturne.Infrastructure.Data.Repositories.TrackerRepository.GetActiveInstancesAsync"/>:
-    /// only a Public definition is visible tenant-wide, otherwise just to its owner.
-    /// </remarks>
-    Task BroadcastTrackerUpdateAsync(
-        TrackerRealtimeAction action,
-        TrackerInstanceDto trackerInstance,
-        string ownerSubjectId,
-        TrackerVisibility visibility
-    );
+    Task BroadcastTrackerUpdateAsync(TrackerRealtimeAction action, TrackerInstanceDto trackerInstance);
+
+    /// <summary>
+    /// Tell the tenant's authorized clients that a tracker definition was created, changed or
+    /// deleted, as a <c>trackerDefinitionUpdate</c> event carrying its id.
+    /// </summary>
+    Task BroadcastTrackerDefinitionUpdateAsync(Guid definitionId);
 
     /// <summary>
     /// Broadcast configuration change event to subscribers via ConfigHub
@@ -499,12 +495,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     }
 
     /// <inheritdoc />
-    public async Task BroadcastTrackerUpdateAsync(
-        TrackerRealtimeAction action,
-        TrackerInstanceDto trackerInstance,
-        string ownerSubjectId,
-        TrackerVisibility visibility
-    )
+    public async Task BroadcastTrackerUpdateAsync(TrackerRealtimeAction action, TrackerInstanceDto trackerInstance)
     {
         try
         {
@@ -513,17 +504,29 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 action
             );
             var payload = new { action, instance = trackerInstance };
-            var group = visibility == TrackerVisibility.Public
-                ? RealtimeGroups.Authorized
-                : RealtimeGroups.ForSubject(ownerSubjectId);
             await _dataHubContext
-                .Clients.Group(TenantGroup(group))
+                .Clients.Group(TenantGroup(RealtimeGroups.Authorized))
                 .SendCoreAsync("trackerUpdate", new[] { payload });
             _logger.LogDebug("Tracker update broadcast completed for action {Action}", action);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error broadcasting tracker update event");
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task BroadcastTrackerDefinitionUpdateAsync(Guid definitionId)
+    {
+        try
+        {
+            await _dataHubContext
+                .Clients.Group(TenantGroup(RealtimeGroups.Authorized))
+                .SendCoreAsync("trackerDefinitionUpdate", new object[] { new { definitionId } });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting tracker definition update event");
         }
     }
 

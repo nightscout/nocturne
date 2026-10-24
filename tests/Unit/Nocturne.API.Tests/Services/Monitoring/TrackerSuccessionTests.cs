@@ -31,9 +31,8 @@ public class TrackerSuccessionTests
 
         _broadcast
             .Setup(b => b.BroadcastTrackerUpdateAsync(
-                It.IsAny<TrackerRealtimeAction>(), It.IsAny<TrackerInstanceDto>(),
-                It.IsAny<string>(), It.IsAny<TrackerVisibility>()))
-            .Callback((TrackerRealtimeAction action, TrackerInstanceDto instance, string _, TrackerVisibility _) =>
+                It.IsAny<TrackerRealtimeAction>(), It.IsAny<TrackerInstanceDto>()))
+            .Callback((TrackerRealtimeAction action, TrackerInstanceDto instance) =>
                 _broadcasts.Add((action, instance.Id)))
             .Returns(Task.CompletedTask);
     }

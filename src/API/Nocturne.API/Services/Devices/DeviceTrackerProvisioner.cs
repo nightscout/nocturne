@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Nocturne.Connectors.Core.Constants;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -14,20 +15,23 @@ namespace Nocturne.API.Services.Devices;
 /// <see cref="DeviceCatalogEntry"/>, so a device without a catalog id gets none.
 /// </summary>
 /// <remarks>
-/// Definitions are per user and named after the device model, found-or-created by name, so
-/// registering the same model twice reuses its trackers while switching models adds the new model's.
+/// Definitions are the tenant's and named after the device model, found-or-created by name across
+/// the tenant, so registering the same model twice, by any member, reuses its trackers while
+/// switching models adds the new model's.
 /// </remarks>
 public interface IDeviceTrackerProvisioner
 {
     /// <summary>
-    /// Creates the trackers <paramref name="device"/>'s catalog entry calls for that
-    /// <paramref name="userId"/> does not already have. Returns the number created.
+    /// Creates the trackers <paramref name="device"/>'s catalog entry calls for that the tenant does
+    /// not already have, recording <paramref name="userId"/> as their creator. Returns the number
+    /// created.
     /// </summary>
     Task<int> ProvisionAsync(PatientDevice device, string userId, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
-internal sealed class DeviceTrackerProvisioner(ITrackerRepository trackers) : IDeviceTrackerProvisioner
+internal sealed class DeviceTrackerProvisioner(ITrackerRepository trackers, ISignalRBroadcastService broadcast)
+    : IDeviceTrackerProvisioner
 {
     /// <summary>A tracker definition a catalog entry calls for.</summary>
     internal sealed record TrackerSpec(
@@ -47,14 +51,14 @@ internal sealed class DeviceTrackerProvisioner(ITrackerRepository trackers) : ID
         if (specs.Count == 0)
             return 0;
 
-        var existing = await trackers.GetDefinitionsForUserAsync(userId, ct);
+        var existing = await trackers.GetAllDefinitionsAsync(ct);
         var created = 0;
         foreach (var spec in specs)
         {
             if (existing.Any(d => string.Equals(d.Name, spec.Name, StringComparison.OrdinalIgnoreCase)))
                 continue;
 
-            await trackers.CreateDefinitionAsync(new TrackerDefinitionEntity
+            var definition = await trackers.CreateDefinitionAsync(new TrackerDefinitionEntity
             {
                 UserId = userId,
                 Name = spec.Name,
@@ -65,6 +69,7 @@ internal sealed class DeviceTrackerProvisioner(ITrackerRepository trackers) : ID
                 StartEventType = spec.Triggers.FirstOrDefault(),
                 Mode = TrackerMode.Duration,
             }, ct);
+            await broadcast.BroadcastTrackerDefinitionUpdateAsync(definition.Id);
             created++;
         }
 
