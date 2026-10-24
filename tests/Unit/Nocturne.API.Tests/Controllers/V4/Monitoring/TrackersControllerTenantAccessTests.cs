@@ -20,8 +20,9 @@ namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
 
 /// <summary>
 /// Pins that trackers are the tenant's: every member reads every tracker whoever created it and
-/// whatever its visibility, any member holding the write scope changes any of them, and a viewer
-/// without an account (a guest link, a public share, no credential) reads none.
+/// whatever its visibility, provided they hold <c>alerts.read</c>; any member holding the write
+/// scope changes any of them; and a viewer without an account (a guest link, a public share, no
+/// credential) reads none even when it holds <c>alerts.read</c>.
 /// </summary>
 [Trait("Category", "Unit")]
 public class TrackersControllerTenantAccessTests
@@ -64,9 +65,10 @@ public class TrackersControllerTenantAccessTests
         return controller;
     }
 
-    private TrackersController AsMember(string subjectId = MemberId)
+    private TrackersController AsMember(string subjectId = MemberId, string scope = Scope.AlertsRead)
     {
         var httpContext = new DefaultHttpContext();
+        httpContext.Items["GrantedScopes"] = new HashSet<string> { scope };
         httpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
@@ -76,9 +78,13 @@ public class TrackersControllerTenantAccessTests
         return Controller(httpContext);
     }
 
+    /// <summary>
+    /// Every viewer holds <c>alerts.read</c>, so what refuses it is the account check, not the scope.
+    /// </summary>
     private TrackersController As(Viewer viewer)
     {
         var httpContext = new DefaultHttpContext();
+        httpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.AlertsRead };
         switch (viewer)
         {
             case Viewer.Guest:
@@ -87,7 +93,6 @@ public class TrackersControllerTenantAccessTests
                     IsAuthenticated = true,
                     AuthType = AuthType.Guest,
                     ActingAsSubjectId = Guid.Parse(CreatorId),
-                    Scopes = [Scope.AlertsRead],
                 };
                 break;
             case Viewer.Share:
@@ -199,10 +204,29 @@ public class TrackersControllerTenantAccessTests
     [InlineData(Viewer.Guest)]
     [InlineData(Viewer.Share)]
     [InlineData(Viewer.NoCredential)]
-    public async Task ViewerWithoutAnAccount_ReadsNoTracker(Viewer viewer)
+    public Task ViewerWithoutAnAccount_ReadsNoTracker(Viewer viewer) => ReadsNothing(As(viewer));
+
+    [Theory]
+    [InlineData(Scope.GlucoseRead)]
+    [InlineData(Scope.ReportsRead)]
+    public Task MemberWithoutAlertsRead_ReadsNoTracker(string scope) =>
+        ReadsNothing(AsMember(scope: scope));
+
+    [Theory]
+    [InlineData(Scope.AlertsReadWrite)]
+    [InlineData(Scope.FullAccess)]
+    public async Task MemberWithAScopeSatisfyingAlertsRead_ReadsTrackers(string scope)
+    {
+        var definition = Definition();
+
+        var result = await AsMember(scope: scope).GetDefinition(definition.Id);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    private async Task ReadsNothing(TrackersController controller)
     {
         var definition = Definition(TrackerVisibility.Public);
-        var controller = As(viewer);
 
         (await controller.GetDefinitions()).Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeOfType<TrackerDefinitionDto[]>().Which.Should().BeEmpty();
@@ -258,6 +282,17 @@ public class TrackersControllerTenantAccessTests
 
         result.Should().BeOfType<NoContentResult>();
         _repository.Verify(r => r.AckInstanceAsync(instance.Id, 30, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AckInstance_WithoutGlobal_StillBroadcastsTheAck()
+    {
+        var instance = Instance(Definition());
+
+        await AsMember().AckInstance(instance.Id, new AckTrackerRequest { SnoozeMins = 30, Global = false });
+
+        _broadcast.Verify(b => b.BroadcastTrackerUpdateAsync(
+            TrackerRealtimeAction.Ack, It.Is<TrackerInstanceDto>(d => d.Id == instance.Id)), Times.Once);
     }
 
     [Fact]

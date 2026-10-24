@@ -237,8 +237,8 @@ internal static class CorrelationReadScopeGuard
 /// the IOB/COB state, the tracker statuses and the firing alarm into one small payload.
 /// </summary>
 /// <remarks>
-/// Trackers carry no <see cref="ShareDataCategories"/> category and are gated by the fallback
-/// policy wherever else they are served, so they are not redacted here.
+/// Trackers carry no <see cref="ShareDataCategories"/> category; the controller drops them by
+/// <see cref="TrackerReadAccess"/> instead.
 /// </remarks>
 /// <seealso cref="AnalyticsReadScopes"/>
 internal static class WidgetSummaryReadScopeGuard

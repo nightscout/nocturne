@@ -99,9 +99,7 @@ public class ChartDataController : ControllerBase
         );
 
         var redacted = ChartDataReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes());
-        // The markers come from the tenant's trackers, which a viewer without an account does not
-        // read; see TrackersController.ReadsNoTrackers.
-        if (DenyNoAccountViewerAttribute.Refuses(HttpContext))
+        if (!TrackerReadAccess.Allows(HttpContext))
             redacted.TrackerMarkers = [];
 
         return Ok(redacted);

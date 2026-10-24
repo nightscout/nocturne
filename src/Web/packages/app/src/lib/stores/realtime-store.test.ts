@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   getProfileSummary: vi.fn(),
   emptyList: vi.fn(),
   getTrackerDefinitions: vi.fn(),
+  getActiveTrackerInstances: vi.fn(),
 }));
 
 vi.mock("$lib/api/browser-clients", () => ({
@@ -19,7 +20,10 @@ vi.mock("$lib/api/browser-clients", () => ({
   noteClient: () => ({ getAll: api.emptyPage }),
   deviceEventClient: () => ({ getAll: api.emptyPage }),
   profileClient: () => ({ getProfileSummary: api.getProfileSummary }),
-  trackersClient: () => ({ getDefinitions: api.getTrackerDefinitions, getActiveInstances: api.emptyList }),
+  trackersClient: () => ({
+    getDefinitions: api.getTrackerDefinitions,
+    getActiveInstances: api.getActiveTrackerInstances,
+  }),
   notificationsClient: () => ({ getNotifications: api.emptyList }),
 }));
 
@@ -1030,38 +1034,65 @@ describe("RealtimeStore tracker updates", () => {
 });
 
 describe("RealtimeStore tracker definition updates", () => {
-  const definition = (id: string): TrackerDefinitionDto => ({ id, name: id });
-  const instance = (id: string, definitionId: string): TrackerInstanceDto => ({ id, definitionId });
+  const definition = (id: string, name = id): TrackerDefinitionDto => ({ id, name });
+  const instance = (id: string, definitionId: string, definitionName = definitionId): TrackerInstanceDto => ({
+    id,
+    definitionId,
+    definitionName,
+  });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  async function emit(store: TestStore, definitionId: string): Promise<void> {
+  function emit(store: TestStore, definitionId: string): void {
     store.websocketClient.eventHandlers.trackerDefinitionUpdate?.({ definitionId });
-    await vi.waitFor(() => expect(api.getTrackerDefinitions).toHaveBeenCalled());
-    await Promise.resolve();
   }
 
-  it("re-reads the definitions when one changes", async () => {
+  async function settled(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  it("carries a renamed definition onto its running instance", async () => {
     const store = makeStore();
-    store.trackerDefinitions = [definition("site")];
-    api.getTrackerDefinitions.mockResolvedValue([definition("site"), definition("sensor")]);
+    store.trackerDefinitions = [definition("site", "Site")];
+    store.trackerInstances = [instance("run", "site", "Site")];
+    api.getTrackerDefinitions.mockResolvedValue([definition("site", "Pod")]);
+    api.getActiveTrackerInstances.mockResolvedValue([instance("run", "site", "Pod")]);
 
-    await emit(store, "sensor");
+    emit(store, "site");
+    await settled();
 
-    expect(store.trackerDefinitions.map((d) => d.id)).toEqual(["site", "sensor"]);
+    expect(store.trackerDefinitions.map((d) => d.name)).toEqual(["Pod"]);
+    expect(store.trackerInstances.map((i) => i.definitionName)).toEqual(["Pod"]);
 
     store.destroy();
   });
 
-  it("clears the definitions and their running instances when the last one is deleted", async () => {
+  it("clears the last running instance when it was completed elsewhere", async () => {
+    const store = makeStore();
+    store.trackerDefinitions = [definition("site")];
+    store.trackerInstances = [instance("run", "site")];
+    api.getTrackerDefinitions.mockResolvedValue([definition("site")]);
+    api.getActiveTrackerInstances.mockResolvedValue([]);
+
+    emit(store, "site");
+    await settled();
+
+    expect(store.trackerInstances).toEqual([]);
+
+    store.destroy();
+  });
+
+  it("clears the definitions and instances when the last definition is deleted", async () => {
     const store = makeStore();
     store.trackerDefinitions = [definition("site")];
     store.trackerInstances = [instance("run", "site")];
     api.getTrackerDefinitions.mockResolvedValue([]);
+    api.getActiveTrackerInstances.mockResolvedValue([]);
 
-    await emit(store, "site");
+    emit(store, "site");
+    await settled();
 
     expect(store.trackerDefinitions).toEqual([]);
     expect(store.trackerInstances).toEqual([]);
@@ -1069,15 +1100,38 @@ describe("RealtimeStore tracker definition updates", () => {
     store.destroy();
   });
 
-  it("keeps the definitions when the read fails", async () => {
+  it("keeps only the latest read when two overlap", async () => {
+    const store = makeStore();
+    let resolveFirst: (value: TrackerDefinitionDto[]) => void = () => {};
+    api.getTrackerDefinitions
+      .mockReturnValueOnce(new Promise<TrackerDefinitionDto[]>((resolve) => (resolveFirst = resolve)))
+      .mockResolvedValueOnce([definition("sensor")]);
+    api.getActiveTrackerInstances.mockResolvedValue([]);
+
+    emit(store, "site");
+    emit(store, "sensor");
+    await settled();
+    resolveFirst([definition("site")]);
+    await settled();
+
+    expect(store.trackerDefinitions.map((d) => d.id)).toEqual(["sensor"]);
+
+    store.destroy();
+  });
+
+  it("keeps the definitions and instances when the read fails", async () => {
     const store = makeStore();
     store.trackerDefinitions = [definition("site")];
+    store.trackerInstances = [instance("run", "site")];
     api.getTrackerDefinitions.mockRejectedValue(new Error("offline"));
+    api.getActiveTrackerInstances.mockResolvedValue([]);
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await emit(store, "site");
+    emit(store, "site");
+    await settled();
 
     expect(store.trackerDefinitions.map((d) => d.id)).toEqual(["site"]);
+    expect(store.trackerInstances.map((i) => i.id)).toEqual(["run"]);
 
     store.destroy();
   });

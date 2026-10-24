@@ -80,16 +80,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
 
     #region Helpers
 
-    /// <summary>
-    /// Whether the caller reads no trackers: one with no account, a public share or a guest link.
-    /// Trackers are the tenant's, so every member reads all of them and a definition's
-    /// <see cref="TrackerDefinitionEntity.Visibility"/> narrows nothing. A viewer without an
-    /// account is the exception: a share is already blind to the tracker tables under RLS (they are
-    /// not in <see cref="ShareDataCategories"/>), and a guest link, which RLS does not hide them
-    /// from, is refused here the same way.
-    /// </summary>
-    private bool ReadsNoTrackers =>
-        !HttpContext.IsAuthenticated() || DenyNoAccountViewerAttribute.Refuses(HttpContext);
+    /// <summary>The caller reads no trackers; see <see cref="TrackerReadAccess"/>.</summary>
+    private bool ReadsNoTrackers => !TrackerReadAccess.Allows(HttpContext);
 
     /// <summary>
     /// A manual start replaces the running instance, as a device-event start does; see
@@ -689,17 +681,13 @@ public class TrackersController : ControllerBase, IWriteScopedController
         // with the tracker ack instead of showing a still-unacknowledged alert.
         await AcknowledgeManagedRuleExcursionsAsync(existing.DefinitionId, userId, HttpContext.RequestAborted);
 
-        // Broadcast ack if global
-        if (request.Global)
+        var updated = await _repository.GetInstanceByIdAsync(id, HttpContext.RequestAborted);
+        if (updated != null)
         {
-            var updated = await _repository.GetInstanceByIdAsync(id, HttpContext.RequestAborted);
-            if (updated != null)
-            {
-                await _broadcast.BroadcastTrackerUpdateAsync(
-                    TrackerRealtimeAction.Ack,
-                    TrackerInstanceDto.FromEntity(updated)
-                );
-            }
+            await _broadcast.BroadcastTrackerUpdateAsync(
+                TrackerRealtimeAction.Ack,
+                TrackerInstanceDto.FromEntity(updated)
+            );
         }
 
         return NoContent();
@@ -934,7 +922,7 @@ public class TrackerDefinitionDto
     public DashboardVisibility DashboardVisibility { get; set; } = DashboardVisibility.Always;
 
     /// <inheritdoc cref="TrackerDefinitionEntity.Visibility"/>
-    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Public;
+    public TrackerVisibility Visibility { get; set; } = TrackerVisibility.Private;
 
     /// <summary>
     /// Event type to create when tracker is started (for Nightscout compatibility)
@@ -1170,6 +1158,11 @@ public class CompleteTrackerInstanceRequest
 public class AckTrackerRequest
 {
     public int SnoozeMins { get; set; } = 30;
+
+    /// <summary>
+    /// Accepted for older clients and ignored: the snooze is stored on the tenant's instance, so
+    /// every ack is broadcast to the tenant's clients.
+    /// </summary>
     public bool Global { get; set; } = false;
 }
 

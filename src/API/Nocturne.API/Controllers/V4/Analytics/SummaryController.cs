@@ -92,7 +92,11 @@ public class SummaryController : ControllerBase
                 HttpContext.RequestAborted
             );
 
-            return Ok(WidgetSummaryReadScopeGuard.Redact(summary, HttpContext.GetGrantedScopes()));
+            var redacted = WidgetSummaryReadScopeGuard.Redact(summary, HttpContext.GetGrantedScopes());
+            if (!TrackerReadAccess.Allows(HttpContext))
+                redacted.Trackers = [];
+
+            return Ok(redacted);
         }
         catch (Exception ex)
         {

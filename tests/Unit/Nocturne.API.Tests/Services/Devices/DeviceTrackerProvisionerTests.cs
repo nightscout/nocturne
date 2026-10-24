@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Moq;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -15,6 +16,7 @@ public class DeviceTrackerProvisionerTests
     private const string UserId = "user-1";
 
     private readonly Mock<ITrackerRepository> _trackers = new();
+    private readonly Mock<ISignalRBroadcastService> _broadcast = new();
     private readonly List<TrackerDefinitionEntity> _created = [];
     private readonly DeviceTrackerProvisioner _provisioner;
 
@@ -24,8 +26,12 @@ public class DeviceTrackerProvisionerTests
             .ReturnsAsync([]);
         _trackers.Setup(t => t.CreateDefinitionAsync(It.IsAny<TrackerDefinitionEntity>(), It.IsAny<CancellationToken>()))
             .Callback<TrackerDefinitionEntity, CancellationToken>((d, _) => _created.Add(d))
-            .ReturnsAsync((TrackerDefinitionEntity d, CancellationToken _) => d);
-        _provisioner = new DeviceTrackerProvisioner(_trackers.Object);
+            .ReturnsAsync((TrackerDefinitionEntity d, CancellationToken _) =>
+            {
+                d.Id = Guid.NewGuid();
+                return d;
+            });
+        _provisioner = new DeviceTrackerProvisioner(_trackers.Object, _broadcast.Object);
     }
 
     private static PatientDevice Device(string catalogId, DeviceCategory category) =>
@@ -95,6 +101,27 @@ public class DeviceTrackerProvisionerTests
 
         created.Should().Be(0);
         _created.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task EachCreatedTrackerIsAnnouncedToTheTenant()
+    {
+        await _provisioner.ProvisionAsync(Device("dana-i", DeviceCategory.InsulinPump), UserId);
+
+        foreach (var definition in _created)
+            _broadcast.Verify(b => b.BroadcastTrackerDefinitionUpdateAsync(definition.Id), Times.Once);
+        _broadcast.Verify(b => b.BroadcastTrackerDefinitionUpdateAsync(It.IsAny<Guid>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task NothingIsAnnouncedWhenNothingIsCreated()
+    {
+        _trackers.Setup(t => t.GetAllDefinitionsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TrackerDefinitionEntity { Name = "Omnipod DASH pod" }]);
+
+        await _provisioner.ProvisionAsync(Device("omnipod-dash", DeviceCategory.InsulinPump), UserId);
+
+        _broadcast.Verify(b => b.BroadcastTrackerDefinitionUpdateAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Fact]

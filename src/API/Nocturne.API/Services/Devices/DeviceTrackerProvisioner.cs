@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Nocturne.Connectors.Core.Constants;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -29,7 +30,8 @@ public interface IDeviceTrackerProvisioner
 }
 
 /// <inheritdoc />
-internal sealed class DeviceTrackerProvisioner(ITrackerRepository trackers) : IDeviceTrackerProvisioner
+internal sealed class DeviceTrackerProvisioner(ITrackerRepository trackers, ISignalRBroadcastService broadcast)
+    : IDeviceTrackerProvisioner
 {
     /// <summary>A tracker definition a catalog entry calls for.</summary>
     internal sealed record TrackerSpec(
@@ -56,7 +58,7 @@ internal sealed class DeviceTrackerProvisioner(ITrackerRepository trackers) : ID
             if (existing.Any(d => string.Equals(d.Name, spec.Name, StringComparison.OrdinalIgnoreCase)))
                 continue;
 
-            await trackers.CreateDefinitionAsync(new TrackerDefinitionEntity
+            var definition = await trackers.CreateDefinitionAsync(new TrackerDefinitionEntity
             {
                 UserId = userId,
                 Name = spec.Name,
@@ -67,6 +69,7 @@ internal sealed class DeviceTrackerProvisioner(ITrackerRepository trackers) : ID
                 StartEventType = spec.Triggers.FirstOrDefault(),
                 Mode = TrackerMode.Duration,
             }, ct);
+            await broadcast.BroadcastTrackerDefinitionUpdateAsync(definition.Id);
             created++;
         }
 

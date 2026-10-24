@@ -584,6 +584,10 @@ public class V4ReadLimitClampTests
                             IsAuthenticated = true,
                             SubjectId = Guid.NewGuid(),
                         },
+                        ["GrantedScopes"] = new HashSet<string>
+                        {
+                            Nocturne.Core.Models.Authorization.Scope.AlertsRead,
+                        },
                     },
                 },
             },

@@ -116,10 +116,15 @@ screen:
 
 ## Who can see it
 
-**Public Visibility** controls whether other people who sign in to your site,
-such as a family member you have invited, can see this tracker running.
-**Private**, the default, keeps it to your own account. Trackers are never
-shown on a [public share link](/docs/sharing/public-link), whichever you pick.
+Trackers belong to your site, not to one person. Each
+[member](/docs/sharing/members) who can see alerts can see all of your trackers.
+A Clinician, a Caretaker, an Administrator and the Owner can see alerts. A member
+who can manage alerts can also start, complete, change and delete each tracker,
+not only the ones they made. A Caretaker, an Administrator and the Owner can
+manage alerts.
+
+A [public share link](/docs/sharing/public-link) and a
+[guest link](/docs/sharing/guest-links) do not show trackers.
 
 ## Writing events for Nightscout apps
 

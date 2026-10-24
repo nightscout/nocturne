@@ -96,8 +96,8 @@ public class ReadEndpointScopeEnforcementTests
         /// <summary>The action, or the service it calls, checks the scope or the share and guest access itself and answers Forbid, NotFound or a narrowed result.</summary>
         public const string ActionChecksAccess = "scope or share access checked in the action or its service";
 
-        /// <summary>The tenant's trackers, read whole by a member and not at all by a share or guest link.</summary>
-        public const string TenantTrackers = "tenant's trackers, none for a viewer without an account";
+        /// <summary>The tenant's trackers, read whole by a member holding alerts.read and not at all by anyone else (see TrackerReadAccess).</summary>
+        public const string TenantTrackers = "tenant's trackers, alerts.read checked in the action";
 
         /// <summary>Instance-level or compiled-in reference data; no tenant row is read.</summary>
         public const string StaticReference = "static reference data, no tenant rows";
