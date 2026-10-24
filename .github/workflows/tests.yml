@@ -681,6 +681,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
+          check-latest: true
       - uses: actions/download-artifact@v5
         with:
           pattern: coverage-*
