@@ -19,6 +19,7 @@
     setColorScheme,
     userPrefersMode,
     dashboardTopWidgets,
+    dashboardRail,
     chartLineColorMode,
     chartLineColor,
     chartPointColorMode,
@@ -38,6 +39,7 @@
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import TitleFaviconSettings from "$lib/components/settings/TitleFaviconSettings.svelte";
   import DashboardWidgetConfigurator from "$lib/components/settings/DashboardWidgetConfigurator.svelte";
+  import DashboardRailConfigurator from "$lib/components/settings/DashboardRailConfigurator.svelte";
   import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
   import { updateLanguagePreference } from "$api/user-preferences.remote";
@@ -945,6 +947,12 @@
       />
     </div>
 
+    <DashboardRailConfigurator
+      value={dashboardRail.current}
+      {trackerPillsEnabled}
+      onchange={(preference) => (dashboardRail.current = preference)}
+    />
+
 
     {#if !tenantless}
     <!-- Glucose Processing -->
@@ -1043,6 +1051,9 @@
             <Label>Show tracker pills</Label>
             <p class="text-sm text-muted-foreground">
               Display active tracker ages (such as sensor and pump site) on homepage
+            </p>
+            <p class="text-sm text-muted-foreground">
+              When this is off, tracker pills do not show for any user.
             </p>
           </div>
           <Switch

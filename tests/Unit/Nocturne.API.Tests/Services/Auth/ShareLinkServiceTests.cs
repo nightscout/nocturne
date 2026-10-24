@@ -450,6 +450,7 @@ public sealed class ShareLinkServiceTests : IDisposable
         {
             GlucoseUnits = "mmol",
             DashboardTopWidgets = [WidgetId.Tdd, WidgetId.Meals],
+            DashboardRail = new DashboardRailPreference { Order = [RailItemId.Trackers, RailItemId.Reservoir] },
             NightModeSchedule = true,
         });
 
@@ -458,6 +459,8 @@ public sealed class ShareLinkServiceTests : IDisposable
         appearance.GlucoseUnits.Should().Be("mmol");
         appearance.DashboardTopWidgets.Should().BeNull(
             "the widgets an owner pins describe what they track, not how it looks");
+        appearance.DashboardRail.Should().BeNull(
+            "the status pills an owner picks describe what they track, not how it looks");
         appearance.NightModeSchedule.Should().BeNull(
             "it tells a stranger holding the link roughly when the owner sleeps");
     }

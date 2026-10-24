@@ -895,7 +895,7 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		// The bar lays its pills straight into this row (display: contents), so the row is the clip.
 		clip: '[data-testid="status-pills"]',
-		anchors: { trackers: '[data-testid="tracker-pill-bar"] button' },
+		anchors: { trackers: '[data-testid="status-pills"] [data-testid="tracker-pill-bar"] button' },
 		// Ages and the loop's figures come from the seeded data, so this image differs every capture.
 		alt: 'The row of status pills beside the current reading on the home screen. After the pills your pump and loop report comes one pill per running tracker, each giving its name and how long it has been running, with a thin line underneath showing how much of its expected life is used up.',
 	},
@@ -905,7 +905,7 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		prepare: async (page) => {
 			await openWith(
-				page.getByTestId('tracker-pill-bar').getByRole('button').first(),
+				page.getByTestId('status-pills').getByTestId('tracker-pill-bar').getByRole('button').first(),
 				page.getByTestId('tracker-pill-popover'),
 			);
 		},

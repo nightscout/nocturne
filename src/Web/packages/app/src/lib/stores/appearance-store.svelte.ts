@@ -27,8 +27,13 @@ import { getContext, setContext } from "svelte";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
-import { WidgetId, type UserDisplayPreferences } from "../api/generated/nocturne-api-client";
+import {
+  WidgetId,
+  type DashboardRailPreference,
+  type UserDisplayPreferences,
+} from "../api/generated/nocturne-api-client";
 import { DEFAULT_TOP_WIDGETS } from "../components/dashboard/top-widget-ids";
+import { parseRailPreference } from "../components/status-pills/rail";
 import { weekStartName } from "../components/calendar/calendar-date";
 import { resolveCookieDomain } from "../utils/tenant-host";
 import { isRecord } from "../utils/type-guards";
@@ -235,6 +240,7 @@ const widgetListPref: PrefParser<WidgetId[]> = (raw) =>
   Array.isArray(raw)
     ? raw.flatMap((id) => WIDGET_IDS.find((known) => known === id) ?? [])
     : undefined;
+
 
 function parseJson(json: string): unknown {
   try {
@@ -478,6 +484,17 @@ export const dashboardTopWidgets = new SyncedPref<WidgetId[]>(
   DEFAULT_TOP_WIDGETS,
   (p) => p.dashboardTopWidgets,
   widgetListPref
+);
+
+/**
+ * How the user arranged the dashboard status rail; an empty object is the default rail (see
+ * `effectiveRail`).
+ */
+export const dashboardRail = new SyncedPref<DashboardRailPreference>(
+  "nocturne-dashboard-rail",
+  {},
+  (p) => p.dashboardRail,
+  parseRailPreference
 );
 
 // ==========================================
@@ -824,6 +841,7 @@ export function collectPreferences(): UserDisplayPreferences {
     nightModeSchedule: nightModeSchedule.stored,
     calendarShowTirPercent: calendarShowTirPercent.stored,
     dashboardTopWidgets: dashboardTopWidgets.stored,
+    dashboardRail: dashboardRail.stored,
     prediction: {
       enabled: predictionEnabled.stored,
       minutes: predictionMinutes.stored,

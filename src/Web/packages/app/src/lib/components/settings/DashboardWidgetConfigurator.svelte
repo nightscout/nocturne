@@ -26,6 +26,7 @@
   import LayoutGrid from "@lucide/svelte/icons/layout-grid";
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
+  import { DragReorder } from "./drag-reorder.svelte";
   interface Props {
     /** Currently selected widget IDs (ordered) */
     value: WidgetId[];
@@ -36,9 +37,6 @@
   }
 
   let { value, onchange, maxWidgets = 3 }: Props = $props();
-
-  let draggedIndex: number | null = $state(null);
-  let dragOverIndex: number | null = $state(null);
 
   const definitions = getWidgetDefinitions();
 
@@ -70,43 +68,10 @@
   );
   const canAddMore = $derived(selectedWidgets.length < maxWidgets);
 
-  function handleDragStart(event: DragEvent, index: number) {
-    draggedIndex = index;
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", String(index));
-    }
-  }
-
-  function handleDragOver(event: DragEvent, index: number) {
-    event.preventDefault();
-    if (draggedIndex !== null && draggedIndex !== index) {
-      dragOverIndex = index;
-    }
-  }
-
-  function handleDragLeave() {
-    dragOverIndex = null;
-  }
-
-  function handleDrop(event: DragEvent, targetIndex: number) {
-    event.preventDefault();
-
-    if (draggedIndex !== null && draggedIndex !== targetIndex) {
-      const newValue = [...selectedWidgets];
-      const [removed] = newValue.splice(draggedIndex, 1);
-      newValue.splice(targetIndex, 0, removed);
-      onchange?.(newValue);
-    }
-
-    draggedIndex = null;
-    dragOverIndex = null;
-  }
-
-  function handleDragEnd() {
-    draggedIndex = null;
-    dragOverIndex = null;
-  }
+  const drag = new DragReorder<TopWidgetId>(
+    () => selectedWidgets,
+    (widgets) => onchange?.(widgets)
+  );
 
   function addWidget(id: TopWidgetId) {
     if (canAddMore) {
@@ -151,16 +116,16 @@
             {@const Icon = WIDGET_ICONS[widgetId]}
             <div
               class="flex items-center gap-2 p-3 rounded-lg border bg-card transition-all
-              {dragOverIndex === index
+              {drag.dragOverIndex === index
                 ? 'border-primary bg-accent'
                 : 'border-border'}
-              {draggedIndex === index ? 'opacity-50' : ''}"
+              {drag.draggedIndex === index ? 'opacity-50' : ''}"
               draggable="true"
-              ondragstart={(e) => handleDragStart(e, index)}
-              ondragover={(e) => handleDragOver(e, index)}
-              ondragleave={handleDragLeave}
-              ondrop={(e) => handleDrop(e, index)}
-              ondragend={handleDragEnd}
+              ondragstart={(e) => drag.start(e, index)}
+              ondragover={(e) => drag.over(e, index)}
+              ondragleave={() => drag.leave()}
+              ondrop={(e) => drag.drop(e, index)}
+              ondragend={() => drag.end()}
               role="listitem"
             >
               <GripVertical class="h-4 w-4 text-muted-foreground cursor-grab" />

@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reactiveFields } from "$lib/test-stubs/reactive-fields.svelte";
+import { remoteQuery } from "$lib/test-stubs/remote-resource";
 import type {
   BasalPillData,
   COBPillData,
@@ -32,8 +33,8 @@ vi.mock("$lib/stores/realtime-store.svelte", () => ({
   getRealtimeStore: () => store,
   tryGetRealtimeStore: () => store,
 }));
-vi.mock("$lib/stores/settings-store.svelte", () => ({
-  getSettingsStore: () => ({ features: { trackerPills: { enabled: false } } }),
+vi.mock("$api/ui-settings.remote", () => ({
+  getUiSettings: () => remoteQuery(() => ({ features: { trackerPills: { enabled: false } } })),
 }));
 
 import CurrentBGDisplay from "./current-bg-display-test-wrapper.svelte";
@@ -69,7 +70,7 @@ const arrive = async () => {
   store.isReady = true;
   store.currentReservoir = 120;
   store.pillsData = arrived;
-  await expect.element(page.getByText("Reservoir")).toBeVisible();
+  await expect.element(page.getByTestId("status-pills").getByText("Reservoir")).toBeVisible();
 };
 
 describe("CurrentBGDisplay pill rows", () => {

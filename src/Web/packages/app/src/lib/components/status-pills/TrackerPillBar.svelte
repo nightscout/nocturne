@@ -1,9 +1,9 @@
 <script lang="ts">
   import TrackerPill from "./TrackerPill.svelte";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$lib/api";
-  import { DashboardVisibility, NotificationUrgency, TrackerCategory } from "$lib/api";
+  import { TrackerCategory } from "$lib/api";
   import { cn } from "$lib/utils";
-  import { reachedUrgency, urgencyRank } from "$lib/components/trackers/schedule";
+  import { trackerDefinition, visibleTrackerInstances } from "./tracker-pill-visibility";
 
   interface TrackerPillBarProps {
     /** Active tracker instances */
@@ -32,33 +32,7 @@
     onComplete,
   }: TrackerPillBarProps = $props();
 
-  function getDefinition(
-    instance: TrackerInstanceDto
-  ): TrackerDefinitionDto | undefined {
-    return definitions.find((d) => d.id === instance.definitionId);
-  }
-
-  /** The step a pill waits for before it appears; null for always, undefined for never. */
-  const SHOWN_FROM: Record<DashboardVisibility, NotificationUrgency | null | undefined> = {
-    [DashboardVisibility.Off]: undefined,
-    [DashboardVisibility.Always]: null,
-    [DashboardVisibility.Info]: NotificationUrgency.Info,
-    [DashboardVisibility.Warn]: NotificationUrgency.Warn,
-    [DashboardVisibility.Hazard]: NotificationUrgency.Hazard,
-    [DashboardVisibility.Urgent]: NotificationUrgency.Urgent,
-  };
-
-  function isVisible(instance: TrackerInstanceDto, def?: TrackerDefinitionDto): boolean {
-    if (!def) return false;
-    const shownFrom = SHOWN_FROM[def.dashboardVisibility ?? DashboardVisibility.Always];
-    if (shownFrom === undefined) return false;
-    if (shownFrom === null) return true;
-    return urgencyRank(reachedUrgency(instance, now)) >= urgencyRank(shownFrom);
-  }
-
-  const visibleInstances = $derived(
-    instances.filter((instance) => isVisible(instance, getDefinition(instance)))
-  );
+  const visibleInstances = $derived(visibleTrackerInstances(instances, definitions, now));
 
   const hasVisiblePills = $derived(visibleInstances.length > 0);
 </script>
@@ -71,7 +45,7 @@
     {#each visibleInstances as instance (instance.id)}
       <TrackerPill
         {instance}
-        definition={getDefinition(instance)}
+        definition={trackerDefinition(instance, definitions)}
         {now}
         {onComplete}
       />

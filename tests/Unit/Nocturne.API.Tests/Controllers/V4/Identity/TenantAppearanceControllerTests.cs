@@ -128,6 +128,7 @@ public sealed class TenantAppearanceControllerTests
             Chart = new ChartPreferences { ShowPoints = true },
             YearOverviewColors = new YearOverviewColorPreferences { TddBand = [10, 70] },
             DashboardTopWidgets = [WidgetId.Tdd],
+            DashboardRail = new DashboardRailPreference { Hidden = [RailItemId.Trackers] },
         };
 
         var disclosed = everythingSet.ToPresentationOnly();
