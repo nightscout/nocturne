@@ -79,12 +79,12 @@ describe("AppSidebar", () => {
   it("keeps help and the sidebar toggle inside the collapsed desktop header", async () => {
     localStorage.setItem("nocturne-help-visibility", "icon");
     render(Harness, { user: MEMBER });
-    await group("Toggle Sidebar").first().click();
+    await group("Toggle sidebar").first().click();
     const help = group("Open page help");
     await expect.element(help).toBeVisible();
     await vi.waitFor(() => {
       const icon = help.element().getBoundingClientRect();
-      const toggle = group("Toggle Sidebar").first().element().getBoundingClientRect();
+      const toggle = group("Toggle sidebar").first().element().getBoundingClientRect();
       const header = help.element().closest('[data-slot="sidebar-header"]')!.getBoundingClientRect();
       expect(icon.left).toBeGreaterThanOrEqual(header.left);
       expect(icon.right).toBeLessThanOrEqual(header.right);
@@ -107,7 +107,7 @@ describe("AppSidebar", () => {
     await expect.element(page.getByText("Underlying report")).toBeVisible();
     expect(document.querySelector('[aria-label="Report filter"]')?.closest("[inert]")).not.toBeNull();
     await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
-    await link("Heart Rate").click();
+    await link("Heart rate").click();
     await expect.element(page.getByRole("heading", { name: "Heart Rate", exact: true })).toBeVisible();
     expect(pageState.url.pathname + pageState.url.search).toBe("/reports/steps?range=week");
     await group("Close page help").click();
@@ -129,7 +129,7 @@ describe("AppSidebar", () => {
     expect(originalSteps.getBoundingClientRect().left).toBe(originalPosition.left);
     expect(originalSteps.getBoundingClientRect().top).toBe(originalPosition.top);
     const docs = page.getByRole("navigation", { name: "Documentation navigation" });
-    await docs.getByRole("link", { name: "Heart Rate", exact: true }).click();
+    await docs.getByRole("link", { name: "Heart rate", exact: true }).click();
     await expect.element(page.getByRole("heading", { name: "Heart Rate", exact: true })).toBeVisible();
     expect(pageState.url.pathname).toBe("/reports/steps");
     navigation.scrollTop = 180;
@@ -410,3 +410,4 @@ describe("AppSidebar", () => {
     });
   });
 });
+
