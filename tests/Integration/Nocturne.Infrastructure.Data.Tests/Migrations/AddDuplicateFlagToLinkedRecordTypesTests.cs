@@ -44,10 +44,12 @@ public class AddDuplicateFlagToLinkedRecordTypesFixture : IAsyncLifetime
             $"ALTER TABLE {t} ADD COLUMN written_live boolean NOT NULL DEFAULT false;")));
         await ExecuteAsync(string.Concat(WriterStampedTables.Select(t =>
             $"ALTER TABLE {t} ADD COLUMN writer_grant_id uuid;")));
+        await ExecuteAsync($"ALTER TABLE sensor_glucose ADD COLUMN {string.Join(", ADD COLUMN ", LaterSensorGlucoseColumns)};");
         foreach (var tenant in new[] { TenantA, TenantB })
             Expected.AddRange(await SeedAsync(tenant));
         await ExecuteAsync(string.Concat(LaterColumnTables.Select(t => $"ALTER TABLE {t} DROP COLUMN written_live;")));
         await ExecuteAsync(string.Concat(WriterStampedTables.Select(t => $"ALTER TABLE {t} DROP COLUMN writer_grant_id;")));
+        await ExecuteAsync($"ALTER TABLE sensor_glucose DROP COLUMN {string.Join(", DROP COLUMN ", LaterSensorGlucoseColumns.Select(c => c.Split(' ')[0]))};");
 
         await MigrateToAsync(null);
         FlaggedAfterUp = await FlaggedAsync();
@@ -78,6 +80,10 @@ public class AddDuplicateFlagToLinkedRecordTypesFixture : IAsyncLifetime
 
     /// <summary>The seeded tables the model writes <c>writer_grant_id</c> to, on the same terms.</summary>
     private static readonly string[] WriterStampedTables = [.. LaterColumnTables, "state_spans"];
+
+    /// <summary>The <c>sensor_glucose</c> columns <c>AddQualityToSensorGlucose</c> adds, on the same terms.</summary>
+    private static readonly string[] LaterSensorGlucoseColumns =
+        ["quality character varying(16)", "sensor_status character varying(64)"];
 
     /// <summary>
     /// For each of three record types: a group of a primary and one non-primary copy, and a record

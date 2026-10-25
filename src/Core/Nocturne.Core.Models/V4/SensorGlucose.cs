@@ -106,6 +106,19 @@ public class SensorGlucose : V4RecordBase, IDeviceAttributed
     public int? Rssi { get; set; }
 
     /// <summary>
+    /// Whether the sensor trusted the value. Omitted when null, like <see cref="Rssi"/>.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SensorGlucoseQuality? Quality { get; set; }
+
+    /// <summary>
+    /// The vendor's raw state behind <see cref="Quality"/>, e.g. <c>G7:Errors/info2</c>, so nothing
+    /// is lost in the mapping. Omitted when null, like <see cref="Rssi"/>.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SensorStatus { get; set; }
+
+    /// <summary>
     /// Whether this glucose value has been algorithmically smoothed or is raw sensor output.
     /// <c>null</c> when the uploader did not declare.
     /// </summary>
