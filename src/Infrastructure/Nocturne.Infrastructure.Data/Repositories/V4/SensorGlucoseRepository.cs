@@ -117,7 +117,8 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-                descending, afterTimestamp, afterId, patientDeviceId, orderByValue)
+                descending, afterTimestamp, afterId, patientDeviceId, orderByValue,
+                countedOnly: true)
             .Select(e => new SensorGlucose
             {
                 Id = e.Id,
@@ -152,11 +153,18 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// realtime clients and the Home Assistant relay if it survives
     /// <see cref="CanonicalGlucoseStream"/> selection over the recent window plus the just-written
     /// batch. Single-stream tenants pass through unchanged (the selector's fast path). Failures
-    /// fail open — a broadcast is better than a silent drop.
+    /// fail open — a broadcast is better than a silent drop. Readings that don't count in
+    /// statistics (<see cref="SensorGlucoseQualityRules.CountsInStatistics"/>) neither pass nor
+    /// compete: v1/v3 clients and the relay can't see the quality field, so they would act on the
+    /// value.
     /// </summary>
     protected override async Task<IReadOnlyList<SensorGlucose>> FilterLegacyProjectionAsync(
         IReadOnlyList<SensorGlucose> models, CancellationToken ct)
     {
+        models = models.Where(m => m.CountsInStatistics()).ToList();
+        if (models.Count == 0)
+            return models;
+
         try
         {
             await using var ctx = await ContextFactory.CreateAsync(ct);
@@ -164,6 +172,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             var windowStart = DateTime.UtcNow - TimeSpan.FromMinutes(15);
             var recentEntities = await ctx.Set<SensorGlucoseEntity>()
                 .AsNoTracking()
+                .CountedInStatistics()
                 .Where(e => e.Timestamp >= windowStart)
                 .OrderByDescending(e => e.Timestamp)
                 .Take(500)
@@ -276,7 +285,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await BuildReadQuery(ctx, from, to, device, source, limit, offset,
-                descending, afterTimestamp, afterId, patientDeviceId)
+                descending, afterTimestamp, afterId, patientDeviceId, countedOnly: true)
             .Select(e => new SensorGlucose
             {
                 Id = e.Id,
@@ -291,13 +300,27 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             .ToListAsync(ct);
     }
 
+    /// <inheritdoc />
+    public async Task<IEnumerable<SensorGlucose>> GetCountedAsync(
+        DateTime? from, DateTime? to, string? source, int limit, bool descending,
+        CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await BuildReadQuery(ctx, from, to, device: null, source, limit, offset: 0,
+            descending, afterTimestamp: null, afterId: null, patientDeviceId: null,
+            countedOnly: true).ToListAsync(ct);
+        return entities.Select(SensorGlucoseMapper.ToDomainModel);
+    }
+
     private IQueryable<SensorGlucoseEntity> BuildReadQuery(
         NocturneDbContext ctx, DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending,
         DateTime? afterTimestamp, Guid? afterId, Guid? patientDeviceId,
-        bool orderByValue = false)
+        bool orderByValue = false, bool countedOnly = false)
     {
         var query = ctx.SensorGlucose.AsNoTracking().AsQueryable();
+        if (countedOnly)
+            query = query.CountedInStatistics();
         if (from.HasValue)
             query = query.Where(e => e.Timestamp >= from.Value);
         if (to.HasValue)

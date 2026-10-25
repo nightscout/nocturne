@@ -24,7 +24,8 @@ namespace Nocturne.API.Services.Sleep;
 /// Overnight TIR and hypo events use the clinical consensus bands, not the profile's
 /// personal target, so they agree with every other report. Glucose is the canonical stream
 /// (<see cref="ICanonicalGlucoseService.SelectAsync"/>), as the other reports read it, so a
-/// reading posted by two uploaders counts once. Weekly buckets start on the caller's regional
+/// reading posted by two uploaders counts once, and a reading the sensor marked invalid doesn't
+/// count. Weekly buckets start on the caller's regional
 /// first day of the week (<see cref="FirstDayOfWeek"/>), Monday for a caller with no preferences.
 /// </remarks>
 public class SleepReportService : ISleepReportService
@@ -144,17 +145,13 @@ public class SleepReportService : ISleepReportService
     private async Task<IReadOnlyList<SensorGlucose>> ReadCanonicalGlucoseAsync(
         DateTime from, DateTime to, CancellationToken ct)
     {
-        var raw = await _glucose.GetAsync(
-            from:           from,
-            to:             to,
-            device:         null,
-            source:         null,
-            limit:          int.MaxValue,
-            offset:         0,
-            descending:     false,
-            afterTimestamp: null,
-            afterId:        null,
-            ct:             ct);
+        var raw = await _glucose.GetCountedAsync(
+            from:       from,
+            to:         to,
+            source:     null,
+            limit:      int.MaxValue,
+            descending: false,
+            ct:         ct);
         return await _canonicalGlucose.SelectAsync(raw.ToList(), ct);
     }
 

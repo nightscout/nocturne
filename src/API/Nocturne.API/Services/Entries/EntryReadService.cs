@@ -378,7 +378,8 @@ public class EntryReadService : IEntryStore
         {
             // Sequential to avoid DbContext thread-safety issues with scoped lifetime
             var fetched = new List<HistoryRecord<IV4Record>>();
-            fetched.AddRange(Widen(await _sgRepo.GetModifiedSinceAsync(cursor, limit, ct)));
+            fetched.AddRange(Widen(await _sgRepo.GetModifiedSinceAsync(cursor, limit, ct))
+                .Select(WithholdUncounted));
             fetched.AddRange(Widen(await _mgRepo.GetModifiedSinceAsync(cursor, limit, ct)));
             fetched.AddRange(Widen(await _calRepo.GetModifiedSinceAsync(cursor, limit, ct)));
 
@@ -422,6 +423,15 @@ public class EntryReadService : IEntryStore
     private static IEnumerable<HistoryRecord<IV4Record>> Widen<T>(IEnumerable<HistoryRecord<T>> rows)
         where T : IV4Record =>
         rows.Select(r => new HistoryRecord<IV4Record>(r.Record, r.Deleted));
+
+    /// <summary>
+    /// History delivers a reading that doesn't count in statistics
+    /// (<see cref="SensorGlucoseQualityRules.CountsInStatistics"/>) as deleted. A sync client can't
+    /// see the quality field, and it may hold the reading from before backfill flagged it; a
+    /// deleted row is the change it understands.
+    /// </summary>
+    private static HistoryRecord<IV4Record> WithholdUncounted(HistoryRecord<IV4Record> row) =>
+        row.Record is SensorGlucose sg && !sg.CountsInStatistics() ? row with { Deleted = true } : row;
 
     private static int HistoryTypeOrder(IV4Record record) => record switch
     {

@@ -245,6 +245,14 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
+    /// Readings a client posts for statistics, less those statistics leave out
+    /// (<see cref="SensorGlucoseQualityRules.CountsInStatistics"/>): a client may post what it read
+    /// from the sensor glucose endpoints, which return every reading.
+    /// </summary>
+    private static IEnumerable<SensorGlucose> Counted(IEnumerable<SensorGlucose> entries) =>
+        entries.Where(e => e.CountsInStatistics());
+
+    /// <summary>
     /// Calculate basic glucose statistics from provided glucose values
     /// </summary>
     /// <param name="values">Array of glucose values in mg/dL</param>
@@ -275,7 +283,7 @@ public class StatisticsController : ControllerBase
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
         var result = _statisticsService.CalculateGlycemicVariability(
             request.Values,
-            request.Entries,
+            Counted(request.Entries),
             clock.Zone
         );
         if (result == null)
@@ -300,7 +308,7 @@ public class StatisticsController : ControllerBase
     )
     {
         var result = _statisticsService.CalculateTimeInRange(
-            request.Entries,
+            Counted(request.Entries),
             request.Thresholds
         );
         return Ok(result);
@@ -319,7 +327,7 @@ public class StatisticsController : ControllerBase
     )
     {
         var result = _statisticsService.CalculateGlucoseDistribution(
-            request.Entries,
+            Counted(request.Entries),
             request.Bins
         );
         return Ok(result);
@@ -341,7 +349,7 @@ public class StatisticsController : ControllerBase
     )
     {
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
-        return Ok(_statisticsService.CalculateAveragedStats(entries, clock.Zone));
+        return Ok(_statisticsService.CalculateAveragedStats(Counted(entries), clock.Zone));
     }
 
     /// <summary>
@@ -400,7 +408,7 @@ public class StatisticsController : ControllerBase
     {
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
         var result = _statisticsService.AnalyzeGlucoseData(
-            request.Entries,
+            Counted(request.Entries),
             request.Boluses ?? Enumerable.Empty<Bolus>(),
             request.CarbIntakes ?? Enumerable.Empty<CarbIntake>(),
             StatisticsService.ClinicalMinimumDays,
@@ -425,7 +433,7 @@ public class StatisticsController : ControllerBase
     {
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
         var result = _statisticsService.AnalyzeGlucoseDataExtended(
-            request.Entries,
+            Counted(request.Entries),
             request.Boluses ?? Enumerable.Empty<Bolus>(),
             request.CarbIntakes ?? Enumerable.Empty<CarbIntake>(),
             request.StartDate is { } start && request.EndDate is { } end
@@ -692,7 +700,7 @@ public class StatisticsController : ControllerBase
     {
         var clock = await _tenantClock.ResolveAsync(cancellationToken);
         var result = _statisticsService.AssessDataSufficiency(
-            request.Entries,
+            Counted(request.Entries),
             request.Days,
             request.ExpectedReadingsPerDay,
             clock.Zone
@@ -921,7 +929,7 @@ public class StatisticsController : ControllerBase
     )
     {
         var result = _statisticsService.CalculateSiteChangeImpact(
-            request.Entries,
+            Counted(request.Entries),
             request.DeviceEvents,
             request.HoursBeforeChange,
             request.HoursAfterChange,

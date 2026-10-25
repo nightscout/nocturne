@@ -44,4 +44,14 @@ public class SensorGlucoseSerializationTests
         root.GetProperty("quality").GetString().Should().Be("Invalid");
         root.GetProperty("sensorStatus").GetString().Should().Be("G7:Errors/info2");
     }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(SensorGlucoseQuality.Valid, true)]
+    [InlineData(SensorGlucoseQuality.Uncertain, true)]
+    [InlineData(SensorGlucoseQuality.Invalid, false)]
+    public void CountsInStatistics_LeavesOutOnlyInvalid(SensorGlucoseQuality? quality, bool counts)
+    {
+        new SensorGlucose { Mgdl = 76, Quality = quality }.CountsInStatistics().Should().Be(counts);
+    }
 }

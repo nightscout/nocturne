@@ -79,10 +79,9 @@ public class SleepReportServiceTests
         }
 
         _glucoseRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null,
+                It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(readings.OrderBy(r => r.Mills).ToArray());
     }
 
@@ -176,10 +175,9 @@ public class SleepReportServiceTests
             .ReturnsAsync(session);
 
         _glucoseRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null,
+                It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         var result = await _sut.GetSingleNightReportAsync(Guid.NewGuid());
@@ -211,17 +209,15 @@ public class SleepReportServiceTests
             .ReturnsAsync(session);
 
         _glucoseRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null,
+                It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         await _sut.GetSingleNightReportAsync(Guid.NewGuid());
 
-        _glucoseRepo.Verify(r => r.GetAsync(
-            start, end, null, null,
-            int.MaxValue, 0, false, null, null,
+        _glucoseRepo.Verify(r => r.GetCountedAsync(
+            start, end, null, int.MaxValue, false,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -236,10 +232,9 @@ public class SleepReportServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(sessions);
         _glucoseRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null,
+                It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
     }
 
@@ -349,10 +344,9 @@ public class SleepReportServiceTests
         result.Summary.DaysInRange.Should().Be(31); // Jan 1 – Jan 31 inclusive
         result.Summary.CoveragePct.Should().Be(0);
 
-        _glucoseRepo.Verify(r => r.GetAsync(
-            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-            It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+        _glucoseRepo.Verify(r => r.GetCountedAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -389,10 +383,9 @@ public class SleepReportServiceTests
             .ReturnsAsync(sessions);
 
         _glucoseRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null,
+                It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -426,10 +419,9 @@ public class SleepReportServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync([session]);
         _glucoseRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null,
+                It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         // Sydney is UTC+11 in January, so these bounds are Sydney 10 Jan 00:00 to 12 Jan 23:59:59.999,
@@ -514,10 +506,9 @@ public class SleepReportServiceTests
             .ReturnsAsync(sessions);
 
         _glucoseRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null,
+                It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -550,10 +541,9 @@ public class SleepReportServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(sessions);
         _glucoseRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
-                It.IsAny<int>(), 0, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null,
+                It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
     }
 

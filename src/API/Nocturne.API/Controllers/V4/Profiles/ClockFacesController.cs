@@ -100,9 +100,10 @@ public class ClockFacesController : ControllerBase
         }
 
         // Latest two readings: the newest drives the value/trend; the previous is a delta fallback.
-        var readings = await _sensorGlucoseRepository.GetAsync(
-            from: null, to: null, device: null, source: null,
-            limit: 2, offset: 0, descending: true, ct: HttpContext.RequestAborted);
+        // Counted ones only: a clock face can't show that the sensor marked a reading invalid.
+        var readings = await _sensorGlucoseRepository.GetCountedAsync(
+            from: null, to: null, source: null, limit: 2, descending: true,
+            ct: HttpContext.RequestAborted);
 
         var dtos = readings.Select(r => new ClockGlucoseDto
         {

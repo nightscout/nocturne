@@ -332,6 +332,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
                 .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
+                .CountedInStatistics()
                 .ExcludeNonPrimary(context, RecordType.SensorGlucose)
                 .Select(e => new { e.Timestamp, e.Mgdl }),
             r => r.Timestamp, r => (r.Timestamp, r.Mgdl), allGlucoseByMonth, tz,
@@ -526,6 +527,7 @@ public class DataOverviewService : IDataOverviewService
             .SensorGlucose.Where(e => e.Timestamp >= lookbackStartUtc && e.Timestamp < yearEndUtc)
             .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
             .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
+            .CountedInStatistics()
             .ExcludeNonPrimary(context, RecordType.SensorGlucose)
             .Select(e => new { e.Timestamp, e.Mgdl })
             .ToListAsync(cancellationToken);
@@ -942,6 +944,7 @@ public class DataOverviewService : IDataOverviewService
                 .SensorGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
                 .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
+                .CountedInStatistics()
                 .ExcludeNonPrimary(context, RecordType.SensorGlucose)
                 .Select(e => new { e.Timestamp, e.Mgdl })
                 .ReadMetricRowsAsync(reads, YearMetricSource.Sensor, cancellationToken);

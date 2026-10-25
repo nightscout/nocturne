@@ -175,6 +175,24 @@ public class EntryReadServiceHistoryTests
     }
 
     [Fact]
+    public async Task AReadingTheSensorMarkedInvalid_IsDeliveredAsDeleted()
+    {
+        var flagged = Sg(Cursor.AddHours(-2), written: Cursor.AddMinutes(1), source: "cgm");
+        flagged.Quality = SensorGlucoseQuality.Invalid;
+        var trusted = Sg(Cursor.AddHours(-1), written: Cursor.AddMinutes(2), source: "cgm");
+        trusted.Quality = SensorGlucoseQuality.Uncertain;
+        _sgRepo.Setup(r => r.GetModifiedSinceAsync(CursorMills, 1000, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Live(flagged), Live(trusted)]);
+
+        var page = await CreateSut(TestDoubles.CanonicalGlucosePassThrough.Create())
+            .GetModifiedSinceAsync(CursorMills, 1000);
+
+        page.Records.Select(e => (e.Id, e.IsValid)).Should().Equal(
+            (flagged.Id.ToString(), (bool?)false),
+            (trusted.Id.ToString(), (bool?)true));
+    }
+
+    [Fact]
     public async Task FullPageEntirelyWithheld_IsSkipped_ForTheNextPage_AndTheCursorAdvances()
     {
         var demo1 = Sg(Cursor.AddDays(-1), written: Cursor.AddMinutes(1), source: DataSources.DemoService);
