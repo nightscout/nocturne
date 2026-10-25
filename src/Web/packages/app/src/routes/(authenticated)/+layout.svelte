@@ -22,7 +22,7 @@
   import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
   import { browser, dev } from "$app/environment";
-  import { invalidate } from "$app/navigation";
+  import { beforeNavigate, invalidate } from "$app/navigation";
   import { refreshOnVisible } from "$lib/utils/refresh-on-return.svelte";
   import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "$lib/constants/shell-data";
   import { createShellRevalidator } from "$lib/utils/shell-session";

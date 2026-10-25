@@ -38,7 +38,7 @@
       />
     </div>
     <p class="text-xs text-muted-foreground">
-      Only the background layer changes; documentation text stays fully visible.
+      Only the background layer changes. Documentation text stays fully visible.
       Saved in this browser.
     </p>
     <Button
