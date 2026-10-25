@@ -59,6 +59,33 @@ public class StateSpanService : IStateSpanService
     }
 
     /// <inheritdoc />
+    public Task<IEnumerable<StateSpan>> GetStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
+        string? source,
+        bool? active,
+        int count,
+        int skip,
+        bool descending,
+        CancellationToken cancellationToken = default)
+        => _repository.GetStateSpansInCategoriesAsync(
+            categories, state, from, to, source, active, count, skip, descending, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<int> CountStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
+        string? source,
+        bool? active,
+        CancellationToken cancellationToken = default)
+        => _repository.CountStateSpansInCategoriesAsync(
+            categories, state, from, to, source, active, cancellationToken);
+
+    /// <inheritdoc />
     public Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
         StateSpanCategory category,
         string? source,

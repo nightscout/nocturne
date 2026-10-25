@@ -35,9 +35,7 @@
       <div class="space-y-0.5">
         <p class="font-medium">Add a backup way to sign in</p>
         <p>
-          There is one way into this account. Add a second passkey, link a
-          sign-in method, or save recovery codes, which are one-time codes you can
-          type in if you lose your device.
+          There is one way into this account. Add a second passkey, link a sign-in method, or save recovery codes. Recovery codes are one-time codes you can type in if you lose your device.
         </p>
       </div>
     </div>

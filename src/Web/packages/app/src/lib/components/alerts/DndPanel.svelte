@@ -56,7 +56,7 @@
     } catch (err) {
       if (read === reads) {
         settings = null;
-        errorMessage = remoteErrorMessage(err, "Couldn't load Do Not Disturb.");
+        errorMessage = remoteErrorMessage(err, "Could not load Do not disturb.");
       }
     } finally {
       loading = false;
@@ -84,7 +84,7 @@
     } catch (e) {
       errorMessage = describeSubmitError(
         e,
-        "Couldn't change Do Not Disturb. Please try again.",
+        "Could not change Do not disturb. Try again.",
       );
     } finally {
       saving = false;
@@ -125,7 +125,7 @@
             {:else}
               <Bell class="h-4 w-4" />
             {/if}
-            <span class="flex-1 truncate text-sm {inEffect ? 'text-status-info' : ''}">Do Not Disturb</span>
+            <span class="flex-1 truncate text-sm {inEffect ? 'text-status-info' : ''}">Do not disturb</span>
             {#if saving}
               <Loader2 class="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             {:else}
@@ -140,8 +140,7 @@
         {:else if isActive}
           <DropdownMenu.Item disabled={saving} onSelect={() => setActive(false)}>
             <Bell class="h-3.5 w-3.5" />
-            Turn off
-          </DropdownMenu.Item>
+            Disable </DropdownMenu.Item>
         {:else}
           <div class="px-2 pt-1 pb-1 text-2xs uppercase tracking-wider text-muted-foreground">
             Mute alerts for

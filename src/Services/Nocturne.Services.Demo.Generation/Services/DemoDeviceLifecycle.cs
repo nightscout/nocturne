@@ -120,7 +120,7 @@ public static class DemoDeviceLifecycle
     public static Treatment ToTreatment(DeviceChangeEvent change, string dataSource) => new()
     {
         EventType = change.EventType,
-        Mills = new DateTimeOffset(change.TimestampUtc).ToUnixTimeMilliseconds(),
+        Mills = change.TimestampUtc.ToMills(),
         Created_at = change.TimestampUtc.ToString("o"),
         EnteredBy = "demo-user",
         DataSource = dataSource,

@@ -18,7 +18,7 @@
   // exposes `date`. Both props are read once here, exactly as a page reads its
   // params object once — the test drives the values through their getters.
   const resource = contextResource(() => query, {
-    errorTitle: "Error Loading Test Report",
+    errorTitle: "Error loading test report",
     dateParams,
   });
 </script>

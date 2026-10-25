@@ -17,22 +17,27 @@ public class ExcursionResolutionHandlerTests
 {
     private readonly Mock<IAlertRepository> _repository = new();
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
+    private readonly Mock<IEngineAlarmRelay> _alarmRelay = new();
     private readonly Mock<IInAppNotificationService> _notification = new();
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 4, 30, 14, 0, 0, TimeSpan.Zero));
     private readonly ExcursionResolutionHandler _sut;
 
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly Guid _excursionId = Guid.NewGuid();
+    private readonly Guid _ruleId = Guid.NewGuid();
 
     public ExcursionResolutionHandlerTests()
     {
         _repository.Setup(r => r.GetInAppDestinationsForExcursionAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<string>());
+        _repository.Setup(r => r.GetExcursionRuleAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExcursionRuleSnapshot(_ruleId, "Urgent Low"));
 
         _sut = new ExcursionResolutionHandler(
             _repository.Object,
             _broadcast.Object,
             _notification.Object,
+            _alarmRelay.Object,
             _timeProvider,
             NullLogger<ExcursionResolutionHandler>.Instance);
     }
@@ -57,7 +62,78 @@ public class ExcursionResolutionHandlerTests
             _tenantId,
             It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(instanceId)),
             It.IsAny<CancellationToken>()), Times.Once);
-        _broadcast.Verify(b => b.BroadcastAlertEventAsync("alert_resolved", It.IsAny<object>()), Times.Once);
+        _broadcast.Verify(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()), Times.Once);
+        _alarmRelay.Verify(
+            r => r.ClearIfQuietAsync(
+                It.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { _excursionId })),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleClosed_BroadcastCarriesTheExcursionRuleAndReason()
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        AlertResolvedEvent? sent = null;
+        _broadcast.Setup(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()))
+            .Callback<AlertResolvedEvent>(e => sent = e)
+            .Returns(Task.CompletedTask);
+
+        await _sut.HandleClosedAsync(
+            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.Hysteresis),
+            _tenantId,
+            CancellationToken.None);
+
+        sent.Should().BeEquivalentTo(new AlertResolvedEvent
+        {
+            TenantId = _tenantId,
+            ExcursionId = _excursionId,
+            AlertRuleId = _ruleId,
+            RuleName = "Urgent Low",
+            ResolvedAt = _timeProvider.GetUtcNow().UtcDateTime,
+            Reason = ExcursionCloseReason.Hysteresis,
+        });
+    }
+
+    [Fact]
+    public async Task HandleClosed_ExcursionWithoutRule_ResolvesWithoutBroadcasting()
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        _repository.Setup(r => r.GetExcursionRuleAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ExcursionRuleSnapshot?)null);
+
+        await _sut.HandleClosedAsync(
+            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.AutoResolve),
+            _tenantId,
+            CancellationToken.None);
+
+        _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
+            _tenantId, _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
+        _broadcast.Verify(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleClosed_RuleLookupFailure_StillResolvesAndClears()
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+        _repository.Setup(r => r.GetExcursionRuleAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        var act = async () => await _sut.HandleClosedAsync(
+            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.AutoResolve),
+            _tenantId,
+            CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        _repository.Verify(r => r.ResolveInstancesForExcursionAsync(
+            _tenantId, _excursionId, It.IsAny<DateTime>(), "auto", It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.DeleteExcursionMutesAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()), Times.Once);
+        _alarmRelay.Verify(
+            r => r.ClearIfQuietAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()), Times.Once);
+        _broadcast.Verify(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()), Times.Never);
     }
 
     [Fact]
@@ -175,7 +251,7 @@ public class ExcursionResolutionHandlerTests
     {
         _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
-        _broadcast.Setup(b => b.BroadcastAlertEventAsync(It.IsAny<string>(), It.IsAny<object>()))
+        _broadcast.Setup(b => b.BroadcastAlertResolvedAsync(It.IsAny<AlertResolvedEvent>()))
             .ThrowsAsync(new InvalidOperationException("hub down"));
 
         var transition = new ExcursionTransition(

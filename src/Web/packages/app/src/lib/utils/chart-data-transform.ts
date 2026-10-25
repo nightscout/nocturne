@@ -48,6 +48,7 @@ export function transformChartData(data: DashboardChartData) {
     defaultBasalRate: data.defaultBasalRate ?? 1.0,
     maxBasalRate: data.maxBasalRate ?? 3.0,
     maxIob: data.maxIob ?? 5.0,
+    minIob: data.minIob ?? 0,
     maxCob: data.maxCob ?? 100.0,
 
     glucoseData: (data.glucoseData ?? []).map((p) => ({

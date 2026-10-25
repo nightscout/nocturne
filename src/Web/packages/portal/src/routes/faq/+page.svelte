@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { Artwork } from "@nocturne/watercolour";
     import * as Accordion from "@nocturne/ui/ui/accordion";
     import { Button } from "@nocturne/ui/ui/button";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
@@ -96,7 +97,15 @@
 </script>
 
 <div class="max-w-[900px] mx-auto px-6">
-    <div class="pt-20 pb-15">
+    <div class="relative pt-20 pb-15">
+        <Artwork
+            artwork="magnifying-glass"
+            palette="water"
+            motion="auto"
+            autoplay="once"
+            position="absolute"
+            class="pointer-events-none -right-8 top-16 hidden size-[260px] opacity-90 lg:block xl:size-[300px]"
+        />
         <h1 class="text-headline font-bold text-foreground m-0 mb-4">Frequently asked questions</h1>
         <p class="text-lead text-muted-foreground max-w-[560px] m-0">
             Answers to frequent questions about Nocturne, installation, migration,

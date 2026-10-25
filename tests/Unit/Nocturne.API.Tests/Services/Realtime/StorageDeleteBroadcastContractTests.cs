@@ -332,7 +332,7 @@ public class StorageDeleteBroadcastContractTests
         await CreateSideEffects(capture).OnCreatedAsync("devicestatus", new[] { status });
 
         var v1 = Rest(status).GetProperty("_id").GetString();
-        var v3 = RestIdentifier(V3DeviceStatusController.MapToV3Dto(status));
+        var v3 = RestIdentifier(V3DeviceStatusController.ToDocument(status));
         v1.Should().Be(v3);
         IdKeys(capture.Create.GetProperty("doc"))
             .Should()

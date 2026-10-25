@@ -34,7 +34,7 @@ const textFields = [
   /^Energy/,
 ];
 const selectFields = [/^Category$/];
-const groupFields = [/^Unit$/, /^Glycemic Index$/];
+const groupFields = [/^Unit$/, /^Glycemic index$/];
 
 async function expectAllFields() {
   for (const label of textFields) {
@@ -58,7 +58,7 @@ function overflowingElements(form: Element) {
 }
 
 function crushedToggles(form: Element) {
-  const minimumGroupWidth = { Unit: 200, "Glycemic Index": 180 };
+  const minimumGroupWidth = { Unit: 200, "Glycemic index": 180 };
   return [...form.querySelectorAll("[data-toggle-group-root]")].flatMap(
     (group) => {
       const box = group.getBoundingClientRect();

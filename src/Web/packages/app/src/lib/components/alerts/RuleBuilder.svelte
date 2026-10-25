@@ -68,7 +68,7 @@
   {:else if nested && node.composite}
     <div class="flex items-center gap-2 text-xs text-muted-foreground">
       <Brackets class="h-3.5 w-3.5" />
-      <span>Group — match</span>
+      <span>Group: match</span>
       <OperatorToggle
         value={node.composite.operator}
         size="compact"

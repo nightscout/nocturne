@@ -29,9 +29,6 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
     /// <summary>Client identifier sent with the data-hub authorization request.</summary>
     private const string ClientName = "Nocturne.Widget.Windows11";
 
-    /// <summary>Notification level (URGENT) at or above which an alarm is treated as urgent.</summary>
-    private const int UrgentAlarmLevel = 2;
-
     /// <summary>
     /// Record collections the data hub subscribes to: the native V4 categories (glucose/care/device)
     /// plus the legacy v1 collections, so realtime works whether the tenant writes V4 or legacy shapes.
@@ -391,13 +388,15 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
 
         // Device-age tracker recomputation (drives the Ages widget).
         connection.On<JsonElement>("trackerUpdate", _ => RaiseDataUpdated("tracker"));
+        connection.On<JsonElement>("trackerDefinitionUpdate", _ => RaiseDataUpdated("tracker"));
     }
 
     private void ConfigureAlarmHubHandlers(HubConnection connection)
     {
-        connection.On<JsonElement>("alarm", payload => RaiseAlarm(payload, urgent: false, cleared: false));
-        connection.On<JsonElement>("urgent_alarm", payload => RaiseAlarm(payload, urgent: true, cleared: false));
-        connection.On<JsonElement>("clear_alarm", payload => RaiseAlarm(payload, urgent: false, cleared: true));
+        foreach (var (eventName, kind) in AlarmHubEvents.Kinds)
+        {
+            connection.On<JsonElement>(eventName, payload => RaiseAlarm(payload, kind));
+        }
     }
 
     private void RaiseDataUpdated(string dataType) =>
@@ -410,7 +409,7 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
             }
         );
 
-    private void RaiseAlarm(JsonElement payload, bool urgent, bool cleared)
+    private void RaiseAlarm(JsonElement payload, AlarmEventKind kind)
     {
         var level = GetInt(payload, "level");
         var args = new AlarmEventArgs
@@ -419,11 +418,11 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
             Title = GetString(payload, "title"),
             Message = GetString(payload, "message"),
             Level = level,
-            Urgent = urgent || level >= UrgentAlarmLevel,
+            Urgent = kind.IsUrgent(level),
             Timestamp = GetLong(payload, "timestamp"),
         };
 
-        if (cleared)
+        if (kind.Cleared)
         {
             AlarmCleared?.Invoke(this, args);
         }

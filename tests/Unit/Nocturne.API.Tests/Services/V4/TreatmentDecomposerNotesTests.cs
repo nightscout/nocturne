@@ -48,7 +48,6 @@ public class TreatmentDecomposerNotesTests : IDisposable
             .Setup(s => s.ResolveAsync(It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
-        var profileDecomposerMock = new Mock<IProfileDecomposer>();
         var activeProfileResolverMock = new Mock<IActiveProfileResolver>();
         var insulinRepoMock = new Mock<IPatientInsulinRepository>();
 
@@ -62,7 +61,6 @@ public class TreatmentDecomposerNotesTests : IDisposable
             treatmentFoodServiceMock.Object,
             deviceServiceMock.Object,
             Mock.Of<IPatientDeviceStamper>(),
-            profileDecomposerMock.Object,
             activeProfileResolverMock.Object,
             insulinRepoMock.Object,
             TempBasalTestDeps.Unscheduled(),

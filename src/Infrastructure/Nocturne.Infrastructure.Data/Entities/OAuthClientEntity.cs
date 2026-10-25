@@ -4,9 +4,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
-/// Registered or pinned OAuth client applications.
-/// Any app can initiate an OAuth flow without prior registration;
-/// this table records clients that have been authorized at least once.
+/// OAuth clients: one per Dynamic Client Registration, plus the tenant's Scalar docs client, plus
+/// seed rows from before per-registration clients that still hold grants.
 /// </summary>
 [Table("oauth_clients")]
 public class OAuthClientEntity : ITenantScoped, IEntityTimestamped
@@ -34,9 +33,9 @@ public class OAuthClientEntity : ITenantScoped, IEntityTimestamped
     public string ClientId { get; set; } = string.Empty;
 
     /// <summary>
-    /// RFC 7591 software_id — reverse-DNS identifier that is stable across installs of the
-    /// same product (e.g., "org.nightscout.trio"). Used to match self-registering clients
-    /// against the bundled known app directory for idempotent DCR.
+    /// RFC 7591 software_id as the registrant sent it, e.g. "org.nightscout.trio". Shared by every
+    /// install of a product, so it names the product, never one client; <see cref="IsKnown"/>
+    /// says whether the registration proved it.
     /// </summary>
     [MaxLength(255)]
     [Column("software_id")]
@@ -79,7 +78,7 @@ public class OAuthClientEntity : ITenantScoped, IEntityTimestamped
     public string? DisplayName { get; set; }
 
     /// <summary>
-    /// Whether this client matched the bundled known app directory at authorization time
+    /// Whether this client matched the bundled known app directory at registration
     /// </summary>
     [Column("is_known")]
     public bool IsKnown { get; set; }

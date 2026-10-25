@@ -364,7 +364,7 @@
   <CardHeader class={isMobile.current ? "pb-2 px-1" : "pb-2 px-3 @md:px-6"}>
     <div class="flex items-center justify-between flex-wrap gap-2">
       <CardTitle class="flex items-center gap-2">
-        Blood Glucose
+        Blood glucose
         {#if displayDemoMode}
           <Badge variant="demo">
             Demo
@@ -628,6 +628,7 @@
       bolusDataSource={inspection.context.nearbyBolus?.dataSource}
       carbGrams={inspection.context.nearbyCarbs?.carbs}
       carbLabel={inspection.context.nearbyCarbs?.label}
+      carbMealPeriod={inspection.context.nearbyCarbs?.mealPeriod}
       carbDataSource={inspection.context.nearbyCarbs?.dataSource}
       iob={inspection.context.iob}
       cob={inspection.context.cob}

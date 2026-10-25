@@ -4,6 +4,7 @@
     Area,
     Spline,
     Pattern,
+    Rect,
     ChartClipPath,
     Highlight,
     AnnotationLine,
@@ -126,6 +127,7 @@
       {@const spanLower = chartCtx.yScale(basalScale(maxBasalRate * 0.7))}
       {@const labelX = spanLeft + 4}
       {@const labelY = chartCtx.yScale(basalScale(maxBasalRate * 0.8))}
+      <!-- Native rect: up to ~288 temp basals a day; layerchart Rect mounts ~5x slower (0.16 vs 0.03 ms each) and registers a component per span, which mark-registration.svelte.test.ts forbids. -->
       <rect
         x={spanLeft}
         y={Math.min(spanUpper, spanLower)}
@@ -167,7 +169,7 @@
       {@const staleBottom = chartCtx.yScale(basalZero)}
       <Pattern size={8} lines={{ rotate: -45, opacity: ctx.printing ? 0.3 : 0.1 }}>
         {#snippet children({ pattern }: { pattern: string })}
-          <rect
+          <Rect
             x={staleLeft}
             y={Math.min(staleTop, staleBottom)}
             width={staleWidth}
@@ -235,6 +237,7 @@
                     chartCtx.xScale(new Date(nextPoint.timestamp ?? 0)) - left,
                   height: Math.abs(bottom - top),
                 }}
+                <!-- Native rect: same measured cost as the temp basal spans above. -->
                 <rect {...step} fill={fillColor} {opacity} />
                 <rect {...step} fill={patternFill} {opacity} />
               {/each}

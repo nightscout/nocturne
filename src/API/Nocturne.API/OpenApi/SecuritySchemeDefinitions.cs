@@ -60,6 +60,7 @@ public static class SecuritySchemeDefinitions
             [Scope.TherapyReadWrite] = "Read and write therapy settings",
             [Scope.AlertsRead] = "Read alert configuration",
             [Scope.AlertsReadWrite] = "Read and write alert configuration",
+            [Scope.AlertsAcknowledge] = "Silence an alarm for everyone for a time",
             [Scope.ReportsRead] = "Read reports",
             [Scope.IdentityRead] = "Read identity information",
             [Scope.SharingReadWrite] = "Manage sharing settings",

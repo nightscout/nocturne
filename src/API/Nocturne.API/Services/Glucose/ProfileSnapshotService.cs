@@ -1,6 +1,7 @@
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Glucose;
 
@@ -82,7 +83,7 @@ public sealed class ProfileSnapshotService : IProfileSnapshotService
             {
                 StartMills = nowMills,
                 EndMills = windowEnd,
-                Dia = bolus?.Dia ?? DefaultDia,
+                Dia = bolus is { Dia: > 0 } ? bolus.Dia : DefaultDia,
                 Basal = DefaultBasal,
                 Sens = DefaultSens,
                 CarbRatio = DefaultCarbRatio,
@@ -148,7 +149,7 @@ public sealed class ProfileSnapshotService : IProfileSnapshotService
         Dictionary<int, (double Low, double High)> targetCache,
         CancellationToken ct)
     {
-        var bucket = LocalSecondsOfDay(snap.Timezone, t + snap.CcpTimeshiftMs);
+        var bucket = ScheduleEntryTime.SecondsOfDay(t + snap.CcpTimeshiftMs, snap.Timezone);
         if (!targetCache.TryGetValue(bucket, out var target))
         {
             var low = await _targetRange.GetLowBGTargetAsync(t, profileId, ct);
@@ -163,14 +164,6 @@ public sealed class ProfileSnapshotService : IProfileSnapshotService
             snap.BasalRateAt(t),
             target.Low,
             target.High);
-    }
-
-    private static int LocalSecondsOfDay(TimeZoneInfo? tz, long mills)
-    {
-        var dto = DateTimeOffset.FromUnixTimeMilliseconds(mills);
-        if (tz is not null)
-            dto = TimeZoneInfo.ConvertTime(dto, tz);
-        return (int)dto.TimeOfDay.TotalSeconds;
     }
 
     private static void EnsureContiguous(IReadOnlyList<ProfileSnapshotSegment> segments, long start, long end)

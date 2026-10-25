@@ -15,6 +15,11 @@ import {
   preferredLanguage,
   type GlucoseUnits,
 } from "$lib/stores/appearance-store.svelte";
+import {
+  relativeAge as sharedRelativeAge,
+  relativeTime as sharedRelativeTime,
+  type RelativeTimeOptions,
+} from "@nocturne/ui/relative-time";
 import type { OverallAverages, Treatment, TreatmentSummary } from "$api-clients";
 
 // Re-export for backward compatibility
@@ -33,7 +38,9 @@ export {
   formatGlucoseValue,
   formatGlucoseDelta,
   getUnitLabel,
+  isGlucoseUnits,
 } from "@nocturne/ui/glucose";
+export { toDate } from "@nocturne/ui/relative-time";
 import {
   convertToDisplayUnits,
   formatGlucoseValue,
@@ -213,41 +220,33 @@ export function hourLabel(date: Date | number): string {
 }
 
 /**
- * Coarse relative age for a "last seen" or "last synced" field: "Just now",
- * "12m ago", "3h ago", "2d ago", then an absolute date past a week.
+ * How long ago a moment was, in the largest whole unit: "now", "5m ago", "3h ago",
+ * "2d ago", then the absolute date from a week on. The words are the regional
+ * format's own. A moment in the future reads as "now".
  *
- * This is the short form. `formatTimeSince` in the alerts folder is minute-
- * precise ("3h 5m ago") because an alert card is read while it is firing; use
- * this one everywhere else so the same age doesn't render two ways on one row.
+ * Returns `fallback` when `at` is missing or not a date. The caller owns that
+ * wording, so it is extracted for translation with the rest of its component.
  *
- * @param now Reference time. Pass a ticking value (see `Now`) where the result
- *   is rendered, or the text freezes at the age it had on first render.
+ * @param opts.now Reference time. Pass a ticking value (see `Now`) where the
+ *   result is rendered, or the text freezes at the age it had on first render.
  */
-export function lastSeen(
-  date: Date | string | undefined | null,
-  now: number = Date.now()
+export function relativeAge(
+  at: Date | string | number | null | undefined,
+  opts: RelativeTimeOptions = {}
 ): string {
-  if (!date) return "Never";
-  const d = date instanceof Date ? date : new Date(date);
-  if (Number.isNaN(d.getTime())) return "Never";
-
-  const minutes = Math.floor((now - d.getTime()) / 60000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return formatNumericDate(d);
+  return sharedRelativeAge(at, formatLocale(), opts);
 }
 
-/** Format elapsed time as minutes ago in the user's regional format. */
-export function minutesAgo(from: number, to: number = Date.now()): string {
-  const minutes = Math.max(0, Math.floor((to - from) / 60000));
-  return new Intl.RelativeTimeFormat(formatLocale(), {
-    numeric: "always",
-    style: "short",
-  }).format(-minutes, "minute");
+/**
+ * How far a moment is from `now`, in either direction: "3h ago" or "in 3h". A
+ * moment behind reads in the largest whole unit, as in `relativeAge`. A moment
+ * ahead reads in the nearest whole unit, so 47 hours is "in 2d", never "tomorrow".
+ */
+export function relativeTime(
+  at: Date | string | number | null | undefined,
+  opts: RelativeTimeOptions = {}
+): string {
+  return sharedRelativeTime(at, formatLocale(), opts);
 }
 
 // =============================================================================
@@ -255,23 +254,24 @@ export function minutesAgo(from: number, to: number = Date.now()): string {
 // =============================================================================
 
 /**
- * NSwag-generated fields typed `Date` arrive over the wire as ISO strings
- * (the client's jsonParseReviver is a no-op) — coerce defensively, and return
- * null rather than an Invalid Date so callers can take their empty branch
- * instead of feeding NaN to Intl.
- */
-export function toDate(value: Date | string | undefined | null): Date | null {
-  if (value == null) return null;
-  const d = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-/**
  * A number with the regional format's own group and decimal separators — "1.234"
  * for a German reader, "1,234" for an American one.
  */
 export function formatNumber(value: number | undefined | null): string {
   return (value ?? 0).toLocaleString(formatLocale());
+}
+
+/** A byte count in the largest unit that keeps it above 1, to one decimal place: "1.5 GB". */
+export function formatFileSize(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  const digits = unit === 0 ? 0 : 1;
+  return `${value.toLocaleString(formatLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })} ${units[unit]}`;
 }
 
 /**
@@ -555,6 +555,11 @@ export function formatCarbDisplay(carbs: number | undefined): string {
     return "N/A";
   }
   return carbs.toFixed(0);
+}
+
+/** Formats an insulin-to-carb ratio, grams per unit, as `1:x.x`, or "–" when there is none. */
+export function formatInsulinToCarbRatio(gramsPerUnit: number | null | undefined): string {
+  return gramsPerUnit == null ? "–" : `1:${gramsPerUnit.toFixed(1)}`;
 }
 
 /**

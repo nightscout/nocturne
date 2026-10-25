@@ -72,6 +72,12 @@ docker-compose.yaml
 src/Web/packages/app/src/lib/api/generated/
 src/Web/packages/app/src/lib/api/api-client.generated.ts
 
+# wasm-bindgen output for the watercolour engine (pnpm --filter @nocturne/watercolour build:wasm)
+src/Web/packages/watercolour/src/wasm/
+# watercolour bench build and results
+src/Web/packages/watercolour/bench/dist/
+src/Web/packages/watercolour/bench/results/
+
 docs/plans/
 
 # SDK generated output. openapi-v4.json is the filtered SDK surface, produced by
@@ -100,3 +106,6 @@ Trio/
 
 # Throwaway probes and one-off scripts; never part of a change.
 scratch/
+
+# Session scratch: worker briefs, logs and reports
+scratchpad/

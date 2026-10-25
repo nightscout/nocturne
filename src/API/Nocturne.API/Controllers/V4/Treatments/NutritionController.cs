@@ -590,7 +590,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
         foreach (var orphan in carbIntakeEntities.Where(c => !c.CorrelationId.HasValue))
         {
             events.Add(BuildEvent(
-                correlationId: Guid.Empty,
+                correlationId: null,
                 carbEntities: [orphan],
                 boluses: [],
                 foodsByCarbIntake: foodsByCarbIntake));
@@ -604,7 +604,7 @@ public class NutritionController : ControllerBase, IWriteScopedController
     }
 
     private static MealEvent BuildEvent(
-        Guid correlationId,
+        Guid? correlationId,
         IReadOnlyList<CarbIntakeEntity> carbEntities,
         Bolus[] boluses,
         IReadOnlyDictionary<Guid, List<TreatmentFood>> foodsByCarbIntake)

@@ -10,7 +10,7 @@
   import { CHART_TEXTURES, patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import { GLUCOSE_BANDS } from "$lib/components/reports/percentile-band-colors";
-  import type { AveragedStats } from "$lib/api";
+  import type { AveragedStats, GlycemicThresholds } from "$lib/api";
   import {
     formatHour as _formatHour,
     transformStats,
@@ -19,8 +19,10 @@
 
   let {
     averagedStats,
+    thresholds,
   }: {
     averagedStats?: AveragedStats[];
+    thresholds?: GlycemicThresholds;
   } = $props();
 
   // Use props directly - parent should provide pre-fetched stats
@@ -41,20 +43,17 @@
   const HOUR_TICKS = [0, 3, 6, 9, 12, 15, 18, 21, 24];
 
   const tenantThresholds = tenantChartThresholds();
-  const thresholds = $derived(tenantThresholds.current);
 
   // Dynamic Y-axis domain based on units
   const yDomain = $derived<[number, number]>([
     0,
-    convertToDisplayUnits(thresholds.glucoseYMax, units),
+    convertToDisplayUnits(tenantThresholds.current.glucoseYMax, units),
   ]);
 
-  // Convert threshold values to display units
-  const lowThreshold = $derived(
-    convertToDisplayUnits(thresholds.low, units)
-  );
-  const highThreshold = $derived(
-    convertToDisplayUnits(thresholds.high, units)
+  const targetRange = $derived(
+    thresholds?.targetBottom != null && thresholds.targetTop != null
+      ? { low: thresholds.targetBottom, high: thresholds.targetTop }
+      : null
   );
 
   // Time format for X-axis labels
@@ -133,41 +132,46 @@
     xDomain={[0, 24]}
     {yDomain}
     seriesLayout="overlap"
-    annotations={[
-      {
-        type: "range",
-        layer: "below",
-        y: [lowThreshold, highThreshold],
-        fill: CHART_TEXTURES["target-band"].color,
-        class: patternClass("target-band"),
-      },
-      {
-        type: "line",
-        layer: "above",
-        y: lowThreshold,
-        label: `Low ${bg(thresholds.low)}`,
-        labelPlacement: "bottom-left",
-        labelXOffset: 4,
-        labelYOffset: 4,
-        props: {
-          label: { class: RULE_LABEL_CLASS },
-          line: { class: "stroke-foreground", strokeWidth: 1, "stroke-dasharray": "5 3" },
-        },
-      },
-      {
-        type: "line",
-        layer: "above",
-        y: highThreshold,
-        label: `High ${bg(thresholds.high)}`,
-        labelPlacement: "top-left",
-        labelXOffset: 4,
-        labelYOffset: 4,
-        props: {
-          label: { class: RULE_LABEL_CLASS },
-          line: { class: "stroke-foreground", strokeWidth: 1, "stroke-dasharray": "5 3" },
-        },
-      },
-    ]}
+    annotations={targetRange
+      ? [
+          {
+            type: "range",
+            layer: "below",
+            y: [
+              convertToDisplayUnits(targetRange.low, units),
+              convertToDisplayUnits(targetRange.high, units),
+            ],
+            fill: CHART_TEXTURES["target-band"].color,
+            class: patternClass("target-band"),
+          },
+          {
+            type: "line",
+            layer: "above",
+            y: convertToDisplayUnits(targetRange.low, units),
+            label: `Low ${bg(targetRange.low)}`,
+            labelPlacement: "bottom-left",
+            labelXOffset: 4,
+            labelYOffset: 4,
+            props: {
+              label: { class: RULE_LABEL_CLASS },
+              line: { class: "stroke-foreground", strokeWidth: 1, "stroke-dasharray": "5 3" },
+            },
+          },
+          {
+            type: "line",
+            layer: "above",
+            y: convertToDisplayUnits(targetRange.high, units),
+            label: `High ${bg(targetRange.high)}`,
+            labelPlacement: "top-left",
+            labelXOffset: 4,
+            labelYOffset: 4,
+            props: {
+              label: { class: RULE_LABEL_CLASS },
+              line: { class: "stroke-foreground", strokeWidth: 1, "stroke-dasharray": "5 3" },
+            },
+          },
+        ]
+      : []}
     props={{
       area: { motion: { type: "tween", duration: 200 } },
       xAxis: {
@@ -227,7 +231,9 @@
       { texture: "percentile-outer", label: "10–90%", color: BAND_OUTER },
       { texture: "percentile-inner", label: "25–75%", color: BAND_INNER },
       { texture: "percentile-median", label: "Median", color: MEDIAN_COLOR, shape: "line" },
-      { texture: "target-band", label: `Target range ${bgRange(thresholds.low, thresholds.high)}` },
+      ...(targetRange
+        ? [{ texture: "target-band" as const, label: `Consensus target range ${bgRange(targetRange.low, targetRange.high)}` }]
+        : []),
     ]}
   />
 </div>

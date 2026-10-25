@@ -29,14 +29,19 @@ public class ConditionTimerRepositoryTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    private async Task<DateTime?> FirstTrueAsync(Guid ruleId, string path) =>
+        (await _repository.GetAllForRuleAsync(ruleId, CancellationToken.None)).TryGetValue(path, out var at)
+            ? at
+            : null;
+
     [Fact]
-    public async Task GetFirstTrue_returns_null_when_no_row()
+    public async Task GetAll_returns_nothing_when_no_row()
     {
         var ruleId = Guid.NewGuid();
 
-        var result = await _repository.GetFirstTrueAsync(ruleId, "composite[0].sustained", CancellationToken.None);
+        var result = await _repository.GetAllForRuleAsync(ruleId, CancellationToken.None);
 
-        result.Should().BeNull();
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -48,7 +53,7 @@ public class ConditionTimerRepositoryTests : IDisposable
 
         await _repository.SetFirstTrueAsync(ruleId, path, at, CancellationToken.None);
 
-        var result = await _repository.GetFirstTrueAsync(ruleId, path, CancellationToken.None);
+        var result = await FirstTrueAsync(ruleId, path);
 
         result.Should().NotBeNull();
         result!.Value.Ticks.Should().Be(at.Ticks);
@@ -65,7 +70,7 @@ public class ConditionTimerRepositoryTests : IDisposable
         await _repository.SetFirstTrueAsync(ruleId, path, first, CancellationToken.None);
         await _repository.SetFirstTrueAsync(ruleId, path, second, CancellationToken.None);
 
-        var result = await _repository.GetFirstTrueAsync(ruleId, path, CancellationToken.None);
+        var result = await FirstTrueAsync(ruleId, path);
 
         result!.Value.Ticks.Should().Be(second.Ticks);
         (await _context.AlertConditionTimers.CountAsync()).Should().Be(1);
@@ -81,25 +86,8 @@ public class ConditionTimerRepositoryTests : IDisposable
 
         await _repository.ClearAsync(ruleId, "a", CancellationToken.None);
 
-        (await _repository.GetFirstTrueAsync(ruleId, "a", CancellationToken.None)).Should().BeNull();
-        (await _repository.GetFirstTrueAsync(ruleId, "b", CancellationToken.None)).Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ClearAllForRule_removes_all()
-    {
-        var ruleId = Guid.NewGuid();
-        var otherRuleId = Guid.NewGuid();
-        var at = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
-        await _repository.SetFirstTrueAsync(ruleId, "a", at, CancellationToken.None);
-        await _repository.SetFirstTrueAsync(ruleId, "b", at, CancellationToken.None);
-        await _repository.SetFirstTrueAsync(otherRuleId, "c", at, CancellationToken.None);
-
-        await _repository.ClearAllForRuleAsync(ruleId, CancellationToken.None);
-
-        (await _repository.GetFirstTrueAsync(ruleId, "a", CancellationToken.None)).Should().BeNull();
-        (await _repository.GetFirstTrueAsync(ruleId, "b", CancellationToken.None)).Should().BeNull();
-        (await _repository.GetFirstTrueAsync(otherRuleId, "c", CancellationToken.None)).Should().NotBeNull();
+        (await FirstTrueAsync(ruleId, "a")).Should().BeNull();
+        (await FirstTrueAsync(ruleId, "b")).Should().NotBeNull();
     }
 
     [Fact]
@@ -115,10 +103,10 @@ public class ConditionTimerRepositoryTests : IDisposable
 
         await _repository.PruneToPathsAsync(ruleId, new[] { "b", "c" }, CancellationToken.None);
 
-        (await _repository.GetFirstTrueAsync(ruleId, "a", CancellationToken.None)).Should().BeNull();
-        (await _repository.GetFirstTrueAsync(ruleId, "b", CancellationToken.None)).Should().NotBeNull();
-        (await _repository.GetFirstTrueAsync(ruleId, "c", CancellationToken.None)).Should().NotBeNull();
-        (await _repository.GetFirstTrueAsync(otherRuleId, "a", CancellationToken.None)).Should().NotBeNull();
+        (await FirstTrueAsync(ruleId, "a")).Should().BeNull();
+        (await FirstTrueAsync(ruleId, "b")).Should().NotBeNull();
+        (await FirstTrueAsync(ruleId, "c")).Should().NotBeNull();
+        (await FirstTrueAsync(otherRuleId, "a")).Should().NotBeNull();
     }
 
     [Fact]
@@ -133,9 +121,9 @@ public class ConditionTimerRepositoryTests : IDisposable
 
         await _repository.PruneToPathsAsync(ruleId, Array.Empty<string>(), CancellationToken.None);
 
-        (await _repository.GetFirstTrueAsync(ruleId, "a", CancellationToken.None)).Should().BeNull();
-        (await _repository.GetFirstTrueAsync(ruleId, "b", CancellationToken.None)).Should().BeNull();
-        (await _repository.GetFirstTrueAsync(otherRuleId, "a", CancellationToken.None)).Should().NotBeNull();
+        (await FirstTrueAsync(ruleId, "a")).Should().BeNull();
+        (await FirstTrueAsync(ruleId, "b")).Should().BeNull();
+        (await FirstTrueAsync(otherRuleId, "a")).Should().NotBeNull();
     }
 
     [Fact]

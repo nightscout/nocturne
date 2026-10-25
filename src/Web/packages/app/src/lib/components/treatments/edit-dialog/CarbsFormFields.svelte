@@ -32,7 +32,7 @@
 
 <div class="grid grid-cols-2 gap-4">
   <div class="space-y-2">
-    <Label for="absorptionTime">Absorption Time (min)</Label>
+    <Label for="absorptionTime">Absorption time (min)</Label>
     <Input
       id="absorptionTime"
       type="number"
@@ -43,7 +43,7 @@
     />
   </div>
   <div class="space-y-2">
-    <Label for="carbTime">Carb Time (min)</Label>
+    <Label for="carbTime">Carb time (min)</Label>
     <Input
       id="carbTime"
       type="number"

@@ -1,6 +1,6 @@
 using System.Collections.Frozen;
-using System.Globalization;
 using System.Text.Json;
+using Nocturne.API.Configuration;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.V4;
@@ -40,6 +40,13 @@ public class DeviceStatusProjectionService
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
+    private static readonly FrozenSet<string> TypedPropertyNames = NightscoutJsonOptions
+        .Create()
+        .GetTypeInfo(typeof(DeviceStatus))
+        .Properties
+        .Select(property => property.Name)
+        .ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
     public DeviceStatusProjectionService(
         IDeviceStatusGroupRepository groupRepo,
         IApsSnapshotRepository apsRepo,
@@ -76,34 +83,8 @@ public class DeviceStatusProjectionService
     /// </summary>
     private const int MaxIdLookups = 100;
 
-    /// <summary>
-    /// Returns paginated <see cref="DeviceStatus"/> documents projected from V4 snapshots, newest first
-    /// or, when <paramref name="descending"/> is <c>false</c>, the oldest first.
-    /// </summary>
-    /// <param name="count">Maximum number of results.</param>
-    /// <param name="skip">Number of results to skip for pagination.</param>
-    /// <param name="find">JSON find honouring <c>device</c> and <c>created_at</c> only (see <see cref="ParseFindQuery"/>).</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <param name="descending">Newest first when <c>true</c>, else the oldest first.</param>
-    /// <param name="sort">
-    /// <see cref="ReadSortField.SrvModified"/> orders by modification stamp when the find is empty or
-    /// only bounds <c>srvModified</c> from below, which is served by the modified-since pages; any
-    /// other field orders by time.
-    /// </param>
-    public async Task<IEnumerable<DeviceStatus>> GetAsync(
-        int count, int skip, string? find, CancellationToken ct,
-        bool descending = true, ReadSortField sort = ReadSortField.Time)
-    {
-        if (ModifiedSearch.CursorFor(FindQuery.Parse(find), sort, descending) is { } after)
-            return await GetModifiedAfterAsync(count, skip, after, sort, descending, ct);
-
-        var (device, from, to) = ParseFindQuery(find);
-        var groups = await _groupRepo.GetAsync(from, to, device, count, skip, descending, ct);
-        return await ProjectAsync(groups, ct);
-    }
-
-    private async Task<IEnumerable<DeviceStatus>> GetModifiedAfterAsync(
-        int count, int skip, long after, ReadSortField sort, bool descending, CancellationToken ct)
+    private async Task<IReadOnlyList<DeviceStatus>> GetModifiedAfterAsync(
+        FindQuery find, int count, int skip, long after, ReadSortField sort, bool descending, CancellationToken ct)
     {
         var live = await ModifiedSearch.CollectAsync(
             async (cursor, limit, token) =>
@@ -111,7 +92,7 @@ public class DeviceStatusProjectionService
                 var page = (await GetModifiedSinceAsync(cursor, limit, token)).ToList();
                 return new ModifiedSearch.Page<DeviceStatus>(page, page.Count == 0 ? null : page[^1].SrvModified, page.Count < limit);
             },
-            status => status.IsValid == false,
+            status => status.IsValid == false || !find.Matches(status),
             status => status.Id,
             after,
             ModifiedSearch.ArrivesInOrder(sort, descending) ? (long)count + skip : null,
@@ -125,33 +106,43 @@ public class DeviceStatusProjectionService
         return (descending ? live.OrderByDescending(key) : live.OrderBy(key)).Skip(skip).Take(count).ToList();
     }
 
-    /// <summary>Parses a v1 find, in either wire form, for <see cref="GetMatchingAsync"/>.</summary>
+    /// <summary>Parses a find, in either wire form, for <see cref="GetMatchingAsync"/>.</summary>
     public static FindQuery ParseFind(string? find) =>
         FindQuery.Parse(find, bareRegexFields: null, AnchorTimeFields);
 
     /// <summary>
-    /// A page of the statuses <paramref name="find"/> matches, newest first, evaluated as legacy
+    /// A page of the statuses <paramref name="find"/> matches, newest first or, when
+    /// <paramref name="descending"/> is <c>false</c>, the oldest first, evaluated as legacy
     /// Nightscout evaluates it. The device equality and time bounds filter the store; every
     /// condition is tested against the projected document.
     /// </summary>
+    /// <param name="sort">
+    /// <see cref="ReadSortField.SrvModified"/> orders by modification stamp when the find is empty or
+    /// only bounds <c>srvModified</c> from below, which is served by the modified-since pages; any
+    /// other field orders by time.
+    /// </param>
     public async Task<IReadOnlyList<DeviceStatus>> GetMatchingAsync(
-        FindQuery find, int count, int skip, CancellationToken ct)
+        FindQuery find, int count, int skip, CancellationToken ct,
+        bool descending = true, ReadSortField sort = ReadSortField.Time)
     {
+        if (ModifiedSearch.CursorFor(find, sort, descending) is { } after)
+            return await GetModifiedAfterAsync(find, count, skip, after, sort, descending, ct);
+
         if (!TryGetStoreWindow(find, out var from, out var to))
             return [];
 
         if (find.GetEqualityValues("_id") is { Count: <= MaxIdLookups } ids)
-            return (await ResolveByIdAsync(find, ids, ct)).Skip(skip).Take(count).ToList();
+            return (await ResolveByIdAsync(find, ids, descending, ct)).Skip(skip).Take(count).ToList();
 
         var device = StoreDevice(find);
         if (!HasResidual(find, device))
         {
-            var page = await _groupRepo.GetAsync(from, to, device, count, skip, descending: true, ct);
+            var page = await _groupRepo.GetAsync(from, to, device, count, skip, descending, ct);
             return (await ProjectAsync(page, ct)).Where(find.Matches).ToList();
         }
 
         var (matching, truncated) = await FindFilteredFetch.MatchAsync<DeviceStatus>(
-            async (limit, offset) => await ProjectAsync(await _groupRepo.GetAsync(from, to, device, limit, offset, descending: true, ct), ct),
+            async (limit, offset) => await ProjectAsync(await _groupRepo.GetAsync(from, to, device, limit, offset, descending, ct), ct),
             find.Matches, status => status.Id, (long)count + skip, MaxFilterFetch);
 
         if (truncated)
@@ -180,11 +171,11 @@ public class DeviceStatusProjectionService
 
     /// <summary>
     /// The statuses an <c>_id</c> find names, each resolved as <see cref="GetByIdAsync"/> resolves an
-    /// id, newest first. A status is named by its stored id as well as by the ObjectId its wire form
+    /// id, in time order. A status is named by its stored id as well as by the ObjectId its wire form
     /// carries, so an uploader's own id finds its status even when it is not an ObjectId.
     /// </summary>
     private async Task<List<DeviceStatus>> ResolveByIdAsync(
-        FindQuery find, IReadOnlyList<string> ids, CancellationToken ct)
+        FindQuery find, IReadOnlyList<string> ids, bool descending, CancellationToken ct)
     {
         var found = new Dictionary<string, DeviceStatus>(StringComparer.Ordinal);
         foreach (var id in ids)
@@ -196,7 +187,7 @@ public class DeviceStatusProjectionService
                 found[storedId] = status;
         }
 
-        return found.Values.OrderByDescending(status => status.Mills).ToList();
+        return (descending ? found.Values.OrderByDescending(status => status.Mills) : found.Values.OrderBy(status => status.Mills)).ToList();
     }
 
     /// <summary>
@@ -205,7 +196,7 @@ public class DeviceStatusProjectionService
     /// status stored without a device reads as an empty one.
     /// </summary>
     private static string? StoreDevice(FindQuery find) =>
-        find.GetEqualityValue("device", StringComparison.Ordinal) is { Length: > 0 } device ? device : null;
+        find.GetPushableEquality("device", StringComparison.Ordinal) is { Length: > 0 } device ? device : null;
 
     private static bool HasResidual(FindQuery find, string? storeDevice) =>
         find.HasFieldFiltersExcept(storeDevice is null ? null : "device", StringComparison.Ordinal);
@@ -361,7 +352,7 @@ public class DeviceStatusProjectionService
                     g.Aps is { } aps ? FindOverrideForTimestamp(overrides, aps.Timestamp) : null,
                     g.Extras,
                     _logger);
-                status.SrvModified = new DateTimeOffset(g.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                status.SrvModified = g.ModifiedAt.ToMills();
                 return status;
             })
             .ToList();
@@ -434,14 +425,14 @@ public class DeviceStatusProjectionService
     private static DeviceStatus NewStatus(
         string id, DateTime timestamp, DateTime createdAt, DateTime modifiedAt, int? utcOffset, string? device)
     {
-        var mills = new DateTimeOffset(timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var mills = timestamp.ToMills();
         return new DeviceStatus
         {
             Id = id,
             Mills = mills,
             Date = mills,
-            SrvModified = new DateTimeOffset(modifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            SrvCreated = new DateTimeOffset(createdAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            SrvModified = modifiedAt.ToMills(),
+            SrvCreated = createdAt.ToMills(),
             // Nightscout clients place a status on the timeline by created_at, so it is the event
             // time; the server clock is srvCreated.
             CreatedAt = timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
@@ -609,16 +600,14 @@ public class DeviceStatusProjectionService
                 case "mmtune":
                     ds.MmTune = DeserializeValue<OpenApsMmTune>(value, logger);
                     break;
-                // The record reports the server clock (see ProjectFromSnapshots); a client-supplied
-                // value must neither override it nor re-emit as an extra.
-                case "srvCreated":
-                case "srvModified":
-                    break;
                 // An NS v3 uploader sends its own identifier and it is stored verbatim.
                 // DeviceStatus has no member to absorb it, so re-emitting it would put a
                 // client-supplied value where every reader takes the record's identity from —
                 // including the id of its delete event (see StorageDeleteEvent).
                 case "identifier":
+                    break;
+                // The typed value always wins, and a second key of the same name would serialize twice.
+                case var typed when TypedPropertyNames.Contains(typed):
                     break;
                 default:
                     // Unknown keys go into ExtensionData
@@ -633,132 +622,6 @@ public class DeviceStatusProjectionService
     #endregion
 
     #region Helpers
-
-    /// <summary>
-    /// Parses a JSON find, <c>{"device":"openaps","created_at":{"$gte":"2024-01-01"}}</c>, into the
-    /// filters <see cref="GetAsync"/> applies. Honours <c>device</c> as a string or <c>$eq</c>, and
-    /// <c>created_at</c> with <c>$gte/$gt/$lte/$lt/$eq</c> or a bare instant; drops everything else.
-    /// </summary>
-    internal static (string? Device, DateTime? From, DateTime? To) ParseFindQuery(string? find)
-    {
-        if (string.IsNullOrWhiteSpace(find) || !find.TrimStart().StartsWith('{'))
-            return (null, null, null);
-
-        string? device = null;
-        DateTime? from = null;
-        DateTime? to = null;
-
-        try
-        {
-            using var doc = JsonDocument.Parse(find);
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
-                return (null, null, null);
-
-            foreach (var field in root.EnumerateObject())
-            {
-                if (field.Name is not ("device" or "created_at"))
-                    continue;
-
-                var operators = field.Value.ValueKind == JsonValueKind.Object
-                    ? field.Value.EnumerateObject().Select(prop => (prop.Name, prop.Value)).ToList()
-                    : [("$eq", field.Value)];
-
-                foreach (var (op, operand) in operators)
-                {
-                    if (field.Name == "device")
-                    {
-                        if (op == "$eq" && operand.ValueKind == JsonValueKind.String)
-                            device = operand.GetString();
-                    }
-                    else if (TryParseDateTime(operand, out var dt))
-                    {
-                        TryApplyCreatedAtCondition(op, dt, ref from, ref to);
-                    }
-                }
-            }
-        }
-        catch (JsonException)
-        {
-            return (null, null, null);
-        }
-
-        return (device, from, to);
-    }
-
-    /// <summary>
-    /// Intersects one <c>created_at</c> condition into the window. The repositories are inclusive at
-    /// both ends, so a strict bound tightens by 1ms, as <c>FindQuery</c> does for its time bounds. A
-    /// strict bound with no representable instant beyond it returns false.
-    /// </summary>
-    private static bool TryApplyCreatedAtCondition(
-        string op, DateTime instant, ref DateTime? from, ref DateTime? to)
-    {
-        switch (op)
-        {
-            case "$gt" when instant > DateTime.MaxValue.AddMilliseconds(-1):
-            case "$lt" when instant < DateTime.MinValue.AddMilliseconds(1):
-                return false;
-            case "$gt":
-                instant = instant.AddMilliseconds(1);
-                goto case "$gte";
-            case "$gte":
-                from = from > instant ? from : instant;
-                return true;
-            case "$lt":
-                instant = instant.AddMilliseconds(-1);
-                goto case "$lte";
-            case "$lte":
-                to = to < instant ? to : instant;
-                return true;
-            case "$eq":
-                from = from > instant ? from : instant;
-                to = to < instant ? to : instant;
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private static bool TryParseDateTime(JsonElement value, out DateTime result)
-    {
-        if (value.ValueKind == JsonValueKind.Number)
-        {
-            result = default;
-            return value.TryGetInt64(out var mills) && TryFromMills(mills, out result);
-        }
-
-        if (value.ValueKind == JsonValueKind.String)
-            return TryParseDateTime(value.GetString()!, out result);
-
-        result = default;
-        return false;
-    }
-
-    private static bool TryParseDateTime(string value, out DateTime result)
-    {
-        if (DateTime.TryParse(value, CultureInfo.InvariantCulture,
-                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out result))
-        {
-            return true;
-        }
-
-        result = default;
-        return long.TryParse(value, out var mills) && TryFromMills(mills, out result);
-    }
-
-    private static bool TryFromMills(long mills, out DateTime result)
-    {
-        if (mills < DateTimeOffset.MinValue.ToUnixTimeMilliseconds()
-            || mills > DateTimeOffset.MaxValue.ToUnixTimeMilliseconds())
-        {
-            result = default;
-            return false;
-        }
-
-        result = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
-        return true;
-    }
 
     private async Task<List<StateSpan>> LoadOverridesForSnapshots(
         List<ApsSnapshot> snapshots, CancellationToken ct)

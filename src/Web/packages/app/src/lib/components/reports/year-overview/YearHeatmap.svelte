@@ -38,6 +38,7 @@
     getCellHatch,
     navigateToDayInReview,
     glucoseColorScale,
+    glucoseBands,
     units,
     unitLabel,
     formatUnits,
@@ -56,6 +57,8 @@
     getCellHatch?: (data: YearCalendarDatum | undefined) => TextureKey | null;
     navigateToDayInReview: (dateStr: string) => void;
     glucoseColorScale: (mgdl: number) => string;
+    /** Very-low, low, high and very-high boundaries in mg/dL, in the order the colour ranges run. */
+    glucoseBands: readonly number[];
     units: GlucoseUnits;
     unitLabel: string;
     formatUnits: (value: number | null) => string;
@@ -147,7 +150,7 @@
             x="date"
             c="value"
             cScale={scaleThreshold().unknown("transparent")}
-            cDomain={[54, 70, 180, 250]}
+            cDomain={[...glucoseBands]}
             cRange={[
               "var(--glucose-very-low)",
               "var(--glucose-low)",

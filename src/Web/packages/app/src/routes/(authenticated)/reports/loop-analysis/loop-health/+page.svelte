@@ -9,11 +9,6 @@
   const resource = contextResource(() => getLoopHealth(analysis.query), { errorTitle: "Cannot load the loop health" });
 </script>
 
-<svelte:head>
-  <title>Loop health - Loop Analysis - Nocturne Reports</title>
-  <meta name="description" content="How much of the time the loop was closed, why it stopped and how frequently it reached its limits." />
-</svelte:head>
-
 {#if resource.current}
   <LoopHealthBody response={resource.current} />
 {:else}

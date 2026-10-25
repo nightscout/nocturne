@@ -56,7 +56,7 @@
   // Create resource with automatic layout registration
   const dayDataResource = contextResource(
     () => getDayInReviewData(dateParam),
-    { errorTitle: "Error Loading Day in Review" }
+    { errorTitle: "Error loading day in review" }
   );
 
   const dayData = $derived(dayDataResource.current);
@@ -108,7 +108,7 @@
   );
 
   function getRowLabel(row: TreatmentRow): string {
-    return row.rowType === "bolus" ? (row.bolusType ?? "Bolus") : "Carb Intake";
+    return row.rowType === "bolus" ? (row.bolusType ?? "Bolus") : "Carb intake";
   }
 
   // Get unique event types for filter dropdown
@@ -288,7 +288,7 @@
       onclick={goBackToPreviousView}
     >
       <ArrowLeft class="h-4 w-4 mr-2" />
-      Back to Previous View
+      Back to previous view
     </Button>
 
     <div class="flex items-center justify-center gap-2">
@@ -344,7 +344,7 @@
             </div>
           </div>
           <div>
-            <div class="text-muted-foreground">Std Dev</div>
+            <div class="text-muted-foreground">Std dev</div>
             <div class="font-medium tabular-nums">
               {formatGlucoseValue(basicStats?.standardDeviation ?? 0, units)} {unitLabel}
             </div>
@@ -375,7 +375,7 @@
             </div>
           </div>
         </div>
-        <ReliabilityBadge reliability={analysis?.reliability} class="print:hidden" />
+        <ReliabilityBadge reliability={analysis?.reliability} timeZoneUnavailableReason={analysis?.timeZoneUnavailableReason} class="print:hidden" />
       </Card.Content>
     </Card.Root>
 
@@ -397,7 +397,7 @@
         {/key}
         <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm w-full">
           <div>
-            <div class="text-muted-foreground">Total Carbs</div>
+            <div class="text-muted-foreground">Total carbs</div>
             <div class="font-medium tabular-nums">
               {(summary?.totals?.food?.carbs ?? 0).toFixed(0)}g
             </div>
@@ -447,7 +447,7 @@
       <div class="flex flex-wrap items-center justify-between gap-4">
         <Card.Title class="flex items-center gap-2">
           <Apple class="h-5 w-5" />
-          Treatments Timeline
+          Treatments timeline
         </Card.Title>
 
         <div class="flex items-center gap-2 print:hidden">
@@ -461,11 +461,11 @@
             <Select.Trigger class="w-[180px]">
               <div class="flex items-center gap-2">
                 <Filter class="h-4 w-4" />
-                {filterEventType || "All Types"}
+                {filterEventType || "All types"}
               </div>
             </Select.Trigger>
             <Select.Content>
-              <Select.Item value="">All Types</Select.Item>
+              <Select.Item value="">All types</Select.Item>
               {#each uniqueEventTypes as eventType (eventType)}
                 <Select.Item value={eventType}>{eventType}</Select.Item>
               {/each}
@@ -479,7 +479,7 @@
           {/if}
         </div>
       </div>
-      <Card.Description class="print:hidden">Click on a treatment to edit it</Card.Description>
+      <Card.Description class="print:hidden">Select a treatment to edit it</Card.Description>
       {#if filterEventType}
         <p class="hidden text-sm text-muted-foreground print:block">Showing {filterEventType} only</p>
       {/if}

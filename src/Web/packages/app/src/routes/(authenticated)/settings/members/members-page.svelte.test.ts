@@ -164,7 +164,7 @@ describe("members page listing members", () => {
     render(MembersPage);
 
     await expect
-      .element(browserPage.getByRole("heading", { name: "Sharing & Privacy" }))
+      .element(browserPage.getByRole("heading", { name: "Sharing & privacy" }))
       .toBeVisible();
     expect(mocks.getMembers).not.toHaveBeenCalled();
     expect(browserPage.getByText(/\d+ members?$/).elements()).toHaveLength(0);
@@ -191,7 +191,7 @@ describe("members page loading roles and pending requests", () => {
     render(MembersPage);
 
     await expect.element(browserPage.getByText("1 member", { exact: true })).toBeVisible();
-    await browserPage.getByRole("button", { name: "Create Invite Link" }).click();
+    await browserPage.getByRole("button", { name: "Create invite link" }).click();
 
     await expect.element(browserPage.getByText("Viewer", { exact: true }).last()).toBeVisible();
     expect(mocks.getRoles).toHaveBeenCalled();
@@ -203,7 +203,7 @@ describe("members page loading roles and pending requests", () => {
     render(MembersPage);
 
     await expect
-      .element(browserPage.getByRole("heading", { name: "Sharing & Privacy" }))
+      .element(browserPage.getByRole("heading", { name: "Sharing & privacy" }))
       .toBeVisible();
     expect(mocks.getRoles).not.toHaveBeenCalled();
     expect(mocks.getPendingRequests).not.toHaveBeenCalled();

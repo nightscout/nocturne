@@ -1630,9 +1630,6 @@ public class DeduplicationServiceTests : IDisposable
     private static DateTime ToUtc(long mills) =>
         DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
 
-    private static long ToMills(DateTime timestamp) =>
-        new DateTimeOffset(timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-
     private static BolusEntity CreateBolus(long mills, double insulin, string dataSource) =>
         new()
         {
@@ -1723,27 +1720,27 @@ public class DeduplicationServiceTests : IDisposable
     // Criteria come from MatchCriteriaMapper, the same source the repositories feed the service
     // from, so a change to a tolerance cannot pass here while breaking production.
     private static DeduplicationInput ToInput(BolusEntity e, string? dataSource = null) =>
-        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+        new(e.Id, e.Timestamp.ToMills(), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
             MatchCriteriaMapper.From(e));
 
     private static DeduplicationInput ToInput(CarbIntakeEntity e, string? dataSource = null) =>
-        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+        new(e.Id, e.Timestamp.ToMills(), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
             MatchCriteriaMapper.From(e));
 
     private static DeduplicationInput ToInput(DeviceEventEntity e, string? dataSource = null) =>
-        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+        new(e.Id, e.Timestamp.ToMills(), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
             MatchCriteriaMapper.From(e));
 
     private static DeduplicationInput ToInput(SensorGlucoseEntity e, string? dataSource = null) =>
-        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+        new(e.Id, e.Timestamp.ToMills(), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
             MatchCriteriaMapper.From(e));
 
     private static DeduplicationInput ToInput(BolusCalculationEntity e, string? dataSource = null) =>
-        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+        new(e.Id, e.Timestamp.ToMills(), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
             MatchCriteriaMapper.From(e));
 
     private static DeduplicationInput ToInput(NoteEntity e, string? dataSource = null) =>
-        new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
+        new(e.Id, e.Timestamp.ToMills(), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
             MatchCriteriaMapper.From(e));
 
     private static StateSpan CreateTestStateSpan(

@@ -1,6 +1,6 @@
 <script lang="ts">
   import AlertBanner from "./AlertBanner.svelte";
-  import FiringToast from "./FiringToast.svelte";
+  import CriticalAlertTakeover from "./CriticalAlertTakeover.svelte";
   import { pollActiveAlerts } from "./active-alerts-poll.svelte";
 
   // One poll for both surfaces — they read the same query. Mounting the poll with the surfaces
@@ -9,4 +9,4 @@
 </script>
 
 <AlertBanner />
-<FiringToast />
+<CriticalAlertTakeover />

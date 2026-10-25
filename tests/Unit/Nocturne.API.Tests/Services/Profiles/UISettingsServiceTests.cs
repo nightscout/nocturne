@@ -16,14 +16,12 @@ namespace Nocturne.API.Tests.Services.Profiles;
 
 /// <summary>
 /// Coverage for the storage layout of <see cref="UISettingsService"/>: one owning row per value, the
-/// aggregate assembled on read, and rows written by the earlier layout (a whole-document
-/// <c>ui:settings:complete</c> blob plus a mirrored copy of the alarm configuration) still read
-/// correctly.
+/// aggregate assembled on read, and alarm configuration copies an earlier layout left in the
+/// notifications row.
 /// </summary>
 [Trait("Category", "Unit")]
 public class UISettingsServiceTests
 {
-    private const string LegacyAggregateKey = "ui:settings:complete";
     private const string NotificationsKey = "ui:settings:notifications";
     private const string AlarmsKey = "ui:settings:notifications:alarms";
     private const string ServicesKey = "ui:settings:services";
@@ -78,7 +76,6 @@ public class UISettingsServiceTests
     {
         var context = NewContext();
         var stale = AlarmConfiguration("stale", 55);
-        Seed(context, LegacyAggregateKey, LegacyAggregate(stale));
         Seed(context, NotificationsKey, new NotificationSettings { AlarmConfiguration = stale });
         Seed(context, AlarmsKey, stale);
         await context.SaveChangesAsync();
@@ -163,7 +160,6 @@ public class UISettingsServiceTests
             .Should()
             .BeEmpty();
         StoredRows(context).Select(r => r.Key).Should().Contain(AlarmsKey);
-        StoredRows(context).Select(r => r.Key).Should().NotContain(LegacyAggregateKey);
     }
 
     [Fact]
@@ -211,32 +207,9 @@ public class UISettingsServiceTests
     }
 
     [Fact]
-    public async Task GetSettingsAsync_readsSectionsWrittenByTheEarlierLayout()
-    {
-        var context = NewContext();
-        var legacy = LegacyAggregate(AlarmConfiguration("legacy", 88));
-        legacy.Devices.AutoConnect = false;
-        legacy.DataQuality.SleepSchedule.BedtimeHour = 1;
-        Seed(context, LegacyAggregateKey, legacy);
-        await context.SaveChangesAsync();
-
-        var service = NewService(context);
-        var stored = (await service.GetSettingsAsync())!;
-
-        stored.Devices.AutoConnect.Should().BeFalse();
-        stored.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
-
-        foreach (var config in await EveryAlarmReadPath(service))
-        {
-            config.Profiles.Should().ContainSingle().Which.Threshold.Should().Be(88);
-        }
-    }
-
-    [Fact]
     public async Task GetAlarmConfigurationAsync_prefersTheOwningRowOverTheEarlierLayoutsCopies()
     {
         var context = NewContext();
-        Seed(context, LegacyAggregateKey, LegacyAggregate(AlarmConfiguration("aggregate", 44)));
         Seed(
             context,
             NotificationsKey,
@@ -254,25 +227,24 @@ public class UISettingsServiceTests
     }
 
     [Fact]
-    public async Task SaveSectionAsync_leavesTheOtherSectionsOfTheEarlierLayoutReadable()
+    public async Task No_read_returns_pushover_credentials_a_stored_configuration_carries()
     {
         var context = NewContext();
-        var legacy = LegacyAggregate(AlarmConfiguration("legacy", 88));
-        legacy.Devices.AutoConnect = false;
-        legacy.DataQuality.SleepSchedule.BedtimeHour = 1;
-        Seed(context, LegacyAggregateKey, legacy);
+        Seed(context, AlarmsKey, new
+        {
+            profiles = new[] { new { id = "low", name = "low", alarmType = "Low", threshold = 70 } },
+            channels = new { pushover = new { enabled = true, userKey = "u-secret", apiToken = "a-secret" } },
+        });
         await context.SaveChangesAsync();
 
         var service = NewService(context);
-        await service.SaveSectionAsync(
-            "features",
-            new FeatureSettings { Display = new DisplaySettings { Units = "mmol/L" } }
-        );
 
-        var stored = (await service.GetSettingsAsync())!;
-        stored.Features.Display.Units.Should().Be("mmol/L");
-        stored.Devices.AutoConnect.Should().BeFalse();
-        stored.DataQuality.SleepSchedule.BedtimeHour.Should().Be(1);
+        var reads = (await EveryAlarmReadPath(service)).Select(c => JsonSerializer.Serialize(c, JsonOptions))
+            .Append(JsonSerializer.Serialize(await service.GetSettingsAsync(), JsonOptions));
+        foreach (var json in reads)
+        {
+            json.Should().NotContain("secret").And.NotContain("apiToken").And.NotContain("userKey");
+        }
     }
 
     [Fact]
@@ -568,14 +540,6 @@ public class UISettingsServiceTests
                     Threshold = threshold,
                 },
             ],
-        };
-    }
-
-    private static UISettingsConfiguration LegacyAggregate(UserAlarmConfiguration alarms)
-    {
-        return new UISettingsConfiguration
-        {
-            Notifications = new NotificationSettings { AlarmConfiguration = alarms },
         };
     }
 

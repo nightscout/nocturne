@@ -8,33 +8,27 @@
 // E2E_KEEP_STACK=1 leaves the stack running after `run`. E2E_SKIP_BUILD=1 uses whatever
 // nocturne-api:e2e / nocturne-web:e2e already exist (CI builds them in an earlier step).
 
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { capture, compose, config, E2E_DIR, ensureImages, run } from "./lib.ts";
+import { clearCrashDumps, compose, config, E2E_DIR, ensureImages, reportFailure, run } from "./lib.ts";
 
 const PROJECT = process.env.E2E_PROJECT ?? "nocturne-e2e";
 const [command = "run", target = "all"] = process.argv.slice(2);
 
 async function up() {
   if (process.env.E2E_SKIP_BUILD !== "1") await ensureImages();
+  clearCrashDumps();
   // --force-recreate / --renew-anon-volumes: a run never inherits a previous run's containers.
   const code = await compose(PROJECT, [
     "up", "-d", "--wait", "--wait-timeout", "300",
     "--force-recreate", "--renew-anon-volumes", "--remove-orphans",
   ]);
   if (code !== 0) {
-    await dumpLogs();
+    reportFailure(PROJECT, { printLogs: true });
     throw new Error("the e2e stack did not become healthy; logs in e2e/docker-compose-logs.txt");
   }
 }
 
 async function down() {
   await compose(PROJECT, ["down", "--volumes", "--remove-orphans", "--timeout", "5"]);
-}
-
-async function dumpLogs() {
-  const logs = capture("docker", ["compose", "-p", PROJECT, "-f", join(E2E_DIR, "docker-compose.yml"), "logs", "--no-color", "--timestamps"]);
-  writeFileSync(join(E2E_DIR, "docker-compose-logs.txt"), logs);
 }
 
 async function seedForHumans() {
@@ -98,7 +92,7 @@ async function main() {
       try {
         failures = await runSpecs(target);
       } finally {
-        if (failures > 0) await dumpLogs();
+        if (failures > 0) reportFailure(PROJECT, { printLogs: false });
         if (process.env.E2E_KEEP_STACK !== "1") await down();
       }
       console.log(`[e2e] specs ${Math.round((Date.now() - upAt) / 1000)}s, total ${Math.round((Date.now() - started) / 1000)}s`);

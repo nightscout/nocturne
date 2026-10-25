@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { HttpMethod } from "$lib/constants/http-methods";
   import { runCompatibilityTest } from "./data.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { createPatch } from "diff";
@@ -21,7 +22,7 @@
   let nightscoutUrl = $state("https://your-nightscout.herokuapp.com");
   let apiSecret = $state("");
   let queryPath = $state("/api/v1/treatments?count=5");
-  let method = $state("GET");
+  let method = $state<HttpMethod>(HttpMethod.Get);
   let requestBody = $state("");
 
   // Options
@@ -129,7 +130,7 @@
     }
 
     return createPatch(
-      "Nightscout Response",
+      "Nightscout response",
       filteredResponses.ns,
       filteredResponses.nc,
       "Nightscout",
@@ -328,7 +329,7 @@
 
   async function runTest() {
     if (!nightscoutUrl || !queryPath) {
-      error = "Please enter both Nightscout URL and Query Path";
+      error = "Enter both Nightscout URL and query path";
       return;
     }
 
@@ -362,21 +363,21 @@
   <!-- Header -->
   <div class="flex flex-col gap-3 @lg:flex-row @lg:justify-between @lg:items-center">
     <div>
-      <h1 class="text-3xl font-bold">Manual Compatibility Test</h1>
+      <h1 class="text-3xl font-bold">Manual compatibility test</h1>
       <p class="text-muted-foreground mt-1">
         Compare API responses between Nightscout and Nocturne
       </p>
     </div>
     <Button variant="outline" href="/compatibility" class="shrink-0">
       <ArrowLeft class="h-4 w-4 mr-2" />
-      Back to Dashboard
+      Back to dashboard
     </Button>
   </div>
 
   <!-- Test Form -->
   <Card.Root>
     <Card.Header>
-      <Card.Title>Test Configuration</Card.Title>
+      <Card.Title>Test configuration</Card.Title>
       <Card.Description>
         Enter the Nightscout server details and API path to test
       </Card.Description>
@@ -395,7 +396,7 @@
 
         <div class="space-y-2">
           <Label for="apiSecret">
-            API Secret
+            API secret
             <span class="text-muted-foreground font-normal ml-1">
               {hashApiSecret ? "(will be hashed)" : "(SHA1 hash or plain)"}
             </span>
@@ -420,15 +421,15 @@
         </div>
 
         <div class="@lg:col-span-2 space-y-2">
-          <Label for="queryPath">Query Path</Label>
+          <Label for="queryPath">Query path</Label>
           <div class="flex gap-2">
             <Select.Root type="single" bind:value={method}>
               <Select.Trigger class="w-[100px]">
                 {method}
               </Select.Trigger>
               <Select.Content>
-                <Select.Item value="GET">GET</Select.Item>
-                <Select.Item value="POST">POST</Select.Item>
+                <Select.Item value={HttpMethod.Get}>GET</Select.Item>
+                <Select.Item value={HttpMethod.Post}>POST</Select.Item>
               </Select.Content>
             </Select.Root>
             <Input
@@ -440,9 +441,9 @@
           </div>
         </div>
 
-        {#if method === "POST"}
+        {#if method === HttpMethod.Post}
           <div class="@lg:col-span-2 space-y-2">
-            <Label for="requestBody">Request Body (JSON)</Label>
+            <Label for="requestBody">Request body (JSON)</Label>
             <Textarea
               id="requestBody"
               bind:value={requestBody}
@@ -500,7 +501,7 @@
           Testing...
         {:else}
           <Play class="h-4 w-4 mr-2" />
-          Run Test
+          Run test
         {/if}
       </Button>
     </Card.Footer>
@@ -520,7 +521,7 @@
     <div class="grid grid-cols-1 @4xl:grid-cols-4 gap-4">
       <Card.Root>
         <Card.Content class="pt-6">
-          <p class="text-sm text-muted-foreground mb-1">Nightscout Status</p>
+          <p class="text-sm text-muted-foreground mb-1">Nightscout status</p>
           <p
             class="text-2xl font-bold {result.nightscoutStatusCode === 200
               ? 'text-success'
@@ -538,7 +539,7 @@
 
       <Card.Root>
         <Card.Content class="pt-6">
-          <p class="text-sm text-muted-foreground mb-1">Nocturne Status</p>
+          <p class="text-sm text-muted-foreground mb-1">Nocturne status</p>
           <p
             class="text-2xl font-bold {result.nocturneStatusCode === 200
               ? 'text-success'
@@ -554,7 +555,7 @@
 
       <Card.Root>
         <Card.Content class="pt-6">
-          <p class="text-sm text-muted-foreground mb-1">Nightscout Time</p>
+          <p class="text-sm text-muted-foreground mb-1">Nightscout time</p>
           <p class="text-2xl font-bold">
             {formatElapsedMs(result.nightscoutResponseTimeMs)}
           </p>
@@ -563,7 +564,7 @@
 
       <Card.Root>
         <Card.Content class="pt-6">
-          <p class="text-sm text-muted-foreground mb-1">Nocturne Time</p>
+          <p class="text-sm text-muted-foreground mb-1">Nocturne time</p>
           <p class="text-2xl font-bold">
             {formatElapsedMs(result.nocturneResponseTimeMs)}
           </p>
@@ -593,7 +594,7 @@
         <Card.Root>
           <Card.Header class="py-3">
             <Card.Title variant="destructive" class="text-base">
-              Nightscout Response
+              Nightscout response
             </Card.Title>
           </Card.Header>
           <Card.Content class="p-0">
@@ -615,7 +616,7 @@
         <Card.Root>
           <Card.Header class="py-3">
             <Card.Title variant="success" class="text-base">
-              Nocturne Response
+              Nocturne response
             </Card.Title>
           </Card.Header>
           <Card.Content class="p-0">
@@ -639,7 +640,7 @@
       <!-- Unified Diff View -->
       <Card.Root>
         <Card.Header class="py-3 flex-row justify-between items-center">
-          <Card.Title class="text-base">Unified Diff</Card.Title>
+          <Card.Title class="text-base">Unified diff</Card.Title>
           <span class="text-sm text-muted-foreground">
             <span class="text-destructive">- Nightscout</span> / <span class="text-success">+ Nocturne</span>
           </span>

@@ -61,7 +61,12 @@ public interface IActiveProfileResolver
 /// </summary>
 /// <param name="Percentage">Basal rate percentage (100 = no change).</param>
 /// <param name="TimeshiftMs">Time shift in milliseconds applied to the schedule.</param>
-public record CircadianAdjustment(double Percentage, long TimeshiftMs);
+public record CircadianAdjustment(double Percentage, long TimeshiftMs)
+{
+    /// <summary>The percentage and timeshift <paramref name="activation"/> names, the shift within one day.</summary>
+    public static CircadianAdjustment Of(ProfileActivation activation) =>
+        new(activation.Percentage, activation.TimeshiftMs % TimeSpan.MillisecondsPerDay);
+}
 
 /// <summary>
 /// A stretch of time one stored profile is read over, under one profile activation or none, for batch
@@ -70,9 +75,14 @@ public record CircadianAdjustment(double Percentage, long TimeshiftMs);
 /// <param name="ProfileName">The stored profile read; see <see cref="IActiveProfileResolver.GetProfileNameAsync"/>.</param>
 /// <param name="Adjustment">The activation's percentage and timeshift, or null; see <see cref="IActiveProfileResolver.GetCircadianAdjustmentAsync"/>.</param>
 /// <param name="Schedules">The schedules to read in place of the store's; see <see cref="ResolvedProfileActivation.Schedules"/>.</param>
+/// <param name="AppliedAdjustment">
+/// The activation's percentage and timeshift when <paramref name="Schedules"/> already has them applied
+/// (<see cref="ProfileScheduleSource.CustomizedSnapshot"/>), so they are not in <paramref name="Adjustment"/>.
+/// </param>
 public record ProfileSpan(
     string ProfileName,
     long StartMills,
     long? EndMills,
     CircadianAdjustment? Adjustment,
-    ProfileActivationSnapshot? Schedules = null);
+    ProfileActivationSnapshot? Schedules = null,
+    CircadianAdjustment? AppliedAdjustment = null);

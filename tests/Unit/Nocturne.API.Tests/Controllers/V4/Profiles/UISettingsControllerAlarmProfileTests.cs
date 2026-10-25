@@ -105,12 +105,11 @@ public class UISettingsControllerAlarmProfileTests
     }
 
     /// <summary>
-    /// An explicit JSON null binds over the property initialiser, so these rows deserialize to a
+    /// An explicit JSON null binds over the property initialiser, so this row deserializes to a
     /// <see cref="NotificationSettings"/> with no alarm configuration at all. Earlier versions could
-    /// write them; the read has to cope rather than treat it as a failed read.
+    /// write it; the read has to cope rather than treat it as a failed read.
     /// </summary>
     [Theory]
-    [InlineData("ui:settings:complete", """{"notifications":{"alarmConfiguration":null}}""")]
     [InlineData("ui:settings:notifications", """{"alarmConfiguration":null}""")]
     public async Task GetAlarmConfiguration_servesAnEmptyConfiguration_forALegacyNullAlarmRow(
         string key,

@@ -31,6 +31,27 @@ public record AlertRuleChannelSnapshot(
     string? Secret = null);
 
 /// <summary>
+/// A stored <see cref="AlertRule"/>, enabled or not, with what the rule editor reads beside its
+/// evaluated fields.
+/// </summary>
+/// <param name="Channels">The rule's channels in <see cref="AlertRuleChannelSnapshot.SortOrder"/>.</param>
+public sealed record AlertRuleRecord(
+    AlertRuleSnapshot Rule,
+    string? Description,
+    bool IsEnabled,
+    string? ManagedBy,
+    string? ReviewReason,
+    IReadOnlyList<AlertRuleChannelSnapshot> Channels);
+
+/// <summary>
+/// A tenant's enabled rules, with the enabled rules left out because their stored condition type or
+/// severity names no member the engine has.
+/// </summary>
+public sealed record EnabledAlertRules(
+    IReadOnlyList<AlertRuleSnapshot> Rules,
+    IReadOnlyList<Guid> UnreadableRuleIds);
+
+/// <summary>
 /// Immutable snapshot of a live alert instance.
 /// </summary>
 /// <seealso cref="AlertExcursion"/>
@@ -54,6 +75,11 @@ public record UpdateAlertInstanceRequest(Guid TenantId, Guid Id, string? Status 
 /// Snapshot of an <see cref="AlertExcursion"/> in the hysteresis cooldown period, used to check if cooldown has elapsed.
 /// </summary>
 public record HysteresisExcursionSnapshot(Guid Id, Guid TenantId, Guid AlertRuleId, DateTime? HysteresisStartedAt);
+
+/// <summary>
+/// The <see cref="AlertRule"/> an <see cref="AlertExcursion"/> belongs to.
+/// </summary>
+public record ExcursionRuleSnapshot(Guid AlertRuleId, string Name);
 
 /// <summary>
 /// Pairing of an open excursion with its owning rule, restricted to rules

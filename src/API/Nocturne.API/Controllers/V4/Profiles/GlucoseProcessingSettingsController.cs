@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Models.V4;
+using Nocturne.API.Attributes;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
 
@@ -14,6 +16,7 @@ public class GlucoseProcessingSettingsController(
     IGlucoseProcessingConfigProvider configProvider) : ControllerBase
 {
     [HttpGet("preference")]
+    [RequireScope(Scope.GlucoseRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(GlucoseProcessingPreferenceResponse), 200)]
     public async Task<ActionResult<GlucoseProcessingPreferenceResponse>> GetPreference()
@@ -40,6 +43,7 @@ public class GlucoseProcessingSettingsController(
     }
 
     [HttpGet("source-defaults")]
+    [RequireScope(Scope.GlucoseRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(GlucoseProcessingSourceDefaultsResponse), 200)]
     public async Task<ActionResult<GlucoseProcessingSourceDefaultsResponse>> GetSourceDefaults()

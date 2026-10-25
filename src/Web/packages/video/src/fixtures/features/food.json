@@ -1,0 +1,323 @@
+{
+ "route": "/meals",
+ "params": {},
+ "capturedAt": 1792828850545,
+ "entries": [
+  {
+   "type": "sgv",
+   "mills": 1792828800000,
+   "sgv": 221,
+   "direction": "SingleUp",
+   "delta": 9.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828500000,
+   "sgv": 212,
+   "direction": "DoubleUp",
+   "delta": 10.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828200000,
+   "sgv": 201,
+   "direction": "SingleUp",
+   "delta": 9.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827900000,
+   "sgv": 191,
+   "direction": "SingleUp",
+   "delta": 8.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827600000,
+   "sgv": 183,
+   "direction": "SingleUp",
+   "delta": 8.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827300000,
+   "sgv": 175,
+   "direction": "SingleUp",
+   "delta": 9.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827000000,
+   "sgv": 165,
+   "direction": "DoubleUp",
+   "delta": 10.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826700000,
+   "sgv": 155,
+   "direction": "DoubleUp",
+   "delta": 10.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826400000,
+   "sgv": 145,
+   "direction": "DoubleUp",
+   "delta": 10.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826340000
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826100000,
+   "sgv": 135,
+   "direction": "SingleUp",
+   "delta": 7.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825800000,
+   "sgv": 127,
+   "direction": "SingleUp",
+   "delta": 7.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825500000,
+   "sgv": 119,
+   "direction": "SingleUp",
+   "delta": 7.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825200000,
+   "sgv": 112,
+   "direction": "SingleUp",
+   "delta": 8.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824900000,
+   "sgv": 103,
+   "direction": "SingleUp",
+   "delta": 5.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824600000,
+   "sgv": 98,
+   "direction": "FortyFiveUp",
+   "delta": 4.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824300000,
+   "sgv": 93,
+   "direction": "SingleUp",
+   "delta": 5.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824000000,
+   "sgv": 87,
+   "direction": "FortyFiveUp",
+   "delta": 3.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823700000,
+   "sgv": 83,
+   "direction": "FortyFiveUp",
+   "delta": 2.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823400000,
+   "sgv": 81,
+   "direction": "FortyFiveUp",
+   "delta": 2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823100000,
+   "sgv": 79,
+   "direction": "Flat",
+   "delta": 1.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822800000,
+   "sgv": 77,
+   "direction": "FortyFiveUp",
+   "delta": 2.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822500000,
+   "sgv": 75,
+   "direction": "Flat",
+   "delta": 1.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822200000,
+   "sgv": 73,
+   "direction": "Flat",
+   "delta": 1.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821900000,
+   "sgv": 72,
+   "direction": "Flat",
+   "delta": 1.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821600000,
+   "sgv": 71,
+   "direction": "Flat",
+   "delta": 0
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821300000,
+   "sgv": 70,
+   "direction": "Flat",
+   "delta": 0.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821000000,
+   "sgv": 70,
+   "direction": "Flat",
+   "delta": -0.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792820700000,
+   "sgv": 70,
+   "direction": "Flat",
+   "delta": 0.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792820400000,
+   "sgv": 69,
+   "direction": "Flat",
+   "delta": 0.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792820100000,
+   "sgv": 69,
+   "direction": "Flat",
+   "delta": -0.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792819800000,
+   "sgv": 70,
+   "direction": "Flat",
+   "delta": -1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792819500000,
+   "sgv": 71,
+   "direction": "Flat",
+   "delta": 0.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792819200000,
+   "sgv": 71,
+   "direction": "Flat",
+   "delta": -0.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792818900000,
+   "sgv": 71,
+   "direction": "Flat",
+   "delta": -1.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792818600000,
+   "sgv": 72,
+   "direction": "Flat",
+   "delta": -0.9
+  }
+ ],
+ "results": {
+  "getActiveAlerts": "[[]]",
+  "getMeals": "[[1,15,40,60],{\"correlationId\":2,\"timestamp\":3,\"carbIntakes\":4,\"boluses\":11,\"foods\":12,\"totalCarbs\":6,\"attributedCarbs\":13,\"unspecifiedCarbs\":6,\"totalInsulin\":13,\"isAttributed\":14},\"01a16ced-4160-7f4c-a371-8e5aad5137f2\",\"2026-10-24T07:40:50.498Z\",[5],{\"carbs\":6,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":8,\"timestamp\":3,\"mills\":9,\"utcOffset\":7,\"device\":7,\"app\":7,\"dataSource\":7,\"correlationId\":2,\"legacyId\":7,\"createdAt\":10,\"modifiedAt\":10,\"additionalProperties\":7},21,null,\"01a16ced-4160-7403-be78-6084f35aee3c\",1792827650498,\"2026-10-24T08:00:50.52994Z\",[],[],0,false,{\"correlationId\":16,\"timestamp\":17,\"carbIntakes\":18,\"boluses\":29,\"foods\":30,\"totalCarbs\":20,\"attributedCarbs\":20,\"unspecifiedCarbs\":13,\"totalInsulin\":13,\"isAttributed\":39},\"01a16ced-1ac2-744c-bd48-6828ecf00e81\",\"2026-10-24T06:35:00Z\",[19],{\"carbs\":20,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":21,\"timestamp\":17,\"mills\":22,\"utcOffset\":7,\"device\":23,\"app\":7,\"dataSource\":24,\"correlationId\":16,\"legacyId\":25,\"createdAt\":26,\"modifiedAt\":26,\"additionalProperties\":27},65,\"01a16ced-1b9c-7861-8090-77dfd6124051\",1792823700000,\"demo-user\",\"dev-sample\",\"syn-0d57f092b8c4367447ccb210d0ef3b7ca280a4d39178fcee727a58627722\",\"2026-10-24T08:00:40.862387Z\",{\"eventType\":28},\"Carbs\",[],[31],{\"id\":32,\"carbIntakeId\":21,\"foodId\":33,\"portions\":34,\"carbs\":20,\"timeOffsetMinutes\":13,\"note\":7,\"foodName\":35,\"carbsPerPortion\":36,\"fatPerPortion\":37,\"proteinPerPortion\":38},\"01a16ced-3131-75ca-a79f-50fc15f6ed88\",\"01a16ced-310c-7526-a16f-bd59f1d09049\",1.05,\"Homemade pizza slices\",62,20,22,true,{\"correlationId\":41,\"timestamp\":42,\"carbIntakes\":43,\"boluses\":50,\"foods\":51,\"totalCarbs\":45,\"attributedCarbs\":45,\"unspecifiedCarbs\":13,\"totalInsulin\":13,\"isAttributed\":39},\"01a16ced-1ac2-706c-a39b-a2c61820ee40\",\"2026-10-24T00:05:00Z\",[44],{\"carbs\":45,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":46,\"timestamp\":42,\"mills\":47,\"utcOffset\":7,\"device\":23,\"app\":7,\"dataSource\":24,\"correlationId\":41,\"legacyId\":48,\"createdAt\":26,\"modifiedAt\":26,\"additionalProperties\":49},45,\"01a16ced-1b9c-76d6-944a-e715af96a525\",1792800300000,\"syn-7aad5f75d2ae445689780cff80d1ea19e7f544f1dc883ebadb37a13cb2cb\",{\"eventType\":28},[],[52],{\"id\":53,\"carbIntakeId\":46,\"foodId\":54,\"portions\":55,\"carbs\":45,\"timeOffsetMinutes\":13,\"note\":7,\"foodName\":56,\"carbsPerPortion\":57,\"fatPerPortion\":58,\"proteinPerPortion\":59},\"01a16ced-3131-788e-a9cb-8aeb84cd4723\",\"01a16ced-3103-74c4-b2fc-784ce64376ab\",1.18,\"Chicken salad wrap\",38,11,24,{\"correlationId\":61,\"timestamp\":62,\"carbIntakes\":63,\"boluses\":70,\"foods\":71,\"totalCarbs\":65,\"attributedCarbs\":13,\"unspecifiedCarbs\":65,\"totalInsulin\":13,\"isAttributed\":14},\"01a16ced-1ac1-7a66-bf50-a1282bc624d2\",\"2026-10-23T19:10:00Z\",[64],{\"carbs\":65,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":66,\"timestamp\":62,\"mills\":67,\"utcOffset\":7,\"device\":23,\"app\":7,\"dataSource\":24,\"correlationId\":61,\"legacyId\":68,\"createdAt\":26,\"modifiedAt\":26,\"additionalProperties\":69},60,\"01a16ced-1b9c-77db-bb20-95d7a4cbfe24\",1792782600000,\"syn-9223271ed73887e19c3a9a3b0e55ce06bdc6e8d5f1c8a56d48944ddc6950\",{\"eventType\":28},[],[]]",
+  "getAll": "[[]]",
+  "getMyTenants": "[[1],{\"id\":2,\"slug\":3,\"displayName\":4,\"isActive\":5,\"sysCreatedAt\":6},\"01a16cec-e07c-7df7-b8b6-1ecf02c53e87\",\"films-1792828825704\",\"Sample\",true,\"2026-10-24T08:00:25.725592Z\"]",
+  "getSessionInfo": "[{\"isAuthenticated\":1,\"subjectId\":2,\"name\":3,\"email\":4,\"avatarUrl\":4,\"roles\":5,\"permissions\":7,\"expiresAt\":8},true,\"01a16cec-e095-7d13-8c5d-3e824a3c9187\",\"dev\",null,[6],\"Owner\",[],\"2026-10-24T08:15:46+00:00\"]",
+  "getSummary": "[{\"current\":1,\"history\":9,\"iob\":10,\"cob\":11,\"trackers\":12,\"alarm\":4,\"predictions\":4,\"serverMills\":48},{\"sgv\":2,\"direction\":3,\"trendRate\":4,\"delta\":5,\"mills\":6,\"noise\":7,\"status\":8},221,\"SingleUp\",null,9.3,1792828800000,1,\"InRange\",[],3.01,34,[13,24,30,39],{\"id\":14,\"definitionId\":15,\"name\":16,\"icon\":17,\"category\":18,\"mode\":19,\"ageHours\":20,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":22,\"percentElapsed\":23},\"01a16ced-3030-7820-827f-1706d0c0a30f\",\"01a16ced-2fac-703d-bbd0-37a1cdc94647\",\"Infusion Site\",\"syringe\",\"Cannula\",\"Duration\",11.8,\"Info\",72,16,{\"id\":25,\"definitionId\":26,\"name\":27,\"icon\":28,\"category\":27,\"mode\":19,\"ageHours\":29,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":22,\"percentElapsed\":23},\"01a16ced-30b2-72e5-b01b-f8632107e487\",\"01a16ced-3036-7a13-8db0-a1d0f606a572\",\"Reservoir\",\"cylinder\",11.9,{\"id\":31,\"definitionId\":32,\"name\":33,\"icon\":34,\"category\":35,\"mode\":19,\"ageHours\":36,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":37,\"percentElapsed\":38},\"01a16ced-2fa3-763a-bc6b-da989c2b9139\",\"01a16ced-2f75-7332-929f-6ea7ce4050df\",\"CGM Sensor\",\"radio\",\"Sensor\",225.8,240,94,{\"id\":40,\"definitionId\":41,\"name\":42,\"icon\":43,\"category\":44,\"mode\":19,\"ageHours\":45,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":46,\"percentElapsed\":47},\"01a16ced-30c7-7da9-a854-53162f7634b3\",\"01a16ced-30b9-79ad-b5b7-f3a7992149de\",\"Pump Battery\",\"battery\",\"Battery\",263.5,504,52,1792828852082]",
+  "getSuggestions": "[[]]"
+ },
+ "calls": {
+  "getMeals": [
+   "[[1,15,40],{\"correlationId\":2,\"timestamp\":3,\"carbIntakes\":4,\"boluses\":11,\"foods\":12,\"totalCarbs\":6,\"attributedCarbs\":13,\"unspecifiedCarbs\":6,\"totalInsulin\":13,\"isAttributed\":14},\"01a16ced-4160-7f4c-a371-8e5aad5137f2\",\"2026-10-24T07:40:50.498Z\",[5],{\"carbs\":6,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":8,\"timestamp\":3,\"mills\":9,\"utcOffset\":7,\"device\":7,\"app\":7,\"dataSource\":7,\"correlationId\":2,\"legacyId\":7,\"createdAt\":10,\"modifiedAt\":10,\"additionalProperties\":7},21,null,\"01a16ced-4160-7403-be78-6084f35aee3c\",1792827650498,\"2026-10-24T08:00:50.52994Z\",[],[],0,false,{\"correlationId\":16,\"timestamp\":17,\"carbIntakes\":18,\"boluses\":29,\"foods\":30,\"totalCarbs\":20,\"attributedCarbs\":20,\"unspecifiedCarbs\":13,\"totalInsulin\":13,\"isAttributed\":39},\"01a16ced-1ac2-744c-bd48-6828ecf00e81\",\"2026-10-24T06:35:00Z\",[19],{\"carbs\":20,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":21,\"timestamp\":17,\"mills\":22,\"utcOffset\":7,\"device\":23,\"app\":7,\"dataSource\":24,\"correlationId\":16,\"legacyId\":25,\"createdAt\":26,\"modifiedAt\":26,\"additionalProperties\":27},65,\"01a16ced-1b9c-7861-8090-77dfd6124051\",1792823700000,\"demo-user\",\"dev-sample\",\"syn-0d57f092b8c4367447ccb210d0ef3b7ca280a4d39178fcee727a58627722\",\"2026-10-24T08:00:40.862387Z\",{\"eventType\":28},\"Carbs\",[],[31],{\"id\":32,\"carbIntakeId\":21,\"foodId\":33,\"portions\":34,\"carbs\":20,\"timeOffsetMinutes\":13,\"note\":7,\"foodName\":35,\"carbsPerPortion\":36,\"fatPerPortion\":37,\"proteinPerPortion\":38},\"01a16ced-3131-75ca-a79f-50fc15f6ed88\",\"01a16ced-310c-7526-a16f-bd59f1d09049\",1.05,\"Homemade pizza slices\",62,20,22,true,{\"correlationId\":41,\"timestamp\":42,\"carbIntakes\":43,\"boluses\":50,\"foods\":51,\"totalCarbs\":45,\"attributedCarbs\":45,\"unspecifiedCarbs\":13,\"totalInsulin\":13,\"isAttributed\":39},\"01a16ced-1ac2-706c-a39b-a2c61820ee40\",\"2026-10-24T00:05:00Z\",[44],{\"carbs\":45,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":46,\"timestamp\":42,\"mills\":47,\"utcOffset\":7,\"device\":23,\"app\":7,\"dataSource\":24,\"correlationId\":41,\"legacyId\":48,\"createdAt\":26,\"modifiedAt\":26,\"additionalProperties\":49},45,\"01a16ced-1b9c-76d6-944a-e715af96a525\",1792800300000,\"syn-7aad5f75d2ae445689780cff80d1ea19e7f544f1dc883ebadb37a13cb2cb\",{\"eventType\":28},[],[52],{\"id\":53,\"carbIntakeId\":46,\"foodId\":54,\"portions\":55,\"carbs\":45,\"timeOffsetMinutes\":13,\"note\":7,\"foodName\":56,\"carbsPerPortion\":57,\"fatPerPortion\":58,\"proteinPerPortion\":59},\"01a16ced-3131-788e-a9cb-8aeb84cd4723\",\"01a16ced-3103-74c4-b2fc-784ce64376ab\",1.18,\"Chicken salad wrap\",38,11,24]",
+   "[[1,15,40,60],{\"correlationId\":2,\"timestamp\":3,\"carbIntakes\":4,\"boluses\":11,\"foods\":12,\"totalCarbs\":6,\"attributedCarbs\":13,\"unspecifiedCarbs\":6,\"totalInsulin\":13,\"isAttributed\":14},\"01a16ced-4160-7f4c-a371-8e5aad5137f2\",\"2026-10-24T07:40:50.498Z\",[5],{\"carbs\":6,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":8,\"timestamp\":3,\"mills\":9,\"utcOffset\":7,\"device\":7,\"app\":7,\"dataSource\":7,\"correlationId\":2,\"legacyId\":7,\"createdAt\":10,\"modifiedAt\":10,\"additionalProperties\":7},21,null,\"01a16ced-4160-7403-be78-6084f35aee3c\",1792827650498,\"2026-10-24T08:00:50.52994Z\",[],[],0,false,{\"correlationId\":16,\"timestamp\":17,\"carbIntakes\":18,\"boluses\":29,\"foods\":30,\"totalCarbs\":20,\"attributedCarbs\":20,\"unspecifiedCarbs\":13,\"totalInsulin\":13,\"isAttributed\":39},\"01a16ced-1ac2-744c-bd48-6828ecf00e81\",\"2026-10-24T06:35:00Z\",[19],{\"carbs\":20,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":21,\"timestamp\":17,\"mills\":22,\"utcOffset\":7,\"device\":23,\"app\":7,\"dataSource\":24,\"correlationId\":16,\"legacyId\":25,\"createdAt\":26,\"modifiedAt\":26,\"additionalProperties\":27},65,\"01a16ced-1b9c-7861-8090-77dfd6124051\",1792823700000,\"demo-user\",\"dev-sample\",\"syn-0d57f092b8c4367447ccb210d0ef3b7ca280a4d39178fcee727a58627722\",\"2026-10-24T08:00:40.862387Z\",{\"eventType\":28},\"Carbs\",[],[31],{\"id\":32,\"carbIntakeId\":21,\"foodId\":33,\"portions\":34,\"carbs\":20,\"timeOffsetMinutes\":13,\"note\":7,\"foodName\":35,\"carbsPerPortion\":36,\"fatPerPortion\":37,\"proteinPerPortion\":38},\"01a16ced-3131-75ca-a79f-50fc15f6ed88\",\"01a16ced-310c-7526-a16f-bd59f1d09049\",1.05,\"Homemade pizza slices\",62,20,22,true,{\"correlationId\":41,\"timestamp\":42,\"carbIntakes\":43,\"boluses\":50,\"foods\":51,\"totalCarbs\":45,\"attributedCarbs\":45,\"unspecifiedCarbs\":13,\"totalInsulin\":13,\"isAttributed\":39},\"01a16ced-1ac2-706c-a39b-a2c61820ee40\",\"2026-10-24T00:05:00Z\",[44],{\"carbs\":45,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":46,\"timestamp\":42,\"mills\":47,\"utcOffset\":7,\"device\":23,\"app\":7,\"dataSource\":24,\"correlationId\":41,\"legacyId\":48,\"createdAt\":26,\"modifiedAt\":26,\"additionalProperties\":49},45,\"01a16ced-1b9c-76d6-944a-e715af96a525\",1792800300000,\"syn-7aad5f75d2ae445689780cff80d1ea19e7f544f1dc883ebadb37a13cb2cb\",{\"eventType\":28},[],[52],{\"id\":53,\"carbIntakeId\":46,\"foodId\":54,\"portions\":55,\"carbs\":45,\"timeOffsetMinutes\":13,\"note\":7,\"foodName\":56,\"carbsPerPortion\":57,\"fatPerPortion\":58,\"proteinPerPortion\":59},\"01a16ced-3131-788e-a9cb-8aeb84cd4723\",\"01a16ced-3103-74c4-b2fc-784ce64376ab\",1.18,\"Chicken salad wrap\",38,11,24,{\"correlationId\":61,\"timestamp\":62,\"carbIntakes\":63,\"boluses\":70,\"foods\":71,\"totalCarbs\":65,\"attributedCarbs\":13,\"unspecifiedCarbs\":65,\"totalInsulin\":13,\"isAttributed\":14},\"01a16ced-1ac1-7a66-bf50-a1282bc624d2\",\"2026-10-23T19:10:00Z\",[64],{\"carbs\":65,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":66,\"timestamp\":62,\"mills\":67,\"utcOffset\":7,\"device\":23,\"app\":7,\"dataSource\":24,\"correlationId\":61,\"legacyId\":68,\"createdAt\":26,\"modifiedAt\":26,\"additionalProperties\":69},60,\"01a16ced-1b9c-77db-bb20-95d7a4cbfe24\",1792782600000,\"syn-9223271ed73887e19c3a9a3b0e55ce06bdc6e8d5f1c8a56d48944ddc6950\",{\"eventType\":28},[],[]]"
+  ]
+ },
+ "args": {
+  "getMeals": [
+   "[{\"attributed\":-1,\"from\":-1,\"to\":-1}]",
+   "[{\"attributed\":-1,\"from\":1,\"to\":2},\"2026-10-23T13:00:00.000Z\",\"2026-10-24T12:59:59.999Z\"]"
+  ]
+ },
+ "phases": [
+  {
+   "results": {
+    "getMeals": "[[1,15],{\"correlationId\":2,\"timestamp\":3,\"carbIntakes\":4,\"boluses\":11,\"foods\":12,\"totalCarbs\":6,\"attributedCarbs\":13,\"unspecifiedCarbs\":6,\"totalInsulin\":13,\"isAttributed\":14},\"01a16ced-4160-7f4c-a371-8e5aad5137f2\",\"2026-10-24T07:40:50.498Z\",[5],{\"carbs\":6,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":8,\"timestamp\":3,\"mills\":9,\"utcOffset\":7,\"device\":7,\"app\":7,\"dataSource\":7,\"correlationId\":2,\"legacyId\":7,\"createdAt\":10,\"modifiedAt\":10,\"additionalProperties\":7},21,null,\"01a16ced-4160-7403-be78-6084f35aee3c\",1792827650498,\"2026-10-24T08:00:50.52994Z\",[],[],0,false,{\"correlationId\":16,\"timestamp\":17,\"carbIntakes\":18,\"boluses\":29,\"foods\":30,\"totalCarbs\":20,\"attributedCarbs\":13,\"unspecifiedCarbs\":20,\"totalInsulin\":13,\"isAttributed\":14},\"01a16ced-1ac1-7a66-bf50-a1282bc624d2\",\"2026-10-23T19:10:00Z\",[19],{\"carbs\":20,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":21,\"timestamp\":17,\"mills\":22,\"utcOffset\":7,\"device\":23,\"app\":7,\"dataSource\":24,\"correlationId\":16,\"legacyId\":25,\"createdAt\":26,\"modifiedAt\":26,\"additionalProperties\":27},60,\"01a16ced-1b9c-77db-bb20-95d7a4cbfe24\",1792782600000,\"demo-user\",\"dev-sample\",\"syn-9223271ed73887e19c3a9a3b0e55ce06bdc6e8d5f1c8a56d48944ddc6950\",\"2026-10-24T08:00:40.862387Z\",{\"eventType\":28},\"Carbs\",[],[]]"
+   }
+  },
+  {
+   "results": {
+    "getFavorites": "[[1,19,29],{\"_id\":2,\"type\":3,\"category\":4,\"subcategory\":5,\"name\":6,\"portion\":7,\"carbs\":8,\"fat\":9,\"protein\":10,\"energy\":11,\"gi\":12,\"unit\":13,\"foods\":14,\"hideafteruse\":15,\"hidden\":15,\"position\":16,\"created_at\":17,\"srvModified\":18,\"srvCreated\":18},\"01a16ced-310c-7526-a16f-bd59f1d09049\",\"food\",\"Dinner\",\"Pizza\",\"Homemade pizza slices\",280,62,20,22,520,2,\"g\",null,false,9,\"2026-10-24T08:00:46.362Z\",1792828846362,{\"_id\":20,\"type\":3,\"category\":21,\"subcategory\":22,\"name\":23,\"portion\":24,\"carbs\":25,\"fat\":26,\"protein\":26,\"energy\":27,\"gi\":12,\"unit\":13,\"foods\":14,\"hideafteruse\":15,\"hidden\":15,\"position\":28,\"created_at\":17,\"srvModified\":18,\"srvCreated\":18},\"01a16ced-3114-7020-a9a0-802d081143ff\",\"Snack\",\"Hypo treatment\",\"Jelly beans\",30,25,0,100,15,{\"_id\":30,\"type\":3,\"category\":21,\"subcategory\":31,\"name\":32,\"portion\":33,\"carbs\":34,\"fat\":35,\"protein\":36,\"energy\":37,\"gi\":12,\"unit\":13,\"foods\":14,\"hideafteruse\":15,\"hidden\":15,\"position\":38,\"created_at\":17,\"srvModified\":18,\"srvCreated\":18},\"01a16ced-3110-715b-96e2-c7951e3d0a14\",\"Bar\",\"Muesli bar\",35,18,5,3,130,12]",
+    "getFoods": "[[1,18,26,37,46,54,64,70,77,86,92,98,107,115,120],{\"_id\":2,\"type\":3,\"category\":4,\"subcategory\":5,\"name\":6,\"portion\":7,\"carbs\":8,\"fat\":9,\"protein\":9,\"energy\":10,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":15,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-310f-7204-b94b-f70f969d0eae\",\"food\",\"Snack\",\"Fruit\",\"Apple\",150,16,0,62,2,\"g\",null,false,11,\"2026-10-24T08:00:46.362Z\",1792828846362,{\"_id\":19,\"type\":3,\"category\":4,\"subcategory\":5,\"name\":20,\"portion\":21,\"carbs\":22,\"fat\":9,\"protein\":23,\"energy\":24,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":25,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-3113-749b-bf90-7241762a7153\",\"Banana\",120,20,1,80,14,{\"_id\":27,\"type\":3,\"category\":28,\"subcategory\":29,\"name\":30,\"portion\":31,\"carbs\":32,\"fat\":33,\"protein\":34,\"energy\":35,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":36,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-3108-7bbf-8bf9-580c95f05ef2\",\"Dinner\",\"Rice\",\"Beef stir-fry with rice\",350,58,15,28,480,7,{\"_id\":38,\"type\":3,\"category\":39,\"subcategory\":40,\"name\":41,\"portion\":42,\"carbs\":43,\"fat\":15,\"protein\":44,\"energy\":31,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":45,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-3103-74c4-b2fc-784ce64376ab\",\"Lunch\",\"Wrap\",\"Chicken salad wrap\",220,38,24,4,{\"_id\":47,\"type\":3,\"category\":4,\"subcategory\":48,\"name\":49,\"portion\":50,\"carbs\":33,\"fat\":51,\"protein\":36,\"energy\":52,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":53,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-3112-748a-8890-7c2b6a35b200\",\"Crackers\",\"Crackers and cheese\",60,9,170,13,{\"_id\":55,\"type\":3,\"category\":56,\"subcategory\":57,\"name\":58,\"portion\":59,\"carbs\":60,\"fat\":51,\"protein\":61,\"energy\":62,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":63,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-3102-7daa-8da5-b8b562802c0d\",\"Breakfast\",\"Dairy\",\"Greek yoghurt with granola\",200,34,12,280,3,{\"_id\":65,\"type\":3,\"category\":28,\"subcategory\":66,\"name\":67,\"portion\":62,\"carbs\":10,\"fat\":22,\"protein\":68,\"energy\":69,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":51,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-310c-7526-a16f-bd59f1d09049\",\"Pizza\",\"Homemade pizza slices\",22,520,{\"_id\":71,\"type\":3,\"category\":4,\"subcategory\":72,\"name\":73,\"portion\":74,\"carbs\":75,\"fat\":9,\"protein\":9,\"energy\":76,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":33,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-3114-7020-a9a0-802d081143ff\",\"Hypo treatment\",\"Jelly beans\",30,25,100,{\"_id\":78,\"type\":3,\"category\":39,\"subcategory\":79,\"name\":80,\"portion\":81,\"carbs\":82,\"fat\":53,\"protein\":83,\"energy\":84,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":85,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-3105-77d4-83b3-fdcefd8e847c\",\"Pasta\",\"Leftover pasta bake\",300,52,18,400,5,{\"_id\":87,\"type\":3,\"category\":28,\"subcategory\":88,\"name\":89,\"portion\":84,\"carbs\":50,\"fat\":61,\"protein\":22,\"energy\":90,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":91,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-310d-7d27-9123-b541f91412ab\",\"Curry\",\"Lentil curry with naan\",450,10,{\"_id\":93,\"type\":3,\"category\":4,\"subcategory\":94,\"name\":95,\"portion\":96,\"carbs\":83,\"fat\":85,\"protein\":63,\"energy\":97,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":61,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-3110-715b-96e2-c7951e3d0a14\",\"Bar\",\"Muesli bar\",35,130,{\"_id\":99,\"type\":3,\"category\":56,\"subcategory\":100,\"name\":101,\"portion\":102,\"carbs\":103,\"fat\":104,\"protein\":105,\"energy\":106,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":23,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-30ff-7a36-940b-19bd487f8e7c\",\"Cereal\",\"Porridge with berries\",250,42,6,8,260,{\"_id\":108,\"type\":3,\"category\":28,\"subcategory\":109,\"name\":110,\"portion\":111,\"carbs\":112,\"fat\":83,\"protein\":113,\"energy\":114,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":105,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-310a-7212-8e00-74b9f1e549c4\",\"Roast\",\"Roast chicken with potatoes\",380,45,32,470,{\"_id\":116,\"type\":3,\"category\":39,\"subcategory\":29,\"name\":117,\"portion\":102,\"carbs\":118,\"fat\":85,\"protein\":33,\"energy\":119,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":104,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-3106-772c-84b5-bbb20bb1ba70\",\"Sushi set\",55,330,{\"_id\":121,\"type\":3,\"category\":56,\"subcategory\":122,\"name\":123,\"portion\":124,\"carbs\":34,\"fat\":25,\"protein\":8,\"energy\":81,\"gi\":11,\"unit\":12,\"foods\":13,\"hideafteruse\":14,\"hidden\":14,\"position\":11,\"created_at\":16,\"srvModified\":17,\"srvCreated\":17},\"01a16ced-3101-7a05-807a-c7717cf9847f\",\"Bread\",\"Wholegrain toast with eggs\",160]",
+    "getRecentFoods": "[[1,19,28,38,49],{\"_id\":2,\"type\":3,\"category\":4,\"subcategory\":5,\"name\":6,\"portion\":7,\"carbs\":8,\"fat\":9,\"protein\":10,\"energy\":11,\"gi\":12,\"unit\":13,\"foods\":14,\"hideafteruse\":15,\"hidden\":15,\"position\":16,\"created_at\":17,\"srvModified\":18,\"srvCreated\":18},\"01a16ced-30ff-7a36-940b-19bd487f8e7c\",\"food\",\"Breakfast\",\"Cereal\",\"Porridge with berries\",250,42,6,8,260,2,\"g\",null,false,1,\"2026-10-24T08:00:46.362Z\",1792828846362,{\"_id\":20,\"type\":3,\"category\":4,\"subcategory\":21,\"name\":22,\"portion\":23,\"carbs\":24,\"fat\":25,\"protein\":26,\"energy\":27,\"gi\":12,\"unit\":13,\"foods\":14,\"hideafteruse\":15,\"hidden\":15,\"position\":12,\"created_at\":17,\"srvModified\":18,\"srvCreated\":18},\"01a16ced-3101-7a05-807a-c7717cf9847f\",\"Bread\",\"Wholegrain toast with eggs\",160,28,14,16,300,{\"_id\":29,\"type\":3,\"category\":4,\"subcategory\":30,\"name\":31,\"portion\":32,\"carbs\":33,\"fat\":34,\"protein\":35,\"energy\":36,\"gi\":12,\"unit\":13,\"foods\":14,\"hideafteruse\":15,\"hidden\":15,\"position\":37,\"created_at\":17,\"srvModified\":18,\"srvCreated\":18},\"01a16ced-3102-7daa-8da5-b8b562802c0d\",\"Dairy\",\"Greek yoghurt with granola\",200,34,9,12,280,3,{\"_id\":39,\"type\":3,\"category\":40,\"subcategory\":41,\"name\":42,\"portion\":43,\"carbs\":44,\"fat\":45,\"protein\":46,\"energy\":47,\"gi\":12,\"unit\":13,\"foods\":14,\"hideafteruse\":15,\"hidden\":15,\"position\":48,\"created_at\":17,\"srvModified\":18,\"srvCreated\":18},\"01a16ced-3103-74c4-b2fc-784ce64376ab\",\"Lunch\",\"Wrap\",\"Chicken salad wrap\",220,38,11,24,350,4,{\"_id\":50,\"type\":3,\"category\":40,\"subcategory\":51,\"name\":52,\"portion\":27,\"carbs\":53,\"fat\":54,\"protein\":55,\"energy\":56,\"gi\":12,\"unit\":13,\"foods\":14,\"hideafteruse\":15,\"hidden\":15,\"position\":57,\"created_at\":17,\"srvModified\":18,\"srvCreated\":18},\"01a16ced-3105-77d4-83b3-fdcefd8e847c\",\"Pasta\",\"Leftover pasta bake\",52,13,18,400,5]",
+    "updateStatus": "[{\"id\":1,\"subjectId\":2,\"markKey\":3,\"status\":4,\"seenAt\":5,\"completedAt\":6},\"01a16ced-5db9-76f0-9a9c-a1fe9858cf6a\",\"01a16cec-e095-7d13-8c5d-3e824a3c9187\",\"feature-intro.meals-matching\",\"completed\",\"2026-10-24T08:00:57.7859486Z\",\"2026-10-24T08:00:57.7859489Z\"]"
+   }
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {
+    "createFood": "[{\"_id\":1,\"type\":2,\"category\":3,\"subcategory\":3,\"name\":4,\"portion\":5,\"carbs\":6,\"fat\":7,\"protein\":7,\"energy\":7,\"gi\":8,\"unit\":9,\"foods\":10,\"hideafteruse\":11,\"hidden\":11,\"position\":12,\"created_at\":13,\"srvModified\":14,\"srvCreated\":14},\"01a16ced-66f7-74a5-baf1-9f947f699402\",\"food\",\"\",\"Oat pancakes\",120,42,0,2,\"g\",null,false,99999,\"2026-10-24T08:01:00.153Z\",1792828860153]",
+    "addCarbIntakeFood": "[{\"carbIntakeId\":1,\"foods\":2,\"isAttributed\":12,\"attributedCarbs\":7,\"unspecifiedCarbs\":8},\"01a16ced-4160-7403-be78-6084f35aee3c\",[3],{\"id\":4,\"carbIntakeId\":1,\"foodId\":5,\"portions\":6,\"carbs\":7,\"timeOffsetMinutes\":8,\"note\":9,\"foodName\":10,\"carbsPerPortion\":11,\"fatPerPortion\":8,\"proteinPerPortion\":8},\"01a16ced-6747-7d7d-84af-86304aa93ec0\",\"01a16ced-66f7-74a5-baf1-9f947f699402\",0.5,21,0,null,\"Oat pancakes\",42,true]",
+    "getMeals": "[[1],{\"correlationId\":2,\"timestamp\":3,\"carbIntakes\":4,\"boluses\":16,\"foods\":17,\"totalCarbs\":6,\"attributedCarbs\":18,\"unspecifiedCarbs\":6,\"totalInsulin\":18,\"isAttributed\":19},\"01a16ced-1ac1-7a66-bf50-a1282bc624d2\",\"2026-10-23T19:10:00Z\",[5],{\"carbs\":6,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":8,\"timestamp\":3,\"mills\":9,\"utcOffset\":7,\"device\":10,\"app\":7,\"dataSource\":11,\"correlationId\":2,\"legacyId\":12,\"createdAt\":13,\"modifiedAt\":13,\"additionalProperties\":14},60,null,\"01a16ced-1b9c-77db-bb20-95d7a4cbfe24\",1792782600000,\"demo-user\",\"dev-sample\",\"syn-9223271ed73887e19c3a9a3b0e55ce06bdc6e8d5f1c8a56d48944ddc6950\",\"2026-10-24T08:00:40.862387Z\",{\"eventType\":15},\"Carbs\",[],[],0,false]"
+   }
+  },
+  {
+   "results": {
+    "getMeals": "[[1,21,45,65],{\"correlationId\":2,\"timestamp\":3,\"carbIntakes\":4,\"boluses\":11,\"foods\":12,\"totalCarbs\":6,\"attributedCarbs\":6,\"unspecifiedCarbs\":17,\"totalInsulin\":17,\"isAttributed\":20},\"01a16ced-4160-7f4c-a371-8e5aad5137f2\",\"2026-10-24T07:40:50.498Z\",[5],{\"carbs\":6,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":8,\"timestamp\":3,\"mills\":9,\"utcOffset\":7,\"device\":7,\"app\":7,\"dataSource\":7,\"correlationId\":2,\"legacyId\":7,\"createdAt\":10,\"modifiedAt\":10,\"additionalProperties\":7},21,null,\"01a16ced-4160-7403-be78-6084f35aee3c\",1792827650498,\"2026-10-24T08:00:50.52994Z\",[],[13],{\"id\":14,\"carbIntakeId\":8,\"foodId\":15,\"portions\":16,\"carbs\":6,\"timeOffsetMinutes\":17,\"note\":7,\"foodName\":18,\"carbsPerPortion\":19,\"fatPerPortion\":17,\"proteinPerPortion\":17},\"01a16ced-6747-7d7d-84af-86304aa93ec0\",\"01a16ced-66f7-74a5-baf1-9f947f699402\",0.5,0,\"Oat pancakes\",42,true,{\"correlationId\":22,\"timestamp\":23,\"carbIntakes\":24,\"boluses\":35,\"foods\":36,\"totalCarbs\":26,\"attributedCarbs\":26,\"unspecifiedCarbs\":17,\"totalInsulin\":17,\"isAttributed\":20},\"01a16ced-1ac2-744c-bd48-6828ecf00e81\",\"2026-10-24T06:35:00Z\",[25],{\"carbs\":26,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":27,\"timestamp\":23,\"mills\":28,\"utcOffset\":7,\"device\":29,\"app\":7,\"dataSource\":30,\"correlationId\":22,\"legacyId\":31,\"createdAt\":32,\"modifiedAt\":32,\"additionalProperties\":33},65,\"01a16ced-1b9c-7861-8090-77dfd6124051\",1792823700000,\"demo-user\",\"dev-sample\",\"syn-0d57f092b8c4367447ccb210d0ef3b7ca280a4d39178fcee727a58627722\",\"2026-10-24T08:00:40.862387Z\",{\"eventType\":34},\"Carbs\",[],[37],{\"id\":38,\"carbIntakeId\":27,\"foodId\":39,\"portions\":40,\"carbs\":26,\"timeOffsetMinutes\":17,\"note\":7,\"foodName\":41,\"carbsPerPortion\":42,\"fatPerPortion\":43,\"proteinPerPortion\":44},\"01a16ced-3131-75ca-a79f-50fc15f6ed88\",\"01a16ced-310c-7526-a16f-bd59f1d09049\",1.05,\"Homemade pizza slices\",62,20,22,{\"correlationId\":46,\"timestamp\":47,\"carbIntakes\":48,\"boluses\":55,\"foods\":56,\"totalCarbs\":50,\"attributedCarbs\":50,\"unspecifiedCarbs\":17,\"totalInsulin\":17,\"isAttributed\":20},\"01a16ced-1ac2-706c-a39b-a2c61820ee40\",\"2026-10-24T00:05:00Z\",[49],{\"carbs\":50,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":51,\"timestamp\":47,\"mills\":52,\"utcOffset\":7,\"device\":29,\"app\":7,\"dataSource\":30,\"correlationId\":46,\"legacyId\":53,\"createdAt\":32,\"modifiedAt\":32,\"additionalProperties\":54},45,\"01a16ced-1b9c-76d6-944a-e715af96a525\",1792800300000,\"syn-7aad5f75d2ae445689780cff80d1ea19e7f544f1dc883ebadb37a13cb2cb\",{\"eventType\":34},[],[57],{\"id\":58,\"carbIntakeId\":51,\"foodId\":59,\"portions\":60,\"carbs\":50,\"timeOffsetMinutes\":17,\"note\":7,\"foodName\":61,\"carbsPerPortion\":62,\"fatPerPortion\":63,\"proteinPerPortion\":64},\"01a16ced-3131-788e-a9cb-8aeb84cd4723\",\"01a16ced-3103-74c4-b2fc-784ce64376ab\",1.18,\"Chicken salad wrap\",38,11,24,{\"correlationId\":66,\"timestamp\":67,\"carbIntakes\":68,\"boluses\":75,\"foods\":76,\"totalCarbs\":70,\"attributedCarbs\":17,\"unspecifiedCarbs\":70,\"totalInsulin\":17,\"isAttributed\":77},\"01a16ced-1ac1-7a66-bf50-a1282bc624d2\",\"2026-10-23T19:10:00Z\",[69],{\"carbs\":70,\"syncIdentifier\":7,\"carbTime\":7,\"absorptionTime\":7,\"fatGrams\":7,\"proteinGrams\":7,\"id\":71,\"timestamp\":67,\"mills\":72,\"utcOffset\":7,\"device\":29,\"app\":7,\"dataSource\":30,\"correlationId\":66,\"legacyId\":73,\"createdAt\":32,\"modifiedAt\":32,\"additionalProperties\":74},60,\"01a16ced-1b9c-77db-bb20-95d7a4cbfe24\",1792782600000,\"syn-9223271ed73887e19c3a9a3b0e55ce06bdc6e8d5f1c8a56d48944ddc6950\",{\"eventType\":34},[],[],false]",
+    "getActiveAlerts": "[[]]"
+   }
+  }
+ ]
+}

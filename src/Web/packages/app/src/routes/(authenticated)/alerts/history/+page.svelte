@@ -17,7 +17,8 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { formatElapsedDuration } from "$lib/utils/duration";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
-  import { severity, severityLabel } from "$lib/components/alerts/severity";
+  import { severity } from "$lib/components/alerts/severity";
+  import { severityLabel } from "$lib/components/alerts/severityLabel.svelte";
 
   let page = $state(1);
   const historyQuery = $derived(getAlertHistory({ page, pageSize: 25 }));
@@ -40,7 +41,7 @@
       <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
         <HistoryIcon class="h-5 w-5" /> Alert history
       </h1>
-      <p class="text-sm text-muted-foreground">Every real fire from this tenant. Test fires aren't shown.</p>
+      <p class="text-sm text-muted-foreground">Every real fire from this tenant. Test fires are not shown.</p>
     </div>
   </div>
 

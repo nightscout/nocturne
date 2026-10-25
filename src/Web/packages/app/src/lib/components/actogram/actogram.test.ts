@@ -3,35 +3,34 @@ import {
 	sliceIntoRows,
 	sliceBgIntoRows,
 	findNearestPoint,
+	hasShiftedHourMarks,
+	MS_PER_HOUR,
 	resolveTargetRange,
 	type ActogramPoint,
 	type GlucosePoint,
 	type RowDataPoint,
 } from './actogram';
+import { servedDay, servedDays } from '$lib/test-stubs/actogram-days';
 
 describe('sliceIntoRows', () => {
-	const days = [
-		new Date('2026-04-20T00:00:00'),
-		new Date('2026-04-21T00:00:00'),
-		new Date('2026-04-22T00:00:00'),
-	];
+	const days = servedDays('2026-04-20', 3);
 
 	it('assigns a point to the correct row primary window', () => {
 		const data: ActogramPoint[] = [
-			{ mills: new Date('2026-04-21T10:00:00').getTime() },
+			{ mills: new Date('2026-04-21T10:00:00Z').getTime() },
 		];
 		const rows = sliceIntoRows(data, days);
-		const apr21Row = rows.find((r) => r.day.getTime() === days[1].getTime());
+		const apr21Row = rows.find((r) => r.day === days[1]);
 		expect(apr21Row?.data).toHaveLength(1);
 		expect(apr21Row?.data[0].hoursFromStart).toBeCloseTo(10);
 	});
 
 	it('assigns a point to the previous row extended window', () => {
 		const data: ActogramPoint[] = [
-			{ mills: new Date('2026-04-21T10:00:00').getTime() },
+			{ mills: new Date('2026-04-21T10:00:00Z').getTime() },
 		];
 		const rows = sliceIntoRows(data, days);
-		const apr20Row = rows.find((r) => r.day.getTime() === days[0].getTime());
+		const apr20Row = rows.find((r) => r.day === days[0]);
 		expect(apr20Row?.data).toHaveLength(1);
 		expect(apr20Row?.data[0].hoursFromStart).toBeCloseTo(34);
 		expect(apr20Row?.data[0].isExtended).toBe(true);
@@ -51,11 +50,40 @@ describe('sliceIntoRows', () => {
 
 	it('point at midnight belongs to primary window of that day', () => {
 		const data: ActogramPoint[] = [
-			{ mills: new Date('2026-04-21T00:00:00').getTime() },
+			{ mills: new Date('2026-04-21T00:00:00Z').getTime() },
 		];
 		const rows = sliceIntoRows(data, days);
-		const apr21Row = rows.find((r) => r.day.getTime() === days[1].getTime());
+		const apr21Row = rows.find((r) => r.day === days[1]);
 		expect(apr21Row?.data.some((d) => d.hoursFromStart === 0 && !d.isExtended)).toBe(true);
+	});
+});
+
+describe('sliceIntoRows on served days', () => {
+	const chatham = 13 * 60 + 45;
+
+	it('cuts a row where the served day ends, not at the browser calendar day', () => {
+		const days = servedDays('2026-01-10', 2, chatham);
+		const lastOfTenth = days[0].endMills - 1;
+		const rows = sliceIntoRows([{ mills: days[0].startMills }, { mills: lastOfTenth }, { mills: days[0].endMills }], days);
+
+		expect(rows[0].data.map((d) => d.isExtended)).toEqual([false, false, true]);
+		expect(rows[1].data.map((d) => d.isExtended)).toEqual([false]);
+		expect(rows[1].data[0].hoursFromStart).toBe(0);
+	});
+
+	it('lays a 23 hour day out as 23 primary hours', () => {
+		const short = servedDay('2023-03-12', 0, 23);
+		const rows = sliceIntoRows([{ mills: short.startMills + 22.5 * MS_PER_HOUR }, { mills: short.endMills }], [short]);
+
+		expect(rows[0].data.map((d) => d.isExtended)).toEqual([false, true]);
+		expect(rows[0].data[1].hoursFromStart).toBe(23);
+	});
+
+	it('lays a 25 hour day out as 25 primary hours', () => {
+		const long = servedDay('2023-11-05', 0, 25);
+		const rows = sliceIntoRows([{ mills: long.startMills + 24.5 * MS_PER_HOUR }, { mills: long.endMills }], [long]);
+
+		expect(rows[0].data.map((d) => d.isExtended)).toEqual([false, true]);
 	});
 });
 
@@ -114,18 +142,14 @@ describe('resolveTargetRange', () => {
 });
 
 describe('sliceBgIntoRows', () => {
-	const days = [
-		new Date('2026-04-20T00:00:00'),
-		new Date('2026-04-21T00:00:00'),
-		new Date('2026-04-22T00:00:00'),
-	];
+	const days = servedDays('2026-04-20', 3);
 
 	it('places a glucose point in the primary window with correct shape', () => {
 		const bg: GlucosePoint[] = [
-			{ mills: new Date('2026-04-21T06:30:00').getTime(), sgv: 120, color: 'in-range' },
+			{ mills: new Date('2026-04-21T06:30:00Z').getTime(), sgv: 120, color: 'in-range' },
 		];
 		const rows = sliceBgIntoRows(bg, days);
-		const apr21Row = rows.find((r) => r.day.getTime() === days[1].getTime());
+		const apr21Row = rows.find((r) => r.day === days[1]);
 		expect(apr21Row?.bgData).toHaveLength(1);
 		expect(apr21Row?.bgData[0].hoursFromStart).toBeCloseTo(6.5);
 		expect(apr21Row?.bgData[0].isExtended).toBe(false);
@@ -135,18 +159,30 @@ describe('sliceBgIntoRows', () => {
 
 	it('double-plots a glucose point in both primary and previous-row extended windows', () => {
 		const bg: GlucosePoint[] = [
-			{ mills: new Date('2026-04-21T14:00:00').getTime(), sgv: 95, color: 'in-range' },
+			{ mills: new Date('2026-04-21T14:00:00Z').getTime(), sgv: 95, color: 'in-range' },
 		];
 		const rows = sliceBgIntoRows(bg, days);
 
-		const apr21Row = rows.find((r) => r.day.getTime() === days[1].getTime());
+		const apr21Row = rows.find((r) => r.day === days[1]);
 		expect(apr21Row?.bgData).toHaveLength(1);
 		expect(apr21Row?.bgData[0].hoursFromStart).toBeCloseTo(14);
 		expect(apr21Row?.bgData[0].isExtended).toBe(false);
 
-		const apr20Row = rows.find((r) => r.day.getTime() === days[0].getTime());
+		const apr20Row = rows.find((r) => r.day === days[0]);
 		expect(apr20Row?.bgData).toHaveLength(1);
 		expect(apr20Row?.bgData[0].hoursFromStart).toBeCloseTo(38);
 		expect(apr20Row?.bgData[0].isExtended).toBe(true);
+	});
+});
+
+describe('hasShiftedHourMarks', () => {
+	it.each([
+		{ hours: 24, nextHours: 24, shifted: false },
+		{ hours: 23, nextHours: 24, shifted: true },
+		{ hours: 25, nextHours: 24, shifted: true },
+		{ hours: 24, nextHours: 23, shifted: true },
+		{ hours: 24, nextHours: 25, shifted: true },
+	])('is $shifted for a $hours hour day before a $nextHours hour day', ({ hours, nextHours, shifted }) => {
+		expect(hasShiftedHourMarks(servedDay('2026-03-08', 0, hours, nextHours))).toBe(shifted);
 	});
 });

@@ -42,7 +42,8 @@ public class RealtimeAdmissionController : ControllerBase
             authorization is { CanJoinTenantRelay: true }
                 ? [.. RealtimeCategories.All.Where(authorization.MayReceiveCategory)]
                 : [],
-            authorization?.HistoryClamped ?? false));
+            authorization?.HistoryClamped ?? false,
+            authorization is { CanJoinTenantRelay: true } && authorization.Satisfies(Scope.AlertsAcknowledge)));
     }
 }
 
@@ -62,8 +63,14 @@ public class RealtimeAdmissionController : ControllerBase
 /// whose socket the bridge keeps out of every room, and for a history-clamped caller.
 /// </param>
 /// <param name="HistoryClamped">Whether the caller may read only the last 24 hours.</param>
+/// <param name="MayAck">
+/// Whether the caller may silence the tenant's alarms through the bridge's <c>/alarm</c> namespace.
+/// The bridge forwards an ack on its own AlarmHub connection, whose gate it always meets, so the
+/// bridge drops an ack from a subscriber without this.
+/// </param>
 public record RealtimeAdmission(
     bool TenantRelay,
     Guid? SubjectId,
     IReadOnlyList<string> Categories,
-    bool HistoryClamped);
+    bool HistoryClamped,
+    bool MayAck);

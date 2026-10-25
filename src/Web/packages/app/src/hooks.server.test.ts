@@ -80,7 +80,7 @@ function requestEvent(host: string, pathname = "/", cookies: Record<string, stri
  * Runs the hook chain with a resolve standing in for the layouts: it reads the tenant status the
  * way they do, so a request's status calls can be counted end to end.
  */
-async function run(event: RequestEvent) {
+async function run(event: RequestEvent, page: () => Response = () => new Response("page")) {
   let layoutStatus: App.TenantStatus | null | undefined;
   const state = { tracing: { record_span: ({ fn }: { fn: (span: unknown) => unknown }) => fn({}) } };
   const response = await withRequestStore({ event, state }, () =>
@@ -88,7 +88,7 @@ async function run(event: RequestEvent) {
       event,
       resolve: async (resolved) => {
         layoutStatus = await getRequestStatus(resolved.locals);
-        return new Response("page");
+        return page();
       },
     })
   );
@@ -270,5 +270,34 @@ describe("hooks — response headers", () => {
       expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
       expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     }
+  });
+
+  it("keeps the style and font preloads in the Link header and drops the modulepreloads", async () => {
+    getStatus.mockResolvedValue(ready);
+    const css = '</_app/immutable/assets/0.A.css>; rel="preload"; as="style"; nopush';
+    const font = '</_app/immutable/assets/f.A.woff2>; rel="preload"; as="font"; crossorigin; nopush';
+    const html = '<head><link rel="modulepreload" href="/_app/immutable/chunks/a.js"></head>';
+    const { response } = await run(requestEvent(freshHost(), "/", signedIn), () => {
+      const page = new Response(html, { headers: { "content-type": "text/html" } });
+      page.headers.set(
+        "link",
+        [css, '</_app/immutable/chunks/a.js>; rel="modulepreload"; nopush', font].join(", ")
+      );
+      return page;
+    });
+
+    expect(response.headers.get("link")).toBe([css, font].join(", "));
+    expect(await response.text()).toBe(html);
+  });
+
+  it("removes the Link header when only modulepreloads were in it", async () => {
+    getStatus.mockResolvedValue(ready);
+    const { response } = await run(requestEvent(freshHost(), "/", signedIn), () => {
+      const page = new Response("page");
+      page.headers.set("link", '</_app/immutable/chunks/a.js>; rel="modulepreload"; nopush');
+      return page;
+    });
+
+    expect(response.headers.has("link")).toBe(false);
   });
 });

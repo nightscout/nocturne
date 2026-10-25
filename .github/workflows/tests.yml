@@ -31,6 +31,7 @@ jobs:
       e2e: ${{ steps.filter.outputs.e2e == 'true' || github.event_name != 'pull_request' }}
       migrations: ${{ steps.filter.outputs.migrations == 'true' || github.event_name != 'pull_request' }}
       crates: ${{ steps.filter.outputs.crates == 'true' || github.event_name != 'pull_request' }}
+      watercolour: ${{ steps.filter.outputs.watercolour == 'true' || github.event_name != 'pull_request' }}
       desktop: ${{ steps.filter.outputs.desktop == 'true' || github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v5
@@ -52,15 +53,22 @@ jobs:
               - 'tests/**'
               - 'nocturne.sln'
               - 'docs/postgres/**'
-              - 'crates/**'
+              - &alert-crates 'crates/nocturne-alerts-*/**'
+              - &crates-workspace 'crates/Cargo.*'
+              - 'crates/clippy.toml'
             web:
               - *shared
               - 'src/Web/**'
               - 'src/API/**'
+              - '.vale.ini'
+              - '.vale/**'
             e2e:
               - *shared
               - 'src/**'
               - 'e2e/**'
+              - 'crates/**'
+              - 'scripts/Shared/**'
+              - 'scripts/alerts-native-build.cs'
               - 'Dockerfile.web'
               - 'docs/postgres/**'
             migrations:
@@ -72,13 +80,21 @@ jobs:
               - 'docs/postgres/**'
             crates:
               - *shared
-              - 'crates/**'
+              - *alert-crates
+              - *crates-workspace
+              - 'crates/clippy.toml'
               - 'src/API/**'
               - 'tests/Parity/**'
               - 'tests/Unit/Nocturne.Alerts.Native.Tests/**'
             desktop:
               - *shared
               - 'src/Web/packages/desktop/src-tauri/**'
+            watercolour:
+              - *shared
+              - 'crates/nocturne-watercolour-*/**'
+              - *crates-workspace
+              - 'crates/clippy.toml'
+              - 'src/Web/packages/watercolour/**'
 
   # Compiles every test project once and runs the API client codegen (NSwag, then the
   # Zod schemas and remote functions through pnpm) as the API build's post-build step. The test jobs
@@ -104,6 +120,23 @@ jobs:
       - uses: ./.github/actions/setup-pnpm
         with:
           install: src/Web
+      # The API refuses to start without the nocturne_alerts cdylib, and Nocturne.Core.Alerts.Native
+      # packs it into every referencing output when crates/target/release holds it, so each test
+      # assembly below carries it to the test jobs.
+      - name: Cache cargo
+        if: env.BUILD_TESTS == 'true'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          # Sources, not just the lockfile: see the alerts-ffi-parity job.
+          key: cargo-cdylib-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+      - name: Build nocturne_alerts cdylib
+        if: env.BUILD_TESTS == 'true'
+        working-directory: crates
+        run: cargo build --release -p nocturne-alerts-ffi
       # No job here builds nocturne.sln — CI builds named projects only (see Build below) — so this
       # is the only thing gating solution membership, and it has to hold in both directions.
       # scripts/Shared is the deliberate omission: scripts/ consumes it through `#:project`.
@@ -146,7 +179,7 @@ jobs:
           dotnet sln "$sln" add --solution-folder Unit tests/Unit/*/*.csproj
           dotnet sln "$sln" add --solution-folder Integration tests/Integration/*/*.csproj
           dotnet sln "$sln" add --solution-folder Parity \
-            tests/Parity/Nocturne.Alerts.ParityCorpus.Generator/Nocturne.Alerts.ParityCorpus.Generator.csproj
+            tests/Parity/Nocturne.Alerts.Corpus/Nocturne.Alerts.Corpus.csproj
           dotnet build "$sln" -p:GenerateNSwagClient=true
           missing=0
           for project in tests/Unit/*/*.csproj tests/Integration/*/*.csproj tests/Parity/*/*.csproj; do
@@ -207,8 +240,11 @@ jobs:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-dotnet
       - uses: ./.github/actions/dotnet-build-output
-      # One solution of the unit test projects, so the assemblies are tested concurrently.
+      # One solution of the unit test projects, so the assemblies are tested concurrently. The build
+      # job packed the nocturne_alerts cdylib into every output, so a native test may not skip.
       - name: Test
+        env:
+          NOCTURNE_ALERTS_REQUIRE_NATIVE: "1"
         run: |
           set -euo pipefail
           sln="$RUNNER_TEMP/unit/unit.slnx"
@@ -234,39 +270,18 @@ jobs:
           name: unit-trx
           path: "**/*.trx"
 
-  # The alert-engine golden corpus (tests/Parity/AlertEngineCorpus) is the normative
-  # spec for the Rust port of the leaf/node evaluation engine. While the C# engine is
-  # authoritative, any behavioural change to the evaluators/tracker must regenerate the
-  # corpus deliberately — this job fails if the committed corpus no longer matches what
-  # the engine produces.
-  alert-corpus-check:
-    needs: [changes, build]
-    if: needs.changes.outputs.dotnet == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v5
-      - uses: ./.github/actions/setup-dotnet
-      - uses: ./.github/actions/dotnet-build-output
-      - name: Verify alert engine corpus is current
-        run: |
-          dotnet run --no-build \
-            --project tests/Parity/Nocturne.Alerts.ParityCorpus.Generator -- --check
-
-  # Rust alert engine FFI: lints + tests the crates workspace, builds the
-  # nocturne_alerts cdylib, then runs the three-way parity suite (C# engine vs
-  # committed corpus vs Rust engine over the C ABI) on the build job's assemblies, which find
-  # the cdylib through NOCTURNE_ALERTS_NATIVE_DIR. NOCTURNE_ALERTS_REQUIRE_NATIVE
-  # turns silent skips (native lib not found) into a hard failure so the parity
-  # theories can never quietly stop running here.
+  # Rust alert engine: tests, lints and formats the crates workspace, including the golden corpus
+  # (tests/Parity/AlertEngineCorpus), the engine's normative spec. The corpus is frozen: a missing
+  # snapshot fails here, and NOCTURNE_CORPUS_BLESS=1 writes a new scenario's snapshot locally for
+  # review. The FFI parity suite (Nocturne.Alerts.Native.Tests: committed corpus vs Rust over the
+  # C ABI) runs in the unit job, on the cdylib the build job packed.
   alerts-ffi-parity:
-    needs: [changes, build]
+    needs: changes
     if: needs.changes.outputs.crates == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/setup-dotnet
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           toolchain: stable
@@ -280,59 +295,53 @@ jobs:
             crates/target
           # Sources, not just the lockfile: actions/cache restores crates/target with
           # mtimes newer than the checked-out sources, and cargo's path-package fingerprint
-          # is mtime-based, so a lockfile-only key lets a source change reuse a stale build.
-          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+          # is mtime-based, so a lockfile-only key lets a source change reuse a stale build. For
+          # the same reason there are no restore-keys. Only the crates this job builds are hashed.
+          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/nocturne-alerts-*/**/*.rs', 'crates/**/Cargo.toml') }}
       # --all-features compiles the uniffi surface Prelude ships; the default-feature clippy
-      # covers the cdylib the backend loads.
+      # covers the cdylib the backend loads. The watercolour crates have their own job.
       - name: Rust tests, clippy, fmt
         working-directory: crates
         run: |
-          cargo test --workspace --all-features
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo clippy --workspace --all-targets --all-features -- -D warnings
-          cargo fmt --check
-      - name: Build nocturne_alerts cdylib
+          alerts=(--workspace --exclude nocturne-watercolour-core
+            --exclude nocturne-watercolour-infra --exclude nocturne-watercolour-wasm)
+          cargo test "${alerts[@]}" --all-features
+          cargo clippy "${alerts[@]}" --all-targets -- -D warnings
+          cargo clippy "${alerts[@]}" --all-targets --all-features -- -D warnings
+          cargo fmt --check -p nocturne-alerts-core -p nocturne-alerts-ffi
+
+  # The watercolour engine crates, apart from the alert engine's job: wgpu/naga and the
+  # catalogue's CPU render sweep are most of this job's time. The GPU tests skip on a runner
+  # without a hardware device. rust-cache keeps only dependencies, so a partial restore never
+  # hands cargo a workspace build whose mtimes outrank the checked-out sources. The reveal
+  # sweep ignored here runs in watercolour-reveal-sweep.yml.
+  watercolour:
+    needs: changes
+    if: needs.changes.outputs.watercolour == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
         working-directory: crates
-        run: cargo build --release -p nocturne-alerts-ffi
-      - uses: ./.github/actions/dotnet-build-output
-      - name: Three-way parity tests (C# engine vs corpus vs Rust FFI)
-        env:
-          NOCTURNE_ALERTS_NATIVE_DIR: ${{ github.workspace }}/crates/target/release
-          NOCTURNE_ALERTS_REQUIRE_NATIVE: "1"
-        run: |
-          dotnet test tests/Unit/Nocturne.Alerts.Native.Tests/Nocturne.Alerts.Native.Tests.csproj \
-            --no-build \
-            --logger "trx;LogFileName=alerts-ffi-parity.trx"
-      # Engine-seam tests (IAlertEvaluationEngine) plus every API test class holding a
-      # [NativeFact]/[NativeTheory], which the unit job skips for want of the cdylib. The
-      # classes are found by grep, each in a file named after it, so a new native test
-      # cannot be left out; NOCTURNE_ALERTS_REQUIRE_NATIVE turns silent skips into failures.
-      - name: Engine seam and native-backed API tests
-        env:
-          NOCTURNE_ALERTS_NATIVE_DIR: ${{ github.workspace }}/crates/target/release
-          NOCTURNE_ALERTS_REQUIRE_NATIVE: "1"
-          Alerts__Engine: rust
-        run: |
-          set -euo pipefail
-          filter="FullyQualifiedName~Services.Alerts.Engines"
-          while IFS= read -r file; do
-            class=$(basename "$file" .cs)
-            if ! grep -qE "class ${class}\b" "$file"; then
-              echo "::error file=$file::holds native tests but declares no class named $class"
-              exit 1
-            fi
-            filter="$filter|FullyQualifiedName~.${class}."
-          done < <(grep -rlE '\[Native(Fact|Theory)' tests/Unit/Nocturne.API.Tests --include='*.cs')
-          echo "Filter: $filter"
-          dotnet test tests/Unit/Nocturne.API.Tests/Nocturne.API.Tests.csproj \
-            --no-build \
-            --filter "$filter" \
-            --logger "trx;LogFileName=alerts-engine-seam.trx"
-      - uses: actions/upload-artifact@v6
-        if: failure()
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
-          name: alerts-ffi-parity-trx
-          path: "**/*.trx"
+          toolchain: stable
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates -> target
+          key: watercolour
+      - name: Format
+        run: cargo fmt --check -p nocturne-watercolour-core -p nocturne-watercolour-infra -p nocturne-watercolour-wasm
+      - name: Clippy
+        if: ${{ !cancelled() }}
+        run: cargo clippy -p nocturne-watercolour-core -p nocturne-watercolour-infra -p nocturne-watercolour-wasm --all-targets --locked -- -D warnings
+      - name: Tests
+        if: ${{ !cancelled() }}
+        run: cargo test -p nocturne-watercolour-core -p nocturne-watercolour-infra -p nocturne-watercolour-wasm --locked
 
   # The desktop Companion's Tauri crate. Windows only: tauri-winrt-notification's `windows`
   # dependency does not compile elsewhere (see desktop-release.yml). generate_context! embeds
@@ -455,6 +464,32 @@ jobs:
           path: src/Web/packages/*/coverage/cobertura-coverage.xml
           if-no-files-found: ignore
           retention-days: 7
+
+  # Lints every user-facing string against the ASD-STE100 rules in .vale/styles/Nocturne (the
+  # simple-english skill). wuchale extracts the strings from source into locales/en.po first, so the
+  # check reads this commit's strings, not the catalog the sync job last committed. Errors fail.
+  ui-copy:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Pinned so CI and a workstation run the same rule engine.
+      VALE_VERSION: 3.24.0
+    defaults:
+      run:
+        working-directory: src/Web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-pnpm
+        with:
+          install: src/Web
+      - name: Install Vale
+        run: |
+          curl -sSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz"             | sudo tar -xz -C /usr/local/bin vale
+          vale --version
+      - name: Lint UI copy
+        run: pnpm run lint:copy --min=error
 
   integration-db:
     needs: [changes, build]
@@ -653,12 +688,21 @@ jobs:
         env:
           E2E_SKIP_BUILD: "1"
         run: pnpm e2e
+      # A native fault the runtime does not handle is logged by the kernel with the faulting
+      # library and offset ("segfault at ... in libfoo.so"); the OOM killer logs here too.
+      # The container's user owns the crash dumps, which the upload has to read.
+      - name: Collect crash diagnostics
+        if: failure()
+        run: |
+          sudo dmesg --ctime | grep -iE 'segfault|general protection|traps:|oom|killed process' || true
+          if [ -d e2e/crash-dumps ]; then sudo chmod -R a+rX e2e/crash-dumps; fi
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: e2e-artifacts
           path: |
             e2e/docker-compose-logs.txt
+            e2e/crash-dumps/
             e2e/playwright-report/
             e2e/test-results/
           if-no-files-found: ignore
@@ -687,11 +731,19 @@ jobs:
         env:
           E2E_SKIP_BUILD: "1"
         run: node scripts/migration-upgrade.ts
+      # As in the e2e job.
+      - name: Collect crash diagnostics
+        if: failure()
+        run: |
+          sudo dmesg --ctime | grep -iE 'segfault|general protection|traps:|oom|killed process' || true
+          if [ -d e2e/crash-dumps ]; then sudo chmod -R a+rX e2e/crash-dumps; fi
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: migration-upgrade-logs
-          path: e2e/docker-compose-logs.txt
+          path: |
+            e2e/docker-compose-logs.txt
+            e2e/crash-dumps/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -721,6 +773,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
+          check-latest: true
       - uses: actions/download-artifact@v5
         with:
           pattern: coverage-*
@@ -818,11 +871,12 @@ jobs:
       - changes
       - build
       - unit
-      - alert-corpus-check
       - alerts-ffi-parity
+      - watercolour
       - desktop-rust
       - web-static
       - web-app-tests
+      - ui-copy
       - integration-db
       - integration-api
       - images

@@ -155,6 +155,12 @@ public class Entry : ProcessableDocumentBase
     public double? Sgv { get; set; }
 
     /// <summary>
+    /// The glucose value in mg/dL: <see cref="Mgdl"/> when set, else <see cref="Sgv"/>, else 0. Mgdl wins
+    /// because it is the canonical mg/dL value and <c>sgv</c> is the legacy wire field.
+    /// </summary>
+    public double GlucoseMgdl() => Mgdl != 0 ? Mgdl : Sgv ?? 0;
+
+    /// <summary>
     /// Direction of glucose trend as string for legacy compatibility
     /// Common values: Flat, SingleUp, DoubleUp, SingleDown, DoubleDown, FortyFiveUp, FortyFiveDown
     /// </summary>

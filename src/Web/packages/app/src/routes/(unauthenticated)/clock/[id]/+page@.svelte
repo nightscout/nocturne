@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { onMount } from "svelte";
   import { setClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
   import { PublicClockStore } from "$lib/stores/public-clock-store.svelte";
@@ -13,6 +14,7 @@
   import ClockIcon from "@lucide/svelte/icons/clock";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";
+  import ClockAlertBand from "$lib/components/clock/ClockAlertBand.svelte";
   import { formatClockTime } from "$lib/components/clock/clock-time";
   import {
     isClockReadingStale,
@@ -23,6 +25,10 @@
 
   // The route param identifies the clock and is the capability for its glucose.
   const id = page.params.id ?? "";
+
+  const canManage = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "sharing.manage"),
+  );
 
   // `?embed=1` hosts this page inside the desktop companion's floating window, where the in-app
   // navigation (which links back to the authenticated /clock area) doesn't apply.
@@ -98,6 +104,11 @@
 
   // Show time based on configuration
   const showTime = $derived(clockConfig?.settings?.alwaysShowTime || isStale);
+
+  const showAlerts = $derived(clockConfig?.settings?.showAlerts ?? false);
+  $effect(() => {
+    clockStore.watchAlerts(showAlerts);
+  });
 </script>
 
 <svelte:head>
@@ -118,7 +129,7 @@
     <p class="text-lg">{error}</p>
     <Button variant="outline" onclick={() => goto(resolve("/clock"))}>
       <ArrowLeft class="mr-2 size-4" />
-      Back to Clock Faces
+      Back to clock faces
     </Button>
   </div>
 {:else if clockConfig}
@@ -140,17 +151,19 @@
     <div class="flex items-center gap-2">
       {#if demoMode}
         <Badge variant="overlay">
-          Demo Mode
+          Demo mode
         </Badge>
       {/if}
-      <Button
-        variant="overlay"
-        size="sm"
-        onclick={() => goto(resolve("/(authenticated)/clock/config/[id]", { id }))}
-      >
-        <Settings class="size-4" />
-        Edit
-      </Button>
+      {#if canManage}
+        <Button
+          variant="overlay"
+          size="sm"
+          onclick={() => goto(resolve("/(authenticated)/clock/config/[id]", { id }))}
+        >
+          <Settings class="size-4" />
+          Edit
+        </Button>
+      {/if}
     </div>
   </div>
   {/if}
@@ -162,6 +175,14 @@
     showCharts={false}
     loadTrackerDefinitions={false}
     class="fixed inset-0 h-screen w-screen transition-colors duration-500"
+  />
+
+  <ClockAlertBand
+    alerts={clockStore.alerts}
+    now={currentTime.getTime()}
+    onSeen={clockConfig.settings?.allowMarkSeen
+      ? (excursionId) => clockStore.markSeen(excursionId)
+      : undefined}
   />
 
   {#if !(clockConfig.settings?.screensaverMode ?? false)}

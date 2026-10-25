@@ -59,6 +59,12 @@ public static class GlucoseConstants
     public const double CoefficientOfVariationTargetPercent = 36;
 
     /// <summary>
+    /// Coefficient of variation in percent above which glucose counts as variable. Between this and
+    /// <see cref="CoefficientOfVariationTargetPercent"/> it counts as moderate.
+    /// </summary>
+    public const double CoefficientOfVariationVariablePercent = 50;
+
+    /// <summary>
     /// Tile fill per glucose status as <c>RRGGBB</c>, for the native surfaces that paint a reading
     /// directly — the desktop tray tile and the taskbar sparkline — instead of resolving the web
     /// theme's status tokens.

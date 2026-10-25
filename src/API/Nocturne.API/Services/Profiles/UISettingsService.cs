@@ -1,6 +1,6 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
@@ -21,9 +21,6 @@ namespace Nocturne.API.Services.Profiles;
 /// Anything a read serves but no tenant owns gets no row at all, per
 /// <see cref="UISettingsSection.OmittedProperties"/>, so a client that sends it back cannot persist
 /// it.
-/// <c>ui:settings:complete</c>, written by earlier versions, is read-only: it is the fallback for a
-/// section that has no row of its own, which is how tenants whose settings predate this layout keep
-/// reading correctly.
 /// </remarks>
 /// <seealso cref="IUISettingsService"/>
 public class UISettingsService : IUISettingsService
@@ -31,8 +28,7 @@ public class UISettingsService : IUISettingsService
     private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<UISettingsService> _logger;
 
-    private const string SettingsKeyPrefix = "ui:settings:";
-    private const string LegacyAggregateKey = "ui:settings:complete";
+    private const string SettingsKeyPrefix = SettingsKeys.UiSettingsPrefix;
     private const string AlarmConfigurationKey = "ui:settings:notifications:alarms";
     private const string AlarmConfigurationNotes = "xDrip+-style alarm profiles configuration";
 
@@ -57,15 +53,11 @@ public class UISettingsService : IUISettingsService
         try
         {
             var stored = await ReadAllAsync(db, cancellationToken);
-            var legacy = Value(stored, LegacyAggregateKey);
-            var legacyAggregate = legacy == null ? null : JsonNode.Parse(legacy) as JsonObject;
             var settings = new UISettingsConfiguration();
 
             foreach (var section in UISettingsSections.All)
             {
-                var value =
-                    Deserialize(Value(stored, GetSectionKey(section.Name)), section.Type)
-                    ?? legacyAggregate?[section.Name]?.Deserialize(section.Type, JsonOptions);
+                var value = Deserialize(Value(stored, GetSectionKey(section.Name)), section.Type);
 
                 if (value != null)
                 {
@@ -73,10 +65,11 @@ public class UISettingsService : IUISettingsService
                 }
             }
 
-            settings.Notifications.AlarmConfiguration =
+            var notifications = settings.Notifications ??= new NotificationSettings();
+            notifications.AlarmConfiguration =
                 Deserialize(Value(stored, AlarmConfigurationKey), typeof(UserAlarmConfiguration))
                     as UserAlarmConfiguration
-                ?? settings.Notifications.AlarmConfiguration;
+                ?? notifications.AlarmConfiguration;
 
             settings.Features.Widgets = WidgetCatalog.MainSectionsOf(settings.Features.Widgets);
 

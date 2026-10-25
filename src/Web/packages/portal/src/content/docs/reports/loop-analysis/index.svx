@@ -1,0 +1,217 @@
+---
+title: Loop Analysis
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Loop Analysis
+
+An automated insulin delivery system (Loop, AAPS, Trio, iAPS or OpenAPS) makes
+small changes to your insulin all day. **Loop Analysis** shows these changes,
+when they occurred, and what occurred after them. Use it to find answers to
+questions such as these:
+
+- _"Does my loop always add insulin at 3 in the morning?"_
+- _"What does my glucose do after breakfast?"_
+- _"How frequently does the loop not operate?"_
+
+To open it, go to **Reports > Loop Analysis**. Anyone whose access includes
+reports can open it. This includes members, guest links and apps that you
+authorise. A public share link shows the pages, but it cannot show the figures,
+because the share does not get the time zone.
+
+<Callout type="warning" title="Observations, not advice">
+
+  All of Loop Analysis is an observation of your own data. Each figure shows the
+  number of days or events that it uses. No figure is an instruction. Speak to
+  your diabetes care team before you change a setting.
+
+</Callout>
+
+## The five pages
+
+Loop Analysis has five pages. The page switcher under the report header links
+the pages. When you go to a different page, the range and the filters stay the
+same.
+
+| Page | The question that it answers |
+|------|------------------------------|
+| [Daily profile](/docs/reports/loop-analysis/daily-profile) | What does a usual day look like, hour by hour? When does the loop add or remove insulin? |
+| [Meals and events](/docs/reports/loop-analysis/meals-and-events) | What occurs after a meal, a correction, a rise with no carbs logged, or the start of exercise or a new sensor? |
+| [Prediction accuracy](/docs/reports/loop-analysis/prediction-accuracy) | How close are the predictions of the loop to the readings that followed them? |
+| [Loop health](/docs/reports/loop-analysis/loop-health) | How much of the time was the loop closed, and how frequently did it reach its limits? |
+| [Settings evidence](/docs/reports/loop-analysis/settings-evidence) | What does your data show about your basal rates, insulin sensitivity (ISF) and carb ratio? |
+
+## The Filters panel
+
+To change the range and the filters, open the **Filters** panel of the reports.
+The Loop Analysis filters are under the date range.
+
+<Screenshot id="loop-analysis-filter-bar" />
+
+- The date range: the days that the report uses. The maximum is 90 days. For a
+  longer range, the report uses only the most recent 90 days, and it tells you
+  this.
+- **Compare with**: a second period to show with the first. Select
+  **Previous period** for the period immediately before, or **Custom range** to
+  select the dates. The charts show the comparison as dashed outlines. The Loop
+  health tiles and the chart readouts show the compared value.
+- **Profile**: use only the time when one profile was active.
+- **Days of the week**: use only some days of the week, for example weekdays.
+- **Exclude the time of**: remove the time of overrides, temporary targets,
+  exercise, illness, or time not in closed loop. Illness and time not in closed
+  loop are removed by default. The report removes only that time. It does not
+  remove the full day.
+
+**Time not in closed loop** uses the dates when each of your pumps was in use.
+These dates are days in your time zone, from local midnight to local midnight.
+
+The report always removes glucose readings that your data marks as not
+reliable. Examples are compression lows (a false low when you lie on your
+sensor) and sensor errors.
+
+### Ranges that include today
+
+A range never goes after the current time. If the range includes today, the
+report uses today only up to now. When you compare with the previous period,
+the comparison also stops at the same time of day on its last day.
+
+### Time zone
+
+Loop Analysis aligns days by the local time of day. It needs the time zone of
+your data to do this. If it cannot get the time zone, each page shows
+**This report needs a time zone** and the cause:
+
+- **The profile settings do not have a time zone.** The owner of this data can
+  set a time zone in the profile settings.
+- **This server does not recognise the time zone in the profile settings.** The
+  owner of this data can correct the time zone in the profile settings.
+- **The time zone of this data did not load.** To try again, reload the report
+  later.
+- **A shared link does not show the time zone of this data.**
+
+## Net loop correction
+
+Many figures use **net loop correction**. This is the insulin that your loop
+added above your scheduled basal, or removed from it. It is the sum of two
+decisions of the algorithm:
+
+- **Temp basals that the algorithm set**, measured against your scheduled
+  basal. The schedule is adjusted for an override that changes your insulin
+  needs. A temp above the schedule adds insulin. A temp below the schedule
+  (also a zero temp) removes insulin.
+- **Automatic boluses** (SMBs in AAPS, Trio, iAPS and OpenAPS, or the automatic
+  boluses of Loop).
+
+Many systems make most of their corrections with automatic boluses. So the
+figure includes them. If it did not include them, it would show only a part of
+what the loop does.
+
+<Screenshot id="loop-analysis-net-correction" />
+
+Some insulin changes are not decisions of the algorithm. Net loop correction
+does not include them. The Daily profile can show them as separate lines:
+
+- temp basals that you set manually;
+- pump suspends;
+- delivery that the report calculated from the schedule (**Inferred**).
+
+### Which temp basals the loop set
+
+Trio, AAPS and OpenAPS do not record whether a temp basal came from the loop or
+from you. Nocturne compares each temp with the decisions that your loop uploaded
+near it:
+
+- If the loop asked for the same rate within 5 minutes, the temp is from the
+  algorithm.
+- If the loop asked only for different rates, the temp is manual.
+- If the loop uploaded no decisions near the temp, the temp keeps the origin
+  that its uploader gives. This is the algorithm for a loop app, and manual for
+  other sources.
+
+The temp and the decision can come from devices with different names. For
+example, AAPS can upload through Nightscout with no device name, and Trio
+through Tidepool. Nocturne then uses the decisions of the one loop device that
+uploaded near the temp. If two or more loop devices uploaded near the temp, the
+temp keeps the origin that its uploader gives.
+
+### Delivered basal
+
+The report calculates delivered basal from the temp basal records of the pump.
+
+- **Two sources for one pump.** Two sources can record the same pump, for
+  example a loop and a Tidepool copy of it. The records of the loop are used
+  first. The records of the other source fill only the time that the loop did
+  not record.
+- **A cancelled temp.** When a temp is cancelled, basal goes back to the
+  schedule. The report uses the schedule for this time only when the rule for
+  missing records applies.
+- **Missing records.** If there is no record of delivery, the basal for that
+  time is not known. The report uses the schedule only for a gap of 3 hours or
+  less, with records on the two sides. A longer gap stays unknown.
+
+## Read the charts
+
+Most charts in Loop Analysis show a shaded band, not a single line.
+
+- The **line** in the middle is the median. Half of your days (or readings) were
+  above it and half were below it.
+- The **darker band** shows the middle half (25th to 75th percentile).
+- The **lighter band** shows most of your data (10th to 90th percentile).
+- **n** is the number of days, readings or events that a figure uses.
+
+The report measures two types of figure differently:
+
+- For **glucose**, the report puts all the readings from all the days into each
+  five-minute period. The AGP report does the same, so the bands agree with AGP.
+  For glucose, n counts readings.
+- **Rates** (basal, net loop correction, insulin on board and carbs on board)
+  are calculated for each day first. Then the report compares the days. For
+  rates, n counts days. A day counts in a period only when data covers half of the
+  period or more.
+
+If a figure uses **fewer than 5 days**, the chart shows it faded. There is not
+enough data to show a pattern.
+
+The report shows missing data as missing, never as zero. A zero temp is a real
+zero, and it always counts.
+
+### When parts are hidden
+
+Your access can include only some types of data. Then some parts of the report
+show **Hidden: your access does not include this data**. Each part needs access
+to the type of data that it uses: glucose, treatments (insulin and carbs),
+devices (the records of the loop and the pump) or therapy settings (your
+profile). Filters that you cannot use are grey, and they show the access that
+they need.
+
+If you can see only the **last 24 hours**, the report shows only those 24 hours
+for all ranges. It does not compare ranges. Settings evidence does not show. The
+report tells you this.
+
+## How it is different from the Nightscout Loopalyzer
+
+Loop Analysis replaces the Loopalyzer report of Nightscout. It corrects the
+problems that made Loopalyzer difficult to trust:
+
+- **Zeros count.** Loopalyzer did not use zeros in its averages. So the loop
+  correction looked larger than it was.
+- **Automatic boluses count.** Loopalyzer showed only temp basals. If your loop
+  corrects with SMBs, Loopalyzer showed only a part of what it did.
+- **Daylight saving time is correct.** Loopalyzer did not use days that were not
+  exactly 24 hours long. After a change, it showed glucose with an error of one
+  hour.
+- **Readings exactly on a five-minute mark stay in.** One missing basal record
+  does not move all the times after it.
+- **The spread and n are shown**, not only an average.
+- **Totals**: insulin each day, with basal, automatic boluses and manual boluses.
+- **A maximum of 90 days**, not 14.
+- **Meals align correctly.** Loopalyzer moved the time from the first meal in the
+  data, not from the first meal in the day. It also lost data that moved past
+  midnight.
+- **You can remove time**: overrides, temporary targets, exercise, illness and
+  time not in closed loop.
+- **One method for Loop, AAPS, Trio, iAPS and OpenAPS.**

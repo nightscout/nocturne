@@ -100,6 +100,7 @@
 
   const maxBasalRate = $derived(data.maxBasalRate > 0 ? data.maxBasalRate : 2.5);
   const maxIob = $derived(data.maxIob > 0 ? data.maxIob : 3);
+  const minIob = $derived(Math.min(data.minIob ?? 0, 0));
   const glucoseYMax = $derived(data.thresholds.glucoseYMax > 0 ? data.thresholds.glucoseYMax : 300);
   const highThreshold = $derived(data.thresholds.high);
   const lowThreshold = $derived(data.thresholds.low);
@@ -488,17 +489,18 @@
         y="value"
         xScale={scaleTime()}
         xDomain={xDomain}
-        yDomain={[0, maxIob]}
+        yDomain={[minIob, maxIob]}
         padding={{ left: 48, top: 4, bottom: 0, right: 48 }}
       >
         {#snippet children({ context })}
           {@const trackHeight = context.height}
           {@const trackTop = 0}
           {@const trackBottom = trackHeight}
-          {@const pixelToGlucoseDomain = (py: number) => maxIob * (1 - py / trackHeight)}
-          {@const iobScale = (v: number) => pixelToGlucoseDomain(trackBottom - (v / maxIob) * trackHeight)}
-          {@const iobZero = pixelToGlucoseDomain(trackBottom)}
-          {@const iobAxisScale = scaleLinear().domain([0, maxIob]).range([trackBottom, trackTop])}
+          {@const iobSpan = maxIob - minIob}
+          {@const pixelToGlucoseDomain = (py: number) => minIob + iobSpan * (1 - py / trackHeight)}
+          {@const iobScale = (v: number) => pixelToGlucoseDomain(trackBottom - ((v - minIob) / iobSpan) * trackHeight)}
+          {@const iobZero = iobScale(0)}
+          {@const iobAxisScale = scaleLinear().domain([minIob, maxIob]).range([trackBottom, trackTop])}
           <Svg>
             <IobCobTrack
               {iobData}

@@ -889,7 +889,7 @@ public class DeduplicationService : IDeduplicationService
     internal static IQueryable<Guid> MisplacedStateSpanPrimaries(NocturneDbContext db, DateTime startedAfter)
     {
         var key = RecordTypeKeys.Key(RecordType.StateSpan);
-        var startedAfterMills = new DateTimeOffset(startedAfter, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var startedAfterMills = startedAfter.ToMills();
         var withOpenMember = db.StateSpans
             .Where(s => s.EndTimestamp == null)
             .Join(db.LinkedRecords.Where(m => m.RecordType == key),
@@ -2018,7 +2018,7 @@ public class DeduplicationService : IDeduplicationService
                     CanonicalId = Guid.CreateVersion7(),
                     RecordType = key,
                     RecordId = recordId(e),
-                    SourceTimestamp = new DateTimeOffset(eventTime(e), TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    SourceTimestamp = eventTime(e).ToMills(),
                     DataSource = dataSource(e) ?? DeduplicationInput.UnknownDataSource,
                     IsPrimary = true,
                 }).ToList();
@@ -2029,7 +2029,7 @@ public class DeduplicationService : IDeduplicationService
                 timestamp,
                 e => new DeduplicationInput(
                     recordId(e),
-                    new DateTimeOffset(eventTime(e), TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    eventTime(e).ToMills(),
                     dataSource(e) ?? DeduplicationInput.UnknownDataSource,
                     criteria(e)),
                 name, totalRecords, startOffset, progress, ct));

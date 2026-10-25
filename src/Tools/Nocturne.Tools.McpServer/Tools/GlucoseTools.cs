@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
-using Nocturne.Core.Constants;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Tools.McpServer.Tools;
 
@@ -88,14 +88,13 @@ public static class GlucoseTools
             if (!doc.RootElement.TryGetProperty("data", out var dataElement))
                 return "No glucose data returned";
 
-            var values = new List<double>();
-            foreach (var item in dataElement.EnumerateArray())
-            {
-                if (item.TryGetProperty("mgdl", out var mgdl) && mgdl.TryGetDouble(out var v) && v > 0)
-                    values.Add(v);
-                else if (item.TryGetProperty("value", out var val) && val.TryGetDouble(out var v2) && v2 > 0)
-                    values.Add(v2);
-            }
+            var readings = dataElement
+                .EnumerateArray()
+                .Select(item => JsonSerializer.Deserialize<SensorGlucose>(item.GetRawText(), JsonSerializerOptions.Web))
+                .OfType<SensorGlucose>()
+                .Where(reading => reading.Mgdl > 0)
+                .ToList();
+            var values = readings.Select(reading => reading.Mgdl).ToList();
 
             if (values.Count == 0)
                 return $"No valid glucose values found in the last {hours} hours";
@@ -107,8 +106,7 @@ public static class GlucoseTools
             var variance = sorted.Select(x => Math.Pow(x - mean, 2)).Average();
             var stdDev = Math.Sqrt(variance);
 
-            const double targetLow = GlucoseConstants.TargetBottomMgdl;
-            const double targetHigh = GlucoseConstants.TargetTopMgdl;
+            var timeInRange = await ToolBase.TimeInRangeAsync(ToolBase.Api, readings);
 
             var stats = new
             {
@@ -120,22 +118,8 @@ public static class GlucoseTools
                 Max = sorted[^1],
                 StandardDeviation = Math.Round(stdDev, 1),
                 CoefficientOfVariation = Math.Round(stdDev / mean * 100, 1),
-                TimeInRange = new
-                {
-                    VeryLow = sorted.Count(g => g < 54),
-                    Low = sorted.Count(g => g >= 54 && g < targetLow),
-                    InRange = sorted.Count(g => g >= targetLow && g <= targetHigh),
-                    High = sorted.Count(g => g > targetHigh && g <= 250),
-                    VeryHigh = sorted.Count(g => g > 250),
-                },
-                TimeInRangePercent = new
-                {
-                    VeryLow = Math.Round((double)sorted.Count(g => g < 54) / values.Count * 100, 1),
-                    Low = Math.Round((double)sorted.Count(g => g >= 54 && g < targetLow) / values.Count * 100, 1),
-                    InRange = Math.Round((double)sorted.Count(g => g >= targetLow && g <= targetHigh) / values.Count * 100, 1),
-                    High = Math.Round((double)sorted.Count(g => g > targetHigh && g <= 250) / values.Count * 100, 1),
-                    VeryHigh = Math.Round((double)sorted.Count(g => g > 250) / values.Count * 100, 1),
-                },
+                TimeInRangeMinutes = timeInRange.Minutes,
+                TimeInRangePercent = timeInRange.Percent,
             };
 
             return ToolBase.Serialize(stats);

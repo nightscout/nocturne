@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -43,7 +44,7 @@ public class HistoryPageTests : IDisposable
         first.Select(e => e.Id).Should().BeEquivalentTo(ids);
         _logger.Messages.Should().ContainSingle(m => m.Level == LogLevel.Warning && m.Text.Contains("millisecond"));
 
-        var cursor = first.Max(e => HistoryPage.ToMilliseconds(e.Timestamp));
+        var cursor = first.Max(e => e.Timestamp.ToMills());
         var second = await PageAsync(cursor, limit: 3);
 
         second.Should().BeEmpty();
@@ -112,7 +113,7 @@ public class HistoryPageTests : IDisposable
                 break;
 
             delivered.AddRange(rows.Select(r => r.Id));
-            cursor = rows.Max(e => HistoryPage.ToMilliseconds(e.Timestamp));
+            cursor = rows.Max(e => e.Timestamp.ToMills());
         }
 
         return delivered;
@@ -137,7 +138,7 @@ public class HistoryPageTests : IDisposable
         await _context.SaveChangesAsync();
     }
 
-    private static long CursorMills(DateTime value) => HistoryPage.ToMilliseconds(value);
+    private static long CursorMills(DateTime value) => value.ToMills();
 
     private sealed class RecordingLogger : ILogger
     {

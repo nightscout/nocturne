@@ -40,6 +40,12 @@ public class ShareLinkDto
     /// </summary>
     public List<string> Scopes { get; set; } = [];
 
+    /// <summary>
+    /// Every category a public link may share: <see cref="Nocturne.Core.Models.Authorization.Scope.PublicShareScopes"/>.
+    /// </summary>
+    public List<string> ShareableScopes { get; set; } =
+        [.. Nocturne.Core.Models.Authorization.Scope.PublicShareScopes.Order(StringComparer.Ordinal)];
+
     /// <summary>When the share link was last accessed, or null if never (or not yet recorded).</summary>
     public DateTime? LastAccessedAt { get; set; }
 }

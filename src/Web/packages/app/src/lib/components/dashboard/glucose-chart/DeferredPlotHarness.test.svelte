@@ -3,6 +3,7 @@
   // turns on `deferDrawing` alone.
   import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { transformChartData } from "$lib/utils/chart-data-transform";
+  import type { MealPeriod } from "$lib/api";
   import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
   import GlucoseChartCard from "./GlucoseChartCard.svelte";
 
@@ -12,6 +13,7 @@
     /** Narrower than a phone, so the header's controls take their own line. */
     narrow?: boolean;
     glucoseUnits?: GlucoseUnits;
+    carbMarkers?: { time: number; carbs: number; mealPeriod?: MealPeriod }[];
     /** Hands the test the setter for `deferDrawing`. */
     onready: (setDeferred: (deferred: boolean) => void) => void;
   }
@@ -21,6 +23,7 @@
     showPredictions = false,
     narrow = false,
     glucoseUnits,
+    carbMarkers = [],
     onready,
   }: Props = $props();
 
@@ -34,11 +37,13 @@
   });
 
   const now = Date.now();
+  // svelte-ignore state_referenced_locally
   const initialChartData = transformChartData({
     glucoseData: [
       { time: now - 10 * 60 * 1000, sgv: 110 },
       { time: now - 5 * 60 * 1000, sgv: 120 },
     ],
+    carbMarkers,
   });
 
   // svelte-ignore state_referenced_locally

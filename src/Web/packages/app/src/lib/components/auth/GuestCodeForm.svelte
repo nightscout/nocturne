@@ -15,7 +15,7 @@
   let code = $state(untrack(() => initialCode));
 
   const submission = useSubmission({
-    fallback: "We couldn't check that code just now. Please try again.",
+    fallback: "We could not check that code. Try again.",
   });
 
   const pending = $derived(activateGuestCode.pending > 0);
@@ -63,7 +63,7 @@
       Verifying...
     {:else}
       <KeyRound class="mr-2 h-5 w-5" />
-      Access Data
+      Access data
     {/if}
   </Button>
 </form>

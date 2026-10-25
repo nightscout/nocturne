@@ -30,7 +30,7 @@ public sealed class GoogleHealthConnectorService(
     TimeProvider? timeProvider = null)
     : BaseConnectorService<GoogleHealthConnectorConfiguration>(httpClient, serverResolver, logger, publisher)
 {
-    private const string ConnectorName = "GoogleHealth";
+    public const string ConnectorName = "GoogleHealth";
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
 
     protected override string ConnectorSource => DataSources.GoogleHealthConnector;

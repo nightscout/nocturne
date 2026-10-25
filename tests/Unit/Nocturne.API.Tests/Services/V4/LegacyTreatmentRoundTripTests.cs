@@ -90,7 +90,6 @@ public class LegacyTreatmentRoundTripTests : IDisposable
             foods.Object,
             devices.Object,
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IProfileDecomposer>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),

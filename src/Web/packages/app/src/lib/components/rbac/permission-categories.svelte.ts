@@ -29,15 +29,15 @@ export function levelsOf(cat: ScopeCategory): AccessLevel[] {
   const read = cat.read ? [cat.read] : [];
   const levels = [none, { value: "read", label: "Read", atoms: read }];
   if (cat.readwrite) {
-    levels.push({ value: "readwrite", label: "Read & Write", atoms: [...read, cat.readwrite] });
+    levels.push({ value: "readwrite", label: "Read & write", atoms: [...read, cat.readwrite] });
   }
   return levels;
 }
 
 function groupHeaders(): [ScopeCategoryGroup, string][] {
   return [
-    ["record", "Patient Record"],
-    ["therapy", "Therapy Settings"],
+    ["record", "Patient record"],
+    ["therapy", "Therapy settings"],
     ["account", "Account"],
     ["administration", "Administration"],
     ["audit", "Audit"],

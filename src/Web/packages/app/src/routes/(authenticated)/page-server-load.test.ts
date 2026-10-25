@@ -12,6 +12,19 @@ function runLoad(getDashboardChartData: ReturnType<typeof vi.fn>) {
 }
 
 describe("dashboard page load", () => {
+  it("asks only for the reachable tenants when a tenantless host picks a landing", async () => {
+    const getMyTenants = vi.fn().mockResolvedValue([{ slug: "sleepy", displayName: "Sleepy" }]);
+
+    const landing = load({
+      locals: { apiClient: { myTenants: { getMyTenants } } },
+      request: new Request("https://nocturne.run/"),
+      parent: async () => ({ tenantless: true, baseDomain: "nocturne.run", dashboardSlugs: [] }),
+    } as unknown as LoadEvent);
+
+    await expect(landing).rejects.toMatchObject({ status: 303, location: "https://sleepy.nocturne.run/" });
+    expect(getMyTenants).toHaveBeenCalledWith(true);
+  });
+
   it("asks for both chart windows without the heart-rate and step series", async () => {
     const getDashboardChartData = vi.fn().mockResolvedValue({});
 

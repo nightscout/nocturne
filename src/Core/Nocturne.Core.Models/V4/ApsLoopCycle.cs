@@ -18,7 +18,7 @@ public sealed class ApsLoopCycle
 
     public DateTime Timestamp { get; init; }
 
-    public long Mills => new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    public long Mills => Timestamp.ToMills();
 
     public AidAlgorithm AidAlgorithm { get; init; }
 

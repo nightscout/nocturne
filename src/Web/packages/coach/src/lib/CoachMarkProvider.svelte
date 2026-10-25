@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { CoachLabels, CoachMarkAdapter, CoachRouter, SequenceConfig } from "./types.js";
+  import type { CoachGates, CoachLabels, CoachMarkAdapter, CoachRouter, SequenceConfig } from "./types.js";
   import { createCoachMarkContext } from "./context.svelte.js";
   import { setCoachMarkContextRef } from "./coachmark.svelte.js";
   import { HistorySentinel } from "./history-sentinel.js";
@@ -11,6 +11,7 @@
     adapter,
     labels,
     sequences = {},
+    gates = {},
     settleDelay = 500,
     seenDwellMs = 2000,
     router,
@@ -19,15 +20,16 @@
     adapter: CoachMarkAdapter;
     labels: CoachLabels;
     sequences?: SequenceConfig;
+    gates?: CoachGates;
     settleDelay?: number;
     seenDwellMs?: number;
-    /** Without one, the history entry an overlay holds can cancel, or strand under, a navigation. */
+    /** Without one, the back button leaves the page instead of dismissing an overlay. */
     router?: CoachRouter;
     children: Snippet;
   } = $props();
 
   // svelte-ignore state_referenced_locally
-  const ctx = createCoachMarkContext(adapter, labels, sequences, settleDelay, seenDwellMs);
+  const ctx = createCoachMarkContext(adapter, labels, sequences, settleDelay, seenDwellMs, () => gates);
   setCoachMarkContextRef(ctx);
 
   $effect.pre(() => {

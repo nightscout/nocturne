@@ -36,6 +36,16 @@ describe("satisfiesScope", () => {
     expect(satisfiesScope(["audit.read"], "audit.manage")).toBe(false);
   });
 
+  it("accepts alerts.readwrite for alerts.acknowledge", () => {
+    expect(satisfiesScope(["alerts.readwrite"], "alerts.acknowledge")).toBe(
+      true
+    );
+  });
+
+  it("does not accept device.notify for alerts.acknowledge", () => {
+    expect(satisfiesScope(["device.notify"], "alerts.acknowledge")).toBe(false);
+  });
+
   it("refuses everything on an empty grant", () => {
     expect(satisfiesScope([], "glucose.read")).toBe(false);
   });

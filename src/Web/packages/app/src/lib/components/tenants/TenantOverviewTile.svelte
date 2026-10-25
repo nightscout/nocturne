@@ -6,7 +6,7 @@
     type TenantOverviewItem,
   } from "$lib/api/generated/nocturne-api-client";
   import { getGlucoseStatusClass } from "$lib/utils/glucose-status";
-  import { bg, bgDelta, minutesAgo, toDate } from "$lib/utils/formatting";
+  import { bg, bgDelta, relativeAge, toDate } from "$lib/utils/formatting";
   import { getDirectionInfo } from "$lib/utils";
   import { tenantUrl } from "$lib/utils/tenant-host";
   import Bell from "@lucide/svelte/icons/bell";
@@ -96,7 +96,7 @@
       </div>
       <p class="mt-1 text-xs text-muted-foreground" data-testid="freshness">
         {#if lastReadingAt}
-          Last reading {minutesAgo(lastReadingAt.getTime())}
+          Last reading {relativeAge(lastReadingAt)}
         {:else}
           No recent data
         {/if}

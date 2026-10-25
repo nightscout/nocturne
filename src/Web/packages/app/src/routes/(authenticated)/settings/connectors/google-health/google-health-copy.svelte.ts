@@ -6,13 +6,14 @@ import {
   type GoogleHealthDataTypeStatus,
   type GoogleHealthStatus,
 } from "$lib/api";
+import { plural } from "$lib/utils/plural";
 import { isGoogleHealthErrorCode, type GoogleHealthErrorCode } from "$lib/connectors/google-health-error-codes";
 
 const errorMessages: Record<GoogleHealthErrorCode, string> = {
   configure_first: "Connect Google Health first.",
   platform_not_configured: "Google Health is not enabled on this Nocturne server.",
   client_changed:
-    "This server's Google client has changed since you connected. Connect Google Health again; your imported data is kept.",
+    "This server's Google client has changed since you connected. Connect Google Health again. Nocturne keeps your imported data.",
   invalid_configuration: "Check the import start date.",
   invalid_callback:
     "Google rejected this server's redirect URI. Ask your Nocturne operator to check the Google Health setup.",
@@ -36,7 +37,7 @@ const errorMessages: Record<GoogleHealthErrorCode, string> = {
   google_unavailable:
     "Google is temporarily unavailable. Existing data was preserved.",
   already_running:
-    "Another Google Health import is already running. The inventory will be available when it finishes; refresh this page afterwards.",
+    "Another Google Health import is already running. The inventory will be available when it finishes. Refresh this page after that.",
   account_not_linked: "This Google account is not linked to Fitbit.",
   invalid_google_request: "Google rejected the data request.",
   preview_access_denied: "This account cannot access this API version.",
@@ -46,7 +47,7 @@ const errorMessages: Record<GoogleHealthErrorCode, string> = {
     "Google rejected this date range. Choose a later start date.",
   invalid_filter_operator: "Google rejected Nocturne's time filter.",
   invalid_google_filter: "Google rejected the filter for this data type.",
-  invalid_google_data_type: "Google did not recognise this data type.",
+  invalid_google_data_type: "Google did not recognize this data type.",
   invalid_source_family: "Google could not reconcile the sources.",
   invalid_google_response: "Google returned an incomplete response.",
   stored_google_configuration_unreadable:
@@ -60,7 +61,9 @@ const errorMessages: Record<GoogleHealthErrorCode, string> = {
   internal_sync:
     "Nocturne could not complete the import. Check the server log for the technical code and stage.",
   internal_sync_native_write:
-    "Nocturne downloaded the data, but could not store it locally. Retry the same range; if it persists, use the technical stage from the server log.",
+    "Nocturne downloaded the data, but could not store it locally. Retry the same range. If the problem continues, use the technical stage from the server log.",
+  activation_failed:
+    "Google Health is connected, but Nocturne could not finish the set-up. Imports continue. Check the server log if this message stays.",
 };
 
 /** The sentence for a server error code, or a generic one for a code this page does not know. */
@@ -76,8 +79,15 @@ const notices = {
   importRunning:
     "The import is running in the background. You can leave this page and return later.",
   importCompleted: "Google Health import completed.",
+  settingsSaved:
+    "Import settings saved. No import has started. Automatic sync picks up the selection on its next scheduled run.",
+  settingsSavedPaused:
+    "Import settings saved. No import has started. Imports resume when your Nocturne operator turns Google Health back on.",
+  settingsSavedOnly: "Import settings saved.",
+  selectionPaused:
+    "Import settings saved. Imports are paused because no data types are selected. Previously imported data is kept.",
   statusUnavailable: "Import status is temporarily unavailable. Retrying.",
-  disconnected: "Google Health is disconnected. Your imported data has been kept.",
+  disconnected: "Google Health is disconnected. Nocturne kept your imported data.",
   alreadyRunning: errorMessages.already_running,
 };
 
@@ -87,8 +97,18 @@ export function noticeText(key: NoticeKey): string {
   return notices[key];
 }
 
+/** What a new import covers while no start date is set. */
+export function lookbackSentence(days: number | undefined): string {
+  return days
+    ? plural(days, [
+        "While the field is empty, a new import covers the last # day.",
+        "While the field is empty, a new import covers the last # days.",
+      ])
+    : "While the field is empty, a new import covers the configured history lookback.";
+}
+
 const connectionOutcomes: Record<string, string> = {
-  failed: "Google sign-in failed or was cancelled.",
+  failed: "Google sign-in failed or was canceled.",
   provider_denied: "Google did not grant the requested read access.",
   no_session:
     "The Nocturne session was missing after the Google redirect. Sign in and reconnect in the same browser.",
@@ -177,7 +197,7 @@ export function typeStateLabel(type: GoogleHealthDataTypeStatus): string {
     case GoogleHealthTypeState.Importing:
       return "Import enabled";
     case GoogleHealthTypeState.ImportingNoData:
-      return "Import enabled; no data found";
+      return "Import enabled. No data found.";
     case GoogleHealthTypeState.Available:
       return "Available to connect";
     case GoogleHealthTypeState.AvailableNoData:

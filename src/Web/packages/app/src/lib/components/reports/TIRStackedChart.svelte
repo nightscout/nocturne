@@ -23,11 +23,10 @@
 </script>
 
 <script lang="ts">
-  import { Chart, Svg, Bars, Bar, Tooltip } from "layerchart";
+  import { Chart, Svg, Bars, Bar, Line, Rect, Tooltip } from "layerchart";
   import { scaleBand, scaleLinear } from "d3-scale";
   import { bandScale as toBandScale, numericScale } from "$lib/components/charts/scale-guards";
   import { bgRange } from "$lib/utils/formatting";
-  import { tenantChartThresholds } from "$lib/stores/realtime-store.svelte";
   import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import type { TimeInRangePercentages } from "$api-clients";
@@ -35,12 +34,10 @@
   interface Props {
     /** Pre-computed percentages - required to avoid reactive API calls */
     percentages?: TimeInRangePercentages;
-    /** Target range bounds in mg/dL for the caption below the chart */
+    /** Served consensus target range bounds in mg/dL; the caption below the chart shows when given */
     thresholds?: { low: number; high: number };
     /** Chart orientation - 'vertical' (default) or 'horizontal' */
     orientation?: "vertical" | "horizontal";
-    /** Whether to show the "Target Range" caption below the chart (default: false) */
-    showThresholds?: boolean;
     /**
      * Band labels: beside the bar when vertical; when horizontal, a key under the bar on paper
      * only unless keyOnScreen is set (default: true).
@@ -69,26 +66,22 @@
 
   let {
     percentages,
-    thresholds: suppliedThresholds,
+    thresholds,
     orientation = "vertical",
-    showThresholds = false,
     showLabels = true,
     keyOnScreen = false,
     compact = false,
     personalRange,
   }: Props = $props();
 
-  const tenantThresholds = tenantChartThresholds();
-  const thresholds = $derived(suppliedThresholds ?? tenantThresholds.current);
-
   const vertical = $derived(orientation === "vertical");
 
   const bandLabel = $derived<Record<BandKey, string>>({
-    veryLow: "Very Low",
+    veryLow: "Very low",
     low: "Low",
-    target: "In Range",
+    target: "In range",
     high: "High",
-    veryHigh: "Very High",
+    veryHigh: "Very high",
   });
 
   const pct = $derived({
@@ -173,7 +166,7 @@
           {#if tightInset}
             {@const a = valueScale(tightInset.start)}
             {@const b = valueScale(tightInset.end)}
-            <rect
+            <Rect
               x={vertical ? bandPos : Math.min(a, b)}
               y={vertical ? Math.min(a, b) : bandPos}
               width={vertical ? bandSize : Math.abs(b - a)}
@@ -190,14 +183,14 @@
             {@const lineMax = vertical ? context.height : context.width}
             {#each personalMarkers as marker, i (i)}
               {@const pos = Math.min(Math.max(valueScale(marker), 1), lineMax - 1)}
-              <line
+              <Line
                 x1={vertical ? bandPos - 4 : pos}
                 x2={vertical ? bandPos + bandSize + 4 : pos}
                 y1={vertical ? pos : bandPos - 2}
                 y2={vertical ? pos : bandPos + bandSize + 2}
                 stroke="var(--foreground)"
-                stroke-width={2}
-                stroke-dasharray="3 2"
+                strokeWidth={2}
+                dashArray="3 2"
                 data-testid="personal-range-marker"
               />
             {/each}
@@ -216,7 +209,7 @@
           />
           {#if row.key === "target" && pct.tightTarget > 0}
             <Tooltip.Item
-              label="Tight Range"
+              label="Tight range"
               format="percent"
               value={pct.tightTarget / 100}
               color="var(--glucose-tight-range)"
@@ -316,10 +309,10 @@
     {/if}
   {/if}
 
-  {#if showThresholds || personalRange}
+  {#if thresholds || personalRange}
     <div class={["mt-2 shrink-0 text-center text-muted-foreground", compact ? "text-2xs" : "text-xs"].join(" ")}>
-      {#if showThresholds}
-        <p><span class="font-semibold text-foreground">Target Range:</span> {bgRange(thresholds.low, thresholds.high)}</p>
+      {#if thresholds}
+        <p><span class="font-semibold text-foreground">Consensus target range:</span> {bgRange(thresholds.low, thresholds.high)}</p>
       {/if}
       {#if personalRange}
         <p>{personalRange.label}</p>

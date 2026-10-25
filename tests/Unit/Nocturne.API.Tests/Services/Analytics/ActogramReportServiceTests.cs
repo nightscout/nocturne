@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Glucose;
@@ -225,7 +226,7 @@ public class ActogramReportServiceTests
     [InlineData(null, TimeZoneUnavailableReason.NotConfigured)]
     [InlineData("", TimeZoneUnavailableReason.NotConfigured)]
     [InlineData("Not/AZone", TimeZoneUnavailableReason.Unrecognised)]
-    public async Task GetAsync_WithoutAUsableTimezone_BinsNoDayAndSaysWhy(
+    public async Task GetAsync_WithoutAUsableTimezone_ServesUtcDaysAndSaysWhy(
         string? stored,
         TimeZoneUnavailableReason expected)
     {
@@ -236,7 +237,10 @@ public class ActogramReportServiceTests
 
         var result = await CreateService().GetAsync(StartMills, EndMills);
 
-        result.StepDayTotals.Should().BeEmpty();
+        result.Days.Select(d => d.Date).Should().StartWith("2023-11-14").And.HaveCount(15);
+        result.Days[0].EndMills.Should().Be(result.Days[1].StartMills);
+        result.Days[1].StartMills.Should().Be(1700006400000L);
+        result.StepDayTotals["2023-11-14"].Should().Be(800);
         result.TimeZoneUnavailableReason.Should().Be(expected);
         result.StepCounts.Should().HaveCount(2);
     }
@@ -255,7 +259,7 @@ public class ActogramReportServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_ForAShare_BinsNoDayAndSaysShare_EvenWhenAZoneIsCached()
+    public async Task GetAsync_ForAShare_ServesUtcDaysAndSaysShare_EvenWhenAZoneIsCached()
     {
         SetupEmpty();
         SetupSteps((StartMills + 30 * 60_000, 300));
@@ -265,8 +269,97 @@ public class ActogramReportServiceTests
 
         var result = await CreateService().GetAsync(StartMills, EndMills);
 
-        result.StepDayTotals.Should().BeEmpty();
+        result.Days[0].Date.Should().Be("2023-11-14");
+        result.Days[0].StartMills.Should().Be(1699920000000L);
         result.TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.Share);
+    }
+
+    [Fact]
+    public async Task GetAsync_ServesEachTenantLocalDayWithItsStartAndEndInstants()
+    {
+        SetupEmpty();
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        SetupZone("Europe/Stockholm");
+
+        var result = await CreateService().GetAsync(StartMills, EndMills);
+
+        result.Days.Should().HaveCount(15);
+        result.Days[0].Date.Should().Be("2023-11-14");
+        result.Days[0].StartMills.Should().Be(1699916400000L);
+        result.Days[0].EndMills.Should().Be(1700002800000L);
+        result.Days[1].StartMills.Should().Be(result.Days[0].EndMills);
+        result.Days.Select(d => d.Date).Should().Equal(result.StepDayTotals.Keys);
+    }
+
+    [Theory]
+    [InlineData("2023-03-12", 23)]
+    [InlineData("2023-03-13", 24)]
+    [InlineData("2023-11-05", 25)]
+    public async Task GetAsync_ServesADayAcrossADstChangeAtItsRealLength(string date, int hours)
+    {
+        SetupEmpty();
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        SetupZone("America/New_York");
+        var from = new DateTimeOffset(2023, 3, 10, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var to = new DateTimeOffset(2023, 11, 7, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+        var march = await CreateService().GetAsync(from, from + 5L * 24 * 3_600_000);
+        var november = await CreateService().GetAsync(to - 5L * 24 * 3_600_000, to);
+
+        var day = march.Days.Concat(november.Days).First(d => d.Date == date);
+        (day.EndMills - day.StartMills).Should().Be(hours * 3_600_000L);
+    }
+
+    [Theory]
+    [InlineData("2023-03-11")]
+    [InlineData("2023-03-12")]
+    [InlineData("2023-03-13")]
+    [InlineData("2023-11-04")]
+    [InlineData("2023-11-05")]
+    public async Task GetAsync_ServesHourMarksAtTheRealLocalHoursOfTheDayAndTheNext(string date)
+    {
+        SetupEmpty();
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        SetupZone("America/New_York");
+        var from = new DateTimeOffset(2023, 3, 10, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var to = new DateTimeOffset(2023, 11, 7, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+        var march = await CreateService().GetAsync(from, from + 5L * 24 * 3_600_000);
+        var november = await CreateService().GetAsync(to - 5L * 24 * 3_600_000, to);
+
+        var day = march.Days.Concat(november.Days).First(d => d.Date == date);
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+        var local = day.HourMarks
+            .Select(m => TimeZoneInfo.ConvertTimeFromUtc(DateTimeOffset.FromUnixTimeMilliseconds(m).UtcDateTime, zone))
+            .ToList();
+        var first = DateTime.Parse(date, CultureInfo.InvariantCulture);
+        local.Should().Equal(
+            first.AddHours(6), first.AddHours(12), first.AddHours(18),
+            first.AddDays(1).AddHours(6), first.AddDays(1).AddHours(12), first.AddDays(1).AddHours(18));
+        day.HourMarks.Should().BeInAscendingOrder();
+        day.HourMarks[0].Should().BeGreaterThan(day.StartMills);
+        day.HourMarks[2].Should().BeLessThan(day.EndMills);
+        day.HourMarks[3].Should().BeGreaterThan(day.EndMills);
+    }
+
+    [Fact]
+    public async Task GetAsync_StepDayTotalsEqualTheStepsInsideEachServedDay()
+    {
+        SetupEmpty();
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        SetupZone("Pacific/Chatham");
+        var from = new DateTimeOffset(2023, 11, 14, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var samples = Enumerable.Range(0, 96).Select(i => (from + i * 3_600_000L, 10 + i)).ToArray();
+        SetupSteps(samples);
+
+        var result = await CreateService().GetAsync(from, from + 96 * 3_600_000L);
+
+        foreach (var day in result.Days)
+        {
+            var inside = samples.Where(s => s.Item1 >= day.StartMills && s.Item1 < day.EndMills).Sum(s => s.Item2);
+            result.StepDayTotals[day.Date].Should().Be(inside);
+        }
+        result.StepDayTotals.Values.Sum().Should().Be(samples.Sum(s => s.Item2));
     }
 
     [Fact]

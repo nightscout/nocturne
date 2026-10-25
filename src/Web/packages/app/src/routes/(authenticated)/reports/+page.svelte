@@ -20,6 +20,7 @@
   import { satisfiesAllScopes } from "$lib/authorization/scopes";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -28,8 +29,6 @@
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is standard for reports overview
@@ -58,7 +57,7 @@
       canLoadSummary
         ? getReportsData(reportsParams.dateRangeInput)
         : { loading: false, error: null, current: undefined, refresh: () => {} },
-    { errorTitle: "Error Loading Reports", dateParams: reportsParams }
+    { errorTitle: "Error loading reports", dateParams: reportsParams }
   );
 
   const isLoading = $derived(reportsResource.loading);
@@ -73,10 +72,15 @@
   const units = $derived(glucoseUnits.current);
   const glucoseFormatting = $derived({
     unitLabel: getUnitLabel(units),
-    targetRangeDisplay: formatGlucoseRange(70, 180, units),
   });
 
   const tir = $derived(analysis?.timeInRange?.percentages);
+  const consensusRange = $derived.by(() => {
+    const served = analysis?.timeInRange?.thresholds;
+    return served?.targetBottom != null && served.targetTop != null
+      ? { low: served.targetBottom, high: served.targetTop }
+      : undefined;
+  });
   const variability = $derived(analysis?.glycemicVariability);
   const stats = $derived(analysis?.basicStats);
 
@@ -112,23 +116,15 @@
   } as const;
 </script>
 
-<svelte:head>
-  <title>Reports - Nocturne</title>
-  <meta
-    name="description"
-    content="Comprehensive diabetes management analytics and insights"
-  />
-</svelte:head>
-
 {#if isLoading && !reportsResource.current}
   <div class="mx-auto max-w-6xl px-3 py-6 @md:px-6"><ReportsSkeleton /></div>
 {:else if reportsResource.error}
   <div class="flex min-h-[60vh] items-center justify-center px-4">
     <div class="max-w-md space-y-4 text-center">
       <AlertTriangle class="mx-auto size-6 text-destructive" aria-hidden="true" />
-      <h2 class="text-xl font-semibold">Unable to load reports</h2>
+      <h2 class="text-xl font-semibold">Could not load reports</h2>
       <p class="text-muted-foreground">
-        {remoteErrorMessage(reportsResource.error, "Something went wrong")}
+        {remoteErrorMessage(reportsResource.error, "An error occurred")}
       </p>
       <Button variant="outline" onclick={() => reportsResource.refresh()}>
         Try again
@@ -151,13 +147,13 @@
         {#if visibleHrefs.has("/reports/executive-summary")}
           <Button href="/reports/executive-summary">
             <Gauge />
-            Executive Summary
+            Executive summary
           </Button>
         {/if}
         {#if visibleHrefs.has("/reports/agp")}
           <Button href="/reports/agp" variant="outline">
             <BarChart3 />
-            AGP Report
+            AGP report
           </Button>
         {/if}
         {#if visibleHrefs.has("/reports/readings")}
@@ -178,12 +174,20 @@
               <h2 class="text-sm font-medium text-muted-foreground">Time in range</h2>
               {#if tirValue != null}
                 <div class="h-64 @sm:h-72">
-                  <TIRStackedChart percentages={tir} personalRange={personalRangeOverlay} showThresholds />
+                  <TIRStackedChart percentages={tir} personalRange={personalRangeOverlay} thresholds={consensusRange} />
                 </div>
               {:else}
                 <p class="text-xl text-muted-foreground">No data</p>
               {/if}
               <p class="text-sm text-muted-foreground">Consensus target: at least 70% of time in range.</p>
+              {#if queryData?.timeZoneUnavailableReason}
+                <p class="text-sm text-muted-foreground">
+                  <TimeZoneNote reason={queryData.timeZoneUnavailableReason}>
+                    Time in a personal target range that changes through the day is not shown.
+                    Days of data are counted on UTC days.
+                  </TimeZoneNote>
+                </p>
+              {/if}
               {#if analysis?.reliability?.meetsReliabilityCriteria === false}
                 <ReliabilityBadge reliability={analysis.reliability} />
               {/if}
@@ -233,7 +237,7 @@
           </CardHeader>
           <CardContent>
             <div class="h-64">
-              <AmbulatoryGlucoseProfile {averagedStats} />
+              <AmbulatoryGlucoseProfile {averagedStats} thresholds={analysis?.timeInRange?.thresholds} />
             </div>
           </CardContent>
         </Card>
@@ -242,8 +246,8 @@
           <CardContent class="text-center">
             <h2 class="mb-2 text-lg font-semibold">No data in this range</h2>
             <p class="mx-auto max-w-md text-muted-foreground">
-              There aren't enough glucose readings between these dates to
-              summarise. Choose a longer date range.
+              There are not enough glucose readings between these dates to
+              summarize. Choose a longer date range.
             </p>
           </CardContent>
         </Card>
@@ -253,10 +257,6 @@
     <section
       class="grid gap-x-12 gap-y-10 @3xl:grid-cols-2"
       aria-label="All reports"
-      {@attach coachmark({
-        ...coachFor("setup-reports.categories"),
-        completeOn: { event: "click" },
-      })}
     >
       {#each categories as category (category.id)}
         {@const CategoryIcon = category.icon}

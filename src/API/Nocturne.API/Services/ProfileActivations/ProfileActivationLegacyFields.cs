@@ -86,7 +86,7 @@ internal static class ProfileActivationLegacyFields
                 residue[PercentageOmittedKey] = true;
         }
 
-        var startMills = new DateTimeOffset(DateTime.SpecifyKind(start, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        var startMills = start.ToMills();
         return new ProfileActivation
         {
             StartTimestamp = start,

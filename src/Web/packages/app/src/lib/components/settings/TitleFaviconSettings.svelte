@@ -59,7 +59,7 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <Globe class="h-5 w-5" />
-      Browser Tab Settings
+      Browser tab settings
     </CardTitle>
     <CardDescription>
       Customize how glucose data appears in the browser tab
@@ -189,7 +189,7 @@
       <div class="space-y-4">
         <h4 class="text-sm font-medium flex items-center gap-2">
           <Bell class="h-4 w-4" />
-          Alarm Integration
+          Alarm integration
         </h4>
 
         <div class="flex items-center justify-between">

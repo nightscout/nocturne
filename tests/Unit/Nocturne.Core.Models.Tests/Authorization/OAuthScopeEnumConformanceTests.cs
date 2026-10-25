@@ -143,6 +143,7 @@ public class OAuthScopeEnumConformanceTests
             [OAuthScope.TherapyReadWrite] = Scope.TherapyReadWrite,
             [OAuthScope.AlertsRead] = Scope.AlertsRead,
             [OAuthScope.AlertsReadWrite] = Scope.AlertsReadWrite,
+            [OAuthScope.AlertsAcknowledge] = Scope.AlertsAcknowledge,
             [OAuthScope.ReportsRead] = Scope.ReportsRead,
             [OAuthScope.IdentityRead] = Scope.IdentityRead,
             [OAuthScope.SharingReadWrite] = Scope.SharingReadWrite,

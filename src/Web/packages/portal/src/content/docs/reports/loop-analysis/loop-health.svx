@@ -1,0 +1,73 @@
+---
+title: Loop health
+---
+
+<script>
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Loop health
+
+Loop health shows how the loop operated. Most tiles show a percentage of time.
+**Loop gaps** and **Unrecorded delivery** show a count of periods.
+**Requested, not done** shows a percentage of the changes that the loop asked
+for. The last two tiles show the limits that your loop reported. The charts show
+the data for each hour of the day.
+
+The [Loop Analysis overview](/docs/reports/loop-analysis) tells you about the
+filters, net loop correction and how to read the charts. They are the same on
+all five pages.
+
+<Screenshot id="loop-analysis-loop-health" />
+
+| Tile | What it shows |
+|------|---------------|
+| **Closed loop** | Time when the loop controlled basal delivery. |
+| **CGM active** | Time when your sensor sent readings. |
+| **Pump active** | Time when the loop uploaded a cycle. If there are no cycles, the report uses the delivery records. |
+| **Loop gaps** | Gaps of more than 15 minutes between two loop cycles. |
+| **Unrecorded delivery** | Periods when the loop operated but there is no record of the pump delivery. |
+| **Algorithm zero temps** | Time when the loop set basal to zero, as a percentage of the time with known delivery. Suspends and manual zero temps are separate. |
+| **At max basal** | Time when the temp basals of the loop were at the highest rate that it can set. |
+| **At max IOB** | Time when insulin on board was at max IOB, as a percentage of loop time with a recorded reason (AAPS, Trio, iAPS, OpenAPS). |
+| **Automatic boluses a day** | The number and the size of automatic boluses. |
+| **Requested, not done** | Changes that the loop asked for but did not make, for example because the pump did not reply (AAPS, Trio, iAPS, OpenAPS). |
+| **Max basal rate setting of the Loop app** and **Max IOB** | The limits that your loop reported. |
+
+## At max basal and "max basal known"
+
+For **Loop**, a temp is at its limit when it is at your maximum basal rate
+setting. For **AAPS, Trio, iAPS and OpenAPS**, the limit is a safety limit that
+the algorithm calculates each time. Only the reason that the loop gives tells
+when the temp was at that limit. **Max basal known** is the percentage of the temp
+time of the algorithm where Nocturne can tell. **At max basal** uses only that
+time.
+
+## Unrecorded delivery
+
+When the loop operates but there is no record of the pump delivery, the basal
+for that time is not known. Loop Analysis uses your schedule only for a gap of
+3 hours or less, with records on the two sides. A large quantity of unrecorded
+delivery usually means that pump history does not arrive in Nocturne. It also
+makes the insulin figures on the other pages less complete.
+
+## When a tile shows "Unknown"
+
+When the report cannot calculate a tile, the tile shows **Unknown** and the
+reason:
+
+- **No loop cycles in this range**: the loop recorded nothing.
+- **The system that ran the loop does not record this**: for example, Loop does
+  not record a maximum IOB.
+- **Only the Loop app uploads this setting**: the maximum basal rate setting.
+- **No loop cycle in this range recorded the data that this figure needs**: the
+  loop operated, but it did not record the reason that the figure uses.
+- **No loop cycle in this range set the temp basals that this figure needs**: no
+  loop decision matched the temps.
+- **All the data for this figure is in time that the filters exclude.**
+- **The active profile does not record a maximum basal rate.**
+- **The loop did not set a temp basal in this range.**
+- **Nothing measured in this range.**
+
+**Max IOB** shows only when the loop reports that max IOB limited a dose.
+

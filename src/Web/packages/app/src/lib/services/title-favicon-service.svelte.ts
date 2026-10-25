@@ -110,7 +110,7 @@ export class TitleFaviconService {
    * @param variant - The server's status for this reading, through `getGlucoseTileVariant`
    * @param isDisconnected - Whether the client is disconnected from server
    * @param isStale - Whether the data is stale (old)
-   * @param timeSinceReading - Human-readable time since last reading (e.g., "5 min ago")
+   * @param timeSinceReading - Human-readable time since last reading (e.g., "5m ago")
    */
   update(
     bg: number,

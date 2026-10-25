@@ -25,7 +25,6 @@
     "@chat-adapter/telegram": "4.29.0",
     "@chat-adapter/whatsapp": "4.29.0",
     "@chat-adapter/state-pg": "4.29.0",
-    "@chat-adapter/messenger": "4.29.0",
     "@resend/chat-sdk-adapter": "^0.2.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -41,6 +40,6 @@
     "vitest": "^4.1.6"
   },
   "engines": {
-    "node": ">=24"
+    "node": "^24.22.1 || >=26.12.1"
   }
 }

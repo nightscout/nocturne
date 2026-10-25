@@ -1,6 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
-using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.Alerts.Corpus;
 using Nocturne.Core.Alerts.Native;
 using Xunit;
 
@@ -26,10 +26,10 @@ public class ClassifyParityTests
         { "predicted", """{ "operator": "<", "value": 70, "within_minutes": 15 }""", "low" },
         { "predicted", """{ "operator": ">=", "value": 250, "within_minutes": 15 }""", "high" },
         { "predicted", """{ "operator": "==", "value": 100, "within_minutes": 15 }""", "undirected" },
-        { "glucose_bucket", """{ "buckets": [0, 1] }""", "low" },
-        { "glucose_bucket", """{ "buckets": [4, 5] }""", "high" },
-        { "glucose_bucket", """{ "buckets": [0, 5] }""", "composite" },
-        { "glucose_bucket", """{ "buckets": [2, 3] }""", "undirected" },
+        { "glucose_bucket", """{ "buckets": ["very_low", "low"] }""", "low" },
+        { "glucose_bucket", """{ "buckets": ["high", "very_high"] }""", "high" },
+        { "glucose_bucket", """{ "buckets": ["very_low", "very_high"] }""", "composite" },
+        { "glucose_bucket", """{ "buckets": ["tight_range", "in_range"] }""", "undirected" },
         { "signal_loss", """{ "timeout_minutes": 20 }""", "undirected" },
         // Composite of full child nodes — the stored shape.
         {
@@ -56,7 +56,7 @@ public class ClassifyParityTests
         // A directional leaf under NOT taints the whole rule to undirected.
         { "not", """{ "child": { "type": "threshold", "threshold": { "direction": "above", "value": 250 } } }""", "undirected" },
         // Sustained passes its child's direction through.
-        { "sustained", """{ "child": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } } }""", "low" },
+        { "sustained", """{ "minutes": 15, "child": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } } }""", "low" },
         // Unknown type / malformed input silent-fail to the all-only default.
         { "teleport", "{}", "undirected" },
     };

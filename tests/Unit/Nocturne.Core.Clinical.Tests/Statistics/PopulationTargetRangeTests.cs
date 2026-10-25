@@ -75,4 +75,62 @@ public class PopulationTargetRangeTests
         assessment.TIRAssessment.Status.Should().Be(TargetStatus.Met);
         assessment.TARAssessment.CurrentValue.Should().BeApproximately(0, 0.5);
     }
+
+    /// <summary>
+    /// A day at 65 mg/dL: inside the pregnancy range (63-140) and below the general one (70-180).
+    /// </summary>
+    private ExtendedGlucoseAnalytics AnalyzeAtSixtyFive(DiabetesPopulation population) =>
+        _sut.AnalyzeGlucoseDataExtended(
+            Enumerable.Range(0, 288)
+                .Select(i => new SensorGlucose { Mgdl = 65, Timestamp = Start.AddMinutes(i * 5) })
+                .ToList(),
+            [],
+            [],
+            windowDays: 1,
+            population);
+
+    [Theory]
+    [InlineData(DiabetesPopulation.Type1Adult, 70, 180, 0, 100)]
+    [InlineData(DiabetesPopulation.Pregnancy, 63, 140, 100, 0)]
+    [InlineData(DiabetesPopulation.PregnancyType1, 63, 140, 100, 0)]
+    public void AnalyzeGlucoseDataExtended_ServesTheEdgesItMeasuredTimeInRangeAgainst(
+        DiabetesPopulation population,
+        double low,
+        double high,
+        double expectedTarget,
+        double expectedLow)
+    {
+        var analysis = AnalyzeAtSixtyFive(population);
+        var served = analysis.TimeInRange.Thresholds;
+
+        served.Should().NotBeNull();
+        served!.TargetBottom.Should().Be(low);
+        served.Low.Should().Be(low);
+        served.TargetTop.Should().Be(high);
+        served.High.Should().Be(high);
+        served.VeryLow.Should().Be(54);
+        served.VeryHigh.Should().Be(250);
+        analysis.ClinicalAssessment.Targets.TargetLow.Should().Be(served.TargetBottom);
+        analysis.ClinicalAssessment.Targets.TargetHigh.Should().Be(served.TargetTop);
+        analysis.TimeInRange.Percentages.Target.Should().BeApproximately(expectedTarget, 0.5);
+        analysis.TimeInRange.Percentages.Low.Should().BeApproximately(expectedLow, 0.5);
+    }
+
+    [Theory]
+    [InlineData(DiabetesPopulation.Type1Adult, 70, 180)]
+    [InlineData(DiabetesPopulation.Pregnancy, 63, 140)]
+    public void AnalyzeGlucoseDataExtended_WithNoReadings_StillServesThePopulationsEdges(
+        DiabetesPopulation population,
+        double low,
+        double high)
+    {
+        var served = _sut
+            .AnalyzeGlucoseDataExtended([], [], [], windowDays: 1, population)
+            .TimeInRange
+            .Thresholds;
+
+        served.Should().NotBeNull();
+        served!.TargetBottom.Should().Be(low);
+        served.TargetTop.Should().Be(high);
+    }
 }

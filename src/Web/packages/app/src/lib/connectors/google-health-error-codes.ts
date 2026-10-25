@@ -43,6 +43,7 @@ const codes = [
   "pagination_failed",
   "internal_sync",
   "internal_sync_native_write",
+  "activation_failed",
 ] as const;
 
 export type GoogleHealthErrorCode = (typeof codes)[number];

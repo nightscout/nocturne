@@ -5,6 +5,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 
@@ -24,35 +25,40 @@ namespace Nocturne.API.Controllers.V1;
 public class NotificationsController : ControllerBase
 {
     private readonly INotificationV1Service _notificationService;
+    private readonly IAlarmAckHandler _ackHandler;
     private readonly ILogger<NotificationsController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="NotificationsController"/>.
     /// </summary>
     /// <param name="notificationService">Service handling legacy V1 notification operations.</param>
+    /// <param name="ackHandler">Silences an acknowledged alarm.</param>
     /// <param name="logger">Logger instance.</param>
     public NotificationsController(
         INotificationV1Service notificationService,
+        IAlarmAckHandler ackHandler,
         ILogger<NotificationsController> logger
     )
     {
         _notificationService = notificationService;
+        _ackHandler = ackHandler;
         _logger = logger;
     }
 
     /// <summary>
-    /// Acknowledge a notification alarm to silence it
-    /// Implements the /notifications/ack endpoint from legacy notifications-api.js
+    /// Acknowledge a notification alarm to silence it for everyone, through
+    /// <see cref="IAlarmAckHandler"/>. Implements the /notifications/ack endpoint from legacy
+    /// notifications-api.js.
     /// </summary>
     /// <param name="level">Alarm level to acknowledge (1=WARN, 2=URGENT)</param>
-    /// <param name="group">Alarm group, defaulting to <c>default</c></param>
+    /// <param name="group">Alarm group, defaulting to <c>default</c>. An engine alarm's group is its excursion id.</param>
     /// <param name="time">Milliseconds to silence the alarm. Absent, zero or not a number means 30 minutes.</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <response code="200">The body is <c>OK</c>, also when the alarm was already snoozed.</response>
+    /// <response code="200">The body is <c>OK</c> whatever the outcome.</response>
     /// <response code="400">The level is not 1 or 2.</response>
     [HttpGet("notifications/ack")]
     [Authorize]
-    [RequireScope(Scope.AlertsReadWrite)]
+    [RequireScope(Scope.AlertsAcknowledge)]
     [NightscoutEndpoint("/api/v1/notifications/ack")]
     [Produces("text/plain")]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
@@ -71,21 +77,17 @@ public class NotificationsController : ControllerBase
             return PlainText(StatusCodes.Status400BadRequest, "Level must be 1 (WARN) or 2 (URGENT)");
         }
 
-        await _notificationService.AckNotificationAsync(
-            new NotificationAckRequest
-            {
-                Level = level,
-                Group = string.IsNullOrEmpty(group) ? "default" : group,
-                Time = ParseSilenceTime(time),
-                SendClear = true,
-            },
+        await _ackHandler.AckAsync(
+            level,
+            string.IsNullOrEmpty(group) ? "default" : group,
+            ParseSilenceTime(time),
             cancellationToken
         );
 
         return PlainText(StatusCodes.Status200OK, "OK");
     }
 
-    private static int? ParseSilenceTime(string? time)
+    private static int ParseSilenceTime(string? time)
     {
         if (
             !double.TryParse(time, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
@@ -93,96 +95,17 @@ public class NotificationsController : ControllerBase
             || parsed == 0
         )
         {
-            return null;
+            return NotificationAckRequest.DefaultSilenceTimeMs;
         }
 
-        // NIGHTSCOUT-COMPAT: Nightscout silences for any number of milliseconds. The service holds
-        // the silence time as an int, so a longer silence is capped at about 24.8 days.
+        // NIGHTSCOUT-COMPAT: Nightscout silences for any number of milliseconds. The silence time
+        // is held as an int, so a longer silence is capped at about 24.8 days, and an engine
+        // alarm's snooze at a day.
         return (int)Math.Clamp(parsed, int.MinValue, int.MaxValue);
     }
 
     private static ContentResult PlainText(int statusCode, string content) =>
         new() { StatusCode = statusCode, Content = content, ContentType = "text/plain; charset=utf-8" };
-
-    /// <summary>
-    /// Handle Pushover webhook callbacks for notification acknowledgments
-    /// Implements the /notifications/pushovercallback endpoint for Pushover integration
-    /// </summary>
-    /// <param name="request">Pushover callback request data from webhook</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Response indicating callback processing result</returns>
-    /// <response code="200">Pushover callback processed successfully</response>
-    /// <response code="400">Invalid callback request</response>
-    /// <response code="500">Internal server error</response>
-    [HttpPost("notifications/pushovercallback")]
-    [AllowAnonymous]
-    [NightscoutEndpoint("/api/v1/notifications/pushovercallback")]
-    [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(
-        typeof(NotificationAckResponse),
-        StatusCodes.Status500InternalServerError
-    )]
-    public async Task<ActionResult<NotificationAckResponse>> PushoverCallback(
-        [FromBody] PushoverCallbackRequest request,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
-        _logger.LogDebug(
-            "Pushover callback endpoint requested from {RemoteAddress} with receipt {Receipt}",
-            remoteAddress,
-            request?.Receipt
-        );
-
-        try
-        {
-            if (request == null)
-            {
-                _logger.LogWarning(
-                    "Pushover callback request body is null from {RemoteAddress}",
-                    remoteAddress
-                );
-                return BadRequest(
-                    new NotificationAckResponse
-                    {
-                        Success = false,
-                        Message = "Request body is required",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    }
-                );
-            }
-
-            var response = await _notificationService.ProcessPushoverCallbackAsync(
-                request,
-                cancellationToken
-            );
-
-            _logger.LogDebug(
-                "Pushover callback processed from {RemoteAddress}: {Success}",
-                remoteAddress,
-                response.Success
-            );
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error processing Pushover callback from {RemoteAddress}",
-                remoteAddress
-            );
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new NotificationAckResponse
-                {
-                    Success = false,
-                    Message = "Internal server error processing Pushover callback",
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                }
-            );
-        }
-    }
 
     /// <summary>
     /// Get all admin notifications with their counts and timestamps
@@ -393,119 +316,6 @@ public class NotificationsController : ControllerBase
                 {
                     Success = false,
                     Message = "Internal server error clearing admin notifications",
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                }
-            );
-        }
-    }
-
-    /// <summary>
-    /// Send a Pushover notification for testing or manual triggering
-    /// Provides an endpoint for sending Pushover notifications directly
-    /// </summary>
-    /// <param name="request">Pushover notification request</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Response indicating whether the notification was sent successfully</returns>
-    /// <response code="200">Pushover notification sent successfully</response>
-    /// <response code="400">Invalid notification request</response>
-    /// <response code="500">Internal server error</response>
-    [HttpPost("notifications/pushover")]
-    [Authorize]
-    [RequireScope(Scope.AlertsReadWrite)]
-    [NightscoutEndpoint("/api/v1/notifications/pushover")]
-    [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(
-        typeof(NotificationAckResponse),
-        StatusCodes.Status500InternalServerError
-    )]
-    public async Task<ActionResult<NotificationAckResponse>> SendPushoverNotification(
-        [FromBody] PushoverNotificationRequest request,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
-        _logger.LogDebug(
-            "Send Pushover notification endpoint requested from {RemoteAddress}",
-            remoteAddress
-        );
-
-        try
-        {
-            if (request == null)
-            {
-                _logger.LogWarning(
-                    "Pushover notification request body is null from {RemoteAddress}",
-                    remoteAddress
-                );
-                return BadRequest(
-                    new NotificationAckResponse
-                    {
-                        Success = false,
-                        Message = "Request body is required",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    }
-                );
-            }
-
-            if (string.IsNullOrEmpty(request.Title) || string.IsNullOrEmpty(request.Message))
-            {
-                _logger.LogWarning(
-                    "Invalid Pushover notification request from {RemoteAddress}: missing title or message",
-                    remoteAddress
-                );
-                return BadRequest(
-                    new NotificationAckResponse
-                    {
-                        Success = false,
-                        Message = "Title and message are required",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    }
-                );
-            }
-
-            // Use level and group for alarm-based notifications, or default values
-            var level = request.Level ?? 1;
-            var group = request.Group ?? "manual";
-
-            var response = await _notificationService.SendPushoverNotificationAsync(
-                level,
-                group,
-                request.Title,
-                request.Message,
-                request.Sound,
-                cancellationToken
-            );
-
-            if (!response.Success)
-            {
-                _logger.LogWarning(
-                    "Pushover notification send failed from {RemoteAddress}: {Message}",
-                    remoteAddress,
-                    response.Message
-                );
-                return BadRequest(response);
-            }
-
-            _logger.LogDebug(
-                "Pushover notification sent successfully from {RemoteAddress}",
-                remoteAddress
-            );
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error sending Pushover notification from {RemoteAddress}",
-                remoteAddress
-            );
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new NotificationAckResponse
-                {
-                    Success = false,
-                    Message = "Internal server error sending Pushover notification",
                     Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 }
             );

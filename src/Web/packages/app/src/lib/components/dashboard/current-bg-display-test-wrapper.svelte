@@ -9,6 +9,9 @@
   let { showPills = true }: Props = $props();
 </script>
 
+<!-- The dashboard page is the container the mobile rail's breakpoint reads. -->
 <Tooltip.Provider>
-  <CurrentBGDisplay {showPills} />
+  <div class="@container">
+    <CurrentBGDisplay {showPills} />
+  </div>
 </Tooltip.Provider>

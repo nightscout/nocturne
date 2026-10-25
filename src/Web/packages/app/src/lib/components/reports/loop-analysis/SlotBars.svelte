@@ -14,7 +14,7 @@
 </script>
 
 <script lang="ts">
-  import { getChartContext } from "layerchart";
+  import { Rect, getChartContext } from "layerchart";
 
   interface Props {
     bars: SlotBar[];
@@ -41,17 +41,17 @@
 
 {#each bars as bar (bar.start)}
   {@const b = box(bar)}
-  <rect {...b} rx="1" fill={color} fill-opacity={bar.sparse ? 0.35 : 1} />
+  <Rect {...b} rx={1} fill={color} fillOpacity={bar.sparse ? 0.35 : 1} />
 {/each}
 {#each comparison as bar (`c${bar.start}`)}
   {@const b = box(bar)}
-  <rect
+  <Rect
     {...b}
-    rx="1"
+    rx={1}
     fill="none"
     stroke="var(--foreground)"
-    stroke-opacity="0.85"
-    stroke-width="1.25"
-    stroke-dasharray="3 2"
+    strokeOpacity={0.85}
+    strokeWidth={1.25}
+    dashArray="3 2"
   />
 {/each}

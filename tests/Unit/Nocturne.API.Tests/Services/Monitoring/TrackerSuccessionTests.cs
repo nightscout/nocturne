@@ -31,9 +31,8 @@ public class TrackerSuccessionTests
 
         _broadcast
             .Setup(b => b.BroadcastTrackerUpdateAsync(
-                It.IsAny<TrackerRealtimeAction>(), It.IsAny<TrackerInstanceDto>(),
-                It.IsAny<string>(), It.IsAny<TrackerVisibility>()))
-            .Callback((TrackerRealtimeAction action, TrackerInstanceDto instance, string _, TrackerVisibility _) =>
+                It.IsAny<TrackerRealtimeAction>(), It.IsAny<TrackerInstanceDto>()))
+            .Callback((TrackerRealtimeAction action, TrackerInstanceDto instance) =>
                 _broadcasts.Add((action, instance.Id)))
             .Returns(Task.CompletedTask);
     }
@@ -42,7 +41,7 @@ public class TrackerSuccessionTests
     {
         Id = Guid.NewGuid(),
         Name = "Infusion Site",
-        UserId = "owner",
+        CreatedBy = "owner",
         Mode = mode,
         LifespanHours = 72,
     };
@@ -53,7 +52,7 @@ public class TrackerSuccessionTests
         {
             Id = Guid.NewGuid(),
             DefinitionId = definition.Id,
-            UserId = definition.UserId,
+            CreatedBy = definition.CreatedBy,
             StartedAt = startedAt,
             Definition = definition,
         };
@@ -72,7 +71,7 @@ public class TrackerSuccessionTests
     {
         Id = Guid.NewGuid(),
         DefinitionId = definition.Id,
-        UserId = definition.UserId,
+        CreatedBy = definition.CreatedBy,
         StartedAt = T0,
         Definition = definition,
     };

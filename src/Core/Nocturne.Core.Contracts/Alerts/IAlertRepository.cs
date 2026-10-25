@@ -19,6 +19,50 @@ public interface IAlertRepository
     Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
+    /// Returns the tenant's enabled rules as <see cref="GetEnabledRulesAsync"/> does, together with
+    /// the ids of the enabled rules it leaves out because they cannot be read.
+    /// </summary>
+    Task<EnabledAlertRules> ReadEnabledRulesAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Returns every rule of the tenant, enabled or not, in <c>SortOrder</c>, each with its channels.
+    /// </summary>
+    /// <remarks>
+    /// Reads with the tenant pinned and none of the caller's share or history-clamp state, so a
+    /// public share or guest link would see every rule and every channel destination through it. A
+    /// caller serving a request must refuse those viewers first, as <c>AlertRulesController</c> does
+    /// with <c>[DenyNoAccountViewer]</c>.
+    /// </remarks>
+    Task<IReadOnlyList<AlertRuleRecord>> GetRulesAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Returns every rule of the tenant, enabled or not, in <c>SortOrder</c>, without its channels.
+    /// </summary>
+    /// <remarks>Callers are bound as for <see cref="GetRulesAsync"/>.</remarks>
+    Task<IReadOnlyList<AlertRuleSnapshot>> GetRuleSnapshotsAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Returns one rule of the tenant, enabled or not, with its channels; null when the tenant has
+    /// no rule <paramref name="ruleId"/>.
+    /// </summary>
+    /// <remarks>Callers are bound as for <see cref="GetRulesAsync"/>.</remarks>
+    Task<AlertRuleRecord?> GetRuleAsync(Guid tenantId, Guid ruleId, CancellationToken ct);
+
+    /// <summary>
+    /// Counts the tenant's rules, enabled or not.
+    /// </summary>
+    /// <remarks>Callers are bound as for <see cref="GetRulesAsync"/>.</remarks>
+    Task<int> CountRulesAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Returns the open, unacknowledged excursions of the rules whose <c>ManagedBy</c> tag is
+    /// <paramref name="managedBy"/>.
+    /// </summary>
+    /// <remarks>Callers are bound as for <see cref="GetRulesAsync"/>.</remarks>
+    Task<IReadOnlyList<Guid>> GetUnacknowledgedExcursionIdsAsync(
+        Guid tenantId, string managedBy, CancellationToken ct);
+
+    /// <summary>
     /// Returns the flat per-rule channel list. Channels are dispatched in parallel when the
     /// rule fires; <see cref="AlertRuleChannelSnapshot.SortOrder"/> is cosmetic only.
     /// </summary>
@@ -34,6 +78,13 @@ public interface IAlertRepository
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <returns>A read-only list of alert instances for the excursion.</returns>
     Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
+
+    /// <summary>
+    /// The rule an excursion belongs to, or null when the excursion does not exist.
+    /// </summary>
+    /// <param name="tenantId">The tenant that owns the excursion, used to scope the query.</param>
+    /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
+    Task<ExcursionRuleSnapshot?> GetExcursionRuleAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
 
     /// <summary>
     /// Resolves all active alert instances for the specified excursion, marking them

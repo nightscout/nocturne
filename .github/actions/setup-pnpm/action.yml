@@ -29,6 +29,7 @@ runs:
     - uses: actions/setup-node@v5
       with:
         node-version: "24"
+        check-latest: true
         cache: ${{ inputs.install != '' && 'pnpm' || '' }}
         cache-dependency-path: ${{ steps.lockfiles.outputs.paths }}
     - if: inputs.install != ''

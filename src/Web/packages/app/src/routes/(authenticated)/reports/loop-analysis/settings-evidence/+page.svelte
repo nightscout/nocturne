@@ -9,11 +9,6 @@
   const resource = contextResource(() => getSettingsEvidence(analysis.query), { errorTitle: "Cannot load the settings evidence" });
 </script>
 
-<svelte:head>
-  <title>Settings evidence - Loop Analysis - Nocturne Reports</title>
-  <meta name="description" content="Your profile settings compared with what your data shows." />
-</svelte:head>
-
 {#if resource.current}
   <SettingsEvidenceBody response={resource.current} sensitivityHref={analysis.path("loop-health", "sensitivity")} />
 {:else}

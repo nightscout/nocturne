@@ -47,7 +47,7 @@ describe("FoodBreakdown", () => {
     });
 
     await expect
-      .element(page.getByText("Unable to load food breakdown."))
+      .element(page.getByText("Could not load food breakdown."))
       .toBeVisible();
   });
 });

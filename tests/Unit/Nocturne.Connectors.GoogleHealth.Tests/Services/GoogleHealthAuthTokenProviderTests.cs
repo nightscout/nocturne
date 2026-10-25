@@ -67,7 +67,7 @@ public class GoogleHealthAuthTokenProviderTests
     }
 
     [Fact]
-    public async Task Durable_rotated_session_replaces_a_stale_replica_cache()
+    public async Task Durable_rotated_session_replaces_a_stale_cache()
     {
         string? posted = null;
         var provider = CreateProvider(new StubHandler(request =>

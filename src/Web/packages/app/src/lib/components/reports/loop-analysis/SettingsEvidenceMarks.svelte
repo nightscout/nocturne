@@ -6,7 +6,7 @@
   A block with no observed value draws only its profile.
 -->
 <script lang="ts">
-  import { getChartContext } from "layerchart";
+  import { Circle, Line, Path, getChartContext } from "layerchart";
   import { SettingsEvidenceConfidence, type SettingsEvidenceFigure } from "$lib/api";
   import { blockSpan, matchingBlock } from "./settings-evidence-view";
 
@@ -52,7 +52,7 @@
 </script>
 
 {#if steps}
-  <path d={steps} fill="none" class="stroke-foreground/50" stroke-width="2" data-testid="profile-step" />
+  <Path pathData={steps} fill="none" class="stroke-foreground/50" strokeWidth={2} data-testid="profile-step" />
 {/if}
 
 {#each blocks as block (`${block.startHour}`)}
@@ -60,26 +60,26 @@
     {@const x = centre(block)}
     {@const low = block.confidence === SettingsEvidenceConfidence.Low}
     {#if block.spread?.p25 != null && block.spread?.p75 != null}
-      <line
+      <Line
         x1={x}
         x2={x}
         y1={y(block.spread.p25)}
         y2={y(block.spread.p75)}
         stroke={color}
-        stroke-width="2"
+        strokeWidth={2}
         stroke-linecap={low ? "butt" : "round"}
         stroke-opacity={low ? LOW_BAR_OPACITY : 1}
-        stroke-dasharray={low ? "3 2" : undefined}
+        dashArray={low ? "3 2" : undefined}
         data-testid={low ? "spread-low" : "spread"}
       />
     {/if}
-    <circle
+    <Circle
       cx={x}
       cy={y(block.observed)}
-      r="4.5"
+      r={4.5}
       fill={low ? "var(--background)" : color}
       stroke={color}
-      stroke-width="2"
+      strokeWidth={2}
       data-testid={low ? "observed-low" : "observed"}
     />
   {/if}
@@ -87,28 +87,29 @@
   {#if compared?.observed != null}
     {@const x = centre(block) + offset}
     {#if compared.spread?.p25 != null && compared.spread?.p75 != null}
-      <line x1={x} x2={x} y1={y(compared.spread.p25)} y2={y(compared.spread.p75)} stroke="var(--background)" stroke-width="5" />
-      <line
+      <Line x1={x} x2={x} y1={y(compared.spread.p25)} y2={y(compared.spread.p75)} stroke="var(--background)" strokeWidth={5} />
+      <Line
         x1={x}
         x2={x}
         y1={y(compared.spread.p25)}
         y2={y(compared.spread.p75)}
         stroke="var(--foreground)"
         stroke-opacity="0.85"
-        stroke-width="1.5"
-        stroke-dasharray="3 2"
+        strokeWidth={1.5}
+        dashArray="3 2"
+        data-testid="compared-spread"
       />
     {/if}
     {@const d = diamond(x, y(compared.observed))}
-    <path {d} fill="var(--background)" stroke="var(--background)" stroke-width="4" />
+    <Path pathData={d} fill="var(--background)" stroke="var(--background)" strokeWidth={4} />
     {@const comparedLow = compared.confidence === SettingsEvidenceConfidence.Low}
-    <path
-      {d}
+    <Path
+      pathData={d}
       fill={comparedLow ? "var(--background)" : "var(--foreground)"}
-      fill-opacity={comparedLow ? 1 : 0.85}
+      fillOpacity={comparedLow ? 1 : 0.85}
       stroke="var(--foreground)"
-      stroke-opacity="0.85"
-      stroke-width="1.5"
+      strokeOpacity={0.85}
+      strokeWidth={1.5}
       data-testid={comparedLow ? "observed-compared-low" : "observed-compared"}
     />
   {/if}

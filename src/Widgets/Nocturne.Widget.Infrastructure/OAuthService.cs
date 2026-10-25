@@ -62,8 +62,8 @@ public class OAuthService : IOAuthService
         {
             var scopeString = scopes != null ? string.Join(" ", scopes) : DefaultScopes;
 
-            // RFC 7591 Dynamic Client Registration: obtain this server's client_id.
-            // Idempotent per tenant on software_id, so reconnects reuse the same client.
+            // RFC 7591 Dynamic Client Registration issues a new client_id on every call; the
+            // stored credentials keep it for refresh.
             var clientId = await RegisterClientAsync(apiUrl, scopeString);
             if (string.IsNullOrEmpty(clientId))
             {
@@ -137,9 +137,7 @@ public class OAuthService : IOAuthService
 
     /// <summary>
     /// Registers this widget with the Nocturne server via RFC 7591 Dynamic Client
-    /// Registration and returns the server-assigned client_id. Registration is
-    /// idempotent per tenant on <see cref="SoftwareId"/>, so the same client_id is
-    /// returned on every reconnect.
+    /// Registration and returns the new client_id the server assigned.
     /// </summary>
     private async Task<string?> RegisterClientAsync(string apiUrl, string scopeString)
     {

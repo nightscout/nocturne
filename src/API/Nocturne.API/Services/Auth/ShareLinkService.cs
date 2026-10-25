@@ -373,7 +373,8 @@ public sealed class ShareLinkService : IShareLinkService
             return [];
 
         return member.EffectivePermissions()
-            .Where(Scope.PublicShareScopes.Contains)
+            .Where(scope => Scope.PublicShareScopes.Contains(scope)
+                            && Scope.SharesWithPublic(scope, member.DirectPermissions))
             .ToList();
     }
 }

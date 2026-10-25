@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { DeviceEventType } from "$lib/api";
   import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import type { Snippet } from "svelte";
   import { cn } from "$lib/utils";
@@ -237,17 +238,17 @@
   </svg>{/snippet}
 {#snippet hatchSwatch()}<TextureSwatch texture="basal-unreported" color="transparent" />{/snippet}
 {#snippet overrideIcon()}<div
-    class="w-3 h-2 rounded border border-(--pump-mode-boost) bg-(--pump-mode-boost) opacity-30"
+    class="w-3 h-2 rounded border border-pump-mode-boost bg-pump-mode-boost opacity-30"
   ></div>{/snippet}
 {#snippet profileIcon()}<div
     class="w-3 h-2 rounded border border-chart-1 bg-chart-1 opacity-20"
   ></div>{/snippet}
 {#snippet activityIcon()}<div class="flex items-center gap-0.5">
     <div
-      class="w-2 h-2 rounded bg-(--pump-mode-sleep)"
+      class="w-2 h-2 rounded bg-pump-mode-sleep"
     ></div>
     <div
-      class="w-2 h-2 rounded bg-(--pump-mode-exercise)"
+      class="w-2 h-2 rounded bg-pump-mode-exercise"
     ></div>
   </div>{/snippet}
 
@@ -257,9 +258,9 @@
   class="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs @md:gap-4 @md:text-sm text-muted-foreground pt-2"
 >
   <!-- Glucose range indicators -->
-  {@render glucoseRangeIndicator("bg-glucose-in-range", "In Range", `${bg(lowThreshold, glucoseUnits)}–${bg(highThreshold, glucoseUnits)}`)}
+  {@render glucoseRangeIndicator("bg-glucose-in-range", "In range", `${bg(lowThreshold, glucoseUnits)}–${bg(highThreshold, glucoseUnits)}`)}
   {#if glucoseData.some((d) => d.sgv > veryHighThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-very-high", "Very High", `>${bg(veryHighThreshold, glucoseUnits)}`)}
+    {@render glucoseRangeIndicator("bg-glucose-very-high", "Very high", `>${bg(veryHighThreshold, glucoseUnits)}`)}
   {/if}
   {#if glucoseData.some((d) => d.sgv > highThreshold && d.sgv <= veryHighThreshold)}
     {@render glucoseRangeIndicator("bg-glucose-high", "High", `>${bg(highThreshold, glucoseUnits)}`)}
@@ -268,7 +269,7 @@
     {@render glucoseRangeIndicator("bg-glucose-low", "Low", `<${bg(lowThreshold, glucoseUnits)}`)}
   {/if}
   {#if glucoseData.some((d) => d.sgv < veryLowThreshold)}
-    {@render glucoseRangeIndicator("bg-glucose-very-low", "Very Low", `<${bg(veryLowThreshold, glucoseUnits)}`)}
+    {@render glucoseRangeIndicator("bg-glucose-very-low", "Very low", `<${bg(veryLowThreshold, glucoseUnits)}`)}
   {/if}
   {@render printKey(rangeLimitSwatch, `Range limits ${bg(lowThreshold, glucoseUnits)} / ${bg(highThreshold, glucoseUnits)}`)}
   {#if targetLabel}
@@ -292,16 +293,16 @@
   {@render legendToggle(showCarbs, onToggleCarbs, "Carbs", carbsIconSnippet)}
 
   <!-- Device event legend items (only show if present in current view) -->
-  {#if deviceEventMarkers.some((m) => m.eventType === "SensorStart" || m.eventType === "SensorChange")}
+  {#if deviceEventMarkers.some((m) => m.eventType === DeviceEventType.SensorStart || m.eventType === DeviceEventType.SensorChange)}
     {@render legendIndicator(sensorIcon, "Sensor")}
   {/if}
-  {#if deviceEventMarkers.some((m) => m.eventType === "SiteChange")}
+  {#if deviceEventMarkers.some((m) => m.eventType === DeviceEventType.SiteChange)}
     {@render legendIndicator(siteIcon, "Site")}
   {/if}
-  {#if deviceEventMarkers.some((m) => m.eventType === "InsulinChange")}
+  {#if deviceEventMarkers.some((m) => m.eventType === DeviceEventType.InsulinChange)}
     {@render legendIndicator(reservoirIcon, "Reservoir")}
   {/if}
-  {#if deviceEventMarkers.some((m) => m.eventType === "PumpBatteryChange")}
+  {#if deviceEventMarkers.some((m) => m.eventType === DeviceEventType.PumpBatteryChange)}
     {@render legendIndicator(batteryIcon, "Battery")}
   {/if}
 

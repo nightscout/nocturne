@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { ArtworkHero } from "@nocturne/watercolour";
+    import { DOCS_HERO } from "$lib/data/docs-artwork";
     import { resolve } from "$app/paths";
     import SystemRequirements from "$lib/components/docs/SystemRequirements.svelte";
     import VerificationSteps from "$lib/components/docs/VerificationSteps.svelte";
@@ -10,17 +12,20 @@
     import envExample from "$lib/release/docker-compose/default.env.example?raw";
     import dockerCompose from "$lib/release/docker-compose/docker-compose.yaml?raw";
     import bindDataCompose from "$lib/release/docker-compose/docker-compose.bind-data.yaml?raw";
+
+    const hero = DOCS_HERO["installation/docker-compose"];
 </script>
 
 <div class="max-w-3xl">
-    <div class="flex items-center gap-4 mb-4">
-        <img
-            src="/logos/docker-compose.png"
-            alt="Docker Compose"
-            class="w-12 h-12 object-contain shrink-0"
-        />
-        <h1 class="text-4xl font-bold tracking-tight">Docker Compose</h1>
-    </div>
+    <ArtworkHero
+        artwork={hero.artwork}
+        palette={hero.palette}
+        motion="auto"
+        autoplay="once"
+        size={400}
+        wrap={hero.wrap ?? true}
+    />
+    <h1 class="text-4xl font-bold tracking-tight mb-4">Docker Compose</h1>
     <p class="text-lg text-muted-foreground mb-8">
         Deploy Nocturne on any server with Docker Compose from the command line.
     </p>
@@ -42,7 +47,7 @@
 
     <SystemRequirements />
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 1: Download the release bundle</h2>
+    <h2 data-install-step="1" class="text-2xl font-bold mt-8 mb-4">Step 1: Download the release bundle</h2>
     <p class="text-muted-foreground mb-4">
         Download the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose</code>
         bundle from the
@@ -52,8 +57,7 @@
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.yaml</code>
         and the environment template, which GitHub lists as
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">default.env.example</code>.
-        The database init script and the TLS proxy config are embedded directly in
-        the compose file, so there are no extra directories to keep alongside it. The
+        The database init script and the TLS proxy config are embedded directly in the compose file. There are no extra directories to keep alongside it. The
         bundle also ships a
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.byo-proxy.yaml</code>
         override for operators who run their own reverse proxy (see below).
@@ -67,10 +71,10 @@
         <CodeBlock code={dockerCompose} class="mt-2" maxHeight="400px" />
     </details>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 2: Configure environment variables</h2>
+    <h2 data-install-step="2" class="text-2xl font-bold mt-8 mb-4">Step 2: Configure environment variables</h2>
     <p class="text-muted-foreground mb-4">
         Edit <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code> and fill in your
-        values. The required fields come first and are left blank; optional bot integrations are commented out.
+        values. The required fields come first and are left blank. Optional bot integrations are commented out.
         Use the generator below for each password field and <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">INSTANCE_KEY</code>.
     </p>
     <PasswordGenerator label="password" />
@@ -92,8 +96,7 @@
     <ol class="list-decimal list-inside space-y-3 text-muted-foreground mb-4">
         <li>
             Create the directory on the machine running the Docker daemon, not merely on the
-            computer where you run the Docker CLI. Use an absolute path and ensure the
-            PostgreSQL container can write to it. For example:
+            computer where you run the Docker CLI. Use an absolute path and make sure the PostgreSQL container can write to it. For example:
             <CodeBlock code="sudo mkdir -p /srv/nocturne/postgres-data" class="mt-3" />
         </li>
         <li>
@@ -102,7 +105,7 @@
         </li>
         <li>
             This replaces the default <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code>
-            command in Step 3 below; do not run both commands. Start the stack with both files. Keep both <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code>
+            command in Step 3 below. Do not run both commands. Start the stack with both files. Keep both <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code>
             arguments on every later Compose command, including updates and shutdown:
             <CodeBlock code="docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml up -d" class="mt-3" />
         </li>
@@ -113,7 +116,7 @@
             existing install, take and verify a backup, stop the stack, and migrate the existing
             PostgreSQL data before starting with the override. Preserve file ownership and use
             the same PostgreSQL major version. Keep the original named volume until the new
-            location has been verified. There is no automatic volume migration. Do not use
+            location is verified. There is no automatic volume migration. Do not use
             <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">docker compose down -v</code>
             while the original volume is your only copy.
         </p>
@@ -155,18 +158,17 @@
                     Verify the PostgreSQL logs and your existing Nocturne data before allowing
                     writes. Keep the original named volume and backup archive until verification
                     is complete. To roll back before new writes, stop the override stack without
-                    deleting volumes, then start the original Compose file again:
+                    deleting volumes. Then start the original Compose file again:
                     <CodeBlock code={'docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml down\ndocker compose up -d'} class="mt-3" />
-                    For a stack that also uses BYO proxy, keep that override when stopping and
-                    when returning to the named-volume configuration:
+                    For a stack that also uses BYO proxy, keep that override when you stop it. Keep it also when you return to the named-volume configuration:
                     <CodeBlock code={'docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml -f docker-compose.byo-proxy.yaml down\ndocker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d'} class="mt-3" />
                 </li>
             </ol>
             <p class="text-muted-foreground">
                 Do not use <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">down -v</code>
                 during migration or rollback. It deletes named volumes. If the new database has
-                accepted writes, it is no longer equivalent to the untouched original volume;
-                plan any rollback or restore before reopening the service to users.
+                accepted writes, it is no longer equivalent to the untouched original volume.
+                Plan any rollback or restore before reopening the service to users.
             </p>
         </div>
     </details>
@@ -181,7 +183,7 @@
         <CodeBlock code={bindDataCompose} class="mt-2" maxHeight="240px" />
     </details>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 3: Start the services</h2>
+    <h2 data-install-step="3" class="text-2xl font-bold mt-8 mb-4">Step 3: Start the services</h2>
     <CodeBlock code="docker compose up -d" class="mb-4" />
     <p class="text-muted-foreground mb-8">
         Docker will pull the images and start all services. First run takes a few minutes.
@@ -197,9 +199,7 @@
         on demand the first time it is visited.
     </p>
     <p class="text-muted-foreground mb-4">
-        Already run your own reverse proxy (nginx, Traefik, Caddy)? Use the
-        bring-your-own-proxy override to disable the bundled Caddy and expose the
-        gateway on plain HTTP port 8080 for your proxy to forward to:
+        Already run your own reverse proxy (nginx, Traefik, Caddy)? Use the bring-your-own-proxy override. It disables the bundled Caddy and exposes the gateway on plain HTTP port 8080 for your proxy to forward to:
     </p>
     <CodeBlock code="docker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d" class="mb-4" />
     <p class="text-muted-foreground mb-4">
@@ -215,7 +215,7 @@
         for worked nginx, Traefik, and Caddy configurations.
     </p>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 4: Verify the installation</h2>
+    <h2 data-install-step="4" class="text-2xl font-bold mt-8 mb-4">Step 4: Verify the installation</h2>
     <VerificationSteps />
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Updating</h2>
@@ -228,9 +228,8 @@
         restart policy and log rotation below were added, download the new bundle and
         run <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code>
         to pick them up. That first run recreates the containers, which clears their
-        old logs; your database data is kept. If you installed before Caddy was excluded from
-        Watchtower, set <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">com.centurylinklabs.watchtower.enable</code>
-        to <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">"false"</code> on the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">caddy</code> service, or download the new bundle, then run
+        old logs. Your database data is kept. If you installed before Caddy was excluded from Watchtower, set <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">com.centurylinklabs.watchtower.enable</code>
+        to <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">"false"</code> on the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">caddy</code> service. Or download the new bundle and run
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code> to recreate it.
     </p>
     <p class="text-muted-foreground mb-4">
@@ -246,8 +245,7 @@
     <h2 class="text-2xl font-bold mt-8 mb-4">Restarts and logs</h2>
     <p class="text-muted-foreground mb-4">
         Every service sets <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">restart: unless-stopped</code>,
-        so Docker restarts it when it exits or when the Docker daemon restarts, unless you
-        stopped it. Docker's default policy is <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">no</code>
+        so Docker restarts it when it exits or when the Docker daemon restarts. Docker does not restart a service that you stopped. Docker's default policy is <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">no</code>
         (<a href="https://docs.docker.com/engine/containers/start-containers-automatically/" class="text-primary hover:underline">Docker docs</a>).
     </p>
     <p class="text-muted-foreground mb-8">
@@ -261,10 +259,7 @@
         so the bundle overrides any <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">log-driver</code>
         in your <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">daemon.json</code>.
         To keep yours, set <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">logging</code>
-        on the services in a <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.override.yaml</code>.
-        Compose reads that file only when you pass no <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code>
-        (<a href="https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/" class="text-primary hover:underline">Docker docs</a>),
-        so with the bring-your-own-proxy command, also pass
+        on the services in a <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.override.yaml</code>. Compose reads that file only when you pass no <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code> (<a href="https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/" class="text-primary hover:underline">Docker docs</a>). With the bring-your-own-proxy command, also pass
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f docker-compose.override.yaml</code>.
     </p>
 
@@ -274,7 +269,7 @@
     <p class="text-muted-foreground mb-8">To start fresh, stop all services and remove volumes:</p>
     <CodeBlock code="docker compose down -v" class="mb-8" />
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Next Steps</h2>
+    <h2 data-install-step="next-steps" class="text-2xl font-bold mt-8 mb-4">Next steps</h2>
     <NextSteps />
 
     <SupportNocturne />

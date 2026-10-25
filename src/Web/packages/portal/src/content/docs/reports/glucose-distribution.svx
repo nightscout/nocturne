@@ -1,0 +1,78 @@
+---
+title: Glucose Distribution
+---
+
+<script>
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Glucose Distribution
+
+The Glucose Distribution report answers the question "how much time do I spend
+in each glucose range?". It also shows how that changes with the hour of the
+day.
+
+<Video id="glucose-distribution" />
+
+## What it shows
+
+### The key figures
+
+The strip at the top shows the **Mean**, **Median** and **Std Dev** (standard
+deviation) of your glucose, and the number of **Readings** in the period.
+
+### Distribution Chart
+
+The ring shows how your time divides across the glucose ranges. The number in
+the middle is your time in range, 70 to 180 mg/dL. The key under the ring names
+each part.
+
+| Range | Glucose |
+|-------|---------|
+| Very Low | Below 54 mg/dL |
+| Low | 54 to 70 mg/dL |
+| Tight Range | 70 to 140 mg/dL |
+| In Range | 140 to 180 mg/dL when the tight range shows; 70 to 180 mg/dL when it does not |
+| High | 180 to 250 mg/dL |
+| Very High | Above 250 mg/dL |
+
+**Distribution Statistics** gives the same values as a table, with one decimal
+place.
+
+### Hourly Distribution
+
+Each column is one hour of the day. The column is split by range, so you can
+see which hours spend more time high or low. The key names each range, with its
+glucose values.
+
+### GMI, Glycemic Variability and Fluctuation
+
+- **GMI** (glucose management indicator) estimates your HbA1c from your average
+  glucose. If the GMI is not available, the card shows your eHbA1c.
+- **Glycemic Variability** shows the **GVI** (glycemic variability index) and
+  **PGS** (patient glycemic status).
+- **Fluctuation** shows the **Mean Total Daily Change** and the **Time in
+  Fluctuation**.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+To see your whole target range as one part of the ring:
+
+1. In the **Distribution Chart** card, select **Hide Tight Range**.
+2. The ring now shows one **In Range** part for 70 to 180 mg/dL.
+3. To split it again, select **Show Tight Range**.
+
+The app keeps this choice in the page address. If you share or reload the page,
+the chart shows the same view.
+
+To change the period, select the date range at the top of the report, select a
+period, and then select **Apply Filters**.
+
+## Good to know
+
+- If the period has no readings, the report shows **No readings in this date
+  range**. Choose a longer period.
+- If the GMI or eHbA1c uses fewer days than recommended, a badge in that card
+  shows how many days it uses.

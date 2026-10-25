@@ -501,7 +501,7 @@ public class AlexaService : IAlexaService
             "virtAsstStatus",
             request.Locale,
             GlucoseUnits.Scale(
-                latest.Sgv ?? latest.Mgdl,
+                latest.GlucoseMgdl(),
                 await GlucoseUnits.UsesMmolAsync(
                     _appearanceReader,
                     _tenantAccessor,

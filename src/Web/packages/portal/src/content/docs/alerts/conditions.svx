@@ -200,7 +200,10 @@ Time since a tracker you have set up started, or until one is due.
 - **Good to know:** for a tracker that counts down to a scheduled event, the
   time is negative before the event, so "at least minus 30 minutes" is true from
   30 minutes before it is due onwards. A tracker that is not running has no
-  age, and the condition is not true.
+  age, and the condition is not true. For a duration tracker, with "more than"
+  or "at least", a time that was already reached when the run was recorded
+  does not make the condition true for that run. This does not apply to a
+  tracker that counts down to a scheduled event.
 
 ### Pump battery and Phone battery
 
@@ -255,10 +258,10 @@ Whether insulin delivery is suspended.
 Whether an override (a temporary change of targets or settings in your loop)
 is running, and optionally for how long.
 
-### Do Not Disturb
+### Do not disturb
 
-Whether Do Not Disturb is on right now, and optionally for how long. Useful for
-a rule that tells a carer when Do Not Disturb has been left on.
+Whether Do not disturb is on right now, and optionally for how long. Useful for
+a rule that tells a carer when Do not disturb has been left on.
 
 ### Pump mode
 

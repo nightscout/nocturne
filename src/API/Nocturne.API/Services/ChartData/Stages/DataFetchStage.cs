@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -180,14 +181,21 @@ internal sealed class DataFetchStage(
             ct: cancellationToken
         );
 
-        // Fetch APS snapshot IOB/COB points (ascending) so the IOB/COB series can prefer the
-        // values the AID system actually acted on. The buffer start is used so a tick at the very
-        // left edge of the window can still resolve a snapshot uploaded just before it. The slim
-        // projection is deliberate: full snapshots carry multi-KB JSON blob columns, and a limit
-        // heuristic would truncate the newest rows for high-cadence uploaders.
+        // APS and pump snapshot points (ascending) so the IOB/COB series can prefer the values the
+        // devices reported. The buffer start lets a tick at the very left edge resolve a snapshot
+        // uploaded just before it, and the skew allowance past the end lets the live tick take one
+        // stamped by a device clock running ahead. The slim projections are deliberate: full
+        // snapshots carry multi-KB JSON blob columns, and a limit heuristic would truncate the
+        // newest rows for high-cadence uploaders.
+        var deviceReadUntil = MillsToDateTime(endTime + DeviceReportedValues.FutureSkewToleranceMs)!.Value;
         var apsSnapshotTask = apsSnapshotRepository.GetIobCobPointsAsync(
             from: MillsToDateTime(bufferStartTime)!.Value,
-            to: MillsToDateTime(endTime)!.Value,
+            to: deviceReadUntil,
+            ct: cancellationToken
+        );
+        var pumpIobTask = pumpSnapshotRepository.GetIobPointsAsync(
+            from: MillsToDateTime(bufferStartTime)!.Value,
+            to: deviceReadUntil,
             ct: cancellationToken
         );
 
@@ -205,14 +213,12 @@ internal sealed class DataFetchStage(
 
         async Task<ChartDataContext> FetchScopedContextReadsAsync()
         {
-            var stateSpanCategories = new[]
-            {
+            StateSpanCategory[] stateSpanCategories =
+            [
                 StateSpanCategory.PumpMode,
                 StateSpanCategory.Override,
-                StateSpanCategory.Exercise,
-                StateSpanCategory.Illness,
-                StateSpanCategory.Travel,
-            };
+                .. StateSpanCategories.DrawnActivities,
+            ];
 
             var allStateSpans = await stateSpanRepository.GetByCategories(
                 stateSpanCategories,
@@ -220,6 +226,9 @@ internal sealed class DataFetchStage(
                 MillsToDateTime(endTime),
                 cancellationToken
             );
+
+            var overrides = await ScheduledBasal.OverridesAsync(
+                stateSpanRepository, bufferStartTime, endTime, cancellationToken);
 
             var profileSegments = await profileActivationResolver.GetRangeAsync(startTime, endTime, cancellationToken);
 
@@ -235,10 +244,7 @@ internal sealed class DataFetchStage(
             );
 
             var trackerDefs = await trackerRepository.GetAllDefinitionsAsync(cancellationToken);
-            var trackerInstances = await trackerRepository.GetActiveInstancesAsync(
-                userId: null,
-                cancellationToken: cancellationToken
-            );
+            var trackerInstances = await trackerRepository.GetActiveInstancesAsync(cancellationToken);
 
             List<HeartRate> heartRateList = [];
             List<StepCount> stepCountList = [];
@@ -266,6 +272,7 @@ internal sealed class DataFetchStage(
             return context with
             {
                 StateSpans = stateSpansReadOnly,
+                Overrides = overrides,
                 ProfileSegments = profileSegments,
                 SystemEvents = systemEventsResult?.ToList() ?? [],
                 TrackerDefinitions = trackerDefs?.ToList() ?? [],
@@ -278,7 +285,7 @@ internal sealed class DataFetchStage(
 
         await Task.WhenAll(
             sensorGlucoseTask, bolusTask, carbIntakeTask, bgCheckTask, deviceEventTask,
-            basalInjectionTask, tempBasalTask, apsSnapshotTask, latestPumpSnapshotTask, sleepSessionTask, scopedTask);
+            basalInjectionTask, tempBasalTask, apsSnapshotTask, pumpIobTask, latestPumpSnapshotTask, sleepSessionTask, scopedTask);
 
         var sensorGlucoseList = await sensorGlucoseTask;
         var bolusList = (await bolusTask).ToList();
@@ -330,6 +337,7 @@ internal sealed class DataFetchStage(
             DisplayTempBasals = displayTempBasals,
             NowMills = nowMills,
             ApsSnapshotList = apsSnapshotList,
+            PumpIobPointList = await pumpIobTask,
             LatestPumpSnapshot = await latestPumpSnapshotTask,
             BasalInjectionList = basalInjectionList,
             SleepSessions = sleepSessionList,

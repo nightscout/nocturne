@@ -1,0 +1,142 @@
+name: Alerts native library (development builds)
+
+# Builds the nocturne_alerts cdylib for every crates/ tree that reaches main and attaches it to
+# the rolling `alerts-native` prerelease, named by the tree's hash:
+# nocturne_alerts-<tree>-<rid>.<ext>. Nocturne.Core.Alerts.Native.csproj downloads the one for
+# the checkout's crates/ tree when a developer has no current local cargo build, so working on
+# the backend needs no Rust toolchain, and checks each file's build provenance attestation (made
+# here, from main) with `gh attestation verify` before using it. CI and image builds never use
+# these: they build from source.
+
+on:
+  push:
+    branches: [main]
+    paths: ["crates/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Per commit: one group for the whole workflow would drop the middle of three queued runs, and
+# leave that tree unpublished.
+concurrency:
+  group: alerts-native-publish-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: alerts-native
+  # Assets are kept for the crates/ trees of this many most recent crates/ commits on main.
+  KEEP_TREES: 30
+
+jobs:
+  tree:
+    # A dispatch from another branch would publish a tree main never had, and prune against a
+    # history that lacks main's latest trees.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tree: ${{ steps.tree.outputs.tree }}
+      published: ${{ steps.tree.outputs.published }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tree=$(git rev-parse HEAD:crates)
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          count=$(gh release view "$RELEASE_TAG" --json assets \
+                    --jq "[.assets[].name | select(startswith(\"nocturne_alerts-$tree-\"))] | length" 2>/dev/null || echo 0)
+          echo "published=$([ "$count" -ge 4 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: tree
+    if: needs.tree.outputs.published != 'true'
+    strategy:
+      matrix:
+        include:
+          # The oldest hosted Ubuntu, so the library loads on the oldest glibc a developer is likely to run.
+          - os: ubuntu-22.04
+            rid: linux-x64
+            artifact: libnocturne_alerts.so
+            extension: .so
+          - os: ubuntu-22.04-arm
+            rid: linux-arm64
+            artifact: libnocturne_alerts.so
+            extension: .so
+          - os: windows-latest
+            rid: win-x64
+            artifact: nocturne_alerts.dll
+            extension: .dll
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: libnocturne_alerts.dylib
+            extension: .dylib
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+      - name: Build cdylib
+        working-directory: crates
+        shell: bash
+        run: |
+          # A developer without Rust may have no Visual C++ runtime installed either.
+          if [ "${{ matrix.rid }}" = win-x64 ]; then export RUSTFLAGS="-C target-feature=+crt-static"; fi
+          cargo build --release --locked -p nocturne-alerts-ffi
+      - name: Stage artifact under its asset name
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "crates/target/release/${{ matrix.artifact }}" \
+             "dist/nocturne_alerts-${{ needs.tree.outputs.tree }}-${{ matrix.rid }}${{ matrix.extension }}"
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
+      - uses: actions/upload-artifact@v6
+        with:
+          name: nocturne-alerts-${{ matrix.rid }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [tree, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v7
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Upload to the rolling release and prune old trees
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --prerelease --target "$GITHUB_SHA" \
+              --title "Alerts native library (development builds)" \
+              --notes "nocturne_alerts built from main, one set per crates/ tree, for developer builds without Rust (see .github/workflows/alerts-native-publish.yml). Not a release."
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
+
+          keep=$(git log -n "$KEEP_TREES" --format=%H -- crates | while read -r commit; do
+                   git rev-parse "$commit:crates"; done | sort -u)
+          gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | while read -r asset; do
+            tree=$(echo "$asset" | sed -nE 's/^nocturne_alerts-([0-9a-f]{40})-.*/\1/p')
+            if [ -n "$tree" ] && ! grep -qx "$tree" <<< "$keep"; then
+              gh release delete-asset "$RELEASE_TAG" "$asset" --yes
+            fi
+          done

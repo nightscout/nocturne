@@ -88,7 +88,7 @@ describe("PatientDeviceManager", () => {
     ];
     render(PatientDeviceManager, { variant: "dialog" });
 
-    await page.getByRole("button", { name: "Add Device" }).click();
+    await page.getByRole("button", { name: "Add device" }).click();
     await page.getByRole("combobox", { name: "Device" }).click();
     await page.getByPlaceholder("Search or type a device name...").fill("g7");
 
@@ -109,7 +109,7 @@ describe("PatientDeviceManager", () => {
     ];
     render(PatientDeviceManager, { variant: "dialog" });
 
-    await page.getByRole("button", { name: "Add Device" }).click();
+    await page.getByRole("button", { name: "Add device" }).click();
     await page.getByRole("combobox", { name: "Device" }).click();
     await expect.element(page.getByRole("option", { name: /Custom Pump/ })).not.toBeInTheDocument();
 
@@ -119,5 +119,54 @@ describe("PatientDeviceManager", () => {
     const form = new FormData(document.querySelector("form")!);
     expect(form.get("model")).toBe("Kaleido");
     expect(form.get("catalogId")).toBeNull();
+  });
+
+  describe("inline variant", () => {
+    it("names a device with no manufacturer or model as unknown", async () => {
+      devicesCurrent = [
+        makeDevice("11111111-1111-1111-1111-111111111111"),
+        makeDevice("22222222-2222-2222-2222-222222222222", { manufacturer: null, model: null }),
+      ];
+      render(PatientDeviceManager, { variant: "inline" });
+
+      await expect.element(page.getByText("Dexcom G7")).toBeVisible();
+      await expect.element(page.getByText("Unknown device")).toBeVisible();
+    });
+
+    it("opens the add form with the add button disabled until it is complete", async () => {
+      render(PatientDeviceManager, { variant: "inline" });
+
+      await page.getByRole("button", { name: "Add device" }).click();
+
+      await expect.element(page.getByText("Add a device")).toBeVisible();
+      await expect.element(page.getByText("Device category")).toBeVisible();
+      await expect.element(page.getByText("AID algorithm")).not.toBeInTheDocument();
+      await expect.element(page.getByRole("button", { name: "Add device" })).toBeDisabled();
+    });
+
+    it("asks for the AID algorithm once the category is an insulin pump", async () => {
+      render(PatientDeviceManager, { variant: "inline" });
+
+      await page.getByRole("button", { name: "Add device" }).click();
+      await page.getByText("Select category").click();
+      await page.getByRole("option", { name: "Insulin pump" }).click();
+
+      await expect.element(page.getByText("AID algorithm")).toBeVisible();
+      await expect.element(page.getByText("Select algorithm")).toBeVisible();
+    });
+
+    it("enables add once category, manufacturer and model are set", async () => {
+      catalogCurrent = [
+        { id: "dexcom-g7", name: "Dexcom G7", manufacturer: "Dexcom", category: "CGM", cgm: { hasSeparateTransmitter: false } },
+      ];
+      render(PatientDeviceManager, { variant: "inline" });
+
+      await page.getByRole("button", { name: "Add device" }).click();
+      await page.getByRole("combobox", { name: "Device" }).click();
+      await page.getByRole("option", { name: /Dexcom G7/ }).click();
+
+      await expect.element(page.getByLabelText("Manufacturer")).toHaveValue("Dexcom");
+      await expect.element(page.getByRole("button", { name: "Add device" })).toBeEnabled();
+    });
   });
 });

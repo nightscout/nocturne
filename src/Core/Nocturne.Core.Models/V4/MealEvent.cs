@@ -13,11 +13,10 @@ namespace Nocturne.Core.Models.V4;
 public class MealEvent
 {
     /// <summary>
-    /// Shared correlation identifier. For orphan events (no correlation), this
-    /// is <see cref="Guid.Empty"/>.
+    /// Shared correlation identifier. Null for an orphan event (no correlation).
     /// </summary>
     [JsonPropertyName("correlationId")]
-    public Guid CorrelationId { get; set; }
+    public Guid? CorrelationId { get; set; }
 
     /// <summary>
     /// Earliest timestamp across all carb intakes and boluses in the group.

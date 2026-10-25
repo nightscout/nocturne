@@ -22,7 +22,7 @@ describe("filterTenantlessNav", () => {
           { title: "Account", href: "/settings/account" },
           { title: "Therapy", href: "/settings/profile" },
           { title: "Appearance", href: "/settings/appearance" },
-          { title: "Sharing & Privacy", href: "/settings/members" },
+          { title: "Sharing & privacy", href: "/settings/members" },
         ],
       },
     ];

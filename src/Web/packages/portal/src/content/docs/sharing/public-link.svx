@@ -59,7 +59,7 @@ is impossible, so regenerating is the only way to get a copy you can send.
 
 You stay in control of two things.
 
-**What's visible.** There are seven categories you can switch on or off
+**What's visible.** There are eight categories you can switch on or off
 independently:
 
 | Category | What it shares |
@@ -67,6 +67,7 @@ independently:
 | Blood Glucose | Your glucose readings and the graph of them |
 | Treatments | Logged insulin doses, carbs and other entries |
 | Device Status | The state of your pump, CGM and closed loop, including insulin on board |
+| Alerts | An alarm that is firing now, with its name and severity. Your alert rules, quiet hours and alert history stay private |
 | Heart Rate | Heart rate collected from a watch or band |
 | Step Count | Step counts collected from a watch or phone |
 | Food & Meals | Your saved food items and the meals you have logged |
@@ -82,8 +83,12 @@ so older data is never exposed.
 <Callout type="tip" title="When to use it: a daycare">
 
   The daycare wants to keep your child's current glucose up on a tablet at the
-  desk, and staff change shift through the day. Turn on public access, leave it on
-  <em>Blood Glucose</em> only, and set the window to <em>Last 24 hours</em>.
+  desk, and staff change shift through the day. Turn on public access, switch on
+  <em>Blood Glucose</em> and <em>Alerts</em>, and set the window to
+  <em>Last 24 hours</em>. When an alarm fires, it shows on the tablet as well as
+  on your own devices. Staff can press <strong>Seen</strong>, and the alarm on
+  your phone then reads "Seen by Public link", though it keeps going on your
+  devices until you acknowledge it.
   Everyone on shift sees the same screen with no logins to hand around, and they
   never see older history. If a device goes missing or the room changes,
   regenerate the link and the old one stops working.

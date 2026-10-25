@@ -26,6 +26,7 @@ internal sealed class AlertAcknowledgementService(
     INocturneDbContextFactory contextFactory,
     ISignalRBroadcastService broadcastService,
     ITenantMemberService memberService,
+    IEngineAlarmRelay alarmRelay,
     ILogger<AlertAcknowledgementService> logger)
     : IAlertAcknowledgementService
 {
@@ -43,9 +44,9 @@ internal sealed class AlertAcknowledgementService(
     /// test fires carry a short future <c>EndedAt</c> so they surface in the active-intents
     /// snapshot; see <see cref="AlertDeliveryService.TestFireAsync"/>), applies the
     /// per-excursion mutation via <see cref="ApplyAcknowledgement"/>, saves once,
-    /// and broadcasts a single roll-up <c>alert_acknowledged</c> event via
-    /// <see cref="ISignalRBroadcastService"/>. Broadcast failures are swallowed
-    /// and logged so the acknowledgement is not rolled back.
+    /// and broadcasts one <c>alert_acknowledged</c> event, naming every excursion it acknowledged,
+    /// through <see cref="ISignalRBroadcastService.BroadcastAlertAcknowledgedAsync"/>. Broadcast
+    /// failures are swallowed and logged so the acknowledgement is not rolled back.
     /// </remarks>
     public async Task AcknowledgeAllAsync(Guid tenantId, string acknowledgedBy, CancellationToken ct)
     {
@@ -83,18 +84,20 @@ internal sealed class AlertAcknowledgementService(
 
         try
         {
-            await broadcastService.BroadcastAlertEventAsync("alert_acknowledged", new
+            await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
             {
-                tenantId,
-                acknowledgedBy,
-                acknowledgedAt = now,
-                excursionCount = excursions.Count,
+                TenantId = tenantId,
+                ExcursionIds = excursions.Select(e => e.Id).ToList(),
+                AcknowledgedBy = acknowledgedBy,
+                AcknowledgedAt = now,
             });
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to broadcast alert_acknowledged for tenant {TenantId}", tenantId);
         }
+
+        await alarmRelay.ClearIfQuietAsync(excursionIds, ct);
 
         logger.LogInformation(
             "Acknowledged {ExcursionCount} excursions and {InstanceCount} instances for tenant {TenantId} by {AcknowledgedBy}",
@@ -147,16 +150,18 @@ internal sealed class AlertAcknowledgementService(
 
         await db.SaveChangesAsync(ct);
 
+        await alarmRelay.ClearIfQuietAsync([excursionId], ct);
+
         if (broadcast)
         {
             try
             {
-                await broadcastService.BroadcastAlertEventAsync("alert_acknowledged", new
+                await broadcastService.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
                 {
-                    tenantId = excursion.TenantId,
-                    excursionId,
-                    acknowledgedBy,
-                    acknowledgedAt = now,
+                    TenantId = excursion.TenantId,
+                    ExcursionIds = [excursionId],
+                    AcknowledgedBy = acknowledgedBy,
+                    AcknowledgedAt = now,
                 });
             }
             catch (Exception ex)

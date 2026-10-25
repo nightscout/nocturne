@@ -335,7 +335,7 @@
         <Separator />
 
         <div class="space-y-2">
-          <Label>Chart Features</Label>
+          <Label>Chart features</Label>
           <div class="space-y-1">
             {#each CHART_FEATURE_OPTIONS as { key, label, defaultValue } (key)}
               <div class="flex items-center gap-2">

@@ -1,6 +1,7 @@
 <script lang="ts">
   import Actogram from "./Actogram.svelte";
   import { MS_PER_HOUR } from "./actogram";
+  import { servedDay } from "$lib/test-stubs/actogram-days";
   import type { ChartThresholds } from "$lib/constants/glucose-thresholds";
 
   let {
@@ -13,10 +14,10 @@
     targetHigh: number;
   } = $props();
 
-  const day = new Date("2026-10-06T00:00:00Z");
+  const day = servedDay("2026-10-06");
   const data = [
-    { mills: day.getTime() + MS_PER_HOUR, value: 80 },
-    { mills: day.getTime() + 2 * MS_PER_HOUR, value: 100 },
+    { mills: day.startMills + MS_PER_HOUR, value: 80 },
+    { mills: day.startMills + 2 * MS_PER_HOUR, value: 100 },
   ];
   const bgData = data.map((point) => ({
     mills: point.mills,
@@ -38,7 +39,7 @@
   <Actogram {data} {bgData} days={[day]} {thresholds} rowHeight={64}>
     {#snippet row(ctx)}
       {#each ctx.data as { point, hoursFromStart }, index (index)}
-        {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
+        {@const x = ctx.xScale(new Date(ctx.day.startMills + hoursFromStart * MS_PER_HOUR))}
         {#if metric === "steps"}
           <rect
             data-testid="step-reading"

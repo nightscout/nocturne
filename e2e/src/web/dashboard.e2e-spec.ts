@@ -24,7 +24,7 @@ test.describe("dashboard", () => {
   test("renders a seeded history across the dashboard widgets", async ({ page, seed }) => {
     const tenant = await seed({ sampleData: true, sampleDataDays: 2 });
     await signIn(page, tenant);
-    await expect(page.locator("main")).toContainText("Time in Range");
+    await expect(page.locator("main")).toContainText("Time in range");
     await expect(page.locator("main")).toContainText(/\d+ readings/);
   });
 });

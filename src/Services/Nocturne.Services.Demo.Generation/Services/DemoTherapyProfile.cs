@@ -117,7 +117,7 @@ public static class DemoTherapyProfile
         {
             DefaultProfile = ProfileName,
             StartDate = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-            Mills = new DateTimeOffset(nowUtc).ToUnixTimeMilliseconds(),
+            Mills = nowUtc.ToMills(),
             CreatedAt = nowUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             Units = "mg/dL",
             EnteredBy = DemoDeviceStatusGenerator.DeviceName,

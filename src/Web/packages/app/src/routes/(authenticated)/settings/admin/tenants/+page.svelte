@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { formatNumericDate } from "$lib/utils/formatting";
+  import {
+    formatFileSize,
+    formatNumber,
+    formatNumericDate,
+  } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -32,8 +36,11 @@
   import type { TenantDetailDto, TenantMemberDto } from "$api";
   import { getCurrentTenantId } from "../../current-tenant.remote";
   import { getTransitionStatus } from "$api/generated/platforms.generated.remote";
+  import { get as getDatabaseCapacity } from "$api/generated/databaseCapacities.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { invalidate } from "$app/navigation";
+  import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
 
   const tenantIdQuery = getCurrentTenantId();
   const currentTenantId = $derived(tenantIdQuery.current ?? undefined);
@@ -166,6 +173,11 @@
   let validating = $state(false);
   let createError = $state<string | null>(null);
 
+  const capacityQuery = $derived(
+    isCreateDialogOpen ? getDatabaseCapacity() : undefined,
+  );
+  const capacity = $derived(capacityQuery?.current);
+
   const normalizedSlug = $derived(slug.trim().toLowerCase());
   const debouncedSlug = new Debounced(() => normalizedSlug, 400);
 
@@ -229,10 +241,11 @@
       });
       createdSlug = normalizedSlug;
       isCreateDialogOpen = false;
+      void invalidate(SHELL_DATA_KEY);
     } catch (err) {
       createError = describeSubmitError(
         err,
-        "Failed to create tenant. Please try again."
+        "Failed to create tenant. Try again."
       );
     } finally {
       creating = false;
@@ -245,7 +258,7 @@
     <div class="flex items-center gap-3">
       <Building2 class="h-8 w-8 text-primary" />
       <div>
-        <h1 class="text-2xl font-bold">Tenant Management</h1>
+        <h1 class="text-2xl font-bold">Tenant management</h1>
         <p class="text-muted-foreground">
           Manage the current tenant's details and members
         </p>
@@ -275,7 +288,7 @@
       <Alert.Title>Multitenancy enabled</Alert.Title>
       <Alert.Description class="flex items-start justify-between gap-4">
         <span>
-          All app sessions have been invalidated. Reconfigure your apps to use
+          All app sessions were invalidated. Reconfigure your apps to use
           <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs"
             >{"{slug}"}.{transitionStatus?.baseDomain}</code
           >.
@@ -347,7 +360,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <ShieldCheck class="h-5 w-5" />
-          Platform Administrators
+          Platform administrators
         </CardTitle>
         <CardDescription>
           Platform admins can manage every tenant on this instance. Grant or
@@ -404,18 +417,18 @@
 <Dialog.Root bind:open={isEditDialogOpen}>
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
-      <Dialog.Title>Edit Tenant</Dialog.Title>
+      <Dialog.Title>Edit tenant</Dialog.Title>
       <Dialog.Description>
         Update the tenant's display name and active status
       </Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">
       <div class="space-y-2">
-        <Label for="edit-display-name">Display Name</Label>
+        <Label for="edit-display-name">Display name</Label>
         <Input
           id="edit-display-name"
           bind:value={editDisplayName}
-          placeholder="Display Name"
+          placeholder="Display name"
         />
       </div>
       <div class="flex items-center justify-between">
@@ -445,9 +458,37 @@
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
       <Dialog.Title>Create new tenant</Dialog.Title>
-      <Dialog.Description>Set up a new Nocturne instance</Dialog.Description>
+      <Dialog.Description>Configure a new Nocturne instance</Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">
+      {#if capacity}
+        <div class="space-y-2 rounded-md border p-3">
+          <h3 class="text-sm font-medium">Database capacity</h3>
+          <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+            <dt class="text-muted-foreground">Database size</dt>
+            <dd class="text-right">
+              {formatFileSize(capacity.databaseSizeBytes ?? 0)}
+            </dd>
+            <dt class="text-muted-foreground">Tenants</dt>
+            <dd class="text-right">{formatNumber(capacity.tenantCount)}</dd>
+            <dt class="text-muted-foreground">Average per tenant</dt>
+            <dd class="text-right">
+              {formatFileSize(capacity.averageTenantBytes ?? 0)}
+            </dd>
+            <dt class="text-muted-foreground">Largest tenant</dt>
+            <dd class="text-right">
+              {formatFileSize(capacity.largestTenantBytes ?? 0)}
+            </dd>
+            <dt class="text-muted-foreground">Used</dt>
+            <dd class="text-right">
+              {formatNumber(capacity.usedPercent)}% of {formatFileSize(
+                capacity.budgetBytes ?? 0,
+              )}
+            </dd>
+          </dl>
+        </div>
+      {/if}
+
       {#if createError}
         <Alert.Root variant="destructive">
           <AlertTriangle class="h-4 w-4" />
@@ -479,7 +520,7 @@
         <Input
           id="new-display-name"
           bind:value={displayName}
-          placeholder="My Nocturne Instance"
+          placeholder="My Nocturne instance"
         />
       </div>
     </div>

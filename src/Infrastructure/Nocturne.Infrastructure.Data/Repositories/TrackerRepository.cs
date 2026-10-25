@@ -15,49 +15,27 @@ public class TrackerRepository : ITrackerRepository
 {
     private readonly INocturneDbContextFactory? _contexts;
     private readonly DbUnitOfWork? _unit;
+    private readonly TimeProvider _time;
 
     /// <summary>A repository whose calls each open their own context.</summary>
-    public TrackerRepository(INocturneDbContextFactory contexts)
+    public TrackerRepository(INocturneDbContextFactory contexts, TimeProvider? timeProvider = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _time = timeProvider ?? TimeProvider.System;
     }
 
     /// <summary>A repository whose calls run on <paramref name="unit"/>, which the caller owns.</summary>
-    public TrackerRepository(DbUnitOfWork unit)
+    public TrackerRepository(DbUnitOfWork unit, TimeProvider? timeProvider = null)
     {
         _unit = unit;
+        _time = timeProvider ?? TimeProvider.System;
     }
 
     private ValueTask<DbContextLease> OpenAsync(CancellationToken ct) => DbContextLease.OpenAsync(_unit, _contexts, ct);
 
     #region Definitions
 
-    /// <summary>
-    /// Get all tracker definitions for a user
-    /// </summary>
-    /// <param name="userId">The user ID.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A list of tracker definitions visible to the user.</returns>
-    public virtual async Task<List<TrackerDefinitionEntity>> GetDefinitionsForUserAsync(
-        string userId,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await using var lease = await OpenAsync(cancellationToken);
-        var db = lease.Context;
-        return await db
-            .TrackerDefinitions.AsNoTracking()
-            .Include(d => d.NotificationThresholds)
-            .Where(d => d.UserId == userId || d.Visibility == TrackerVisibility.Public)
-            .OrderBy(d => d.Name)
-            .ToListAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Get all tracker definitions (for anonymous/public access filtering)
-    /// </summary>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A list of all tracker definitions.</returns>
+    /// <inheritdoc />
     public virtual async Task<List<TrackerDefinitionEntity>> GetAllDefinitionsAsync(
         CancellationToken cancellationToken = default
     )
@@ -71,15 +49,8 @@ public class TrackerRepository : ITrackerRepository
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Get tracker definitions by category
-    /// </summary>
-    /// <param name="userId">The user ID.</param>
-    /// <param name="category">The category to filter by.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A list of tracker definitions in the specified category.</returns>
+    /// <inheritdoc />
     public virtual async Task<List<TrackerDefinitionEntity>> GetDefinitionsByCategoryAsync(
-        string userId,
         TrackerCategory category,
         CancellationToken cancellationToken = default
     )
@@ -89,29 +60,9 @@ public class TrackerRepository : ITrackerRepository
         return await db
             .TrackerDefinitions.AsNoTracking()
             .Include(d => d.NotificationThresholds)
-            .Where(d => (d.UserId == userId || d.Visibility == TrackerVisibility.Public) && d.Category == category)
+            .Where(d => d.Category == category)
             .OrderBy(d => d.Name)
             .ToListAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Get favorite tracker definitions for quick-add
-    /// </summary>
-    /// <param name="userId">The user ID.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>An array of favorite tracker definitions.</returns>
-    public virtual async Task<TrackerDefinitionEntity[]> GetFavoriteDefinitionsAsync(
-        string userId,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await using var lease = await OpenAsync(cancellationToken);
-        var db = lease.Context;
-        return await db
-            .TrackerDefinitions.AsNoTracking()
-            .Where(d => d.UserId == userId && d.IsFavorite)
-            .OrderBy(d => d.Name)
-            .ToArrayAsync(cancellationToken);
     }
 
     /// <summary>
@@ -147,7 +98,7 @@ public class TrackerRepository : ITrackerRepository
         await using var lease = await OpenAsync(cancellationToken);
         var db = lease.Context;
         definition.Id = Guid.CreateVersion7();
-        definition.CreatedAt = DateTime.UtcNow;
+        definition.CreatedAt = _time.GetUtcNow().UtcDateTime;
 
         db.TrackerDefinitions.Add(definition);
         await db.SaveChangesAsync(cancellationToken);
@@ -187,10 +138,12 @@ public class TrackerRepository : ITrackerRepository
         existing.LifespanHours = updated.LifespanHours;
         existing.IsFavorite = updated.IsFavorite;
         existing.DashboardVisibility = updated.DashboardVisibility;
-        existing.Visibility = updated.Visibility;
         existing.StartEventType = updated.StartEventType;
         existing.CompletionEventType = updated.CompletionEventType;
-        existing.UpdatedAt = DateTime.UtcNow;
+        existing.LowReservoirUnits = updated.LowReservoirUnits;
+        existing.LowReservoirUrgency = updated.LowReservoirUrgency;
+        existing.Mode = updated.Mode;
+        existing.UpdatedAt = _time.GetUtcNow().UtcDateTime;
 
         await db.SaveChangesAsync(cancellationToken);
 
@@ -263,14 +216,8 @@ public class TrackerRepository : ITrackerRepository
 
     #region Instances
 
-    /// <summary>
-    /// Get active (not completed) tracker instances for a user
-    /// </summary>
-    /// <param name="userId">Optional user ID filter.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>An array of active tracker instances.</returns>
+    /// <inheritdoc />
     public virtual async Task<TrackerInstanceEntity[]> GetActiveInstancesAsync(
-        string? userId,
         CancellationToken cancellationToken = default
     )
     {
@@ -279,7 +226,7 @@ public class TrackerRepository : ITrackerRepository
         return await db
             .TrackerInstances.AsNoTracking()
             .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
-            .Where(i => ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt == null)
+            .Where(i => i.CompletedAt == null)
             .OrderByDescending(i => i.StartedAt)
             .ToArrayAsync(cancellationToken);
     }
@@ -306,7 +253,7 @@ public class TrackerRepository : ITrackerRepository
     }
 
     /// <inheritdoc />
-    public virtual async Task<Dictionary<Guid, DateTime>> GetActiveTrackerReferencesAsync(
+    public virtual async Task<Dictionary<Guid, ActiveTrackerReference>> GetActiveTrackerReferencesAsync(
         IReadOnlySet<Guid> definitionIds,
         DateTime at,
         CancellationToken cancellationToken = default
@@ -315,7 +262,7 @@ public class TrackerRepository : ITrackerRepository
         await using var lease = await OpenAsync(cancellationToken);
         var db = lease.Context;
         if (definitionIds.Count == 0)
-            return new Dictionary<Guid, DateTime>();
+            return new Dictionary<Guid, ActiveTrackerReference>();
 
         var ids = definitionIds.ToList();
         var instances = await db
@@ -329,11 +276,12 @@ public class TrackerRepository : ITrackerRepository
                 i.DefinitionId,
                 i.StartedAt,
                 i.ScheduledAt,
+                i.RecordedAt,
                 i.Definition!.Mode,
             })
             .ToListAsync(cancellationToken);
 
-        var references = new Dictionary<Guid, DateTime>();
+        var references = new Dictionary<Guid, ActiveTrackerReference>();
         foreach (var instance in instances)
         {
             // Newest-first ordering: the first instance seen per definition wins.
@@ -344,21 +292,15 @@ public class TrackerRepository : ITrackerRepository
                 ? instance.ScheduledAt
                 : instance.StartedAt;
             if (reference is { } referenceAt)
-                references[instance.DefinitionId] = referenceAt;
+                references[instance.DefinitionId] = new ActiveTrackerReference(
+                    referenceAt, instance.RecordedAt, IsScheduled: instance.Mode == TrackerMode.Event);
         }
 
         return references;
     }
 
-    /// <summary>
-    /// Get completed tracker instances for history
-    /// </summary>
-    /// <param name="userId">Optional user ID filter.</param>
-    /// <param name="limit">The maximum number of instances to return.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>An array of completed tracker instances.</returns>
+    /// <inheritdoc />
     public virtual async Task<TrackerInstanceEntity[]> GetCompletedInstancesAsync(
-        string? userId,
         int limit = 100,
         CancellationToken cancellationToken = default
     )
@@ -368,22 +310,14 @@ public class TrackerRepository : ITrackerRepository
         return await db
             .TrackerInstances.AsNoTracking()
             .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
-            .Where(i => ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt != null)
+            .Where(i => i.CompletedAt != null)
             .OrderByDescending(i => i.CompletedAt)
             .Take(limit)
             .ToArrayAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Get upcoming instance expirations for calendar display
-    /// </summary>
-    /// <param name="userId">Optional user ID filter.</param>
-    /// <param name="from">Start of the date range.</param>
-    /// <param name="to">End of the date range.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>An array of instances expiring within the range.</returns>
+    /// <inheritdoc />
     public virtual async Task<TrackerInstanceEntity[]> GetUpcomingInstancesAsync(
-        string? userId,
         DateTime from,
         DateTime to,
         CancellationToken cancellationToken = default
@@ -395,9 +329,7 @@ public class TrackerRepository : ITrackerRepository
         var instances = await db
             .TrackerInstances.AsNoTracking()
             .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
-            .Where(i =>
-                ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt == null && i.Definition.LifespanHours != null
-            )
+            .Where(i => i.CompletedAt == null && i.Definition.LifespanHours != null)
             .ToArrayAsync(cancellationToken);
 
         // Filter by expected end date (calculated in memory)
@@ -435,7 +367,7 @@ public class TrackerRepository : ITrackerRepository
     /// Start a new tracker instance
     /// </summary>
     /// <param name="definitionId">The identifier of the definition to instantiate.</param>
-    /// <param name="userId">The user ID.</param>
+    /// <param name="createdBy">The subject starting the instance.</param>
     /// <param name="startNotes">Optional initial notes.</param>
     /// <param name="startTreatmentId">Optional starting treatment ID.</param>
     /// <param name="startedAt">Optional start timestamp.</param>
@@ -444,7 +376,7 @@ public class TrackerRepository : ITrackerRepository
     /// <returns>The newly started tracker instance.</returns>
     public virtual async Task<TrackerInstanceEntity> StartInstanceAsync(
         Guid definitionId,
-        string userId,
+        string createdBy,
         string? startNotes = null,
         string? startTreatmentId = null,
         DateTime? startedAt = null,
@@ -454,12 +386,14 @@ public class TrackerRepository : ITrackerRepository
     {
         await using var lease = await OpenAsync(cancellationToken);
         var db = lease.Context;
+        var now = _time.GetUtcNow().UtcDateTime;
         var instance = new TrackerInstanceEntity
         {
             Id = Guid.CreateVersion7(),
-            UserId = userId,
+            CreatedBy = createdBy,
             DefinitionId = definitionId,
-            StartedAt = startedAt ?? DateTime.UtcNow,
+            StartedAt = startedAt ?? now,
+            RecordedAt = now,
             StartNotes = startNotes,
             StartTreatmentId = startTreatmentId,
             ScheduledAt = scheduledAt,
@@ -486,7 +420,7 @@ public class TrackerRepository : ITrackerRepository
     {
         await using var lease = await OpenAsync(cancellationToken);
         var db = lease.Context;
-        var at = completedAt ?? DateTime.UtcNow;
+        var at = completedAt ?? _time.GetUtcNow().UtcDateTime;
 
         // Lifted so a clamped member can complete a run at a time before the window. It targets only
         // running instances, which the clamp shows (see ShareDataCategories.HiddenSpanEndColumns), and
@@ -608,7 +542,7 @@ public class TrackerRepository : ITrackerRepository
 
         await using var unit = await DbUnitOfWork.OpenAsync(_contexts!, cancellationToken);
         return await CommitUnderLockAsync(
-            unit, new TrackerRepository(unit), definitionId, work, verifySucceeded, cancellationToken);
+            unit, new TrackerRepository(unit, _time), definitionId, work, verifySucceeded, cancellationToken);
     }
 
     private static Task<T> CommitUnderLockAsync<T>(
@@ -623,6 +557,43 @@ public class TrackerRepository : ITrackerRepository
             {
                 await unit.Context.LockForTransactionAsync(SuccessionLockClass, definitionId, ct);
                 return await work(bound, ct);
+            },
+            verifySucceeded is null ? null : (result, ct) => verifySucceeded(bound, result, ct),
+            ct: cancellationToken
+        );
+
+    private const int ConsumableLockClass = 0x4E54_434E;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The lock is keyed on the context's tenant, taken as <see cref="ExecuteUnderDefinitionLockAsync{T}"/>
+    /// takes the definition's.
+    /// </remarks>
+    public virtual async Task<T> ExecuteUnderConsumableLockAsync<T>(
+        Func<ITrackerRepository, DbUnitOfWork, CancellationToken, Task<T>> work,
+        Func<ITrackerRepository, T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_unit is not null)
+            return await CommitUnderConsumableLockAsync(_unit, this, work, verifySucceeded, cancellationToken);
+
+        await using var unit = await DbUnitOfWork.OpenAsync(_contexts!, cancellationToken);
+        return await CommitUnderConsumableLockAsync(
+            unit, new TrackerRepository(unit, _time), work, verifySucceeded, cancellationToken);
+    }
+
+    private static Task<T> CommitUnderConsumableLockAsync<T>(
+        DbUnitOfWork unit,
+        ITrackerRepository bound,
+        Func<ITrackerRepository, DbUnitOfWork, CancellationToken, Task<T>> work,
+        Func<ITrackerRepository, T, CancellationToken, Task<bool>>? verifySucceeded,
+        CancellationToken cancellationToken) =>
+        unit.CommitAsync(
+            async ct =>
+            {
+                await unit.Context.LockForTransactionAsync(ConsumableLockClass, unit.Context.TenantId, ct);
+                return await work(bound, unit, ct);
             },
             verifySucceeded is null ? null : (result, ct) => verifySucceeded(bound, result, ct),
             ct: cancellationToken
@@ -651,7 +622,7 @@ public class TrackerRepository : ITrackerRepository
         if (instance == null)
             return false;
 
-        instance.LastAckedAt = DateTime.UtcNow;
+        instance.LastAckedAt = _time.GetUtcNow().UtcDateTime;
         instance.AckSnoozeMins = snoozeMins;
 
         var result = await db.SaveChangesAsync(cancellationToken);
@@ -688,14 +659,8 @@ public class TrackerRepository : ITrackerRepository
 
     #region Presets
 
-    /// <summary>
-    /// Get all presets for a user
-    /// </summary>
-    /// <param name="userId">The user ID.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>An array of tracker presets for the user.</returns>
-    public virtual async Task<TrackerPresetEntity[]> GetPresetsForUserAsync(
-        string userId,
+    /// <inheritdoc />
+    public virtual async Task<TrackerPresetEntity[]> GetPresetsAsync(
         CancellationToken cancellationToken = default
     )
     {
@@ -704,7 +669,6 @@ public class TrackerRepository : ITrackerRepository
         return await db
             .TrackerPresets.AsNoTracking()
             .Include(p => p.Definition)
-            .Where(p => p.UserId == userId)
             .OrderBy(p => p.Name)
             .ToArrayAsync(cancellationToken);
     }
@@ -742,7 +706,7 @@ public class TrackerRepository : ITrackerRepository
         await using var lease = await OpenAsync(cancellationToken);
         var db = lease.Context;
         preset.Id = Guid.CreateVersion7();
-        preset.CreatedAt = DateTime.UtcNow;
+        preset.CreatedAt = _time.GetUtcNow().UtcDateTime;
 
         db.TrackerPresets.Add(preset);
         await db.SaveChangesAsync(cancellationToken);

@@ -20,6 +20,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Authorize]
 [RequireScope(Scope.AlertsRead)]
 [Route("api/v4/alerts/replay")]
+[DenyNoAccountViewer]
 public class AlertReplayController : ControllerBase
 {
     private readonly IAlertReplayService _replayService;

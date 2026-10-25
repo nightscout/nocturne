@@ -51,6 +51,10 @@
   const totalChecked = $derived(Object.values(checked).filter(Boolean).length);
   const totalCount = $derived(items.length);
 
+  function customCategory() {
+    return "Custom";
+  }
+
   // Add custom item
   let addingToCategory = $state<string | null>(null);
   let newLabel = $state("");
@@ -107,7 +111,7 @@
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
         <ListChecks class="h-6 w-6" />
-        Packing List
+        Packing list
       </h1>
       {#if totalCount > 0}
         <span class="text-sm text-muted-foreground tabular-nums">
@@ -235,7 +239,7 @@
     {/each}
 
     <!-- Add to new "Custom" category -->
-    {#if addingToCategory === "Custom"}
+    {#if addingToCategory === customCategory()}
       <Card>
         <CardHeader class="py-3">
           <CardTitle variant="muted" class="text-sm font-semibold uppercase tracking-wider">
@@ -276,7 +280,7 @@
       <Button
         variant="outline"
         class="w-full"
-        onclick={() => startAdding("Custom")}
+        onclick={() => startAdding(customCategory())}
       >
         <Plus class="h-4 w-4" />
         Add custom item

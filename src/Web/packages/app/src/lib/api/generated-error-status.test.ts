@@ -453,7 +453,7 @@ describe("an error body that is not RFC-7807", () => {
  * ProblemDetails: beside the flattened `errors` map the status arm already reads.
  */
 const conditionIssues = [
-  { scope: "condition", path: "root", reason: "conditions_empty", field: null },
+  { scope: "condition", path: "root", reason: "list_empty", field: null },
   {
     scope: "condition",
     path: "root",
@@ -477,7 +477,7 @@ describe("a rejected rule save that carries issues", () => {
         "The rule's conditions cannot be saved.",
         "Bad Request"
       ),
-      errors: { "condition:root": ["conditions_empty"] },
+      errors: { "condition:root": ["list_empty"] },
       issues: conditionIssues,
     });
 
@@ -492,11 +492,11 @@ describe("a rejected rule save that carries issues", () => {
         "The rule's conditions cannot be saved.",
         "Bad Request"
       ),
-      errors: { "condition:root": ["conditions_empty"] },
+      errors: { "condition:root": ["list_empty"] },
       issues: conditionIssues,
     });
 
-    expect(crossedBody(crossed).message).toBe("conditions_empty");
+    expect(crossedBody(crossed).message).toBe("list_empty");
   });
 
   it("forwards them on the 409 it throws", async () => {
@@ -540,12 +540,12 @@ describe("a rejected rule save that carries issues", () => {
         "The rule's conditions cannot be saved.",
         "Bad Request"
       ),
-      errors: { "condition:root": ["conditions_empty"] },
-      issues: [{ reason: "conditions_empty" }, "boom"],
+      errors: { "condition:root": ["list_empty"] },
+      issues: [{ reason: "list_empty" }, "boom"],
     });
 
     expect(crossedBody(crossed)).not.toHaveProperty("issues");
-    expect(crossedBody(crossed).message).toBe("conditions_empty");
+    expect(crossedBody(crossed).message).toBe("list_empty");
   });
 
   it("omits issues when the body carried none", async () => {

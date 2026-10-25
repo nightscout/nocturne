@@ -213,7 +213,7 @@ public class ProfileV1WriteIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
-    public async Task Prune_RanksProfileDocumentsOnly_NotProfileSwitchSnapshots()
+    public async Task Prune_RanksProfileDocumentsOnly_NotProfileSwitches()
     {
         var client = CreateAuthenticatedClient();
         var now = DateTimeOffset.UtcNow;

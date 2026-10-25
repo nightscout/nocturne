@@ -1,4 +1,4 @@
-using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.Alerts.Corpus;
 using Xunit;
 
 namespace Nocturne.Alerts.Native.Tests;

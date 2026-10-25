@@ -3,6 +3,8 @@ import {
   reportCategories,
   visibleReportCategories,
   getSidebarReportItems,
+  reportDescription,
+  reportSubRouteTitle,
   reportTitle,
   type ReportViewer,
 } from "./report-navigation.svelte";
@@ -42,12 +44,12 @@ describe("reportCategories", () => {
       .flatMap((c) => c.reports)
       .find((r) => r.href === "/reports/year-overview");
 
-    expect(yearOverview?.title).toBe("Year Overview");
+    expect(yearOverview?.title).toBe("Year overview");
     expect(
       getSidebarReportItems({ grantedScopes: OWNER, anonymous: false }).find(
         (i) => i.href === "/reports/year-overview"
       )?.title
-    ).toBe("Year Overview");
+    ).toBe("Year overview");
   });
 });
 
@@ -151,15 +153,65 @@ describe("a report made of several pages", () => {
   it("is one sidebar entry at the report's address", () => {
     const items = getSidebarReportItems({ grantedScopes: OWNER, anonymous: false });
     const entries = items.filter((i) => i.href.startsWith("/reports/loop-analysis"));
-    expect(entries).toEqual([expect.objectContaining({ title: "Loop Analysis", href: "/reports/loop-analysis" })]);
+    expect(entries).toEqual([expect.objectContaining({ title: "Loop analysis", href: "/reports/loop-analysis" })]);
   });
 
   it("names each page with the report", () => {
     const category = loop();
-    expect(category.reports.map((r) => reportTitle(category, r))).toContain("Loop Analysis: Daily profile");
+    expect(category.reports.map((r) => reportTitle(category, r))).toContain("Loop analysis: Daily profile");
   });
 
   it("is found by searching for the report", () => {
     expect(loop().reports.find((r) => r.href.endsWith("/daily-profile"))?.keywords).toContain("loop analysis");
+  });
+});
+
+describe("reportSubRouteTitle", () => {
+  it.each([
+    ["/reports/data-quality/compression-lows", "Compression lows"],
+    ["/reports/data-quality/sensor-integrity", "Signal integrity"],
+    ["/reports/data-quality/cgm-comparison", "CGM comparison"],
+    ["/reports/data-quality/rejected-uploads", "Rejected uploads"],
+    ["/reports/sleep/2026-10-01", "Sleep night report"],
+  ])("names %s", (path, name) => {
+    expect(reportSubRouteTitle(path)).toBe(name);
+  });
+
+  it("has no name for an unknown path", () => {
+    expect(reportSubRouteTitle("/reports/unknown")).toBeUndefined();
+    expect(reportSubRouteTitle("/reports/sleep")).toBeUndefined();
+  });
+});
+
+const reportPages = import.meta.glob("/src/routes/*/reports/**/+page.svelte", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+const reportPathnames = Object.keys(reportPages).map((file) =>
+  file
+    .replace("/src/routes/(authenticated)", "")
+    .replace("/+page.svelte", "")
+    .replace("[date]", "2026-10-01")
+);
+
+describe("reportDescription", () => {
+  it("finds the report pages on disk", () => {
+    expect(reportPathnames.length).toBeGreaterThan(20);
+  });
+
+  it.each(reportPathnames)("gives %s a description", (pathname) => {
+    expect(reportDescription(pathname)?.trim()).toBeTruthy();
+  });
+
+  it("is the only place a report page sets a description", () => {
+    for (const source of Object.values(reportPages)) {
+      expect(source).not.toMatch(/name="description"/);
+    }
+  });
+
+  it("has none for a path that is not a report", () => {
+    expect(reportDescription("/reports/unknown")).toBeUndefined();
   });
 });

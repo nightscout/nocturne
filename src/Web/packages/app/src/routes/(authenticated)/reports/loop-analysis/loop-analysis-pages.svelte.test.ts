@@ -108,7 +108,7 @@ const PAGE_NAMES: PageName[] = [
   "settings-evidence",
 ];
 
-const ENVELOPE_ERROR = "Cannot load Loop Analysis";
+const ENVELOPE_ERROR = "Cannot load Loop analysis";
 
 async function report(name: PageName): Promise<Component> {
   return (await PAGES[name]()).default;

@@ -3,8 +3,12 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4;
@@ -17,6 +21,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 public class TenantSettingsControllerTests
 {
     private static readonly Guid TenantId = Guid.CreateVersion7();
+    private static readonly Guid OwnerId = Guid.CreateVersion7();
 
     [Fact]
     public async Task SetPublicDocs_RefusesAMemberWithoutTenantSettings()
@@ -82,10 +87,171 @@ public class TenantSettingsControllerTests
             .Which.Value.Should().BeEquivalentTo(new TenantSettingsDto(true));
     }
 
+    [Fact]
+    public async Task GetPatientRelationship_RefusesAnAdministratorWhoIsNotTheOwner()
+    {
+        var (controller, tenants) = Build(Scope.TenantSettings);
+
+        var result = await controller.GetPatientRelationship(CancellationToken.None);
+
+        result.Result.Should().BeOfType<ForbidResult>();
+        tenants.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task SetPatientRelationship_RefusesAnAdministratorWhoIsNotTheOwner()
+    {
+        var (controller, tenants, records, _) = BuildWithRecords(Scope.TenantSettings, Scope.TherapyReadWrite);
+
+        var result = await controller.SetPatientRelationship(
+            new SetPatientRelationshipRequest { Relationship = PatientRelationship.Caregiver, PatientName = "Sam" }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ForbidResult>();
+        tenants.VerifyNoOtherCalls();
+        records.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task GetPatientRelationship_ReadsTheResolvedTenantAndThePatientsName()
+    {
+        var (controller, tenants, records, _) = BuildWithRecords(Scope.FullAccess);
+        tenants.Setup(t => t.GetPatientRelationshipAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PatientRelationship.Helper);
+        records.Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PatientRecord { PreferredName = "Sam" });
+
+        var result = await controller.GetPatientRelationship(CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().Be(new PatientRelationshipDto(PatientRelationship.Helper, "Sam"));
+    }
+
+    [Fact]
+    public async Task GetPatientRelationship_IsUnsetBeforeAnyAnswer()
+    {
+        var (controller, tenants, records, _) = BuildWithRecords(Scope.FullAccess);
+        tenants.Setup(t => t.GetPatientRelationshipAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PatientRelationship?)null);
+        records.Setup(r => r.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync((PatientRecord?)null);
+
+        var result = await controller.GetPatientRelationship(CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().Be(new PatientRelationshipDto(null, null));
+    }
+
+    [Theory]
+    [InlineData(PatientRelationship.Caregiver)]
+    [InlineData(PatientRelationship.Helper)]
+    public async Task SetPatientRelationship_SavesTheNameAsThePatientsPreferredName(PatientRelationship answer)
+    {
+        var (controller, tenants, records) = BuildAnswering(answer);
+        var record = new PatientRecord { Pronouns = "they/them" };
+        records.Setup(r => r.GetOrCreateAsync(It.IsAny<CancellationToken>())).ReturnsAsync(record);
+        records.Setup(r => r.UpdateAsync(record, WriteOrigin.Live, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(record);
+        records.Setup(r => r.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(() => record);
+
+        var result = await controller.SetPatientRelationship(
+            new SetPatientRelationshipRequest { Relationship = answer, PatientName = "  Sam " }, CancellationToken.None);
+
+        tenants.Verify(t => t.SetPatientRelationshipAsync(TenantId, answer, It.IsAny<CancellationToken>()), Times.Once);
+        records.Verify(r => r.UpdateAsync(
+            It.Is<PatientRecord>(p => p.PreferredName == "Sam" && p.Pronouns == "they/them"),
+            WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().Be(new PatientRelationshipDto(answer, "Sam"));
+    }
+
+    [Theory]
+    [InlineData(PatientRelationship.Self, "Sam")]
+    [InlineData(PatientRelationship.Caregiver, null)]
+    [InlineData(PatientRelationship.Helper, "   ")]
+    public async Task SetPatientRelationship_LeavesThePatientRecordAloneWithoutANameToSave(
+        PatientRelationship answer, string? name)
+    {
+        var (controller, tenants, records) = BuildAnswering(answer);
+        records.Setup(r => r.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync((PatientRecord?)null);
+
+        await controller.SetPatientRelationship(
+            new SetPatientRelationshipRequest { Relationship = answer, PatientName = name }, CancellationToken.None);
+
+        tenants.Verify(t => t.SetPatientRelationshipAsync(TenantId, answer, It.IsAny<CancellationToken>()), Times.Once);
+        records.Verify(r => r.GetOrCreateAsync(It.IsAny<CancellationToken>()), Times.Never);
+        records.Verify(r => r.UpdateAsync(
+            It.IsAny<PatientRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UnitsAndTimezone_AreRefusedToAnAdministratorWhoIsNotTheOwner()
+    {
+        var (controller, units) = BuildForUnits(Scope.TenantSettings, Scope.TherapyReadWrite);
+
+        (await controller.GetUnitsAndTimezone("en-AU", false, CancellationToken.None))
+            .Result.Should().BeOfType<ForbidResult>();
+        (await controller.SetUnitsAndTimezone(
+                new SetUnitsAndTimezoneRequest { GlucoseUnits = "mmol", Timezone = "Australia/Sydney" }, CancellationToken.None))
+            .Result.Should().BeOfType<ForbidResult>();
+        units.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task GetUnitsAndTimezone_ReadsForTheSignedInOwner()
+    {
+        var (controller, units) = BuildForUnits(Scope.FullAccess);
+        var answer = new UnitsAndTimezoneDto("mmol", "Australia/Sydney");
+        units.Setup(u => u.GetAsync(OwnerId, "en-AU", true, It.IsAny<CancellationToken>())).ReturnsAsync(answer);
+
+        var result = await controller.GetUnitsAndTimezone("en-AU", true, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(answer);
+    }
+
+    [Fact]
+    public async Task SetUnitsAndTimezone_SavesTheOwnersAnswer()
+    {
+        var (controller, units) = BuildForUnits(Scope.FullAccess);
+        var saved = new UnitsAndTimezoneDto("mmol", "Australia/Sydney");
+        units.Setup(u => u.SetAsync(TenantId, OwnerId, "mmol", "Australia/Sydney", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(saved);
+
+        var result = await controller.SetUnitsAndTimezone(
+            new SetUnitsAndTimezoneRequest { GlucoseUnits = "mmol", Timezone = " Australia/Sydney " }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(saved);
+    }
+
+    private static (TenantSettingsController, Mock<IUnitsAndTimezoneService>) BuildForUnits(params string[] grantedScopes)
+    {
+        var built = BuildWithRecords(grantedScopes);
+        built.Controller.HttpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = OwnerId };
+        return (built.Controller, built.Units);
+    }
+
+    private static (TenantSettingsController, Mock<ITenantService>, Mock<IPatientRecordRepository>) BuildAnswering(
+        PatientRelationship answer)
+    {
+        var built = BuildWithRecords(Scope.FullAccess);
+        built.Tenants.Setup(t => t.SetPatientRelationshipAsync(TenantId, answer, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        built.Tenants.Setup(t => t.GetPatientRelationshipAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(answer);
+        return (built.Controller, built.Tenants, built.Records);
+    }
+
     private static (TenantSettingsController Controller, Mock<ITenantService> Tenants) Build(
         params string[] grantedScopes)
     {
+        var (controller, tenants, _, _) = BuildWithRecords(grantedScopes);
+        return (controller, tenants);
+    }
+
+    private static (TenantSettingsController Controller, Mock<ITenantService> Tenants, Mock<IPatientRecordRepository> Records, Mock<IUnitsAndTimezoneService> Units)
+        BuildWithRecords(params string[] grantedScopes)
+    {
         var tenants = new Mock<ITenantService>(MockBehavior.Strict);
+        var records = new Mock<IPatientRecordRepository>(MockBehavior.Strict);
+        var units = new Mock<IUnitsAndTimezoneService>(MockBehavior.Strict);
 
         var accessor = new Mock<ITenantAccessor>();
         accessor.SetupGet(a => a.TenantId).Returns(TenantId);
@@ -93,11 +259,11 @@ public class TenantSettingsControllerTests
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
 
-        var controller = new TenantSettingsController(tenants.Object, accessor.Object)
+        var controller = new TenantSettingsController(tenants.Object, accessor.Object, records.Object, units.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
 
-        return (controller, tenants);
+        return (controller, tenants, records, units);
     }
 }

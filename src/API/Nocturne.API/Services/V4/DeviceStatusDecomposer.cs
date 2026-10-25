@@ -1256,7 +1256,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     }
 
     private static long ResolveStatusMills(DeviceStatus ds) =>
-        new DateTimeOffset(ResolveTimestamp(ds)).ToUnixTimeMilliseconds();
+        ResolveTimestamp(ds).ToMills();
 
     private static DateTime? ParseTimestampToDateTime(string? timestamp) =>
         UploaderTimestamp.ParseUtcDateTime(timestamp);

@@ -16,81 +16,31 @@ export function coachCopy() {
     "quick-tour.chart": {
       title: "Interactive chart",
       description:
-        "Drag to pan, pinch or scroll to zoom. Tap any point to see the exact reading and time.",
+        "Drag to pan, pinch or scroll to zoom. Select any point to see the exact reading and time.",
     },
     "feature-intro.calendar-views": {
       title: "View modes",
       description:
-        "Switch between Time in Range and Profile views to see different patterns.",
+        "Switch between time in range and profile views to see different patterns.",
     },
     "feature-intro.calendar-trackers": {
       title: "Tracker events",
       description:
-        "Tracker events appear on your calendar \u2014 coloured by urgency.",
+        "Tracker events appear on your calendar, colored by urgency.",
     },
     "feature-intro.meals-matching": {
       title: "Smart matching",
       description:
-        "Nocturne suggests food matches based on your history \u2014 review them here.",
+        "Nocturne suggests food matches based on your history. Review them here.",
     },
     "feature-intro.appearance-widgets": {
       title: "Widget order",
       description: "Drag to reorder your dashboard widgets.",
     },
-    "setup-reports.categories": {
-      title: "Start with Executive Summary",
-      description:
-        "It combines your key metrics into a single page \u2014 great for clinic visits or sharing with your endo.",
-    },
-    "setup-connectors.sources": {
-      title: "Waiting for data",
-      description:
-        "Once you set up an uploader app or cloud connector below, your data source will appear here automatically.",
-    },
-    "setup-connectors.server-connectors": {
-      title: "Cloud connectors",
-      description:
-        "Pull data directly from Dexcom, LibreLink, or Glooko \u2014 no uploader app needed.",
-    },
-    "onboarding.sharing": {
-      title: "Share with a caretaker",
-      description:
-        "Share your glucose data with a parent, partner, or clinician.",
-    },
-    "setup-invite.create-link": {
-      title: "Start here",
-      description:
-        "Create a shareable link to invite a caretaker, partner, or clinician.",
-    },
-    "setup-invite.roles": {
-      title: "Choose their access",
-      description:
-        "Roles control what they can see and do. Viewer for a quick glance, Caretaker if they help manage your diabetes.",
-    },
-    "onboarding.patient-details": {
-      title: "Why this matters",
-      description:
-        "Your diabetes type determines how Nocturne calculates bolus suggestions and categorises treatments. Select your type and save.",
-    },
-    "onboarding.devices": {
-      title: "Add your current device",
-      description:
-        "Add the CGM, pump, or meter you use right now and mark it as current. Historical devices can be added later.",
-    },
-    "onboarding.insulins": {
-      title: "Add your current insulin",
-      description:
-        "Add at least one insulin and mark it as current. The brand and type help Nocturne estimate active insulin curves.",
-    },
-    "onboarding.therapy-profile": {
-      title: "Automatically synced",
-      description:
-        "Your basal rates, carb ratios, and sensitivity factors are imported from your uploader (AAPS, Loop, xDrip+). No manual entry needed.",
-    },
     "loop-analysis-pages.switcher": {
       title: "Pages and filters",
       description:
-        "Select a page name to open that page. Select Filters (the funnel icon) at the top of the report to choose the data that the report uses. All the Loop Analysis pages use the same filters.",
+        "Select a page name to open that page. Select Filters (the funnel icon) at the top of the report to choose the data that the report uses. All the Loop analysis pages use the same filters.",
     },
     "loop-analysis-daily-profile.totals": {
       title: "Daily totals",
@@ -110,7 +60,7 @@ export function coachCopy() {
     "loop-analysis-daily-profile.days": {
       title: "Days at a time of day",
       description:
-        "Select a time on a chart to see the days for that time. Select a day to open it in Day in Review. Faded areas have too few days to show a pattern.",
+        "Select a time on a chart to see the days for that time. Select a day to open it in Day in review. Faded areas have too few days to show a pattern.",
     },
     "loop-analysis-meals-and-events.builder": {
       title: "Events to align",
@@ -120,7 +70,7 @@ export function coachCopy() {
     "loop-analysis-meals-and-events.curves": {
       title: "Before and after each event",
       description:
-        "The charts align all the events of a cohort at 0. The dashed line at 0 is the time of the event. Each colour is one cohort. The line is the median of its events.",
+        "The charts align all the events of a cohort at 0. The dashed line at 0 is the time of the event. Each color is one cohort. The line is the median of its events.",
     },
     "loop-analysis-meals-and-events.metrics": {
       title: "Results after each event",
@@ -130,7 +80,7 @@ export function coachCopy() {
     "loop-analysis-meals-and-events.events": {
       title: "All the events",
       description:
-        "This list shows each event in the cohorts. Select a column heading to sort the events. Select an event to open it in Day in Review.",
+        "This list shows each event in the cohorts. Select a column heading to sort the events. Select an event to open it in Day in review.",
     },
     "loop-analysis-prediction-accuracy.horizons": {
       title: "Error by horizon",
@@ -140,7 +90,7 @@ export function coachCopy() {
     "loop-analysis-prediction-accuracy.hours": {
       title: "Bias by hour",
       description:
-        "Each row is one hour of the day. Each column is one horizon. The colour of a cell shows if the predictions from that hour were too high or too low. If there is more than one curve, select a curve at the top of By hour and context.",
+        "Each row is one hour of the day. Each column is one horizon. The color of a cell shows if the predictions from that hour were too high or too low. If there is more than one curve, select a curve at the top of By hour and context.",
     },
     "loop-analysis-prediction-accuracy.contexts": {
       title: "Bias by context",
@@ -160,7 +110,7 @@ export function coachCopy() {
     "loop-analysis-loop-health.gaps": {
       title: "Gaps",
       description:
-        "This list shows the gaps in the loop, with the longest gap first. Select a gap to open it in Day in Review.",
+        "This list shows the gaps in the loop, with the longest gap first. Select a gap to open it in Day in review.",
     },
     "loop-analysis-settings-evidence.observations": {
       title: "Observations, not advice",
@@ -177,6 +127,26 @@ export function coachCopy() {
       description:
         "Each row shows the observed value, the profile value, the number of days or events and the confidence. Select a row to see the days or events for that figure.",
     },
+    "tracker-intro.pill": {
+      title: "Tracker pill",
+      description:
+        "The pill shows the time since the last change. Its color changes when the tracker reaches a notification threshold. To change the order of the pills, go to Settings > Appearance.",
+    },
+    "tracker-intro.complete": {
+      title: "Record a change",
+      description:
+        "When you change the item, select its pill. Then select Complete tracker. To start a new tracker from the change, select the Start another option in the Complete dialog. To change the lifespan and the alerts, go to Settings > Notifications & trackers.",
+    },
+    "tracker-intro.settings": {
+      title: "Lifespan and thresholds",
+      description:
+        "Select Definitions. Then select the pencil icon of a tracker to edit it. The expected lifespan is the usual time between changes. Warning and Hazard alerts come from the notification thresholds.",
+    },
+    "tracker-intro.rail": {
+      title: "Status pills",
+      description:
+        "Use this list to change the order of the status pills or to hide a pill. If you hid a legacy age from the dashboard, that age shows under Hidden legacy ages. Select Show to show the age on the dashboard again.",
+    },
   } satisfies Record<string, CoachMarkStep>;
 }
 
@@ -186,13 +156,6 @@ export function coachFor(
   key: CoachCopyKey
 ): CoachMarkStep & { key: CoachCopyKey } {
   return { key, ...coachCopy()[key] };
-}
-
-export function inviteLinkCopy(expiryLabel: string): CoachMarkStep {
-  return {
-    title: "Send the link",
-    description: `The link expires in ${expiryLabel}. They'll need to sign in or create an account to accept.`,
-  };
 }
 
 /** The label of the button that replays the tour of the page on screen. */

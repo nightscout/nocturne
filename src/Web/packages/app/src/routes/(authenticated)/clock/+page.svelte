@@ -3,6 +3,8 @@
   import { formatNumericDate } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import * as Card from "$lib/components/ui/card";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Button } from "$lib/components/ui/button";
@@ -10,6 +12,7 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import { Artwork } from "@nocturne/watercolour";
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";
   import { remoteErrorMessage } from "$lib/api/remote-error";
@@ -21,6 +24,9 @@
   import ClockFacePreview from "$lib/components/clock/ClockFacePreview.svelte";
 
   const clockFacesQuery = listClockFaces();
+  const canManage = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "sharing.manage"),
+  );
 
   let creating = $state(false);
   const deletion = useToastSubmission("Failed to delete clock face");
@@ -30,7 +36,7 @@
   async function handleCreate() {
     creating = true;
     try {
-      const result = await createClockFace({ name: "New Clock Face" });
+      const result = await createClockFace({ name: "New clock face" });
       if (result.id) {
         goto(resolve("/(authenticated)/clock/config/[id]", { id: result.id }));
       } else {
@@ -55,7 +61,6 @@
 
     await deletion.run(async () => {
       await removeClockFace(target.id);
-      await clockFacesQuery.refresh();
       toast.success("Clock face deleted");
       deleteDialogOpen = false;
       clockFaceToDelete = null;
@@ -64,26 +69,28 @@
 </script>
 
 <svelte:head>
-  <title>Clock Faces - Nocturne</title>
+  <title>Clock faces - Nocturne</title>
 </svelte:head>
 
 <div class="min-h-dvh overflow-y-auto bg-background p-4 text-foreground sm:p-6 md:p-8">
   <div class="mx-auto max-w-4xl">
     <div class="mb-8 flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold sm:text-3xl">Clock Faces</h1>
+        <h1 class="text-2xl font-bold sm:text-3xl">Clock faces</h1>
         <p class="mt-1 text-muted-foreground">
-          Create and manage your custom clock displays
+          {canManage ? "Create and manage your custom clock displays" : "Your clock displays"}
         </p>
       </div>
-      <Button onclick={handleCreate} disabled={creating}>
-        {#if creating}
-          <Loader2 class="size-4 animate-spin" />
-        {:else}
-          <Plus class="size-4" />
-        {/if}
-        New Clock
-      </Button>
+      {#if canManage}
+        <Button onclick={handleCreate} disabled={creating}>
+          {#if creating}
+            <Loader2 class="size-4 animate-spin" />
+          {:else}
+            <Plus class="size-4" />
+          {/if}
+          New clock
+        </Button>
+      {/if}
     </div>
 
     <svelte:boundary>
@@ -109,22 +116,28 @@
         <!-- Empty State -->
         <Card.Root variant="dashed">
           <Card.Content class="flex flex-col items-center justify-center py-12">
-            <div class="mb-4 rounded-full bg-muted p-4">
-              <ClockIcon class="size-8 text-muted-foreground" />
-            </div>
+            <Artwork
+              artwork="clock"
+              palette="slate"
+              motion="auto"
+              autoplay="once"
+              class="mb-4 size-48"
+            />
             <h3 class="mb-2 text-lg font-semibold">No clock faces yet</h3>
-            <p class="mb-6 max-w-sm text-center text-muted-foreground">
-              Create your first custom clock face to display your glucose data
-              exactly how you want it.
-            </p>
-            <Button onclick={handleCreate} disabled={creating}>
-              {#if creating}
-                <Loader2 class="size-4 animate-spin" />
-              {:else}
-                <Plus class="size-4" />
-              {/if}
-              Create Clock Face
-            </Button>
+            {#if canManage}
+              <p class="mb-6 max-w-sm text-center text-muted-foreground">
+                Create your first custom clock face to display your glucose data
+                exactly how you want it.
+              </p>
+              <Button onclick={handleCreate} disabled={creating}>
+                {#if creating}
+                  <Loader2 class="size-4 animate-spin" />
+                {:else}
+                  <Plus class="size-4" />
+                {/if}
+                Create clock face
+              </Button>
+            {/if}
           </Card.Content>
         </Card.Root>
       {:else}
@@ -151,29 +164,33 @@
                     {/if}
                   </Card.Description>
                 </div>
-                <Button
-                  variant="ghost-destructive"
-                  size="icon"
-                  reveal
-                  aria-label="Delete clock face"
-                  onclick={(e: MouseEvent) => {
-                    e.stopPropagation();
-                    openDeleteDialog(face.id ?? "", face.name ?? "Untitled");
-                  }}
-                >
-                  <Trash2 />
-                </Button>
+                {#if canManage}
+                  <Button
+                    variant="ghost-destructive"
+                    size="icon"
+                    reveal
+                    aria-label="Delete clock face"
+                    onclick={(e: MouseEvent) => {
+                      e.stopPropagation();
+                      openDeleteDialog(face.id ?? "", face.name ?? "Untitled");
+                    }}
+                  >
+                    <Trash2 />
+                  </Button>
+                {/if}
               </div>
 
               <div class="mt-4 flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="flex-1"
-                  onclick={() => goto(resolve(`/clock/config/${face.id}`))}
-                >
-                  Edit
-                </Button>
+                {#if canManage}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="flex-1"
+                    onclick={() => goto(resolve(`/clock/config/${face.id}`))}
+                  >
+                    Edit
+                  </Button>
+                {/if}
                 <Button
                   size="sm"
                   class="flex-1"
@@ -194,7 +211,7 @@
 <!-- Delete Confirmation Dialog -->
 <ConfirmDialog
   bind:open={deleteDialogOpen}
-  title="Delete Clock Face"
+  title="Delete clock face"
   confirmLabel="Delete"
   destructive
   busy={deletion.busy}

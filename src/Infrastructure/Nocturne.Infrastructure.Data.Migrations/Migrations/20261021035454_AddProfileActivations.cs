@@ -259,23 +259,56 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 'Concentration', COALESCE({Int($"trunc(COALESCE({Num("m->'insulinConcentration'")}, 100))")}, 100)) END
             ";
 
-        private static readonly string ConvertProfileSpansSql = $@"
+        private static readonly string ConvertProfileSpansSql = ConvertProfileSpans(unconvertedOnly: false);
+
+        /// <summary>
+        /// The conversion <see cref="Up"/> runs over every Profile span. With
+        /// <paramref name="unconvertedOnly"/> it converts only the spans no activation holds the id of,
+        /// as <c>RemoveLegacyProfileSpansAndSwitchSnapshots</c> needs for spans a pre-cutover image wrote
+        /// after this ran: a span whose key a live activation already holds converts as a deleted loser,
+        /// and a tenant whose conversion fails is left unconverted with a warning rather than aborting.
+        /// </summary>
+        internal static string ConvertProfileSpans(bool unconvertedOnly)
+        {
+            var declare = unconvertedOnly ? @"
+                pending uuid[];" : "";
+            var prelude = unconvertedOnly ? @"
+                    BEGIN
+                    pending := ARRAY(
+                        SELECT s.id FROM state_spans s
+                        WHERE s.tenant_id = t.id AND s.category = 'Profile'
+                          AND NOT EXISTS (SELECT 1 FROM profile_activations a WHERE a.tenant_id = t.id AND a.id = s.id));
+                    CONTINUE WHEN cardinality(pending) = 0;" : "";
+            var spanFilter = unconvertedOnly ? " AND s.id = ANY(pending)" : "";
+            var keyHeld = unconvertedOnly ? @"
+                                OR (v.deleted_at IS NULL AND EXISTS (
+                                        SELECT 1 FROM profile_activations x
+                                        WHERE x.tenant_id = t.id AND x.deleted_at IS NULL
+                                          AND (x.legacy_id = v.legacy_id
+                                               OR (x.sync_identifier = v.sync_identifier
+                                                   AND x.data_source IS NOT DISTINCT FROM v.data_source))))" : "";
+            var requestFilter = unconvertedOnly ? " AND e.id = ANY(pending)" : "";
+            var epilogue = unconvertedOnly ? @"
+                    EXCEPTION WHEN OTHERS THEN
+                        RAISE WARNING 'Profile spans of tenant % stay unconverted: %', t.id, SQLERRM;
+                    END;" : "";
+            return $@"
             DO $$
             DECLARE
                 t RECORD;
                 span_ids uuid[];
                 span_id uuid;
                 m jsonb;
-                pj jsonb;
+                pj jsonb;{declare}
             BEGIN
                 FOR t IN SELECT id FROM tenants LOOP
-                    PERFORM set_config('app.current_tenant_id', t.id::text, true);
+                    PERFORM set_config('app.current_tenant_id', t.id::text, true);{prelude}
 
                     WITH spans AS (
                         SELECT s.*, COALESCE(s.metadata, '{{}}'::jsonb) AS m,
                                (s.original_id IS NOT NULL AND COALESCE(s.metadata, '{{}}'::jsonb) ? 'utcOffset') AS served
                         FROM state_spans s
-                        WHERE s.tenant_id = t.id AND s.category = 'Profile'),
+                        WHERE s.tenant_id = t.id AND s.category = 'Profile'{spanFilter}),
                     read AS (
                         SELECT sp.*,
                                (sp.m ? 'eventType') AS effective,
@@ -333,7 +366,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                                 AND row_number() OVER (
                                         PARTITION BY v.deleted_at IS NULL, v.legacy_id,
                                                      CASE WHEN v.legacy_id IS NULL THEN v.data_source END, v.sync_identifier
-                                        ORDER BY v.updated_at DESC, v.id DESC) > 1) AS loser
+                                        ORDER BY v.updated_at DESC, v.id DESC) > 1){keyHeld} AS loser
                         FROM converted v),
                     numbered AS (
                         SELECT k.*, row_number() OVER (PARTITION BY k.loser ORDER BY k.id) - 1 AS loser_index
@@ -379,7 +412,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     span_ids := ARRAY(
                         SELECT s.id FROM state_spans s
                         WHERE s.tenant_id = t.id AND s.category = 'Profile'
-                          AND jsonb_typeof(s.metadata->'profileJson') = 'string');
+                          AND jsonb_typeof(s.metadata->'profileJson') = 'string'{spanFilter});
 
                     FOREACH span_id IN ARRAY span_ids LOOP
                         SELECT s.metadata INTO m FROM state_spans s WHERE s.tenant_id = t.id AND s.id = span_id;
@@ -431,10 +464,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         WHERE f.runs OR NOT f.ran_out
                         ORDER BY f.start_timestamp DESC, f.id DESC
                         LIMIT 1)
-                    WHERE e.tenant_id = t.id AND e.snapshot_is_customized;
+                    WHERE e.tenant_id = t.id AND e.snapshot_is_customized{requestFilter};{epilogue}
                 END LOOP;
             END $$;
             ";
+        }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)

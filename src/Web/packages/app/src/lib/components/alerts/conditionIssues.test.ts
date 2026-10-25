@@ -19,9 +19,9 @@ describe("conditionIssuesMessage", () => {
 		expect(
 			conditionIssuesMessage(
 				rejected(400, [
-					issue("conditions_empty"),
+					issue("list_empty", "conditions"),
 					issue("minutes_not_positive", "minutes"),
-					issue("conditions_empty"),
+					issue("list_empty", "conditions"),
 				])
 			)
 		).toBe(
@@ -36,18 +36,25 @@ describe("conditionIssuesMessage", () => {
 		expect(
 			conditionIssuesMessage(rejected(400, [issue("invalid_field", "timezone")]))
 		).toBe(
-			"A time-of-day condition has a time zone that isn't recognised. Pick one from its time zone list, or clear it to use the profile's, and save again."
+			"A time-of-day condition has a time zone that is not recognized. Pick one from its time zone list, or clear it to use the profile's, and save again."
 		);
 		expect(
 			conditionIssuesMessage(rejected(400, [issue("invalid_field", "value")]))
-		).toBe("Part of this rule's conditions is malformed, so it can't be saved.");
+		).toBe("Part of this rule's conditions is malformed, so it cannot be saved.");
 	});
 
-	it("has a sentence for every save-only reason the engine reports", () => {
+	it("has a sentence for every reason the engine reports", () => {
 		for (const [reason, field] of [
 			["unknown_field", undefined],
 			["field_missing", "value"],
+			["field_missing", "operator"],
+			["field_missing", "direction"],
+			["field_missing", "state"],
+			["field_missing", "child"],
+			["unknown_value", "bucket"],
+			["unknown_value", "operator"],
 			["unknown_value", "mode"],
+			["list_empty", "conditions"],
 			["invalid_time", "from"],
 			["empty_window", undefined],
 			["list_empty", "days"],
@@ -95,7 +102,7 @@ describe("storedConditionIssuesMessage", () => {
 		expect(
 			storedConditionIssuesMessage([issue("field_missing", "value"), issue("constructor")])
 		).toBe(
-			"A condition is missing a setting it needs. Fill it in and save again. Part of this rule's conditions is malformed, so the rule may not alert as set. Edit its conditions and save it."
+			"A condition is missing a setting it needs. Fill it in and save again. Part of this rule's conditions is malformed, so the rule cannot run as set. Edit its conditions and save it."
 		);
 	});
 });

@@ -108,6 +108,9 @@
   const suspendedDeliverySpans = $derived(
     basalDeliverySpans.filter((s) => s.origin === BasalDeliveryOrigin.Suspended)
   );
+  const inferredDeliverySpans = $derived(
+    basalDeliverySpans.filter((s) => s.origin === BasalDeliveryOrigin.Inferred)
+  );
 
   // Check if we're using new StateSpans-based basal data
   const useStateSpans = $derived(basalDeliverySpans.length > 0);
@@ -246,6 +249,16 @@
       y={[basalScale(span.rate), basalZero]}
       fill={span.color}
       class="opacity-90"
+    />
+  {/each}
+
+  <!-- Render inferred basal (profile-derived, no pump data) -->
+  {#each inferredDeliverySpans as span (span.id)}
+    <AnnotationRange
+      x={[span.displayStart.getTime(), span.displayEnd.getTime()]}
+      y={[basalScale(span.rate), basalZero]}
+      fill={span.color}
+      class="opacity-40"
     />
   {/each}
 

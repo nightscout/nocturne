@@ -47,6 +47,12 @@ export async function getPatientTimeZone(): Promise<string | null> {
   return resolvePatientTimeZone(getRequestEvent().locals);
 }
 
+/** The patient's current calendar day as `YYYY-MM-DD`, in the zone a report's days are cut in. */
+export async function resolvePatientToday(): Promise<string> {
+  const timeZone = await getPatientTimeZone();
+  return resolveDayRange(null, 1, timeZone ?? "UTC").to;
+}
+
 /** Resolve a report window against the patient's timezone. */
 export async function resolveReportRange(
   input?: DateRangeInput | null,

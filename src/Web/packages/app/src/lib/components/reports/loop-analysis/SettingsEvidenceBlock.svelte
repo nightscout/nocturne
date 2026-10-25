@@ -163,10 +163,9 @@
     {#if episodes.length > 0}
       <div class="space-y-1">
         <h4 class="font-medium">{plural(episodes.length, ["# episode", "# episodes"])}</h4>
-        <Tooltip.Provider>
         <div class="overflow-x-auto rounded-md border">
           <table class="w-full text-xs tabular-nums">
-            <caption class="sr-only">Episodes for the {span} figure. Open an episode in Day in Review.</caption>
+            <caption class="sr-only">Episodes for the {span} figure. Open an episode in Day in review.</caption>
             <thead>
               <tr class="border-b text-muted-foreground">
                 <th scope="col" class="px-2 py-1.5 text-left font-medium">When</th>
@@ -185,7 +184,7 @@
                     {/if}
                   </th>
                 {/each}
-                <th scope="col" class="px-2 py-1.5"><span class="sr-only">Open in Day in Review</span></th>
+                <th scope="col" class="px-2 py-1.5"><span class="sr-only">Open in day in review</span></th>
               </tr>
             </thead>
             <tbody>
@@ -201,7 +200,7 @@
                     <a
                       href={resolve(`/reports/day-in-review?${episodeSearch(episode)}`)}
                       class="inline-flex items-center text-muted-foreground hover:text-foreground"
-                      aria-label="Open {formatWeekdayDate(startOfDay(episode.date ?? ''))} {localTime(episode.time)} in Day in Review"
+                      aria-label="Open {formatWeekdayDate(startOfDay(episode.date ?? ''))} {localTime(episode.time)} in Day in review"
                     >
                       <ArrowUpRight class="size-4" />
                     </a>
@@ -211,7 +210,6 @@
             </tbody>
           </table>
         </div>
-        </Tooltip.Provider>
       </div>
     {/if}
   </div>

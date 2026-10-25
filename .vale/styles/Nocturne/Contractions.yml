@@ -1,0 +1,13 @@
+# Rule 4.2: STE is short sentences with complete grammar, not telegraph style.
+# The possessive apostrophe is legal, so it is not matched here.
+extends: existence
+message: "Rule 4.2: expand the contraction '%s'."
+link: .claude/skills/simple-english/SKILL.md
+level: error
+nonword: true
+tokens:
+  - '\b\w+n[''’]t\b'
+  - '\b\w+[''’](?:ll|re|ve|d)\b'
+  - '\b[Ii]t[''’]s\b'
+  # "Let's Encrypt" is a product name.
+  - '\b[Ll]et[''’]s\b(?! Encrypt)'

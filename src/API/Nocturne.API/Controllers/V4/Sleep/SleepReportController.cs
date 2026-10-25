@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -25,10 +26,12 @@ namespace Nocturne.API.Controllers.V4.Sleep;
 public class SleepReportController : ControllerBase
 {
     private readonly ISleepReportService _service;
+    private readonly TenantClockResolver _tenantClock;
 
-    public SleepReportController(ISleepReportService service)
+    public SleepReportController(ISleepReportService service, TenantClockResolver tenantClock)
     {
         _service = service;
+        _tenantClock = tenantClock;
     }
 
     /// <summary>
@@ -81,7 +84,7 @@ public class SleepReportController : ControllerBase
     }
 
     /// <summary>
-    /// Get a multi-night trends report, over at most <see cref="V4ReadLimits.MaxAnalyticsSpanDays"/> days.
+    /// Get a multi-night trends report, over at most <see cref="V4ReadLimits.MaxAnalyticsSpanDays"/> local days.
     /// When <paramref name="source"/> is omitted, sessions are deduplicated to one per
     /// calendar night (longest sleep wins; source priority as tie-breaker).
     /// </summary>
@@ -99,7 +102,7 @@ public class SleepReportController : ControllerBase
         [FromQuery] SleepSource? source = null,
         CancellationToken cancellationToken = default)
     {
-        if (this.RejectDateSpan(from, to, V4ReadLimits.MaxAnalyticsSpanDays) is { } overlong)
+        if (await this.RejectAnalyticsSpanAsync(from, to, _tenantClock, cancellationToken) is { } overlong)
             return overlong;
 
         // Query-bound dates arrive Kind=Unspecified when the client omits an offset;
@@ -107,7 +110,9 @@ public class SleepReportController : ControllerBase
         var fromUtc = DateTime.SpecifyKind(from, DateTimeKind.Utc);
         var toUtc   = DateTime.SpecifyKind(to, DateTimeKind.Utc);
 
-        var report = await _service.GetTrendsReportAsync(fromUtc, toUtc, source, cancellationToken);
+        var clock = await _tenantClock.ResolveAsync(cancellationToken);
+        var report = await _service.GetTrendsReportAsync(fromUtc, toUtc, source, clock.Zone, cancellationToken);
+        report.TimeZoneUnavailableReason = clock.Reason;
         return Ok(report);
     }
 }

@@ -1,3 +1,4 @@
+using Nocturne.Core.Clinical.Treatments;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -40,7 +41,7 @@ public class BasalSeriesBuilderTests
         var builder = new BasalSeriesBuilder(
             therapySettings.Object, FlatSchedule(1.7).Object, NullLogger<BasalSeriesBuilder>.Instance);
 
-        var result = await builder.BuildAsync(tempBasals: [], startTime, endTime, 1.0, CancellationToken.None);
+        var result = await builder.BuildAsync(tempBasals: [], startTime, endTime, 1.0, [], CancellationToken.None);
 
         result.Should().NotBeEmpty();
         result.Should().AllSatisfy(p => p.Rate.Should().BeApproximately(1.7, 0.001));
@@ -62,7 +63,7 @@ public class BasalSeriesBuilderTests
         therapySettings.Setup(s => s.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var builder = new BasalSeriesBuilder(therapySettings.Object, FlatSchedule(1.2).Object, NullLogger<BasalSeriesBuilder>.Instance);
 
-        var result = await builder.BuildAsync([tempBasal], startTime, endTime, 1.0, CancellationToken.None);
+        var result = await builder.BuildAsync([tempBasal], startTime, endTime, 1.0, [], CancellationToken.None);
 
         result[0].Timestamp.Should().Be(startTime);
         result[0].Rate.Should().BeApproximately(0.4, 0.001);
@@ -88,7 +89,7 @@ public class BasalSeriesBuilderTests
         var builder = new BasalSeriesBuilder(therapySettings.Object, FlatSchedule(1.2).Object, NullLogger<BasalSeriesBuilder>.Instance);
 
         var result = await builder.BuildAsync(
-            [Temp(0, 30, 0.4, null), Temp(10, 40, null, -50)], startTime, endTime, 1.0, CancellationToken.None);
+            [Temp(0, 30, 0.4, null), Temp(10, 40, null, -50)], startTime, endTime, 1.0, [], CancellationToken.None);
 
         result[0].Timestamp.Should().Be(startTime);
         result[0].Rate.Should().BeApproximately(0.4, 0.001);
@@ -124,6 +125,7 @@ public class BasalSeriesBuilderTests
             startTime,
             endTime,
             defaultBasalRate,
+            [],
             CancellationToken.None);
 
         result.Should().BeEmpty();
@@ -161,6 +163,7 @@ public class BasalSeriesBuilderTests
             startTime,
             endTime,
             defaultBasalRate: 1.0,
+            overrides: [],
             CancellationToken.None);
 
         result.Should().ContainSingle();
@@ -176,12 +179,19 @@ public class BasalSeriesBuilderTests
     private static Task<List<BasalPoint>> BuildGapAsync(
         Mock<IBasalSegmentService> schedule, long startTime, long endTime, params TempBasal[] temps)
     {
+        return BuildGapAsync(schedule, startTime, endTime, [], temps);
+    }
+
+    private static Task<List<BasalPoint>> BuildGapAsync(
+        Mock<IBasalSegmentService> schedule, long startTime, long endTime,
+        IReadOnlyList<ScaleFactorInterval> overrides, params TempBasal[] temps)
+    {
         var therapySettings = new Mock<ITherapySettingsResolver>();
         therapySettings.Setup(s => s.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var builder = new BasalSeriesBuilder(
             therapySettings.Object, schedule.Object, NullLogger<BasalSeriesBuilder>.Instance);
         return builder.BuildAsync(
-            [.. temps], startTime, endTime, 1.0, CancellationToken.None);
+            [.. temps], startTime, endTime, 1.0, overrides, CancellationToken.None);
     }
 
     [Fact]
@@ -410,5 +420,63 @@ public class BasalSeriesBuilderTests
         var result = await BuildGapAsync(schedule, start, end, temp);
 
         result.Single(p => p.Origin == BasalDeliveryOrigin.Algorithm).ScheduledRate.Should().Be(2.0);
+    }
+
+    [Fact]
+    public async Task BuildAsync_OverrideInsideAGap_ScalesTheInferredDeliveryAndStepsAtItsEdges()
+    {
+        var start = SixAm - 20 * Minute;
+        var end = SixAm + 20 * Minute;
+        var schedule = ScheduleOf((Midnight, SixAm, 1.0), (SixAm, Midnight + 24 * 60 * Minute, 2.0));
+        ScaleFactorInterval[] overrides = [new(SixAm - 10 * Minute, SixAm + 10 * Minute, 0.5)];
+
+        var result = await BuildGapAsync(schedule, start, end, overrides);
+
+        result.Select(p => (p.Timestamp, p.Rate, p.ScheduledRate)).Should().Equal(
+            (start, 1.0, 1.0),
+            (SixAm - 10 * Minute, 0.5, 0.5),
+            (SixAm, 1.0, 1.0),
+            (SixAm + 10 * Minute, 2.0, 2.0));
+    }
+
+    [Fact]
+    public async Task BuildAsync_RecordedTempWithoutScheduledRateDuringAnOverride_TakesTheScaledRate()
+    {
+        var start = SixAm + 5 * Minute;
+        var end = SixAm + 30 * Minute;
+        var temp = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(start).UtcDateTime,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(start + 10 * Minute).UtcDateTime,
+            Rate = 0.3,
+            Origin = TempBasalOrigin.Algorithm,
+        };
+        var schedule = ScheduleOf((Midnight, SixAm, 1.0), (SixAm, Midnight + 24 * 60 * Minute, 2.0));
+        ScaleFactorInterval[] overrides = [new(SixAm, end, 1.5)];
+
+        var result = await BuildGapAsync(schedule, start, end, overrides, temp);
+
+        result.Single(p => p.Origin == BasalDeliveryOrigin.Algorithm).ScheduledRate.Should().Be(3.0);
+    }
+
+    [Fact]
+    public async Task BuildAsync_DeviceScheduledRateDuringAnOverride_StillWins()
+    {
+        var start = SixAm + 5 * Minute;
+        var end = SixAm + 30 * Minute;
+        var temp = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(start).UtcDateTime,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(start + 10 * Minute).UtcDateTime,
+            Rate = 0.3,
+            ScheduledRate = 2.4,
+            Origin = TempBasalOrigin.Algorithm,
+        };
+        var schedule = ScheduleOf((Midnight, SixAm, 1.0), (SixAm, Midnight + 24 * 60 * Minute, 2.0));
+        ScaleFactorInterval[] overrides = [new(SixAm, end, 1.5)];
+
+        var result = await BuildGapAsync(schedule, start, end, overrides, temp);
+
+        result.Single(p => p.Origin == BasalDeliveryOrigin.Algorithm).ScheduledRate.Should().Be(2.4);
     }
 }

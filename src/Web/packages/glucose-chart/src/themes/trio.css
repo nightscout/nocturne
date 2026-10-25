@@ -73,7 +73,7 @@
   --status-warning: rgb(255, 193, 69);
   --status-critical: rgb(235, 87, 87);
   --status-normal: rgb(111, 207, 151);
-  --status-info: rgb(0, 122, 255);
+  --status-info: rgb(30, 150, 252);
   --status-aging: rgb(255, 193, 69);
   --status-stale: rgb(235, 87, 87);
 
@@ -105,6 +105,7 @@
 }
 
 /* Dark mode - applied when both .trio-theme and .dark are on document */
+@media not print {
 :root.trio-theme.dark,
 .trio-theme .dark {
   /* shadcn/ui Base Colors - Trio Dark Mode */
@@ -141,4 +142,5 @@
   --percentile-outer: oklch(0.28 0.05 250);
   --percentile-inner: oklch(0.38 0.10 250);
   --percentile-median: oklch(0.75 0.15 250);
+}
 }

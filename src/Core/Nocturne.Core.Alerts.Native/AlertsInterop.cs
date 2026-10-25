@@ -29,12 +29,15 @@ public static partial class AlertsInterop
     private const string ClassifyExport = "nocturne_alerts_classify";
     private const string ValidateExport = "nocturne_alerts_validate";
     private const string ReplayExport = "nocturne_alerts_replay";
+    private const string DescribeExport = "nocturne_alerts_describe";
+    private const string ReferencesWallClockExport = "nocturne_alerts_references_wall_clock";
 
     /// <summary>Every export bound below; <see cref="Probe"/> resolves each one.</summary>
     private static readonly string[] BoundExports =
     [
         FreeStringExport, VersionExport, TzdbVersionExport, EvaluateExport, EvaluateNodeExport,
-        LeafPathsExport, ClassifyExport, ValidateExport,
+        LeafPathsExport, ClassifyExport, ValidateExport, ReplayExport, DescribeExport,
+        ReferencesWallClockExport,
         TrackerProcessExport, TrackerForceCloseExport, TrackerCloseElapsedHysteresisExport,
     ];
 
@@ -164,6 +167,21 @@ public static partial class AlertsInterop
     [LibraryImport(LibraryName, EntryPoint = ReplayExport, StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr ReplayNative(string requestJson);
 
+    /// <summary>
+    /// Decodes a rule's condition trees into leaf-id-tagged descriptions. Request/response are
+    /// the JSON envelopes documented in crates/nocturne-alerts-ffi/README.md. Must be freed with
+    /// FreeString.
+    /// </summary>
+    [LibraryImport(LibraryName, EntryPoint = DescribeExport, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial IntPtr DescribeNative(string requestJson);
+
+    /// <summary>
+    /// Whether a rule must also be evaluated on the wall clock. Request/response are the JSON
+    /// envelopes documented in crates/nocturne-alerts-ffi/README.md. Must be freed with FreeString.
+    /// </summary>
+    [LibraryImport(LibraryName, EntryPoint = ReferencesWallClockExport, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial IntPtr ReferencesWallClockNative(string requestJson);
+
     /// <summary>Get the nocturne_alerts library version as a managed string.</summary>
     public static string GetVersion() => ConsumeString(VersionNative(), string.Empty);
 
@@ -187,6 +205,13 @@ public static partial class AlertsInterop
 
     /// <summary>Raw replay call: request envelope JSON in, response envelope JSON out.</summary>
     public static string Replay(string requestJson) => ConsumeString(ReplayNative(requestJson), "{}");
+
+    /// <summary>Raw describe call: request envelope JSON in, response envelope JSON out.</summary>
+    public static string Describe(string requestJson) => ConsumeString(DescribeNative(requestJson), "{}");
+
+    /// <summary>Raw references-wall-clock call: request envelope JSON in, response envelope JSON out.</summary>
+    public static string ReferencesWallClock(string requestJson) =>
+        ConsumeString(ReferencesWallClockNative(requestJson), "{}");
 
     private static string ConsumeString(IntPtr ptr, string fallback)
     {

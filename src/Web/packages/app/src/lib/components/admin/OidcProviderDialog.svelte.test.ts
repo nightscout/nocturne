@@ -44,7 +44,7 @@ describe("OidcProviderDialog", () => {
 		render(OidcProviderDialog, default_props({ open: false }));
 
 		await expect
-			.element(page.getByText("Add Identity Provider"))
+			.element(page.getByText("Add identity provider"))
 			.not.toBeInTheDocument();
 	});
 
@@ -52,7 +52,7 @@ describe("OidcProviderDialog", () => {
 		render(OidcProviderDialog, default_props({ open: true }));
 
 		await expect
-			.element(page.getByText("Add Identity Provider"))
+			.element(page.getByText("Add identity provider"))
 			.toBeVisible();
 		await expect
 			.element(
@@ -69,12 +69,12 @@ describe("OidcProviderDialog", () => {
 		await expect.element(page.getByLabelText("Name")).toBeVisible();
 		await expect.element(page.getByLabelText("Issuer URL")).toBeVisible();
 		await expect.element(page.getByLabelText("Client ID")).toBeVisible();
-		await expect.element(page.getByLabelText("Client Secret")).toBeVisible();
+		await expect.element(page.getByLabelText("Client secret")).toBeVisible();
 		await expect.element(page.getByLabelText("Scopes")).toBeVisible();
-		await expect.element(page.getByLabelText("Default Roles")).toBeVisible();
+		await expect.element(page.getByLabelText("Default roles")).toBeVisible();
 		await expect.element(page.getByLabelText("Icon")).toBeVisible();
-		await expect.element(page.getByLabelText("Button Color")).toBeVisible();
-		await expect.element(page.getByLabelText("Display Order")).toBeVisible();
+		await expect.element(page.getByLabelText("Button color")).toBeVisible();
+		await expect.element(page.getByLabelText("Display order")).toBeVisible();
 		await expect.element(page.getByLabelText("Enabled")).toBeVisible();
 	});
 
@@ -82,7 +82,7 @@ describe("OidcProviderDialog", () => {
 		render(OidcProviderDialog, default_props({ open: true }));
 
 		await expect
-			.element(page.getByRole("button", { name: "Create Provider" }))
+			.element(page.getByRole("button", { name: "Create provider" }))
 			.toBeVisible();
 	});
 
@@ -95,7 +95,7 @@ describe("OidcProviderDialog", () => {
 		);
 
 		await expect
-			.element(page.getByText("Edit Identity Provider"))
+			.element(page.getByText("Edit identity provider"))
 			.toBeVisible();
 	});
 
@@ -108,7 +108,7 @@ describe("OidcProviderDialog", () => {
 		);
 
 		await expect
-			.element(page.getByRole("button", { name: "Save Changes" }))
+			.element(page.getByRole("button", { name: "Save changes" }))
 			.toBeVisible();
 	});
 
@@ -140,19 +140,19 @@ describe("OidcProviderDialog", () => {
 			.element(page.getByLabelText("Client ID"))
 			.toHaveValue("google-client-id");
 		await expect
-			.element(page.getByLabelText("Client Secret"))
+			.element(page.getByLabelText("Client secret"))
 			.toHaveValue("");
 		await expect
 			.element(page.getByLabelText("Scopes"))
 			.toHaveValue("openid, profile");
 		await expect
-			.element(page.getByLabelText("Default Roles"))
+			.element(page.getByLabelText("Default roles"))
 			.toHaveValue("readable, admin");
 		await expect
 			.element(page.getByLabelText("Icon"))
 			.toHaveValue("google");
 		await expect
-			.element(page.getByLabelText("Button Color"))
+			.element(page.getByLabelText("Button color"))
 			.toHaveValue("#4285f4");
 	});
 
@@ -160,7 +160,7 @@ describe("OidcProviderDialog", () => {
 		render(OidcProviderDialog, default_props({ open: true }));
 
 		await expect
-			.element(page.getByRole("button", { name: "Test Connection" }))
+			.element(page.getByRole("button", { name: "Test connection" }))
 			.toBeDisabled();
 	});
 
@@ -184,7 +184,7 @@ describe("OidcProviderDialog", () => {
 		render(OidcProviderDialog, default_props({ open: true }));
 
 		await expect
-			.element(page.getByLabelText("Default Roles"))
+			.element(page.getByLabelText("Default roles"))
 			.toHaveValue("readable");
 	});
 });

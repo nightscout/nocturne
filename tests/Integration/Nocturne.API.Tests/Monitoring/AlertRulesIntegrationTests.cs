@@ -172,6 +172,41 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task ReadingRules_WithoutAlertsRead_Returns403()
+    {
+        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
+        using var bearerClient = await CreateScopedBearerClientAsync("glucose.read");
+
+        var list = await bearerClient.GetAsync("/api/v4/alert-rules");
+        var single = await bearerClient.GetAsync($"/api/v4/alert-rules/{ruleId}");
+
+        list.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        single.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ReadingRules_WithAlertsRead_Returns200()
+    {
+        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
+        using var bearerClient = await CreateScopedBearerClientAsync("alerts.read");
+
+        var list = await bearerClient.GetAsync("/api/v4/alert-rules");
+        var single = await bearerClient.GetAsync($"/api/v4/alert-rules/{ruleId}");
+
+        list.StatusCode.Should().Be(HttpStatusCode.OK);
+        single.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    private async Task<HttpClient> CreateScopedBearerClientAsync(string scope)
+    {
+        var sessionToken = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, _subjectId);
+        using var authClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, sessionToken);
+        var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(authClient, scope: scope);
+        var result = await AuthTestHelpers.ExecutePkceFlowAsync(authClient, clientId, scope: scope);
+        return AuthTestHelpers.CreateBearerClient(Fixture, result.AccessToken);
+    }
+
+    [Fact]
     public async Task UpdateAlertRule_ModifiesFields()
     {
         // Arrange
@@ -426,7 +461,8 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
         var recipients = await guest.GetAsync("/api/v4/alert-rules/in-app-recipients");
 
         // Assert
-        rules.StatusCode.Should().Be(HttpStatusCode.OK, "the guest session reads alert rules");
+        rules.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "a guest sees a firing alarm, not the rules behind it, which name delivery channels");
         recipients.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 

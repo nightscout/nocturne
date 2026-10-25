@@ -41,4 +41,16 @@ public class SiteChangeImpactTests
         result.DataPoints.Select(p => p.Count).Should().Equal(2, 2, 2);
         result.DataPoints.Select(p => p.AverageGlucose).Should().Equal(110, 120, 130);
     }
+
+    [Fact]
+    public void ServesTheConsensusEdgesTheChartDrawsItsTargetRangeBetween()
+    {
+        var result = new StatisticsService().CalculateSiteChangeImpact([], []);
+
+        result.Thresholds.Should().BeEquivalentTo(new StatisticsService().HourlyBandThresholds);
+        result.Thresholds.VeryLow.Should().Be(54);
+        result.Thresholds.TargetBottom.Should().Be(70);
+        result.Thresholds.TargetTop.Should().Be(180);
+        result.Thresholds.VeryHigh.Should().Be(250);
+    }
 }

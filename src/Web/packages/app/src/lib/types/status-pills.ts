@@ -33,7 +33,7 @@ export interface PillInfoItem {
 export interface PillDisplayProps {
 	/** Formatted display value shown in the pill */
 	display: string;
-	/** Label for the pill (IOB, COB, CAGE, etc.) */
+	/** Label for the pill (IOB, COB, etc.) */
 	label: string;
 	/** Array of info items for popover */
 	info: PillInfoItem[];
@@ -84,46 +84,6 @@ export interface COBPillData extends PillDisplayProps {
 		food?: string;
 		notes?: string;
 	};
-}
-
-/**
- * CAGE (Cannula Age) pill display data
- */
-export interface CAGEPillData extends PillDisplayProps {
-	/** Age in hours */
-	age: number;
-	/** Age in days */
-	days: number;
-	/** Remaining hours after full days */
-	hours: number;
-	/** Time remaining before change needed (hours) */
-	timeRemaining?: number;
-	/** Timestamp of the device event (e.g., site change) */
-	eventDate: number;
-	/** Notes from the device event */
-	notes?: string;
-}
-
-/**
- * SAGE (Sensor Age) pill display data
- */
-export interface SAGEPillData extends PillDisplayProps {
-	/** Age in hours */
-	age: number;
-	/** Age in days */
-	days: number;
-	/** Remaining hours after full days */
-	hours: number;
-	/** Time remaining before change needed (hours) */
-	timeRemaining?: number;
-	/** Timestamp of the device event (e.g., sensor start/change) */
-	eventDate: number;
-	/** Notes from the device event */
-	notes?: string;
-	/** Transmitter ID from treatment */
-	transmitterId?: string;
-	/** Event type */
-	eventType?: string;
 }
 
 /**
@@ -191,7 +151,7 @@ export interface LoopPillData extends PillDisplayProps {
 /**
  * All possible pill types as a union
  */
-export type PillType = 'iob' | 'cob' | 'cage' | 'sage' | 'iage' | 'bage' | 'basal' | 'loop' | 'pump' | 'upbat';
+export type PillType = 'iob' | 'cob' | 'basal' | 'loop' | 'pump' | 'upbat';
 
 /**
  * Configuration for status pills thresholds and display options
@@ -209,30 +169,6 @@ export interface StatusPillsConfig {
 		/** Recency threshold in minutes */
 		recencyThreshold?: number;
 	};
-	/** CAGE configuration */
-	cage?: {
-		/** Hours until info alert */
-		infoThreshold?: number;
-		/** Hours until warning */
-		warnThreshold?: number;
-		/** Hours until urgent */
-		urgentThreshold?: number;
-		/** Display format */
-		displayFormat?: 'hours' | 'days';
-		/** Enable alerts */
-		enableAlerts?: boolean;
-	};
-	/** SAGE configuration */
-	sage?: {
-		/** Hours until info alert */
-		infoThreshold?: number;
-		/** Hours until warning */
-		warnThreshold?: number;
-		/** Hours until urgent */
-		urgentThreshold?: number;
-		/** Enable alerts */
-		enableAlerts?: boolean;
-	};
 	/** Loop configuration */
 	loop?: {
 		/** Minutes until warning */
@@ -248,25 +184,12 @@ export interface StatusPillsConfig {
  * Default configuration values (matching Nightscout defaults)
  */
 export const DEFAULT_PILLS_CONFIG: StatusPillsConfig = {
-	enabledPills: ['iob', 'cob', 'cage', 'sage', 'basal', 'loop'],
+	enabledPills: ['iob', 'cob', 'basal', 'loop'],
 	cob: {
 		recencyThreshold: 30
 	},
 	iob: {
 		recencyThreshold: 30
-	},
-	cage: {
-		infoThreshold: 44,
-		warnThreshold: 48,
-		urgentThreshold: 72,
-		displayFormat: 'hours',
-		enableAlerts: false
-	},
-	sage: {
-		infoThreshold: 144, // 6 days
-		warnThreshold: 164, // 7 days - 4 hours
-		urgentThreshold: 166, // 7 days - 2 hours
-		enableAlerts: false
 	},
 	loop: {
 		warnThreshold: 30,

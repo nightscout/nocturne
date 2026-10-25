@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Platform;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Profiles;
@@ -83,6 +85,27 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(503)]
     public async Task<ActionResult<UISettingsConfiguration>> GetUISettings(
         CancellationToken cancellationToken = default
+    )
+    {
+        var result = await ReadUISettings(cancellationToken);
+        if (result.Result is OkObjectResult { Value: UISettingsConfiguration config })
+        {
+            foreach (var section in UISettingsSections.All)
+            {
+                if (!CanRead(section))
+                    section.Set(config, null);
+            }
+        }
+
+        return result;
+    }
+
+    private bool CanRead(UISettingsSection section) =>
+        (section.ReadScope is not { } scope || Scope.Satisfies(HttpContext.GetGrantedScopes(), scope))
+        && !(section.MemberOnly && DenyNoAccountViewerAttribute.Refuses(HttpContext));
+
+    private async Task<ActionResult<UISettingsConfiguration>> ReadUISettings(
+        CancellationToken cancellationToken
     )
     {
         _logger.LogDebug(
@@ -176,23 +199,25 @@ public class UISettingsController : ControllerBase, IWriteScopedController
         CancellationToken cancellationToken = default
     )
     {
-        var settings = await GetUISettings(cancellationToken);
-
-        if (
-            settings.Result is OkObjectResult okResult
-            && okResult.Value is UISettingsConfiguration config
-        )
+        if (UISettingsSections.Find(section) is not { } known)
         {
-            return UISettingsSections.Find(section) is { } known
-                ? Ok(known.Get(config))
-                : Problem(
-                    detail: $"Unknown settings section: {section}",
-                    statusCode: 404,
-                    title: "Not Found"
-                );
+            return Problem(
+                detail: $"Unknown settings section: {section}",
+                statusCode: 404,
+                title: "Not Found"
+            );
         }
 
-        return settings.Result ?? StatusCode(500);
+        if (known.ReadScope is { } scope && !Scope.Satisfies(HttpContext.GetGrantedScopes(), scope))
+            return this.ForbiddenForScope(scope);
+        if (!CanRead(known))
+            return Forbid();
+
+        var settings = await ReadUISettings(cancellationToken);
+
+        return settings.Result is OkObjectResult { Value: UISettingsConfiguration config }
+            ? Ok(known.Get(config))
+            : settings.Result ?? StatusCode(500);
     }
 
     /// <summary>
@@ -283,6 +308,8 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The alarm configuration</returns>
     [HttpGet("notifications/alarms")]
+    [DenyNoAccountViewer]
+    [RequireScope(Scope.AlertsRead)]
     [ProducesResponseType(typeof(UserAlarmConfiguration), 200)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<UserAlarmConfiguration>> GetAlarmConfiguration(

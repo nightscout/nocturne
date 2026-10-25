@@ -1,5 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Nocturne.API.Configuration;
+using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Legacy;
@@ -9,6 +12,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 
@@ -24,13 +28,12 @@ public class PropertiesService : IPropertiesService
 {
     private readonly IDDataService _ddataService;
     private readonly ILogger<PropertiesService> _logger;
-    private readonly IIobCalculator _iobCalculator;
-    private readonly ICobCalculator _cobCalculator;
-    private readonly IBolusRepository _bolusRepository;
-    private readonly ICarbIntakeRepository _carbIntakeRepository;
-    private readonly ITempBasalRepository _tempBasalRepository;
+    private readonly IIobCobReader _iobCobReader;
     private readonly IAr2Service _ar2Service;
     private readonly IDeviceAgeService _deviceAgeService;
+    private readonly ITherapySettingsResolver _therapySettings;
+    private readonly TimeProvider _time;
+    private readonly DbSizeOptions _dbSize;
 
     // Properties served by IDeviceAgeService, each costing its own query.
     private static readonly HashSet<string> DeviceAgeProperties =
@@ -51,24 +54,22 @@ public class PropertiesService : IPropertiesService
     public PropertiesService(
         IDDataService ddataService,
         ILogger<PropertiesService> logger,
-        IIobCalculator iobCalculator,
-        ICobCalculator cobCalculator,
-        IBolusRepository bolusRepository,
-        ICarbIntakeRepository carbIntakeRepository,
-        ITempBasalRepository tempBasalRepository,
+        IIobCobReader iobCobReader,
         IAr2Service ar2Service,
-        IDeviceAgeService deviceAgeService
+        IDeviceAgeService deviceAgeService,
+        ITherapySettingsResolver therapySettings,
+        TimeProvider time,
+        IOptions<DbSizeOptions> dbSize
     )
     {
         _ddataService = ddataService;
         _logger = logger;
-        _iobCalculator = iobCalculator;
-        _cobCalculator = cobCalculator;
-        _bolusRepository = bolusRepository;
-        _carbIntakeRepository = carbIntakeRepository;
-        _tempBasalRepository = tempBasalRepository;
+        _iobCobReader = iobCobReader;
         _ar2Service = ar2Service;
         _deviceAgeService = deviceAgeService;
+        _therapySettings = therapySettings;
+        _time = time;
+        _dbSize = dbSize.Value;
     }
 
     /// <inheritdoc />
@@ -167,7 +168,7 @@ public class PropertiesService : IPropertiesService
     )
     {
         var properties = new Dictionary<string, object>();
-        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var timestamp = _time.GetUtcNow().ToUnixTimeMilliseconds();
 
         try
         {
@@ -185,11 +186,14 @@ public class PropertiesService : IPropertiesService
             // Direction properties
             SetDirectionProperties(properties, ddata);
 
-            // IOB properties (Insulin on Board) - requires treatments and profile data
-            await SetIobPropertiesAsync(properties, ddata);
-
-            // COB properties (Carbs on Board) - requires treatments and profile data
-            await SetCobPropertiesAsync(properties, ddata);
+            var now = _time.GetUtcNow().ToUnixTimeMilliseconds();
+            var iobCob = await ReadIobCobAsync(now);
+            if (iobCob is not null)
+            {
+                SetIobProperties(properties, iobCob.Iob, now);
+                if (iobCob.Cob is not null)
+                    SetCobProperties(properties, iobCob.Cob, now);
+            }
 
             // Device status properties
             SetDeviceStatusProperties(properties, ddata);
@@ -215,7 +219,10 @@ public class PropertiesService : IPropertiesService
             SetProfileProperties(properties, ddata);
 
             // Basal properties
-            SetBasalProperties(properties, ddata);
+            if (requested == null || requested.Contains("basal"))
+            {
+                await SetBasalPropertiesAsync(properties, ddata, cancellationToken);
+            }
 
             // DB Size properties
             SetDbSizeProperties(properties, ddata);
@@ -244,7 +251,7 @@ public class PropertiesService : IPropertiesService
         if (currentSgv == null)
             return;
 
-        var mgdlValue = DirectionService.MgdlOf(currentSgv);
+        var mgdlValue = currentSgv.GlucoseMgdl();
         var bgnow = BucketProperties(DirectionService.BuildBuckets(ddata.Sgvs!)[0]);
         bgnow["mgdl"] = mgdlValue;
         bgnow["scaled"] = currentSgv.Scaled ?? mgdlValue;
@@ -260,7 +267,7 @@ public class PropertiesService : IPropertiesService
         if (bucket.Last != null)
         {
             result["mean"] = bucket.Mean!.Value;
-            result["last"] = DirectionService.MgdlOf(bucket.Last);
+            result["last"] = bucket.Last.GlucoseMgdl();
             result["mills"] = bucket.Last.Mills;
         }
 
@@ -320,104 +327,62 @@ public class PropertiesService : IPropertiesService
         };
     }
 
-    /// <summary>
-    /// Set IOB (Insulin on Board) properties using v4 calculator
-    /// </summary>
-    private async Task SetIobPropertiesAsync(Dictionary<string, object> properties, DData ddata)
+    private async Task<IobCobReading?> ReadIobCobAsync(long now)
     {
         try
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var diaHoursAgo = DateTime.UtcNow.AddHours(-8);
-
-            var boluses = (await _bolusRepository.GetAsync(
-                from: diaHoursAgo, to: null, device: null, source: null,
-                limit: 1000, offset: 0, descending: false
-            )).ToList();
-            var tempBasals = (await _tempBasalRepository.GetAsync(
-                from: diaHoursAgo, to: null, device: null, source: null,
-                limit: 1000, offset: 0, descending: false
-            )).ToList();
-
-            // Emit the property even with no insulin on board: legacy clients treat a
-            // missing `iob` as "server doesn't support it" rather than "zero".
-            var iobResult = boluses.Any() || tempBasals.Any()
-                ? await _iobCalculator.CalculateTotalAsync(boluses, tempBasals, now)
-                : null;
-
-            var iob = Math.Round(iobResult?.Iob ?? 0, 2);
-            var display = iobResult?.Display ?? iob.ToString(CultureInfo.InvariantCulture);
-
-            properties["iob"] = new Dictionary<string, object?>
-            {
-                ["iob"] = iob,
-                ["display"] = display,
-                ["displayLine"] = iobResult?.DisplayLine ?? $"IOB: {display}U",
-                ["timestamp"] = now,
-                ["source"] = iobResult?.Source ?? "Care Portal",
-                // Legacy calcTotal reports zeros rather than nulls for the numeric parts.
-                ["activity"] = iobResult?.Activity ?? 0,
-                ["lastBolus"] = iobResult?.LastBolus?.Mills,
-                ["basalIob"] = iobResult?.BasalIob ?? 0,
-                ["treatmentIob"] = iobResult?.TreatmentIob ?? 0,
-            };
+            return await _iobCobReader.ReadTotalAsync(now, live: true);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error setting IOB properties");
-            // Don't throw, just skip setting IOB properties
+            _logger.LogError(ex, "Error reading IOB and COB; leaving both properties out");
+            return null;
         }
     }
 
     /// <summary>
-    /// Set COB (Carbs on Board) properties using v4 calculator
+    /// Set IOB (Insulin on Board) properties. Emitted even with no insulin on board: legacy
+    /// clients treat a missing <c>iob</c> as "server doesn't support it" rather than "zero".
     /// </summary>
-    private async Task SetCobPropertiesAsync(Dictionary<string, object> properties, DData ddata)
+    private static void SetIobProperties(Dictionary<string, object> properties, IobResult iobResult, long now)
     {
-        try
+        var iob = Math.Round(iobResult.Iob, 2);
+        var display = IobResult.FormatDisplay(iob);
+
+        // NIGHTSCOUT-COMPAT: Nightscout derives iob and activity from boluses alone. Here both
+        // include the net basal IOB of temp basals, as the chart does, so they can go negative.
+        properties["iob"] = new Dictionary<string, object?>
         {
-            _logger.LogDebug("SetCobProperties: Starting");
-            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var cobHoursAgo = DateTime.UtcNow.AddHours(-6);
-            var diaHoursAgo = DateTime.UtcNow.AddHours(-8);
+            ["iob"] = iob,
+            ["display"] = display,
+            ["displayLine"] = iobResult.DisplayLine ?? $"IOB: {display}U",
+            ["timestamp"] = now,
+            ["source"] = iobResult.Source ?? "Care Portal",
+            // Legacy calcTotal reports zeros rather than nulls for the numeric parts.
+            ["activity"] = iobResult.Activity ?? 0,
+            ["lastBolus"] = iobResult.LastBolus?.Mills,
+            ["basalIob"] = iobResult.BasalIob ?? 0,
+            ["treatmentIob"] = iobResult.TreatmentIob ?? 0,
+        };
+    }
 
-            var carbIntakes = (await _carbIntakeRepository.GetAsync(
-                from: cobHoursAgo, to: null, device: null, source: null,
-                limit: 1000, offset: 0, descending: false
-            )).ToList();
-            var boluses = (await _bolusRepository.GetAsync(
-                from: diaHoursAgo, to: null, device: null, source: null,
-                limit: 1000, offset: 0, descending: false
-            )).ToList();
-            var tempBasals = (await _tempBasalRepository.GetAsync(
-                from: diaHoursAgo, to: null, device: null, source: null,
-                limit: 1000, offset: 0, descending: false
-            )).ToList();
+    /// <summary>
+    /// Set COB (Carbs on Board) properties, emitted even with no carbs on board, as IOB is.
+    /// </summary>
+    private static void SetCobProperties(Dictionary<string, object> properties, CobResult cobResult, long now)
+    {
+        var cob = Math.Round(cobResult.Cob);
+        var display = cobResult.Display ?? cob.ToString(CultureInfo.InvariantCulture);
 
-            // Emit the property even with no carbs on board: legacy clients treat a
-            // missing `cob` as "server doesn't support it" rather than "zero".
-            var cobResult = carbIntakes.Any()
-                ? await _cobCalculator.CalculateTotalAsync(carbIntakes, boluses, tempBasals, now)
-                : null;
-
-            var cob = Math.Round(cobResult?.Cob ?? 0);
-            var display = cobResult?.Display ?? cob.ToString(CultureInfo.InvariantCulture);
-
-            properties["cob"] = new Dictionary<string, object?>
-            {
-                ["cob"] = cob,
-                ["display"] = display,
-                ["displayLine"] = cobResult?.DisplayLine ?? $"COB: {display}g",
-                ["timestamp"] = now,
-                ["source"] = cobResult?.Source ?? "Care Portal",
-                ["activity"] = cobResult?.Activity ?? 0,
-            };
-        }
-        catch (Exception ex)
+        properties["cob"] = new Dictionary<string, object?>
         {
-            _logger.LogError(ex, "SetCobProperties failed");
-            // Don't throw, just skip setting COB properties
-        }
+            ["cob"] = cob,
+            ["display"] = display,
+            ["displayLine"] = cobResult.DisplayLine ?? $"COB: {display}g",
+            ["timestamp"] = now,
+            ["source"] = cobResult.Source ?? "Care Portal",
+            ["activity"] = cobResult.Activity ?? 0,
+        };
     }
 
     /// <summary>
@@ -526,7 +491,7 @@ public class PropertiesService : IPropertiesService
         if (rawEntry == null)
             return;
 
-        var mgdlValue = rawEntry.Mgdl != 0 ? rawEntry.Mgdl : rawEntry.Sgv ?? 0;
+        var mgdlValue = rawEntry.GlucoseMgdl();
 
         properties["rawbg"] = new Dictionary<string, object?>
         {
@@ -669,7 +634,10 @@ public class PropertiesService : IPropertiesService
     /// Set basal properties - exact 1:1 match with legacy basalprofile.js
     /// Provides current basal rate information including temp basal and combo bolus treatments
     /// </summary>
-    private void SetBasalProperties(Dictionary<string, object> properties, DData ddata)
+    private async Task SetBasalPropertiesAsync(
+        Dictionary<string, object> properties,
+        DData ddata,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -693,12 +661,13 @@ public class PropertiesService : IPropertiesService
                 return;
             }
 
-            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var now = _time.GetUtcNow().ToUnixTimeMilliseconds();
             var treatments = ddata.Treatments ?? new List<Treatment>();
             _logger.LogDebug("SetBasalProperties: Now: {Now}, Treatments count: {TreatmentCount}", now, treatments.Count);
 
-            // Calculate current basal rate with temp treatments - exact legacy algorithm
-            var tempBasalResult = CalculateTempBasal(now, profileData, treatments);
+            var zone = TimeZoneHelper.GetTimeZoneInfoFromId(
+                await _therapySettings.GetTimezoneAsync(ct: cancellationToken));
+            var tempBasalResult = CalculateTempBasal(now, profileData, treatments, zone);
             _logger.LogDebug("SetBasalProperties: TempBasal result: Basal={Basal}, TotalBasal={TotalBasal}", tempBasalResult.Basal, tempBasalResult.TotalBasal);
 
             // Build temp markers like legacy: T for temp basal, C for combo bolus
@@ -723,7 +692,7 @@ public class PropertiesService : IPropertiesService
             };
             _logger.LogDebug("SetBasalProperties: Basal property set successfully");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "SetBasalProperties failed");
             // Don't throw, just skip setting basal properties
@@ -736,13 +705,14 @@ public class PropertiesService : IPropertiesService
     private TempBasalResult CalculateTempBasal(
         long time,
         ProfileData profileData,
-        List<Treatment> treatments
+        List<Treatment> treatments,
+        TimeZoneInfo zone
     )
     {
         var result = new TempBasalResult();
 
         // Get base basal rate from profile for the current time
-        result.Basal = GetBasalRateAtTime(time, profileData.Basal);
+        result.Basal = GetBasalRateAtTime(time, profileData.Basal, zone);
         result.TotalBasal = result.Basal;
 
         // Find active temp basal treatment - exact legacy search logic
@@ -802,25 +772,13 @@ public class PropertiesService : IPropertiesService
         return result;
     }
 
-    /// <summary>
-    /// Get basal rate at specific time from profile - exact legacy algorithm
-    /// </summary>
-    private double GetBasalRateAtTime(long time, List<TimeValue>? basalSchedule)
+    private static double GetBasalRateAtTime(long time, List<TimeValue> basalSchedule, TimeZoneInfo zone)
     {
-        if (basalSchedule == null || !basalSchedule.Any())
-            return 0.0;
-
-        // Convert timestamp to time of day in seconds
-        var dateTime = DateTimeOffset.FromUnixTimeMilliseconds(time);
-        var timeOfDaySeconds = (int)dateTime.TimeOfDay.TotalSeconds;
-
-        // Find the appropriate basal rate - exact legacy lookup logic
-        var applicableRate = basalSchedule
-            .Where(b => b.TimeAsSeconds.HasValue && b.TimeAsSeconds.Value <= timeOfDaySeconds)
-            .OrderByDescending(b => b.TimeAsSeconds)
-            .FirstOrDefault();
-
-        return applicableRate?.Value ?? basalSchedule.FirstOrDefault()?.Value ?? 0.0;
+        var entries = basalSchedule
+            .Select(b => new ScheduleEntry { Time = b.Time, Value = b.Value, TimeAsSeconds = b.TimeAsSeconds })
+            .ToList();
+        return ScheduleResolution.FindValueAtTime(entries, ScheduleEntryTime.SecondsOfDay(time, zone))
+            ?? 0.0;
     }
 
     /// <summary>
@@ -832,19 +790,18 @@ public class PropertiesService : IPropertiesService
         if (dbStats == null)
             return;
 
-        // Simplified database size calculation
-        var totalSize = dbStats.DataSize; // Only dataSize, no indexSize in our model
-        var maxSize = 500 * 1024 * 1024; // 500MB default max
-        var percentage = totalSize > 0 ? (int)((totalSize / (double)maxSize) * 100) : 0;
+        var totalSize = dbStats.DataSize + dbStats.IndexSize;
+        var percentage = totalSize > 0 ? (int)(totalSize * 100.0 / _dbSize.MaxBytes) : 0;
 
         properties["dbsize"] = new Dictionary<string, object>
         {
             ["size"] = totalSize,
             ["percentage"] = percentage,
             ["display"] = $"{percentage}%",
+            // NIGHTSCOUT-COMPAT: Nightscout's dbsize plugin warns from 60% and is urgent from 75% of the floored percentage.
             ["status"] =
-                percentage > 80 ? "urgent"
-                : percentage > 60 ? "warn"
+                percentage >= 75 ? "urgent"
+                : percentage >= 60 ? "warn"
                 : "ok",
         };
     }

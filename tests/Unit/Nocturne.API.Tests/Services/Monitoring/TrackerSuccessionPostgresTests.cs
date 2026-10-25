@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
@@ -101,7 +102,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         {
             Id = Guid.CreateVersion7(),
             TenantId = tenant,
-            UserId = OwnerId,
+            CreatedBy = OwnerId,
             Name = "Infusion Site",
             Mode = mode,
             LifespanHours = mode == TrackerMode.Duration ? 72 : null,
@@ -114,7 +115,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = tenant,
-                UserId = OwnerId,
+                CreatedBy = OwnerId,
                 DefinitionId = definition.Id,
                 StartedAt = startedAt,
             });
@@ -339,5 +340,77 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         }
 
         result.Outcome.Should().Be(endedSince ? TrackerSuccessionOutcome.EndedSince : TrackerSuccessionOutcome.Started);
+    }
+
+    [Fact]
+    public async Task ABackdatedRun_FeedsTheAlertEngineItsStartAndTheTimeItWasRecorded()
+    {
+        var tenant = await SeedTenantAsync();
+        var definition = await SeedDefinitionAsync(tenant, TrackerMode.Duration, runningSince: null);
+        var clock = new FakeTimeProvider(Now);
+        await using var db = Context(tenant);
+        var repository = new TrackerRepository(db.AsFactory(), clock);
+
+        await repository.StartInstanceAsync(definition.Id, OwnerId, startedAt: Now.AddDays(-3));
+        var references = await repository.GetActiveTrackerReferencesAsync(new HashSet<Guid> { definition.Id }, Now);
+
+        references[definition.Id].Should().Be(new ActiveTrackerReference(Now.AddDays(-3), Now, IsScheduled: false));
+    }
+
+    [Fact]
+    public async Task ARunStartedNow_IsRecordedAtTheSameReadingAsItsStart()
+    {
+        var tenant = await SeedTenantAsync();
+        var definition = await SeedDefinitionAsync(tenant, TrackerMode.Duration, runningSince: null);
+        await using var db = Context(tenant);
+        var repository = new TrackerRepository(db.AsFactory(), new FakeTimeProvider(Now));
+
+        var run = await repository.StartInstanceAsync(definition.Id, OwnerId);
+
+        run.StartedAt.Should().Be(Now);
+        run.RecordedAt.Should().Be(Now);
+    }
+
+    [Fact]
+    public async Task AnEventRun_ReachesTheAlertEngineAsScheduled()
+    {
+        var tenant = await SeedTenantAsync();
+        var definition = await SeedDefinitionAsync(tenant, TrackerMode.Event, runningSince: null);
+        await using var db = Context(tenant);
+        var repository = new TrackerRepository(db.AsFactory(), new FakeTimeProvider(Now));
+
+        await repository.StartInstanceAsync(definition.Id, OwnerId, startedAt: Now, scheduledAt: Now.AddHours(2));
+        var references = await repository.GetActiveTrackerReferencesAsync(new HashSet<Guid> { definition.Id }, Now);
+
+        references[definition.Id].Should().Be(new ActiveTrackerReference(Now.AddHours(2), Now, IsScheduled: true));
+    }
+
+    [Fact]
+    public async Task UpdatingADefinition_StoresItsModeAndReservoirRuleAndTheClocksTime()
+    {
+        var tenant = await SeedTenantAsync();
+        await using var db = Context(tenant);
+        var repository = new TrackerRepository(db.AsFactory(), new FakeTimeProvider(Now));
+        var definition = await repository.CreateDefinitionAsync(new TrackerDefinitionEntity
+        {
+            CreatedBy = OwnerId,
+            Name = "Reservoir",
+            Category = TrackerCategory.Reservoir,
+            Mode = TrackerMode.Duration,
+            LifespanHours = 72,
+        });
+
+        definition.Mode = TrackerMode.Event;
+        definition.LifespanHours = null;
+        definition.LowReservoirUnits = 20;
+        definition.LowReservoirUrgency = NotificationUrgency.Hazard;
+        await repository.UpdateDefinitionAsync(definition.Id, definition);
+
+        var stored = await repository.GetDefinitionByIdAsync(definition.Id);
+        stored!.Mode.Should().Be(TrackerMode.Event);
+        stored.LowReservoirUnits.Should().Be(20);
+        stored.LowReservoirUrgency.Should().Be(NotificationUrgency.Hazard);
+        stored.CreatedAt.Should().Be(Now);
+        stored.UpdatedAt.Should().Be(Now);
     }
 }

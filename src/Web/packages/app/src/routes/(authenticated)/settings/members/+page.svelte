@@ -14,6 +14,7 @@
   import Globe from "@lucide/svelte/icons/globe";
   import Lock from "@lucide/svelte/icons/lock";
   import ScrollText from "@lucide/svelte/icons/scroll-text";
+  import { Artwork } from "@nocturne/watercolour";
   import { getRoles } from "$lib/api/generated/roles.generated.remote";
   import { getShareLink } from "$api/generated/shareLinks.generated.remote";
   import {
@@ -25,8 +26,6 @@
     setMemberPermissions,
     setMemberLimitTo24Hours,
   } from "$lib/api/generated/memberInvites.generated.remote";
-  import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import {
     getPendingRequests,
     approveRequest,
@@ -89,12 +88,6 @@
   const allRoles = $derived(rolesQuery?.current ?? []);
   const pendingRequests = $derived(pendingRequestsQuery?.current ?? []);
   const share = $derived(shareQuery?.current ?? null);
-
-  const publicMember = $derived(allMembers.find((m) => m.isSystemSubject));
-  const sharingConfigured = $derived(
-    (publicMember?.roles ?? []).length > 0 ||
-      (publicMember?.directPermissions ?? []).length > 0,
-  );
 
   // Header status chips
   const memberCount = $derived(allMembers.filter((m) => !m.isSystemSubject).length);
@@ -162,7 +155,7 @@
       expandedMember = null;
       clearMessages();
     } catch (e) {
-      memberSaveError = describeSubmitError(e, "Failed to update member. Please try again.");
+      memberSaveError = describeSubmitError(e, "Failed to update member. Try again.");
     } finally {
       isSavingMember = false;
     }
@@ -178,7 +171,7 @@
       successMessage = "Membership request approved.";
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to approve request. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to approve request. Try again.");
       clearMessages();
     }
   }
@@ -190,20 +183,17 @@
       successMessage = "Membership request denied.";
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to deny request. Try again.");
       clearMessages();
     }
   }
 </script>
 
 <svelte:head>
-  <title>Sharing & Privacy - Settings - Nocturne</title>
+  <title>Sharing & privacy - Settings - Nocturne</title>
 </svelte:head>
 
-<div
-  class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6"
-  {@attach coachmark({ ...coachFor("onboarding.sharing"), completedWhen: () => sharingConfigured })}
->
+<div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
   <!-- Page header -->
   <div class="flex flex-col gap-4 @md:flex-row @md:items-start @md:justify-between">
     <div class="flex items-center gap-3">
@@ -211,7 +201,7 @@
         <Users class="h-6 w-6 text-primary" />
       </div>
       <div>
-        <h1 class="text-2xl font-bold tracking-tight">Sharing &amp; Privacy</h1>
+        <h1 class="text-2xl font-bold tracking-tight">Sharing &amp; privacy</h1>
         <p class="text-muted-foreground">
           Control who can see your data, and what they can do with it.
         </p>
@@ -279,9 +269,13 @@
       {#if visibleMembers.length === 0}
         <Card.Root>
           <Card.Content class="flex flex-col items-center justify-center py-12 text-center">
-            <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <Users class="h-6 w-6 text-muted-foreground" />
-            </div>
+            <Artwork
+              artwork="people-group"
+              palette="dusk"
+              motion="auto"
+              autoplay="once"
+              class="mx-auto mb-4 size-48"
+            />
             <p class="max-w-sm text-sm text-muted-foreground">
               No members. Invite someone to share your data.
             </p>
@@ -309,7 +303,7 @@
                   successMessage = "Member removed successfully.";
                   clearMessages();
                 } catch (e) {
-                  errorMessage = describeSubmitError(e, "Failed to remove member. Please try again.");
+                  errorMessage = describeSubmitError(e, "Failed to remove member. Try again.");
                   clearMessages();
                 }
               }}
@@ -336,12 +330,9 @@
             size="lg"
             class="w-full"
             onclick={() => (showCreateInvite = true)}
-            {@attach coachmark({
-              ...coachFor("setup-invite.create-link"),
-            })}
           >
             <Link class="h-4 w-4" />
-            Create Invite Link
+            Create invite link
           </Button>
         {/if}
       {/if}
@@ -362,7 +353,7 @@
             } catch (err) {
               errorMessage = describeSubmitError(
                 err,
-                "Failed to revoke invite. Please try again."
+                "Failed to revoke invite. Try again."
               );
               clearMessages();
             } finally {
@@ -387,7 +378,7 @@
   {#if canViewAudit}
     <SettingsLinkCard
       link={{
-        title: "Audit Log",
+        title: "Audit log",
         description: "Review changes and access history.",
         href: "/settings/audit",
         icon: ScrollText,
@@ -401,7 +392,7 @@
         <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
           <ShieldAlert class="h-6 w-6 text-destructive" />
         </div>
-        <h2 class="text-lg font-semibold">Access Denied</h2>
+        <h2 class="text-lg font-semibold">Access denied</h2>
         <p class="mt-2 max-w-sm text-sm text-muted-foreground">
           You do not have permission to manage sharing or members. Contact your
           tenant administrator for access.

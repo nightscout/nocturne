@@ -1,0 +1,104 @@
+---
+title: Year Overview
+---
+
+# Year Overview
+
+The Year Overview answers the question "how did my whole year go?". It shows
+every day of every year that has data as one calendar, with each day coloured
+by a figure that you choose.
+
+## What it shows
+
+### The calendar
+
+Each year has its own calendar. The newest year is at the top. Each square is
+one day, and each column is one week. Next to the year, the report shows how
+many days have data.
+
+The colour of a square shows the figure that you choose in the menu above the
+calendars:
+
+| Figure | What the colour shows |
+|--------|-----------------------|
+| **Avg Glucose** | The average glucose of the day |
+| **Time in Range** | The part of the day from 70 to 180 mg/dL |
+| **Bolus** | The bolus insulin of the day |
+| **Basal** | The basal insulin of the day |
+| **TDD** | The total daily dose of insulin |
+| **Carbs** | The carbs of the day |
+
+The colour scale next to the menu shows which colour goes with which value.
+For **Avg Glucose**, a day below range or above range also has a hatch pattern.
+
+Move the pointer over a day to see its details: the average glucose, the
+insulin (**Bolus**, **Basal** and **TDD**), the **Carbs**, and the number of
+records of each type.
+
+### Glycemic Risk Index, month by month
+
+Under each calendar, a chart shows your Glycemic Risk Index (GRI) for each
+month. The GRI puts the risk of lows and highs into one score, from 0 to 100. A
+lower score means less risk. The chart has five zones:
+
+| Zone | GRI |
+|------|-----|
+| A | 0-20 |
+| B | 21-40 |
+| C | 41-60 |
+| D | 61-80 |
+| E | 81-100 |
+
+Each dot is one month. The horizontal axis is the part of the risk that comes
+from lows. The vertical axis is the part that comes from highs. Move the
+pointer over a dot to see the score, and the average glucose, insulin and carbs
+for that month. The panel next to the chart shows the latest score and its
+zone. The chart shows when a year has data for more than one month.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+To change what the colours show:
+
+1. Open the menu above the calendars. It shows **Avg Glucose** first.
+2. Select a figure, for example **Time in Range**.
+3. Read the colour scale to see which colour means a high value.
+
+To look closer at part of the year:
+
+- Select a day to open it in [Day in Review](/docs/reports/day-in-review).
+- Select a week number under the calendar to open that week in
+  [Week to Week](/docs/reports/week-to-week).
+- Select a month name to open that month in the calendar.
+
+To filter the data:
+
+- Use **All Data Sources** to show the data from some sources only. The
+  calendars load again.
+- Use **Types** to choose which record types the counts include.
+
+To change the colour scale:
+
+- Move the two handles on the scale, or type a value above each handle, to set
+  the range of values that the colours cover. The days outside the range fade.
+  Type a value in **Dim outside** to set how much they fade.
+- Select **Color boundary** to add a point to the scale. Move the point to
+  change where the colours change.
+- Select the circle at an end of the scale, or next to a point, to choose a
+  different colour for it.
+- Select **Swap colors** to put the colours at the two ends in the opposite
+  order. For example, to make low values the brightest.
+- Select **Reset** to go back to the default scale.
+
+When you scroll down, the scale panel moves out of view. Scroll up a small
+distance to show it again at the top of the screen. To make the panel smaller,
+select the arrow at its right side. The smaller panel shows only the menu and
+the colour scale.
+
+## Good to know
+
+- The report loads one year at a time. Older years load when you scroll down to
+  them.
+- A day with records but no value for the chosen figure shows in a plain muted
+  colour. A day with no records is almost blank.

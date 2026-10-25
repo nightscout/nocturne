@@ -22,7 +22,7 @@ public abstract class TimeSeriesEntityService<TDomain, TEntity>(
     ILogger logger
 ) : SimpleEntityService<TDomain, TEntity>(contexts, documentProcessingService, signalRBroadcastService, logger)
     where TDomain : class, IProcessableDocument
-    where TEntity : class, IOriginalIdentified, IObservationTimestamped, ISyncDedupable
+    where TEntity : class, IOriginalIdentified, ITenantScoped, ISoftDeletable, IObservationTimestamped, ISyncDedupable
 {
     protected sealed override IOrderedQueryable<TEntity> OrderByTimestamp(IQueryable<TEntity> query) =>
         query.OrderByDescending(e => e.Timestamp);

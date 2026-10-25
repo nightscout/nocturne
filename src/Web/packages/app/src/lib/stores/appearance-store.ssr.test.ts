@@ -11,6 +11,14 @@ import {
 
 const mmol: UserDisplayPreferences = { glucoseUnits: "mmol", timeFormat: "24" };
 
+/** Five minutes ago as the narrow relative-time format writes it in `locale`. */
+function narrowAgo(locale: string): string {
+  return new Intl.RelativeTimeFormat(locale, {
+    style: "narrow",
+    numeric: "auto",
+  }).format(-5, "minute");
+}
+
 async function ssr(
   layers: UserDisplayPreferences[],
   language?: SupportedLocale
@@ -87,7 +95,7 @@ describe("language SSR resolution", () => {
     const body = await ssr([], "de");
 
     expect(body).toContain("Do., 31. Dez.");
-    expect(body).toContain("vor 5 Min.");
+    expect(body).toContain(narrowAgo("de"));
     expect(body).not.toContain("Thu, Dec 31");
   });
 
@@ -95,7 +103,7 @@ describe("language SSR resolution", () => {
     const body = await ssr([]);
 
     expect(body).toContain("Thu, Dec 31");
-    expect(body).toContain("5 min. ago");
+    expect(body).toContain(narrowAgo("en"));
   });
 
   it("keeps concurrent requests isolated", async () => {

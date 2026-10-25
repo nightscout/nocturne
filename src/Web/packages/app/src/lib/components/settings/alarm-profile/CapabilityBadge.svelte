@@ -25,6 +25,6 @@
   <span
     class="px-1.5 py-0.5 text-2xs font-medium rounded bg-warning/10 text-warning"
   >
-    Needs Permission
+    Needs permission
   </span>
 {/if}

@@ -24,15 +24,6 @@
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     </ItemGroup>
     <ItemGroup>
-        <!-- Microsoft.AspNetCore.App supplies the assembly, so this reference delivers nothing and
-             NuGet reports it as redundant (NU1510). It stays because NuGet audits the pre-pruning
-             graph: without it the transitive resolves to the 10.0.8 that GHSA-23rf-6693-g89p and
-             four sibling advisories cover, and the solution restore reports 120 NU1903. Deleting it
-             needs the EF Core family on 10.0.10 first, so that Microsoft.AspNetCore.DataProtection
-             10.0.10 can carry the fixed transitive without an NU1605 downgrade. -->
-        <PackageReference Include="System.Security.Cryptography.Xml" NoWarn="NU1510" />
-    </ItemGroup>
-    <ItemGroup>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />
         <ProjectReference Include="..\..\Core\Nocturne.Core.Contracts\Nocturne.Core.Contracts.csproj" />
     </ItemGroup>

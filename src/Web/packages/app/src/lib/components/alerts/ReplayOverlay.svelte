@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getChartContext } from "layerchart";
+  import { Circle, Line, getChartContext } from "layerchart";
   import { AlertReplayEventKind, type AlertReplayEvent } from "$api-clients";
   import { severityVar } from "./severity";
 
@@ -25,34 +25,34 @@
   {@const color = severityVar(m.ev.severity)}
   {@const isResolved = m.ev.kind === AlertReplayEventKind.AutoResolved}
   {@const isSuppressed = m.ev.kind === AlertReplayEventKind.SuppressedByDnd}
-  <line
+  <Line
     x1={px}
     x2={px}
     y1={height - 20}
     y2={height - 8}
     stroke={color}
-    stroke-width="1.5"
-    stroke-dasharray={isSuppressed ? "2 2" : null}
+    strokeWidth={1.5}
+    dashArray={isSuppressed ? "2 2" : undefined}
     opacity={isSuppressed ? 0.6 : 1}
   />
-  <circle
+  <Circle
     cx={px}
     cy={height - 8}
-    r="4"
+    r={4}
     fill={isResolved || isSuppressed ? "none" : color}
     stroke={color}
-    stroke-width={isResolved || isSuppressed ? 1.5 : 0}
+    strokeWidth={isResolved || isSuppressed ? 1.5 : 0}
     opacity={isSuppressed ? 0.6 : 1}
   />
 {/each}
 {#if currentDate}
   {@const px = xScale(currentDate)}
-  <line
+  <Line
     x1={px}
     x2={px}
-    y1="0"
+    y1={0}
     y2={height}
     class="stroke-foreground/80"
-    stroke-width="1.5"
+    strokeWidth={1.5}
   />
 {/if}

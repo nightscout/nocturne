@@ -147,7 +147,7 @@
     } catch (err) {
       deviceLookupError = describeSubmitError(
         err,
-        "Invalid or expired device code. Please check and try again."
+        "Invalid or expired device code. Check the code and try again."
       );
     } finally {
       deviceLookupLoading = false;
@@ -162,7 +162,7 @@
       deviceApproved = true;
       startPolling();
     } catch (err) {
-      deviceLookupError = describeSubmitError(err, "Failed to approve. The code may have expired.");
+      deviceLookupError = describeSubmitError(err, "Could not approve the device. The code possibly expired.");
     } finally {
       deviceApproveLoading = false;
     }
@@ -189,7 +189,7 @@
 
 <div class="space-y-4">
   <div>
-    <p class="text-sm font-medium">Quick Connect</p>
+    <p class="text-sm font-medium">Quick connect</p>
     <p class="text-muted-foreground text-sm">
       Automatically configure xDrip+ with your Nocturne instance.
     </p>
@@ -246,7 +246,7 @@
   <!-- Device Authorization Code Section -->
   <div class="space-y-3">
     <div>
-      <p class="text-sm font-medium">Enter Authorization Code</p>
+      <p class="text-sm font-medium">Enter authorization code</p>
       <p class="text-muted-foreground text-sm">
         If xDrip+ shows an authorization code, enter it here.
       </p>
@@ -347,7 +347,7 @@
       <form onsubmit={handleDeviceCodeSubmit} class="flex items-center gap-2">
         <Input
           type="text"
-          placeholder="XXXX-YY"
+          placeholder="XXXX-YYYY"
           maxlength={9}
           autocomplete="off"
           variant="code"
@@ -389,7 +389,7 @@
       class="flex items-center gap-2 rounded bg-success/10 p-3 text-sm text-success"
     >
       <CheckCircle class="h-4 w-4" />
-      Connected! Data is flowing from xDrip+.
+      Connected. Data is flowing from xDrip+.
     </div>
   {:else if connectionState === "timeout"}
     <div
@@ -398,7 +398,7 @@
       aria-atomic="true"
       class="bg-muted space-y-2 rounded p-3 text-sm"
     >
-      <p>No data from xDrip+ yet. This is normal if xDrip+ hasn't had a new reading.</p>
+      <p>No data from xDrip+ yet. This is normal when xDrip+ has no new reading.</p>
       <Button variant="outline" size="sm" onclick={retryCheck}>
         Check now
       </Button>

@@ -46,6 +46,18 @@ public class PumpSnapshotRepository : SyncUpsertRepositoryBase<PumpSnapshot, Pum
         PumpSnapshotMapper.UpdateEntity(target, source);
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<PumpIobPoint>> GetIobPointsAsync(
+        DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.PumpSnapshots.AsNoTracking()
+            .Where(e => e.Timestamp >= from && e.Timestamp <= to)
+            .OrderBy(e => e.Timestamp)
+            .Select(e => new PumpIobPoint(e.Timestamp, e.Iob, e.BolusIob))
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
     public async Task<PumpSnapshot?> GetLatestBeforeAsync(DateTime timestamp, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);

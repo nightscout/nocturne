@@ -3,7 +3,9 @@ import { page, userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 import { createRawSnippet } from "svelte";
 import Actogram from "./Actogram.svelte";
+import type { ActogramDay } from "./actogram";
 import Harness from "./ActogramHarness.test.svelte";
+import { servedDay, servedDays } from "$lib/test-stubs/actogram-days";
 
 describe.each(["steps", "heart-rate"] as const)("%s actogram", (metric) => {
   it.each([
@@ -32,7 +34,7 @@ describe.each(["steps", "heart-rate"] as const)("%s actogram", (metric) => {
 });
 
 describe("keyboard navigation", () => {
-  const days = Array.from({ length: 40 }, (_, index) => new Date(Date.UTC(2026, 8, 1 + index)));
+  const days = servedDays("2026-09-01", 40);
   const row = createRawSnippet(() => ({ render: () => "<g></g>" }));
 
   async function press(keys: string) {
@@ -62,5 +64,81 @@ describe("keyboard navigation", () => {
 
     await expect.poll(() => onVisibleRangeChange.mock.calls.length).toBe(1);
     expect(onVisibleRangeChange.mock.calls[0][0]).toEqual(days[30]);
+  });
+});
+
+describe("week buttons", () => {
+  const newestFirst = servedDays("2026-08-02", 40).reverse();
+  const row = createRawSnippet(() => ({ render: () => "<g></g>" }));
+
+  it("Older week shows older days and Newer week returns", async () => {
+    const onVisibleRangeChange = vi.fn();
+    render(Actogram, { props: { data: [], days: newestFirst, visibleCount: 5, onVisibleRangeChange, row } });
+    const firstVisible = () => onVisibleRangeChange.mock.calls.at(-1)![0] as ActogramDay;
+
+    await expect.element(page.getByRole("button", { name: "Newer week" })).toBeDisabled();
+    await page.getByRole("button", { name: "Older week" }).click();
+    await expect.poll(() => onVisibleRangeChange.mock.calls.length).toBe(1);
+    expect(firstVisible().startMills).toBeLessThan(newestFirst[0].startMills);
+    expect(firstVisible()).toEqual(newestFirst[7]);
+
+    await page.getByRole("button", { name: "Newer week" }).click();
+    await expect.poll(() => onVisibleRangeChange.mock.calls.length).toBe(2);
+    expect(firstVisible()).toEqual(newestFirst[0]);
+  });
+});
+
+describe("hour marks on DST rows", () => {
+  const row = createRawSnippet(() => ({ render: () => "<g></g>" }));
+  const centreX = (element: Element) => {
+    const box = element.getBoundingClientRect();
+    return box.left + box.width / 2;
+  };
+
+  async function renderRow(hours: number, nextHours = 24) {
+    render(Actogram, { props: { data: [], days: [servedDay("2026-03-08", 0, hours, nextHours)], row } });
+    await expect.element(page.getByTestId("actogram-dim-boundary")).toBeInTheDocument();
+  }
+
+  async function expectMarksInsideTheRow() {
+    const marks = page.getByTestId("actogram-hour-mark");
+    await expect.element(marks.nth(7)).toBeInTheDocument();
+    expect(marks.elements()).toHaveLength(8);
+    const boundary = page.getByTestId("actogram-dim-boundary").element().getBoundingClientRect();
+    const chart = page.getByTestId("actogram-row").element().querySelector("svg")!.getBoundingClientRect();
+    for (const mark of marks.elements()) {
+      const box = mark.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(chart.left - 0.5);
+      expect(box.right).toBeLessThanOrEqual(chart.right + 0.5);
+    }
+    return { marks, boundary };
+  }
+
+  it.each([
+    { name: "DST start", hours: 23 },
+    { name: "DST end", hours: 25 },
+  ])("puts the second midnight label on the dim boundary at $name", async ({ hours }) => {
+    await renderRow(hours);
+    const { marks, boundary } = await expectMarksInsideTheRow();
+
+    const midnight = marks.nth(4).element();
+    expect(midnight.textContent?.trim()).toBe("0h");
+    expect(centreX(midnight)).toBeCloseTo(boundary.left, 0);
+  });
+
+  it.each([
+    { name: "DST start", nextHours: 23 },
+    { name: "DST end", nextHours: 25 },
+  ])("keeps every label inside the row of the day before $name", async ({ nextHours }) => {
+    await renderRow(24, nextHours);
+    const { marks, boundary } = await expectMarksInsideTheRow();
+
+    expect(centreX(marks.nth(4).element())).toBeCloseTo(boundary.left, 0);
+  });
+
+  it("draws no row labels on a 24 hour day", async () => {
+    await renderRow(24);
+
+    expect(page.getByTestId("actogram-hour-mark").elements()).toHaveLength(0);
   });
 });

@@ -1,5 +1,7 @@
 using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Clinical.Tests.Treatments;
 using Nocturne.Core.Clinical.Treatments;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -365,8 +367,8 @@ public class SettingsEvidenceCalculatorTests
 
         /// <summary>
         /// IOB calculated from <paramref name="temps"/> and the doses as the Settings evidence load
-        /// calculates it (<see cref="BasalIobModel.Carried"/>), with the basal delivered as the temps
-        /// set it and the schedule elsewhere.
+        /// calculates it (<see cref="IobCobSeries"/>), with the basal delivered as the temps set it and
+        /// the schedule elsewhere.
         /// </summary>
         public Week WithCalculatedIob(IReadOnlyList<TempBasal> temps)
         {
@@ -378,11 +380,11 @@ public class SettingsEvidenceCalculatorTests
                 Kind = d.Automatic ? BolusKind.Algorithm : BolusKind.Manual,
             })];
             var calculator = new IobCalculator(
-                Mock.Of<ITherapySettingsResolver>(), Mock.Of<ISensitivityResolver>(), Mock.Of<IBasalRateResolver>(),
-                Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>());
+                Mock.Of<ITherapySettingsResolver>(), Mock.Of<ISensitivityResolver>(), Mock.Of<IBasalSegmentService>(),
+                Mock.Of<IApsSnapshotRepository>(), Mock.Of<IPumpSnapshotRepository>(), MockStateSpans.Empty().Object);
             var iob = IobCobSeries.Build(
-                    calculator, Mock.Of<ICobCalculator>(), boluses, [], temps, Timeline(), null,
-                    start, end, end, 5 * Minute, BasalIobModel.Carried)
+                    calculator, Mock.Of<ICobCalculator>(), boluses, [], temps, Timeline(), new ScheduledBasal(Timeline().BasalSegments(), []), null,
+                    start, end, end, 5 * Minute)
                 .ToDictionary(t => t.Mills, t => t.Iob);
             Iob = t => iob[t];
             IobSource = _ => IobCobSource.Calculated;
@@ -1191,27 +1193,38 @@ public class SettingsEvidenceCalculatorTests
         return temps;
     }
 
+    // The DIA 5 h curve: minutes scale by 3/5, so a dose a minutes old is m = 0.6a curve minutes old.
+    // Before the 75 min peak it keeps 1 - 0.001852 (m/5)(m/5 + 1) of itself, after it
+    // 0.001323 x^2 - 0.054233 x + 0.55556 with x = (m - 75) / 5, and nothing from m = 180.
+    // Twelve five-minute chunks 5 to 60 minutes old are at m = 3k, k = 1..12, and keep
+    // 12 - 0.001852 * (0.36 * 650 + 0.6 * 78) = 11.4799584 between them. Twelve 125 to 180 minutes
+    // old are at x = 0.6i, i = 0..11, and keep 0.001323 * 0.36 * 506 - 0.054233 * 0.6 * 66
+    // + 12 * 0.55556 = 4.76009088.
+
     [Fact]
     public void AZeroTempBeforeABlockAtSchedule_IsCarriedIntoItAsNegativeInsulin()
     {
-        // Schedule 1 U/h, DIA 5 h, zero temp 01:00-02:00. Each five minutes of the zero temp carries
-        // -1/12 U decaying from its own start: -0.892 U at 02:00, -0.492 U at 04:00.
+        // Schedule 1 U/h, DIA 5 h, zero temp 01:00-02:00: twelve chunks of -1/12 U. On board
+        // -11.4799584 / 12 = -0.957 U at 02:00 and -4.76009088 / 12 = -0.397 U at 04:00.
         var week = new Week { Dia = 5 };
         week.WithCalculatedIob(DailyTemps(week, 1, 2, 0));
 
         var block = BasalBlock(week.Run(), 2);
 
         block.N.Should().Be(7);
-        block.Days.Should().OnlyContain(d => d.CarriedInsulin == -0.2 && d.NetLoopCorrection == 0,
-            "acted is 0 U delivered above schedule + -0.892 - -0.492 = -0.4 U over two hours");
-        block.Observed.Should().Be(0.8, "the 0.4 U the zero temp left missing acts in the block");
+        block.Days.Should().OnlyContain(d => d.CarriedInsulin == -0.28 && d.NetLoopCorrection == 0,
+            "acted is 0 U delivered above schedule + -0.957 - -0.397 = -0.56 U over two hours");
+        block.Observed.Should().Be(0.72, "the 0.56 U the zero temp left missing acts in the block");
     }
 
     [Fact]
     public void ALongHighTemp_IsCarriedTheSame_AsOneRecordOrAsFiveMinuteRecords()
     {
-        // 1.5 U/h on a 1 U/h schedule from 01:00 to 04:00, DIA 5 h: 0.446 U on board at 02:00 and
-        // 1.038 U at 04:00, so acted over 02:00-04:00 is 1.0 + 0.446 - 1.038 = 0.408 U.
+        // 1.5 U/h on a 1 U/h schedule from 01:00 to 04:00, DIA 5 h: chunks of 1/24 U. At 02:00 twelve
+        // are on board, 11.4799584 / 24 = 0.478 U. At 04:00 all 36 are, 5 to 180 minutes old: the 24
+        // before the peak at m = 3k keep 24 - 0.001852 * (0.36 * 4900 + 0.6 * 300) = 20.399712 and the
+        // twelve after it 4.76009088, so 25.15980288 / 24 = 1.048 U. Acted over 02:00-04:00 is
+        // 1.0 + 0.478 - 1.048 = 0.43 U.
         SettingsEvidenceRange Run(bool fiveMinutePieces)
         {
             var week = new Week { Dia = 5 };
@@ -1221,8 +1234,8 @@ public class SettingsEvidenceCalculatorTests
         var whole = BasalBlock(Run(fiveMinutePieces: false), 2);
         var pieces = BasalBlock(Run(fiveMinutePieces: true), 2);
 
-        whole.Observed.Should().Be(1.204, "1.0 scheduled + 0.5 correction + (0.408 / 2 - 0.5) carried");
-        whole.Days.Should().OnlyContain(d => d.CarriedInsulin == -0.296);
+        whole.Observed.Should().Be(1.215, "1.0 scheduled + 0.5 correction + (0.43 / 2 - 0.5) carried");
+        whole.Days.Should().OnlyContain(d => d.CarriedInsulin == -0.285);
         pieces.Observed.Should().Be(whole.Observed);
         pieces.Days.Select(d => d.CarriedInsulin).Should().Equal(whole.Days.Select(d => d.CarriedInsulin));
     }
@@ -1230,9 +1243,14 @@ public class SettingsEvidenceCalculatorTests
     [Fact]
     public void AZeroTempBeforeACorrection_IsTakenOffTheInsulinThatActed()
     {
-        // A 2 U correction at 14:00 after a zero temp from 13:00, DIA 5 h. On board: 2 - 0.892 U at
-        // 14:00, and 0.118 U of the bolus less 0.092 U still missing at 18:00, so 1.082 U acted
-        // against an 80 mg/dL drop. Counting the zero temp as nothing, 1.882 U would read an ISF of 42.5.
+        // A 2 U correction at 14:00 after a zero temp from 13:00, DIA 5 h. On board at 14:00:
+        // 2 - 0.957 = 1.043 U. At 18:00 the bolus is m = 144, x = 13.8: 2 * (0.001323 * 190.44
+        // - 0.054233 * 13.8 + 0.55556) = 0.118 U. The zero temp's chunk 300 minutes old is off the
+        // curve; the eleven 245 to 295 minutes old are at x = 14.4 + 0.6i, i = 0..10, and keep
+        // 0.001323 * 3369.96 - 0.054233 * 191.4 + 11 * 0.55556 = 0.18942088, plus 0.0002132 because
+        // the one at x = 20.4 is below zero and counts as 0: -0.18963408 / 12 = -0.016 U still missing.
+        // So 1.043 - (0.118 - 0.016) = 0.941 U acted against an 80 mg/dL drop, an ISF of 85.016.
+        // Counting the zero temp as nothing, 1.882 U would read an ISF of 42.5.
         var week = new Week { Dia = 5, Glucose = Corrections().Glucose };
         week.Doses.AddRange(Enumerable.Range(0, 7).Select(d => new InsulinDose(week.At(d, 14), 2, Automatic: false)));
         week.WithCalculatedIob(DailyTemps(week, 13, 14, 0));
@@ -1240,17 +1258,18 @@ public class SettingsEvidenceCalculatorTests
         var isf = Isf(week.Run(), SettingsEvidenceBlock.Midday);
 
         isf.N.Should().Be(7);
-        isf.Episodes.Should().OnlyContain(e => e.InsulinActed == 1.082 && e.Value == 73.937);
-        isf.Observed.Should().Be(73.937);
+        isf.Episodes.Should().OnlyContain(e => e.InsulinActed == 0.941 && e.Value == 85.016);
+        isf.Observed.Should().Be(85.016);
     }
 
     [Fact]
     public void ACarriedTermThatLeavesTheNeedTooHigh_ReadsLow()
     {
         // A high temp before the block that the body has already used: glucose stays flat at
-        // schedule, but 0.6 U of it is still on the calculated curve, so the need reads 1.3 U/h
-        // against a body that needs 1.0. The carried term is 23% of it, which is material, and the
-        // figure points towards more insulin, so it reads Low.
+        // schedule, but on the calculated curve its twelve 0.125 U chunks still hold
+        // 0.125 * 11.4799584 = 1.435 U at 02:00 and 0.125 * 4.76009088 = 0.595 U at 04:00. The 0.84 U
+        // between them makes the need read 1.42 U/h against a body that needs 1.0. The carried term
+        // is 30% of it, which is material, and the figure points towards more insulin, so it reads Low.
         var week = new Week { Dia = 5, Days = 14 };
         for (var d = 0; d < week.Days; d++)
             week.Carbs.Add(new CarbEvent(week.At(d, 12), 30));
@@ -1258,7 +1277,7 @@ public class SettingsEvidenceCalculatorTests
 
         var block = BasalBlock(week.Run(), 2);
 
-        block.Observed.Should().Be(1.3);
+        block.Observed.Should().Be(1.42);
         block.TowardsMoreInsulin.Should().BeTrue();
         block.ConfidenceReasons.Should().Equal(
             SettingsEvidenceConfidenceReason.CarriedInsulinMaterial,

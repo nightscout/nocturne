@@ -34,5 +34,5 @@
   {...restProps}
 >
   <PanelLeftIcon />
-  <span class="sr-only">Toggle Sidebar</span>
+  <span class="sr-only">Toggle sidebar</span>
 </Button>

@@ -1,13 +1,10 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Glucose;
 
@@ -21,10 +18,11 @@ public interface IGlucoseStatusClassifier
     TenantOverviewThresholds Defaults { get; }
 
     /// <summary>
-    /// Resolves the thresholds for the tenant <paramref name="db"/> is pinned to. Share RLS hides
-    /// <c>alert_rules</c>, so a public share is classified against <see cref="Defaults"/>.
+    /// Resolves the thresholds from the tenant's enabled alert rules. Rules other than threshold
+    /// rules are ignored. A caller that cannot read <c>alert_rules</c>, such as a public share,
+    /// classifies against <see cref="Defaults"/> and does not call this.
     /// </summary>
-    Task<TenantOverviewThresholds> ResolveThresholdsAsync(NocturneDbContext db, CancellationToken ct);
+    TenantOverviewThresholds ResolveThresholds(IEnumerable<AlertRuleSnapshot> enabledRules);
 
     /// <summary>
     /// Classifies a reading. <paramref name="lastReadingAt"/> stands in for the reading's time
@@ -57,14 +55,10 @@ public class GlucoseStatusClassifier : IGlucoseStatusClassifier
 
     public TenantOverviewThresholds Defaults { get; }
 
-    public async Task<TenantOverviewThresholds> ResolveThresholdsAsync(NocturneDbContext db, CancellationToken ct)
-    {
-        var thresholdRules = await db.AlertRules.AsNoTracking()
-            .Where(r => r.IsEnabled && r.ConditionType == AlertConditionType.Threshold)
-            .ToListAsync(ct);
-
-        return ResolveThresholds(Defaults, ParseThresholdRules(thresholdRules));
-    }
+    public TenantOverviewThresholds ResolveThresholds(IEnumerable<AlertRuleSnapshot> enabledRules) =>
+        ResolveThresholds(
+            Defaults,
+            ParseThresholdRules(enabledRules.Where(r => r.ConditionType == AlertConditionType.Threshold)));
 
     public GlucoseStatus Classify(
         double? mgdl,
@@ -75,14 +69,14 @@ public class GlucoseStatusClassifier : IGlucoseStatusClassifier
         Classify(mgdl, readingTimestamp, lastReadingAt, thresholds, _staleAfter, nowUtc);
 
     private IEnumerable<(string Direction, double Value, AlertRuleSeverity Severity)> ParseThresholdRules(
-        IEnumerable<AlertRuleEntity> rules)
+        IEnumerable<AlertRuleSnapshot> rules)
     {
         foreach (var rule in rules)
         {
             ThresholdCondition? condition;
             try
             {
-                condition = JsonSerializer.Deserialize<ThresholdCondition>(rule.ConditionParams, EvaluatorJson.Options);
+                condition = JsonSerializer.Deserialize<ThresholdCondition>(rule.ConditionParams, ConditionJson.Options);
             }
             catch (JsonException ex)
             {
@@ -120,7 +114,7 @@ public class GlucoseStatusClassifier : IGlucoseStatusClassifier
         {
             if (string.IsNullOrEmpty(direction)) continue;
 
-            switch (direction.ToLowerInvariant(), severity)
+            switch (direction, severity)
             {
                 case ("below", AlertRuleSeverity.Critical):
                     urgentLow = Math.Max(urgentLow ?? double.MinValue, value);

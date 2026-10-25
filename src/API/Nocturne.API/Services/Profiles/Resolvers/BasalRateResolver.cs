@@ -3,6 +3,7 @@ using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -111,11 +112,7 @@ internal sealed class BasalRateResolver : IBasalRateResolver
             if (entries is null)
                 return DefaultBasalRate;
 
-            var dto = DateTimeOffset.FromUnixTimeMilliseconds(shiftedMills);
-            if (tz is not null)
-                dto = TimeZoneInfo.ConvertTime(dto, tz);
-
-            var secondsFromMidnight = (int)dto.TimeOfDay.TotalSeconds;
+            var secondsFromMidnight = ScheduleEntryTime.SecondsOfDay(shiftedMills, tz);
             var value = ScheduleResolution.FindValueAtTime(entries, secondsFromMidnight)
                 ?? DefaultBasalRate;
 

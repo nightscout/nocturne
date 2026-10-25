@@ -250,7 +250,8 @@ public class AuthenticationMiddleware
                     .Union(ScopeTranslator.FromPermissions(publicAccess.EffectivePermissions))
                     .ToHashSet();
                 var publicScopes = Scope.PublicShareScopes
-                    .Where(scope => Scope.Satisfies(resolvedGrants, scope))
+                    .Where(scope => Scope.Satisfies(resolvedGrants, scope)
+                                    && Scope.SharesWithPublic(scope, publicAccess.DirectPermissions))
                     .ToHashSet();
                 context.SetGrantedScopes((IReadOnlySet<string>)publicScopes);
 

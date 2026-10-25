@@ -9,7 +9,7 @@
   import { Button } from "@nocturne/ui/ui/button";
   import { resolve } from "$app/paths";
   import { LINKS } from "$lib/data/links";
-  import { track } from "$lib/analytics";
+  import { campaignUrl, track } from "$lib/analytics";
   import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
 
   const BRAND = { background: "var(--brand)", foreground: "white" };
@@ -320,10 +320,10 @@
       </div>
       <div class="flex flex-col gap-2.5 md:items-end">
         <Button
-          href={LINKS.donate}
+          href={campaignUrl(LINKS.donate, "get-involved")}
           target="_blank"
           rel="external noopener noreferrer"
-          onclick={() => track("Donate Click", { destination: "foundation" })}
+          onclick={() => track("Donate Click", { destination: "foundation", placement: "get-involved" })}
           variant="brand"
           size="cta"
           brand={BRAND}

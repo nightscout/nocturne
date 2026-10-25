@@ -73,7 +73,7 @@ public class LoopAnalysisSettingsEvidenceBudgetTests(ITestOutputHelper output)
             carbRatioEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 10 }],
             basalEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 0.8 }]);
         var timeline = new TherapyTimeline([new TherapySegment(start, end + 1, snapshot)]);
-        var iob = new IobCalculator(null!, null!, null!, null!, null!);
+        var iob = new IobCalculator(null!, null!, null!, null!, null!, null!);
         var cob = new CobCalculator(NullLogger<CobCalculator>.Instance, iob, null!, null!, null!, null!);
 
         var stopwatch = Stopwatch.StartNew();
@@ -91,10 +91,10 @@ public class LoopAnalysisSettingsEvidenceBudgetTests(ITestOutputHelper output)
                 Glucose = glucose,
                 Insulin = new NetInsulinAboveSchedule(
                     NetInsulinAboveSchedule.DeliveredFromSeries(series, end, evidence),
-                    NetInsulinAboveSchedule.ScheduledBaseline([new BasalSegment(start, end, 0.8, 0.8, "Default")], []),
+                    new ScheduledBasal([new BasalSegment(start, end, 0.8, 0.8, "Default")], []).Segments(clipped),
                     boluses.Select(b => new InsulinDose(b.Mills, b.Insulin, b.Kind == BolusKind.Algorithm))),
                 Carbs = [.. carbs.Select(c => new CarbEvent(c.Mills, c.Carbs))],
-                IobCob = IobCobSeries.Build(iob, cob, boluses, carbs, temps, timeline, null, start, end - 1, end - 1, 5 * Minute, BasalIobModel.Carried),
+                IobCob = IobCobSeries.Build(iob, cob, boluses, carbs, temps, timeline, new ScheduledBasal(timeline.BasalSegments(), []), null, start, end - 1, end - 1, 5 * Minute),
                 CalculatedIobCobTime = DailyProfileCalculator.CalculableIobCobTime(
                     evidence, boluses.Select(b => b.Mills).Concat(carbs.Select(c => c.Mills))),
                 TargetAt = _ => (90, 140),

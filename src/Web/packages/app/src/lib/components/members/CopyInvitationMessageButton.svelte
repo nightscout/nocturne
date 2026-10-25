@@ -15,8 +15,8 @@
 
   const message = $derived(
     inviterName
-      ? `${inviterName} has invited you to Nocturne, a website for viewing diabetes information, such as glucose readings, that they've chosen to share with you. Open this link to sign in or create an account and join: ${url}`
-      : `You've been invited to Nocturne, a website for viewing diabetes information, such as glucose readings, that someone has chosen to share with you. Open this link to sign in or create an account and join: ${url}`
+      ? `${inviterName} has invited you to Nocturne, a website for viewing diabetes information, such as glucose readings, that they chose to share with you. Open this link to sign in or create an account and join: ${url}`
+      : `You are invited to Nocturne, a website for viewing diabetes information, such as glucose readings, that someone chose to share with you. Open this link to sign in or create an account and join: ${url}`
   );
 </script>
 

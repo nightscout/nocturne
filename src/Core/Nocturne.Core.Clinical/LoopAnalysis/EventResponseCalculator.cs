@@ -42,7 +42,7 @@ public static class EventResponseCalculator
     /// that announce a rise, and the carbs that make a bolus a meal's rather than a correction.
     /// </summary>
     public static long HistoryLookbackMs(EventWindow window) =>
-        Math.Max(window.BeforeMs, Math.Max(UnannouncedRises.CarbsBeforeMs, EventAnchors.CarbFreeMs));
+        Math.Max(window.BeforeMs, Math.Max(UnannouncedRises.CarbsBeforeMs, EventAnchors.BolusAfterMealMs));
 
     /// <param name="listEvents">Whether to list the events; the comparison range's are not shown.</param>
     public static EventResponseRange Calculate(

@@ -28,6 +28,8 @@ export interface AuthUser {
 	preferredLanguage?: string;
 	/** Per-user display preferences (units, time format, theme, chart style, etc.) */
 	preferences?: UserDisplayPreferences;
+	/** The tenant's default glucose units, for a member who has chosen none of their own. */
+	defaultGlucoseUnits?: string;
 	/** URL to the subject's avatar image */
 	avatarUrl?: string;
 }

@@ -86,7 +86,7 @@
     <div class="flex items-center gap-3">
       <Volume2 class="h-5 w-5 text-muted-foreground" />
       <div>
-        <Label>Sound Enabled</Label>
+        <Label>Sound enabled</Label>
         <p class="text-sm text-muted-foreground">
           Play audio when alarm triggers
         </p>
@@ -101,7 +101,7 @@
     <div class="space-y-4">
       <div class="space-y-2">
         <div class="flex items-center justify-between">
-          <Label>Alarm Sound</Label>
+          <Label>Alarm sound</Label>
           <Button
             variant="ghost"
             size="xs"
@@ -109,7 +109,7 @@
               (showCustomSoundUpload = !showCustomSoundUpload)}
           >
             <Upload class="h-3 w-3 mr-1" />
-            {showCustomSoundUpload ? "Hide" : "Manage"} Custom Sounds
+            {showCustomSoundUpload ? "Hide" : "Manage"} custom sounds
           </Button>
         </div>
         <div class="flex items-center gap-2">
@@ -130,14 +130,14 @@
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectLabel>Built-in Sounds</SelectLabel>
+                <SelectLabel>Built-in sounds</SelectLabel>
                 {#each BUILT_IN_SOUNDS as sound (sound.id)}
                   <SelectItem value={sound.id}>{sound.name}</SelectItem>
                 {/each}
               </SelectGroup>
               {#if allSounds.some((s) => s.isCustom)}
                 <SelectGroup>
-                  <SelectLabel>Custom Sounds</SelectLabel>
+                  <SelectLabel>Custom sounds</SelectLabel>
                   {#each allSounds.filter((s) => s.isCustom) as sound (sound.id)}
                     <SelectItem value={sound.id}>
                       <span class="flex items-center gap-2">
@@ -172,7 +172,7 @@
       <!-- Preview Section -->
       <div class="p-4 rounded-lg border bg-muted/30">
         <div class="flex items-center justify-between mb-3">
-          <Label>Test Alarm</Label>
+          <Label>Test alarm</Label>
           <span class="text-xs text-muted-foreground">
             Preview sound and visual effects
           </span>
@@ -190,7 +190,7 @@
         <div class="flex items-center gap-3">
           <TrendingUp class="h-5 w-5 text-muted-foreground" />
           <div>
-            <Label>Ascending Volume</Label>
+            <Label>Ascending volume</Label>
             <p class="text-sm text-muted-foreground">
               Start quiet and gradually get louder
             </p>
@@ -204,7 +204,7 @@
           class="grid gap-4 @sm:grid-cols-3 p-4 bg-muted/50 rounded-lg"
         >
           <div class="space-y-2">
-            <Label>Start Volume</Label>
+            <Label>Start volume</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"
@@ -217,7 +217,7 @@
             </div>
           </div>
           <div class="space-y-2">
-            <Label>Max Volume</Label>
+            <Label>Max volume</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"
@@ -230,7 +230,7 @@
             </div>
           </div>
           <div class="space-y-2">
-            <Label>Ramp Duration</Label>
+            <Label>Ramp duration</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"
@@ -283,7 +283,7 @@
 
     {#if profile.vibration.enabled}
       <div class="space-y-2">
-        <Label>Vibration Pattern</Label>
+        <Label>Vibration pattern</Label>
         <Select
           type="single"
           value={profile.vibration.pattern}

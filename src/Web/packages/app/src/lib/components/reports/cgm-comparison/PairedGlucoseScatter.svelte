@@ -3,7 +3,7 @@
    * Paired readings plotted against each other, reference device on x. Points sit on the
    * diagonal where the two devices read the same value.
    */
-  import { Chart, Svg } from "layerchart";
+  import { Chart, Line, Path, Svg } from "layerchart";
   import { scaleLinear } from "d3-scale";
   import { bg, bgLabel } from "$lib/utils/formatting";
   import type { CgmPairedReading } from "$lib/api";
@@ -64,7 +64,7 @@
   >
     {#snippet children({ context })}
       <Svg>
-        <line
+        <Line
           x1={context.xScale(domain[0])}
           y1={context.yScale(domain[0])}
           x2={context.xScale(domain[1])}
@@ -72,9 +72,10 @@
           class="stroke-muted-foreground/40 [stroke-dasharray:4_3]"
         />
 
-        <path
+        <Path
           data-testid="paired-points"
-          d={dots(context.xScale, context.yScale)}
+          pathData={dots(context.xScale, context.yScale)}
+          stroke="none"
           class="fill-primary/50"
         />
 

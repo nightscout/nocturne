@@ -12,6 +12,7 @@ import { playAlarmSound, stopAlarmSound } from '$lib/audio/alarm-sounds';
 import type { AlarmEvent } from '$lib/websocket/types';
 import type { AlarmProfileConfiguration } from '$lib/types/alarm-profile';
 import { createDefaultAlarmProfile } from '$lib/types/alarm-profile';
+import { AlarmTriggerType } from '$lib/api';
 
 export interface ActiveAlarm {
 	event: AlarmEvent;
@@ -45,7 +46,7 @@ function resolveProfile(
 
 	// Fall back to a sensible default profile
 	const isUrgent = event.level === 'urgent';
-	return createDefaultAlarmProfile(isUrgent ? 'UrgentLow' : 'Low');
+	return createDefaultAlarmProfile(isUrgent ? AlarmTriggerType.UrgentLow : AlarmTriggerType.Low);
 }
 
 /**

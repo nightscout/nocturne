@@ -49,6 +49,12 @@ public class AlertRepository : IAlertRepository
     public virtual async Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesAsync(
         Guid tenantId, CancellationToken ct)
     {
+        return (await ReadEnabledRulesAsync(tenantId, ct)).Rules;
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<EnabledAlertRules> ReadEnabledRulesAsync(Guid tenantId, CancellationToken ct)
+    {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
         context.TenantId = tenantId;
 
@@ -63,12 +69,12 @@ public class AlertRepository : IAlertRepository
     /// would stop every rule of the tenant evaluating. Each skipped rule is logged as an error
     /// instead, every time it is skipped.
     /// </remarks>
-    private async Task<List<AlertRuleSnapshot>> ReadEnabledRulesAsync(
+    private async Task<EnabledAlertRules> ReadEnabledRulesAsync(
         NocturneDbContext context, Guid tenantId, CancellationToken ct)
     {
         try
         {
-            return await EnabledRules(context, tenantId, []).ToListAsync(ct);
+            return new EnabledAlertRules(await EnabledRules(context, tenantId, []).ToListAsync(ct), []);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -89,20 +95,23 @@ public class AlertRepository : IAlertRepository
                     rule.Id, tenantId, rule.ConditionType, rule.Severity);
             }
 
-            return await EnabledRules(context, tenantId, unreadable.Select(r => r.Id).ToList()).ToListAsync(ct);
+            var excluded = unreadable.Select(r => r.Id).ToList();
+            return new EnabledAlertRules(await EnabledRules(context, tenantId, excluded).ToListAsync(ct), excluded);
         }
     }
 
     private static IQueryable<AlertRuleSnapshot> EnabledRules(
         NocturneDbContext context, Guid tenantId, List<Guid> excluded) =>
-        context.AlertRules
+        Snapshots(context.AlertRules
             .AsNoTracking()
             .Where(r => r.TenantId == tenantId && r.IsEnabled && !excluded.Contains(r.Id))
-            .OrderBy(r => r.SortOrder)
-            .Select(r => new AlertRuleSnapshot(
-                r.Id, r.TenantId, r.Name, r.ConditionType,
-                r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
-                r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass));
+            .OrderBy(r => r.SortOrder));
+
+    private static IQueryable<AlertRuleSnapshot> Snapshots(IQueryable<AlertRuleEntity> rules) =>
+        rules.Select(r => new AlertRuleSnapshot(
+            r.Id, r.TenantId, r.Name, r.ConditionType,
+            r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
+            r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass));
 
     private sealed class StoredRuleEnums
     {
@@ -110,6 +119,91 @@ public class AlertRepository : IAlertRepository
         public string ConditionType { get; init; } = string.Empty;
         public string Severity { get; init; } = string.Empty;
     }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<AlertRuleRecord>> GetRulesAsync(Guid tenantId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
+
+        var rules = await RulesWithChannels(context, tenantId)
+            .OrderBy(r => r.SortOrder)
+            .ToListAsync(ct);
+        return rules.Select(ToRecord).ToList();
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<AlertRuleSnapshot>> GetRuleSnapshotsAsync(
+        Guid tenantId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
+
+        return await Snapshots(context.AlertRules
+                .AsNoTracking()
+                .Where(r => r.TenantId == tenantId)
+                .OrderBy(r => r.SortOrder))
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<Guid>> GetUnacknowledgedExcursionIdsAsync(
+        Guid tenantId, string managedBy, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
+
+        return await context.AlertExcursions
+            .AsNoTracking()
+            .Where(e => e.EndedAt == null && e.AcknowledgedAt == null)
+            .Join(
+                context.AlertRules.Where(r => r.TenantId == tenantId && r.ManagedBy == managedBy),
+                e => e.AlertRuleId,
+                r => r.Id,
+                (e, r) => e.Id)
+            .ToListAsync(ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<AlertRuleRecord?> GetRuleAsync(Guid tenantId, Guid ruleId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
+
+        var rule = await RulesWithChannels(context, tenantId).FirstOrDefaultAsync(r => r.Id == ruleId, ct);
+        return rule is null ? null : ToRecord(rule);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<int> CountRulesAsync(Guid tenantId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
+
+        return await context.AlertRules.CountAsync(r => r.TenantId == tenantId, ct);
+    }
+
+    private static IQueryable<AlertRuleEntity> RulesWithChannels(NocturneDbContext context, Guid tenantId) =>
+        context.AlertRules
+            .AsNoTracking()
+            .Include(r => r.Channels)
+            .Where(r => r.TenantId == tenantId);
+
+    private static AlertRuleRecord ToRecord(AlertRuleEntity r) => new(
+        new AlertRuleSnapshot(
+            r.Id, r.TenantId, r.Name, r.ConditionType,
+            r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
+            r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass),
+        r.Description,
+        r.IsEnabled,
+        r.ManagedBy,
+        r.ReviewReason,
+        r.Channels
+            .OrderBy(c => c.SortOrder)
+            .Select(c => new AlertRuleChannelSnapshot(
+                c.Id, c.AlertRuleId, c.ChannelType,
+                c.Destination, c.DestinationLabel, c.SortOrder, c.Metadata, c.Secret))
+            .ToList());
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<AlertRuleChannelSnapshot>> GetChannelsForRuleAsync(
@@ -168,6 +262,21 @@ public class AlertRepository : IAlertRepository
                 i.Status, i.TriggeredAt,
                 i.SnoozedUntil, i.SnoozeCount))
             .ToListAsync(ct);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<ExcursionRuleSnapshot?> GetExcursionRuleAsync(
+        Guid tenantId, Guid excursionId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
+
+        return await context.AlertExcursions
+            .AsNoTracking()
+            .Where(e => e.Id == excursionId)
+            .Join(context.AlertRules, e => e.AlertRuleId, r => r.Id,
+                (e, r) => new ExcursionRuleSnapshot(r.Id, r.Name))
+            .FirstOrDefaultAsync(ct);
     }
 
     /// <inheritdoc/>
@@ -496,7 +605,7 @@ public class AlertRepository : IAlertRepository
             await using var context = await _contextFactory.CreateDbContextAsync(ct);
             context.TenantId = tenantId;
 
-            results.AddRange(await ReadEnabledRulesAsync(context, tenantId, ct));
+            results.AddRange((await ReadEnabledRulesAsync(context, tenantId, ct)).Rules);
         }
 
         return results;

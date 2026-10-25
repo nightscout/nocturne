@@ -8,6 +8,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.API.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -25,6 +26,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Tags("Monitoring")]
 [Authorize]
 [Route("api/v4/alert-sounds")]
+[DenyNoAccountViewer]
 public class AlertCustomSoundsController : ControllerBase
 {
     private readonly INocturneDbContextFactory _contextFactory;
@@ -97,6 +99,7 @@ public class AlertCustomSoundsController : ControllerBase
     /// List all custom sounds for the current tenant (metadata only, no audio data).
     /// </summary>
     [HttpGet]
+    [RequireScope(Scope.AlertsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<AlertCustomSoundResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<AlertCustomSoundResponse>>> GetSounds(CancellationToken ct)
@@ -123,6 +126,7 @@ public class AlertCustomSoundsController : ControllerBase
     /// Stream the raw audio bytes for a custom sound.
     /// </summary>
     [HttpGet("{id:guid}/stream")]
+    [RequireScope(Scope.AlertsRead)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> StreamSound(Guid id, CancellationToken ct)

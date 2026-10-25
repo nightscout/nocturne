@@ -1,0 +1,144 @@
+---
+title: Reports
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Reports
+
+The reports look back at your data over a period of time. Each report answers
+a different question, from "how was my glucose in the last two weeks?" to "what
+happens after I change my infusion site?".
+
+<Video id="overview" />
+
+## The reports page
+
+To open the reports, select **Reports** in the app navigation. The reports page
+shows a summary of the last 14 days at the top:
+
+- **Time in range**: a bar that shows how much of your time was in each glucose
+  range. The consensus target is at least 70% of time in range, 70-180 mg/dL. If
+  you set a personal target range, the caption under the bar also shows your
+  time in that range.
+- **Average glucose**, **eHbA1c**, **Coefficient of variation** and **Time below
+  range** for the same period.
+- **Typical day**: your glucose over 24 hours, with all the days of the period
+  laid on top of each other. Select **Full report** to open the
+  [Glucose Profile (AGP)](/docs/reports/agp).
+
+Under the summary, the reports are in four groups: **The Big Picture**,
+**Patterns & Trends**, **Lifestyle Impact** and **Treatment Insights**. Select a
+report to open it. A report marked **Coming soon** is not available yet.
+
+The app shows glucose in mg/dL by default. If you chose mmol/L in your
+settings, the reports show mmol/L, and so do the targets and thresholds.
+
+## Set the date range
+
+Most reports show a period that you choose. Each report opens on its own
+default period. For most reports this is the last 14 days.
+
+1. At the top of the report, select the date range (for example, **Last 14
+   days**). On a small screen, select **Filters**.
+2. Under **Quick Selection**, select a period: **Today**, **3 Days**, **7
+   Days**, **14 Days**, **30 Days** or **90 Days**.
+3. To choose other dates, select the first and the last day in the **Custom
+   Date Range** calendar.
+4. Select **Apply Filters**. The report loads again for the new period.
+
+The period you choose stays in place when you open another report. To go back
+to the default period of the report, open the date range and select **Reset**.
+
+Some reports have their own period controls, so they do not show the date
+range: [Comparison](/docs/reports/comparison),
+[Year Overview](/docs/reports/year-overview),
+[Day in Review](/docs/reports/day-in-review),
+[Estimated HbA1c](/docs/reports/ehba1c) and
+[Data Quality](/docs/reports/data-quality).
+
+## Print a report
+
+Select **Print** at the top of a report, or press Ctrl+P (Cmd+P on a Mac). The
+app loads the complete report before it prints. The printed page shows the
+report name and the period.
+
+## Which report to use
+
+### Glucose
+
+- **[Executive Summary](/docs/reports/executive-summary)**: how did I do in this
+  period? All the key numbers on one page.
+- **[Glucose Profile (AGP)](/docs/reports/agp)**: what does a typical day look
+  like?
+- **[Glucose Distribution](/docs/reports/glucose-distribution)**: how much time
+  do I spend in each glucose range, and at which hours?
+- **[Hourly Patterns](/docs/reports/hourly-stats)**: which hours of the day go
+  well, and which are harder?
+- **[Readings](/docs/reports/readings)**: what happened on each day, reading by
+  reading?
+- **[Day in Review](/docs/reports/day-in-review)**: what happened on one day,
+  and what did my loop do?
+- **[Week to Week](/docs/reports/week-to-week)**: how does each day of the week
+  compare?
+- **[Comparison](/docs/reports/comparison)**: what changed between two periods?
+- **[Year Overview](/docs/reports/year-overview)**: how did my whole year go?
+- **[Estimated HbA1c](/docs/reports/ehba1c)**: what would a lab HbA1c test
+  read, and how has it changed?
+
+### Insulin and loop
+
+- **[Treatment Log](/docs/reports/treatments)**: every dose, carb entry, note
+  and device event, in a list you can search and edit.
+- **[Insulin Delivery](/docs/reports/insulin-delivery)**: how much insulin do I
+  use, and how is it split between basal and bolus?
+- **[Basal Rate Analysis](/docs/reports/basal-analysis)**: how does my basal
+  rate change through the day?
+- **[Insulin Dosing Profile](/docs/reports/idp)**: my insulin and my glucose on
+  one page, for a clinic visit.
+- **[Site Change Impact](/docs/reports/site-change-impact)**: what does my
+  glucose do around an infusion site change?
+- **[Loop Analysis](/docs/reports/loop-analysis)**: what does my loop change,
+  when, and what occurs after it?
+
+### Devices and data
+
+- **[Data Quality](/docs/reports/data-quality)**: which readings may come from
+  the sensor and not from my glucose?
+- **[Battery](/docs/reports/battery)**: how long do the batteries of my devices
+  last?
+
+### Activity and sleep
+
+- **[Step Count](/docs/reports/steps)**: how active am I, and what does my
+  glucose do at the same time?
+- **[Heart Rate](/docs/reports/heart-rate)**: what does my heart rate do
+  through the day?
+- **[Sleep & Overnight](/docs/reports/sleep)**: how do I sleep, and what does my
+  glucose do overnight?
+
+## Good to know
+
+- **Only the reports you can read.** On a public share link, or as a member
+  with limited access, you see only the reports for the data you are allowed
+  to read. The Insulin Dosing Profile is not available on a public share link.
+- **The last 24 hours only.** If the person who shared the data limited you to
+  the last 24 hours, a notice at the top says so. The reports then show no
+  data older than 24 hours, whatever period you choose.
+- **Reliability badge.** Some reports show a badge such as "Based on 9 days of
+  data (14 recommended)". The badge shows when the period has too few days
+  with readings. For a period of 14 days or more, the report needs readings on
+  at least 14 days. For a shorter period, it needs readings on every day. Treat
+  the figures with care until you have more data.
+
+<Callout type="warning" title="Reports are not medical advice">
+
+  The reports show what happened in your data. They do not tell you why, or
+  what to change. Meals, activity, sleep, illness and sensor problems can all
+  change the figures. Discuss any pattern with your diabetes care team before
+  you change your treatment.
+
+</Callout>

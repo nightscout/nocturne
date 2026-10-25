@@ -122,7 +122,7 @@ public static class ByoProxyComposePublisherExtensions
             "# X-Forwarded-Proto and X-Forwarded-Host.",
             "#",
             "# Worked nginx, Traefik and Caddy configurations, plus a troubleshooting table:",
-            "#   https://getnocturne.dev/docs/installation/reverse-proxy",
+            "#   https://getnocturne.dev/docs/installation/reverse-proxy?utm_source=docker-compose&utm_medium=config",
             "services:",
             "  caddy:",
             "    profiles: [\"byo-proxy-disabled\"]",

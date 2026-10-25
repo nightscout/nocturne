@@ -45,7 +45,8 @@ public class AlertSurfaceWriteScopeTests
     ];
 
     /// <summary>
-    /// Write actions on the alert surface that deliberately carry no scope gate, with the reason.
+    /// Write actions on the alert surface that deliberately carry no scope gate, or only a read
+    /// gate, with the reason.
     /// Anything else fails <see cref="EveryAlertSurfaceWriteAction_RequiresAlertsReadWrite"/>.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> Ungated =
@@ -68,6 +69,12 @@ public class AlertSurfaceWriteScopeTests
             ["NotificationsController.MarkAsRead"] = "read state on the caller's own row",
             ["NotificationsController.MarkAllAsRead"] = "read state on the caller's own rows",
             ["NotificationsController.DismissNotification"] = "archive flag on the caller's own row",
+
+            // Gated on alerts.read rather than alerts.readwrite, so a share or guest link holding
+            // alerts.read can say it saw a firing alarm. AlertReceiptService appends one receipt per
+            // viewer and touches no excursion, instance, mute or delivery, so escalation is unchanged
+            // for everyone, including the caller.
+            ["AlertsController.MarkSeen"] = "append-only receipt; changes no alert state",
         };
 
     /// <summary>
@@ -231,6 +238,17 @@ public class AlertSurfaceWriteScopeTests
                     $"the {role} role holds no alerts.readwrite, so it must not reach {key}");
             }
         }
+    }
+
+    [Fact]
+    public void AnAlertsAcknowledgeCaller_ReachesOnlyTheSnooze()
+    {
+        var reached = GatedWriteActions()
+            .Where(x => Evaluate(x.Controller, x.Action, authenticated: true,
+                new HashSet<string> { Scope.AlertsAcknowledge }) is null)
+            .Select(x => $"{x.Controller.Name}.{x.Action.Name}");
+
+        reached.Should().BeEquivalentTo(["AlertsController.SnoozeInstance"]);
     }
 
     [Fact]

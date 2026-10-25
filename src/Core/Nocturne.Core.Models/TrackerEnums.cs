@@ -9,7 +9,8 @@ namespace Nocturne.Core.Models;
 public enum TrackerCategory
 {
     /// <summary>
-    /// Consumable devices: cannulas, sensors, infusion sets
+    /// Pump parts and other consumables that are not a sensor, site, reservoir or battery, such as
+    /// a pump's battery lid
     /// </summary>
     Consumable,
 
@@ -284,4 +285,24 @@ public enum NotificationCategory
     /// Gentle reminders for optional actions (e.g., suggested meal match, tracker reset)
     /// </summary>
     Reminder
+}
+
+/// <summary>
+/// A consumable whose age legacy Nightscout shows as a pill (SAGE, CAGE, IAGE, BAGE), which a
+/// tenant with no tracker for it still sees as a fallback.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<LegacyConsumableKind>))]
+public enum LegacyConsumableKind
+{
+    /// <summary>CGM sensor (SAGE).</summary>
+    Sensor,
+
+    /// <summary>Infusion site, cannula or pod (CAGE).</summary>
+    Site,
+
+    /// <summary>Insulin reservoir or cartridge (IAGE).</summary>
+    Reservoir,
+
+    /// <summary>Pump battery (BAGE).</summary>
+    PumpBattery,
 }

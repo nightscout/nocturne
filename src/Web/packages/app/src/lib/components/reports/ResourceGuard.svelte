@@ -40,7 +40,7 @@
     error,
     hasData = false,
     refreshing = false,
-    errorTitle = "Error Loading Data",
+    errorTitle = "Error loading data",
     onRetry,
     compact = false,
     children,
@@ -54,7 +54,7 @@
         ? error.message
         : typeof error === "string"
           ? error
-          : remoteErrorMessage(error, "Something went wrong. Please try again.")
+          : remoteErrorMessage(error, "Could not load the data. Try again.")
       : null
   );
 

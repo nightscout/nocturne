@@ -1,0 +1,85 @@
+---
+title: Comparison
+---
+
+<script>
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Comparison
+
+The Comparison report answers the question "what changed between two
+periods?". It puts two periods side by side and shows the change in each key
+figure.
+
+<Video id="comparison" />
+
+## What it shows
+
+### The change table
+
+Each row is one figure. The row shows its value in the first period, its value
+in the second period, a bar, and the change.
+
+| Figure | What it measures |
+|--------|------------------|
+| **Time in Range** | Time from 70 to 180 mg/dL |
+| **GMI** | Glucose management indicator: your HbA1c, estimated from your average glucose |
+| **Variability (CV)** | Coefficient of variation: how much your glucose goes up and down |
+| **Glycemic Risk Index** | One score for the risk of lows and highs, from 0 to 100 |
+| **Mean Glucose** | Your average glucose |
+| **Hyper Duration** and **Hyper Events** | Total hours above range, and the number of separate highs |
+| **Hypo Duration** and **Hypo Events** | Total hours below range, and the number of separate lows |
+
+The bar shows the direction and the size of the change:
+
+- A bar to the right means the figure is higher in the second period.
+- A bar to the left means the figure is lower in the second period.
+- A short line in the middle means no change.
+
+The bar does not say if a change is good or bad. A lower value is better for
+some figures, such as the Glycemic Risk Index. A higher value is better for
+others, such as time in range. A change in a percentage is shown in percentage
+points (pp).
+
+### Time in Range — stacked comparison
+
+Two bars show how the time in each period divides across five ranges: very
+low, low, in range, high and very high. Move the pointer over a bar to see each
+percentage.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+The report opens on the last 14 days against the 14 days before. To compare
+other periods:
+
+1. Select **Preset**.
+2. Select a pair of periods:
+   - **Last 7 vs Prior 7 days**
+   - **Last 14 vs Prior 14 days**
+   - **Last 30 vs Prior 30 days**
+   - **This Month vs Last Month**
+3. The table loads again at once.
+
+To compare two periods that you choose:
+
+1. Select the dates under the first period. Select the first and the last day
+   in the calendar.
+2. Do the same for the second period.
+3. Select **Load**.
+
+To give a period a name, such as "Before new pump", type it in the name field
+above its dates. To change the order of the two periods, select **Swap**.
+
+The app keeps the comparison in the page address. If you share or reload the
+page, it shows the same comparison.
+
+## Good to know
+
+- **Hyper Duration**, **Hypo Duration** and the event counts are totals for
+  the whole period. Make sure that the two periods have the same number of
+  days before you compare them. The number of days shows next to each period
+  name.
+- If a period has no readings, its figures show **No data**.

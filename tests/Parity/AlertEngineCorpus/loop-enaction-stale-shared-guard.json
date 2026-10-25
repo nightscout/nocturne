@@ -8,8 +8,8 @@
       "name": "rule-1",
       "condition_type": "loop_enaction_stale",
       "condition_params": {
-        "operator": "\u003E",
-        "value": 30
+        "operator": ">",
+        "minutes": 30
       },
       "confirmation_readings": 1,
       "hysteresis_minutes": 0,

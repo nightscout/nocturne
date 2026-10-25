@@ -4,10 +4,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Profiles;
+using Nocturne.API.Extensions;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -20,16 +23,18 @@ public class ClockFacesControllerTests
     private readonly Mock<ISensorGlucoseRepository> _sensorGlucoseRepositoryMock = new();
     private readonly Mock<ILogger<ClockFacesController>> _loggerMock = new();
 
-    private ClockFacesController CreateController()
+    private ClockFacesController CreateController(AuthContext? auth = null)
     {
         var controller = new ClockFacesController(
             _clockFaceServiceMock.Object,
             _sensorGlucoseRepositoryMock.Object,
             _loggerMock.Object);
 
+        var httpContext = new DefaultHttpContext();
+        httpContext.SetAuthContext(auth ?? new AuthContext { IsAuthenticated = true, SubjectId = Guid.NewGuid() });
         controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext()
+            HttpContext = httpContext
         };
         controller.ProblemDetailsFactory = new EchoingProblemDetailsFactory();
 
@@ -158,6 +163,88 @@ public class ClockFacesControllerTests
         });
 
         result.Result.Should().BeOfType<CreatedAtActionResult>();
+    }
+
+    public static TheoryData<string> Writes => new() { "Create", "Update", "Delete" };
+
+    private static IActionResult? Gate(string action, AuthContext? auth, IEnumerable<string> scopes) =>
+        ActionGate.Evaluate(typeof(ClockFacesController), action, new HashSet<string>(scopes), auth);
+
+    [Theory]
+    [MemberData(nameof(Writes))]
+    public void AGuestSession_IsRefused(string action)
+    {
+        var guest = new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.Guest,
+            ActingAsSubjectId = Guid.NewGuid(),
+        };
+
+        Gate(action, guest, Scope.NormalizeGuest(Scope.AllowedGuestScopes))
+            .Should().BeOfType<ForbidResult>();
+    }
+
+    [Theory]
+    [MemberData(nameof(Writes))]
+    public void APublicShareViewer_IsRefused(string action)
+    {
+        Gate(action, auth: null, Scope.PublicShareScopes)
+            .Should().BeOfType<UnauthorizedResult>();
+    }
+
+    [Theory]
+    [MemberData(nameof(Writes))]
+    public void AMemberWhoManagesSharing_IsAdmitted(string action)
+    {
+        var admin = new AuthContext { IsAuthenticated = true, AuthType = AuthType.SessionCookie, SubjectId = Guid.NewGuid() };
+
+        Gate(action, admin, Scope.NormalizeMemberPermissions(RoleSeeds.Permissions[RoleSeeds.Admin]))
+            .Should().BeNull();
+        Gate(action, admin, Scope.NormalizeMemberPermissions(RoleSeeds.Permissions[RoleSeeds.Owner]))
+            .Should().BeNull();
+    }
+
+    [Theory]
+    [MemberData(nameof(Writes))]
+    public void AMemberWhoCannotManageSharing_IsRefused(string action)
+    {
+        var caretaker = new AuthContext { IsAuthenticated = true, AuthType = AuthType.SessionCookie, SubjectId = Guid.NewGuid() };
+
+        Gate(action, caretaker, Scope.NormalizeMemberPermissions(RoleSeeds.Permissions[RoleSeeds.Caretaker]))
+            .Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public async Task ACallerWithNoSubject_SavesNoFace()
+    {
+        var instanceKey = new AuthContext { IsAuthenticated = true, SubjectId = null };
+        var controller = CreateController(instanceKey);
+        var id = Guid.NewGuid();
+
+        var created = await controller.Create(new CreateClockFaceRequest { Name = "Bedside" });
+        var updated = await controller.Update(id, new UpdateClockFaceRequest { Name = "Kitchen" });
+        var deleted = await controller.Delete(id);
+
+        created.Result.Should().BeOfType<UnauthorizedResult>();
+        updated.Result.Should().BeOfType<UnauthorizedResult>();
+        deleted.Should().BeOfType<UnauthorizedResult>();
+        _clockFaceServiceMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ACallerWithNoSubject_ReadsNoFacesAndAnEmptyStarter()
+    {
+        var controller = CreateController(new AuthContext { IsAuthenticated = true, SubjectId = null });
+
+        var list = await controller.List();
+        var starter = await controller.GetStarter();
+
+        list.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeAssignableTo<IEnumerable<ClockFaceListItem>>().Which.Should().BeEmpty();
+        starter.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<ClockFaceConfig>().Which.Rows.Should().BeEmpty();
+        _clockFaceServiceMock.VerifyNoOtherCalls();
     }
 
     [Fact]

@@ -118,7 +118,7 @@ public class GlookoProfileMapper
 
                 var startTimestamp = parsed!.Value;
                 DateTime? endTimestamp = i < ordered.Count - 1 ? ordered[i + 1].Parsed : null;
-                var startMills = new DateTimeOffset(startTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                var startMills = startTimestamp.ToMills();
 
                 activations.Add(new ProfileActivation
                 {
@@ -173,7 +173,7 @@ public class GlookoProfileMapper
             _logger.LogWarning("Failed to parse profile timestamp: '{Timestamp}'", timestamp);
             return null;
         }
-        var mills = new DateTimeOffset(syncTime).ToUnixTimeMilliseconds();
+        var mills = syncTime.ToMills();
         var activeBasalProgram = settings.BasalSettings?.ActiveBasalProgram ?? "Default";
 
         var store = new Dictionary<string, ProfileData>();

@@ -2,13 +2,11 @@ import { getContext, setContext } from "svelte";
 import { PRINT_LAYOUT_CLASS } from "$lib/components/charts/print/print-mode.svelte";
 
 /**
- * Print-document metadata the reports layout cannot derive itself. A title is
- * needed for a route the report registry does not list. A period is needed by a
- * report with its own period controls (comparison, year overview, day in
- * review).
+ * Print-document metadata the reports layout cannot derive itself. A period is
+ * needed by a report with its own period controls (comparison, year overview,
+ * day in review).
  */
 export interface ReportPrintMeta {
-  title?: string;
   /**
    * Inclusive YYYY-MM-DD bounds, or free text for periods that are not one
    * range.
@@ -63,7 +61,7 @@ export function getReportPrintContext(): ReportPrintContext | undefined {
   return getContext<ReportPrintContext | undefined>(KEY);
 }
 
-/** Declare this report's print title and/or period. Call during component init. */
+/** Declare this report's print period. Call during component init. */
 export function setReportPrintMeta(read: () => ReportPrintMeta): void {
   const ctx = getContext<ReportPrintContext | undefined>(KEY);
   if (!ctx) return;

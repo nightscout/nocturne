@@ -225,13 +225,12 @@ public class TreatmentsController : ControllerBase
                 return BadRequest("No treatments provided");
             }
 
-            var createdTreatments = await _treatmentService.CreateTreatmentsAsync(
+            var resultArray = await CreateOrReplaceAsync(
                 PrepareTreatments(treatmentsToCreate),
                 cancellationToken
             );
-            var resultArray = TreatmentEcho.InSubmittedOrder(createdTreatments);
 
-            _logger.LogDebug("Successfully created {Count} treatments", createdTreatments.Count);
+            _logger.LogDebug("Successfully created {Count} treatments", resultArray.Length);
 
             // Return 200 OK to match Nightscout behavior (not 201 Created)
             return Ok(resultArray);
@@ -276,13 +275,7 @@ public class TreatmentsController : ControllerBase
 
         try
         {
-            var toSave = NightscoutJsonBody.ReadObject<Treatment>(treatment)!;
-            if (treatment.TryGetProperty("identifier", out var identifier)
-                && identifier.ValueKind == JsonValueKind.String
-                && !string.IsNullOrWhiteSpace(identifier.GetString()))
-                toSave.Id = identifier.GetString();
-
-            return await SaveAsync(toSave, cancellationToken);
+            return await SaveAsync(ReadTreatment(treatment)!, cancellationToken);
         }
         catch (JsonException ex)
         {
@@ -489,7 +482,7 @@ public class TreatmentsController : ControllerBase
         }
 
         if (string.IsNullOrWhiteSpace(prepared.Id)
-            && await FindSameEventAsync(prepared, cancellationToken) is { } sameEventId
+            && await _treatmentService.FindSameEventIdAsync(prepared, cancellationToken) is { } sameEventId
             && await _treatmentService.UpdateTreatmentAsync(sameEventId, prepared, cancellationToken) is { } replaced)
             return Ok(replaced);
 
@@ -511,21 +504,67 @@ public class TreatmentsController : ControllerBase
     }
 
     /// <summary>
-    /// The id of the treatment stored at <paramref name="treatment"/>'s <c>created_at</c> with its
-    /// <c>eventType</c>: Nightscout 15.0.8's last upsert key, for a document with neither
-    /// <c>identifier</c> nor <c>_id</c>.
+    /// Stores each document, replacing the stored treatment at its <c>created_at</c> with its
+    /// <c>eventType</c> when it carries no identity, as Nightscout's upsert does.
     /// </summary>
-    private async Task<string?> FindSameEventAsync(Treatment treatment, CancellationToken cancellationToken)
+    /// <remarks>
+    /// Documents with an identity are written in runs, so a replaced treatment is stored before a later
+    /// document of the same request looks for it.
+    /// </remarks>
+    private async Task<Treatment[]> CreateOrReplaceAsync(
+        List<Treatment> treatments,
+        CancellationToken cancellationToken
+    )
     {
-        if (treatment.Mills <= 0)
-            return null;
+        var results = new List<Treatment>(treatments.Count);
+        var withIdentity = new List<Treatment>();
 
-        var atSameTime = await _treatmentService.GetTreatmentsByRangeAsync(
-            treatment.Mills, treatment.Mills, cancellationToken);
-        return atSameTime?
-            .FirstOrDefault(stored => !string.IsNullOrEmpty(stored.Id)
-                && string.Equals(stored.EventType, treatment.EventType, StringComparison.Ordinal))
-            ?.Id;
+        async Task FlushAsync()
+        {
+            if (withIdentity.Count == 0)
+                return;
+
+            results.AddRange(TreatmentEcho.InSubmittedOrder(
+                await _treatmentService.CreateV1TreatmentsAsync(withIdentity, cancellationToken)));
+            withIdentity.Clear();
+        }
+
+        foreach (var treatment in treatments)
+        {
+            if (!string.IsNullOrWhiteSpace(treatment.Id) || !string.IsNullOrWhiteSpace(treatment.SyncIdentifier))
+            {
+                withIdentity.Add(treatment);
+                continue;
+            }
+
+            await FlushAsync();
+
+            if (await _treatmentService.FindSameEventIdAsync(treatment, cancellationToken) is { } sameEventId
+                && await _treatmentService.UpdateTreatmentAsync(sameEventId, treatment, cancellationToken) is { } replaced)
+            {
+                results.Add(replaced);
+                continue;
+            }
+
+            results.AddRange(TreatmentEcho.InSubmittedOrder(
+                await _treatmentService.CreateV1TreatmentsAsync([treatment], cancellationToken)));
+        }
+
+        await FlushAsync();
+        return results.ToArray();
+    }
+
+    private static Treatment? ReadTreatment(JsonElement document)
+    {
+        var treatment = NightscoutJsonBody.ReadObject<Treatment>(document);
+        if (treatment is not null
+            && document.ValueKind == JsonValueKind.Object
+            && document.TryGetProperty("identifier", out var identifier)
+            && identifier.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(identifier.GetString()))
+            treatment.Id = identifier.GetString();
+
+        return treatment;
     }
 
     private OkObjectResult NothingSaved(string? id)
@@ -535,7 +574,8 @@ public class TreatmentsController : ControllerBase
     }
 
     /// <summary>
-    /// The submitted treatments. A string escaping an unpaired surrogate, which Nightscout's JSON.parse
+    /// The documents of an object or array body, each keyed on its <c>identifier</c> when it has one;
+    /// null for any other body. A string escaping an unpaired surrogate, which Nightscout's JSON.parse
     /// accepts and System.Text.Json cannot read, is read with the escape replaced by U+FFFD rather
     /// than answered as invalid JSON, which an uploader would resend forever.
     /// </summary>
@@ -543,12 +583,12 @@ public class TreatmentsController : ControllerBase
     {
         try
         {
-            return NightscoutJsonBody.ReadObjects<Treatment>(body);
+            return NightscoutJsonBody.ReadObjects(body, ReadTreatment);
         }
         catch (JsonException ex) when (ex.InnerException is InvalidOperationException)
         {
             using var repaired = JsonDocument.Parse(StorableText.RepairJsonEscapes(body.GetRawText()));
-            return NightscoutJsonBody.ReadObjects<Treatment>(repaired.RootElement.Clone());
+            return NightscoutJsonBody.ReadObjects(repaired.RootElement.Clone(), ReadTreatment);
         }
     }
 

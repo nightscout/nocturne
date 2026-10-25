@@ -29,11 +29,13 @@ public interface ISleepReportService
     /// <summary>
     /// Returns a trends report covering all sessions in the date range (max 90 days).
     /// When <paramref name="source"/> is null, deduplicates to one session per calendar
-    /// night (longest TotalSleepMs wins; tie-break by source priority).
+    /// night (longest TotalSleepMs wins; tie-break by source priority). The days the report covers
+    /// are counted in <paramref name="zone"/>, or UTC when it is null.
     /// </summary>
     Task<SleepTrendsReport> GetTrendsReportAsync(
         DateTime from,
         DateTime to,
         SleepSource? source = null,
+        TimeZoneInfo? zone = null,
         CancellationToken ct = default);
 }

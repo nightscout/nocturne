@@ -30,7 +30,7 @@ export type SettingsLink = {
  * cannot say one thing on the index and another wherever else it is offered.
  */
 export const connectorsLink: SettingsLink = {
-  title: "Connectors & Apps",
+  title: "Connectors & apps",
   description: "Connect data sources and authorized devices.",
   href: "/settings/connectors",
   icon: Plug,
@@ -38,7 +38,7 @@ export const connectorsLink: SettingsLink = {
 
 /** @see {@link connectorsLink} */
 export const sharingLink: SettingsLink = {
-  title: "Sharing & Privacy",
+  title: "Sharing & privacy",
   description: "Members, invitations, and public sharing.",
   href: "/settings/members",
   icon: Users,
@@ -53,7 +53,7 @@ export const settingsSections: SettingsLink[] = [
     icon: User,
   },
   {
-    title: "Patient Record",
+    title: "Patient record",
     description: "Details for the person being monitored.",
     href: "/settings/patient",
     icon: HeartPulse,
@@ -71,19 +71,19 @@ export const settingsSections: SettingsLink[] = [
     icon: Syringe,
   },
   {
-    title: "Data Quality",
+    title: "Data quality",
     description: "Data validation, cleanup, and maintenance tools.",
     href: "/settings/data-quality",
     icon: ShieldCheck,
   },
   {
-    title: "Notifications & Trackers",
+    title: "Notifications & trackers",
     description: "Alerts, reminders, and tracked events.",
     href: "/settings/trackers",
     icon: Timer,
   },
   {
-    title: "Active Access",
+    title: "Active access",
     description: "Browser sessions signed in to this account.",
     href: "/settings/access",
     icon: KeyRound,
@@ -91,7 +91,7 @@ export const settingsSections: SettingsLink[] = [
   connectorsLink,
   sharingLink,
   {
-    title: "Support & Community",
+    title: "Support & community",
     description: "Get help and connect with the community.",
     href: "/settings/support",
     icon: HeartHandshake,
@@ -106,13 +106,13 @@ export const adminSettingsSections: SettingsLink[] = [
     icon: Shield,
   },
   {
-    title: "Tenant Management",
+    title: "Tenant management",
     description: "Tenant details and platform administrators.",
     href: "/settings/admin/tenants",
     icon: Building2,
   },
   {
-    title: "Access Requests",
+    title: "Access requests",
     description: "Review people asking to join this instance.",
     href: "/settings/access-requests",
     icon: UserPlus,

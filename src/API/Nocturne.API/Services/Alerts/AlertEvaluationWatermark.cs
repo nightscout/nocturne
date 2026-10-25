@@ -17,7 +17,7 @@ namespace Nocturne.API.Services.Alerts;
 /// <para>
 /// The skip expires after <see cref="MaxSkipWindow"/>. A rule can turn true on the clock alone
 /// while the reading stands still, e.g. a <c>time_of_day</c> gate opening over a low that the
-/// wall-clock sweep does not evaluate (<see cref="WallClockConditions"/>). So the reading is a
+/// wall-clock sweep does not evaluate (<see cref="Engines.RuleTrees.ReferencesWallClock"/>). So the reading is a
 /// reason to skip a repeat, never a reason to stop evaluating. The window also bounds a rule the user has just created or edited, and a pass the
 /// orchestrator completed with some rule's exception swallowed internally.
 /// </para>

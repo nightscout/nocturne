@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { Chart, Svg, Axis } from "layerchart";
+  import { Chart, Svg, Axis, Group, Rect } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
   import { PumpModeIcon, ActivityCategoryIcon } from "$lib/components/icons";
   import { BasalRateTrack } from "$lib/components/charts";
   import type { ProcessedSpan } from "../../../../routes/(authenticated)/time-spans/data.remote";
-  import { BasalDeliveryOrigin } from "$lib/api";
+  import { BasalDeliveryOrigin, type BasalDeliverySpanDto } from "$lib/api";
+  import { randomUUID } from "$lib/utils";
+  import { resolveChartColor } from "$lib/utils/chart-colors";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
   import { formatElapsedDuration } from "$lib/utils/duration";
 
@@ -28,7 +30,7 @@
   interface Props {
     pumpModeSpans: ProcessedSpan[];
     profileSpans: ProcessedSpan[];
-    tempBasalSpans: ProcessedSpan[];
+    tempBasalSpans: BasalDeliverySpanDto[];
     overrideSpans: ProcessedSpan[];
     activitySpans: ProcessedSpan[];
     dateRange: { from: Date; to: Date };
@@ -89,20 +91,26 @@
   // Calculate basal track position
   const basalTrackTop = $derived(standardTracks.length * TRACK_HEIGHT + 5);
 
-  // Convert ProcessedSpan to BasalDeliveryChartData format for BasalRateTrack
   const basalDeliverySpans = $derived.by((): (BasalDeliveryChartData & { displayStart: Date; displayEnd: Date })[] => {
-    if (!tempBasalSpans) return [];
-    return tempBasalSpans.map((span) => ({
-      id: span.id,
-      startTime: span.startTime,
-      endTime: span.endTime,
-      displayStart: span.startTime,
-      displayEnd: span.endTime,
-      rate: span.rate ?? 0,
-      origin: span.origin ?? BasalDeliveryOrigin.Scheduled,
-      source: typeof span.metadata?.source === "string" ? span.metadata.source : undefined,
-      color: span.color,
-    }));
+    const rangeStart = dateRange.from.getTime();
+    const rangeEnd = dateRange.to.getTime();
+    return tempBasalSpans
+      .filter((span) => (span.endMills ?? rangeEnd) > rangeStart && (span.startMills ?? 0) < rangeEnd)
+      .map((span) => {
+        const startTime = new Date(Math.max(span.startMills ?? 0, rangeStart));
+        const endTime = new Date(Math.min(span.endMills ?? rangeEnd, rangeEnd));
+        return {
+          id: span.id ?? randomUUID(),
+          startTime,
+          endTime,
+          displayStart: startTime,
+          displayEnd: endTime,
+          rate: span.rate ?? 0,
+          origin: span.origin ?? BasalDeliveryOrigin.Scheduled,
+          source: span.source,
+          color: resolveChartColor(span.fillColor ?? "insulin-basal"),
+        };
+      });
   });
 
   // Dummy glucose scale values for BasalRateTrack (it needs these for internal calculations)
@@ -131,15 +139,10 @@
     >
       {#snippet children({ context })}
         <Svg>
-        <!-- Native SVG throughout: every span carries pre-scaled pixel
-             coordinates, and layerchart marks each call registerMark() on mount,
-             so one <Rect> per span cost O(N^2) across the chart's mark deriveds.
-             Native <rect>/<text>/<g> keep the per-span hover handlers while
-             registering nothing. -->
         {#each standardTracks as track, i (track.key)}
           {@const yPos = i * TRACK_HEIGHT + 5}
           <!-- Track background -->
-          <rect
+          <Rect
             x={context.xScale(dateRange.from)}
             y={yPos}
             width={context.xScale(dateRange.to) - context.xScale(dateRange.from)}
@@ -161,8 +164,7 @@
           {#each track.spans as span (span.id)}
             {@const xStartPx = context.xScale(span.startTime)}
             {@const xEndPx = context.xScale(span.endTime)}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <rect
+            <Rect
               x={xStartPx}
               y={yPos + 2}
               width={xEndPx - xStartPx}
@@ -185,21 +187,21 @@
             />
             <!-- Icon/label at start of span -->
             {#if track.key === "pumpMode"}
-              <g transform="translate({xStartPx}, {yPos + TRACK_HEIGHT / 2})">
+              <Group x={xStartPx} y={yPos + TRACK_HEIGHT / 2}>
                 <foreignObject x={4} y={-8} width={16} height={16}>
                   <div class="flex items-center justify-center w-full h-full">
                     <PumpModeIcon state={span.state} size={14} color={span.color} />
                   </div>
                 </foreignObject>
-              </g>
+              </Group>
             {:else if track.key === "activity"}
-              <g transform="translate({xStartPx}, {yPos + TRACK_HEIGHT / 2})">
+              <Group x={xStartPx} y={yPos + TRACK_HEIGHT / 2}>
                 <foreignObject x={4} y={-8} width={16} height={16}>
                   <div class="flex items-center justify-center w-full h-full">
                     <ActivityCategoryIcon category={span.category} size={14} color={span.color} />
                   </div>
                 </foreignObject>
-              </g>
+              </Group>
             {:else if track.key === "profile" && span.profileName}
               <text
                 x={xStartPx}
@@ -227,7 +229,7 @@
         <!-- Basal delivery track using BasalRateTrack component -->
         {#if showTempBasals}
           <!-- Track background -->
-          <rect
+          <Rect
             x={context.xScale(dateRange.from)}
             y={basalTrackTop}
             width={context.xScale(dateRange.to) - context.xScale(dateRange.from)}

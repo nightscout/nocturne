@@ -63,7 +63,7 @@
 
   const editingFoodId = $derived(draft._id);
   const canSave = $derived((draft.name ?? "").trim() !== "" && !save.busy);
-  const dialogTitle = $derived(editingFoodId ? "Edit Food" : "Add Food");
+  const dialogTitle = $derived(editingFoodId ? "Edit food" : "Add food");
   const saveButtonLabel = $derived(
     save.busy ? "Saving..." : editingFoodId ? "Update" : "Create"
   );

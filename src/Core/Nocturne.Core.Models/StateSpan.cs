@@ -47,13 +47,13 @@ public class StateSpan
     /// When this state began in Unix milliseconds (computed for v1/v3 compatibility)
     /// </summary>
     [JsonPropertyName("startMills")]
-    public long StartMills => new DateTimeOffset(StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    public long StartMills => StartTimestamp.ToMills();
 
     /// <summary>
     /// When this state ended in Unix milliseconds (computed for v1/v3 compatibility)
     /// </summary>
     [JsonPropertyName("endMills")]
-    public long? EndMills => EndTimestamp.HasValue ? new DateTimeOffset(EndTimestamp.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : null;
+    public long? EndMills => EndTimestamp.HasValue ? EndTimestamp.Value.ToMills() : null;
 
     [JsonPropertyName("source")]
     public string? Source { get; set; }

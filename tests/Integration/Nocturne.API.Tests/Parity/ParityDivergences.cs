@@ -106,7 +106,6 @@ public static class ParityDivergences
         new("V1.NotificationsParityTests.PostAdminNotify_Persistent_ReturnsSameShape", "POST /api/v1/adminnotifies", 200, JsonValueKind.Object, NoNightscoutRoute),
         new("V1.NotificationsParityTests.PostAdminNotify_Simple_ReturnsSameShape", "POST /api/v1/adminnotifies", 200, JsonValueKind.Object, NoNightscoutRoute),
         new("V1.NotificationsParityTests.PostAdminNotify_WithGroup_ReturnsSameShape", "POST /api/v1/adminnotifies", 200, JsonValueKind.Object, NoNightscoutRoute),
-        new("V1.NotificationsParityTests.PostPushoverCallback_Valid_ReturnsSameShape", "POST /api/v1/notifications/pushovercallback", 200, JsonValueKind.Object, UndefinedPropertyCrash),
         new("V1.ProfileParityTests.GetProfile_NonExistentId_ReturnsSameShape", "GET /api/v1/profile/nonexistent123", 200, JsonValueKind.Array, NoNightscoutRoute),
         new("V1.TimeQueryParityTests.GetSliceWithPrefix_ReturnsSameShape", "GET /api/v1/slice/entries/date/sgv/*", 200, JsonValueKind.Array, DateStringCrash),
         new("V1.TimeQueryParityTests.GetSliceWithRegex_ReturnsSameShape", "GET /api/v1/slice/entries/date/sgv/*", 200, JsonValueKind.Array, DateStringCrash),

@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
@@ -39,14 +38,6 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
     /// <inheritdoc />
     protected override void ApplyUpdate(TherapySettingsEntity target, TherapySettings source) =>
         TherapySettingsMapper.UpdateEntity(target, source);
-
-    /// <summary>
-    /// Leaves out the snapshots of Profile Switch treatments
-    /// (<see cref="TherapySettings.ProfileSwitchStoreMarker"/>), which are not profiles. Nightscout
-    /// only ever builds them in memory (lib/profilefunctions.js) and never lists them.
-    /// </summary>
-    protected override IQueryable<TherapySettingsEntity> Listed(IQueryable<TherapySettingsEntity> rows) =>
-        rows.Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker));
 
     /// <summary>
     /// Gets therapy settings by profile name.
@@ -148,7 +139,6 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx
             .TherapySettings.AsNoTracking()
-            .Where(IsDocumentRow)
             .OrderByDescending(e => e.Timestamp)
             .ThenByDescending(e => e.Id)
             .FirstOrDefaultAsync(ct);
@@ -185,16 +175,12 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
             .ToList();
     }
 
-    private static readonly Expression<Func<TherapySettingsEntity, bool>> IsDocumentRow =
-        e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker);
-
     /// <summary>
     /// The rows decomposed from profile documents, each with the id of its document computed in SQL
     /// as <see cref="TherapySettings.DocumentIdOf"/> computes it.
     /// </summary>
     private static IQueryable<DocumentRow> DocumentRows(NocturneDbContext ctx) =>
         ctx.TherapySettings.AsNoTracking()
-            .Where(IsDocumentRow)
             .Select(e => new DocumentRow
             {
                 DocumentId = e.LegacyId == null
@@ -246,7 +232,6 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await ctx
             .TherapySettings.AsNoTracking()
-            .Where(IsDocumentRow)
             .Where(e => e.LegacyId != null
                 ? e.LegacyId.StartsWith(prefix) || e.LegacyId == documentId
                 : e.Id == rowId)

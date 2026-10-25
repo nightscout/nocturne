@@ -386,7 +386,7 @@ public class EntryReadService : IEntryStore
             if (page.Count == 0)
                 return new ModifiedSincePage<Entry>([], pageCursor);
 
-            pageCursor = HistoryPage.ToMilliseconds(page[^1].Record.ModifiedAt);
+            pageCursor = page[^1].Record.ModifiedAt.ToMills();
 
             var delivered = await VisibleHistoryEntriesAsync(page, source, excludeDemo, ct);
             if (delivered.Count > 0 || page.Count < limit)
@@ -413,9 +413,9 @@ public class EntryReadService : IEntryStore
         if (ordered.Count <= limit)
             return ordered;
 
-        var lastMills = HistoryPage.ToMilliseconds(ordered[limit - 1].Record.ModifiedAt);
+        var lastMills = ordered[limit - 1].Record.ModifiedAt.ToMills();
         return ordered
-            .TakeWhile((r, i) => i < limit || HistoryPage.ToMilliseconds(r.Record.ModifiedAt) == lastMills)
+            .TakeWhile((r, i) => i < limit || r.Record.ModifiedAt.ToMills() == lastMills)
             .ToList();
     }
 
@@ -499,7 +499,7 @@ public class EntryReadService : IEntryStore
         var size = CanonicalGlucoseStream.BucketSize.Ticks;
         var stamps = deleted
             .GroupBy(r => r.Timestamp.Ticks / size)
-            .ToDictionary(g => g.Key, g => g.Max(r => HistoryPage.ToMilliseconds(r.ModifiedAt)));
+            .ToDictionary(g => g.Key, g => g.Max(r => r.ModifiedAt.ToMills()));
 
         var window = new Dictionary<Guid, SensorGlucose>();
         foreach (var (from, to) in CanonicalBucketRuns(deleted))

@@ -70,7 +70,8 @@
         activity:
           (legend?.activitySpans ?? false) &&
           engine.displayActivitySpans.length > 0,
-      }
+      },
+      engine.minIOB
     )
   );
 
@@ -142,7 +143,8 @@
             placement="bottom"
             ticks={hourTicks}
             format={tickLabel}
-            tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
+            tickOcclusion
+            tickLabelProps={{ class: "text-xs fill-muted-foreground", fontSize: 12 }}
           />
         {/if}
       </Svg>

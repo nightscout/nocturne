@@ -34,6 +34,31 @@ public class NightscoutJsonOptionsTests
         served["duration"]!.GetValue<double>().Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(false, false, "false", "false")]
+    [InlineData(true, true, "true", "true")]
+    [InlineData(false, true, "false", "true")]
+    public void Food_flags_are_served_as_strings_and_always_present(
+        bool hidden, bool hideAfterUse, string expectedHidden, string expectedHideAfterUse)
+    {
+        var served = JsonNode.Parse(
+            JsonSerializer.Serialize(
+                new Food { Name = "Snack", Hidden = hidden, HideAfterUse = hideAfterUse },
+                NightscoutJsonOptions.Create()))!.AsObject();
+
+        served["hidden"]!.GetValue<string>().Should().Be(expectedHidden);
+        served["hideafteruse"]!.GetValue<string>().Should().Be(expectedHideAfterUse);
+    }
+
+    [Fact]
+    public void Food_flags_read_back_from_the_strings_they_are_served_as()
+    {
+        var food = JsonSerializer.Deserialize<Food>("""{"hidden":"true","hideafteruse":"false"}""", NightscoutJsonOptions.Create())!;
+
+        food.Hidden.Should().BeTrue();
+        food.HideAfterUse.Should().BeFalse();
+    }
+
     [Fact]
     public void A_finite_duration_on_an_indefinite_override_is_served()
     {

@@ -1,0 +1,84 @@
+---
+title: Basal Rate Analysis
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Basal Rate Analysis
+
+The Basal Rate Analysis answers the question "how does my basal rate change
+through the day?". It shows the basal rate that your pump delivered at each
+hour, and how often your loop changed it.
+
+<Video id="basal-analysis" />
+
+## What it shows
+
+### The key figures
+
+| Figure | What it shows |
+|--------|---------------|
+| **Avg Rate** | The average basal rate, in units per hour |
+| **Total Basal** | The total units delivered in the period |
+| **Temp Basals** | The average number of temp basals each day |
+| **High / Low** | The number of temp basals above and below the scheduled rate |
+
+A temp basal counts as high when its rate is above the scheduled rate at that
+time. It counts as low when its rate is below the scheduled rate. A suspend or
+a zero temp basal is not in either count.
+
+### Basal Rate Percentile Chart
+
+This chart is like an AGP for your basal rate. The horizontal axis is the time
+of day.
+
+- **The median line** is your most common basal rate at each hour.
+- **The shaded bands** show the range of variation, from the 10th to the 90th
+  percentile.
+- **Wider bands** mean that the delivered rate changed more at that hour.
+
+Where the median falls below your usual rate, your loop often lowers your basal
+at that hour. Where it rises, your loop often raises it.
+
+### Average Hourly Basal Delivery
+
+This chart shows the average basal insulin delivered at each hour of the day.
+Under the chart, the units are added up for **Morning (6am-12pm)**, **Afternoon
+(12pm-6pm)** and **Evening/Night** (6pm to 6am).
+
+### Basal Insights
+
+This card gives the **Basal Rate Range** (the lowest and highest rates), the
+**Temp Basal Activity**, the number of **Suspend/Zero Temp Basals**, and the
+average **Daily Basal Insulin**.
+
+## How to use it
+
+The report opens on the last 14 days. To see if a pattern is still true now:
+
+1. Look at the **High / Low** figure and the percentile chart for 14 days.
+2. At the top of the report, select the date range.
+3. Select **7 Days**.
+4. Select **Apply Filters**. The report loads again for the last 7 days.
+5. Compare the figures with the figures for 14 days.
+
+To see your basal and bolus insulin together, select **Insulin Delivery** to
+open the [Insulin Delivery](/docs/reports/insulin-delivery) report.
+
+## Good to know
+
+- **Total Basal** includes the automatic boluses that your loop gave, if it
+  gives them.
+- **Avg Rate** is the average of the recorded rates. It does not take into
+  account how long each rate ran.
+
+<Callout type="warning" title="Talk to your care team first">
+
+  A pattern in your basal rate can show where your settings may need a review.
+  Do not change your basal schedule because of this report alone. Discuss
+  changes with your diabetes care team.
+
+</Callout>

@@ -1,6 +1,7 @@
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Helpers;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Core.Clinical.Treatments;
@@ -149,6 +150,19 @@ public class TreatmentService : ITreatmentService
     }
 
     /// <inheritdoc />
+    public async Task<string?> FindSameEventIdAsync(
+        Treatment treatment, CancellationToken cancellationToken = default)
+    {
+        if (treatment.Mills <= 0)
+            return null;
+
+        return (await _store.GetByRangeAsync(treatment.Mills, treatment.Mills, cancellationToken))
+            .FirstOrDefault(stored => !string.IsNullOrEmpty(stored.Id)
+                && string.Equals(stored.EventType, treatment.EventType, StringComparison.Ordinal))
+            ?.Id;
+    }
+
+    /// <inheritdoc />
     public async Task<IEnumerable<Treatment>> GetTreatmentsModifiedSinceAsync(
         long lastModifiedMills, int limit = 500, CancellationToken cancellationToken = default)
     {
@@ -163,12 +177,27 @@ public class TreatmentService : ITreatmentService
     /// the <see cref="ITreatmentCache"/> is invalidated and events are fired via
     /// <see cref="IDataEventSink{T}.OnCreatedAsync(IReadOnlyList{T}, CancellationToken)"/>.
     /// </remarks>
-    public async Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
-        IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default)
+    public Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
+        IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default) =>
+        CreateAsync(treatments, splitPreBolus: false, cancellationToken);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// As <see cref="CreateTreatmentsAsync"/>, with each meal split by <see cref="PreBolusSplit"/>
+    /// after its insulin context is set, so the carbs take none.
+    /// </remarks>
+    public Task<BulkWrite<Treatment>> CreateV1TreatmentsAsync(
+        IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default) =>
+        CreateAsync(treatments, splitPreBolus: true, cancellationToken);
+
+    private async Task<BulkWrite<Treatment>> CreateAsync(
+        IEnumerable<Treatment> treatments, bool splitPreBolus, CancellationToken cancellationToken)
     {
         var treatmentList = treatments.ToList();
 
         await PopulateInsulinContextAsync(treatmentList, cancellationToken);
+        if (splitPreBolus)
+            treatmentList = await SplitPreBolusAsync(treatmentList, cancellationToken);
 
         BulkWrite<Treatment> created;
         var stored = new List<Treatment>();
@@ -205,6 +234,23 @@ public class TreatmentService : ITreatmentService
         await RecordRejectedAsync(created);
 
         return created;
+    }
+
+    /// <summary>
+    /// <see cref="PreBolusSplit"/> over a batch. A meal whose id the user deleted keeps its carbs
+    /// deleted too: its bolus is refused under that id, and its carbs would otherwise be written
+    /// fresh under their own.
+    /// </summary>
+    private async Task<List<Treatment>> SplitPreBolusAsync(List<Treatment> treatments, CancellationToken ct)
+    {
+        var meals = treatments.Select(PreBolusSplit.Split).ToList();
+        var split = meals.Where(halves => halves.Count == 2).Select(halves => halves[0].Id!).ToList();
+        if (split.Count == 0)
+            return [.. meals.SelectMany(halves => halves)];
+
+        var deleted = await _decomposer.GetDeletedByUserAsync(split, ct);
+        return [.. meals.SelectMany(halves =>
+            halves.Count == 2 && deleted.Contains(halves[0].Id!) ? halves.Take(1) : halves)];
     }
 
     /// <summary>
@@ -296,34 +342,10 @@ public class TreatmentService : ITreatmentService
     {
         // The identity used to upsert (LegacyId matching) must survive the round-trip. Serializing
         // rewrites _id to its 24-hex ObjectId form, so capture the real Id and restore it after the
-        // merge unless the patch explicitly changes _id.
+        // merge.
         var originalId = treatment.Id;
 
-        // JSON merge-patch: serialize existing, overlay patch properties, deserialize back
-        var existingJson = JsonSerializer.Serialize(treatment);
-        using var existingDoc = JsonDocument.Parse(existingJson);
-
-        var merged = new Dictionary<string, object?>();
-        foreach (var prop in existingDoc.RootElement.EnumerateObject())
-            merged[prop.Name] = prop.Value.Clone();
-        foreach (var prop in patchData.EnumerateObject())
-            merged[prop.Name] = prop.Value.Clone();
-
-        var mergedJson = JsonSerializer.Serialize(merged);
-        var patched = JsonSerializer.Deserialize<Treatment>(mergedJson);
-        if (patched == null) return;
-
-        // Copy patched values back to the existing treatment in-place
-        var props = typeof(Treatment).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-        foreach (var prop in props)
-        {
-            if (!prop.CanWrite) continue;
-            try
-            {
-                prop.SetValue(treatment, prop.GetValue(patched));
-            }
-            catch { /* skip computed properties that throw on set */ }
-        }
+        JsonMergePatch.ApplyInPlace(treatment, patchData);
 
         // A PATCH updates the record identified by the URL; it never changes identity. Restore the
         // upsert key even if the client echoed an _id in the body (AAPS sends the derived ObjectId,

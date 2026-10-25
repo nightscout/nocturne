@@ -29,7 +29,7 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 	// client-side by the same remote query /tenants uses.
 	if (tenantless) {
 		const landing = resolveSingleTenantLanding(
-			await getTenantMemberships(apiClient),
+			await getReachableTenants(apiClient),
 			baseDomain,
 			getOriginalProto(request) + ':',
 			dashboardSlugs
@@ -94,7 +94,7 @@ function loadChartData(apiClient: App.Locals['apiClient']) {
 }
 
 /**
- * The tenants this subject belongs to, or an empty list if the list cannot be fetched.
+ * The tenants this subject can go to, or an empty list if the list cannot be fetched.
  *
  * The bare list, not the overview: all that is wanted here is how many there are and what the
  * sole one is called, and the overview aggregates each tenant's latest glucose to answer that.
@@ -105,9 +105,9 @@ function loadChartData(apiClient: App.Locals['apiClient']) {
  *
  * A failure here must not block the dashboard: it only costs the single-tenant shortcut.
  */
-async function getTenantMemberships(apiClient: App.Locals['apiClient']) {
+async function getReachableTenants(apiClient: App.Locals['apiClient']) {
 	try {
-		return await apiClient.myTenants.getMyTenants();
+		return await apiClient.myTenants.getMyTenants(true);
 	} catch (err) {
 		console.error('Error loading the tenant list:', err);
 		return [];

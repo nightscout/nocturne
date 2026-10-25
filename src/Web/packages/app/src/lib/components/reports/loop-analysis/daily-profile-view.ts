@@ -152,6 +152,12 @@ export function axisEnd(values: (number | null | undefined)[], floor: number): n
   return Math.ceil((max * 1.05) / step) * step;
 }
 
+/** The lower end of an axis: 0, or below the lowest negative value, rounded as {@link axisEnd} rounds. */
+export function axisStart(values: (number | null | undefined)[]): number {
+  const below = values.filter((v): v is number => v != null && Number.isFinite(v) && v < 0);
+  return below.length === 0 ? 0 : -axisEnd(below.map((v) => -v), 0);
+}
+
 /** A wall-clock instant on an arbitrary date, for formatting a slot's time with the viewer's clock format. */
 export function atMinute(minuteOfDay: number): Date {
   return new Date(2000, 0, 1, 0, minuteOfDay);

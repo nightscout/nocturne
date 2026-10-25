@@ -49,8 +49,6 @@ public class StateSpanRepository : IStateSpanRepository
     /// </summary>
     private const int OpenCarryInLimit = 10;
 
-    private static readonly string ProfileCategory = nameof(StateSpanCategory.Profile);
-
     /// <summary>
     /// Exclusive categories whose open spans exclude each other only within a partition.
     /// </summary>
@@ -107,8 +105,57 @@ public class StateSpanRepository : IStateSpanRepository
     )
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var query = BuildFilteredQuery(db, category, state, from, to, source, active);
+        return await PageAsync(
+            BuildFilteredQuery(db, category, state, from, to, source, active),
+            count, skip, descending, cancellationToken);
+    }
 
+    /// <inheritdoc />
+    public async Task<IEnumerable<StateSpan>> GetStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
+        string? source,
+        bool? active,
+        int count,
+        int skip,
+        bool descending,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await PageAsync(
+            InCategories(BuildFilteredQuery(db, null, state, from, to, source, active), categories),
+            count, skip, descending, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
+        string? source,
+        bool? active,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await InCategories(BuildFilteredQuery(db, null, state, from, to, source, active), categories)
+            .CountAsync(cancellationToken);
+    }
+
+    private static IQueryable<StateSpanEntity> InCategories(
+        IQueryable<StateSpanEntity> query, IReadOnlyCollection<StateSpanCategory> categories)
+    {
+        var names = categories.Select(c => c.ToString()).ToList();
+        return query.Where(s => names.Contains(s.Category));
+    }
+
+    private static async Task<IEnumerable<StateSpan>> PageAsync(
+        IQueryable<StateSpanEntity> query, int count, int skip, bool descending, CancellationToken cancellationToken)
+    {
         var ordered = descending
             ? query.OrderByDescending(s => s.StartTimestamp).ThenByDescending(s => s.Id)
             : query.OrderBy(s => s.StartTimestamp).ThenBy(s => s.Id);
@@ -165,8 +212,7 @@ public class StateSpanRepository : IStateSpanRepository
         string? source,
         bool? active)
     {
-        // A Profile span is listed as nothing: a profile switch is a ProfileActivation.
-        var query = db.StateSpans.AsNoTracking().Where(s => s.Category != ProfileCategory);
+        var query = db.StateSpans.AsNoTracking();
 
         if (category.HasValue)
             query = query.Where(s => s.Category == category.Value.ToString());
@@ -307,7 +353,7 @@ public class StateSpanRepository : IStateSpanRepository
                 var dedupInputs = inserted
                     .Select(entity => new DeduplicationInput(
                         RecordId: entity.Id,
-                        Mills: new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                        Mills: entity.StartTimestamp.ToMills(),
                         DataSource: entity.Source ?? DeduplicationInput.UnknownDataSource,
                         Criteria: MatchCriteriaMapper.From(entity)))
                     .ToList();
@@ -389,7 +435,7 @@ public class StateSpanRepository : IStateSpanRepository
 
         // PumpMode mixes independent dimensions (Automatic/Manual loop mode vs Suspended
         // delivery) which can legitimately overlap, so only the SAME state is mutually exclusive
-        // there. Other exclusive categories (Override, TemporaryTarget, Profile) supersede any
+        // there. Other exclusive categories (Override, TemporaryTarget, Motion) supersede any
         // open span regardless of state.
         var sameStateOnly = string.Equals(
             entity.Category, nameof(StateSpanCategory.PumpMode), StringComparison.OrdinalIgnoreCase);

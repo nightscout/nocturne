@@ -137,8 +137,8 @@ public class MyLifeConnectorService(
                 (long)config.TempBasalConsolidationWindowMinutes * 60_000);
 
             var previousTail = new List<MyLifeEvent>();
-            var glucoseSinceTicks = new DateTimeOffset(glucoseSince).ToUnixTimeMilliseconds() * 10_000;
-            var treatmentSinceTicks = new DateTimeOffset(treatmentSince).ToUnixTimeMilliseconds() * 10_000;
+            var glucoseSinceTicks = glucoseSince.ToMills() * 10_000;
+            var treatmentSinceTicks = treatmentSince.ToMills() * 10_000;
 
             // Stream month by month
             await foreach (var batch in syncService.FetchEventsPerMonthAsync(
@@ -212,7 +212,7 @@ public class MyLifeConnectorService(
                 UpdatePreviousTail(previousTail, batch.Events, overlapMs);
             }
 
-            // Publish Profile records and active-profile state spans from pump settings
+            // Publish Profile records and profile activations from pump settings
             // (one SOAP call, two derived data shapes).
             if (activeTypes.Contains(SyncDataType.Profiles))
             {

@@ -1,6 +1,7 @@
 //! Golden-corpus parity suite: runs every scenario in
 //! `tests/Parity/AlertEngineCorpus/` through the Rust engine and asserts an
-//! exact (semantic) match against the C#-generated `.expected.json` snapshot.
+//! exact (semantic) match against its committed `.expected.json` snapshot. A new
+//! scenario gets its snapshot from the engine under `NOCTURNE_CORPUS_BLESS=1`.
 
 #![allow(
     clippy::unwrap_used,
@@ -13,7 +14,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -177,6 +178,24 @@ fn compare_scenario(name: &str, actual: &Value, expected: &Value) -> Vec<String>
     failures
 }
 
+/// Writes a new scenario's expected snapshot from the engine when
+/// `NOCTURNE_CORPUS_BLESS=1`, for review in the diff. Only a scenario with no
+/// `.expected.json` is blessed: a committed expectation is never rewritten, so
+/// a change in behaviour always fails here first.
+fn bless(expected_path: &Path, actual: &Value) -> Result<(), String> {
+    if std::env::var("NOCTURNE_CORPUS_BLESS").as_deref() != Ok("1") {
+        return Err(format!(
+            "{} is missing: run with NOCTURNE_CORPUS_BLESS=1 to write it from the engine, then review it",
+            expected_path.display()
+        ));
+    }
+    let text = serde_json::to_string_pretty(actual).expect("serialise snapshot") + "\n";
+    fs::write(expected_path, text)
+        .unwrap_or_else(|e| panic!("write {}: {e}", expected_path.display()));
+    eprintln!("blessed {}", expected_path.display());
+    Ok(())
+}
+
 #[test]
 fn corpus_parity() {
     let dir = corpus_dir();
@@ -211,11 +230,18 @@ fn corpus_parity() {
             "{}.expected.json",
             path.file_stem().unwrap().to_string_lossy()
         ));
+        let actual = run_scenario(&scenario);
+        if !expected_path.exists() {
+            match bless(&expected_path, &actual) {
+                Ok(()) => passed += 1,
+                Err(message) => all_failures.push(message),
+            }
+            continue;
+        }
         let expected_text = fs::read_to_string(&expected_path)
             .unwrap_or_else(|e| panic!("read {}: {e}", expected_path.display()));
         let expected: Value = serde_json::from_str(&expected_text).expect("parse expected");
 
-        let actual = run_scenario(&scenario);
         let failures = compare_scenario(&scenario.name, &actual, &expected);
         if failures.is_empty() {
             passed += 1;

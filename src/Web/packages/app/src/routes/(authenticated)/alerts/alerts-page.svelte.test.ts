@@ -67,7 +67,7 @@ describe("alerts page", () => {
     pageState.data = {};
   });
 
-  it("shows the Do Not Disturb notice for a schedule in effect, without a way to turn it off", async () => {
+  it("shows the Do not disturb notice for a schedule in effect, without a way to turn it off", async () => {
     pageState.data = { effectivePermissions: ["alerts.readwrite"] };
     dndSettings = {
       dndManualActive: false,
@@ -77,25 +77,25 @@ describe("alerts page", () => {
 
     render(AlertsPage, {});
 
-    await expect.element(page.getByText(/Do Not Disturb is on/)).toBeVisible();
+    await expect.element(page.getByText(/Do not disturb is on/)).toBeVisible();
     await expect
-      .element(page.getByRole("button", { name: "Turn off" }))
+      .element(page.getByRole("button", { name: "Disable" }))
       .not.toBeInTheDocument();
   });
 
-  it("offers to turn off a manual mute from the Do Not Disturb notice", async () => {
+  it("offers to turn off a manual mute from the Do not disturb notice", async () => {
     pageState.data = { effectivePermissions: ["alerts.readwrite"] };
     dndSettings = { dndManualActive: true, dndScheduleEnabled: false };
 
     render(AlertsPage, {});
 
-    await expect.element(page.getByText(/Do Not Disturb is on/)).toBeVisible();
+    await expect.element(page.getByText(/Do not disturb is on/)).toBeVisible();
     await expect
-      .element(page.getByRole("button", { name: "Turn off" }))
+      .element(page.getByRole("button", { name: "Disable" }))
       .toBeVisible();
   });
 
-  it("shows no Do Not Disturb notice for a schedule that is not in effect", async () => {
+  it("shows no Do not disturb notice for a schedule that is not in effect", async () => {
     pageState.data = { effectivePermissions: ["alerts.readwrite"] };
     dndSettings = { dndManualActive: false, dndScheduleEnabled: true, dndScheduleActiveNow: false };
 
@@ -103,7 +103,7 @@ describe("alerts page", () => {
 
     await expect.element(ruleName()).toBeVisible();
     await expect
-      .element(page.getByText(/Do Not Disturb is on/))
+      .element(page.getByText(/Do not disturb is on/))
       .not.toBeInTheDocument();
   });
 

@@ -18,52 +18,52 @@
   /** Get a user-friendly error title based on error code */
   function getErrorTitle(code: AuthErrorCode | undefined): string {
     const titles: Partial<Record<AuthErrorCode, string>> = {
-      [AuthErrorCode.InvalidState]: "Session Expired",
-      [AuthErrorCode.InvalidIntent]: "Session Expired",
-      [AuthErrorCode.IdentityAlreadyLinked]: "Account Already Linked",
-      [AuthErrorCode.AccessDenied]: "Access Denied",
-      [AuthErrorCode.InvalidRequest]: "Invalid Request",
-      [AuthErrorCode.UnauthorizedClient]: "Authorization Error",
-      [AuthErrorCode.UnsupportedResponseType]: "Configuration Error",
-      [AuthErrorCode.InvalidScope]: "Permission Error",
-      [AuthErrorCode.ServerError]: "Server Error",
-      [AuthErrorCode.TemporarilyUnavailable]: "Service Unavailable",
-      [AuthErrorCode.CallbackFailed]: "Authentication Failed",
-      [AuthErrorCode.ProviderError]: "Provider Error",
-      [AuthErrorCode.OidcDisabled]: "Authentication Disabled",
+      [AuthErrorCode.InvalidState]: "Session expired",
+      [AuthErrorCode.InvalidIntent]: "Session expired",
+      [AuthErrorCode.IdentityAlreadyLinked]: "Account already linked",
+      [AuthErrorCode.AccessDenied]: "Access denied",
+      [AuthErrorCode.InvalidRequest]: "Invalid request",
+      [AuthErrorCode.UnauthorizedClient]: "Authorization error",
+      [AuthErrorCode.UnsupportedResponseType]: "Configuration error",
+      [AuthErrorCode.InvalidScope]: "Permission error",
+      [AuthErrorCode.ServerError]: "Server error",
+      [AuthErrorCode.TemporarilyUnavailable]: "Service unavailable",
+      [AuthErrorCode.CallbackFailed]: "Authentication failed",
+      [AuthErrorCode.ProviderError]: "Provider error",
+      [AuthErrorCode.OidcDisabled]: "Authentication disabled",
     };
-    return (code && titles[code]) || "Authentication Error";
+    return (code && titles[code]) || "Authentication error";
   }
 
   /** Get a user-friendly suggestion based on error code */
   function getSuggestion(code: AuthErrorCode | undefined): string {
     const suggestions: Partial<Record<AuthErrorCode, string>> = {
       [AuthErrorCode.InvalidState]:
-        "Your session may have expired. Please try linking again.",
+        "The sign-in state did not match. Your session possibly expired. Try linking again.",
       [AuthErrorCode.InvalidIntent]:
-        "Your session expired before the link could be completed. Please try linking again.",
+        "Your session expired before the link was completed. Try linking again.",
       [AuthErrorCode.IdentityAlreadyLinked]:
         "This provider account is already linked to another Nocturne user. If this is your account, sign in with that provider directly.",
       [AuthErrorCode.AccessDenied]:
-        "You may not have permission to access this resource. Contact your administrator if you believe this is an error.",
+        "If you do not have permission to access this resource, contact your administrator.",
       [AuthErrorCode.InvalidRequest]:
-        "There was a problem with the authentication request. Please try again.",
+        "There was a problem with the authentication request. Try again.",
       [AuthErrorCode.CallbackFailed]:
-        "The authentication process was interrupted. Please try logging in again.",
+        "The authentication process was interrupted. Try signing in again.",
       [AuthErrorCode.ProviderError]:
-        "There was an issue with the authentication provider. Please try again later.",
+        "There was an issue with the authentication provider. Try again later.",
       [AuthErrorCode.OidcDisabled]:
-        "Authentication is not currently enabled. Please contact your administrator.",
+        "Authentication is not currently enabled. Contact your administrator.",
     };
     return (
       (code && suggestions[code]) ||
-      "Please try logging in again. If the problem persists, contact your administrator."
+      "Try signing in again. If the problem continues, contact your administrator."
     );
   }
 </script>
 
 <svelte:head>
-  <title>Authentication Error - Nocturne</title>
+  <title>Authentication error - Nocturne</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-background p-4">
@@ -92,11 +92,11 @@
       <div class="flex flex-col gap-2">
         <Button href="/auth/login" class="w-full">
           <RefreshCw class="mr-2 h-4 w-4" />
-          Try Again
+          Try again
         </Button>
         <Button href="/" variant="outline" class="w-full">
           <ArrowLeft class="mr-2 h-4 w-4" />
-          Return Home
+          Return home
         </Button>
       </div>
     </Card.Content>

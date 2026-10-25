@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reactiveFields } from "$lib/test-stubs/reactive-fields.svelte";
+import { remoteQuery } from "$lib/test-stubs/remote-resource";
 import type {
   BasalPillData,
   COBPillData,
@@ -23,6 +24,7 @@ const store = reactiveFields({
   demoMode: false,
   trackerInstances: [] as unknown[],
   trackerDefinitions: [] as unknown[],
+  legacyFallbacks: [] as unknown[],
   pillsData: { cob: null, basal: null, iob: null, loop: null } as Record<string, unknown>,
   currentReservoir: null as number | null,
   isReady: false,
@@ -32,8 +34,8 @@ vi.mock("$lib/stores/realtime-store.svelte", () => ({
   getRealtimeStore: () => store,
   tryGetRealtimeStore: () => store,
 }));
-vi.mock("$lib/stores/settings-store.svelte", () => ({
-  getSettingsStore: () => ({ features: { trackerPills: { enabled: false } } }),
+vi.mock("$api/ui-settings.remote", () => ({
+  getUiSettings: () => remoteQuery(() => ({ features: { trackerPills: { enabled: false } } })),
 }));
 
 import CurrentBGDisplay from "./current-bg-display-test-wrapper.svelte";
@@ -69,7 +71,7 @@ const arrive = async () => {
   store.isReady = true;
   store.currentReservoir = 120;
   store.pillsData = arrived;
-  await expect.element(page.getByText("Reservoir")).toBeVisible();
+  await expect.element(page.getByTestId("status-pills").getByText("Reservoir")).toBeVisible();
 };
 
 describe("CurrentBGDisplay pill rows", () => {
@@ -83,7 +85,7 @@ describe("CurrentBGDisplay pill rows", () => {
   afterEach(() => localStorage.removeItem(STORAGE_KEY));
 
   // Here the empty placeholder pills fit on one row and the loaded ones wrap onto two.
-  const WIDTH = 680;
+  const WIDTH = 600;
   const settle = () => new Promise((resolve) => setTimeout(resolve, 300));
 
   it("records the rows the loaded pills filled, not the placeholders' one", async () => {

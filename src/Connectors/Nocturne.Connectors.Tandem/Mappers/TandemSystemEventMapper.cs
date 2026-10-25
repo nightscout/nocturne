@@ -78,7 +78,7 @@ public sealed class TandemSystemEventMapper(ILogger logger, TandemTimeResolver t
             Category = category,
             Code = code?.ToString(),
             Description = description,
-            Mills = TandemMapHelpers.ToMills(_time.ToUtc(ev.RawTimestampSeconds)),
+            Mills = _time.ToUtc(ev.RawTimestampSeconds).ToMills(),
             Source = TandemMapHelpers.Source,
             OriginalId = $"tandem_sysevent_{ev.SeqNum}",
         };

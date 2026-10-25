@@ -14,6 +14,7 @@ using Moq;
 using Nocturne.API.Extensions;
 using Nocturne.API.Hubs;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -474,9 +475,7 @@ public class TenantIsolationTests
 
         await service.BroadcastTrackerUpdateAsync(
             TrackerRealtimeAction.Create,
-            new TrackerInstanceDto { Id = Guid.NewGuid() },
-            "owner-123",
-            TrackerVisibility.Public
+            new TrackerInstanceDto { Id = Guid.NewGuid() }
         );
 
         dataClients.Verify(c => c.Group($"{TenantAId}:authorized"), Times.Once);
@@ -507,8 +506,10 @@ public class TenantIsolationTests
         var (serviceA, _, _, _, _, _, _) = CreateBroadcastService(TenantA, haClientsA);
         var (serviceB, _, _, _, _, _, _) = CreateBroadcastService(TenantB, haClientsB);
 
-        await serviceA.BroadcastDataUpdateAsync(new { from = "A" });
-        await serviceB.BroadcastDataUpdateAsync(new { from = "B" });
+        await serviceA.BroadcastHomeAssistantGlucoseAsync(
+            new Nocturne.Core.Models.V4.GlucoseReadingEvent { Readings = [] });
+        await serviceB.BroadcastHomeAssistantGlucoseAsync(
+            new Nocturne.Core.Models.V4.GlucoseReadingEvent { Readings = [] });
 
         haClientsA.Verify(c => c.Group($"{TenantAId}:ha-glucose"), Times.Once);
         haClientsA.Verify(c => c.Group($"{TenantBId}:ha-glucose"), Times.Never);
@@ -1002,7 +1003,8 @@ public class TenantIsolationTests
     {
         var mockLogger = new Mock<ILogger<AlarmHub>>();
         var mockAuthorizer = new Mock<Nocturne.API.Services.Identity.IHubTokenAuthorizer>();
-        var hub = new AlarmHub(mockLogger.Object, mockAuthorizer.Object);
+        var hub = new AlarmHub(
+            mockLogger.Object, mockAuthorizer.Object, Mock.Of<IAlarmAckHandler>(), Mock.Of<IEngineAlarmRelay>());
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] = tenantContext;

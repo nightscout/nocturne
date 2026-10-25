@@ -8,7 +8,7 @@
   import DataSourceRow, {
     type DataSourceStatus,
   } from "$lib/components/settings/DataSourceRow.svelte";
-  import { lastSeen } from "$lib/utils/formatting";
+  import { relativeAge } from "$lib/utils/formatting";
   import HeartPulse from "@lucide/svelte/icons/heart-pulse";
 
   let { connection }: { connection: GoogleHealthStatus } = $props();
@@ -53,7 +53,7 @@
       {:else if state === GoogleHealthConnectionState.NothingSelected}
         Choose at least one data type to start importing
       {:else if connection.lastSync}
-        Last successful sync: {lastSeen(connection.lastSync)}
+        Last successful sync: {relativeAge(connection.lastSync, { fallback: "Never" })}
       {:else}
         Waiting for the first successful sync
       {/if}

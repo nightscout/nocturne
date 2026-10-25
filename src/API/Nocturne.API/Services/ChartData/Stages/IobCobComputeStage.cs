@@ -22,19 +22,19 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// <para>
 /// Results are cached in the local tier of <see cref="ITenantCache"/> for one minute. The cache
 /// key is a 64-bit SHA-256 prefix of every input the series depends on (treatments, temp basals,
-/// APS snapshots and the contents of every therapy segment) combined with the rounded time
+/// APS snapshots, overrides and the contents of every therapy segment) combined with the rounded time
 /// boundaries and interval.
 /// </para>
 /// <para>
 /// Basal series construction is delegated to <see cref="IBasalSeriesBuilder"/>, which uses
 /// v4 <see cref="TempBasal"/> records as the source of truth and fills any gaps with
-/// profile-inferred rates at the schedule's exact boundaries. When no TempBasal records
-/// exist the entire series is inferred from the profile. The y-axis maximum is clamped to at least
+/// <see cref="ScheduledBasal"/> at its exact boundaries. When no TempBasal records
+/// exist the entire series is inferred from it. The y-axis maximum is clamped to at least
 /// 2.5× the default basal rate so the chart always shows meaningful scale.
 /// </para>
 /// <para>
-/// The global IOB minimum is clamped to 3 U and COB minimum to 30 g so the chart axes
-/// are never collapsed to near-zero.
+/// The IOB axis maximum is at least 3 U and the COB maximum at least 30 g, so the chart axes are
+/// never collapsed to near-zero. The IOB axis minimum is the lowest IOB, and never above 0.
 /// </para>
 /// </remarks>
 /// <seealso cref="IChartDataStage"/>
@@ -60,11 +60,12 @@ internal sealed class IobCobComputeStage(
         var intervalMinutes = context.IntervalMinutes;
         var defaultBasalRate = context.DefaultBasalRate;
 
-        var timeline = await therapyTimelineResolver.BuildAsync(startTime, endTime + 1, ct: cancellationToken);
+        var timeline = await therapyTimelineResolver.BuildAsync(
+            context.BufferStartTime, endTime + 1, ct: cancellationToken);
 
-        var (iobSeries, cobSeries, maxIob, maxCob) = BuildIobCobSeries(
-            bolusList, carbIntakeList, startTime, endTime, Math.Min(endTime, context.NowMills), intervalMinutes,
-            tempBasalList, timeline, context.ApsSnapshotList, cancellationToken
+        var (iobSeries, cobSeries, minIob, maxIob, maxCob) = BuildIobCobSeries(
+            bolusList, carbIntakeList, startTime, endTime, context.NowMills, intervalMinutes,
+            tempBasalList, timeline, context.Overrides, context.ApsSnapshotList, context.PumpIobPointList, cancellationToken
         );
 
         var basalSeries = await basalSeriesBuilder.BuildAsync(
@@ -72,6 +73,7 @@ internal sealed class IobCobComputeStage(
             startTime,
             endTime,
             defaultBasalRate,
+            context.Overrides,
             cancellationToken
         );
 
@@ -84,6 +86,7 @@ internal sealed class IobCobComputeStage(
         {
             IobSeries = iobSeries,
             CobSeries = cobSeries,
+            MinIob = minIob,
             MaxIob = Math.Max(3, maxIob),
             MaxCob = Math.Max(30, maxCob),
             BasalSeries = basalSeries,
@@ -94,6 +97,7 @@ internal sealed class IobCobComputeStage(
     internal (
         List<TimeSeriesPoint> iobSeries,
         List<TimeSeriesPoint> cobSeries,
+        double minIob,
         double maxIob,
         double maxCob
     ) BuildIobCobSeries(
@@ -101,15 +105,18 @@ internal sealed class IobCobComputeStage(
         List<CarbIntake> carbIntakes,
         long startTime,
         long endTime,
-        long untilMills,
+        long nowMills,
         int intervalMinutes,
         List<TempBasal>? tempBasals,
         TherapyTimeline timeline,
+        IReadOnlyList<ScaleFactorInterval> overrides,
         IReadOnlyList<ApsIobCobPoint>? apsSnapshots = null,
+        IReadOnlyList<PumpIobPoint>? pumpIobPoints = null,
         CancellationToken ct = default
     )
     {
-        var cacheKey = GenerateIobCobCacheKey(boluses, carbIntakes, startTime, endTime, untilMills, intervalMinutes, timeline, tempBasals, apsSnapshots);
+        var cacheKey = GenerateIobCobCacheKey(
+            boluses, carbIntakes, startTime, endTime, nowMills, intervalMinutes, timeline, overrides, tempBasals, apsSnapshots, pumpIobPoints);
 
         if (
             cache.TryGetLocal(
@@ -117,6 +124,7 @@ internal sealed class IobCobComputeStage(
                 out (
                     List<TimeSeriesPoint> iob,
                     List<TimeSeriesPoint> cob,
+                    double minIob,
                     double maxIob,
                     double maxCob
                 ) cached
@@ -134,12 +142,15 @@ internal sealed class IobCobComputeStage(
         );
 
         var ticks = IobCobSeries.Build(
-            iobCalculator, cobCalculator, boluses, carbIntakes, tempBasals, timeline, apsSnapshots,
-            startTime, endTime, untilMills, intervalMinutes * 60 * 1000L, ct: ct);
+            iobCalculator, cobCalculator, boluses, carbIntakes, tempBasals, timeline,
+            new ScheduledBasal(timeline.BasalSegments(), overrides),
+            DeviceReadings.Of(apsSnapshots, pumpIobPoints),
+            startTime, endTime, nowMills, intervalMinutes * 60 * 1000L, ct: ct);
 
         var iobSeries = new List<TimeSeriesPoint>(ticks.Count);
         var cobSeries = new List<TimeSeriesPoint>(ticks.Count);
-        double maxIob = 0,
+        double minIob = 0,
+            maxIob = 0,
             maxCob = 0;
         foreach (var tick in ticks)
         {
@@ -147,11 +158,13 @@ internal sealed class IobCobComputeStage(
             cobSeries.Add(new TimeSeriesPoint { Timestamp = tick.Mills, Value = tick.Cob });
             if (tick.Iob > maxIob)
                 maxIob = tick.Iob;
+            if (tick.Iob < minIob)
+                minIob = tick.Iob;
             if (tick.Cob > maxCob)
                 maxCob = tick.Cob;
         }
 
-        var result = (iobSeries, cobSeries, maxIob, maxCob);
+        var result = (iobSeries, cobSeries, minIob, maxIob, maxCob);
         cache.SetLocal(cacheKey, result, IobCobCacheExpiration);
 
         return result;
@@ -164,47 +177,72 @@ internal sealed class IobCobComputeStage(
     /// <remarks>
     /// The therapy part covers each segment's whole snapshot and the boundaries between segments,
     /// not the values at the ticks: the calculation also reads the snapshot between ticks, e.g. DIA
-    /// at the window end and the scheduled basal rate at a temp basal's start.
+    /// at the window end and the scheduled basal rate under every chunk of a temp basal.
     /// </remarks>
     private static string GenerateIobCobCacheKey(
         List<Bolus> boluses,
         List<CarbIntake> carbIntakes,
         long startTime,
         long endTime,
-        long untilMills,
+        long nowMills,
         int intervalMinutes,
         TherapyTimeline timeline,
+        IReadOnlyList<ScaleFactorInterval> overrides,
         List<TempBasal>? tempBasals = null,
-        IReadOnlyList<ApsIobCobPoint>? apsSnapshots = null
+        IReadOnlyList<ApsIobCobPoint>? apsSnapshots = null,
+        IReadOnlyList<PumpIobPoint>? pumpIobPoints = null
     )
     {
-        // Round start/end times to interval boundaries for better cache hits
-        var intervalMs = intervalMinutes * 60 * 1000;
-        var roundedStart = (startTime / intervalMs) * intervalMs;
-        var roundedEnd = (endTime / intervalMs) * intervalMs;
-        var roundedUntil = (untilMills / intervalMs) * intervalMs;
+        // The ticks run from startTime, not from the epoch, so the key holds the exact start, the last
+        // tick, and the tick now falls in: now stops running temps and marks the live tick, and past
+        // the last tick's slot it changes nothing.
+        long intervalMs = intervalMinutes * 60 * 1000;
+        long TickHolding(long mills) =>
+            startTime + (long)Math.Floor((mills - startTime) / (double)intervalMs) * intervalMs;
+        var lastTick = TickHolding(endTime);
+        var nowTick = TickHolding(Math.Min(nowMills, lastTick + intervalMs));
 
         // Hash individual data for a collision-resistant fingerprint
         var sb = new StringBuilder();
         foreach (var b in boluses.Where(b => b.Insulin > 0))
         {
-            sb.Append(b.Mills).Append(':').Append(b.Insulin).Append('|');
+            sb.Append(b.Mills).Append(':').Append(b.Insulin).Append(':');
+            AppendInsulinContext(sb, b.InsulinContext);
+            sb.Append('|');
         }
         foreach (var c in carbIntakes.Where(c => c.Carbs > 0))
         {
-            sb.Append(c.Mills).Append(':').Append(c.Carbs).Append('|');
+            sb.Append(c.Mills).Append(':').Append(c.Carbs).Append(':')
+                .Append(c.AbsorptionTime?.ToString() ?? "~").Append('|');
         }
 
-        // Include temp basal data in cache key
+        // Temp basals: what each delivers, and what StatisticsService.ClipOverlappingTempBasals
+        // reads to choose between streams.
         if (tempBasals != null)
         {
             foreach (var tb in tempBasals)
             {
                 sb.Append(tb.StartMills)
                     .Append(':')
-                    .Append(tb.Rate)
+                    .Append(tb.Rate?.ToString() ?? "~")
                     .Append(':')
-                    .Append(tb.EndMills ?? 0)
+                    .Append(tb.EndMills?.ToString() ?? "~")
+                    .Append(':')
+                    .Append(tb.Origin)
+                    .Append(':')
+                    .Append(tb.ScheduledRate?.ToString() ?? "~")
+                    .Append(':');
+                AppendInsulinContext(sb, tb.InsulinContext);
+                sb.Append(':')
+                    .Append(tb.DeviceId?.ToString() ?? "~")
+                    .Append(':')
+                    .Append(tb.Device ?? "~")
+                    .Append(':')
+                    .Append(tb.OriginEvidence?.ToString() ?? "~")
+                    .Append(':')
+                    .Append(tb.ApsSnapshotId?.ToString() ?? "~")
+                    .Append(':')
+                    .Append(tb.App ?? "~")
                     .Append('|');
             }
         }
@@ -224,6 +262,22 @@ internal sealed class IobCobComputeStage(
                     .Append('|');
             }
         }
+        sb.Append('#');
+        foreach (var o in overrides)
+            sb.Append(o.Start).Append(':').Append(o.End).Append(':').Append(o.Factor).Append('|');
+        sb.Append('#');
+        if (pumpIobPoints != null)
+        {
+            foreach (var p in pumpIobPoints)
+            {
+                sb.Append(p.Timestamp.Ticks)
+                    .Append(':')
+                    .Append(p.Iob?.ToString() ?? "~")
+                    .Append(':')
+                    .Append(p.BolusIob?.ToString() ?? "~")
+                    .Append('|');
+            }
+        }
 
         var segments = timeline.Segments;
         for (var i = 0; i < segments.Count; i++)
@@ -237,7 +291,15 @@ internal sealed class IobCobComputeStage(
             ..16
         ]; // First 16 hex chars (64 bits) is sufficient
 
-        return $"iobcob:{hash}:{roundedStart}:{roundedEnd}:{roundedUntil}:{intervalMinutes}";
+        return $"iobcob:{hash}:{startTime}:{lastTick}:{nowTick}:{intervalMinutes}";
+    }
+
+    private static void AppendInsulinContext(StringBuilder sb, TreatmentInsulinContext? context)
+    {
+        if (context is null)
+            sb.Append('~');
+        else
+            sb.Append(context.Dia).Append('/').Append(context.Peak);
     }
 
 }

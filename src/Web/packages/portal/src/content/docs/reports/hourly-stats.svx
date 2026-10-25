@@ -1,0 +1,86 @@
+---
+title: Hourly Patterns
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Hourly Patterns
+
+The Hourly Patterns report answers the question "which hours of the day go
+well, and which are harder?". It lays every day of the period over one 24-hour
+clock and compares the hours.
+
+<Video id="hourly-stats" />
+
+## What it shows
+
+In this report, in range means a reading from 70 to 180 mg/dL. Below range is
+under 70 mg/dL, and very low is under 54 mg/dL. The tight range, 70 to
+140 mg/dL, is a narrower part of the target. The app shows these values in
+mmol/L if you chose mmol/L.
+
+### At a glance
+
+Three columns name the hours that stand out:
+
+- **Most time in range**: the hours with the largest share of readings in
+  range.
+- **Least time in range**: the hours with the smallest share of readings in
+  range. Each one says which way the hour went: below range, above range, or
+  both.
+- **Most time below range**: the hours with the largest share of readings
+  under 70 mg/dL. Only hours that went below range on at least 2 days are in
+  this list.
+
+Each hour has a small bar that shows how its readings divide across the ranges.
+
+### Hour by hour
+
+Each bar is one hour of the day. The bands in the bar show the share of that
+hour's readings in each range. The lowest range is at the bottom.
+
+### Every hour
+
+The table gives the same figures for all 24 hours: **In range**, **Below** and
+**Above**, the **Median** glucose, and the **Middle half**. The middle half is
+the range that holds the central 50% of the readings in that hour. The
+**Readings** and **Days** columns show how much data each hour has.
+
+## How to use it
+
+The report opens on the last 14 days. Two weeks can hide the real pattern. To
+use more data:
+
+1. At the top of the report, select the date range.
+2. Select **30 Days**.
+3. Select **Apply Filters**. The report works out each hour again from 30 days
+   of data.
+4. Look at **At a glance** again. Make sure the same hours stand out.
+
+To see the full daily curve, select **See the full daily curve in the Glucose
+Profile** at the bottom of the page.
+
+## Good to know
+
+- **Hours with too little data.** The report compares an hour with the others
+  only when the hour has readings on at least 5 different days, and at least 20
+  readings in all. An hour with less data shows **Too little data** in the
+  table. It still shows in the chart, but not in **At a glance**.
+- **Close results.** The report names a best or worst hour only when the hours
+  differ by at least 5 percentage points of time in range. If all hours are
+  closer than that, **At a glance** says that no hour stands out.
+- **Time zone.** The hours follow the time zone in your profile settings. If no
+  time zone is set, or a share link cannot read it, the report uses the local
+  time that each device recorded. The **How to read this report** card at the
+  bottom says which one the report uses.
+
+<Callout type="info" title="A pattern, not a reason">
+
+  This report shows what happened at each hour. It does not show why. Meals,
+  activity, sleep, illness and sensor problems can all change an hour. Discuss
+  a pattern with your diabetes care team before you change your treatment.
+
+</Callout>

@@ -24,6 +24,13 @@ aspire resource nocturne-api restart
 # Build solution
 dotnet build
 
+# Alerts evaluate only in the Rust cdylib (crates/nocturne-alerts-ffi); the API will not start
+# without it. A build packs a local cargo build no older than its sources, else (crates/ with no
+# local changes) downloads the one main published for that crates/ tree (alerts-native release),
+# else fails rather than pack a stale one. After changing crates/, rebuild it; `aspire start`
+# does when cargo is installed:
+cd crates && cargo build --release -p nocturne-alerts-ffi
+
 # Run unit tests (excludes integration/performance)
 dotnet test --filter "Category!=Integration&Category!=Performance"
 
@@ -262,9 +269,10 @@ Every context comes from `INocturneDbContextFactory`:
 
 - `CreateAsync` — the scope's reader, including its resolved tenant.
 - `CreateForTenantAsync(tenantId)` — pins the tenant in place of the scope's.
-- `CreateForSubjectAsync(subjectId)` — no tenant; sets `app.current_subject_id`. No policy
-  reads that GUC today: its callers (tenant switcher, caregiver overview, membership
-  enumeration) work because the identity tables carry no RLS.
+- `CreateForSubjectAsync(subjectId)` — no tenant; sets `app.current_subject_id`, which the
+  `subject_pin` policy on `subjects`, `tenant_members` and `refresh_tokens` reads: a pinned
+  context sees only that subject's rows there, and a context with the GUC unset sees all of them.
+  Its callers are the tenant switcher, the caregiver overview and membership enumeration.
 - `CreatePlatformAsync` — no tenant, no subject, for platform tables.
 
 A pin replaces only the tenant or subject: share, clamp and audit state always come from the
@@ -347,8 +355,9 @@ overlap instead, `("end_timestamp" IS NULL OR "end_timestamp" >= now() - interva
 clamped member however long ago it started; clamping it by start would leave the
 therapy resolvers on the default profile. A hidden table whose rows are parts of a parent row,
 in `ShareDataCategories.HiddenParentRecency` (`treatment_foods`, `sleep_stages`,
-`sleep_biometric_samples`), is shown exactly while the clamp shows its parent, by an `EXISTS`
-on the parent. `ShareDataCategoriesGuardTests` fails on a tenant-scoped table that is neither
+`sleep_biometric_samples`, `alert_excursion_mutes`, `alert_deliveries`), is shown exactly
+while the clamp shows its parent, by an `EXISTS` on the parent.
+`ShareDataCategoriesGuardTests` fails on a tenant-scoped table that is neither
 shareable, clamped, nor listed as deliberately unclamped.
 `IS [NOT] DISTINCT FROM` keeps the clamp test non-null when a GUC is unset.)
 
@@ -451,6 +460,9 @@ Design notes:
 - **No frontend-only models.** All TypeScript interfaces derive from the NSwag-generated client.
 - **Always use remote functions**, never raw fetch/requests on the frontend. Use the remote functions attribute to automatically generate type-safe API calls with Zod validation.
 - **Strings/messages live on the frontend** (translation layer).
+- **UI copy is Simplified Technical English (ASD-STE100), in American English.** Follow the
+  `simple-english` skill. `cd src/Web && pnpm run lint:copy` runs the Vale rules in
+  `.vale/styles/Nocturne` over every extracted string. CI fails on errors.
 - **No emoji.** Use Lucide icons for UI elements.
 - **Comments carry only what the code cannot.** No narration, no benefit tails, no change history,
   no step-by-step banners. Rationale lives at one site and is referenced elsewhere with

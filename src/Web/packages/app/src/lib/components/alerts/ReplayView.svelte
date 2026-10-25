@@ -20,7 +20,8 @@
   import IobCobTrack from "$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
   import ThresholdRules from "$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
   import ChartTooltip from "$lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
-  import { severityLabel, severityVar } from "./severity";
+  import { severityVar } from "./severity";
+  import { severityLabel } from "./severityLabel.svelte";
   import ReplayOverlay from "./ReplayOverlay.svelte";
   import PlaybackStrip from "./PlaybackStrip.svelte";
   import RuleSidebar from "./RuleSidebar.svelte";
@@ -303,7 +304,7 @@
         <div
           class="@2xl:flex-1 @2xl:min-h-0 rounded-md border border-dashed py-6 text-center text-xs text-muted-foreground"
         >
-          No events yet — playhead at start of window.
+          No events yet. The playhead is at the start of the window.
         </div>
       {:else}
         <div

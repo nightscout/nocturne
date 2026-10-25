@@ -1,0 +1,11 @@
+{
+  "database": { "fill": [1] },
+  "flag": { "fill": [0] },
+  "sprout": { "fill": [0] },
+  "key": { "holes": [[7.5, 15.5, 2.2]] },
+  "clock": { "markRadius": 1.4 },
+  "cpu": { "markRadius": 1.5, "smallMarks": 4 },
+  "fingerprint": { "markRadius": 1.3, "smallMarks": 3 },
+  "syringe": { "markRadius": 1.3, "smallMarks": 2 },
+  "battery": { "markRadius": 1.6 }
+}

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "not-inversion-and-edge-cases",
-  "description": "not inverts its child; a missing child is false (not true); not over an unknown child kind is true (child silently false)",
+  "description": "not inverts its child; a not with no child cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -25,23 +25,6 @@
       "name": "rule-2",
       "condition_type": "not",
       "condition_params": {},
-      "confirmation_readings": 1,
-      "hysteresis_minutes": 0,
-      "auto_resolve_enabled": false
-    },
-    {
-      "id": "00000000-0000-0000-0000-000000000003",
-      "name": "rule-3",
-      "condition_type": "not",
-      "condition_params": {
-        "child": {
-          "type": "quantum_flux",
-          "threshold": {
-            "direction": "below",
-            "value": 70
-          }
-        }
-      },
       "confirmation_readings": 1,
       "hysteresis_minutes": 0,
       "auto_resolve_enabled": false

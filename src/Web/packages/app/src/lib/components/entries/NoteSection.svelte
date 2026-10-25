@@ -47,7 +47,7 @@
       }}
     />
     <Label for="note-announcement" variant="option" class="cursor-pointer">
-      Is Announcement
+      Is announcement
     </Label>
   </div>
 </div>

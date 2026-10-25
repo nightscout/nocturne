@@ -1,5 +1,5 @@
 // @ts-check
-import { adapter as svelte } from "@wuchale/svelte"
+import { adapter as svelte, svelteKitDefaultHeuristic } from "@wuchale/svelte"
 import { adapter as js } from 'wuchale/adapter-vanilla'
 import { defineConfig, gemini, pofile } from "wuchale"
 import supportedLocales from "./supportedLocales.json" with { type: 'json' };
@@ -18,6 +18,14 @@ const globs = (patterns) =>
     PACKAGES.flatMap(pkg =>
         patterns.map(p => (pkg === 'app' ? `src/${p}` : `../${pkg}/src/${p}`)))
 
+// An analytics event name (the portal's `track("Donate Click")`) is a key in the event schema,
+// not display text. Translated, it would log a different event per locale.
+const IGNORED_CALLS = new Set(['track'])
+
+/** @type {import('wuchale').HeuristicFunc} */
+const svelteHeuristic = msg =>
+    msg.details.call && IGNORED_CALLS.has(msg.details.call) ? false : svelteKitDefaultHeuristic(msg)
+
 /** Both adapters share one catalogue set (same storage key -> shared .po files). */
 export function wuchaleConfig() {
     const storage = pofile({ location: '../../locales/{locale}.po' })
@@ -28,6 +36,7 @@ export function wuchaleConfig() {
         adapters: {
             main: svelte({
                 loader: 'sveltekit',
+                heuristic: svelteHeuristic,
                 sourceLocale: 'en',
                 storage,
                 files: globs(['**/*.svelte', '**/*.svelte.{js,ts}']),

@@ -121,7 +121,7 @@ public class GlookoSettingsProfileMapper
 
         var defaultProfile = ResolveDefaultProfileName(settings, store);
         var timestamp = ParseTimestamp(settings.PumpTimestamp) ?? DateTime.UtcNow;
-        var mills = new DateTimeOffset(timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var mills = timestamp.ToMills();
 
         // Use the v3 GlookoProfileMapper's exact id scheme (glooko_{mills}, keyed on the snapshot's pump
         // timestamp — both mappers derive mills the same way). This makes the current profile upsert the

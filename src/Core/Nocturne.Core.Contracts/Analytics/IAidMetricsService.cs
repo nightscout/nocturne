@@ -27,7 +27,7 @@ public interface IAidMetricsService
     /// <param name="targetLow">Low glucose target in mg/dL, or <c>null</c> if unknown.</param>
     /// <param name="targetHigh">High glucose target in mg/dL, or <c>null</c> if unknown.</param>
     /// <param name="startDate">Start of the analysis period.</param>
-    /// <param name="endDate">End of the analysis period.</param>
+    /// <param name="endDate">End of the analysis period, no later than now: a temp with no end runs to it.</param>
     /// <returns>Computed <see cref="AidSystemMetrics"/>.</returns>
     AidSystemMetrics Calculate(
         IReadOnlyList<DeviceSegmentInput> deviceSegments,

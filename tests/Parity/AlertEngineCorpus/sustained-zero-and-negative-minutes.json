@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "sustained-zero-and-negative-minutes",
-  "description": "minutes \u003C= 0 disables the wrapper entirely (false, no timer activity)",
+  "description": "minutes <= 0 cannot be evaluated, so its rule is skipped, with no timer activity",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

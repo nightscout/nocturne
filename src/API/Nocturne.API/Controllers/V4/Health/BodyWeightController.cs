@@ -59,6 +59,7 @@ public class BodyWeightController(IBodyWeightService bodyWeightService)
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of body weight records ordered by most recent first</returns>
     [HttpGet]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<BodyWeight>), 200)]
     [ProducesResponseType(500)]
@@ -75,6 +76,7 @@ public class BodyWeightController(IBodyWeightService bodyWeightService)
     /// <param name="id">Record ID</param>
     /// <param name="cancellationToken">Cancellation token</param>
     [HttpGet("{id}")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(BodyWeight), 200)]
     [ProducesResponseType(404)]

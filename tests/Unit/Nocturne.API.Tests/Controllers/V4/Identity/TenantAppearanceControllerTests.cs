@@ -128,6 +128,8 @@ public sealed class TenantAppearanceControllerTests
             Chart = new ChartPreferences { ShowPoints = true },
             YearOverviewColors = new YearOverviewColorPreferences { Tdd = [10, 70] },
             DashboardTopWidgets = [WidgetId.Tdd],
+            DashboardRail = new DashboardRailPreference { Hidden = [RailItemId.Trackers] },
+            HiddenLegacyFallbacks = [Nocturne.Core.Models.LegacyConsumableKind.Site],
         };
 
         var disclosed = everythingSet.ToPresentationOnly();

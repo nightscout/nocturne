@@ -44,10 +44,10 @@ describe("OidcProvidersTabContent", () => {
 		render(OidcProvidersTabContent, default_props({ configManaged: true }));
 
 		await expect
-			.element(page.getByText("Identity Providers"))
+			.element(page.getByText("Identity providers"))
 			.not.toBeInTheDocument();
 		await expect
-			.element(page.getByText("Add Provider"))
+			.element(page.getByText("Add provider"))
 			.not.toBeInTheDocument();
 	});
 
@@ -55,7 +55,7 @@ describe("OidcProvidersTabContent", () => {
 		render(OidcProvidersTabContent, default_props());
 
 		await expect
-			.element(page.getByText("Identity Providers", { exact: true }))
+			.element(page.getByText("Identity providers", { exact: true }))
 			.toBeVisible();
 		await expect
 			.element(

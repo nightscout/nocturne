@@ -39,7 +39,6 @@
     class: className,
   }: StatusPillBarProps = $props();
 
-  // Merge with defaults (CAGE/SAGE now handled by TrackerPillBar)
   const mergedConfig = $derived({
     enabledPills: config.enabledPills ?? ["iob", "cob", "basal", "loop"],
   });

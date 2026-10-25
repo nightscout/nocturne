@@ -33,7 +33,7 @@
     getGlucoseStatusClass(glucose.status)
   );
 
-  const statusText = $derived(isDisconnected ? "Connection Error" : timeSince);
+  const statusText = $derived(isDisconnected ? "Connection error" : timeSince);
 </script>
 
 <div

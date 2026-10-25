@@ -39,7 +39,7 @@
 </svelte:head>
 
 {#if failed}
-  <DeadEndCard icon={AlertTriangle} title="This sign-in link didn't work">
+  <DeadEndCard icon={AlertTriangle} title="This sign-in link did not work">
     <p>This sign-in link has expired or was already used.</p>
     <p>You can still sign in the usual way.</p>
     <Button href="/auth/login">Sign in normally</Button>

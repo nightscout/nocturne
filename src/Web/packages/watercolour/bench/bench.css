@@ -1,0 +1,53 @@
+/* The utilities the library components use, so the bench needs no Tailwind. */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #f6f3ee; color: #1c1b19; }
+.relative { position: relative; }
+.absolute { position: absolute; }
+.isolate { isolation: isolate; }
+.inline-flex { display: inline-flex; }
+.block { display: block; }
+.shrink-0 { flex-shrink: 0; }
+.overflow-hidden { overflow: hidden; }
+.overflow-visible { overflow: visible; }
+.rounded-full { border-radius: 9999px; }
+.rounded-\[inherit\] { border-radius: inherit; }
+.h-full { height: 100%; }
+.w-full { width: 100%; }
+.inset-0 { inset: 0; }
+.inset-x-0 { left: 0; right: 0; }
+.inset-y-0 { top: 0; bottom: 0; }
+.left-0 { left: 0; }
+.top-0 { top: 0; }
+.bottom-0 { bottom: 0; }
+.h-1\.5 { height: 0.375rem; }
+.w-1\.5 { width: 0.375rem; }
+.z-0 { z-index: 0; }
+.z-10 { z-index: 10; }
+.pointer-events-none { pointer-events: none; }
+.transition-opacity { transition: opacity 150ms; }
+.duration-300 { transition-duration: 300ms; }
+.opacity-100 { opacity: 1; }
+.opacity-0 { opacity: 0; }
+
+.page { padding: 16px; }
+.avatars { display: flex; flex-wrap: wrap; gap: 8px; }
+.member { display: flex; align-items: center; gap: 10px; width: 220px; }
+.tabbar { display: flex; gap: 4px; border-bottom: 1px solid #0002; }
+.tab { position: relative; padding: 10px 16px; border: 0; background: none; font: inherit; cursor: pointer; }
+.empties { display: flex; flex-wrap: wrap; gap: 16px; }
+.empty { width: 220px; text-align: center; }
+.empty .art { width: 160px; height: 160px; margin: 0 auto 8px; }
+.confirm { position: relative; width: 480px; max-width: 100%; height: 200px; margin-top: 16px; border-radius: 12px; border: 1px solid #0002; }
+.hero { width: 800px; max-width: 100%; }
+.header-wash { width: 1100px; max-width: 100%; height: 56px; }
+.drops { display: grid; grid-template-columns: repeat(4, 220px); gap: 12px; }
+.drop { border: 1px solid #0002; border-radius: 8px; padding: 18px 14px; min-height: 84px; background: #fff8; }
+.shell { display: flex; gap: 24px; }
+.sidebar { width: 200px; flex-shrink: 0; }
+.nav { position: relative; display: block; width: 100%; padding: 10px 14px; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.main { flex: 1; min-width: 0; }
+@media (max-width: 500px) {
+  .drops { grid-template-columns: repeat(2, 1fr); }
+  .shell { flex-direction: column; gap: 8px; }
+  .sidebar { width: 100%; }
+}

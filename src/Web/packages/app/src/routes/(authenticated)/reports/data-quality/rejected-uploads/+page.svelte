@@ -22,7 +22,7 @@
 
   const resource = contextResource(
     () => getRejectedUploads({ limit: pageSize, offset }),
-    { errorTitle: "Error Loading Rejected Uploads" }
+    { errorTitle: "Error loading rejected uploads" }
   );
 
   const rows = $derived<RejectedUpload[]>(resource.current?.data ?? []);
@@ -91,17 +91,13 @@
   }
 </script>
 
-<svelte:head>
-  <title>Rejected Uploads - Nocturne</title>
-</svelte:head>
-
 <div class="@container space-y-6">
   <a
     href={resolve("/reports/data-quality")}
     class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
   >
     <ArrowLeft class="size-4" aria-hidden="true" />
-    Data Quality
+    Data quality
   </a>
 
   <div class="flex flex-col gap-4 @lg:flex-row @lg:items-start @lg:justify-between">
@@ -110,7 +106,7 @@
         <FileWarning class="h-5 w-5 text-primary" />
       </div>
       <div class="space-y-1">
-        <h1 class="text-xl font-semibold">Rejected Uploads</h1>
+        <h1 class="text-xl font-semibold">Rejected uploads</h1>
         <p class="text-sm text-muted-foreground">
           Records an uploader sent that Nocturne answered but could not store, because a value
           in them could not be stored as sent. Most uploaders treat them as saved, so they are

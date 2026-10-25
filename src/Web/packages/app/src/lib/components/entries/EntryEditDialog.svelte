@@ -659,7 +659,7 @@
 {#snippet dialogBody()}
     <Dialog.Header>
       <Dialog.Title>
-        {isEditing ? "Edit Entry" : "New Entry"}
+        {isEditing ? "Edit entry" : "New entry"}
       </Dialog.Title>
       <Dialog.Description>
         {isEditing
@@ -671,7 +671,7 @@
     <div class="space-y-4">
       <!-- Shared Timestamp -->
       <div class="space-y-1.5">
-        <Label for="entry-timestamp">Date & Time</Label>
+        <Label for="entry-timestamp">Date & time</Label>
         <Input
           id="entry-timestamp"
           type="datetime-local"
@@ -744,7 +744,7 @@
             {#snippet child({ props }: { props: Record<string, unknown> })}
               <Button {...props} variant="outline" size="sm" class="w-full">
                 <Plus class="mr-2 h-4 w-4" />
-                Add Section
+                Add section
               </Button>
             {/snippet}
           </DropdownMenu.Trigger>
@@ -797,7 +797,7 @@
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Saving...
           {:else}
-            {isEditing ? "Save Changes" : "Create"}
+            {isEditing ? "Save changes" : "Create"}
           {/if}
         </Button>
       </Dialog.Footer>

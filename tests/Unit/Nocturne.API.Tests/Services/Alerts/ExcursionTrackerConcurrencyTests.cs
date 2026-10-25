@@ -1,7 +1,8 @@
 using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Tests.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
@@ -19,7 +20,7 @@ public class ExcursionTrackerConcurrencyTests
 {
     private static readonly DateTimeOffset Now = new(2026, 3, 22, 12, 0, 0, TimeSpan.Zero);
 
-    [Fact]
+    [NativeFact]
     public async Task Concurrent_evaluations_of_one_rule_open_exactly_one_excursion()
     {
         var ruleId = Guid.NewGuid();
@@ -42,7 +43,7 @@ public class ExcursionTrackerConcurrencyTests
             "the surviving state must reference the one excursion that was opened");
     }
 
-    [Fact]
+    [NativeFact]
     public async Task Concurrent_evaluations_of_different_rules_are_not_serialised()
     {
         var first = Guid.NewGuid();
@@ -65,8 +66,7 @@ public class ExcursionTrackerConcurrencyTests
 
     private static Task<ExcursionTransition> Evaluate(
         IAlertTrackerRepository repository, AlertRuleEvaluationGate gate, Guid ruleId) =>
-        Task.Run(() => new ExcursionTracker(
-                repository, gate, new FakeTimeProvider(Now), NullLogger<ExcursionTracker>.Instance)
+        Task.Run(() => EngineTestHarness.BuildRustTracker(new FakeTimeProvider(Now), repository, gate)
             .ProcessEvaluationAsync(ruleId, true, null, CancellationToken.None));
 
     private static AlertRule Rule(Guid id) => new()
@@ -92,6 +92,8 @@ public class ExcursionTrackerConcurrencyTests
         private int _inside;
 
         public List<AlertExcursion> Excursions { get; } = [];
+
+        public IConditionTimerStore Timers { get; } = new RecordingTimerStore();
 
         /// <summary>Whether every participant was inside the state read at the same moment.</summary>
         public bool Overlapped { get; private set; }

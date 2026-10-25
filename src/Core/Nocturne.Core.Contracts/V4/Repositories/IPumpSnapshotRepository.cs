@@ -31,6 +31,14 @@ public interface IPumpSnapshotRepository : ILegacyKeyedRepository<PumpSnapshot>
     Task<IEnumerable<PumpSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
 
     /// <summary>
+    /// <see cref="PumpIobPoint"/> projections within a time window, ordered oldest-first, as
+    /// <see cref="IApsSnapshotRepository.GetIobCobPointsAsync"/> reads APS snapshots.
+    /// </summary>
+    /// <param name="from">Inclusive start of the time window.</param>
+    /// <param name="to">Inclusive end of the time window.</param>
+    Task<IReadOnlyList<PumpIobPoint>> GetIobPointsAsync(DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns the most recent <see cref="PumpSnapshot"/> with <c>Timestamp &lt; <paramref name="timestamp"/></c>,
     /// or <c>null</c> if none exists.
     /// </summary>

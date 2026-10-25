@@ -19,7 +19,7 @@ public static class CareLinkDeviceStatusMapper
 
         var timestamp = CareLinkTimestampParser.ParseSgTimestamp(data.MedicalDeviceTime, pumpOffsetMs);
         var mills = timestamp.HasValue
-            ? new DateTimeOffset(timestamp.Value, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            ? timestamp.Value.ToMills()
             : data.CurrentServerTime;
 
         var isGuardian = data.MedicalDeviceFamily?.Contains(GuardianFamily, StringComparison.OrdinalIgnoreCase) == true;

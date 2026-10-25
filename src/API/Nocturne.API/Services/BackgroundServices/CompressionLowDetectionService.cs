@@ -286,7 +286,7 @@ public class CompressionLowDetectionService : BackgroundService
             count: int.MaxValue,
             skip: 0,
             cancellationToken: cancellationToken))
-            .Where(e => e.Sgv.HasValue)
+            .Where(e => e.GlucoseMgdl() > 0)
             .OrderBy(e => e.Mills)
             .ToList();
 
@@ -383,7 +383,7 @@ public class CompressionLowDetectionService : BackgroundService
         {
             var current = entries[i];
 
-            if (!current.Sgv.HasValue || current.Sgv.Value >= NadirThresholdMgDl)
+            if (current.GlucoseMgdl() is var nadirValue && (nadirValue <= 0 || nadirValue >= NadirThresholdMgDl))
                 continue;
 
             var dropInfo = FindDrop(entries, i);
@@ -397,7 +397,7 @@ public class CompressionLowDetectionService : BackgroundService
             candidates.Add(new VShapeCandidate(
                 StartMills: entries[dropInfo.Value.startIndex].Mills,
                 EndMills: entries[recoveryInfo.Value.endIndex].Mills,
-                LowestGlucose: current.Sgv!.Value,
+                LowestGlucose: current.GlucoseMgdl(),
                 PreDropGlucose: dropInfo.Value.preDropValue,
                 MaxDropRate: dropInfo.Value.maxDropRate,
                 RecoveryMinutes: recoveryInfo.Value.recoveryMinutes,
@@ -419,11 +419,11 @@ public class CompressionLowDetectionService : BackgroundService
         for (int i = nadirIndex - 1; i >= 0; i--)
         {
             var entry = entries[i];
-            if (!entry.Sgv.HasValue)
+            if (entry.GlucoseMgdl() <= 0)
                 continue;
 
             var timeDiffMinutes = (nadir.Mills - entry.Mills) / 60000.0;
-            var glucoseDiff = entry.Sgv.Value - nadir.Sgv!.Value;
+            var glucoseDiff = entry.GlucoseMgdl() - nadir.GlucoseMgdl();
             var dropRate = glucoseDiff / timeDiffMinutes;
 
             if (dropRate > maxDropRate)
@@ -438,7 +438,7 @@ public class CompressionLowDetectionService : BackgroundService
             {
                 if (dropDurationMinutes >= MinDropDurationMinutes)
                 {
-                    return (i + 1, entries[i + 1].Sgv!.Value, maxDropRate);
+                    return (i + 1, entries[i + 1].GlucoseMgdl(), maxDropRate);
                 }
                 break;
             }
@@ -448,7 +448,7 @@ public class CompressionLowDetectionService : BackgroundService
         // This is the typical compression low pattern — steep drop all the way through.
         if (dropDurationMinutes >= MinDropDurationMinutes && earliestSteepIndex.HasValue)
         {
-            return (earliestSteepIndex.Value, entries[earliestSteepIndex.Value].Sgv!.Value, maxDropRate);
+            return (earliestSteepIndex.Value, entries[earliestSteepIndex.Value].GlucoseMgdl(), maxDropRate);
         }
 
         return null;
@@ -458,12 +458,13 @@ public class CompressionLowDetectionService : BackgroundService
         List<Entry> entries, int nadirIndex, double preDropValue)
     {
         var nadir = entries[nadirIndex];
-        var targetValue = nadir.Sgv!.Value + (preDropValue - nadir.Sgv.Value) * (1 - RecoveryPercentage);
+        var nadirGlucose = nadir.GlucoseMgdl();
+        var targetValue = nadirGlucose + (preDropValue - nadirGlucose) * (1 - RecoveryPercentage);
 
         for (int i = nadirIndex + 1; i < entries.Count; i++)
         {
             var entry = entries[i];
-            if (!entry.Sgv.HasValue)
+            if (entry.GlucoseMgdl() <= 0)
                 continue;
 
             var minutesSinceNadir = (entry.Mills - nadir.Mills) / 60000.0;
@@ -471,7 +472,7 @@ public class CompressionLowDetectionService : BackgroundService
             if (minutesSinceNadir > MaxRecoveryMinutes)
                 break;
 
-            if (entry.Sgv.Value >= targetValue)
+            if (entry.GlucoseMgdl() >= targetValue)
             {
                 return (i, (int)minutesSinceNadir);
             }
@@ -688,8 +689,7 @@ public class CompressionLowDetectionService : BackgroundService
         try
         {
             // Query a small number of entries around midnight of the target night (in UTC)
-            var midnightUtcMills = new DateTimeOffset(nightOf.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
-                .ToUnixTimeMilliseconds();
+            var midnightUtcMills = nightOf.ToDateTime(TimeOnly.MinValue).ToMills();
             var entries = await entryService.GetEntriesAsync(
                 find: $"{{\"mills\":{{\"$gte\":{midnightUtcMills - 12 * 3600000},\"$lte\":{midnightUtcMills + 12 * 3600000}}}}}",
                 count: 10,

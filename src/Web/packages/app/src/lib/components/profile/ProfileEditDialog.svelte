@@ -187,11 +187,10 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Edit class="h-5 w-5" />
-        Edit Profile: {editedStoreName ?? "Unknown"}
+        Edit profile: {editedStoreName ?? "Unknown"}
       </Dialog.Title>
       <Dialog.Description>
-        Modify your therapy settings. Changes are not saved until you click
-        Save.
+        Modify your therapy settings. Changes are not saved until you select Save.
       </Dialog.Description>
     </Dialog.Header>
 
@@ -203,7 +202,7 @@
         <Tabs.List class="grid w-full grid-cols-5">
           <Tabs.Trigger value="general">General</Tabs.Trigger>
           <Tabs.Trigger value="basal">Basal</Tabs.Trigger>
-          <Tabs.Trigger value="carbratio">I:C Ratio</Tabs.Trigger>
+          <Tabs.Trigger value="carbratio">I:C ratio</Tabs.Trigger>
           <Tabs.Trigger value="sens">ISF</Tabs.Trigger>
           <Tabs.Trigger value="targets">Targets</Tabs.Trigger>
         </Tabs.List>
@@ -214,7 +213,7 @@
             <div class="grid grid-cols-2 gap-4">
               <!-- Profile Name -->
               <div class="space-y-2">
-                <Label for="profile-name">Profile Name</Label>
+                <Label for="profile-name">Profile name</Label>
                 <Input
                   id="profile-name"
                   value={editedProfile.defaultProfile ?? ""}
@@ -234,7 +233,7 @@
 
               <!-- Units -->
               <div class="space-y-2">
-                <Label>Blood Glucose Units</Label>
+                <Label>Blood glucose units</Label>
                 <Select.Root
                   type="single"
                   value={editedProfile.units ?? "mg/dL"}
@@ -265,7 +264,7 @@
 
               <!-- DIA -->
               <div class="space-y-2">
-                <Label for="dia">Duration of Insulin Action (hours)</Label>
+                <Label for="dia">Duration of insulin action (hours)</Label>
                 <Input
                   id="dia"
                   type="number"
@@ -280,7 +279,7 @@
 
               <!-- Carbs/hr -->
               <div class="space-y-2">
-                <Label for="carbs-hr">Carbs Absorption Rate (g/hr)</Label>
+                <Label for="carbs-hr">Carbs absorption rate (g/hr)</Label>
                 <Input
                   id="carbs-hr"
                   type="number"
@@ -298,7 +297,7 @@
           <!-- Basal Rates Tab -->
           <Tabs.Content value="basal" class="mt-0">
             {@render TimeValueEditor({
-              title: "Basal Rates",
+              title: "Basal rates",
               description:
                 "Background insulin delivery rates throughout the day",
               unit: "U/hr",
@@ -311,9 +310,9 @@
           <!-- Carb Ratio Tab -->
           <Tabs.Content value="carbratio" class="mt-0">
             {@render TimeValueEditor({
-              title: "Carb Ratios (I:C)",
+              title: "Carb ratios (I:C)",
               description:
-                "Grams of carbohydrates covered by one unit of insulin",
+                "Grams of carbs covered by one unit of insulin",
               unit: "g/U",
               icon: Droplet,
               field: "carbratio",
@@ -324,7 +323,7 @@
           <!-- ISF Tab -->
           <Tabs.Content value="sens" class="mt-0">
             {@render TimeValueEditor({
-              title: "Insulin Sensitivity Factor (ISF)",
+              title: "Insulin sensitivity factor (ISF)",
               description:
                 "How much your blood glucose drops per unit of insulin",
               unit: editedProfile.units === "mmol" ? "mmol/L/U" : "mg/dL/U",
@@ -343,7 +342,7 @@
                 <Target class="h-5 w-5 text-glucose-in-range" />
               </div>
               <div>
-                <h3 class="font-medium">Target Blood Glucose Range</h3>
+                <h3 class="font-medium">Target blood glucose range</h3>
                 <p class="text-sm text-muted-foreground">
                   Set your desired low and high targets throughout the day
                 </p>
@@ -354,7 +353,7 @@
               <!-- Target Low -->
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
-                  <Label size="lg">Target Low</Label>
+                  <Label size="lg">Target low</Label>
                   <Button
                     variant="outline"
                     size="sm"
@@ -426,7 +425,7 @@
               <!-- Target High -->
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
-                  <Label size="lg">Target High</Label>
+                  <Label size="lg">Target high</Label>
                   <Button
                     variant="outline"
                     size="sm"
@@ -512,7 +511,7 @@
           {#if isLoading}
             Saving...
           {:else}
-            Save Changes
+            Save changes
           {/if}
         </Button>
       </Dialog.Footer>
@@ -524,15 +523,15 @@
   </Dialog.Content>
 </Dialog.Root>
 
-<ConfirmDialog bind:open={showExternalWarning} title="Externally Managed Profile">
+<ConfirmDialog bind:open={showExternalWarning} title="Externally managed profile">
   {#snippet footer()}
     <AlertDialog.Action onclick={() => (showExternalWarning = false)}>
-      I Understand
+      I understand
     </AlertDialog.Action>
   {/snippet}
 
   {#snippet description()}
-    This profile is managed by an external source (e.g., Glooko). <br />
+    This profile is managed by an external source (for example, Glooko). <br />
     Any changes made here will
     <strong>NOT</strong>
     be reflected on your device (pump/CGM). They will only affect how data is
@@ -571,14 +570,14 @@
       </div>
       <Button variant="outline" size="sm" onclick={() => addTimeValue(field)}>
         <Plus class="h-4 w-4 mr-1" />
-        Add Time Block
+        Add time block
       </Button>
     </div>
 
     <Table.Root>
       <Table.Header>
         <Table.Row>
-          <Table.Head>Start Time</Table.Head>
+          <Table.Head>Start time</Table.Head>
           <Table.Head class="text-right">{unit}</Table.Head>
           <Table.Head class="w-10"></Table.Head>
         </Table.Row>
@@ -627,7 +626,7 @@
               colspan={3}
               class="text-center py-4"
             >
-              No time blocks configured. Click "Add Time Block" to get started.
+              No time blocks configured. Select "Add time block" to get started.
             </Table.Cell>
           </Table.Row>
         {/each}

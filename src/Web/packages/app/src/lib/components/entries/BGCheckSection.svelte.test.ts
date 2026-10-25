@@ -8,7 +8,7 @@ describe("BGCheckSection", () => {
 	it("renders section heading", async () => {
 		render(BGCheckSection, { bgCheck: {} });
 
-		await expect.element(page.getByText("BG Check")).toBeVisible();
+		await expect.element(page.getByText("BG check")).toBeVisible();
 	});
 
 	it("renders glucose, type, and units fields", async () => {
@@ -34,7 +34,7 @@ describe("BGCheckSection", () => {
 	it("does not show remove button when onRemove is not provided", async () => {
 		render(BGCheckSection, { bgCheck: {} });
 
-		await expect.element(page.getByText("BG Check")).toBeVisible();
+		await expect.element(page.getByText("BG check")).toBeVisible();
 	});
 
 	it("renders with provided values", async () => {

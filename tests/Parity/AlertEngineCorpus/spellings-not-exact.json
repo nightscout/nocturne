@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "name": "spellings-not-exact",
+  "description": "a property name, enum value or zone id is read only when it is exactly its one spelling: another case, an ordinal or a Windows-style id cannot be evaluated, so its rule is skipped; the canonical control rule fires",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "AND",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "BELOW",
+        "value": 70
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "trend",
+      "condition_params": {
+        "bucket": "FALLING_FAST"
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "day_of_week",
+      "condition_params": {
+        "days": [
+          1
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "rule-5",
+      "condition_type": "day_of_week",
+      "condition_params": {
+        "days": [
+          "Monday"
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000006",
+      "name": "rule-6",
+      "condition_type": "glucose_bucket",
+      "condition_params": {
+        "buckets": [
+          "LOW"
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000007",
+      "name": "rule-7",
+      "condition_type": "pump_state",
+      "condition_params": {
+        "mode": "suspended",
+        "is_active": true
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000008",
+      "name": "rule-8",
+      "condition_type": "state_span_active",
+      "condition_params": {
+        "category": 4,
+        "is_active": true
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000009",
+      "name": "rule-9",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "Type": "threshold",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000010",
+      "name": "rule-10",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "Value": 70
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000011",
+      "name": "rule-11",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "00:00",
+        "to": "23:59",
+        "timezone": "ETC/GMT-2"
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000012",
+      "name": "rule-12",
+      "condition_type": "time_of_day",
+      "condition_params": {
+        "from": "00:00",
+        "to": "23:59",
+        "timezone": "AUS Eastern Standard Time"
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000013",
+      "name": "rule-13",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "threshold",
+            "threshold": {
+              "direction": "below",
+              "value": 70
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false,
+        "trend_bucket": "falling_fast",
+        "glucose_bucket": "low"
+      }
+    }
+  ]
+}

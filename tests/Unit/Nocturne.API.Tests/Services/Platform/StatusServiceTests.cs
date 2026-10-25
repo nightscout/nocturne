@@ -8,10 +8,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Platform;
+using Nocturne.API.Services.Profiles;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -37,6 +40,7 @@ namespace Nocturne.API.Tests.Services.Platform;
 public class StatusServiceTests
 {
     private readonly Mock<ICacheService> _mockCacheService;
+    private readonly Mock<ITenantService> _tenants = new();
     private readonly Mock<IDemoModeService> _mockDemoModeService;
     private readonly Mock<ILogger<StatusService>> _mockLogger;
     private readonly Mock<ITenantAccessor> _mockTenantAccessor;
@@ -213,8 +217,10 @@ public class StatusServiceTests
             _httpContextAccessor,
             MockTenantAccessor.Create(tenantId: tenantId, slug: "t", isDemo: isDemo).Object,
             TestPublicAccessCache.Create(),
+            _tenants.Object,
             appearanceReader.Object,
             new GlucoseStatusClassifier(_configuration, NullLogger<GlucoseStatusClassifier>.Instance),
+            new AlertRepository(mockFactory.Object),
             Mock.Of<ICategoryReadContext>(),
             _mockLogger.Object);
 
@@ -737,6 +743,66 @@ public class StatusServiceTests
     #region Configuration and Settings Tests
 
     [Fact]
+    public async Task GetSystemStatusAsync_ReportsTheTenantDefaultOverTheInstanceConfig()
+    {
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("mmol");
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Display:Units"] = "mg/dl" })
+            .Build();
+
+        var result = await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mmol");
+        (await CreateStatusService(configuration, _dbContext).GetV3SystemStatusAsync())
+            .Settings!["units"].Should().Be("mmol");
+    }
+
+    [Fact]
+    public async Task GetSystemStatusAsync_ReportsTheOwnersOwnUnitsOverTheTenantDefault()
+    {
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("mg/dl");
+
+        var result = await CreateStatusService(
+                new ConfigurationBuilder().Build(),
+                appearance: new UserDisplayPreferences { GlucoseUnits = "mmol" })
+            .GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mmol");
+    }
+
+    // A tenant upgraded from before the explicit default holds "mg/dl" in its features settings
+    // from the old class default. Status must not read that as the owner's choice.
+    [Fact]
+    public async Task GetSystemStatusAsync_IgnoresTheLegacyFeaturesUnitsUntilTheOwnerChooses()
+    {
+        _dbContext.TenantId = MockTenantAccessor.DefaultTenantId;
+        await new UISettingsService(new TestNocturneDbContextFactory(_dbContext), Mock.Of<ILogger<UISettingsService>>()).SaveSectionAsync(
+            "features", new FeatureSettings { Display = new DisplaySettings { Units = "mmol" } });
+        var configuration = new ConfigurationBuilder().Build();
+
+        var result = await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mg/dl");
+
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("mmol");
+
+        (await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync())
+            .Settings!["units"].Should().Be("mmol");
+    }
+
+    [Fact]
+    public async Task GetSystemStatusAsync_FallsBackToMgDlWithNoTenantUnits()
+    {
+        var result = await CreateStatusService(new ConfigurationBuilder().Build(), _dbContext)
+            .GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mg/dl");
+    }
+
+    [Fact]
     public async Task GetSystemStatusAsync_WithCustomDisplaySettings_ShouldIncludeInSettings()
     {
         var customConfigData = new Dictionary<string, string?>
@@ -915,9 +981,9 @@ public class StatusServiceTests
     [MemberData(nameof(AlertRuleReadFailures))]
     public async Task GetSystemStatusAsync_WhenAlertRulesCannotBeRead_DegradesToTheDefaults(Exception failure)
     {
-        var classifier = FailingClassifier(failure);
+        var alerts = FailingAlertRepository(failure);
 
-        var result = await CreateStatusService(_configuration, classifier: classifier).GetSystemStatusAsync();
+        var result = await CreateStatusService(_configuration, alertRepository: alerts).GetSystemStatusAsync();
 
         result.Status.Should().Be("ok");
         var thresholds = (Dictionary<string, object>)result.Settings!["thresholds"];
@@ -930,9 +996,9 @@ public class StatusServiceTests
     [Fact]
     public async Task GetSystemStatusAsync_WhenAlertRulesCannotBeRead_DoesNotCacheTheFallback()
     {
-        var classifier = FailingClassifier(new TestDbException());
+        var alerts = FailingAlertRepository(new TestDbException());
 
-        await CreateStatusService(_configuration, classifier: classifier).GetSystemStatusAsync();
+        await CreateStatusService(_configuration, alertRepository: alerts).GetSystemStatusAsync();
 
         _mockCacheService.Verify(
             x => x.SetAsync(It.IsAny<string>(), It.IsAny<StatusResponse>(), It.IsAny<TimeSpan?>(), It.IsAny<CancellationToken>()),
@@ -952,33 +1018,28 @@ public class StatusServiceTests
     [Fact]
     public async Task GetSystemStatusAsync_WhenAlertRulesReadHitsABug_DoesNotHideIt()
     {
-        var classifier = FailingClassifier(new InvalidOperationException("bug"));
+        var alerts = FailingAlertRepository(new InvalidOperationException("bug"));
 
-        var act = () => CreateStatusService(_configuration, classifier: classifier).GetSystemStatusAsync();
+        var act = () => CreateStatusService(_configuration, alertRepository: alerts).GetSystemStatusAsync();
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
-    private static IGlucoseStatusClassifier FailingClassifier(Exception failure)
+    private static IAlertRepository FailingAlertRepository(Exception failure)
     {
-        var classifier = new Mock<IGlucoseStatusClassifier>();
-        classifier.SetupGet(c => c.Defaults).Returns(new TenantOverviewThresholds(55, 80, 180, 260));
-        classifier
-            .Setup(c => c.ResolveThresholdsAsync(It.IsAny<NocturneDbContext>(), It.IsAny<CancellationToken>()))
+        var alerts = new Mock<IAlertRepository>();
+        alerts
+            .Setup(a => a.GetEnabledRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(failure);
-        return classifier.Object;
+        return alerts.Object;
     }
 
     [Fact]
     public async Task GetSystemStatusAsync_WhenTheCallerCancels_DoesNotSwallowIt()
     {
-        var classifier = new Mock<IGlucoseStatusClassifier>();
-        classifier.SetupGet(c => c.Defaults).Returns(new TenantOverviewThresholds(55, 80, 180, 260));
-        classifier
-            .Setup(c => c.ResolveThresholdsAsync(It.IsAny<NocturneDbContext>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new OperationCanceledException());
+        var alerts = FailingAlertRepository(new OperationCanceledException());
 
-        var act = () => CreateStatusService(_configuration, classifier: classifier.Object).GetSystemStatusAsync();
+        var act = () => CreateStatusService(_configuration, alertRepository: alerts).GetSystemStatusAsync();
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -1365,7 +1426,7 @@ public class StatusServiceTests
         IHttpContextAccessor? httpContextAccessor = null,
         UserDisplayPreferences? appearance = null,
         ICategoryReadContext? categoryReadContext = null,
-        IGlucoseStatusClassifier? classifier = null
+        IAlertRepository? alertRepository = null
     )
     {
         var dbName = databaseName ?? $"nocturne_status_tests_{Guid.NewGuid()}";
@@ -1387,8 +1448,11 @@ public class StatusServiceTests
         appearanceReader
             .Setup(r => r.GetTenantAppearanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(appearance ?? new UserDisplayPreferences());
-        classifier ??= new GlucoseStatusClassifier(
-            configuration, NullLogger<GlucoseStatusClassifier>.Instance);
+        var alertContexts = new Mock<IDbContextFactory<NocturneDbContext>>();
+        alertContexts
+            .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(dbName));
+        alertRepository ??= new AlertRepository(alertContexts.Object);
         return new StatusService(
             configuration,
             _mockCacheService.Object,
@@ -1397,8 +1461,10 @@ public class StatusServiceTests
             httpContextAccessor ?? _httpContextAccessor,
             tenantAccessor ?? _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
+            _tenants.Object,
             appearanceReader.Object,
-            classifier,
+            new GlucoseStatusClassifier(configuration, NullLogger<GlucoseStatusClassifier>.Instance),
+            alertRepository,
             categoryReadContext ?? Mock.Of<ICategoryReadContext>(),
             _mockLogger.Object
         );

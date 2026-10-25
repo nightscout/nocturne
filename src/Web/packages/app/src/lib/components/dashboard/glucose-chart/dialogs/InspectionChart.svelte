@@ -45,7 +45,7 @@
 
 {#if windowedGlucoseData.length > 0}
   <div class="py-2">
-    <p class="text-xs text-muted-foreground mb-1">Glucose Response</p>
+    <p class="text-xs text-muted-foreground mb-1">Glucose response</p>
     <GlucoseResponseChart
       glucoseData={windowedGlucoseData}
       {centerTime}

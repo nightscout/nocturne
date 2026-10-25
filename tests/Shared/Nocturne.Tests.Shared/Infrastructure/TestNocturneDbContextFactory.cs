@@ -13,8 +13,10 @@ namespace Nocturne.Tests.Shared.Infrastructure;
 /// Each instance returned from <see cref="CreateAsync"/> suppresses disposal so that
 /// repository <c>await using</c> scopes do not close the shared connection or drop
 /// the in-memory database. The test fixture owns the context lifetime.
+/// As an <see cref="IDbContextFactory{TContext}"/> it serves a repository, which pins its own
+/// tenant, over the same store.
 /// </summary>
-public sealed class TestNocturneDbContextFactory : INocturneDbContextFactory
+public sealed class TestNocturneDbContextFactory : INocturneDbContextFactory, IDbContextFactory<NocturneDbContext>
 {
     // EF Core 10 stores DbContextOptions on IDbContextServices, which is accessible via
     // the private DbContext.ContextServices property.
@@ -50,6 +52,9 @@ public sealed class TestNocturneDbContextFactory : INocturneDbContextFactory
 
     /// <inheritdoc />
     public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => Create(_source.TenantId);
+
+    /// <inheritdoc />
+    NocturneDbContext IDbContextFactory<NocturneDbContext>.CreateDbContext() => Create(_source.TenantId).Result;
 
     /// <inheritdoc />
     public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) =>

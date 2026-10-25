@@ -1,5 +1,13 @@
 ---
 title: Bring your own reverse proxy
+installSteps:
+  start-the-stack-without-caddy: "1"
+  dns-and-certificates: "2"
+  the-three-headers: "3"
+  nginx: nginx
+  traefik: traefik
+  caddy: caddy
+  next-steps: next-steps
 ---
 
 <script>

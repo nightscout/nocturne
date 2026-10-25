@@ -27,8 +27,14 @@ import { getContext, setContext } from "svelte";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
-import { WidgetId, type UserDisplayPreferences } from "../api/generated/nocturne-api-client";
+import {
+  LegacyConsumableKind,
+  WidgetId,
+  type DashboardRailPreference,
+  type UserDisplayPreferences,
+} from "../api/generated/nocturne-api-client";
 import { DEFAULT_TOP_WIDGETS } from "../components/dashboard/top-widget-ids";
+import { parseRailPreference } from "../components/status-pills/rail";
 import { weekStartName } from "../components/calendar/calendar-date";
 import { resolveCookieDomain } from "../utils/tenant-host";
 import { isRecord } from "../utils/type-guards";
@@ -236,6 +242,7 @@ const widgetListPref: PrefParser<WidgetId[]> = (raw) =>
     ? raw.flatMap((id) => WIDGET_IDS.find((known) => known === id) ?? [])
     : undefined;
 
+
 function parseJson(json: string): unknown {
   try {
     return JSON.parse(json);
@@ -333,6 +340,14 @@ class SyncedPref<T> implements SyncedEntry {
     this._held = true;
     this._fallback = undefined;
     persistLocal(this._key, value);
+  }
+
+  /**
+   * Show a value this device has no stored choice for, without storing it: a default the viewer
+   * inherits, which their own later choice replaces. Browser-only, like {@link hydrate}.
+   */
+  showDefault(value: T): void {
+    if (localStorage.getItem(this._key) === null) this._value = value;
   }
 
   /** Hydrate from a preference payload, leaving the current value alone when unset. */
@@ -478,6 +493,32 @@ export const dashboardTopWidgets = new SyncedPref<WidgetId[]>(
   DEFAULT_TOP_WIDGETS,
   (p) => p.dashboardTopWidgets,
   widgetListPref
+);
+
+/**
+ * How the user arranged the dashboard status rail; an empty object is the default rail (see
+ * `effectiveRail`).
+ */
+export const dashboardRail = new SyncedPref<DashboardRailPreference>(
+  "nocturne-dashboard-rail",
+  {},
+  (p) => p.dashboardRail,
+  parseRailPreference
+);
+
+const LEGACY_CONSUMABLE_KINDS: readonly LegacyConsumableKind[] = Object.values(LegacyConsumableKind);
+
+const legacyKindListPref: PrefParser<LegacyConsumableKind[]> = (raw) =>
+  Array.isArray(raw)
+    ? LEGACY_CONSUMABLE_KINDS.filter((kind) => raw.includes(kind))
+    : undefined;
+
+/** The legacy ages the user hid from the rail's tracker pills. */
+export const hiddenLegacyFallbacks = new SyncedPref<LegacyConsumableKind[]>(
+  "nocturne-hidden-legacy-fallbacks",
+  [],
+  (p) => p.hiddenLegacyFallbacks,
+  legacyKindListPref
 );
 
 // ==========================================
@@ -824,6 +865,8 @@ export function collectPreferences(): UserDisplayPreferences {
     nightModeSchedule: nightModeSchedule.stored,
     calendarShowTirPercent: calendarShowTirPercent.stored,
     dashboardTopWidgets: dashboardTopWidgets.stored,
+    dashboardRail: dashboardRail.stored,
+    hiddenLegacyFallbacks: hiddenLegacyFallbacks.stored,
     prediction: {
       enabled: predictionEnabled.stored,
       minutes: predictionMinutes.stored,
@@ -919,6 +962,17 @@ export function reconcilePreferences(serverPrefs: UserDisplayPreferences | null 
     writePrefsCookie(prefs);
     writeThroughReporting(prefs);
   }
+}
+
+/**
+ * Shows the tenant's default glucose units to a member with no units stored anywhere: not on the
+ * server (reconciled first) and not on this device. Nothing is written, so the default is never
+ * mistaken for the member's own choice and seeded back as one.
+ */
+export function showTenantDefaultUnits(units: string | null | undefined): void {
+  if (!browser) return;
+  const parsed = oneOfPref(GLUCOSE_UNITS)(units);
+  if (parsed) glucoseUnits.showDefault(parsed);
 }
 
 /**
@@ -1188,7 +1242,7 @@ export function regionFormatLabel(tag: RegionFormat): string {
 
   const sample = REGION_SAMPLE_DATE.toLocaleDateString(tag);
   const weekStart = weekStartName(tag, preferredLanguage.current);
-  return `${name} — ${sample}, weeks start ${weekStart}`;
+  return `${name}: ${sample}, weeks start ${weekStart}`;
 }
 
 /**

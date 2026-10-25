@@ -3,6 +3,7 @@
   import { satisfiesScope } from "$lib/authorization/scopes";
   import { Button } from "$lib/components/ui/button";
   import { cn } from "$lib/utils";
+  import { relativeAge } from "$lib/utils/formatting";
   import {
     type InAppNotificationDto,
     NotificationUrgency,
@@ -36,27 +37,6 @@
       default:
         return "text-muted-foreground bg-muted/50 border-border";
     }
-  }
-
-  // Format relative time
-  function formatRelativeTime(date: string | undefined): string {
-    if (!date) return "";
-    const now = Date.now();
-    const timestamp = new Date(date).getTime();
-    const diffMs = now - timestamp;
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return "just now";
-    if (diffMins === 1) return "1m ago";
-    if (diffMins < 60) return `${diffMins}m ago`;
-
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours === 1) return "1h ago";
-    if (diffHours < 24) return `${diffHours}h ago`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays === 1) return "1d ago";
-    return `${diffDays}d ago`;
   }
 
   // Get button variant based on action variant string
@@ -105,7 +85,7 @@
         {resolveNotificationLabel(notification.title) || "Notification"}
       </span>
       <span class="text-xs opacity-75 whitespace-nowrap">
-        {formatRelativeTime(notification.createdAt)}
+        {relativeAge(notification.createdAt)}
       </span>
     </div>
     {#if notification.subtitle}

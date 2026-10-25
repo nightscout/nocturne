@@ -1,7 +1,9 @@
 using Nocturne.Connectors.CareLink.Models;
 using Nocturne.Connectors.CareLink.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using BolusType = Nocturne.Core.Models.V4.BolusType;
 
 namespace Nocturne.Connectors.CareLink.Mappers;
 
@@ -47,7 +49,7 @@ public static class CareLinkTreatmentMapper
             if (programmed <= 0 && delivered <= 0)
                 continue;
 
-            var mills = ToMills(timestamp.Value);
+            var mills = timestamp.Value.ToMills();
             var bolusType = MapBolusType(marker.BolusType);
             var automatic = string.Equals(marker.ActivationType, Autocorrection, StringComparison.OrdinalIgnoreCase);
             // Most INSULIN markers carry a stable pump event id; when one is absent, key on the bolus
@@ -97,7 +99,7 @@ public static class CareLinkTreatmentMapper
             if (timestamp == null)
                 continue;
 
-            var mills = ToMills(timestamp.Value);
+            var mills = timestamp.Value.ToMills();
 
             results.Add(new CarbIntake
             {
@@ -170,9 +172,6 @@ public static class CareLinkTreatmentMapper
 
     private static string DeviceName(CareLinkData data) =>
         $"CareLink {data.MedicalDeviceFamily ?? "Unknown"}";
-
-    private static long ToMills(DateTime utc) =>
-        new DateTimeOffset(utc, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
     private static BolusType MapBolusType(string? bolusType) => bolusType?.ToUpperInvariant() switch
     {

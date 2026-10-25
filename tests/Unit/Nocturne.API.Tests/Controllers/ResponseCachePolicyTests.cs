@@ -44,6 +44,7 @@ public class ResponseCachePolicyTests
     [InlineData(typeof(V1EntriesController), nameof(V1EntriesController.GetCurrentEntry))]
     [InlineData(typeof(V1EntriesController), nameof(V1EntriesController.GetEntries))]
     [InlineData(typeof(ProfileController), nameof(ProfileController.GetProfileSummary))]
+    [InlineData(typeof(ProfileController), nameof(ProfileController.GetActiveSchedules))]
     [InlineData(typeof(PredictionController), nameof(PredictionController.GetProfileSnapshot))]
     [InlineData(typeof(TreatmentLogController), nameof(TreatmentLogController.GetStats))]
     public void MutableReads_AreNeverStored(Type controller, string action)

@@ -16,8 +16,8 @@ namespace Nocturne.API.Services.Alerts;
 /// each 5-minute tick's context as of that instant, through the same
 /// <see cref="ISensorContextEnricher"/> the live engine uses
 /// (<see cref="ISensorContextEnricher.EnrichAsOfAsync"/>), resolves Do Not Disturb per tick, and
-/// captures the fact timelines. The <see cref="IAlertReplayEngine"/> the <c>Alerts:Engine</c> flag
-/// selects evaluates the rules over those ticks (docs/alerts/engine-semantics.md §8).
+/// captures the fact timelines. The <see cref="IAlertReplayEngine"/> evaluates the rules over those
+/// ticks (docs/alerts/engine-semantics.md §8).
 /// </summary>
 internal sealed class AlertReplayService(
     IAlertRepository alertRepository,
@@ -412,7 +412,7 @@ internal sealed class AlertReplayService(
         Dictionary<string, decimal> prev,
         Dictionary<string, List<FactSnapshotPoint>> points)
     {
-        var tickMs = new DateTimeOffset(tickUtc).ToUnixTimeMilliseconds();
+        var tickMs = tickUtc.ToMills();
 
         foreach (var binding in FactBindings)
         {

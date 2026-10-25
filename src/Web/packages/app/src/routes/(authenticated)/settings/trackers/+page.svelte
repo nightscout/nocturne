@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatAge } from "$lib/components/trackers/age.svelte";
   import { formatDayTime } from "$lib/utils/formatting";
   import {
     Card,
@@ -38,12 +39,13 @@
   import { page } from "$app/state";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { coachmark } from "@nocturne/coach";
+  import { coachFor } from "$lib/coach-marks/copy.svelte";
   import {
     NotificationUrgency,
     TrackerCategory,
     CompletionReason,
     DashboardVisibility,
-    TrackerVisibility,
     TrackerMode,
     ReservoirReportKind,
     type TrackerDefinitionDto,
@@ -118,7 +120,6 @@
   let formDashboardVisibility = $state<DashboardVisibility>(
     DashboardVisibility.Always
   );
-  let formVisibility = $state<TrackerVisibility>(TrackerVisibility.Private);
   let formMode = $state<TrackerMode>(TrackerMode.Duration);
   let formStartEventType = $state<string | undefined>(undefined);
   let formCompletionEventType = $state<string | undefined>(undefined);
@@ -201,13 +202,13 @@
     [CompletionReason.Expired]: "Expired",
     [CompletionReason.Other]: "Other",
     [CompletionReason.Failed]: "Failed",
-    [CompletionReason.FellOff]: "Fell Off",
-    [CompletionReason.ReplacedEarly]: "Replaced Early",
+    [CompletionReason.FellOff]: "Fell off",
+    [CompletionReason.ReplacedEarly]: "Replaced early",
     [CompletionReason.Empty]: "Empty",
     [CompletionReason.Refilled]: "Refilled",
     [CompletionReason.Attended]: "Attended",
     [CompletionReason.Rescheduled]: "Rescheduled",
-    [CompletionReason.Cancelled]: "Cancelled",
+    [CompletionReason.Cancelled]: "Canceled",
     [CompletionReason.Missed]: "Missed",
   };
 
@@ -222,15 +223,6 @@
     [TrackerCategory.Cannula]: "text-pink-500",
     [TrackerCategory.Battery]: "text-yellow-500",
   };
-
-  // Format age
-  function formatAge(hours: number): string {
-    if (hours < 1) return `${Math.floor(hours * 60)}m`;
-    if (hours < 24) return `${Math.floor(hours)}h`;
-    const days = Math.floor(hours / 24);
-    const h = Math.floor(hours % 24);
-    return h > 0 ? `${days}d ${h}h` : `${days}d`;
-  }
 
   // Format date
   function formatDate(dateStr: Date | string | undefined): string {
@@ -292,7 +284,6 @@
     formNotifications = [];
     formIsFavorite = false;
     formDashboardVisibility = DashboardVisibility.Always;
-    formVisibility = TrackerVisibility.Private;
     formMode = TrackerMode.Duration;
     formStartEventType = undefined;
     formCompletionEventType = undefined;
@@ -318,7 +309,6 @@
     formIsFavorite = def.isFavorite ?? false;
     formDashboardVisibility =
       def.dashboardVisibility ?? DashboardVisibility.Always;
-    formVisibility = def.visibility ?? TrackerVisibility.Private;
     formMode = def.mode ?? TrackerMode.Duration;
     formStartEventType = def.startEventType ?? undefined;
     formCompletionEventType = def.completionEventType ?? undefined;
@@ -435,7 +425,7 @@
 </script>
 
 <svelte:head>
-  <title>Notifications & Trackers - Settings - Nocturne</title>
+  <title>Notifications & trackers - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -446,7 +436,7 @@
     </div>
     <div>
       <h1 class="text-2xl font-bold tracking-tight">
-        Notifications & Trackers
+        Notifications & trackers
       </h1>
       <p class="text-muted-foreground">
         Track consumables, appointments, and reminders
@@ -492,10 +482,12 @@
           <History class="h-4 w-4" />
           History
         </Tabs.Trigger>
-        <Tabs.Trigger value="definitions">
-          <Settings2 class="h-4 w-4" />
-          Definitions
-        </Tabs.Trigger>
+        <div class="flex" {@attach coachmark({ ...coachFor("tracker-intro.settings") })}>
+          <Tabs.Trigger value="definitions">
+            <Settings2 class="h-4 w-4" />
+            Definitions
+          </Tabs.Trigger>
+        </div>
         <Tabs.Trigger value="presets">
           <Bookmark class="h-4 w-4" />
           Presets
@@ -566,7 +558,6 @@
   bind:formNotifications
   bind:formIsFavorite
   bind:formDashboardVisibility
-  bind:formVisibility
   bind:formMode
   bind:formStartEventType
   bind:formCompletionEventType
@@ -614,7 +605,7 @@
 <ConfirmDialog
   bind:open={isDeleteDefinitionDialogOpen}
   onOpenChange={(o) => { if (!o) deletingDefinitionId = null; }}
-  title="Delete Tracker Definition"
+  title="Delete tracker definition"
   confirmLabel="Delete"
   destructive
   onConfirm={confirmDeleteDefinition}
@@ -622,7 +613,7 @@
   {#snippet description()}
     Are you sure you want to delete this tracker definition? This action
     cannot be undone. Any active instances using this definition will
-    remain, but you won't be able to start new ones.
+    remain, but you will not be able to start new ones.
   {/snippet}
 </ConfirmDialog>
 
@@ -630,7 +621,7 @@
 <ConfirmDialog
   bind:open={isDeleteInstanceDialogOpen}
   onOpenChange={(o) => { if (!o) deletingInstanceId = null; }}
-  title="Delete Tracker Instance"
+  title="Delete tracker instance"
   confirmLabel="Delete"
   destructive
   onConfirm={confirmDeleteInstance}
@@ -646,15 +637,15 @@
   <Dialog.Content class="sm:max-w-[425px]">
     <Dialog.Header>
       <Dialog.Title>
-        {isNewPreset ? "New Preset" : "Edit Preset"}
+        {isNewPreset ? "New preset" : "Edit preset"}
       </Dialog.Title>
       <Dialog.Description>
-        Create a quick preset for one-click tracker activation.
+        Create a quick preset for one-step tracker activation.
       </Dialog.Description>
     </Dialog.Header>
     <div class="grid gap-4 py-4">
       <div class="space-y-2">
-        <Label for="presetName">Preset Name</Label>
+        <Label for="presetName">Preset name</Label>
         <Input
           id="presetName"
           bind:value={formPresetName}
@@ -662,7 +653,7 @@
         />
       </div>
       <div class="space-y-2">
-        <Label for="presetDefinition">Tracker Definition</Label>
+        <Label for="presetDefinition">Tracker definition</Label>
         <Select.Root type="single" bind:value={formPresetDefinitionId}>
           <Select.Trigger>
             {definitions.find((d) => d.id === formPresetDefinitionId)?.name ??
@@ -676,7 +667,7 @@
         </Select.Root>
       </div>
       <div class="space-y-2">
-        <Label for="presetNotes">Default Start Notes (optional)</Label>
+        <Label for="presetNotes">Default start notes (optional)</Label>
         <Textarea
           id="presetNotes"
           bind:value={formPresetDefaultStartNotes}
@@ -705,7 +696,7 @@
 <ConfirmDialog
   bind:open={isDeletePresetDialogOpen}
   onOpenChange={(o) => { if (!o) deletingPresetId = null; }}
-  title="Delete Preset"
+  title="Delete preset"
   confirmLabel="Delete"
   destructive
   onConfirm={confirmDeletePreset}

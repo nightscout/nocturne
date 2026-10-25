@@ -2,7 +2,9 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
@@ -188,24 +190,56 @@ public class EntryDecomposerTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_SgvEntry_UsesSgvOverMgdlWhenBothPresent()
+    public async Task DecomposeAsync_SgvEntry_StoresSgvNotAStaleMgdl()
     {
-        // Arrange - Sgv and Mgdl may differ; Sgv takes priority for SGV entries
-        var entry = new Entry
-        {
-            Id = "sgv-priority",
-            Type = "sgv",
-            Mills = 1700000000000,
-            Sgv = 130.0,
-            Mgdl = 125.0
-        };
+        var entry = new Entry { Id = "sgv-priority", Type = "sgv", Mills = 1700000000000, Sgv = 130.0, Mgdl = 125.0 };
 
-        // Act
         var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
-        // Assert
         var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
-        sg.Mgdl.Should().Be(130.0, "Sgv should take priority over Mgdl for SGV entries");
+        sg.Mgdl.Should().Be(130.0);
+    }
+
+    [Theory]
+    [InlineData("{\"sgv\":150}")]
+    [InlineData("{\"sgv\":\"150\"}")]
+    [InlineData("{\"mgdl\":150}")]
+    public async Task PatchEntryAsync_ChangingOneGlucoseField_StoresAndServesTheNewValue(string patch)
+    {
+        await _decomposer.DecomposeAsync(
+            new Entry { Id = "sgv-patch", Type = "sgv", Mills = 1700000000000, Sgv = 120.0 }, WriteOrigin.Live);
+        var service = NewEntryService("sgv-patch");
+
+        var patched = await service.PatchEntryAsync("sgv-patch", JsonDocument.Parse(patch).RootElement);
+
+        _context.ChangeTracker.Clear();
+        _context.SensorGlucose.Single(e => e.LegacyId == "sgv-patch").Mgdl.Should().Be(150);
+        patched!.GlucoseMgdl().Should().Be(150);
+    }
+
+    [Fact]
+    public async Task UpdateEntryAsync_AnEditedSgvSentWithTheStaleMgdl_StoresTheEditedSgv()
+    {
+        await _decomposer.DecomposeAsync(
+            new Entry { Id = "sgv-put", Type = "sgv", Mills = 1700000000000, Sgv = 120.0 }, WriteOrigin.Live);
+        var service = NewEntryService("sgv-put");
+
+        await service.UpdateEntryAsync(
+            "sgv-put",
+            new Entry { Type = "sgv", Mills = 1700000000000, Sgv = 150.0, Mgdl = 120.0 });
+
+        _context.ChangeTracker.Clear();
+        _context.SensorGlucose.Single(e => e.LegacyId == "sgv-put").Mgdl.Should().Be(150);
+    }
+
+    private EntryService NewEntryService(string id)
+    {
+        _context.ChangeTracker.Clear();
+        var projected = EntryProjection.FromSensorGlucose(
+            SensorGlucoseMapper.ToDomainModel(_context.SensorGlucose.Single(e => e.LegacyId == id)));
+        var store = new Mock<IEntryStore>();
+        store.Setup(s => s.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(projected);
+        return new EntryService(store.Object, _decomposer, Mock.Of<IEntryCache>(), NullLogger<EntryService>.Instance);
     }
 
     [Fact]

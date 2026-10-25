@@ -1,5 +1,4 @@
-using System.Text.Json;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -55,127 +54,60 @@ public sealed record DataNeedsSet(
 }
 
 /// <summary>
-/// Walks a batch of <see cref="AlertRuleSnapshot"/> records and reports which optional
+/// Reads a batch of <see cref="AlertRuleSnapshot"/> records and reports which optional
 /// <see cref="SensorContext"/> fields need to be populated to evaluate them.
 /// </summary>
 /// <remarks>
-/// Each rule's <see cref="AlertRuleSnapshot.ConditionType"/> drives the top-level entry; for
-/// the recursive wrappers (<c>composite</c>, <c>not</c>, <c>sustained</c>) the JSON payload is
-/// deserialised once per rule and the resulting <see cref="ConditionNode"/> tree is walked via
-/// <see cref="ConditionPath.Walk"/>. Malformed JSON is treated as "no needs" — rule evaluation
-/// will fail later with the same silent fail-mode used by the leaf evaluators, so the enricher
-/// must not re-throw here. An enabled <see cref="AlertRuleSnapshot.AutoResolveParams"/> tree is walked
-/// the same way; a disabled one contributes nothing.
+/// Each rule's leaves come from the engine (<see cref="RuleTrees"/>): its body, and its
+/// auto-resolve tree while auto-resolve is enabled, read as evaluation reads them. A rule the
+/// engine cannot describe contributes no needs rather than failing the pass for every other rule.
 /// </remarks>
 public static class RuleDataNeeds
 {
     /// <summary>
-    /// Walks <paramref name="rules"/> and returns a <see cref="DataNeedsSet"/> with a flag
-    /// set for every kind of optional context any rule depends on. A rule whose tree cannot be
-    /// walked contributes no needs rather than failing the pass for every other rule.
+    /// Reads <paramref name="rules"/> and returns a <see cref="DataNeedsSet"/> with a flag
+    /// set for every kind of optional context any rule depends on.
     /// </summary>
     public static DataNeedsSet Walk(IEnumerable<AlertRuleSnapshot> rules, ILogger? logger = null)
     {
         var b = new NeedsBuilder();
         foreach (var rule in rules)
         {
+            IReadOnlyList<ConditionLeaf> leaves;
             try
             {
-                VisitTopLevel(rule, b);
-                VisitAutoResolve(rule, b);
+                leaves = RuleTrees.Leaves(rule, includeAutoResolve: true);
             }
             catch (Exception ex)
             {
-                logger?.LogError(ex, "Could not walk the condition tree of alert rule {AlertRuleId}", rule.Id);
+                logger?.LogError(ex, "Could not read the condition tree of alert rule {AlertRuleId}", rule.Id);
+                continue;
             }
+            foreach (var leaf in leaves)
+                VisitLeaf(leaf, b);
         }
         return b.Build();
     }
 
-    private static void VisitTopLevel(AlertRuleSnapshot rule, NeedsBuilder b)
+    private static void VisitLeaf(ConditionLeaf leaf, NeedsBuilder b)
     {
-        switch (rule.ConditionType)
+        if (leaf.Kind is not { } kind) return;
+        ApplyLeaf(kind, b);
+
+        // pump_state, state_span_active and tracker_age select which mode, span or tracker the
+        // enricher fetches.
+        switch (kind)
         {
-            case AlertConditionType.Composite:
-                {
-                    var composite = TryDeserialize<CompositeCondition>(rule.ConditionParams);
-                    if (composite is null) return;
-                    foreach (var child in composite.Conditions ?? [])
-                    {
-                        VisitNode(child, b);
-                    }
-                    return;
-                }
-            case AlertConditionType.Not:
-                {
-                    var not = TryDeserialize<NotCondition>(rule.ConditionParams);
-                    if (not is null) return;
-                    VisitNode(not.Child, b);
-                    return;
-                }
-            case AlertConditionType.Sustained:
-                {
-                    var sustained = TryDeserialize<SustainedCondition>(rule.ConditionParams);
-                    if (sustained is null) return;
-                    VisitNode(sustained.Child, b);
-                    return;
-                }
-            case AlertConditionType.PumpState:
-                {
-                    ApplyLeaf(rule.ConditionType, b);
-                    var typed = TryDeserialize<PumpStateCondition>(rule.ConditionParams);
-                    if (typed is not null) b.PumpStates.Add(typed.Mode);
-                    return;
-                }
-            case AlertConditionType.StateSpanActive:
-                {
-                    ApplyLeaf(rule.ConditionType, b);
-                    var typed = TryDeserialize<StateSpanActiveCondition>(rule.ConditionParams);
-                    if (typed is not null) b.StateSpans.Add((typed.Category, typed.State));
-                    return;
-                }
-            case AlertConditionType.TrackerAge:
-                {
-                    ApplyLeaf(rule.ConditionType, b);
-                    var typed = TryDeserialize<TrackerAgeCondition>(rule.ConditionParams);
-                    if (typed is not null) b.TrackerDefinitions.Add(typed.TrackerDefinitionId);
-                    return;
-                }
-            default:
-                ApplyLeaf(rule.ConditionType, b);
-                return;
+            case AlertConditionType.PumpState when leaf.EnumParam<PumpModeState>("mode") is { } mode:
+                b.PumpStates.Add(mode);
+                break;
+            case AlertConditionType.StateSpanActive when leaf.EnumParam<StateSpanCategory>("category") is { } category:
+                b.StateSpans.Add((category, leaf.StringParam("state")));
+                break;
+            case AlertConditionType.TrackerAge when leaf.GuidParam("tracker_definition_id") is { } definitionId:
+                b.TrackerDefinitions.Add(definitionId);
+                break;
         }
-    }
-
-    private static void VisitAutoResolve(AlertRuleSnapshot rule, NeedsBuilder b)
-    {
-        if (!rule.AutoResolveEnabled || string.IsNullOrWhiteSpace(rule.AutoResolveParams)) return;
-        VisitNode(TryDeserialize<ConditionNode>(rule.AutoResolveParams), b);
-    }
-
-    private static void VisitNode(ConditionNode? node, NeedsBuilder b)
-    {
-        // ConditionPath.Walk recurses through composite/not/sustained wrappers and visits every
-        // node; we only need the node's Type to update flags. The builder closes over the call
-        // directly — no ref-bool plumbing required.
-        ConditionPath.Walk<object>(node, (visited, _) =>
-        {
-            var kind = AlertConditionTypeNames.FromWireString(visited.Type);
-            if (kind is not null)
-            {
-                ApplyLeaf(kind.Value, b);
-
-                // pump_state and state_span_active carry per-rule "which mode/category/state"
-                // selections that the enricher needs to know to fetch the right StateSpans.
-                if (kind == AlertConditionType.PumpState && visited.PumpState is not null)
-                    b.PumpStates.Add(visited.PumpState.Mode);
-                else if (kind == AlertConditionType.StateSpanActive && visited.StateSpanActive is not null)
-                    b.StateSpans.Add((visited.StateSpanActive.Category, visited.StateSpanActive.State));
-                else if (kind == AlertConditionType.TrackerAge && visited.TrackerAge is not null)
-                    b.TrackerDefinitions.Add(visited.TrackerAge.TrackerDefinitionId);
-            }
-            return null;
-        });
     }
 
     private static void ApplyLeaf(AlertConditionType type, NeedsBuilder b)
@@ -219,27 +151,15 @@ public static class RuleDataNeeds
             case AlertConditionType.DayOfWeek: b.TenantTimeZone = true; break;
             // TimeOfDay falls back to the tenant timezone when the rule's own Timezone is
             // null (the default the UI saves), so the enricher must populate it. Without
-            // this co-fetch the evaluator would silently fall back to UTC.
+            // this co-fetch the engine would silently fall back to UTC.
             case AlertConditionType.TimeOfDay: b.TenantTimeZone = true; break;
             case AlertConditionType.SleepSessionActive: b.SleepSession = true; break;
-            case AlertConditionType.PumpState: /* handled in VisitTopLevel/VisitNode */ break;
-            case AlertConditionType.StateSpanActive: /* handled in VisitTopLevel/VisitNode */ break;
-            case AlertConditionType.TrackerAge: /* handled in VisitTopLevel/VisitNode */ break;
+            case AlertConditionType.PumpState: /* selection read in VisitLeaf */ break;
+            case AlertConditionType.StateSpanActive: /* selection read in VisitLeaf */ break;
+            case AlertConditionType.TrackerAge: /* selection read in VisitLeaf */ break;
             // DoNotDisturb deliberately not handled here — see DataNeedsSet docs above.
             // Threshold, RateOfChange, SignalLoss, Staleness, Composite, Not, Sustained
-            // require no extra context — handled by base SensorContext or recursed by VisitNode.
-        }
-    }
-
-    private static T? TryDeserialize<T>(string json) where T : class
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<T>(json, EvaluatorJson.Options);
-        }
-        catch (JsonException)
-        {
-            return null;
+            // require no extra context: the base SensorContext carries what they read.
         }
     }
 

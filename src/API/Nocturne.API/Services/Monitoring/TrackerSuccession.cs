@@ -30,11 +30,12 @@ public static class TrackerSuccession
     /// and a run of the definition ended after <paramref name="startedAt"/>: someone has already
     /// moved the tracker past the start being re-offered. Each run it completes is broadcast as
     /// <see cref="TrackerRealtimeAction.Complete"/>, then the new run as
-    /// <see cref="TrackerRealtimeAction.Create"/>.
+    /// <see cref="TrackerRealtimeAction.Create"/>; with no <paramref name="broadcast"/> nothing is,
+    /// for a caller inside a transaction it has yet to commit, which broadcasts after.
     /// </summary>
     public static async Task<TrackerSuccessionResult> StartAsync(
         ITrackerRepository repository,
-        ISignalRBroadcastService broadcast,
+        ISignalRBroadcastService? broadcast,
         ILogger logger,
         TrackerDefinitionEntity definition,
         DateTime startedAt,
@@ -93,20 +94,17 @@ public static class TrackerSuccession
                 definition.Name,
                 startedAt
             );
-            await broadcast.BroadcastTrackerUpdateAsync(
-                TrackerRealtimeAction.Complete,
-                TrackerInstanceDto.FromEntity(instance),
-                definition.UserId,
-                definition.Visibility
-            );
+            if (broadcast is not null)
+                await broadcast.BroadcastTrackerUpdateAsync(
+                    TrackerRealtimeAction.Complete,
+                    TrackerInstanceDto.FromEntity(instance)
+                );
         }
 
-        if (result.Started is { } started)
+        if (broadcast is not null && result.Started is { } started)
             await broadcast.BroadcastTrackerUpdateAsync(
                 TrackerRealtimeAction.Create,
-                TrackerInstanceDto.FromEntity(started),
-                definition.UserId,
-                definition.Visibility
+                TrackerInstanceDto.FromEntity(started)
             );
 
         return result;

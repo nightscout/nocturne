@@ -44,7 +44,7 @@
 
 <Separator class="my-4" />
 <div class="space-y-4">
-  <h5 class="text-sm font-medium">Text Style</h5>
+  <h5 class="text-sm font-medium">Text style</h5>
 
   <div class="space-y-2">
     <Label>
@@ -163,7 +163,7 @@
   <div class="space-y-2">
     <Label>Custom CSS</Label>
     <p class="text-xs text-muted-foreground">
-      Add custom CSS properties (e.g., text-shadow, letter-spacing)
+      Add custom CSS properties (for example, text-shadow, letter-spacing)
     </p>
 
     {#if element.style?.custom}

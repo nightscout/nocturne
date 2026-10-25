@@ -51,7 +51,7 @@
   <Card data-testid="active-trackers">
     <CardHeader class="flex flex-row items-center justify-between">
       <div>
-        <CardTitle>Active Trackers</CardTitle>
+        <CardTitle>Active trackers</CardTitle>
         <CardDescription>
           Currently running tracker instances
         </CardDescription>
@@ -60,7 +60,7 @@
         <Select.Root type="single">
           <Select.Trigger class="w-[200px]">
             <Plus class="h-4 w-4 mr-2" />
-            Start Tracker
+            Start tracker
           </Select.Trigger>
           <Select.Content>
             {#each definitions as def (def.id)}
@@ -131,7 +131,7 @@
                     onclick={openReservoirReportDialog}
                   >
                     <Droplet class="h-4 w-4 mr-1" />
-                    Record Level
+                    Record level
                   </Button>
                 {/if}
                 <Button

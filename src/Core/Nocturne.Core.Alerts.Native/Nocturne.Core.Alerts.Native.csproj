@@ -19,6 +19,8 @@
                Text="Could not read the package version from $(NocturneAlertsFfiCargoToml)." />
     </Target>
     <ItemGroup>
+        <!-- build/ holds MSBuild task source, compiled by RoslynCodeTaskFactory, not this assembly. -->
+        <Compile Remove="build\**" />
         <InternalsVisibleTo Include="Nocturne.Alerts.Native.Tests" />
         <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
             <_Parameter1>NocturneAlertsExpectedVersion</_Parameter1>
@@ -32,6 +34,7 @@
          the NOCTURNE_ALERTS_NATIVE_DIR environment variable, so a freshly built library can
          be picked up without rebuilding this project. -->
     <PropertyGroup>
+        <_NocturneAlertsNativeDirDefaulted Condition="'$(NocturneAlertsNativeDir)' == ''">true</_NocturneAlertsNativeDirDefaulted>
         <NocturneAlertsNativeDir Condition="'$(NocturneAlertsNativeDir)' == ''">$(MSBuildThisFileDirectory)..\..\..\crates\target\release\</NocturneAlertsNativeDir>
         <!-- Cross-compiled cargo outputs land under target/<triple>/release; CI builds
              aarch64 alongside the host build so multi-arch container publishes can pack
@@ -63,4 +66,84 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
     </ItemGroup>
+
+    <!-- The library a developer build packs for the host RID, resolved by
+         NocturneAlertsResolveLibrary below: a local cargo build at least as new as every
+         crates/ source; else, when crates/ has no local changes, the one main published for this
+         exact crates/ tree (.github/workflows/alerts-native-publish.yml), downloaded once and
+         verified with `gh attestation verify` when gh is installed; else the build fails rather
+         than pack a library that does not match the source. Whichever it is goes through one
+         obj/alerts-native/current/ copy, restamped whenever its source changes, so a switch
+         between trees or back to a local build always reaches bin/. Never in CI, never for
+         another RID, and never when the caller names NocturneAlertsNativeDir or sets
+         NocturneAlertsFromSource=true (image builds), so what is tested and shipped is built
+         from source.
+         NocturneAlertsDownload=false: no download. NocturneAlertsAllowStale=true: warn instead
+         of failing, and pack whatever local build exists. NocturneAlertsVerifyAttestation=false:
+         skip the provenance check. -->
+    <PropertyGroup>
+        <NocturneAlertsRepository Condition="'$(NocturneAlertsRepository)' == ''">nightscout/nocturne</NocturneAlertsRepository>
+        <_NocturneAlertsCratesRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\..\crates'))</_NocturneAlertsCratesRoot>
+        <_NocturneAlertsArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</_NocturneAlertsArch>
+        <_NocturneAlertsHostRid Condition="$([MSBuild]::IsOSPlatform('Windows'))">win-$(_NocturneAlertsArch)</_NocturneAlertsHostRid>
+        <_NocturneAlertsHostRid Condition="$([MSBuild]::IsOSPlatform('Linux'))">linux-$(_NocturneAlertsArch)</_NocturneAlertsHostRid>
+        <_NocturneAlertsHostRid Condition="$([MSBuild]::IsOSPlatform('OSX'))">osx-$(_NocturneAlertsArch)</_NocturneAlertsHostRid>
+        <_NocturneAlertsHostFile Condition="$([MSBuild]::IsOSPlatform('Windows'))">nocturne_alerts.dll</_NocturneAlertsHostFile>
+        <_NocturneAlertsHostFile Condition="$([MSBuild]::IsOSPlatform('Linux'))">libnocturne_alerts.so</_NocturneAlertsHostFile>
+        <_NocturneAlertsHostFile Condition="$([MSBuild]::IsOSPlatform('OSX'))">libnocturne_alerts.dylib</_NocturneAlertsHostFile>
+        <!-- The RIDs alerts-native-publish.yml builds. -->
+        <_NocturneAlertsPublishedRid Condition="'$(_NocturneAlertsHostRid)' == 'win-x64' or '$(_NocturneAlertsHostRid)' == 'linux-x64' or '$(_NocturneAlertsHostRid)' == 'linux-arm64' or '$(_NocturneAlertsHostRid)' == 'osx-arm64'">$(_NocturneAlertsHostRid)</_NocturneAlertsPublishedRid>
+    </PropertyGroup>
+
+    <UsingTask TaskName="NocturneAlertsResolveLibrary" TaskFactory="RoslynCodeTaskFactory"
+               AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+        <ParameterGroup>
+            <CratesRoot ParameterType="System.String" Required="true" />
+            <LocalLibrary ParameterType="System.String" Required="true" />
+            <FileName ParameterType="System.String" Required="true" />
+            <PublishedRid ParameterType="System.String" />
+            <CacheRoot ParameterType="System.String" Required="true" />
+            <Repository ParameterType="System.String" Required="true" />
+            <Download ParameterType="System.Boolean" />
+            <VerifyAttestation ParameterType="System.Boolean" />
+            <Mode ParameterType="System.String" Output="true" />
+            <Library ParameterType="System.String" Output="true" />
+            <Detail ParameterType="System.String" Output="true" />
+            <Caution ParameterType="System.String" Output="true" />
+        </ParameterGroup>
+        <Task>
+            <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)build\NocturneAlertsResolveLibrary.cs" />
+        </Task>
+    </UsingTask>
+
+    <Target Name="ResolveNocturneAlertsLibrary" BeforeTargets="AssignTargetPaths"
+            Condition="'$(CI)' != 'true' and '$(NocturneAlertsFromSource)' != 'true' and '$(_NocturneAlertsNativeDirDefaulted)' == 'true' and '$(_NocturneAlertsHostFile)' != '' and ('$(RuntimeIdentifier)' == '' or '$(RuntimeIdentifier)' == '$(_NocturneAlertsHostRid)')">
+        <NocturneAlertsResolveLibrary
+            CratesRoot="$(_NocturneAlertsCratesRoot)"
+            LocalLibrary="$(NocturneAlertsNativeDir)$(_NocturneAlertsHostFile)"
+            FileName="$(_NocturneAlertsHostFile)"
+            PublishedRid="$(_NocturneAlertsPublishedRid)"
+            CacheRoot="$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)alerts-native"
+            Repository="$(NocturneAlertsRepository)"
+            Download="$([MSBuild]::ValueOrDefault('$(NocturneAlertsDownload)', 'true'))"
+            VerifyAttestation="$([MSBuild]::ValueOrDefault('$(NocturneAlertsVerifyAttestation)', 'true'))">
+            <Output TaskParameter="Mode" PropertyName="_NocturneAlertsMode" />
+            <Output TaskParameter="Library" PropertyName="_NocturneAlertsLibrary" />
+            <Output TaskParameter="Detail" PropertyName="_NocturneAlertsDetail" />
+            <Output TaskParameter="Caution" PropertyName="_NocturneAlertsCaution" />
+        </NocturneAlertsResolveLibrary>
+
+        <ItemGroup Condition="'$(_NocturneAlertsLibrary)' != ''">
+            <Content Remove="@(Content)" Condition="$([System.String]::Copy('%(Content.Link)').StartsWith('runtimes\$(_NocturneAlertsHostRid)\native\'))" />
+            <Content Include="$(_NocturneAlertsLibrary)" Link="runtimes\$(_NocturneAlertsHostRid)\native\$(_NocturneAlertsHostFile)">
+                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            </Content>
+        </ItemGroup>
+        <Message Importance="high" Condition="'$(_NocturneAlertsMode)' == 'prebuilt'" Text="nocturne_alerts: $(_NocturneAlertsDetail)" />
+        <Warning Condition="'$(_NocturneAlertsCaution)' != ''" Text="nocturne_alerts: $(_NocturneAlertsCaution)" />
+        <Warning Condition="'$(_NocturneAlertsMode)' == 'none' and '$(NocturneAlertsAllowStale)' == 'true'"
+                 Text="nocturne_alerts: $(_NocturneAlertsDetail). NocturneAlertsAllowStale is set, so whatever library is already built is packed, and the engine may not match crates/." />
+        <Error Condition="'$(_NocturneAlertsMode)' == 'none' and '$(NocturneAlertsAllowStale)' != 'true'"
+               Text="nocturne_alerts: $(_NocturneAlertsDetail). Install Rust (https://rustup.rs) and run 'cargo build --release -p nocturne-alerts-ffi' in crates/, or set NocturneAlertsAllowStale=true to build with whatever library exists." />
+    </Target>
 </Project>

@@ -44,12 +44,13 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
         Mock.Of<ILogger<TenantService>>());
 
     /// <param name="role">A role seed slug, as every membership an invite creates carries one.</param>
-    private void SeedMembership(string slug, DateTime joinedAt, string? role = null)
+    private void SeedMembership(
+        string slug, DateTime joinedAt, string? role = null, bool isActive = true)
     {
         var tenantId = Guid.CreateVersion7();
         using var db = _db.CreateContext(tenantId);
 
-        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = slug, DisplayName = slug });
+        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = slug, DisplayName = slug, IsActive = isActive });
         var member = new TenantMemberEntity
         {
             Id = Guid.CreateVersion7(),
@@ -125,6 +126,33 @@ public sealed class TenantServiceGetTenantsForSubjectTests : IDisposable
         var tenants = await Service().GetTenantsForSubjectAsync(_subjectId);
 
         tenants.Select(t => t.Slug).Should().Equal("alpha", "zulu");
+    }
+
+    [Fact]
+    public async Task GetReachableTenantsForSubjectAsync_leavesOutAnInactiveTenant()
+    {
+        SeedMembership("alpha", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            isActive: false);
+        SeedMembership("zulu", new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var reachable = await Service().GetReachableTenantsForSubjectAsync(_subjectId);
+        var all = await Service().GetTenantsForSubjectAsync(_subjectId);
+
+        reachable.Select(t => t.Slug).Should().Equal("zulu");
+        all.Select(t => t.Slug).Should().Equal("alpha", "zulu");
+    }
+
+    [Fact]
+    public async Task GetReachableTenantsForSubjectAsync_keepsTheOwnedFirstOrder()
+    {
+        SeedMembership("alpha", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            RoleSeeds.Viewer);
+        SeedMembership("zulu", new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+            RoleSeeds.Owner);
+
+        var tenants = await Service().GetReachableTenantsForSubjectAsync(_subjectId);
+
+        tenants.Select(t => t.Slug).Should().Equal("zulu", "alpha");
     }
 
     public void Dispose() => _db.Dispose();

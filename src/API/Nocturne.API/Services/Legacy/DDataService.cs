@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
@@ -33,6 +34,7 @@ public class DDataService : IDDataService
     private readonly DeviceStatusProjectionService _projectionService;
     private readonly IFoodRepository _food;
     private readonly IActivityService _activities;
+    private readonly IStoreSizeReader _storeSize;
     private readonly ILogger<DDataService> _logger;
 
     private static readonly (string EventType, long WindowMills)[] FrameLatestTreatments =
@@ -63,6 +65,7 @@ public class DDataService : IDDataService
         DeviceStatusProjectionService projectionService,
         IFoodRepository food,
         IActivityService activities,
+        IStoreSizeReader storeSize,
         ILogger<DDataService> logger)
     {
         _store = store;
@@ -71,6 +74,7 @@ public class DDataService : IDDataService
         _projectionService = projectionService;
         _food = food;
         _activities = activities;
+        _storeSize = storeSize;
         _logger = logger;
     }
 
@@ -779,10 +783,18 @@ public class DDataService : IDDataService
     {
         try
         {
-            var deviceStatuses = await _projectionService.GetAsync(
+            var window = new Dictionary<string, object>
+            {
+                ["created_at"] = new Dictionary<string, string>
+                {
+                    ["$gte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp - DeviceStatusWindowMills).UtcDateTime.ToString("o"),
+                    ["$lte"] = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime.ToString("o"),
+                },
+            };
+            var deviceStatuses = await _projectionService.GetMatchingAsync(
+                DeviceStatusProjectionService.ParseFind(JsonSerializer.Serialize(window)),
                 count: 1000,
                 skip: 0,
-                find: CreatedAtWindow(timestamp - DeviceStatusWindowMills, timestamp),
                 ct: cancellationToken
             );
             ddata.DeviceStatus = deviceStatuses.ToList();
@@ -831,21 +843,8 @@ public class DDataService : IDDataService
         }
     }
 
-    private Task LoadDbStatsAsync(DData ddata, CancellationToken cancellationToken)
-    {
-        try
-        {
-            // For now, return empty stats - would need to implement database statistics collection
-            ddata.DbStats = new DbStats();
-            return Task.CompletedTask;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error loading database stats");
-            ddata.DbStats = new DbStats();
-            return Task.CompletedTask;
-        }
-    }
+    private async Task LoadDbStatsAsync(DData ddata, CancellationToken cancellationToken) =>
+        ddata.DbStats = await _storeSize.ReadAsync(cancellationToken);
 
     /// <inheritdoc />
     public DData Clone(DData ddata)

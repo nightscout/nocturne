@@ -29,7 +29,7 @@
   import { loopAnalysisTimeZoneNeed } from "./time-zone-need.svelte";
   import CohortDot from "./CohortDot.svelte";
   import { TimeOfDayCursor } from "./time-of-day-cursor.svelte";
-  import { axisEnd, signedTwoPlaces as signedUnits } from "./daily-profile-view";
+  import { axisEnd, axisStart, signedTwoPlaces as signedUnits } from "./daily-profile-view";
   import { cohortBands, hourTicks, slotMinute } from "./event-response-view";
   import { cohortLabel, relativeHours, relativeMinutes } from "./event-labels.svelte";
   import IgnoredFiltersNotice from "./IgnoredFiltersNotice.svelte";
@@ -174,7 +174,7 @@
       series: LoopAnalysisSeries.EventIob,
       pick: (s) => s.iob,
       format: u2,
-      domain: [0, axisEnd(spread((s) => s.iob), 1)],
+      domain: [axisStart(spread((s) => s.iob)), axisEnd(spread((s) => s.iob), 1)],
     },
     {
       id: "cob",
@@ -268,7 +268,7 @@
         <div class="space-y-5 rounded-lg border bg-card p-3 @md:p-4" data-testid="loop-analysis-event-curves" {@attach loopAnalysisMark("loop-analysis-meals-and-events.curves")}>
           {#if comparing}
             <p class="text-xs text-muted-foreground">
-              The charts show the comparison range as dashed outlines in the colour of each cohort.
+              The charts show the comparison range as dashed outlines in the color of each cohort.
             </p>
           {/if}
 

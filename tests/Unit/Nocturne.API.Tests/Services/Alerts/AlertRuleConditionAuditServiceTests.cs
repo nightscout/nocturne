@@ -7,9 +7,11 @@ using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Alerts.Native;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -36,7 +38,7 @@ public class AlertRuleConditionAuditServiceTests
         _validator
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns((AlertConditionType _, string body, bool _, string? _, string? _) => body == Rejected
-                ? [new RustValidationIssue("condition", "composite", "conditions_empty", "conditions")]
+                ? [new RustValidationIssue("condition", "composite", "list_empty", "conditions")]
                 : []);
     }
 
@@ -63,7 +65,7 @@ public class AlertRuleConditionAuditServiceTests
         await db.SaveChangesAsync();
     }
 
-    private async Task RunAsync()
+    private async Task RunAsync(IAlertRepository? alerts = null)
     {
         var factory = new Mock<IDbContextFactory<NocturneDbContext>>();
         factory
@@ -71,6 +73,7 @@ public class AlertRuleConditionAuditServiceTests
             .ReturnsAsync(() => new NocturneDbContext(_options));
         var services = new ServiceCollection()
             .AddSingleton(factory.Object.AsNocturneFactory())
+            .AddSingleton(alerts ?? new AlertRepository(factory.Object))
             .AddSingleton(_validator.Object)
             .BuildServiceProvider();
 
@@ -88,8 +91,28 @@ public class AlertRuleConditionAuditServiceTests
 
         _logger.Warnings.Should().HaveCount(2);
         _logger.Warnings.Should().ContainSingle(w =>
-            w.Contains(FlaggedRule.ToString()) && w.Contains("condition composite: conditions_empty"));
+            w.Contains(FlaggedRule.ToString()) && w.Contains("condition composite: list_empty"));
         _logger.Warnings.Should().ContainSingle(w => w.StartsWith("1 enabled alert rule(s)"));
+    }
+
+    [Fact]
+    public async Task Counts_an_enabled_rule_the_read_could_not_take()
+    {
+        await SeedAsync();
+        var real = new AlertRepository(new TestNocturneDbContextFactory(new NocturneDbContext(_options)));
+        var unreadable = Guid.Parse("00000000-0000-0000-0000-0000000000b1");
+        var alerts = new Mock<IAlertRepository>();
+        alerts
+            .Setup(a => a.ReadEnabledRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(async (Guid tenantId, CancellationToken ct) =>
+            {
+                var read = await real.ReadEnabledRulesAsync(tenantId, ct);
+                return tenantId == ActiveTenant ? read with { UnreadableRuleIds = [unreadable] } : read;
+            });
+
+        await RunAsync(alerts.Object);
+
+        _logger.Warnings.Should().ContainSingle(w => w.StartsWith("2 enabled alert rule(s)"));
     }
 
     [Fact]
@@ -124,7 +147,7 @@ public class AlertRuleConditionAuditServiceTests
             .Setup(v => v.Validate(It.IsAny<AlertConditionType>(), Rejected, It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns(() => ++calls == 1
                 ? throw new InvalidOperationException("boom")
-                : [new RustValidationIssue("condition", "composite", "conditions_empty", "conditions")]);
+                : [new RustValidationIssue("condition", "composite", "list_empty", "conditions")]);
 
         await RunAsync();
 

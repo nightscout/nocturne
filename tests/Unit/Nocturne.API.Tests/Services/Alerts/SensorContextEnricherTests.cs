@@ -1,3 +1,7 @@
+using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.API.Services.Caching;
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Clinical.Treatments;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -67,8 +71,8 @@ public class SensorContextEnricherTests
         await enricher.EnrichAsync(BaseContext(trendRate: 1.5m), new[] { rule }, _tenantId, CancellationToken.None);
 
         _treatmentService.Verify(s => s.GetTreatmentsByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
-        _iobCalculator.Verify(s => s.CalculateTotalAsync(It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
-        _cobCalculator.Verify(s => s.CalculateTotalAsync(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
+        _iobCalculator.Verify(s => s.CalculateTotalAsync(It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        _cobCalculator.Verify(s => s.CalculateTotalAsync(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
         _predictionService.Verify(s => s.GetPredictionsAsync(It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()), Times.Never);
         _pumpSnapshotRepository.Verify(s => s.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
         _deviceEventRepository.Verify(s => s.GetLatestByEventTypeAsync(It.IsAny<DeviceEventType>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -94,9 +98,9 @@ public class SensorContextEnricherTests
         var enricher = BuildEnricher();
         _treatmentService.Setup(s => s.GetTreatmentsByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Treatment>());
-        _iobCalculator.Setup(s => s.CalculateTotalAsync(It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+        _iobCalculator.Setup(s => s.CalculateTotalAsync(It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IobResult { Iob = 1.5 });
-        _cobCalculator.Setup(s => s.CalculateTotalAsync(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+        _cobCalculator.Setup(s => s.CalculateTotalAsync(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CobResult { Cob = 24.0 });
 
         var json = """
@@ -117,9 +121,82 @@ public class SensorContextEnricherTests
         // V4-native enricher pulls Bolus/CarbIntake/TempBasal from their V4 repos directly
         // — the legacy treatment-range fetch is no longer in this path.
         _iobCalculator.Verify(s => s.CalculateTotalAsync(
-            It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
         _cobCalculator.Verify(s => s.CalculateTotalAsync(
-            It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task LiveIob_IsCalculatedFresh_NotServedFromTheReadersOneMinuteCache()
+    {
+        var cache = TestTenantCache.Create(partition: "full");
+        cache.SetLocal("iobcob:current", new IobCobReading(
+            new IobResult { Iob = 9.0 }, new CobResult { Cob = 90 },
+            new IobCobInputs([], [], [])), TimeSpan.FromMinutes(1));
+        var enricher = BuildEnricher(iobCobCache: cache);
+        _iobCalculator.Setup(s => s.CalculateTotalAsync(It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobResult { Iob = 1.5 });
+        _cobCalculator.Setup(s => s.CalculateTotalAsync(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CobResult { Cob = 24.0 });
+        var rule = MakeRule(AlertConditionType.Composite, """
+        {
+          "operator": "and",
+          "conditions": [
+            { "type": "iob", "iob": { "operator": ">", "value": 1 } },
+            { "type": "cob", "cob": { "operator": ">", "value": 10 } }
+          ]
+        }
+        """);
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.IobUnits.Should().Be(1.5m);
+        enriched.CobGrams.Should().Be(24.0m);
+    }
+
+    [Fact]
+    public async Task ACobFailure_LeavesIobEvaluated()
+    {
+        var enricher = BuildEnricher();
+        _iobCalculator.Setup(s => s.CalculateTotalAsync(It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobResult { Iob = 1.5 });
+        _cobCalculator.Setup(s => s.CalculateTotalAsync(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("cob"));
+        var rule = MakeRule(AlertConditionType.Composite, """
+        {
+          "operator": "and",
+          "conditions": [
+            { "type": "iob", "iob": { "operator": ">", "value": 1 } },
+            { "type": "cob", "cob": { "operator": ">", "value": 10 } }
+          ]
+        }
+        """);
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.IobUnits.Should().Be(1.5m);
+        enriched.CobGrams.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ReplayWithOnlyIobRules_DoesNotCalculateCob()
+    {
+        var enricher = BuildEnricher();
+        _iobCalculator.Setup(s => s.CalculateTotalAsync(It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobResult { Iob = 0.5 });
+        var rule = MakeRule(AlertConditionType.Composite, """
+        {
+          "operator": "and",
+          "conditions": [ { "type": "iob", "iob": { "operator": ">", "value": 1 } } ]
+        }
+        """);
+
+        await enricher.EnrichAsOfAsync(
+            BaseContext(), new[] { rule }, _tenantId, new DateTime(2026, 3, 22, 10, 0, 0, DateTimeKind.Utc), CancellationToken.None);
+
+        _cobCalculator.Verify(s => s.CalculateTotalAsync(
+            It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(),
+            It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -139,15 +216,15 @@ public class SensorContextEnricherTests
         long? capturedCobTime = null;
         _iobCalculator.Setup(s => s.CalculateTotalAsync(
                 It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(),
-                It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .Callback<List<Bolus>, List<TempBasal>?, long, CancellationToken>(
-                (_, _, time, _) => capturedIobTime = time)
+                It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback<List<Bolus>, List<TempBasal>?, long, long?, bool, CancellationToken>(
+                (_, _, time, _, _, _) => capturedIobTime = time)
             .ReturnsAsync(new IobResult { Iob = 0 });
         _cobCalculator.Setup(s => s.CalculateTotalAsync(
                 It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(),
-                It.IsAny<long>(), It.IsAny<CancellationToken>()))
-            .Callback<List<CarbIntake>, List<Bolus>?, List<TempBasal>?, long, CancellationToken>(
-                (_, _, _, time, _) => capturedCobTime = time)
+                It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback<List<CarbIntake>, List<Bolus>?, List<TempBasal>?, long, bool, CancellationToken>(
+                (_, _, _, time, _, _) => capturedCobTime = time)
             .ReturnsAsync(new CobResult { Cob = 0 });
 
         var json = """
@@ -168,6 +245,17 @@ public class SensorContextEnricherTests
 
         capturedIobTime.Should().Be(expectedMills);
         capturedCobTime.Should().Be(expectedMills);
+
+        // One IOB read, the shared reader's window ending at the tick, serves both, and a
+        // replay tick is not the live instant.
+        _bolusRepository.Verify(r => r.GetAsync(
+            tick.AddMilliseconds(-DailyProfileCalculator.ActingMs), tick, null, null, It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<bool>(), It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _bolusRepository.VerifyNoOtherCalls();
+        _iobCalculator.Verify(s => s.CalculateTotalAsync(
+            It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(), expectedMills, It.IsAny<long?>(), false,
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -443,7 +531,7 @@ public class SensorContextEnricherTests
     [Theory]
     [InlineData(null)]
     [InlineData("Active")]
-    [InlineData("night")]
+    [InlineData("Night")]
     public async Task Profile_state_span_leaf_reads_the_active_profile_activation(string? state)
     {
         var enricher = BuildEnricher();
@@ -561,8 +649,10 @@ public class SensorContextEnricherTests
         apsRepo2.Setup(r => r.GetLatestSensitivityRatioAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync((decimal?)null);
         var deps2 = new SensorContextEnricherDependencies(
+            new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
+                _tempBasalRepository.Object, _carbIntakeRepository.Object, TestTenantCache.Create(partition: null),
+                NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object, _cobCalculator.Object, _treatmentService.Object,
-            _bolusRepository.Object, _carbIntakeRepository.Object,
             _deviceEventRepository.Object, _pumpSnapshotRepository.Object,
             apsRepo2.Object, _tempBasalRepository.Object, _uploaderSnapshotRepository.Object,
             _stateSpanService.Object, _alertRepository.Object,
@@ -715,6 +805,35 @@ public class SensorContextEnricherTests
         enriched.GlucoseBucket.Should().Be(Nocturne.Core.Models.Alerts.GlucoseBucket.Low);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GlucoseBucket_resolution_reads_the_entry_time_when_TimeAsSeconds_is_absent(bool withSeconds)
+    {
+        var enricher = BuildEnricher();
+        var tickUtc = new DateTime(2026, 3, 22, 7, 0, 0, DateTimeKind.Utc);
+
+        _activeProfileResolver.Setup(s => s.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Default");
+        _targetRangeScheduleRepository.Setup(s => s.GetActiveAtAsync("Default", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TargetRangeSchedule
+            {
+                ProfileName = "Default",
+                Entries =
+                [
+                    new TargetRangeEntry { Time = "06:00", TimeAsSeconds = withSeconds ? 21600 : null, Low = 80, High = 180 },
+                    new TargetRangeEntry { Time = "00:00", TimeAsSeconds = withSeconds ? 0 : null, Low = 70, High = 180 },
+                ],
+            });
+
+        var rule = MakeRule(AlertConditionType.GlucoseBucket, """{"buckets":["low"]}""");
+        var baseContext = BaseContext() with { LatestValue = 75m };
+
+        var enriched = await enricher.EnrichAsOfAsync(baseContext, new[] { rule }, _tenantId, tickUtc, CancellationToken.None);
+
+        enriched.GlucoseBucket.Should().Be(Nocturne.Core.Models.Alerts.GlucoseBucket.Low);
+    }
+
     // ---- scoped Do Not Disturb (ADR 0004 D5) ----
 
     [Fact]
@@ -822,7 +941,8 @@ public class SensorContextEnricherTests
 
     private SensorContextEnricher BuildEnricher(
         bool includePredictionService = true,
-        AlertEvaluationOptions? options = null)
+        AlertEvaluationOptions? options = null,
+        ITenantCache? iobCobCache = null)
     {
         var services = new ServiceCollection();
         if (includePredictionService)
@@ -832,11 +952,12 @@ public class SensorContextEnricherTests
         var provider = services.BuildServiceProvider();
 
         var deps = new SensorContextEnricherDependencies(
+            new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
+                _tempBasalRepository.Object, _carbIntakeRepository.Object,
+                iobCobCache ?? TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object,
             _cobCalculator.Object,
             _treatmentService.Object,
-            _bolusRepository.Object,
-            _carbIntakeRepository.Object,
             _deviceEventRepository.Object,
             _pumpSnapshotRepository.Object,
             _apsSnapshotRepository.Object,

@@ -26,12 +26,11 @@
     setShareLinkFullHistory,
     setShareLinkScopes,
   } from "$api/generated/shareLinks.generated.remote";
-  import {
-    publicDataCategories,
-    formatList,
-  } from "./public-data-categories";
+  import { categoriesIn, formatList } from "./data-categories";
   import { retainQuery } from "$lib/api/retain-query.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
+
+  let { onEnabled }: { onEnabled?: () => void } = $props();
 
   const canManageSharing = $derived(
     satisfiesScope(page.data.effectivePermissions ?? [], "sharing.manage"),
@@ -73,11 +72,13 @@
   /** Whether there is a link to show or copy at all, as opposed to only to regenerate. */
   const recoverable = $derived(canReveal || revealedUrl != null);
 
+  const shareable = $derived(categoriesIn(share?.shareableScopes));
+
   const sharedLabels = $derived(
-    publicDataCategories.filter((c) => scopes.includes(c.scope)).map((c) => c.name.toLowerCase()),
+    shareable.filter((c) => scopes.includes(c.scope)).map((c) => c.name.toLowerCase()),
   );
   const hiddenLabels = $derived(
-    publicDataCategories.filter((c) => !scopes.includes(c.scope)).map((c) => c.name.toLowerCase()),
+    shareable.filter((c) => !scopes.includes(c.scope)).map((c) => c.name.toLowerCase()),
   );
   const windowPhrase = $derived(fullHistory ? "your entire history" : "the last 24 hours");
 
@@ -86,8 +87,10 @@
     errorMessage = null;
     pendingEnabled = on;
     try {
-      if (on) await mint(rotateShareLink);
-      else {
+      if (on) {
+        await mint(rotateShareLink);
+        onEnabled?.();
+      } else {
         await disableShareLink();
         revealedUrl = null;
         plainVisible = false;
@@ -97,8 +100,8 @@
       errorMessage = describeSubmitError(
         err,
         on
-          ? "Couldn't create the link. Please try again."
-          : "Couldn't turn off public access. Please try again."
+          ? "Could not create the link. Try again."
+          : "Could not disable public access. Try again."
       );
     } finally {
       busy = false;
@@ -113,7 +116,7 @@
     try {
       await mint(rotateShareLink);
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Couldn't regenerate the link. Please try again.");
+      errorMessage = describeSubmitError(err, "Could not regenerate the link. Try again.");
     } finally {
       busy = false;
     }
@@ -140,7 +143,7 @@
       revealSucceeded = link.canReveal ?? revealedUrl != null;
       return revealedUrl;
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Couldn't show the link. Please try again.");
+      errorMessage = describeSubmitError(err, "Could not show the link. Try again.");
       return null;
     } finally {
       revealing = false;
@@ -163,7 +166,7 @@
     try {
       await setShareLinkScopes({ scopes: list });
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Couldn't update what's shared. Please try again.");
+      errorMessage = describeSubmitError(err, "Could not update what is shared. Try again.");
     } finally {
       // Hold the optimistic value until every concurrent toggle settles, then fall back to
       // server truth — the generated command already refreshed getShareLink.
@@ -178,7 +181,7 @@
     try {
       await setShareLinkFullHistory({ fullHistory: fh });
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Couldn't update the time window. Please try again.");
+      errorMessage = describeSubmitError(err, "Could not update the time window. Try again.");
     } finally {
       pendingFullHistory = null;
     }
@@ -215,8 +218,8 @@
       <div class="min-w-0 flex-1">
         <h2 class="text-lg font-semibold">Public access</h2>
         <p class="mt-0.5 max-w-prose text-sm text-muted-foreground">
-          Anyone with your link can view selected data without signing in. No
-          account, no invite — so choose carefully what they can see.
+          Anyone with your link can view selected data without signing in. They
+          need no account and no invite. Choose carefully what they can see.
         </p>
       </div>
       <Switch
@@ -330,8 +333,8 @@
           {:else}
             <p class="text-xs text-muted-foreground">
               Anyone who already has your link can still open the read-only view
-              without signing in, but Nocturne can no longer show you what it is.
-              To get a link you can send, regenerate it; that stops the current one
+              without signing in. Nocturne can no longer show you what the link is.
+              To get a link you can send, regenerate it. This stops the current link
               from working. Last viewed {formatDate(share?.lastAccessedAt)}.
             </p>
           {/if}
@@ -342,11 +345,11 @@
           <div class="flex items-center justify-between gap-2">
             <h3 class="text-sm font-semibold">What anonymous viewers can see</h3>
             <span class="text-xs text-muted-foreground">
-              {scopes.length} of {publicDataCategories.length} shared
+              {scopes.length} of {shareable.length} shared
             </span>
           </div>
           <div class="grid gap-2 @md:grid-cols-2">
-            {#each publicDataCategories as cat (cat.scope)}
+            {#each shareable as cat (cat.scope)}
               {@const on = scopes.includes(cat.scope)}
               {@const ScopeIcon = cat.icon}
               <label
@@ -403,7 +406,7 @@
             {#if scopes.length === 0}
               <strong class="font-semibold">Your link is live, but nothing is shared yet.</strong>
               <span class="text-muted-foreground">
-                Turn on a category above to start sharing.
+                Enable a category above to start sharing.
               </span>
             {:else}
               <strong class="font-semibold">Anyone with the link can see</strong>
@@ -427,7 +430,7 @@
         </div>
         <p class="text-sm text-muted-foreground">
           <strong class="font-medium text-foreground">Public access is off.</strong>
-          Only signed-in members and people you've shared a guest link with can see
+          Only signed-in members and people with a guest link from you can see
           your data. Turn it on to share a read-only public link.
         </p>
       </div>

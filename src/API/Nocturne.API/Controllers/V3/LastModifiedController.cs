@@ -76,13 +76,10 @@ public class LastModifiedController : ControllerBase
     {
         var collections = new Dictionary<string, long>();
 
-        static long ToUnixMillis(DateTime value) =>
-            new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
-
         void Add(string key, DateTime? value)
         {
             if (value.HasValue)
-                collections[key] = ToUnixMillis(value.Value);
+                collections[key] = value.Value.ToMills();
         }
 
         Add("entries", lastModified.Entries);
@@ -103,7 +100,7 @@ public class LastModifiedController : ControllerBase
         {
             Result = new V3LastModifiedResult
             {
-                SrvDate = ToUnixMillis(lastModified.ServerTime),
+                SrvDate = lastModified.ServerTime.ToMills(),
                 Collections = collections,
             },
         };

@@ -244,7 +244,7 @@
   <Dialog.Content class="max-w-2xl max-h-[90vh] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>
-        {editingProvider ? "Edit Identity Provider" : "Add Identity Provider"}
+        {editingProvider ? "Edit identity provider" : "Add identity provider"}
       </Dialog.Title>
       <Dialog.Description>
         Configure an external identity provider (OpenID Connect or OAuth 2.0) for single sign-on.
@@ -261,7 +261,7 @@
 
       <div class="space-y-2">
         <Label for="provider-name">Name</Label>
-        <Input id="provider-name" bind:value={providerName} placeholder="My Provider" />
+        <Input id="provider-name" bind:value={providerName} placeholder="My provider" />
       </div>
 
       <div class="space-y-2">
@@ -340,7 +340,7 @@
       </div>
 
       <div class="space-y-2">
-        <Label for="provider-client-secret">Client Secret</Label>
+        <Label for="provider-client-secret">Client secret</Label>
         <Input
           id="provider-client-secret"
           type="password"
@@ -360,7 +360,7 @@
       </div>
 
       <div class="space-y-2">
-        <Label for="provider-roles">Default Roles</Label>
+        <Label for="provider-roles">Default roles</Label>
         <Input
           id="provider-roles"
           bind:value={providerDefaultRoles}
@@ -381,7 +381,7 @@
       </div>
 
       <div class="space-y-2">
-        <Label for="provider-color">Button Color</Label>
+        <Label for="provider-color">Button color</Label>
         <Input
           id="provider-color"
           bind:value={providerButtonColor}
@@ -390,7 +390,7 @@
       </div>
 
       <div class="space-y-2">
-        <Label for="provider-order">Display Order</Label>
+        <Label for="provider-order">Display order</Label>
         <Input
           id="provider-order"
           type="number"
@@ -415,7 +415,7 @@
           {:else}
             <Globe class="h-4 w-4" />
           {/if}
-          Test Connection
+          Test connection
         </Button>
         {#if testResult}
           {#if testResult.success}
@@ -455,7 +455,7 @@
         {#if providerSaving}
           <Loader2 class="h-4 w-4 animate-spin" />
         {/if}
-        {editingProvider ? "Save Changes" : "Create Provider"}
+        {editingProvider ? "Save changes" : "Create provider"}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

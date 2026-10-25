@@ -1,0 +1,75 @@
+---
+title: Prediction accuracy
+---
+
+<script>
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Prediction accuracy
+
+Your loop predicts your glucose, and it makes its decisions from these
+predictions. This page compares the predictions with the readings that followed
+them, at 30, 60, 90 and 120 minutes ahead.
+
+The [Loop Analysis overview](/docs/reports/loop-analysis) tells you about the
+filters, net loop correction and how to read the charts. They are the same on
+all five pages.
+
+<Screenshot id="loop-analysis-predictions" />
+
+- **Bias** is the average of _prediction minus reading_. A positive bias means
+  that the predictions were too high. A negative bias means that they were too
+  low.
+- **MAE** (mean absolute error) is the average size of the error, in the two
+  directions.
+- **n** is the number of predictions that the report compared.
+
+The report pairs a prediction only with a reading within 2.5 minutes of the
+predicted time. If there is no reading that close, the prediction is unmatched.
+The report does not use a horizon whose reading can still arrive.
+
+## Why only 30 and 60 minutes are about your settings
+
+A prediction assumes that nothing else will occur. But the loop continues to
+change insulin after the prediction. After two hours, glucose also shows all of
+these changes. So only the **bias at 30 and 60 minutes** gives information
+about your settings. For example, if predictions after meals are usually too
+high, speak to your diabetes care team. The longer horizons are for information only.
+
+## Interrupted predictions
+
+If you logged carbs or gave a manual bolus after a prediction and before its
+horizon, the prediction did not know about it. These horizons are
+**interrupted**. The report does not use them in a figure. Food that you did
+not log does not interrupt a prediction.
+
+## Curves and contexts
+
+Loop makes one prediction. AAPS, Trio, iAPS and OpenAPS make a number of
+predictions. Each one assumes something different: **IOB** (insulin only),
+**zero temp** (if basal stops), **COB** (carbs absorb as entered) and **UAM**
+(unannounced meal, from the rise in glucose). The report checks each curve
+only in the contexts where the algorithm uses it. For example, IOB and zero
+temp are checked after a correction or when fasting. COB is checked after a
+meal.
+
+<Screenshot id="loop-analysis-prediction-detail" />
+
+The **By hour and context** box shows the bias of one curve at each hour of the
+day and in each context.
+
+Two curves select the predictions that the report can check:
+
+- The algorithm makes **UAM** only when glucose increases faster than insulin
+  alone predicts, or when carbs are absorbing. So the report measures UAM
+  accuracy only at these times.
+- The algorithm removes the end of the **zero temp** curve where the curve
+  increases above the target. So its long horizons come only from predictions
+  that did not increase above the target.
+
+If your access does not include treatments, the report hides the curves that
+it checks only in some contexts: IOB, zero temp and COB. The page names these
+curves.
+The contexts come from treatments.
+

@@ -22,12 +22,6 @@ internal sealed class AlertEngineErrors
 {
     public const string MeterName = "Nocturne.Alerts";
 
-    /// <summary>The <c>engine</c> tag for the authoritative Rust engine.</summary>
-    public const string RustEngine = "rust";
-
-    /// <summary>The <c>engine</c> tag for the Rust engine running under shadow mode.</summary>
-    public const string ShadowEngine = "shadow";
-
     private const int WindowMinutes = 15;
 
     private readonly Counter<long> _errors;
@@ -74,22 +68,20 @@ internal sealed class AlertEngineErrors
     /// The native entry point: <c>evaluate</c>, <c>evaluate_node</c>, <c>tracker_process</c>,
     /// <c>tracker_force_close</c> or <c>tracker_close_elapsed_hysteresis</c>.
     /// </param>
-    /// <param name="engine"><see cref="RustEngine"/> or <see cref="ShadowEngine"/>.</param>
-    public void Record(string operation, string engine)
+    public void Record(string operation)
     {
         _errors.Add(1,
             new KeyValuePair<string, object?>("operation", operation),
-            new KeyValuePair<string, object?>("engine", engine),
             new KeyValuePair<string, object?>("outcome", "failed"));
         Count(failed: true);
-        Volatile.Write(ref _latest, new AlertEngineError(_timeProvider.GetUtcNow(), operation, engine));
+        Volatile.Write(ref _latest, new AlertEngineError(_timeProvider.GetUtcNow(), operation));
     }
 
     /// <summary>
     /// Runs a native engine call, recording a <see cref="RustAlertEngineException"/> before
     /// rethrowing it.
     /// </summary>
-    public T Track<T>(string operation, string engine, Func<T> call)
+    public T Track<T>(string operation, Func<T> call)
     {
         T result;
         try
@@ -100,14 +92,13 @@ internal sealed class AlertEngineErrors
         {
             _errors.Add(1,
                 new KeyValuePair<string, object?>("operation", operation),
-                new KeyValuePair<string, object?>("engine", engine),
                 new KeyValuePair<string, object?>("outcome", "condition_rejected"));
             Count(failed: false);
             throw;
         }
         catch (RustAlertEngineException)
         {
-            Record(operation, engine);
+            Record(operation);
             throw;
         }
         Count(failed: false);
@@ -135,17 +126,15 @@ internal sealed class AlertEngineErrors
 }
 
 /// <summary>One recorded native alert engine failure.</summary>
-internal sealed record AlertEngineError(DateTimeOffset At, string Operation, string Engine);
+internal sealed record AlertEngineError(DateTimeOffset At, string Operation);
 
 /// <summary>
 /// Reports Unhealthy while most native calls fail: <see cref="UnhealthyFailureRate"/> of the calls
 /// in <see cref="AlertEngineErrors.WindowLength"/>, and at least <see cref="UnhealthyMinimumFailures"/>.
-/// Reports Degraded while any failed within <see cref="FailingWindow"/>, or when shadow mode fell
-/// back to managed at startup. In shadow mode the managed engine serves alerts whatever the Rust
-/// engine does, so failures there are at most Degraded.
+/// Reports Degraded while any failed within <see cref="FailingWindow"/>.
 /// </summary>
 internal sealed class AlertEngineHealthCheck(
-    AlertEngineSelection selection,
+    AlertEngineNativeLibrary library,
     AlertEngineErrors errors,
     TimeProvider timeProvider) : IHealthCheck
 {
@@ -161,33 +150,25 @@ internal sealed class AlertEngineHealthCheck(
 
     public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
-        if (selection.Mode == AlertEngineMode.Managed)
-        {
-            return Task.FromResult(selection.Configured == "shadow"
-                ? HealthCheckResult.Degraded("Alerts:Engine=shadow is configured but the native library failed its probe; the managed engine serves alerts without comparison")
-                : HealthCheckResult.Healthy("Managed alert engine"));
-        }
-
         if (errors.Latest is { } latest && timeProvider.GetUtcNow() - latest.At < FailingWindow)
         {
             var (calls, failures) = errors.Window();
             var data = new Dictionary<string, object>
             {
                 ["operation"] = latest.Operation,
-                ["engine"] = latest.Engine,
                 ["at"] = latest.At,
                 ["calls"] = calls,
                 ["failures"] = failures,
             };
-            var failing = selection.Mode != AlertEngineMode.Shadow
-                          && failures >= UnhealthyMinimumFailures && failures >= calls * UnhealthyFailureRate;
+            var failing = failures >= UnhealthyMinimumFailures && failures >= calls * UnhealthyFailureRate;
             var description =
-                $"The {latest.Engine} alert engine failed {failures} of {calls} calls in the last {FailingWindow.TotalMinutes:0} minutes, latest '{latest.Operation}' at {latest.At:O}";
+                $"The alert engine failed {failures} of {calls} calls in the last {FailingWindow.TotalMinutes:0} minutes, latest '{latest.Operation}' at {latest.At:O}";
             return Task.FromResult(failing
                 ? HealthCheckResult.Unhealthy(description, data: data)
                 : HealthCheckResult.Degraded(description, data: data));
         }
 
-        return Task.FromResult(HealthCheckResult.Healthy($"Alert engine: {selection.Configured}"));
+        return Task.FromResult(HealthCheckResult.Healthy(
+            $"Alert engine: nocturne_alerts {library.Version}, tzdb {library.TzdbVersion}"));
     }
 }

@@ -137,6 +137,6 @@ public static class TempBasalMapper
             entity.App,
             entity.DataSource,
             entity.LegacyId);
-        return new TempBasalOriginState(origin, evidence, entity.ApsSnapshotId, new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(), entity.Rate);
+        return new TempBasalOriginState(origin, evidence, entity.ApsSnapshotId, entity.Timestamp.ToMills(), entity.Rate);
     }
 }

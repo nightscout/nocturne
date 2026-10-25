@@ -38,7 +38,7 @@
   import SlotDays from "./SlotDays.svelte";
   import { TimeOfDayCursor } from "./time-of-day-cursor.svelte";
   import { loopAnalysisMark } from "./loop-analysis-tour.svelte";
-  import { atMinute, axisEnd, signedTwoPlaces as signed } from "./daily-profile-view";
+  import { atMinute, axisEnd, axisStart, signedTwoPlaces as signed } from "./daily-profile-view";
   import NoTimeZone from "$lib/components/reports/NoTimeZone.svelte";
   import { loopAnalysisTimeZoneNeed } from "./time-zone-need.svelte";
   import IgnoredFiltersNotice from "./IgnoredFiltersNotice.svelte";
@@ -80,7 +80,10 @@
     0,
     axisEnd(both.flatMap((s) => [s.deliveredBasal?.p90, s.scheduledBasal?.p50]), 0.5),
   ]);
-  const iobDomain = $derived<[number, number]>([0, axisEnd(both.map((s) => s.iob?.p90), 1)]);
+  const iobDomain = $derived<[number, number]>([
+    axisStart(both.map((s) => s.iob?.p10)),
+    axisEnd(both.map((s) => s.iob?.p90), 1),
+  ]);
   const cobDomain = $derived<[number, number]>([0, axisEnd(both.map((s) => s.cob?.p90), 10)]);
 
   const correctionValues = $derived(
@@ -232,7 +235,7 @@
     counts: "days" | "readings"
   ): string {
     if (!value) return "No data at this time";
-    const n = counts === "days" ? daysText(value.n) : readingsText(value.n);
+    const n = counts === "readings" ? readingsText(value.n) : daysText(value.n);
     return `Median ${format(value.p50 ?? 0)} ${unit}, ${n}`;
   }
 

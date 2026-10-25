@@ -99,6 +99,10 @@ public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
         var rules = await repo.GetEnabledRulesAsync(stale, CancellationToken.None);
         rules.Select(r => r.Name).Should().Equal("Readable");
 
+        var read = await repo.ReadEnabledRulesAsync(stale, CancellationToken.None);
+        read.Rules.Select(r => r.Name).Should().Equal("Readable");
+        read.UnreadableRuleIds.Should().BeEquivalentTo([legacyType, legacySeverity]);
+
         var all = await repo.GetAllEnabledRulesAsync(CancellationToken.None);
         all.Select(r => r.Name).Should().Contain(["Readable", "Other tenant"]);
 

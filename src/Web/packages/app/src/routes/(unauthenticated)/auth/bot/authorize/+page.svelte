@@ -37,7 +37,7 @@
 
 	const errorMessage = $derived.by(() => {
 		if (!stateToken) return "Missing state token.";
-		if (pendingError) return "This link is expired or invalid. Please run /connect in your chat app again.";
+		if (pendingError) return "This link is expired or invalid. Run /connect in your chat app again.";
 		return "";
 	});
 
@@ -83,8 +83,8 @@
 				status === 409
 					? "This chat account is already linked to another member."
 					: status === 400
-						? "This link is expired or invalid. Please run /connect in your chat app again."
-						: describeSubmitError(err, "Failed to link account. Please try again.");
+						? "This link is expired or invalid. Run /connect in your chat app again."
+						: describeSubmitError(err, "Failed to link account. Try again.");
 			isClaiming = false;
 		}
 	}
@@ -96,14 +96,14 @@
 	</div>
 {:else if mode === "error"}
 	<div class="flex flex-col items-center justify-center min-h-screen gap-4 p-6 text-center">
-		<h1 class="text-2xl font-bold">Can't Complete This Link</h1>
+		<h1 class="text-2xl font-bold">Cannot complete this link</h1>
 		<p class="text-destructive max-w-md">{errorMessage}</p>
 	</div>
 {:else if mode === "slug-prompt"}
 	<div class="flex flex-col items-center justify-center min-h-screen gap-4 p-6">
-		<h1 class="text-2xl font-bold">Which Nocturne Instance?</h1>
+		<h1 class="text-2xl font-bold">Which Nocturne instance?</h1>
 		<p class="text-muted-foreground max-w-md text-center">
-			Enter the slug of the Nocturne instance you'd like to link your chat account to.
+			Enter the slug of the Nocturne instance that you want to link your chat account to.
 		</p>
 		{#if slugError}
 			<p class="text-destructive">{slugError}</p>
@@ -118,7 +118,7 @@
 					type="text"
 					bind:value={slug}
 					required
-					pattern="[a-z0-9][a-z0-9\-]{'{ 0,62}'}[a-z0-9]?"
+					pattern={"[a-z0-9][a-z0-9\\-]{0,61}[a-z0-9]?"}
 					placeholder="e.g. myfamily"
 				/>
 			</label>
@@ -132,7 +132,7 @@
 	</div>
 {:else if mode === "confirm"}
 	<div class="flex flex-col items-center justify-center min-h-screen gap-4 p-6">
-		<h1 class="text-2xl font-bold">Connect Chat Account</h1>
+		<h1 class="text-2xl font-bold">Connect chat account</h1>
 		{#if !context?.isAuthenticated}
 			<p class="text-muted-foreground max-w-md text-center">
 				Sign in to your Nocturne account to finish connecting your chat account.

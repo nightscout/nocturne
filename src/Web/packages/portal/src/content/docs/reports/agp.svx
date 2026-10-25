@@ -1,0 +1,90 @@
+---
+title: Glucose Profile (AGP)
+---
+
+<script>
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Glucose Profile (AGP)
+
+The Ambulatory Glucose Profile (AGP) answers the question "what does a typical
+day look like?". It lays all the days of the period on top of each other, so
+the patterns that repeat become clear. The AGP is a standard report format that
+care teams know.
+
+<Video id="agp" />
+
+## What it shows
+
+### The key figures
+
+The strip at the top shows six figures, with the consensus target under most of
+them:
+
+| Figure | Target on the page |
+|--------|--------------------|
+| **Time in range** (70-180 mg/dL) | 70% or more |
+| **Average** | None |
+| **eHbA1c**, from your average glucose | None |
+| **CV** (coefficient of variation) | 33% or less |
+| **Below range** (below 70 mg/dL) | Less than 4% |
+| **Above range** (above 180 mg/dL) | Less than 25% |
+
+### Glucose Pattern (24-hour overlay)
+
+This is the main chart. The horizontal axis is the time of day, from midnight
+to midnight.
+
+- **The median line** is the middle reading at each time of day. It shows what
+  happens most often.
+- **The darker band** (25th to 75th percentile) is where your glucose is for
+  half of the time.
+- **The lighter band** (10th to 90th percentile) is where your glucose is for
+  80% of the time.
+- **The shaded target band**, with the dashed **Low** and **High** lines, marks
+  your target range.
+
+Move the pointer over the chart to see the five values at that time: P90, P75,
+**Median**, P25 and P10.
+
+Where the bands are narrow, your days are alike at that time. Where the bands
+are wide, your days are different from each other at that time.
+
+### Time in Range Distribution
+
+The bar shows how your time divides across five ranges: very low, low, in
+range, high and very high. The labels next to the bar give the percentage for
+each range. Move the pointer over the bar to see all the values, including the
+tight range (70-140 mg/dL).
+
+### Measured Against Consensus Targets
+
+This card puts three figures next to their international consensus targets:
+
+- Time in target range: at least 70%.
+- Coefficient of variation (CV): 33% or below.
+- Time below 70 mg/dL: under 4%.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+The AGP opens on the last 14 days. Two weeks can show a pattern that is not
+typical. To make sure that a pattern is real, look at a longer period:
+
+1. At the top of the report, select the date range.
+2. Select **30 Days**.
+3. Select **Apply Filters**. The whole report loads again for 30 days.
+4. Compare the shape of the median line with the shape for 14 days.
+
+Select **What is an AGP?** and then **How to read this chart** for a short
+explanation on the page. Select **Summary** to open the
+[Executive Summary](/docs/reports/executive-summary).
+
+## Good to know
+
+- The AGP is most reliable with readings on at least 14 days. If the period has
+  too few days with readings, a badge shows how many days the report uses.
+- If the chart shows **No pattern data**, the period has too few readings.
+  Choose a longer period.

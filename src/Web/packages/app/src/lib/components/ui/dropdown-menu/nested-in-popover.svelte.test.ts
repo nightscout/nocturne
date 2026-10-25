@@ -10,7 +10,7 @@ describe("DropdownMenu inside a Popover", () => {
     render(Harness, { onselect });
 
     await page.getByRole("button", { name: "Notifications" }).click();
-    await page.getByRole("button", { name: "Do Not Disturb" }).click();
+    await page.getByRole("button", { name: "Do not disturb" }).click();
     await page.getByRole("menuitem", { name: "30 minutes" }).click();
 
     expect(onselect).toHaveBeenCalledOnce();

@@ -1,14 +1,11 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
+import { GlycemicVariabilityStatus, TimeZoneUnavailableReason } from "$lib/api";
 import { reactiveFields } from "$lib/test-stubs/reactive-fields.svelte";
 
 const statistics = vi.hoisted(() => ({ resolve: (_stats: unknown) => {} }));
-const store = reactiveFields({
-  entries: [] as { mills: number; sgv: number }[],
-  currentReadingLoaded: false,
-  nowMinute: Date.now(),
-});
+const store = reactiveFields({});
 
 vi.mock("$lib/stores/realtime-store.svelte", async () => {
   const { resolveChartThresholds } = await import("$lib/constants/glucose-thresholds");
@@ -29,6 +26,7 @@ vi.mock("$api/generated/statistics.generated.remote", () => ({
     }),
 }));
 
+import WithTooltipProvider from "$lib/test-stubs/WithTooltipProvider.test-stub.svelte";
 import TirChartWidget from "./TirChartWidget.svelte";
 import TddWidget from "./TddWidget.svelte";
 import DailySummaryWidget from "./DailySummaryWidget.svelte";
@@ -37,6 +35,8 @@ const stats = {
   lastDay: {
     entryCount: 288,
     analytics: {
+      basicStats: { count: 288, mean: 144, min: 60, max: 260 },
+      glycemicVariability: { coefficientOfVariation: 40, coefficientOfVariationStatus: GlycemicVariabilityStatus.Moderate },
       timeInRange: {
         percentages: { veryLow: 1, low: 3, target: 70, high: 20, veryHigh: 6 },
       },
@@ -61,13 +61,23 @@ const withMicroboluses = structuredClone(stats);
 withMicroboluses.lastDay.insulinDelivery.automaticBolusPerDay = 6;
 withMicroboluses.last90Days.insulinDelivery.automaticBolusPerDay = 5;
 
+const unreliable = { meetsReliabilityCriteria: false, daysOfData: 1, recommendedMinimumDays: 14 };
+const withoutZone = {
+  lastDay: {
+    ...stats.lastDay,
+    reliability: unreliable,
+    analytics: { ...stats.lastDay.analytics, timeZoneUnavailableReason: TimeZoneUnavailableReason.NotConfigured },
+  },
+  last90Days: { ...stats.last90Days, reliability: unreliable },
+};
+
 const cellHeight = (container: HTMLElement) =>
   container.querySelector("section")!.getBoundingClientRect().height;
 
 describe("stat widgets", () => {
   it.each([
-    ["Time in Range", TirChartWidget, "in range", stats],
-    ["Total Daily Dose", TddWidget, "Basal", stats],
+    ["Time in range", TirChartWidget, "in range", stats],
+    ["Total daily dose", TddWidget, "Basal", stats],
     ["Total Daily Dose with microboluses", TddWidget, "Auto", withMicroboluses],
   ])(
     "%s keeps its height when its statistics arrive, in three columns and in one",
@@ -99,6 +109,23 @@ describe("stat widgets", () => {
     await expect.element(page.getByText("Auto", { exact: true })).toBeVisible();
   });
 
+  it.each([
+    ["Time in range", TirChartWidget],
+    ["Total daily dose", TddWidget],
+  ])("%s says days are UTC days only for the period whose data has no time zone", async (_name, Widget) => {
+    await page.viewport(1440, 900);
+    render(WithTooltipProvider, { props: { component: Widget } });
+    statistics.resolve(withoutZone);
+
+    await expect.element(page.getByRole("button", { name: "Counted on UTC days" })).toBeVisible();
+    await expect.element(page.getByText("Days of data are counted on UTC days.")).not.toBeInTheDocument();
+
+    await page.getByRole("button", { name: "Last 24h" }).click();
+
+    await expect.element(page.getByText("90-Day Avg", { exact: true })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Counted on UTC days" })).not.toBeInTheDocument();
+  });
+
   it("Total Daily Dose labels its 24-hour view Last 24h", async () => {
     await page.viewport(1440, 900);
     render(TddWidget);
@@ -125,27 +152,74 @@ describe("stat widgets", () => {
     await expect.element(page.getByText("40.0", { exact: true })).toBeVisible();
   });
 
-  it("Today's Summary keeps its height when the day's readings arrive, in three columns and in one", async () => {
+  it("Last 24h summary keeps its height when its statistics arrive, in three columns and in one", async () => {
     for (const width of [1440, 375]) {
       await page.viewport(width, 900);
-      store.entries = [];
-      store.currentReadingLoaded = false;
       const { container, unmount } = render(DailySummaryWidget);
       const skeletonHeight = cellHeight(container);
 
-      // Midday on the store's own clock: readings minutes before a wall-clock "now" fall on
-      // yesterday when the run is in the first minutes after midnight.
-      const now = new Date(2026, 9, 21, 12, 0).getTime();
-      store.nowMinute = now;
-      store.entries = [
-        { mills: now - 600_000, sgv: 110 },
-        { mills: now - 300_000, sgv: 150 },
-      ];
-      store.currentReadingLoaded = true;
+      statistics.resolve(stats);
       await expect.element(page.getByText("readings")).toBeVisible();
 
       expect(cellHeight(container)).toBe(skeletonHeight);
       unmount();
     }
+  });
+
+  it("Last 24h summary shows the backend's figures as given, with no figure of its own", async () => {
+    await page.viewport(1440, 900);
+    render(DailySummaryWidget);
+    statistics.resolve(stats);
+
+    await expect.element(page.getByText("144", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("↓ 60", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("↑ 260", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("70%", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Moderate (40% CV)")).toBeVisible();
+    await expect.element(page.getByText("288 readings")).toBeVisible();
+  });
+
+  it.each([
+    [GlycemicVariabilityStatus.Stable, 30, "Stable (30% CV)"],
+    [GlycemicVariabilityStatus.Moderate, 40, "Moderate (40% CV)"],
+    [GlycemicVariabilityStatus.Variable, 55, "Variable (55% CV)"],
+  ])("Last 24h summary renders the served %s variability status", async (status, cv, text) => {
+    await page.viewport(1440, 900);
+    render(DailySummaryWidget);
+    statistics.resolve({
+      lastDay: {
+        ...stats.lastDay,
+        analytics: {
+          ...stats.lastDay.analytics,
+          glycemicVariability: { coefficientOfVariation: cv, coefficientOfVariationStatus: status },
+        },
+      },
+    });
+
+    await expect.element(page.getByText(text)).toBeVisible();
+  });
+
+  it("Last 24h summary shows the served status even when it disagrees with the figure", async () => {
+    await page.viewport(1440, 900);
+    render(DailySummaryWidget);
+    statistics.resolve({
+      lastDay: {
+        ...stats.lastDay,
+        analytics: {
+          ...stats.lastDay.analytics,
+          glycemicVariability: { coefficientOfVariation: 10, coefficientOfVariationStatus: GlycemicVariabilityStatus.Variable },
+        },
+      },
+    });
+
+    await expect.element(page.getByText("Variable (10% CV)")).toBeVisible();
+  });
+
+  it("Last 24h summary says so when the last 24 hours hold no readings", async () => {
+    await page.viewport(1440, 900);
+    render(DailySummaryWidget);
+    statistics.resolve({ lastDay: { entryCount: 0, analytics: { basicStats: { count: 0 } } } });
+
+    await expect.element(page.getByText("No data in the last 24h")).toBeVisible();
   });
 });

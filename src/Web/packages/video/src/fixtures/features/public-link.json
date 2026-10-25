@@ -1,0 +1,290 @@
+{
+ "route": "/settings/members",
+ "params": {},
+ "capturedAt": 1792833476825,
+ "entries": [
+  {
+   "type": "sgv",
+   "mills": 1792833300000,
+   "sgv": 350,
+   "direction": "SingleUp",
+   "delta": 9.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792833000000,
+   "sgv": 341,
+   "direction": "SingleUp",
+   "delta": 9.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792832700000,
+   "sgv": 332,
+   "direction": "DoubleUp",
+   "delta": 10.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792832400000,
+   "sgv": 321,
+   "direction": "DoubleUp",
+   "delta": 11.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792832100000,
+   "sgv": 309,
+   "direction": "DoubleUp",
+   "delta": 11.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792831800000,
+   "sgv": 298,
+   "direction": "DoubleUp",
+   "delta": 12.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792831500000,
+   "sgv": 286,
+   "direction": "DoubleUp",
+   "delta": 14.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792831200000,
+   "sgv": 271,
+   "direction": "DoubleUp",
+   "delta": 14.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830900000,
+   "sgv": 257,
+   "direction": "DoubleUp",
+   "delta": 14.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830600000,
+   "sgv": 242,
+   "direction": "DoubleUp",
+   "delta": 15.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830300000,
+   "sgv": 227,
+   "direction": "DoubleUp",
+   "delta": 14.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830000000,
+   "sgv": 212,
+   "direction": "DoubleUp",
+   "delta": 15.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829700000,
+   "sgv": 196,
+   "direction": "DoubleUp",
+   "delta": 16.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829400000,
+   "sgv": 180,
+   "direction": "DoubleUp",
+   "delta": 14.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829100000,
+   "sgv": 166,
+   "direction": "DoubleUp",
+   "delta": 12.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828800000,
+   "sgv": 153,
+   "direction": "DoubleUp",
+   "delta": 14
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828500000,
+   "sgv": 139,
+   "direction": "SingleUp",
+   "delta": 9.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828200000,
+   "sgv": 129,
+   "direction": "FortyFiveUp",
+   "delta": 4.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827900000,
+   "sgv": 124,
+   "direction": "FortyFiveUp",
+   "delta": 2.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827600000,
+   "sgv": 122,
+   "direction": "FortyFiveUp",
+   "delta": 3.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827300000,
+   "sgv": 118,
+   "direction": "SingleUp",
+   "delta": 5.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827000000,
+   "sgv": 113,
+   "direction": "SingleUp",
+   "delta": 7.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826700000,
+   "sgv": 106,
+   "direction": "DoubleUp",
+   "delta": 10
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826400000,
+   "sgv": 96,
+   "direction": "DoubleUp",
+   "delta": 12.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826340000
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826100000,
+   "sgv": 83,
+   "direction": "DoubleUp",
+   "delta": 12.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825800000,
+   "sgv": 71,
+   "direction": "SingleUp",
+   "delta": 8.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825500000,
+   "sgv": 62,
+   "direction": "Flat",
+   "delta": -0.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825200000,
+   "sgv": 63,
+   "direction": "Flat",
+   "delta": -1.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824900000,
+   "sgv": 64,
+   "direction": "Flat",
+   "delta": 0
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824600000,
+   "sgv": 64,
+   "direction": "Flat",
+   "delta": 0.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824300000,
+   "sgv": 64,
+   "direction": "FortyFiveDown",
+   "delta": -3.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824000000,
+   "sgv": 67,
+   "direction": "FortyFiveDown",
+   "delta": -4.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823700000,
+   "sgv": 71,
+   "direction": "FortyFiveDown",
+   "delta": -3.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823400000,
+   "sgv": 75,
+   "direction": "FortyFiveDown",
+   "delta": -3.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823100000,
+   "sgv": 79,
+   "direction": "FortyFiveDown",
+   "delta": -3.8
+  }
+ ],
+ "results": {
+  "getRoles": "[[1,11,29,36,56,61],{\"id\":2,\"name\":3,\"slug\":4,\"description\":5,\"permissions\":6,\"isSystem\":8,\"memberCount\":9,\"sysCreatedAt\":10},\"01a16d33-85f5-7192-bfd3-d01e6b575095\",\"Owner\",\"owner\",null,[7],\"*\",true,1,\"2026-10-24T09:17:35.606416Z\",{\"id\":12,\"name\":13,\"slug\":14,\"description\":5,\"permissions\":15,\"isSystem\":8,\"memberCount\":28,\"sysCreatedAt\":10},\"01a16d33-85f5-71c6-9846-2a01c17255b3\",\"Clinician\",\"clinician\",[16,17,18,19,20,21,22,23,24,25,26,27],\"glucose.read\",\"treatments.read\",\"devices.read\",\"food.read\",\"heartrate.read\",\"stepcount.read\",\"sleep.read\",\"reports.read\",\"therapy.read\",\"alerts.read\",\"device.notify\",\"device.actuate\",0,{\"id\":30,\"name\":31,\"slug\":32,\"description\":5,\"permissions\":33,\"isSystem\":8,\"memberCount\":28,\"sysCreatedAt\":10},\"01a16d33-85f5-73ec-a503-6bd22f7da14d\",\"Caretaker\",\"caretaker\",[16,34,18,19,20,21,22,23,24,35,26,27],\"treatments.readwrite\",\"alerts.readwrite\",{\"id\":37,\"name\":38,\"slug\":39,\"description\":5,\"permissions\":40,\"isSystem\":8,\"memberCount\":28,\"sysCreatedAt\":10},\"01a16d33-85f5-7542-a4d1-4cd156443839\",\"Administrator\",\"admin\",[41,34,42,43,44,45,46,23,47,35,48,49,50,51,52,53,54,55,26,27],\"glucose.readwrite\",\"devices.readwrite\",\"heartrate.readwrite\",\"stepcount.readwrite\",\"sleep.readwrite\",\"food.readwrite\",\"therapy.readwrite\",\"identity.read\",\"members.invite\",\"members.manage\",\"tenant.settings\",\"roles.manage\",\"sharing.manage\",\"sharing.guest\",\"audit.read\",{\"id\":57,\"name\":58,\"slug\":59,\"description\":5,\"permissions\":60,\"isSystem\":8,\"memberCount\":28,\"sysCreatedAt\":10},\"01a16d33-85f5-763c-8cfa-95a626021813\",\"Denied\",\"denied\",[],{\"id\":62,\"name\":63,\"slug\":64,\"description\":5,\"permissions\":65,\"isSystem\":8,\"memberCount\":28,\"sysCreatedAt\":10},\"01a16d33-85f5-7907-b1ac-36e552c21998\",\"Viewer\",\"viewer\",[16,23,26,27]]",
+  "getPendingRequests": "[[]]",
+  "getMembers": "[[1,11],{\"id\":2,\"subjectId\":3,\"name\":4,\"isSystemSubject\":5,\"roles\":6,\"directPermissions\":7,\"label\":8,\"limitTo24Hours\":5,\"lastUsedAt\":7,\"sysCreatedAt\":9,\"isPlatformAdmin\":10},\"01a16d33-85fd-7ee8-8a9e-de0b728c7c63\",\"01a16b32-1997-7b10-85b5-91a08435c080\",\"Public\",true,[],null,\"Public Access\",\"2026-10-24T09:17:35.614684Z\",false,{\"id\":12,\"subjectId\":13,\"name\":14,\"isSystemSubject\":10,\"roles\":15,\"directPermissions\":7,\"label\":7,\"limitTo24Hours\":10,\"lastUsedAt\":20,\"sysCreatedAt\":21,\"isPlatformAdmin\":10},\"01a16d33-8616-70cc-bbe4-a9871d960406\",\"01a16d33-8607-780e-9bcc-2d2376ef17d7\",\"dev\",[16],{\"roleId\":17,\"name\":18,\"slug\":19},\"01a16d33-85f5-7192-bfd3-d01e6b575095\",\"Owner\",\"owner\",\"2026-10-24T09:17:53.38576Z\",\"2026-10-24T09:17:35.639675Z\"]",
+  "getMembershipRequestSettings": "[{\"allowRequests\":1},true]",
+  "getActiveAlerts": "[[]]",
+  "getShareLink": "[{\"enabled\":1,\"url\":2,\"redactedUrl\":2,\"canReveal\":1,\"fullHistory\":1,\"scopes\":3,\"lastAccessedAt\":2},false,null,[]]",
+  "getMyTenants": "[[1],{\"id\":2,\"slug\":3,\"displayName\":4,\"isActive\":5,\"sysCreatedAt\":6},\"01a16d33-85ec-72d7-a2ad-863d9a82cf34\",\"films-1792833455575\",\"Sample\",true,\"2026-10-24T09:17:35.598011Z\"]",
+  "getAll": "[[]]",
+  "listInvites": "[[]]",
+  "getGuestLinks": "[[]]",
+  "getSessionInfo": "[{\"isAuthenticated\":1,\"subjectId\":2,\"name\":3,\"email\":4,\"avatarUrl\":4,\"roles\":5,\"permissions\":7,\"expiresAt\":8},true,\"01a16d33-8607-780e-9bcc-2d2376ef17d7\",\"dev\",null,[6],\"Owner\",[],\"2026-10-24T09:32:53+00:00\"]",
+  "getSummary": "[{\"current\":1,\"history\":9,\"iob\":10,\"cob\":11,\"trackers\":12,\"alarm\":4,\"predictions\":4,\"serverMills\":47},{\"sgv\":2,\"direction\":3,\"trendRate\":4,\"delta\":5,\"mills\":6,\"noise\":7,\"status\":8},350,\"SingleUp\",null,9.3,1792833300000,1,\"UrgentHigh\",[],5.77,6,[13,24,29,38],{\"id\":14,\"definitionId\":15,\"name\":16,\"icon\":17,\"category\":18,\"mode\":19,\"ageHours\":20,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":22,\"percentElapsed\":23},\"01a16d33-c94d-7dc1-94f1-c09b2f418b69\",\"01a16d33-c8e1-7286-bfa8-f841b5a7cb13\",\"Infusion Site\",\"syringe\",\"Cannula\",\"Duration\",13.1,\"Info\",72,18,{\"id\":25,\"definitionId\":26,\"name\":27,\"icon\":28,\"category\":27,\"mode\":19,\"ageHours\":20,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":22,\"percentElapsed\":23},\"01a16d33-c9c7-7cfd-9bb3-df040dfe138c\",\"01a16d33-c955-7378-bfa1-75d2e8443be9\",\"Reservoir\",\"cylinder\",{\"id\":30,\"definitionId\":31,\"name\":32,\"icon\":33,\"category\":34,\"mode\":19,\"ageHours\":35,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":36,\"percentElapsed\":37},\"01a16d33-c8dc-70b9-aac0-a79fdb0a7891\",\"01a16d33-c8b8-7c0b-b398-78a454d92fc7\",\"CGM Sensor\",\"radio\",\"Sensor\",227.1,240,95,{\"id\":39,\"definitionId\":40,\"name\":41,\"icon\":42,\"category\":43,\"mode\":19,\"ageHours\":44,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":45,\"percentElapsed\":46},\"01a16d33-c9da-7d90-a977-a9fc93bee570\",\"01a16d33-c9cd-7479-afe4-05752263d6d5\",\"Pump Battery\",\"battery\",\"Battery\",264.7,504,53,1792833478147]"
+ },
+ "phases": [
+  {
+   "results": {
+    "rotateShareLink": "[{\"enabled\":1,\"url\":2,\"redactedUrl\":3,\"canReveal\":1,\"fullHistory\":4,\"scopes\":5,\"lastAccessedAt\":7},true,\"https://qyzg8m9mrm2h36f3.share.nocturne.localhost:59784\",\"https://••••••••••••••••.share.nocturne.localhost:59784\",false,[6],\"glucose.read\",null]",
+    "getShareLink": "[{\"enabled\":1,\"url\":2,\"redactedUrl\":3,\"canReveal\":1,\"fullHistory\":4,\"scopes\":5,\"lastAccessedAt\":2},true,null,\"https://••••••••••••••••.share.nocturne.localhost:59784\",false,[6],\"glucose.read\"]"
+   }
+  },
+  {
+   "results": {
+    "setShareLinkScopes": "[{\"enabled\":1,\"url\":2,\"redactedUrl\":3,\"canReveal\":1,\"fullHistory\":4,\"scopes\":5,\"lastAccessedAt\":2},true,null,\"https://••••••••••••••••.share.nocturne.localhost:59784\",false,[6,7],\"glucose.read\",\"treatments.read\"]",
+    "getShareLink": "[{\"enabled\":1,\"url\":2,\"redactedUrl\":3,\"canReveal\":1,\"fullHistory\":4,\"scopes\":5,\"lastAccessedAt\":2},true,null,\"https://••••••••••••••••.share.nocturne.localhost:59784\",false,[6,7],\"glucose.read\",\"treatments.read\"]"
+   }
+  },
+  {
+   "results": {
+    "setShareLinkScopes": "[{\"enabled\":1,\"url\":2,\"redactedUrl\":3,\"canReveal\":1,\"fullHistory\":4,\"scopes\":5,\"lastAccessedAt\":2},true,null,\"https://••••••••••••••••.share.nocturne.localhost:59784\",false,[6,7,8],\"glucose.read\",\"treatments.read\",\"devices.read\"]",
+    "getShareLink": "[{\"enabled\":1,\"url\":2,\"redactedUrl\":3,\"canReveal\":1,\"fullHistory\":4,\"scopes\":5,\"lastAccessedAt\":2},true,null,\"https://••••••••••••••••.share.nocturne.localhost:59784\",false,[6,7,8],\"glucose.read\",\"treatments.read\",\"devices.read\"]"
+   }
+  }
+ ]
+}

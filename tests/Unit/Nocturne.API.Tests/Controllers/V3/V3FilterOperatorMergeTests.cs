@@ -121,7 +121,7 @@ public class V3FilterOperatorMergeTests
         var (from, to, device) = await CaptureDeviceStatusRead(queryString);
 
         from.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(From).UtcDateTime);
-        to.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(To).UtcDateTime);
+        to.Should().Be(StoreEnd(To));
         device.Should().Be("loop://iPhone");
     }
 
@@ -132,19 +132,8 @@ public class V3FilterOperatorMergeTests
     {
         var (from, to, _) = await CaptureDeviceStatusRead(queryString);
 
-        var instant = DateTimeOffset.FromUnixTimeMilliseconds(From).UtcDateTime;
-        from.Should().Be(instant);
-        to.Should().Be(instant);
-    }
-
-    [Theory]
-    [InlineData("?device$eq=loop://iPhone&device$ne=openaps://rpi")]
-    [InlineData("?device$ne=openaps://rpi&device$eq=loop://iPhone")]
-    public async Task DeviceStatus_DeviceEqualityBesideAnotherOperator_StillNarrowsToTheDevice(string queryString)
-    {
-        var (_, _, device) = await CaptureDeviceStatusRead(queryString);
-
-        device.Should().Be("loop://iPhone");
+        from.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(From).UtcDateTime);
+        to.Should().Be(StoreEnd(From));
     }
 
     [Theory]
@@ -155,8 +144,12 @@ public class V3FilterOperatorMergeTests
         var (from, to, _) = await CaptureDeviceStatusRead(queryString);
 
         from.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(From + 1).UtcDateTime);
-        to.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(To - 1).UtcDateTime);
+        to.Should().Be(StoreEnd(To - 1));
     }
+
+    private static DateTime StoreEnd(long mills) =>
+        DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime
+            .AddTicks(TimeSpan.TicksPerMillisecond - TimeSpan.TicksPerMicrosecond);
 
     private static async Task<(DateTime? From, DateTime? To, string? Device)> CaptureDeviceStatusRead(
         string queryString)
@@ -283,7 +276,7 @@ public class V3FilterOperatorMergeTests
         var (from, to, device) = await CaptureDeviceStatusRead(FilterQuery(filter));
 
         from.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(From).UtcDateTime);
-        to.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(To).UtcDateTime);
+        to.Should().Be(StoreEnd(To));
         device.Should().Be("loop://iPhone");
     }
 

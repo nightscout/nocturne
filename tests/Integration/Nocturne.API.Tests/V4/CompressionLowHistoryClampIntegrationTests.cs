@@ -70,27 +70,6 @@ public class CompressionLowHistoryClampIntegrationTests : ApiIntegrationTestBase
         return JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsArray();
     }
 
-    private async Task<HttpClient> CreateHistoryClampedClientAsync()
-    {
-        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
-        await conn.OpenAsync();
-        var (subjectId, token) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
-            conn, Fixture.TenantId, "Clamped Follower");
-
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                SELECT set_config('app.current_tenant_id', @tenant, false);
-                UPDATE oauth_grants SET limit_to_24_hours = true WHERE subject_id = @subject;
-                """;
-            cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-            cmd.Parameters.AddWithValue("subject", subjectId);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        return AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, token);
-    }
-
     [Fact]
     public async Task A_clamped_member_reads_no_suggestion_of_an_older_night()
     {

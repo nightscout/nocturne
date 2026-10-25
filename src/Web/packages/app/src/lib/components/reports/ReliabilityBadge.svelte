@@ -1,15 +1,20 @@
 <script lang="ts">
   import Info from "@lucide/svelte/icons/info";
   import { Badge } from "$lib/components/ui/badge";
+  import * as Tooltip from "$lib/components/ui/tooltip";
   import { cn } from "$lib/utils";
-  import type { StatisticReliability } from "$lib/api";
+  import type { StatisticReliability, TimeZoneUnavailableReason } from "$lib/api";
+  import TimeZoneNote from "./TimeZoneNote.svelte";
+  import { timeZoneReasonCopy } from "./time-zone-reasons.svelte";
 
   interface Props {
     reliability?: StatisticReliability | null;
+    timeZoneUnavailableReason?: TimeZoneUnavailableReason | null;
+    compact?: boolean;
     class?: string;
   }
 
-  let { reliability, class: className }: Props = $props();
+  let { reliability, timeZoneUnavailableReason, compact = false, class: className }: Props = $props();
 
   const daysOfData = $derived(reliability?.daysOfData ?? 0);
 </script>
@@ -26,6 +31,26 @@
     <span class="min-w-0">
       Based on {daysOfData} {daysOfData === 1 ? "day" : "days"} of data ({reliability.recommendedMinimumDays ??
         14} recommended)
+      {#if timeZoneUnavailableReason}
+        {#if compact}
+          {@const copy = timeZoneReasonCopy(timeZoneUnavailableReason)}
+          <br />
+          <Tooltip.Root>
+            <Tooltip.Trigger variant="term">
+              Counted on UTC days
+              <Info class="size-3" aria-hidden="true" />
+            </Tooltip.Trigger>
+            <Tooltip.Content class="max-w-64 text-left">
+              {copy.cause}
+              {#if copy.remedy}
+                {copy.remedy}
+              {/if}
+            </Tooltip.Content>
+          </Tooltip.Root>
+        {:else}
+          <TimeZoneNote reason={timeZoneUnavailableReason}>Days of data are counted on UTC days.</TimeZoneNote>
+        {/if}
+      {/if}
     </span>
   </Badge>
 {/if}

@@ -90,17 +90,13 @@ public class AidMetricsService : IAidMetricsService
                 .Where(s => s.Timestamp >= segStart && s.Timestamp < segEnd)
                 .ToList();
 
-            var segTempBasals = tempBasals
-                .Where(t => t.StartTimestamp < segEnd && (t.EndTimestamp == null || t.EndTimestamp > segStart))
-                .ToList();
-
             var context = new AidDetectionContext
             {
                 Algorithm = segment.Algorithm,
                 StartDate = segStart,
                 EndDate = segEnd,
                 LoopCycles = segCycles,
-                TempBasals = segTempBasals,
+                TempBasals = tempBasals,
             };
 
             var metrics = strategy.CalculateMetrics(context);

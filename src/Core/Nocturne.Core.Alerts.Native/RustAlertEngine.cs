@@ -221,9 +221,42 @@ public static partial class RustAlertEngine
     }
 
     /// <summary>
+    /// Whether the rule must also be evaluated on the wall clock (engine-semantics.md §5.1). An
+    /// unknown type or unevaluable body is false, not an error.
+    /// </summary>
+    /// <exception cref="RustAlertEngineException">
+    /// The engine rejected the request (<c>ok: false</c>, a malformed envelope) or returned an
+    /// unparseable response.
+    /// </exception>
+    public static bool ReferencesWallClock(RustRuleConditionsRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = ParseResponse<RustWallClockResponse>(
+            AlertsInterop.ReferencesWallClock(Serialize(request)), "references_wall_clock");
+        Require(response.ReferencesWallClock is not null, "references_wall_clock", "references_wall_clock");
+        return response.ReferencesWallClock!.Value;
+    }
+
+    /// <summary>
+    /// The rule's condition trees as the engine reads them: every node's path, and each leaf's
+    /// resolved kind and decoded operands (crates/nocturne-alerts-ffi/README.md, "Describe").
+    /// </summary>
+    /// <exception cref="RustAlertEngineException">
+    /// The engine rejected the request (<c>ok: false</c>: an unknown condition type or a
+    /// malformed envelope) or returned an unparseable response.
+    /// </exception>
+    public static RustDescribeResponse Describe(RustDescribeRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return ParseResponse<RustDescribeResponse>(AlertsInterop.Describe(Serialize(request)), "describe");
+    }
+
+    /// <summary>
     /// Every problem saving the rule's condition trees should reject, each with its scope,
     /// condition path and reason code, in <see cref="RustValidateResponse.Issues"/>; empty when
-    /// the rule is valid. For an edit, also what was stripped (<see cref="RustValidateRequest.Stored"/>).
+    /// the rule is valid.
     /// </summary>
     /// <exception cref="RustAlertEngineException">
     /// The engine rejected the request (<c>ok: false</c>, a malformed envelope) or returned an
@@ -235,7 +268,6 @@ public static partial class RustAlertEngine
 
         var response = ParseResponse<RustValidateResponse>(AlertsInterop.Validate(Serialize(request)), "validate");
         Require(response.Issues is not null, "validate", "issues");
-        Require(request.Stored is null || response.Stripped is not null, "validate", "stripped");
         return response;
     }
 

@@ -15,15 +15,12 @@
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import PairedGlucoseScatter from "$lib/components/reports/cgm-comparison/PairedGlucoseScatter.svelte";
   import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
-  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
   import { remoteErrorMessage } from "$lib/api/remote-error";
-
-  setReportPrintMeta(() => ({ title: "CGM Comparison" }));
 
   const params = requireDateParamsContext(14);
 
   const resource = contextResource(() => getReportsAnalysis(params.dateRangeInput), {
-    errorTitle: "Error Loading CGM Comparison",
+    errorTitle: "Error loading CGM comparison",
   });
 
   // The unattributed bucket carries no device id, so it can never be a comparison side.
@@ -77,10 +74,6 @@
     value === undefined ? "-" : `${value.toFixed(1)}%`;
 </script>
 
-<svelte:head>
-  <title>CGM Comparison - Nocturne Reports</title>
-</svelte:head>
-
 {#if resource.current}
   <div class="@container space-y-6">
     <div class="space-y-3">
@@ -89,7 +82,7 @@
         class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
-        Data Quality
+        Data quality
       </a>
       <div class="flex items-center gap-3">
         <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 print:hidden">
@@ -235,7 +228,7 @@
             <CardHeader class="pb-3">
               <CardTitle class="text-base">Paired readings</CardTitle>
               <CardDescription>
-                Each point is one matched pair; the dashed line is where the two read the same
+                Each point is one matched pair. The dashed line is where the two read the same
                 value.
               </CardDescription>
             </CardHeader>

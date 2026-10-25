@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
@@ -82,6 +83,16 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         return result;
     }
 
+    /// <summary>
+    /// Whether <paramref name="storeName"/> has the <c>{name}@@@@@{mills}</c> shape of a Profile
+    /// Switch's inline profile. Nightscout only ever builds such a store in memory
+    /// (lib/profilefunctions.js); one arriving stored is a pre-activation instance's switch snapshot,
+    /// which is the switch's <see cref="V4Models.ProfileActivation"/> snapshot here and no profile.
+    /// </summary>
+    internal static bool IsProfileSwitchStoreName(string storeName) => ProfileSwitchStoreName.IsMatch(storeName);
+
+    private static readonly Regex ProfileSwitchStoreName = new("@@@@@[0-9]+$", RegexOptions.Compiled);
+
     /// <param name="changed">Receives the store versions whose basal schedule or settings changed.</param>
     private async Task<V4Models.DecompositionResult> DecomposeCoreAsync(
         IReadOnlyList<Profile> profiles,
@@ -107,7 +118,15 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
             var minted = first ? firstMinted : Guid.CreateVersion7();
             first = false;
             foreach (var (storeName, profileData) in profile.Store)
+            {
+                if (IsProfileSwitchStoreName(storeName))
+                {
+                    Logger.LogDebug("Skipped profile switch store {StoreName} of profile {Id}", storeName, profile.Id);
+                    continue;
+                }
+
                 entries.Add(new StoreEntry(profile, storeName, profileData, $"{profile.Id}:{storeName}", minted));
+            }
         }
 
         if (entries.Count == 0)
@@ -182,7 +201,6 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// Nightscout finds none, and so does a claim whose store row was not written. A batch that does
     /// not claim keeps the stored flags as they are, so re-syncing an older document neither takes
     /// the default nor drops a user's choice.
-    /// Profile-switch snapshots are not documents, so they neither claim nor count as stored newer.
     /// </remarks>
     private async Task<DefaultClaim> ResolveDefaultClaimAsync(List<StoreEntry> entries, CancellationToken ct)
     {
@@ -558,7 +576,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// </remarks>
     public async Task<bool> ReplaceDocumentAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default)
     {
-        if (profile.Store.Count == 0)
+        var stores = profile.Store.Keys.Where(store => !IsProfileSwitchStoreName(store)).ToList();
+        if (stores.Count == 0)
             return false;
 
         var documentId = profile.Id!;
@@ -574,13 +593,13 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         var changed = new List<(string ProfileName, DateTime Start)>();
         var result = await DecomposeCoreAsync([profile], origin, changed, ct);
         var written = result.CreatedRecords.Concat(result.UpdatedRecords).OfType<V4Models.TherapySettings>().Count();
-        if (written < profile.Store.Count)
+        if (written < stores.Count)
         {
             await _tempBasalRates.AfterSchedulesWrittenAsync(changed, ct);
             return false;
         }
 
-        var carried = profile.Store.Keys.Select(store => $"{documentId}:{store}").ToHashSet(StringComparer.Ordinal);
+        var carried = stores.Select(store => $"{documentId}:{store}").ToHashSet(StringComparer.Ordinal);
         foreach (var dropped in stored.Where(row => !carried.Contains(row.LegacyId)))
         {
             await _therapySettingsRepo.DeleteByLegacyIdAsync(dropped.LegacyId, origin, ct);

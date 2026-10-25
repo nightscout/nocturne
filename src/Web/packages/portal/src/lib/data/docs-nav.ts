@@ -19,10 +19,10 @@ export type DocsNavSection = {
 export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     {
         id: "getting-started",
-        title: "Getting Started",
+        title: "Getting started",
         items: [
             { href: "/docs", label: "Overview" },
-            { href: "/docs/getting-started", label: "Quick Start" },
+            { href: "/docs/getting-started", label: "Quick start" },
         ],
     },
     {
@@ -33,8 +33,8 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
             { href: "/docs/installation/docker-compose", label: "Docker Compose" },
             { href: "/docs/installation/portainer", label: "Portainer" },
             { href: "/docs/installation/oracle-cloud", label: "Oracle Cloud" },
-            { href: "/docs/installation/byo-postgres", label: "Bring Your Own PostgreSQL" },
-            { href: "/docs/installation/reverse-proxy", label: "Bring Your Own Reverse Proxy" },
+            { href: "/docs/installation/byo-postgres", label: "Bring your own PostgreSQL" },
+            { href: "/docs/installation/reverse-proxy", label: "Bring your own reverse proxy" },
         ],
     },
     {
@@ -51,7 +51,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "sharing",
-        title: "Sharing & Privacy",
+        title: "Sharing & privacy",
         items: [
             { href: "/docs/sharing", label: "Overview" },
             { href: "/docs/sharing/public-link", label: "Public share link" },
@@ -62,7 +62,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "food",
-        title: "Food & Carbs",
+        title: "Food & carbs",
         items: [
             { href: "/docs/food", label: "Overview" },
             { href: "/docs/food/carbs", label: "Carb entries" },
@@ -72,17 +72,45 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
         ],
     },
     {
-        id: "reports",
-        title: "Reports",
-        items: [{ href: "/docs/reports/loop-analysis", label: "Loop Analysis" }],
-    },
-    {
         id: "trackers",
         title: "Trackers",
         items: [
             { href: "/docs/trackers", label: "Overview" },
             { href: "/docs/trackers/setting-up", label: "Setting up a tracker" },
             { href: "/docs/trackers/everyday-use", label: "Everyday use" },
+        ],
+    },
+    {
+        id: "reports",
+        title: "Reports",
+        items: [
+            { href: "/docs/reports", label: "Overview" },
+            { href: "/docs/reports/executive-summary", label: "Executive summary" },
+            { href: "/docs/reports/agp", label: "Glucose profile (AGP)" },
+            { href: "/docs/reports/glucose-distribution", label: "Glucose distribution" },
+            { href: "/docs/reports/hourly-stats", label: "Hourly patterns" },
+            { href: "/docs/reports/readings", label: "Readings" },
+            { href: "/docs/reports/day-in-review", label: "Day in review" },
+            { href: "/docs/reports/week-to-week", label: "Week to week" },
+            { href: "/docs/reports/comparison", label: "Comparison" },
+            { href: "/docs/reports/year-overview", label: "Year overview" },
+            { href: "/docs/reports/ehba1c", label: "Estimated HbA1c" },
+            { href: "/docs/reports/treatments", label: "Treatment log" },
+            { href: "/docs/reports/insulin-delivery", label: "Insulin delivery" },
+            { href: "/docs/reports/basal-analysis", label: "Basal analysis" },
+            { href: "/docs/reports/idp", label: "Insulin dosing profile" },
+            { href: "/docs/reports/site-change-impact", label: "Site change impact" },
+            { href: "/docs/reports/loop-analysis", label: "Loop analysis" },
+            { href: "/docs/reports/loop-analysis/daily-profile", label: "Daily profile" },
+            { href: "/docs/reports/loop-analysis/meals-and-events", label: "Meals and events" },
+            { href: "/docs/reports/loop-analysis/prediction-accuracy", label: "Prediction accuracy" },
+            { href: "/docs/reports/loop-analysis/loop-health", label: "Loop health" },
+            { href: "/docs/reports/loop-analysis/settings-evidence", label: "Settings evidence" },
+            { href: "/docs/reports/data-quality", label: "Data quality" },
+            { href: "/docs/reports/battery", label: "Battery" },
+            { href: "/docs/reports/steps", label: "Step count" },
+            { href: "/docs/reports/heart-rate", label: "Heart rate" },
+            { href: "/docs/reports/sleep", label: "Sleep & overnight" },
         ],
     },
     {
@@ -102,7 +130,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "bots",
-        title: "Chat Bots",
+        title: "Chat bots",
         items: [
             { href: "/docs/bots", label: "Overview" },
             { href: "/docs/bots/discord", label: "Discord" },
@@ -113,13 +141,13 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "data-sources",
-        title: "Data Sources",
+        title: "Data sources",
         items: [{ href: "/docs/data-sources/google-health", label: "Google Health" }],
     },
     {
         id: "configuration",
         title: "Configuration",
-        items: [{ href: "/docs/configuration", label: "Configuration Guide" }],
+        items: [{ href: "/docs/configuration", label: "Configuration guide" }],
     },
     {
         id: "observability",
@@ -128,12 +156,12 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "windows-widget",
-        title: "Windows Widget",
+        title: "Windows widget",
         items: [{ href: "/docs/windows-widget", label: "Overview & setup" }],
     },
     {
         id: "connecting-apps",
-        title: "Connecting Apps",
+        title: "Connecting apps",
         items: [
             { href: "/docs/connecting-apps", label: "App authorization (PKCE)" },
             { href: "/docs/connecting-apps/device-flow", label: "Mobile & device flow" },
@@ -146,7 +174,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
     },
     {
         id: "api-reference",
-        title: "API Reference",
-        items: [{ href: "/scalar", label: "Interactive API Docs" }],
+        title: "API reference",
+        items: [{ href: "/scalar", label: "Interactive API docs" }],
     },
 ];

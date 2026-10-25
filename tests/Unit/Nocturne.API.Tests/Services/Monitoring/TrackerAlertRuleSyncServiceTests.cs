@@ -49,7 +49,7 @@ public class TrackerAlertRuleSyncServiceTests
             factory,
             classifier.Object,
             _referenceService.Object,
-            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(Db().AsFactory())),
+            new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(_excursionTracker.Object, _resolutionHandler.Object),
             NullLogger<TrackerAlertRuleSyncService>.Instance);
     }
@@ -102,7 +102,7 @@ public class TrackerAlertRuleSyncServiceTests
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
-            UserId = userId ?? _definitionOwner.ToString(),
+            CreatedBy = userId ?? _definitionOwner.ToString(),
             Name = "Sensor",
             Mode = mode,
             LifespanHours = lifespanHours,
@@ -125,14 +125,10 @@ public class TrackerAlertRuleSyncServiceTests
     private static TrackerNotificationThresholdEntity Threshold(
         int hours,
         NotificationUrgency urgency = NotificationUrgency.Warn,
-        bool push = false,
-        bool respectQuietHours = true,
         string? description = null) => new()
     {
         Hours = hours,
         Urgency = urgency,
-        PushEnabled = push,
-        RespectQuietHours = respectQuietHours,
         Description = description,
     };
 
@@ -144,7 +140,7 @@ public class TrackerAlertRuleSyncServiceTests
     {
         var definition = await SeedDefinitionAsync(
             lifespanHours: 240,
-            thresholds: [Threshold(228), Threshold(-12, NotificationUrgency.Urgent, push: true)]);
+            thresholds: [Threshold(228), Threshold(-12, NotificationUrgency.Urgent)]);
 
         await _sut.SyncDefinitionAsync(definition.Id);
 
@@ -170,13 +166,13 @@ public class TrackerAlertRuleSyncServiceTests
     }
 
     [Fact]
-    public async Task Sync_routes_every_threshold_to_the_definition_owner_in_app_and_never_to_web_push()
+    public async Task Sync_routes_every_threshold_to_the_definition_creator_in_app_and_never_to_web_push()
     {
         var definition = await SeedDefinitionAsync(
             thresholds:
             [
                 Threshold(1, NotificationUrgency.Info),
-                Threshold(2, NotificationUrgency.Urgent, push: true, respectQuietHours: false),
+                Threshold(2, NotificationUrgency.Urgent),
             ]);
 
         await _sut.SyncDefinitionAsync(definition.Id);
@@ -187,15 +183,16 @@ public class TrackerAlertRuleSyncServiceTests
         var info = rules.Single(r => Params(r).GetProperty("minutes").GetInt32() == 60);
         info.Severity.Should().Be(AlertRuleSeverity.Info);
         info.AllowThroughDnd.Should().BeFalse();
+        info.ClientConfiguration.Should().Be("{}");
         var urgent = rules.Single(r => Params(r).GetProperty("minutes").GetInt32() == 120);
         urgent.Severity.Should().Be(AlertRuleSeverity.Critical);
-        urgent.AllowThroughDnd.Should().BeTrue();
+        urgent.AllowThroughDnd.Should().BeFalse();
 
         foreach (var rule in new[] { info, urgent })
         {
             rule.Channels.Should().ContainSingle()
                 .Which.Should().Match<AlertRuleChannelEntity>(c =>
-                    c.ChannelType == ChannelType.InApp && c.Destination == definition.UserId);
+                    c.ChannelType == ChannelType.InApp && c.Destination == definition.CreatedBy);
         }
     }
 
@@ -622,7 +619,7 @@ public class TrackerAlertRuleSyncServiceTests
         level.Severity.Should().Be(AlertRuleSeverity.Critical);
         level.Channels.Should().ContainSingle()
             .Which.Should().Match<AlertRuleChannelEntity>(c =>
-                c.ChannelType == ChannelType.InApp && c.Destination == definition.UserId);
+                c.ChannelType == ChannelType.InApp && c.Destination == definition.CreatedBy);
 
         rules.Should().ContainSingle(r => r.ConditionType == AlertConditionType.TrackerAge);
     }

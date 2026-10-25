@@ -10,7 +10,7 @@ namespace Nocturne.API.Tests.Services.Demo;
 /// <remarks>
 /// <c>DemoTenantService.RetireDemoMemberAsync</c> and <c>DenyDemoSubjectAttribute</c> both
 /// query these tables on a context with no tenant pinned, and both are only correct because
-/// the tables are not tenant-scoped and carry no RLS policy — the retire path has to see
+/// the tables are not tenant-scoped and carry no tenant policy — the retire path has to see
 /// memberships in <em>other</em> tenants to clean them up, and the filter has to resolve a
 /// subject before any tenant is known.
 /// <para>

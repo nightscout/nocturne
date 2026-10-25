@@ -10,6 +10,7 @@ using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.V4;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
@@ -158,64 +159,58 @@ public class SignalRBroadcastServiceTests
     }
 
     [Fact]
-    public async Task BroadcastDataUpdateAsync_ShouldRelayGlucoseReadingToTenantHomeAssistantGroup()
+    public async Task BroadcastDataUpdateAsync_SendsNothingToHomeAssistant()
     {
-        var testData = new { test = "data" };
+        await _service.BroadcastDataUpdateAsync(new { test = "data" });
 
-        await _service.BroadcastDataUpdateAsync(testData);
+        _mockHaProxy.Verify(
+            x => x.SendCoreAsync(It.IsAny<string>(), It.IsAny<object[]>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task BroadcastDataUpdateAsync_DataHubFailure_StillSendsOverview()
+    {
+        _mockDataGroupProxy
+            .Setup(x => x.SendCoreAsync("dataUpdate", It.IsAny<object[]>(), default))
+            .ThrowsAsync(new Exception("data hub down"));
+
+        var act = () => _service.BroadcastDataUpdateAsync(new { test = "data" });
+
+        await act.Should().NotThrowAsync();
+        _mockOverviewGroupProxy.Verify(
+            x => x.SendCoreAsync("overviewUpdate", It.IsAny<object[]>(), default),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task BroadcastHomeAssistantGlucoseAsync_SendsGlucoseReadingToTenantHomeAssistantGroup()
+    {
+        var reading = new GlucoseReadingEvent { Readings = [new SensorGlucose { Mgdl = 120 }] };
+
+        await _service.BroadcastHomeAssistantGlucoseAsync(reading);
 
         _mockHaClients.Verify(x => x.Group("00000000-0000-0000-0000-000000000001:ha-glucose"), Times.Once);
         _mockHaClients.Verify(x => x.Group("ha-glucose"), Times.Never);
         _mockHaProxy.Verify(
             x => x.SendCoreAsync(
                 "glucose_reading",
-                It.Is<object[]>(args => args.Length == 1 && args[0] == testData),
+                It.Is<object[]>(args => args.Length == 1 && args[0] == reading),
                 default),
             Times.Once);
     }
 
     [Fact]
-    public async Task BroadcastDataUpdateAsync_DataHubFailure_StillRelaysToHomeAssistantAndOverview()
+    public async Task BroadcastHomeAssistantGlucoseAsync_HubFailure_DoesNotThrow()
     {
-        var testData = new { test = "data" };
-        _mockDataGroupProxy
-            .Setup(x => x.SendCoreAsync("dataUpdate", It.IsAny<object[]>(), default))
-            .ThrowsAsync(new Exception("data hub down"));
-
-        var act = () => _service.BroadcastDataUpdateAsync(testData);
-
-        await act.Should().NotThrowAsync();
-        _mockHaProxy.Verify(
-            x => x.SendCoreAsync(
-                "glucose_reading",
-                It.Is<object[]>(args => args.Length == 1 && args[0] == testData),
-                default),
-            Times.Once);
-        _mockOverviewGroupProxy.Verify(
-            x => x.SendCoreAsync("overviewUpdate", It.IsAny<object[]>(), default),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task BroadcastDataUpdateAsync_HomeAssistantFailure_StillSendsDataUpdateAndOverview()
-    {
-        var testData = new { test = "data" };
         _mockHaProxy
             .Setup(x => x.SendCoreAsync("glucose_reading", It.IsAny<object[]>(), default))
             .ThrowsAsync(new Exception("home assistant hub down"));
 
-        var act = () => _service.BroadcastDataUpdateAsync(testData);
+        var act = () => _service.BroadcastHomeAssistantGlucoseAsync(
+            new GlucoseReadingEvent { Readings = [new SensorGlucose { Mgdl = 120 }] });
 
         await act.Should().NotThrowAsync();
-        _mockDataGroupProxy.Verify(
-            x => x.SendCoreAsync(
-                "dataUpdate",
-                It.Is<object[]>(args => args[0] == testData),
-                default),
-            Times.Once);
-        _mockOverviewGroupProxy.Verify(
-            x => x.SendCoreAsync("overviewUpdate", It.IsAny<object[]>(), default),
-            Times.Once);
     }
 
     [Fact]
@@ -469,21 +464,17 @@ public class SignalRBroadcastServiceTests
     }
 
     [Fact]
-    public async Task BroadcastTrackerUpdateAsync_PublicInstance_ReachesAuthorizedGroup()
+    public async Task BroadcastTrackerUpdateAsync_ReachesTheTenantsAuthorizedGroupOnly()
     {
         var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
 
-        await _service.BroadcastTrackerUpdateAsync(
-            TrackerRealtimeAction.Create,
-            instance,
-            Guid.NewGuid().ToString(),
-            TrackerVisibility.Public
-        );
+        await _service.BroadcastTrackerUpdateAsync(TrackerRealtimeAction.Create, instance);
 
         _mockDataClients.Verify(
             x => x.Group("00000000-0000-0000-0000-000000000001:authorized"),
             Times.Once
         );
+        _mockDataClients.Verify(x => x.Group(It.Is<string>(g => g.Contains(":user-"))), Times.Never);
         _mockDataGroupProxy.Verify(
             x => x.SendCoreAsync("trackerUpdate", It.Is<object[]>(args => args.Length == 1), default),
             Times.Once
@@ -491,29 +482,23 @@ public class SignalRBroadcastServiceTests
     }
 
     [Fact]
-    public async Task BroadcastTrackerUpdateAsync_PrivateInstance_ReachesOnlyTheOwnersSubjectGroup()
+    public async Task BroadcastTrackerDefinitionUpdateAsync_SendsTheDefinitionIdToTheAuthorizedGroup()
     {
-        var owner = Guid.NewGuid();
-        var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
+        var definitionId = Guid.NewGuid();
 
-        await _service.BroadcastTrackerUpdateAsync(
-            TrackerRealtimeAction.Create,
-            instance,
-            owner.ToString(),
-            TrackerVisibility.Private
-        );
+        await _service.BroadcastTrackerDefinitionUpdateAsync(definitionId);
 
-        _mockDataClients.Verify(
-            x => x.Group($"00000000-0000-0000-0000-000000000001:user-{owner:D}"),
-            Times.Once
-        );
         _mockDataClients.Verify(
             x => x.Group("00000000-0000-0000-0000-000000000001:authorized"),
-            Times.Never
+            Times.Once
         );
-        _mockDataClients.Verify(
-            x => x.Group("00000000-0000-0000-0000-000000000001:relay"),
-            Times.Never
+        _mockDataGroupProxy.Verify(
+            x => x.SendCoreAsync(
+                "trackerDefinitionUpdate",
+                It.Is<object[]>(args => args.Length == 1
+                    && (Guid)args[0].GetType().GetProperty("definitionId")!.GetValue(args[0])! == definitionId),
+                default),
+            Times.Once
         );
     }
 
@@ -672,24 +657,49 @@ public class SignalRBroadcastServiceTests
         return (service, haHub, sent);
     }
 
-    [Theory]
-    [InlineData("alert_resolved")]
-    [InlineData("alert_acknowledged")]
-    public async Task BroadcastAlertEventAsync_SendsResolvedAndAcknowledgedToHomeAssistantAlertsGroup(string eventName)
+    [Fact]
+    public async Task BroadcastAlertResolvedAsync_SendsToAlertSubscribersAndHomeAssistantAlertsGroup()
     {
         var (service, _, sent) = RecordingService();
 
-        await service.BroadcastAlertEventAsync(eventName, new { });
+        await service.BroadcastAlertResolvedAsync(new AlertResolvedEvent
+        {
+            TenantId = MockTenantAccessor.DefaultTenantId,
+            ExcursionId = Guid.NewGuid(),
+            AlertRuleId = Guid.NewGuid(),
+            RuleName = "Low",
+            ResolvedAt = DateTime.UtcNow,
+            Reason = ExcursionCloseReason.Hysteresis,
+        });
 
-        sent.HomeAssistant.Should().Equal((TenantPrefix + ":ha-alerts", eventName));
-        sent.Alert.Should().Equal((TenantPrefix + ":alert-subscribers", eventName));
+        sent.HomeAssistant.Should().Equal((TenantPrefix + ":ha-alerts", "alert_resolved"));
+        sent.Alert.Should().Equal((TenantPrefix + ":alert-subscribers", "alert_resolved"));
+    }
+
+    [Fact]
+    public async Task BroadcastAlertAcknowledgedAsync_SendsToAlertSubscribersAndHomeAssistantAlertsGroup()
+    {
+        var (service, _, sent) = RecordingService();
+
+        await service.BroadcastAlertAcknowledgedAsync(new AlertAcknowledgedEvent
+        {
+            TenantId = MockTenantAccessor.DefaultTenantId,
+            ExcursionIds = [Guid.NewGuid()],
+            AcknowledgedBy = "someone",
+            AcknowledgedAt = DateTime.UtcNow,
+        });
+
+        sent.HomeAssistant.Should().Equal((TenantPrefix + ":ha-alerts", "alert_acknowledged"));
+        sent.Alert.Should().Equal((TenantPrefix + ":alert-subscribers", "alert_acknowledged"));
     }
 
     [Theory]
+    [InlineData("alert_resolved")]
+    [InlineData("alert_acknowledged")]
     [InlineData("alert_dispatch")]
     [InlineData("alert_snoozed")]
     [InlineData("alert_test_fire")]
-    public async Task BroadcastAlertEventAsync_KeepsOtherEventsOffHomeAssistantAlertsGroup(string eventName)
+    public async Task BroadcastAlertEventAsync_KeepsEventsOffHomeAssistantAlertsGroup(string eventName)
     {
         var (service, _, sent) = RecordingService();
 

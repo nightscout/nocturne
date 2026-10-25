@@ -30,7 +30,7 @@
 </div>
 
 <div class="space-y-2">
-  <Label for="eventType">Event Type</Label>
+  <Label for="eventType">Event type</Label>
   <Input
     id="eventType"
     bind:value={form.eventType}

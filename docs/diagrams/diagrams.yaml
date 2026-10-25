@@ -88,7 +88,7 @@ diagrams:
 
   - source: alert-evaluation-pipeline.mmd
     title: Alert Evaluation Pipeline
-    description: How an incoming glucose reading flows through rule filtering, sensor-context enrichment, the condition evaluator registry, the excursion tracker state machine, auto-resolve, the shared resolution handler, the periodic sweep, and step-0 delivery — including the in-app ack/dismiss user-action path.
+    description: How an incoming glucose reading flows through rule filtering, sensor-context enrichment, the Rust evaluation engine, the excursion tracker state machine, auto-resolve, the shared resolution handler, the periodic sweep, and step-0 delivery — including the in-app ack/dismiss user-action path.
     tags: [Monitoring]
 
   - source: er-system-connectors.mmd

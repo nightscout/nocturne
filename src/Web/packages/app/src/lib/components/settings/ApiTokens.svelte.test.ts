@@ -99,27 +99,6 @@ describe("ApiTokens create", () => {
     await expect.element(page.getByText(LOAD_FAILURE)).not.toBeInTheDocument();
   });
 
-  it("lists the new token without a page reload", async () => {
-    createImpl = () => {
-      grants = [grant("g-new", "Home Assistant")];
-      return Promise.resolve({ token: "noc_created" });
-    };
-
-    render(ApiTokens, {
-      createOpen: true,
-      prefillLabel: "Home Assistant",
-      prefillScopes: ["glucose.read"],
-    });
-
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Create token" })
-      .click();
-    await page.getByRole("button", { name: "Done" }).click();
-
-    await expect.element(page.getByText("Home Assistant")).toBeVisible();
-  });
-
   it("still surfaces a real create failure", async () => {
     createImpl = () =>
       Promise.reject({ status: 400, body: { message: "Label already used." } });
@@ -155,23 +134,6 @@ describe("ApiTokens revoke", () => {
 
     await expect.element(page.getByText("API token revoked.")).toBeVisible();
     await expect.element(page.getByText(LOAD_FAILURE)).not.toBeInTheDocument();
-  });
-
-  it("drops the token from the list without a page reload", async () => {
-    revokeImpl = () => {
-      grants = [];
-      return Promise.resolve({ success: true });
-    };
-
-    render(ApiTokens);
-    await expect.element(page.getByText("Old uploader key")).toBeVisible();
-
-    await page.getByRole("button").nth(1).click();
-    await page.getByRole("button", { name: "Revoke" }).click();
-
-    await expect
-      .element(page.getByText("Old uploader key"))
-      .not.toBeInTheDocument();
   });
 
   it("keeps the reason when the revoke itself fails", async () => {

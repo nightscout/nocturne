@@ -35,12 +35,6 @@ const TOKEN_TABLE: Record<AlertRuleSeverity, StatusToken> = {
 	info: "info",
 };
 
-const LABEL_TABLE: Record<AlertRuleSeverity, string> = {
-	critical: "Critical",
-	warning: "Warning",
-	info: "Info",
-};
-
 function isKnown(s: AlertRuleSeverity | string | undefined): s is AlertRuleSeverity {
 	return s === "critical" || s === "warning" || s === "info";
 }
@@ -59,9 +53,4 @@ export function severity(
 /** Raw CSS variable reference. For chart fills and other non-class consumers. */
 export function severityVar(s: AlertRuleSeverity | string | undefined): string {
 	return isKnown(s) ? statusVar(TOKEN_TABLE[s]) : "var(--muted-foreground)";
-}
-
-/** Human label. */
-export function severityLabel(s: AlertRuleSeverity | string | undefined): string {
-	return isKnown(s) ? LABEL_TABLE[s] : (s ?? "");
 }

@@ -12,7 +12,8 @@ public sealed record PublicAccessInfo(
     Guid SubjectId,
     Guid MemberId,
     bool LimitTo24Hours,
-    HashSet<string> EffectivePermissions
+    HashSet<string> EffectivePermissions,
+    IReadOnlyList<string> DirectPermissions
 );
 
 /// <summary>
@@ -129,7 +130,8 @@ public sealed class PublicAccessCacheService
             SubjectId: membership.SubjectId,
             MemberId: membership.Id,
             LimitTo24Hours: membership.LimitTo24Hours,
-            EffectivePermissions: effectivePermissions
+            EffectivePermissions: effectivePermissions,
+            DirectPermissions: membership.DirectPermissions ?? []
         );
     }
 }

@@ -1,9 +1,9 @@
-using System.Text.Json;
-using Nocturne.Connectors.Core.Constants;
-using Nocturne.Core.Models;
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Devices;
 
@@ -14,100 +14,106 @@ namespace Nocturne.API.Services.Devices;
 /// <see cref="DeviceCatalogEntry"/>, so a device without a catalog id gets none.
 /// </summary>
 /// <remarks>
-/// Definitions are per user and named after the device model, found-or-created by name, so
-/// registering the same model twice reuses its trackers while switching models adds the new model's.
+/// Definitions are the tenant's and named after the device model. A spec is skipped when the tenant
+/// has a tracker of its name, so registering the same model twice reuses its trackers, or one that
+/// already does its job (<see cref="LegacyFallbackRules.Follows"/>), which a second tracker would
+/// duplicate: switching CGM models keeps the sensor tracker as it is, while switching between a
+/// tubed and a patch pump adds the new type's site tracker. The trackers have
+/// no notification thresholds; a member adds them. Each starts at the latest event that restarts it
+/// (<see cref="ConsumableTrackerWriter"/>), under the consumable lock the legacy conversion takes.
 /// </remarks>
 public interface IDeviceTrackerProvisioner
 {
     /// <summary>
-    /// Creates the trackers <paramref name="device"/>'s catalog entry calls for that
-    /// <paramref name="userId"/> does not already have. Returns the number created.
+    /// Creates the trackers <paramref name="device"/>'s catalog entry calls for that the tenant does
+    /// not already have, recording <paramref name="userId"/> as their creator. Returns the number
+    /// created, 0 when the store fails: the device is saved already, and the legacy fallbacks still
+    /// offer the consumables.
     /// </summary>
     Task<int> ProvisionAsync(PatientDevice device, string userId, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
-internal sealed class DeviceTrackerProvisioner(ITrackerRepository trackers) : IDeviceTrackerProvisioner
+internal sealed class DeviceTrackerProvisioner(
+    ITrackerRepository trackers,
+    ConsumableTrackerWriter writer,
+    ILogger<DeviceTrackerProvisioner> logger)
+    : IDeviceTrackerProvisioner
 {
-    /// <summary>A tracker definition a catalog entry calls for.</summary>
-    internal sealed record TrackerSpec(
-        string Name,
-        TrackerCategory Category,
-        string Icon,
-        int LifespanHours,
-        IReadOnlyList<string> Triggers);
-
     /// <inheritdoc />
     public async Task<int> ProvisionAsync(PatientDevice device, string userId, CancellationToken ct = default)
     {
         if (device.CatalogId is not { } catalogId || DeviceCatalog.GetById(catalogId) is not { } entry)
             return 0;
 
-        var specs = SpecsFor(entry);
+        var specs = ConsumableTrackerSpecs.SpecsFor(entry);
         if (specs.Count == 0)
             return 0;
 
-        var existing = await trackers.GetDefinitionsForUserAsync(userId, ct);
-        var created = 0;
-        foreach (var spec in specs)
+        List<CreatedConsumableTracker> created;
+        try
         {
-            if (existing.Any(d => string.Equals(d.Name, spec.Name, StringComparison.OrdinalIgnoreCase)))
-                continue;
+            created = await trackers.ExecuteUnderConsumableLockAsync(
+                async (tx, unit, token) =>
+                {
+                    var existing = await tx.GetAllDefinitionsAsync(token);
+                    var made = new List<CreatedConsumableTracker>();
+                    foreach (var spec in specs)
+                    {
+                        if (existing.Any(d => string.Equals(d.Name, spec.Name, StringComparison.OrdinalIgnoreCase)))
+                            continue;
+                        if (existing.Any(d => LegacyFallbackRules.Follows(d, spec)))
+                            continue;
 
-            await trackers.CreateDefinitionAsync(new TrackerDefinitionEntity
-            {
-                UserId = userId,
-                Name = spec.Name,
-                Category = spec.Category,
-                Icon = spec.Icon,
-                LifespanHours = spec.LifespanHours,
-                TriggerEventTypes = JsonSerializer.Serialize(spec.Triggers),
-                StartEventType = spec.Triggers.FirstOrDefault(),
-                Mode = TrackerMode.Duration,
-            }, ct);
-            created++;
+                        made.Add(await writer.CreateAsync(tx, unit, spec, userId, withAlerts: false, token));
+                    }
+                    return made;
+                },
+                async (tx, attempt, token) =>
+                {
+                    foreach (var tracker in attempt)
+                        if (!await ConsumableTrackerWriter.LandedAsync(tx, tracker, token))
+                            return false;
+                    return true;
+                },
+                ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            logger.LogError(ex, "Creating the trackers of device {DeviceId} failed", device.Id);
+            return 0;
+        }
+        catch (DbException ex)
+        {
+            logger.LogError(ex, "Creating the trackers of device {DeviceId} failed", device.Id);
+            return 0;
+        }
+        catch (RetryLimitExceededException ex)
+        {
+            logger.LogError(ex, "Creating the trackers of device {DeviceId} failed", device.Id);
+            return 0;
         }
 
-        return created;
-    }
-
-    /// <summary>The trackers <paramref name="entry"/> calls for, empty when it carries no wear data.</summary>
-    internal static IReadOnlyList<TrackerSpec> SpecsFor(DeviceCatalogEntry entry)
-    {
-        var specs = new List<TrackerSpec>();
-
-        if (entry.Cgm is { } cgm)
+        foreach (var tracker in created)
         {
-            specs.Add(new($"{entry.Name} sensor", TrackerCategory.Sensor, "radio",
-                cgm.SensorDurationDays * 24,
-                [TreatmentTypes.SensorStart, TreatmentTypes.SensorChange]));
-
-            if (cgm is { HasSeparateTransmitter: true, TransmitterDurationDays: { } transmitterDays })
-                specs.Add(new($"{entry.Name} transmitter", TrackerCategory.Battery, "battery",
-                    transmitterDays * 24, []));
-        }
-
-        if (entry.Pump is { } pump)
-        {
-            if (pump.IsPatch)
+            try
             {
-                specs.Add(new($"{entry.Name} pod", TrackerCategory.Cannula, "syringe",
-                    pump.SiteDurationHours,
-                    [TreatmentTypes.PodChange, TreatmentTypes.SiteChange]));
+                await writer.PublishAsync(trackers, tracker, CancellationToken.None);
             }
-            else
+            catch (DbUpdateException ex)
             {
-                specs.Add(new($"{entry.Name} infusion site", TrackerCategory.Cannula, "syringe",
-                    pump.SiteDurationHours,
-                    [TreatmentTypes.SiteChange, TreatmentTypes.CannulaChange]));
-
-                if (pump.ReservoirDurationHours is { } reservoirHours)
-                    specs.Add(new($"{entry.Name} reservoir", TrackerCategory.Reservoir, "cylinder",
-                        reservoirHours,
-                        [TreatmentTypes.InsulinChange, TreatmentTypes.ReservoirChangeEvent]));
+                logger.LogError(ex, "Announcing tracker {DefinitionId} failed", tracker.Definition.Id);
+            }
+            catch (DbException ex)
+            {
+                logger.LogError(ex, "Announcing tracker {DefinitionId} failed", tracker.Definition.Id);
+            }
+            catch (RetryLimitExceededException ex)
+            {
+                logger.LogError(ex, "Announcing tracker {DefinitionId} failed", tracker.Definition.Id);
             }
         }
 
-        return specs;
+        return created.Count;
     }
 }

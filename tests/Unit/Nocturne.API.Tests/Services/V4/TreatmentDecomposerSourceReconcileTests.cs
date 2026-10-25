@@ -34,7 +34,6 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
 
     private static readonly DateTime At = new(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
 
-    private readonly Mock<IProfileDecomposer> _profiles = new();
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly TreatmentDecomposer _decomposer;
@@ -55,7 +54,6 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
             Mock.Of<ITreatmentFoodService>(),
             Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(),
-            _profiles.Object,
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
@@ -138,7 +136,6 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         AddSpan("override", "Override", Connector, """{"collection":"treatments","utcOffset":0}""", At.AddMinutes(5));
         AddSpan("target", "TemporaryTarget", Connector, """{"utcOffset":0}""", At.AddMinutes(10));
         AddSpan("devicestatus-override", "Override", Connector, """{"reason":"devicestatus"}""", At);
-        AddSpan("old-profile-span", "Profile", Connector, """{"utcOffset":0}""", At);
         AddActivation("other-source", Other, At);
         AddActivation("before-window", Connector, At.AddHours(-3));
         await _context.SaveChangesAsync();
@@ -152,7 +149,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task A_profile_switch_is_deleted_with_its_profile_rows_once_the_source_drops_it()
+    public async Task A_profile_switch_is_deleted_once_the_source_drops_it()
     {
         AddActivation("switch", Connector, At);
         AddActivation("kept", Connector, At.AddMinutes(5));
@@ -168,8 +165,6 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
             .DeletedAt.Should().NotBeNull();
         (await _context.ProfileActivations.IgnoreQueryFilters().AsNoTracking().SingleAsync(a => a.LegacyId == "kept"))
             .DeletedAt.Should().BeNull();
-        _profiles.Verify(p => p.DeleteByLegacyIdAsync("switch", WriteOrigin.Live, It.IsAny<CancellationToken>()), Times.Once);
-        _profiles.VerifyNoOtherCalls();
     }
 
     private void AddActivation(string legacyId, string source, DateTime start) =>

@@ -22,8 +22,31 @@ public class GuestLinkService : IGuestLinkService
     private const string CodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
     private const int CodeLength = 7;
 
+    /// <summary>
+    /// What a guest link gets when its creator chooses nothing. It includes
+    /// <see cref="Scope.AlertsRead"/> so a guest sees an alarm that is firing.
+    /// </summary>
     private static readonly List<string> DefaultScopes =
-        [Scope.HealthRead, Scope.TherapyRead, Scope.ReportsRead];
+        [Scope.HealthRead, Scope.TherapyRead, Scope.ReportsRead, Scope.AlertsRead];
+
+    /// <summary>
+    /// The guest vocabulary as categories to pick from: <see cref="Scope.AllowedGuestScopes"/> without
+    /// the <see cref="Scope.HealthRead"/> alias, which is a shorthand for others in the list, and
+    /// without <see cref="Scope.IdentityRead"/>, which no guest view reads.
+    /// </summary>
+    private static readonly IReadOnlyList<string> SelectableScopes = Scope.AllowedGuestScopes
+        .Where(scope => scope is not Scope.HealthRead and not Scope.IdentityRead)
+        .Order(StringComparer.Ordinal)
+        .ToList();
+
+    /// <summary>The categories <paramref name="creatorScopes"/> may put on a guest link.</summary>
+    public static GuestLinkScopeOptions ScopeOptions(IReadOnlySet<string> creatorScopes)
+    {
+        var available = SelectableScopes.Where(scope => Scope.Satisfies(creatorScopes, scope)).ToList();
+        var defaults = Scope.NormalizeGuest(DefaultScopes);
+
+        return new GuestLinkScopeOptions(available, available.Where(defaults.Contains).ToList());
+    }
 
     private readonly INocturneDbContextFactory _contexts;
     private readonly GuestSessionCacheService _sessionCache;

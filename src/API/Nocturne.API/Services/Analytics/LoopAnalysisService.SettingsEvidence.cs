@@ -56,15 +56,13 @@ internal sealed partial class LoopAnalysisService
     /// <summary>
     /// The Daily profile's reads over <paramref name="range"/> widened by
     /// <see cref="SettingsEvidenceBeforeMs"/> and <see cref="SettingsEvidenceAfterMs"/>, with the
-    /// therapy timeline they were read against. A calculated IOB counts temp basals as
-    /// <see cref="BasalIobModel.Carried"/>, the model of the net insulin it is subtracted from
-    /// (<see cref="SettingsEvidenceContext.InsulinActed"/>).
+    /// therapy timeline they were read against.
     /// </summary>
     private async Task<SettingsEvidenceLoaded> LoadSettingsEvidenceAsync(
         Window range, TimeZoneInfo zone, LoopAnalysisFilter filter, CancellationToken ct)
     {
         var padded = new Window(range.From - SettingsEvidenceBeforeMs, range.To + SettingsEvidenceAfterMs);
-        var loaded = await LoadDailyProfileAsync(padded, zone, filter, BasalIobModel.Carried, ct);
+        var loaded = await LoadDailyProfileAsync(padded, zone, filter, ct);
         return new SettingsEvidenceLoaded(new SettingsEvidenceInputs
         {
             Series = loaded.Inputs,

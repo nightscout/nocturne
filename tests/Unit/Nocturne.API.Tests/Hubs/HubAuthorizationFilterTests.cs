@@ -110,6 +110,7 @@ public class HubAuthorizationFilterTests
         { typeof(AlertHub), nameof(AlertHub.Subscribe) },
         { typeof(AlertHub), nameof(AlertHub.Acknowledge) },
         { typeof(AlarmHub), nameof(AlarmHub.Ack) },
+        { typeof(AlarmHub), nameof(AlarmHub.CurrentAlarm) },
         { typeof(HomeAssistantHub), nameof(HomeAssistantHub.Subscribe) },
         { typeof(HomeAssistantHub), nameof(HomeAssistantHub.Acknowledge) },
         { typeof(ConfigHub), nameof(ConfigHub.Subscribe) },
@@ -161,7 +162,26 @@ public class HubAuthorizationFilterTests
         var attempt = Attempt(typeof(AlarmHub), nameof(AlarmHub.Ack), readOnly);
 
         await attempt.Should().ThrowAsync<HubException>()
-            .Where(e => e.Message.Contains(Scope.AlertsReadWrite));
+            .Where(e => e.Message.Contains(Scope.AlertsAcknowledge));
+    }
+
+    [Fact]
+    public async Task An_alarm_ack_refuses_a_credential_that_can_only_mute_for_itself()
+    {
+        var attempt = Attempt(
+            typeof(AlarmHub), nameof(AlarmHub.Ack), Member(Scope.GlucoseRead, Scope.DeviceNotify));
+
+        await attempt.Should().ThrowAsync<HubException>();
+    }
+
+    [Theory]
+    [InlineData(Scope.AlertsAcknowledge)]
+    [InlineData(Scope.AlertsReadWrite)]
+    public async Task An_alarm_ack_admits_a_credential_that_may_silence_alarms(string scope)
+    {
+        var reached = await InvokeAsync(CreateInvocation(typeof(AlarmHub), nameof(AlarmHub.Ack), Member(scope)));
+
+        reached.Should().BeTrue();
     }
 
     [Fact]

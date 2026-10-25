@@ -72,7 +72,6 @@ async function sensorTrackerWithThresholds({ fetch }: ArrangeContext): Promise<R
 			lifespanHours: 240,
 			triggerEventTypes: ['Sensor Start'],
 			dashboardVisibility: 'Always',
-			visibility: 'Private',
 			notificationThresholds: [
 				{ urgency: 'Info', hours: -24, description: 'Sensor ends tomorrow', displayOrder: 0 },
 				{ urgency: 'Warn', hours: -2, description: 'Change the sensor soon', displayOrder: 1 },
@@ -763,7 +762,7 @@ export const definitions: ScreenshotDefinition[] = [
 	// The alert entries come last, and among them the ones that create rules follow the ones that
 	// read the seeded set: an arranged rule would otherwise join the alerts list, the simulator's
 	// replay and the lookup of the seeded Low by name. The tracker entries arrange rules of their own
-	// (a tracker's thresholds), so they sit with those. Do Not Disturb is last of all because it
+	// (a tracker's thresholds), so they sit with those. Do not disturb is last of all because it
 	// silences every alert after it.
 	{
 		id: 'alert-rule-editor',
@@ -779,7 +778,7 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		arrange: seededLowRule,
 		clip: '[data-testid="alert-identity-card"]',
-		alt: 'The Identity card of an alert rule. It holds boxes for the name of the rule and an optional description, a Severity menu set to Warning, an Enabled switch in the top corner, and a tick box for Allow through Do Not Disturb with a note that critical rules always get through.',
+		alt: 'The Identity card of an alert rule. It holds boxes for the name of the rule and an optional description, a Severity menu set to Warning, an Enabled switch in the top corner, and a tick box for Allow through Do not disturb with a note that critical rules always get through.',
 		anchors: {
 			severity: '[data-testid="alert-severity"]',
 			'allow-dnd': '[data-testid="alert-allow-dnd"]',
@@ -863,7 +862,7 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		arrange: lowOvernight,
 		clip: '[data-testid="alert-channels-card"]',
-		alt: 'The Channels card of an alert rule, listing where the alert is sent. An In-App entry shows the member it is sent to, a Webhook entry shows its web address, and an Add channel button sits underneath.',
+		alt: 'The Channels card of an alert rule, listing where the alert is sent. An In-app entry shows the member it is sent to, a Webhook entry shows its web address, and an Add channel button sits underneath.',
 	},
 	{
 		id: 'alert-rule-auto-resolve',
@@ -895,7 +894,7 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		// The bar lays its pills straight into this row (display: contents), so the row is the clip.
 		clip: '[data-testid="status-pills"]',
-		anchors: { trackers: '[data-testid="tracker-pill-bar"] button' },
+		anchors: { trackers: '[data-testid="status-pills"] [data-testid="tracker-pill-bar"] button' },
 		// Ages and the loop's figures come from the seeded data, so this image differs every capture.
 		alt: 'The row of status pills beside the current reading on the home screen. After the pills your pump and loop report comes one pill per running tracker, each giving its name and how long it has been running, with a thin line underneath showing how much of its expected life is used up.',
 	},
@@ -905,7 +904,7 @@ export const definitions: ScreenshotDefinition[] = [
 		scenario: 'patient',
 		prepare: async (page) => {
 			await openWith(
-				page.getByTestId('tracker-pill-bar').getByRole('button').first(),
+				page.getByTestId('status-pills').getByTestId('tracker-pill-bar').getByRole('button').first(),
 				page.getByTestId('tracker-pill-popover'),
 			);
 		},
@@ -956,6 +955,6 @@ export const definitions: ScreenshotDefinition[] = [
 		route: '/alerts/dnd',
 		scenario: 'patient',
 		arrange: quietHours,
-		alt: 'The Do Not Disturb page. The Manual card has its switch on, with an optional box for when it should switch itself off. The Schedule card has quiet hours switched on from 10:00 PM to 07:00 AM, with a note that the times follow the time zone on your patient record.',
+		alt: 'The Do not disturb page. The Manual card has its switch on, with an optional box for when it should switch itself off. The Schedule card has quiet hours switched on from 10:00 PM to 07:00 AM, with a note that the times follow the time zone on your patient record.',
 	},
 ];

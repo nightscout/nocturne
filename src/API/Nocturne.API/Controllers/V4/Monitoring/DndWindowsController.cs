@@ -9,6 +9,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.API.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -39,6 +40,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Tags("Monitoring")]
 [Authorize]
 [Route("api/v4/alerts/dnd/windows")]
+[DenyNoAccountViewer]
 public class DndWindowsController : ControllerBase
 {
     /// <summary>Marker stamped on a window cleared because a newer window of the same scope superseded it.</summary>
@@ -56,6 +58,7 @@ public class DndWindowsController : ControllerBase
     /// List the tenant's DND windows that are active right now (resolved on read).
     /// </summary>
     [HttpGet("active")]
+    [RequireScope(Scope.AlertsRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<DndWindowResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<DndWindowResponse>>> GetActive(CancellationToken ct)

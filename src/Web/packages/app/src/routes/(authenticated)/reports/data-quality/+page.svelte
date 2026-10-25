@@ -14,6 +14,7 @@
 		triggerDetection as triggerCompressionLowDetection
 	} from '$api/generated/compressionLows.generated.remote';
 	import { getRejectedUploads } from '$api/generated/rejectedUploads.generated.remote';
+	import { reportDescription } from '$lib/navigation/report-navigation.svelte';
 	import { contextResource } from '$lib/hooks/resource-context.svelte';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -27,7 +28,7 @@
 
 	const suggestionsResource = contextResource(
 		() => getCompressionLowSuggestions({}),
-		{ errorTitle: 'Error Loading Data Quality Report' }
+		{ errorTitle: 'Error loading data quality report' }
 	);
 
 	const suggestions = $derived(suggestionsResource.current ?? []);
@@ -76,10 +77,6 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Data Quality - Nocturne</title>
-</svelte:head>
-
 {#if suggestionsResource.current}
 	<div class="@container space-y-6">
 		<div class="flex items-center gap-3">
@@ -87,21 +84,21 @@
 				<ShieldCheck class="h-5 w-5 text-primary" />
 			</div>
 			<div>
-				<p class="text-muted-foreground print:hidden">Spot readings that may come from the sensor rather than your glucose</p>
+				<p class="text-muted-foreground print:hidden">Spot readings that can come from the sensor rather than your glucose</p>
 				<h2 class="hidden text-lg font-semibold print:block">Compression lows by review status</h2>
 			</div>
 		</div>
 
 		<FigureStrip
 			figures={[
-				{ label: 'Pending Review', value: String(pendingCount) },
+				{ label: 'Pending review', value: String(pendingCount) },
 				{ label: 'Accepted', value: String(acceptedCount) },
 				{ label: 'Dismissed', value: String(dismissedCount) }
 			]}
 		/>
 
 		<section class="print:hidden" aria-labelledby="data-quality-categories">
-			<h2 id="data-quality-categories" class="mb-3 text-lg font-semibold">Data Quality Categories</h2>
+			<h2 id="data-quality-categories" class="mb-3 text-lg font-semibold">Data quality categories</h2>
 			<ul class="m-0 list-none divide-y divide-border border-y border-border p-0">
 				<li>
 					<a
@@ -109,9 +106,9 @@
 						class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
 					>
 						<div class="min-w-0 flex-1">
-							<div class="font-medium text-foreground">Compression Lows</div>
+							<div class="font-medium text-foreground">Compression lows</div>
 							<div class="text-sm text-muted-foreground">
-								Falsely low readings from sleeping on sensor
+								{reportDescription("/reports/data-quality/compression-lows")}
 							</div>
 							<div class="mt-1 text-sm text-muted-foreground tabular-nums">
 								{acceptedCount} events{#if pendingCount > 0} · {pendingCount} pending{/if}
@@ -126,9 +123,9 @@
 						class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
 					>
 						<div class="min-w-0 flex-1">
-							<div class="font-medium text-foreground">Signal Integrity</div>
+							<div class="font-medium text-foreground">Signal integrity</div>
 							<div class="text-sm text-muted-foreground">
-								Windows where readings oscillate in a way that is unlikely to be physiologic
+								{reportDescription("/reports/data-quality/sensor-integrity")}
 							</div>
 						</div>
 						<ChevronRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/link:translate-x-0.5" aria-hidden="true" />
@@ -140,9 +137,9 @@
 						class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
 					>
 						<div class="min-w-0 flex-1">
-							<div class="font-medium text-foreground">CGM Comparison</div>
+							<div class="font-medium text-foreground">CGM comparison</div>
 							<div class="text-sm text-muted-foreground">
-								How far apart two sensors run over the same window
+								{reportDescription("/reports/data-quality/cgm-comparison")}
 							</div>
 						</div>
 						<ChevronRight class="size-4 shrink-0 text-muted-foreground transition-transform group-hover/link:translate-x-0.5" aria-hidden="true" />
@@ -155,9 +152,9 @@
 						class="group/link -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
 					>
 						<div class="min-w-0 flex-1">
-							<div class="font-medium text-foreground">Rejected Uploads</div>
+							<div class="font-medium text-foreground">Rejected uploads</div>
 							<div class="text-sm text-muted-foreground">
-								Records an uploader sent that Nocturne could not store
+								{reportDescription("/reports/data-quality/rejected-uploads")}
 							</div>
 							<div class="mt-1 text-sm text-muted-foreground tabular-nums">
 								{rejectedCount} records
@@ -187,7 +184,7 @@
 						</div>
 					</div>
 					<Button href="/reports/data-quality/compression-lows" variant="default" class="shrink-0">
-						Review Now
+						Review now
 					</Button>
 				</CardContent>
 			</Card>
@@ -195,7 +192,7 @@
 
 		<Card class="print:hidden">
 			<CardHeader>
-				<CardTitle class="text-base">Run Detection</CardTitle>
+				<CardTitle class="text-base">Run detection</CardTitle>
 				<CardDescription>
 					Manually scan a date range for compression lows
 				</CardDescription>
@@ -203,7 +200,7 @@
 			<CardContent>
 				<div class="flex flex-wrap items-end gap-4">
 					<div class="flex flex-col gap-1">
-						<label for="start-date" class="text-sm text-muted-foreground">Start Date</label>
+						<label for="start-date" class="text-sm text-muted-foreground">Start date</label>
 						<Input
 							id="start-date"
 							type="date"
@@ -212,7 +209,7 @@
 						/>
 					</div>
 					<div class="flex flex-col gap-1">
-						<label for="end-date" class="text-sm text-muted-foreground">End Date (optional)</label>
+						<label for="end-date" class="text-sm text-muted-foreground">End date (optional)</label>
 						<Input
 							id="end-date"
 							type="date"
@@ -223,7 +220,7 @@
 					</div>
 					<Button onclick={handleTriggerDetection} disabled={isDetecting || !testStartDate}>
 						<RefreshCw class="mr-2 h-4 w-4 {isDetecting ? 'animate-spin' : ''}" />
-						Run Detection
+						Run detection
 					</Button>
 				</div>
 				{#if detectionResult}

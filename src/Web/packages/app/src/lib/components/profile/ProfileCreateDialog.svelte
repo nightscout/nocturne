@@ -104,7 +104,7 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Plus class="h-5 w-5" />
-        Create New Profile
+        Create new profile
       </Dialog.Title>
       <Dialog.Description>
         Create a new therapy profile with your insulin settings.
@@ -120,7 +120,7 @@
     >
       <!-- Profile Name -->
       <div class="space-y-2">
-        <Label for="profile-name">Profile Name *</Label>
+        <Label for="profile-name">Profile name *</Label>
         <Input
           id="profile-name"
           bind:value={formState.defaultProfile}
@@ -134,13 +134,13 @@
 
       <!-- Icon Selection -->
       <div class="space-y-2">
-        <Label>Profile Icon</Label>
+        <Label>Profile icon</Label>
         <ProfileIconPicker bind:selectedIcon={formState.icon} />
       </div>
 
       <!-- Units -->
       <div class="space-y-2">
-        <Label for="units">Blood Glucose Units</Label>
+        <Label for="units">Blood glucose units</Label>
         <Select.Root type="single" bind:value={formState.units}>
           <Select.Trigger class="w-full">
             {BG_UNITS.find((u) => u.value === formState.units)?.label ??
@@ -213,7 +213,7 @@
           {#if isLoading}
             Creating...
           {:else}
-            Create Profile
+            Create profile
           {/if}
         </Button>
       </Dialog.Footer>

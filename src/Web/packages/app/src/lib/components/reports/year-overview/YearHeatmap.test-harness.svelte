@@ -67,6 +67,7 @@
   {getCellFill}
   navigateToDayInReview={onNavigate}
   glucoseColorScale={() => "var(--fixture-glucose)"}
+  glucoseBands={[54, 70, 180, 250]}
   units="mg/dl"
   unitLabel="mg/dL"
   {formatUnits}

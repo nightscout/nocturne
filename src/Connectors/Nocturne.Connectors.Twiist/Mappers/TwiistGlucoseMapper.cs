@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Twiist.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Twiist.Mappers;
@@ -60,7 +61,7 @@ public class TwiistGlucoseMapper(ILogger logger)
     {
         try
         {
-            var epochMs = new DateTimeOffset(record.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var epochMs = record.Timestamp.ToMills();
 
             return new SensorGlucose
             {

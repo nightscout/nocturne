@@ -1,6 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
-using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.Alerts.Corpus;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -9,10 +9,9 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts.Engines;
 
 /// <summary>
-/// Sustained-timer continuity across engines: a timer row written by one engine must be
-/// honoured (not reset) by the other, because the engines share the
-/// <c>alert_condition_timers</c> rows keyed by <c>(rule_id, path)</c> and a cutover (or a
-/// shadow/rust rollback) must not restart in-flight sustained windows.
+/// Sustained-timer continuity across engine instances: the <c>alert_condition_timers</c> rows
+/// keyed by <c>(rule_id, path)</c> outlive the process, so a restarted engine must honour (not
+/// reset) an in-flight sustained window.
 /// </summary>
 public class TimerContinuityTests
 {
@@ -44,91 +43,54 @@ public class TimerContinuityTests
     };
 
     [NativeFact]
-    public async Task Timer_row_written_by_the_managed_engine_is_honoured_by_the_rust_engine()
+    public async Task A_sustained_window_reads_its_first_true_from_the_timer_store()
     {
         var rule = BuildSustainedRule();
         var time = new ManualTimeProvider();
-        var timerStore = new RecordingTimerStore();
         var trackerRepo = new InMemoryTrackerRepository([rule]);
         var snapshot = ToSnapshot(rule);
 
-        // Managed engine starts the sustained window at T0 (child true, no timer → set, root false).
-        var (managed, provider) = EngineTestHarness.BuildManagedEngine(time, timerStore, trackerRepo);
-        await using var _ = provider;
+        var before = EngineTestHarness.BuildRustEngine(time, trackerRepo);
         time.SetUtcNow(T0);
-        var first = await managed.EvaluateRuleAsync(snapshot, LowGlucoseContext(T0), AlertEngineOptions.Default, CancellationToken.None);
+        var first = await before.EvaluateRuleAsync(snapshot, LowGlucoseContext(T0), AlertEngineOptions.Default, CancellationToken.None);
         first.ConditionMet.Should().BeFalse("the window starts on the first true tick");
-        timerStore.DrainOps().Should().ContainSingle(op => op.Op == "set" && op.Path == "sustained" && op.At == T0);
+        trackerRepo.Timers.DrainOps().Should().ContainSingle(op => op.Op == "set" && op.Path == "sustained" && op.At == T0);
 
-        // The rust engine picks up the same store mid-window: at T0+5 the window is not
-        // complete (row honoured, NOT reset)...
-        var rust = EngineTestHarness.BuildRustEngine(time, timerStore, trackerRepo);
+        var after = EngineTestHarness.BuildRustEngine(time, trackerRepo);
         time.SetUtcNow(T0.AddMinutes(5));
-        var mid = await rust.EvaluateRuleAsync(snapshot, LowGlucoseContext(T0.AddMinutes(5)), AlertEngineOptions.Default, CancellationToken.None);
-        mid.ConditionMet.Should().BeFalse("only 5 of 10 sustained minutes have elapsed since the managed-written first-true");
-        timerStore.DrainOps().Should().BeEmpty("an in-flight window must not be re-set or cleared");
+        var mid = await after.EvaluateRuleAsync(snapshot, LowGlucoseContext(T0.AddMinutes(5)), AlertEngineOptions.Default, CancellationToken.None);
+        mid.ConditionMet.Should().BeFalse("only 5 of 10 sustained minutes have elapsed since the stored first-true");
+        trackerRepo.Timers.DrainOps().Should().BeEmpty("an in-flight window must not be re-set or cleared");
 
-        // ...and at T0+10 it completes exactly on the managed-written schedule.
         time.SetUtcNow(T0.AddMinutes(10));
-        var done = await rust.EvaluateRuleAsync(snapshot, LowGlucoseContext(T0.AddMinutes(10)), AlertEngineOptions.Default, CancellationToken.None);
-        done.ConditionMet.Should().BeTrue("10 sustained minutes elapsed since the managed-written first-true");
+        var done = await after.EvaluateRuleAsync(snapshot, LowGlucoseContext(T0.AddMinutes(10)), AlertEngineOptions.Default, CancellationToken.None);
+        done.ConditionMet.Should().BeTrue("10 sustained minutes elapsed since the stored first-true");
         done.Transition.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
-        (await timerStore.GetFirstTrueAsync(RuleId, "sustained", CancellationToken.None))
-            .Should().Be(T0, "the first-true instant the managed engine recorded must survive untouched");
+        (await trackerRepo.Timers.GetAllForRuleAsync(RuleId, CancellationToken.None))
+            .Should().Contain("sustained", T0, "the first-true instant the first instance recorded must survive untouched");
     }
 
     [NativeFact]
-    public async Task Timer_row_written_by_the_rust_engine_is_honoured_by_the_managed_engine()
+    public async Task Snooze_timers_thread_through_their_own_path_root()
     {
+        const string conditions =
+            """[{"type":"sustained","sustained":{"minutes":10,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}}]""";
         var rule = BuildSustainedRule();
+        rule.ClientConfiguration = $$$"""{"snooze":{"smartSnooze":true,"conditions":{{{conditions}}}}}""";
         var time = new ManualTimeProvider();
-        var timerStore = new RecordingTimerStore();
         var trackerRepo = new InMemoryTrackerRepository([rule]);
-        var snapshot = ToSnapshot(rule);
-
-        // Rust engine starts the window at T0.
-        var rust = EngineTestHarness.BuildRustEngine(time, timerStore, trackerRepo);
-        time.SetUtcNow(T0);
-        var first = await rust.EvaluateRuleAsync(snapshot, LowGlucoseContext(T0), AlertEngineOptions.Default, CancellationToken.None);
-        first.ConditionMet.Should().BeFalse("the window starts on the first true tick");
-        timerStore.DrainOps().Should().ContainSingle(op => op.Op == "set" && op.Path == "sustained" && op.At == T0);
-        (await timerStore.GetFirstTrueAsync(RuleId, "sustained", CancellationToken.None))
-            .Should().Be(T0, "the rust engine persists the first-true instant through the shared store");
-
-        // The managed engine completes it on schedule.
-        var (managed, provider) = EngineTestHarness.BuildManagedEngine(time, timerStore, trackerRepo);
-        await using var _ = provider;
-        time.SetUtcNow(T0.AddMinutes(10));
-        var done = await managed.EvaluateRuleAsync(snapshot, LowGlucoseContext(T0.AddMinutes(10)), AlertEngineOptions.Default, CancellationToken.None);
-        done.ConditionMet.Should().BeTrue("10 sustained minutes elapsed since the rust-written first-true");
-        done.Transition.Type.Should().Be(ExcursionTransitionType.ExcursionOpened);
-        (await timerStore.GetFirstTrueAsync(RuleId, "sustained", CancellationToken.None))
-            .Should().Be(T0, "the first-true instant the rust engine recorded must survive untouched");
-    }
-
-    [NativeFact]
-    public async Task Aux_scope_timers_thread_through_the_rust_evaluate_node_path()
-    {
-        // EvaluateNodeAsync (the snooze / sweep auto-resolve surface) must honour and
-        // persist (rule_id, path) timers exactly like the rule-body path.
-        var rule = BuildSustainedRule();
-        var time = new ManualTimeProvider();
-        var timerStore = new RecordingTimerStore();
-        var trackerRepo = new InMemoryTrackerRepository([rule]);
-        var rust = EngineTestHarness.BuildRustEngine(time, timerStore, trackerRepo);
-
-        var node = JsonSerializer.Deserialize<ConditionNode>(
-            """{"type":"sustained","sustained":{"minutes":10,"child":{"type":"threshold","threshold":{"direction":"below","value":70}}}}""",
-            Nocturne.API.Services.Alerts.Evaluators.EvaluatorJson.Options)!;
+        var rust = EngineTestHarness.BuildRustEngine(time, trackerRepo);
+        var list = JsonDocument.Parse(conditions).RootElement;
 
         time.SetUtcNow(T0);
-        var first = await rust.EvaluateNodeAsync(RuleId, node, LowGlucoseContext(T0), "snooze", CancellationToken.None);
+        var first = await rust.EvaluateSnoozeAsync(RuleId, list, LowGlucoseContext(T0), CancellationToken.None);
         first.Should().BeFalse("the window starts on the first true tick");
-        (await timerStore.GetFirstTrueAsync(RuleId, "snooze", CancellationToken.None))
-            .Should().Be(T0, "aux-scope timers key under the path root, not the rule body");
+        (await trackerRepo.Timers.GetAllForRuleAsync(RuleId, CancellationToken.None))
+            .Should().Equal(new Dictionary<string, DateTime> { ["snooze[0].sustained"] = T0 },
+                "snooze timers key under their own path root, not the rule body");
 
         time.SetUtcNow(T0.AddMinutes(10));
-        var done = await rust.EvaluateNodeAsync(RuleId, node, LowGlucoseContext(T0.AddMinutes(10)), "snooze", CancellationToken.None);
+        var done = await rust.EvaluateSnoozeAsync(RuleId, list, LowGlucoseContext(T0.AddMinutes(10)), CancellationToken.None);
         done.Should().BeTrue("10 sustained minutes elapsed since the recorded first-true");
     }
 }

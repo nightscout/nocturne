@@ -1,3 +1,4 @@
+using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -19,27 +20,8 @@ namespace Nocturne.API.Services.Alerts;
 /// </para>
 /// </remarks>
 /// <param name="gate">The in-process per-rule lease the tracker holds across read, decide and write.</param>
-/// <param name="repository">The tracker state store, whose transition lock the tracker's writer takes.</param>
-public sealed class AlertRuleRearm(AlertRuleEvaluationGate gate, IAlertTrackerRepository repository)
+public sealed class AlertRuleRearm(AlertRuleEvaluationGate gate)
 {
-    /// <summary>
-    /// Clears the hold of each of <paramref name="ruleIds"/> that has one, after the rule changes
-    /// are saved. Each rule is read and cleared in its own transaction, under the lease and
-    /// transition lock the tracker's writer takes.
-    /// </summary>
-    public async Task ClearAsync(IReadOnlyCollection<Guid> ruleIds, CancellationToken ct)
-    {
-        foreach (var ruleId in ruleIds)
-        {
-            using var lease = await gate.AcquireAsync(ruleId, ct);
-            await repository.ExecuteInTransactionAsync(async (tx, token) =>
-            {
-                await tx.LockRuleAsync(ruleId, token);
-                return await ClearHoldAsync(tx, ruleId, token);
-            }, ct: ct);
-        }
-    }
-
     /// <summary>
     /// Saves the changes <paramref name="unit"/> tracks for rule <paramref name="ruleId"/> and
     /// clears its hold in one transaction on that unit.
@@ -49,10 +31,11 @@ public sealed class AlertRuleRearm(AlertRuleEvaluationGate gate, IAlertTrackerRe
         SaveAndClearAsync(unit, [ruleId], ct);
 
     /// <summary>
-    /// Saves the changes <paramref name="unit"/> tracks and clears the hold of each of
-    /// <paramref name="ruleIds"/> in one transaction on that unit, under the lease and
-    /// transition lock the tracker's writer takes for each rule, so that neither lands without
-    /// the other.
+    /// Saves the changes <paramref name="unit"/> tracks, clears the hold of each of
+    /// <paramref name="ruleIds"/> and prunes its sustained timers to the paths its saved trees still
+    /// have (<see cref="ConditionTimerPaths"/>), in one transaction on that unit, under the lease
+    /// and transition lock the tracker's writer takes for each rule, so that none lands without
+    /// the others.
     /// </summary>
     /// <remarks>
     /// Leases and locks are taken in rule id order, so two writers over overlapping rules cannot
@@ -61,8 +44,21 @@ public sealed class AlertRuleRearm(AlertRuleEvaluationGate gate, IAlertTrackerRe
     /// <param name="unit">The tenant unit the rules were loaded and edited on.</param>
     /// <param name="ruleIds">The rules whose hold the saved changes invalidate.</param>
     /// <param name="ct">Cancellation token.</param>
-    public async Task SaveAndClearAsync(
-        DbUnitOfWork unit, IReadOnlyCollection<Guid> ruleIds, CancellationToken ct)
+    public Task SaveAndClearAsync(
+        DbUnitOfWork unit, IReadOnlyCollection<Guid> ruleIds, CancellationToken ct) =>
+        SaveAsync(unit, ruleIds, clearHold: true, ct);
+
+    /// <summary>
+    /// Saves the changes <paramref name="unit"/> tracks for rule <paramref name="ruleId"/> and prunes
+    /// its sustained timers as <see cref="SaveAndClearAsync(DbUnitOfWork, IReadOnlyCollection{Guid}, CancellationToken)"/>
+    /// does, keeping its hold. For an edit of the smart-snooze conditions alone, which the hold was
+    /// not taken against.
+    /// </summary>
+    public Task SaveAndPruneAsync(DbUnitOfWork unit, Guid ruleId, CancellationToken ct) =>
+        SaveAsync(unit, [ruleId], clearHold: false, ct);
+
+    private async Task SaveAsync(
+        DbUnitOfWork unit, IReadOnlyCollection<Guid> ruleIds, bool clearHold, CancellationToken ct)
     {
         var ordered = ruleIds.Distinct().Order().ToList();
         var leases = new List<IDisposable>(ordered.Count);
@@ -77,7 +73,12 @@ public sealed class AlertRuleRearm(AlertRuleEvaluationGate gate, IAlertTrackerRe
                     await tracker.LockRuleAsync(ruleId, token);
                 await unit.Context.SaveChangesAsync(token);
                 foreach (var ruleId in ordered)
-                    await ClearHoldAsync(tracker, ruleId, token);
+                {
+                    if (clearHold)
+                        await ClearHoldAsync(tracker, ruleId, token);
+                    if (await tracker.GetRuleAsync(ruleId, token) is { } rule)
+                        await tracker.Timers.PruneToPathsAsync(ruleId, ConditionTimerPaths.Of(rule), token);
+                }
                 return true;
             }, ct: ct);
         }

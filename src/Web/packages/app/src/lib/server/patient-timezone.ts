@@ -1,24 +1,12 @@
 /**
  * The calendar a report's days are cut on: the patient's, not the container's.
  *
- * Source order mirrors the API's own `TherapySettingsResolver` — the patient
- * record is canonical, because a patient lives in one timezone however many
- * therapy profiles they have, and the per-profile `TherapySettings.Timezone` is
- * a legacy fallback that connector-imported profiles (Nightscout, Glooko) wrote
- * into before that move. Reading them the other way round lets a stale imported
- * `UTC` beat a correct patient record.
+ * The API resolves it (`GET /patient-record/timezone`): the patient record's
+ * zone, else the active therapy profile's. That endpoint answers any caller who
+ * may read glucose, reports or therapy, so a member who sees reports but not
+ * therapy settings still gets the patient's calendar.
  *
- * The ORDER matches; the row selection does not. `getProfileSummary` returns
- * therapy settings across every profile ordered by timestamp descending with no
- * `<= now` bound, so `[0]` is the newest row anywhere — a future-dated or
- * inactive-profile row wins, where the API resolves the active profile as of
- * now. Only reachable for a patient whose record names no zone; fixing it needs
- * an endpoint that exposes the API's own `GetTimezoneAsync` rather than this
- * reconstruction.
- *
- * A zone the runtime cannot resolve is treated as unset, where the API takes
- * any non-empty `patient.Timezone` as given: the two disagree for a record
- * holding a garbage zone and a legacy row holding a real one.
+ * A zone the runtime cannot resolve is treated as unset.
  *
  * Null means no source names one, and the caller chooses what to do about it.
  */
@@ -30,9 +18,8 @@ import { errorStatus } from "$lib/forms/submit-error";
 /**
  * Read `fetch`, treating a refusal as "not named here" and nothing else.
  *
- * Neither the patient record nor therapy settings is a shareable data category,
- * so an anonymous public-share viewer is refused both, and their reports must
- * still render.
+ * The patient timezone is not a shareable data category, so an anonymous
+ * public-share viewer is refused it, and their reports must still render.
  *
  * Every other failure rethrows. A report that silently cut its days on UTC
  * because this lookup timed out would show a clinician the wrong day with
@@ -49,19 +36,10 @@ export async function readable<T>(fetch: () => Promise<T>): Promise<T | null> {
 }
 
 async function resolve(apiClient: ApiClient): Promise<string | null> {
-  const record = await readable(() =>
-    apiClient.patientRecord.getPatientRecord()
+  const response = await readable(() =>
+    apiClient.patientRecord.getPatientTimezone()
   );
-  if (isTimeZone(record?.timezone)) return record.timezone;
-
-  // Only reached when the canonical source names nothing: `getProfileSummary` is
-  // five sequential repository reads and is served `NoStore`, so it stays off the
-  // path every request would otherwise take.
-  const profile = await readable(() =>
-    apiClient.profile.getProfileSummary(undefined, undefined)
-  );
-  const legacy = profile?.therapySettings?.[0]?.timezone;
-  return isTimeZone(legacy) ? legacy : null;
+  return isTimeZone(response?.timezone) ? response.timezone : null;
 }
 
 /**

@@ -149,7 +149,7 @@ public static class AuditedBulkDeleteExtensions
         IAuditContext? auditContext,
         string scope,
         CancellationToken ct = default,
-        DuplicateDelete duplicates = DuplicateDelete.PromoteSurvivor) where T : class, IAuditable, ISoftDeletable
+        DuplicateDelete duplicates = DuplicateDelete.PromoteSurvivor) where T : class, ISoftDeletable
     {
         var (deleted, _) = await context.ExecuteInTransactionAsync(
             async token =>

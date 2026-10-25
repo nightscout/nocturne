@@ -132,4 +132,14 @@ public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, I
         Guid? patientDeviceId = null,
         CancellationToken ct = default
     );
+
+    /// <summary>
+    /// The number of <see cref="DeviceEvent"/> records of any of <paramref name="eventTypes"/> dated at or
+    /// after <paramref name="since"/>, counted as <see cref="GetLatestByEventTypesAsync"/> reads them.
+    /// </summary>
+    Task<int> CountByEventTypesSinceAsync(
+        DeviceEventType[] eventTypes,
+        DateTime since,
+        CancellationToken ct = default
+    );
 }

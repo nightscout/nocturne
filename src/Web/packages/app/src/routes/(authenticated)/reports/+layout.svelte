@@ -14,7 +14,7 @@
         installPrintFitFallback,
         printReport,
     } from "$lib/components/reports/print/report-print.svelte";
-    import {reportCategories, reportTitle} from "$lib/navigation/report-navigation.svelte";
+    import {reportCategories, reportDescription, reportSubRouteTitle, reportTitle} from "$lib/navigation/report-navigation.svelte";
     import Filter from "@lucide/svelte/icons/funnel";
     import Calendar from "@lucide/svelte/icons/calendar";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
@@ -69,7 +69,7 @@
             );
         } catch (error) {
             console.error("Failed to prepare report for printing:", error);
-            toast.error("Unable to load the complete report. Please try again before printing.");
+            toast.error("Could not load the complete report. Try again before printing.");
         } finally {
             printCtx.printing = false;
         }
@@ -95,7 +95,7 @@
 
     // Extract report name from the URL
     const reportName = $derived.by(() => {
-        const declared = printCtx.meta.title ?? registryTitles.get(page.url.pathname);
+        const declared = registryTitles.get(page.url.pathname) ?? reportSubRouteTitle(page.url.pathname);
         if (declared) return declared;
 
         const pathSegments = page.url.pathname.split("/");
@@ -113,6 +113,8 @@
                 .join(" ") + " Report"
         );
     });
+
+    const description = $derived(reportDescription(page.url.pathname));
 
     // Show the range control only where the report actually reads the range
     const showFilters = $derived(
@@ -135,11 +137,10 @@
 </script>
 
 <svelte:head>
-    <title>{reportName} - Nightscout</title>
-    <meta
-            name="description"
-            content="Nightscout {reportName.toLowerCase()} with comprehensive data analysis and filtering capabilities"
-    />
+    <title>{reportName} - Nocturne</title>
+    {#if description}
+        <meta name="description" content={description}/>
+    {/if}
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </svelte:head>
 

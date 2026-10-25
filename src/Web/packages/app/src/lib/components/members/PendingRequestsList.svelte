@@ -14,6 +14,7 @@
     MembershipRequestDto,
     TenantRoleDto,
   } from "$lib/api/generated/nocturne-api-client";
+  import { relativeAge } from "$lib/utils/formatting";
 
   interface Props {
     requests: MembershipRequestDto[];
@@ -38,24 +39,6 @@
       .slice(0, 2)
       .join("")
       .toUpperCase();
-  }
-
-  function formatRelativeTime(date: string | undefined): string {
-    if (!date) return "Unknown";
-    const now = Date.now();
-    const then = new Date(date).getTime();
-    const diffMs = now - then;
-
-    if (diffMs < 60_000) return "just now";
-
-    const minutes = Math.floor(diffMs / 60_000);
-    if (minutes < 60) return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
-
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
-
-    const days = Math.floor(hours / 24);
-    return `${days} day${days !== 1 ? "s" : ""} ago`;
   }
 
   function getSelectedRoles(requestId: string): string[] {
@@ -93,7 +76,7 @@
 <div class="space-y-4">
   <h2 class="text-lg font-semibold flex items-center gap-2">
     <UserPlus class="h-5 w-5" />
-    Pending Requests
+    Pending requests
   </h2>
 
   {#each requests as request (request.id)}
@@ -116,7 +99,7 @@
             </p>
             <p class="text-xs text-muted-foreground flex items-center gap-1">
               <Clock class="h-3 w-3" />
-              {formatRelativeTime(request.createdAt)}
+              {relativeAge(request.createdAt, { fallback: "Unknown" })}
             </p>
           </div>
         </div>

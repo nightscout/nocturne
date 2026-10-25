@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Nocturne.Connectors.Core.Interfaces;
 
 /// <summary>
@@ -24,4 +26,16 @@ public interface IConnectorSyncCursorStore
     ///     Persists <paramref name="cursor"/> for <paramref name="resource"/>, replacing any prior value.
     /// </summary>
     Task SetAsync(string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     The JSON stored under <paramref name="resource"/> as it is, for state that is not a
+    ///     <see cref="ConnectorSyncCursor"/>; <c>null</c> when none is stored.
+    /// </summary>
+    Task<JsonNode?> GetJsonAsync(string connectorName, string resource, CancellationToken cancellationToken = default);
+
+    /// <summary>Stores <paramref name="value"/> under <paramref name="resource"/> as it is, replacing any prior value.</summary>
+    Task SetJsonAsync(string connectorName, string resource, JsonNode value, CancellationToken cancellationToken = default);
+
+    /// <summary>Removes whatever is stored under <paramref name="resource"/>, leaving the connector's other keys.</summary>
+    Task RemoveAsync(string connectorName, string resource, CancellationToken cancellationToken = default);
 }

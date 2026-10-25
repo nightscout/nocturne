@@ -54,20 +54,15 @@ public class StateSpanWriteScopeTests
     }
 
     [Fact]
-    public async Task AProfileSpanIsRefusedOnEveryWrite()
+    public async Task AProfileSpanIsRefusedOnCreateAndUpdate()
     {
-        var rowId = Guid.NewGuid();
         var service = new Mock<IStateSpanService>(MockBehavior.Strict);
-        service.Setup(s => s.ResolveDeletedAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Dictionary<Guid, DeletedStateSpan> { [rowId] = new("p-1", StateSpanCategory.Profile) });
         var controller = Build(service, [Scope.FullAccess]);
 
         BadRequest((await controller.CreateStateSpan(
             new CreateStateSpanRequest { Category = StateSpanCategory.Profile, StartMills = 1 })).Result);
         BadRequest((await controller.UpdateStateSpan(
             "s1", new UpdateStateSpanRequest { Category = StateSpanCategory.Profile })).Result);
-        BadRequest((await controller.RestoreStateSpan("p-1")).Result);
-        BadRequest((await controller.BulkRestoreStateSpans(["p-1"])).Result);
         service.Verify(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

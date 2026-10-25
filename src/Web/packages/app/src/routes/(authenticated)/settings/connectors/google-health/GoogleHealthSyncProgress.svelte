@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { GoogleHealthStatus } from "$lib/api";
   import { Progress } from "$lib/components/ui/progress";
-  import { lastSeen } from "$lib/utils/formatting";
+  import { relativeAge } from "$lib/utils/formatting";
   import { syncPhaseLabel } from "./google-health-copy.svelte";
 
   let { status }: { status: GoogleHealthStatus } = $props();
@@ -31,7 +31,7 @@
       <span>{status.syncPagesRead} Google pages read for this data type</span>
     {/if}
     {#if status.lastSync}
-      <span>Last successful sync: {lastSeen(status.lastSync)}</span>
+      <span>Last successful sync: {relativeAge(status.lastSync, { fallback: "Never" })}</span>
     {/if}
   </div>
   <p class="text-sm">

@@ -5,7 +5,7 @@
   background so it stays legible over a dark bar.
 -->
 <script lang="ts">
-  import { getChartContext } from "layerchart";
+  import { Rect, getChartContext } from "layerchart";
   import { hourSpan, SPARSE_BAR_FILL, type HourBar } from "./loop-health-view";
 
   interface Props {
@@ -31,26 +31,26 @@
 </script>
 
 {#each bars as bar (bar.hour)}
-  <rect
+  <Rect
     {...box(bar)}
-    rx="1"
+    rx={1}
     fill={color}
-    fill-opacity={bar.sparse ? SPARSE_BAR_FILL : 1}
+    fillOpacity={bar.sparse ? SPARSE_BAR_FILL : 1}
     stroke={bar.sparse ? color : "none"}
-    stroke-width="1"
+    strokeWidth={1}
     data-testid={bar.sparse ? "sparse-hour" : "hour"}
   />
 {/each}
 {#each comparison as bar (`c${bar.hour}`)}
-  <rect {...box(bar)} rx="1" fill="none" stroke="var(--background)" stroke-width="5.25" />
-  <rect
+  <Rect {...box(bar)} rx={1} fill="none" stroke="var(--background)" strokeWidth={5.25} />
+  <Rect
     {...box(bar)}
-    rx="1"
+    rx={1}
     fill="none"
     stroke="var(--foreground)"
-    stroke-opacity="0.85"
-    stroke-width="1.25"
-    stroke-dasharray="3 2"
+    strokeOpacity={0.85}
+    strokeWidth={1.25}
+    dashArray="3 2"
     data-testid="compared-hour"
   />
 {/each}

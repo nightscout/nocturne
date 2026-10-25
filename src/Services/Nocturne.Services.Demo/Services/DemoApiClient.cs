@@ -87,7 +87,7 @@ public sealed class DemoApiClient
                 timestamp = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills),
                 device = entry.Device,
                 dataSource = entry.DataSource,
-                mgdl = entry.Sgv ?? entry.Mgdl,
+                mgdl = entry.GlucoseMgdl(),
                 direction = Enum.TryParse<GlucoseDirection>(entry.Direction, out var dir) ? (int?)dir : null,
                 delta = entry.Delta,
                 noise = entry.Noise,

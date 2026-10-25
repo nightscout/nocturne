@@ -117,7 +117,7 @@ describe("the reports group", () => {
 
   it("names each page of a report made of several with the report", () => {
     const labels = paletteReports(OWNER).map((i) => i.label);
-    expect(labels).toContain("Loop Analysis: Daily profile");
-    expect(labels).toContain("Loop Analysis: Settings evidence");
+    expect(labels).toContain("Loop analysis: Daily profile");
+    expect(labels).toContain("Loop analysis: Settings evidence");
   });
 });

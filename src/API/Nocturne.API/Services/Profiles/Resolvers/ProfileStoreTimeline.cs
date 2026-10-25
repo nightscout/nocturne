@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
@@ -75,7 +76,7 @@ internal sealed class ProfileStoreTimeline
             if (!stores.Contains(defaultStore))
                 stores = new HashSet<string>(stores.Append(defaultStore), StringComparer.Ordinal);
 
-            epochs[i] = new Epoch(ToMills(document.Start), stores, defaultStore);
+            epochs[i] = new Epoch(document.Start.ToMills(), stores, defaultStore);
             previous = defaultStore;
         }
 
@@ -148,9 +149,6 @@ internal sealed class ProfileStoreTimeline
             return _epochs[found];
         return newestBeforeFirst && _epochs.Length > 0 ? _epochs[^1] : null;
     }
-
-    private static long ToMills(DateTime utc) =>
-        new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
 }
 
 /// <summary>The tenant's <see cref="ProfileStoreTimeline"/>, read once per scope.</summary>

@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Services.Realtime;
 
@@ -25,7 +26,7 @@ namespace Nocturne.API.Services.Legacy;
 /// <seealso cref="IDocumentProcessingService"/>
 public abstract class SimpleEntityService<TDomain, TEntity>
     where TDomain : class, IProcessableDocument
-    where TEntity : class, IOriginalIdentified
+    where TEntity : class, IOriginalIdentified, ITenantScoped, ISoftDeletable
 {
     protected readonly INocturneDbContextFactory Contexts;
     protected readonly IDocumentProcessingService DocumentProcessingService;
@@ -210,9 +211,9 @@ public abstract class SimpleEntityService<TDomain, TEntity>
                 .ToList();
 
             // Sync-identifier upsert: an entity whose (DataSource, SyncIdentifier)
-            // matches an existing non-deleted row (the global query filter scopes
-            // the lookup to this tenant) updates it in place; the rest are inserted.
-            // This makes repeated uploads of the same measurement idempotent.
+            // matches a live row updates it in place; the rest are matched on Id or
+            // inserted. This makes repeated uploads of the same measurement idempotent.
+            // A key held by a row the user deleted is dropped (SoftDeleteDedupExtensions).
             //
             // The existing rows for the whole batch are pre-loaded in ONE query
             // keyed on the data sources and sync identifiers present — one round
@@ -234,25 +235,29 @@ public abstract class SimpleEntityService<TDomain, TEntity>
             var existingByKey = new Dictionary<string, TEntity>(StringComparer.Ordinal);
             if (syncIdentifiers.Count > 0)
             {
-                var candidates = await EntitySet(db)
+                var candidates = await EntitySet(db).IgnoreQueryFilters()
+                    .Where(e => e.TenantId == db.TenantId)
+                    .WhereBlocksRecreation()
                     .Where(e => dataSources.Contains(
                             EF.Property<string>(e, nameof(ISyncDedupable.DataSource)))
                         && syncIdentifiers.Contains(
                             EF.Property<string>(e, nameof(ISyncDedupable.SyncIdentifier))))
                     .ToListAsync(cancellationToken);
-                foreach (var candidate in candidates)
+                foreach (var group in candidates.GroupBy(candidate =>
+                    candidate is ISyncDedupable d
+                    && !string.IsNullOrEmpty(d.DataSource)
+                    && !string.IsNullOrEmpty(d.SyncIdentifier)
+                        ? $"{d.DataSource}|{d.SyncIdentifier}"
+                        : null))
                 {
-                    if (candidate is ISyncDedupable d
-                        && !string.IsNullOrEmpty(d.DataSource)
-                        && !string.IsNullOrEmpty(d.SyncIdentifier))
-                    {
-                        existingByKey[$"{d.DataSource}|{d.SyncIdentifier}"] = candidate;
-                    }
+                    if (group.Key is not null)
+                        existingByKey[group.Key] = group.GoverningRow()!;
                 }
             }
 
             var resultEntities = new List<TEntity>(entities.Count);
-            var toInsert = new List<TEntity>();
+            var unmatched = new List<TEntity>();
+            var skippedDeleted = 0;
             foreach (var entity in entities)
             {
                 if (entity is ISyncDedupable dedup
@@ -260,15 +265,59 @@ public abstract class SimpleEntityService<TDomain, TEntity>
                     && !string.IsNullOrEmpty(dedup.SyncIdentifier)
                     && existingByKey.TryGetValue($"{dedup.DataSource}|{dedup.SyncIdentifier}", out var existing))
                 {
+                    if (existing.DeletedAt != null)
+                    {
+                        skippedDeleted++;
+                        continue;
+                    }
+
                     UpdateEntity(existing, ToDomainModel(entity));
                     resultEntities.Add(existing);
                 }
                 else
                 {
-                    toInsert.Add(entity);
-                    resultEntities.Add(entity);
+                    unmatched.Add(entity);
                 }
             }
+
+            // A writer that derives the primary key from its own record id (Glooko, a hashed legacy
+            // id) sends the same Id again, and a soft-deleted row keeps holding that key. A user
+            // tombstone blocks the write; any other row is revived in place, since an insert would
+            // collide with it.
+            var unmatchedIds = unmatched.Select(e => e.Id).ToList();
+            var existingById = unmatchedIds.Count == 0
+                ? new Dictionary<Guid, TEntity>()
+                : await EntitySet(db).IgnoreQueryFilters()
+                    .Where(e => e.TenantId == db.TenantId && unmatchedIds.Contains(e.Id))
+                    .ToDictionaryAsync(e => e.Id, cancellationToken);
+
+            var toInsert = new List<TEntity>();
+            foreach (var entity in unmatched)
+            {
+                if (!existingById.TryGetValue(entity.Id, out var existing))
+                {
+                    toInsert.Add(entity);
+                    resultEntities.Add(entity);
+                    continue;
+                }
+
+                if (existing.DeletedAt != null && db.Entry(existing).Property<bool>("DeletedByUser").CurrentValue)
+                {
+                    skippedDeleted++;
+                    continue;
+                }
+
+                UpdateEntity(existing, ToDomainModel(entity));
+                existing.DeletedAt = null;
+                resultEntities.Add(existing);
+            }
+
+            if (skippedDeleted > 0)
+                Logger.LogDebug(
+                    "Skipped {Count} {EntityType} records the user deleted",
+                    skippedDeleted,
+                    EntityTypeName
+                );
 
             if (toInsert.Count > 0)
                 await EntitySet(db).AddRangeAsync(toInsert, cancellationToken);

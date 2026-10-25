@@ -1,3 +1,12 @@
+<script module lang="ts">
+  /** An access level in plain words, granting one role. */
+  export interface InviteRoleChoice {
+    roleId: string;
+    label: string;
+    description: string;
+  }
+</script>
+
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
@@ -5,6 +14,7 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import * as RadioGroup from "$lib/components/ui/radio-group";
   import { Select, SelectContent, SelectItem, SelectTrigger } from "$lib/components/ui/select";
   import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
@@ -13,8 +23,6 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import CopyInvitationMessageButton from "$lib/components/members/CopyInvitationMessageButton.svelte";
-  import { coachmark } from "@nocturne/coach";
-  import { coachFor, inviteLinkCopy } from "$lib/coach-marks/copy.svelte";
   import { createInvite } from "$api/generated/memberInvites.generated.remote";
   import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
@@ -22,12 +30,18 @@
 
   interface Props {
     roles: TenantRoleDto[];
-    onCreated: (url: string) => void;
+    /**
+     * Offered as a single choice in place of the role checkboxes and direct permissions, for
+     * someone who should not need to know the roles by name. Empty falls back to the checkboxes.
+     */
+    roleChoices?: InviteRoleChoice[];
+    onCreated?: (url: string) => void;
     onCancel: () => void;
   }
 
   let {
     roles = [],
+    roleChoices,
     onCreated,
     onCancel,
   }: Props = $props();
@@ -90,10 +104,10 @@
         createdInviteUrl = result.inviteUrl.startsWith("http")
           ? result.inviteUrl
           : `${window.location.origin}${result.inviteUrl}`;
-        onCreated(createdInviteUrl);
+        onCreated?.(createdInviteUrl);
       }
     } catch (e) {
-      errorMessage = describeSubmitError(e, "Failed to create invite. Please try again.");
+      errorMessage = describeSubmitError(e, "Failed to create invite. Try again.");
     } finally {
       isCreatingInvite = false;
     }
@@ -125,7 +139,7 @@
 
 <Card.Root data-testid="create-invite-card">
   <Card.Header>
-    <Card.Title class="text-lg">Create Invite Link</Card.Title>
+    <Card.Title class="text-lg">Create invite link</Card.Title>
     <Card.Description>
       Generate a shareable link. Anyone with this link can accept the invite
       after signing in.
@@ -145,10 +159,7 @@
           </p>
         </div>
 
-        <div class="flex gap-2" {@attach coachmark({
-          key: "setup-invite.copy-link",
-          ...inviteLinkCopy(expiryLabel),
-        })}>
+        <div class="flex gap-2">
           <Input
             type="text"
             value={createdInviteUrl}
@@ -185,10 +196,26 @@
           />
         </div>
 
+        {#if roleChoices?.length}
+          <div class="space-y-2">
+            <Label id="invite-access-label">What can they do?</Label>
+            <RadioGroup.Root
+              class="gap-2"
+              aria-labelledby="invite-access-label"
+              value={inviteRoleIds[0]}
+              onValueChange={(value) => (inviteRoleIds = [value])}
+            >
+              {#each roleChoices as choice (choice.roleId)}
+                <RadioGroup.Card value={choice.roleId}>
+                  <span class="text-sm font-medium">{choice.label}</span>
+                  <span class="text-xs text-muted-foreground">{choice.description}</span>
+                </RadioGroup.Card>
+              {/each}
+            </RadioGroup.Root>
+          </div>
+        {:else}
         <!-- Role multi-select -->
-        <div class="space-y-2" {@attach coachmark({
-          ...coachFor("setup-invite.roles"),
-        })}>
+        <div class="space-y-2">
           <Label>Roles</Label>
           <div class="grid gap-2 @sm:grid-cols-2">
             {#each roles as role (role.id)}
@@ -208,6 +235,7 @@
             {/each}
           </div>
         </div>
+        {/if}
 
         <div class="space-y-2">
           <Label for="invite-expiry">Link expires</Label>
@@ -230,6 +258,7 @@
           </p>
         </div>
 
+        {#if !roleChoices?.length}
         <!-- Direct permissions (collapsible) -->
         <Collapsible.Root
           open={showInvitePermissions}
@@ -243,7 +272,7 @@
                 {:else}
                   <ChevronDown class="h-4 w-4" />
                 {/if}
-                Direct Permissions (optional)
+                Direct permissions (optional)
               </Button>
             {/snippet}
           </Collapsible.Trigger>
@@ -253,6 +282,7 @@
             </div>
           </Collapsible.Content>
         </Collapsible.Root>
+        {/if}
 
         <div
           class="flex items-start gap-2 rounded-md border p-3 bg-muted/30"
@@ -328,7 +358,7 @@
             {#if isCreatingInvite}
               <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
             {/if}
-            Create Link
+            Create link
           </Button>
         </div>
       </div>

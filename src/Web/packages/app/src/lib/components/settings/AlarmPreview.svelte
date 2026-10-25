@@ -153,7 +153,7 @@
         Stop
       {:else}
         <Volume2 class="h-4 w-4" />
-        Play Preview
+        Play preview
       {/if}
     </Button>
 

@@ -108,7 +108,7 @@ public class GlookoActivityMapper(string connectorSource, GlookoTimeMapper timeM
         {
             // Id is the stable dedup key: it flows through to the StateSpan's OriginalId on publish.
             Id = legacyId,
-            Mills = new DateTimeOffset(timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            Mills = timestamp.ToMills(),
             // "exercise" maps to StateSpanCategory.Exercise; the specific activity name is kept in Name.
             Type = "exercise",
             Name = name,

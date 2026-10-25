@@ -1,37 +1,37 @@
 //! Condition-tree model: JSON-compatible with the stored `condition_params` /
 //! `auto_resolve_params` wire format (engine-semantics.md §1).
 //!
-//! Parsing is two passes. The structural pass reads JSON the way
-//! engine-semantics.md §1.1 specifies: snake_case names matched
-//! case-insensitively, a malformed payload anywhere in the tree is a
-//! [`ParseError`], missing fields take their defaults (`null` for strings,
-//! `0` for numbers and enums, `false` for bools), and JSON `null` for a
-//! non-nullable value is an error. The evaluability pass ([`crate::validate`])
-//! then rejects the trees whose evaluation fails (§1.4). [`Node::parse`] and
-//! [`parse_payload`] run both; the `*_structure` variants run only the first.
+//! A tree reads into this model only when it can be evaluated as written
+//! (§1.4): exact snake_case property names (§1.1), every required operand
+//! present and in range, every enum value exactly a member's wire name, every
+//! container with its children. Reading reports every problem it finds, in
+//! pre-order, and yields no tree when there is any.
 
-use std::borrow::Cow;
+use std::cell::RefCell;
 
+use chrono::NaiveTime;
+use chrono_tz::Tz;
 use rust_decimal::Decimal;
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use crate::enums::{
-    AlertStateKind, CmpOp, CompositeOp, DayOfWeek, EnumValue, GlucoseBucket, PumpMode,
-    RateDirection, Spelled, StateSpanCategory, TempBasalMetric, ThresholdDirection, TrendBucket,
-    WireEnum,
+    AlertStateKind, CmpOp, CompositeOp, DayOfWeek, GlucoseBucket, PumpMode, RateDirection,
+    StateSpanCategory, TempBasalMetric, ThresholdDirection, TrendBucket, WireEnum,
 };
 use crate::paths::child_path;
 
-/// Why a condition tree is rejected. [`Reason::code`] is the stable wire code;
-/// no reason carries a value read from the payload.
+/// Why a condition tree cannot be evaluated (engine-semantics.md §1.4).
+/// [`Reason::code`] is the stable wire code; no reason carries a value read
+/// from the payload.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Reason {
     /// A node or root payload is not a JSON object.
     NotAnObject,
-    /// The named field has the wrong JSON kind or an unrepresentable value.
+    /// The named field has the wrong JSON kind or an unrepresentable value, or
+    /// a `timezone` is not a zone id.
     InvalidField(&'static str),
     /// Nested deeper than the reader's `MaxDepth`.
     TooDeep,
@@ -39,27 +39,11 @@ pub enum Reason {
     TypeMissing,
     /// A `null` slot in a composite's `conditions`.
     ConditionMissing,
-    /// A composite with no `conditions` list.
-    ConditionsMissing,
-    /// A composite with conditions but no `operator`.
-    OperatorMissing,
-    /// A `threshold` or `rate_of_change` with no `direction`.
-    DirectionMissing,
-    /// An `alert_state` with no `state`.
-    StateMissing,
-    /// A rule body whose `condition_params` is JSON `null`.
+    /// A node with no payload property for its `type`, or a rule body whose
+    /// `condition_params` is JSON `null`.
     PayloadMissing,
-    /// A `type` naming no condition kind.
+    /// A `type` that is not exactly a kind's wire name.
     UnknownKind,
-    /// A `type` that resolves to a kind but is not its wire name.
-    NonCanonicalType,
-    UnknownOperator,
-    UnknownDirection,
-    UnknownState,
-    /// A composite with an empty `conditions` list.
-    ConditionsEmpty,
-    /// A `not` or `sustained` with no `child`.
-    ChildMissing,
     /// A duration that is zero or negative where that leaves its node never
     /// true: `sustained` `minutes`, `signal_loss` `timeout_minutes`,
     /// `predicted` `within_minutes`.
@@ -67,18 +51,18 @@ pub enum Reason {
     /// A negative elapsed-time bound, which every operator compares the same
     /// way against an elapsed time that is never negative.
     MinutesNegative(&'static str),
-    /// A property no condition node or payload of its kind has.
+    /// A property no node of its kind, or no payload of its kind, has.
     UnknownField,
-    /// A required operand is absent, so it would read as its default.
+    /// A required operand, or a `not`/`sustained` `child`, is absent.
     FieldMissing(&'static str),
-    /// An enum operand given as an ordinal no member has, or a word naming
-    /// no member.
+    /// An enum operand naming no member.
     UnknownValue(&'static str),
     /// A `time_of_day` bound that is not `HH:mm`.
     InvalidTime(&'static str),
     /// A `time_of_day` whose `from` equals its `to`.
     EmptyWindow,
-    /// A `glucose_bucket` or `day_of_week` list that is absent or empty.
+    /// A composite's `conditions`, or a `glucose_bucket` or `day_of_week`
+    /// list, that is absent or empty.
     ListEmpty(&'static str),
     /// A `state_span_active` on the pump-mode category, which only
     /// `pump_state` reads.
@@ -94,18 +78,8 @@ impl Reason {
             Reason::TooDeep => "too_deep",
             Reason::TypeMissing => "type_missing",
             Reason::ConditionMissing => "condition_missing",
-            Reason::ConditionsMissing => "conditions_missing",
-            Reason::OperatorMissing => "operator_missing",
-            Reason::DirectionMissing => "direction_missing",
-            Reason::StateMissing => "state_missing",
             Reason::PayloadMissing => "payload_missing",
             Reason::UnknownKind => "unknown_kind",
-            Reason::NonCanonicalType => "non_canonical_type",
-            Reason::UnknownOperator => "unknown_operator",
-            Reason::UnknownDirection => "unknown_direction",
-            Reason::UnknownState => "unknown_state",
-            Reason::ConditionsEmpty => "conditions_empty",
-            Reason::ChildMissing => "child_missing",
             Reason::MinutesNotPositive(_) => "minutes_not_positive",
             Reason::MinutesNegative(_) => "minutes_negative",
             Reason::UnknownField => "unknown_field",
@@ -130,12 +104,7 @@ impl Reason {
             | Reason::MinutesNotPositive(f)
             | Reason::MinutesNegative(f) => Some(f),
             Reason::PumpModeCategory => Some("category"),
-            Reason::TypeMissing | Reason::UnknownKind | Reason::NonCanonicalType => Some("type"),
-            Reason::ConditionsMissing | Reason::ConditionsEmpty => Some("conditions"),
-            Reason::OperatorMissing | Reason::UnknownOperator => Some("operator"),
-            Reason::DirectionMissing | Reason::UnknownDirection => Some("direction"),
-            Reason::StateMissing | Reason::UnknownState => Some("state"),
-            Reason::ChildMissing => Some("child"),
+            Reason::TypeMissing | Reason::UnknownKind => Some("type"),
             Reason::NotAnObject
             | Reason::TooDeep
             | Reason::ConditionMissing
@@ -144,29 +113,9 @@ impl Reason {
             | Reason::EmptyWindow => None,
         }
     }
-
-    /// Whether evaluating a tree with this problem fails: the rule is skipped
-    /// that tick with its timers and tracker untouched (engine-semantics.md
-    /// §1.4). The rest evaluate silently false or true and are rejected only
-    /// when a rule is saved.
-    #[must_use]
-    pub fn fails_evaluation(self) -> bool {
-        matches!(
-            self,
-            Reason::NotAnObject
-                | Reason::InvalidField(_)
-                | Reason::TooDeep
-                | Reason::TypeMissing
-                | Reason::ConditionMissing
-                | Reason::ConditionsMissing
-                | Reason::OperatorMissing
-                | Reason::DirectionMissing
-                | Reason::StateMissing
-        )
-    }
 }
 
-/// A rejected condition tree: the problem and the condition path
+/// A problem with a condition tree, and the condition path
 /// (engine-semantics.md §2.3) of the node it is on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
@@ -180,18 +129,6 @@ impl ParseError {
             path: path.into(),
             reason,
         }
-    }
-
-    /// A field-level error raised before the node's path is known.
-    fn unplaced(reason: Reason) -> Self {
-        Self::new(String::new(), reason)
-    }
-
-    fn placed_at(mut self, path: &str) -> Self {
-        if self.path.is_empty() {
-            path.clone_into(&mut self.path);
-        }
-        self
     }
 }
 
@@ -212,25 +149,34 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-pub type ParseResult<T> = Result<T, ParseError>;
+/// Every problem that keeps a tree from being evaluated, in pre-order; never
+/// empty.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unevaluable(pub Vec<ParseError>);
 
-/// Declares [`ConditionKind`] (in the host enum's declaration order, the
-/// ordinal a `type` may be written as) and [`Payload`], one variant per kind.
+impl std::fmt::Display for Unevaluable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, issue) in self.0.iter().enumerate() {
+            if i > 0 {
+                f.write_str("; ")?;
+            }
+            write!(f, "{issue}")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for Unevaluable {}
+
+pub type ParseResult<T> = Result<T, Unevaluable>;
+
+/// Declares [`ConditionKind`] (in the host enum's declaration order) and
+/// [`Payload`], one variant per kind.
 macro_rules! condition_kinds {
     ($($kind:ident = $wire:literal => $payload:ident),+ $(,)?) => {
         crate::enums::wire_enum! {
             /// The condition kinds. [`WireEnum::name`] is the wire name.
             pub enum ConditionKind { $($kind = $wire),+ }
-        }
-
-        impl ConditionKind {
-            /// The host enum's member name.
-            #[must_use]
-            pub fn member(self) -> &'static str {
-                match self {
-                    $(Self::$kind => stringify!($kind)),+
-                }
-            }
         }
 
         /// A parsed kind-specific payload. Serialises to its authored operands.
@@ -248,25 +194,15 @@ macro_rules! condition_kinds {
                 }
             }
 
-            /// What `kind` reads when its payload property is absent, null, or
-            /// under a `type` not spelled as the wire name: every field at its
-            /// default.
+            /// The payload property names `kind` reads.
             #[must_use]
-            pub fn default_for(kind: ConditionKind) -> Self {
+            pub fn fields(kind: ConditionKind) -> &'static [&'static str] {
                 match kind {
-                    $(ConditionKind::$kind => Self::$kind($payload::default())),+
+                    $(ConditionKind::$kind => $payload::FIELDS),+
                 }
             }
 
-            /// The payload property names this kind reads.
-            #[must_use]
-            pub fn fields(&self) -> &'static [&'static str] {
-                match self {
-                    $(Self::$kind(_) => $payload::FIELDS),+
-                }
-            }
-
-            fn read(kind: ConditionKind, r: &Reader<'_>) -> ParseResult<Self> {
+            fn read(kind: ConditionKind, r: &Reader<'_>) -> Option<Self> {
                 match kind {
                     $(ConditionKind::$kind => $payload::read(r).map(Self::$kind)),+
                 }
@@ -312,34 +248,12 @@ condition_kinds! {
 }
 
 impl ConditionKind {
-    /// The kind a node's `type` names (engine-semantics.md §1.2): its wire
-    /// name, else its member name or ordinal, trimmed and ignoring ASCII case.
+    /// The kind whose wire name is exactly `type_str` (engine-semantics.md
+    /// §1.2).
     #[must_use]
-    pub fn resolve(type_str: &str) -> Option<Self> {
-        let trimmed = type_str.trim();
-        Self::from_name(type_str)
-            .or_else(|| {
-                Self::ALL
-                    .iter()
-                    .copied()
-                    .find(|k| k.member().eq_ignore_ascii_case(trimmed))
-            })
-            .or_else(|| trimmed.parse().ok().and_then(Self::from_ordinal))
+    pub fn from_wire(type_str: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|k| k.name() == type_str)
     }
-}
-
-/// Case-insensitive property lookup; a duplicated name binds its last
-/// occurrence.
-pub(crate) fn get_ci<'a>(obj: &'a Map<String, Value>, name: &str) -> Option<&'a Value> {
-    get_ci_entry(obj, name).map(|(_, v)| v)
-}
-
-/// [`get_ci`] with the property name as written.
-pub(crate) fn get_ci_entry<'a>(
-    obj: &'a Map<String, Value>,
-    name: &str,
-) -> Option<(&'a String, &'a Value)> {
-    obj.iter().rev().find(|(k, _)| k.eq_ignore_ascii_case(name))
 }
 
 /// Decimal from a JSON number literal (engine-semantics.md §1.3), with no
@@ -475,187 +389,328 @@ fn exact_decimal<S: Serializer>(d: &Decimal, s: S) -> Result<S::Ok, S::Error> {
     n.serialize(s)
 }
 
+/// Every problem found while reading one tree, in pre-order.
+#[derive(Default)]
+struct Issues(RefCell<Vec<ParseError>>);
+
+impl Issues {
+    /// Records `reason` at `path`. Always `false`, so a check can end in it.
+    fn report(&self, path: &str, reason: Reason) -> bool {
+        self.0.borrow_mut().push(ParseError::new(path, reason));
+        false
+    }
+}
+
 /// The object a payload's fields are read from. `level` is the typed nesting
 /// level of the values inside it; `path` is the owning node's condition path.
 struct Reader<'a> {
     obj: &'a Map<String, Value>,
     level: usize,
     path: &'a str,
+    issues: &'a Issues,
 }
 
 impl Reader<'_> {
+    /// The property `name`; `null` reads as absent.
     fn get(&self, name: &str) -> Option<&Value> {
-        get_ci(self.obj, name)
+        self.obj.get(name).filter(|v| !v.is_null())
+    }
+
+    fn report(&self, reason: Reason) -> bool {
+        self.issues.report(self.path, reason)
+    }
+
+    fn ok<T>(&self, read: Result<T, Reason>) -> Option<T> {
+        read.map_err(|reason| self.report(reason)).ok()
+    }
+
+    /// One [`Reason::UnknownField`] when any property that is not `null` is
+    /// not `known`.
+    fn report_unknown(&self, known: impl Fn(&str) -> bool) {
+        if self.obj.iter().any(|(k, v)| !v.is_null() && !known(k)) {
+            self.report(Reason::UnknownField);
+        }
+    }
+
+    /// An operand that must be present.
+    fn required<T>(&self, name: &'static str, parse: OperandParser<T>) -> Option<T> {
+        match self.get(name) {
+            None => {
+                self.report(Reason::FieldMissing(name));
+                None
+            }
+            Some(v) => self.ok(parse(v, name)),
+        }
+    }
+
+    /// An operand that may be absent.
+    fn optional<T>(&self, name: &'static str, parse: OperandParser<T>) -> Option<Option<T>> {
+        self.get(name)
+            .map_or(Some(None), |v| self.ok(parse(v, name)).map(Some))
+    }
+
+    /// The JSON array `name`, which must hold at least one item.
+    fn list(&self, name: &'static str) -> Option<&Vec<Value>> {
+        let reason = match self.get(name) {
+            Some(Value::Array(items)) if !within_depth(self.level) => Reason::TooDeep,
+            Some(Value::Array(items)) if !items.is_empty() => return Some(items),
+            Some(Value::Array(_)) | None => Reason::ListEmpty(name),
+            Some(_) => Reason::InvalidField(name),
+        };
+        self.report(reason);
+        None
     }
 }
 
-fn invalid(name: &'static str) -> ParseError {
-    ParseError::unplaced(Reason::InvalidField(name))
+type OperandParser<T> = fn(&Value, &'static str) -> Result<T, Reason>;
+
+/// A payload operand read from one JSON value (engine-semantics.md §1.1).
+trait Operand: Sized {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason>;
 }
 
-/// A payload field type and how it reads from JSON (engine-semantics.md §1.1).
+/// A payload field: an [`Operand`], required or optional, a non-empty list,
+/// or a child node.
 trait Field: Sized {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self>;
+    /// `None` once a problem with the field is reported.
+    fn read(r: &Reader<'_>, name: &'static str) -> Option<Self>;
+}
+
+macro_rules! operand_fields {
+    ($($t:ty),* $(,)?) => {$(
+        impl Field for $t {
+            fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
+                r.required(name, <$t as Operand>::parse)
+            }
+        }
+
+        impl Field for Option<$t> {
+            fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
+                r.optional(name, <$t as Operand>::parse)
+            }
+        }
+    )*};
 }
 
 fn i32_from(n: &serde_json::Number) -> Option<i32> {
     n.as_i64().and_then(|v| i32::try_from(v).ok())
 }
 
-impl Field for Decimal {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
-        match r.get(name) {
-            None => Ok(Decimal::ZERO),
-            Some(Value::Number(n)) => decimal_from_number(n).ok_or_else(|| invalid(name)),
-            Some(_) => Err(invalid(name)),
-        }
+impl Operand for Decimal {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+        v.as_number()
+            .and_then(decimal_from_number)
+            .ok_or(Reason::InvalidField(name))
     }
 }
 
-impl Field for i32 {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
-        match r.get(name) {
-            None => Ok(0),
-            Some(Value::Number(n)) => i32_from(n).ok_or_else(|| invalid(name)),
-            Some(_) => Err(invalid(name)),
-        }
+impl Operand for i32 {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+        v.as_number()
+            .and_then(i32_from)
+            .ok_or(Reason::InvalidField(name))
     }
 }
 
-impl Field for Option<i32> {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
-        match r.get(name) {
-            None | Some(Value::Null) => Ok(None),
-            Some(_) => i32::read(r, name).map(Some),
-        }
+impl Operand for bool {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+        v.as_bool().ok_or(Reason::InvalidField(name))
     }
 }
 
-impl Field for bool {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
-        match r.get(name) {
-            None => Ok(false),
-            Some(Value::Bool(b)) => Ok(*b),
-            Some(_) => Err(invalid(name)),
-        }
-    }
-}
-
-impl Field for Option<String> {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
-        read_string(r.obj, name)
-    }
-}
-
-fn read_string(obj: &Map<String, Value>, name: &'static str) -> ParseResult<Option<String>> {
-    match get_ci(obj, name) {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::String(s)) => Ok(Some(s.clone())),
-        Some(_) => Err(invalid(name)),
+impl Operand for String {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+        v.as_str()
+            .map(str::to_owned)
+            .ok_or(Reason::InvalidField(name))
     }
 }
 
 /// Only the 36-character hyphenated form reads; braced, simple and URN
-/// spellings are errors.
-impl Field for Uuid {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
-        match r.get(name) {
-            None => Ok(Uuid::nil()),
-            Some(Value::String(s)) if s.len() == 36 => {
-                Uuid::try_parse(s).map_err(|_| invalid(name))
+/// spellings do not.
+impl Operand for Uuid {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+        v.as_str()
+            .filter(|s| s.len() == 36)
+            .and_then(|s| Uuid::try_parse(s).ok())
+            .ok_or(Reason::InvalidField(name))
+    }
+}
+
+/// Exactly an IANA tzdb name (engine-semantics.md §4).
+impl Operand for Tz {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+        v.as_str()
+            .and_then(|id| id.parse().ok())
+            .ok_or(Reason::InvalidField(name))
+    }
+}
+
+/// `HH:mm` exactly: two digits each, 00-23 and 00-59.
+impl Operand for NaiveTime {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+        let text = v.as_str().ok_or(Reason::InvalidField(name))?;
+        let two_digits = |t: &str| {
+            (t.len() == 2 && t.bytes().all(|b| b.is_ascii_digit()))
+                .then(|| t.parse().ok())
+                .flatten()
+        };
+        text.split_once(':')
+            .and_then(|(hh, mm)| NaiveTime::from_hms_opt(two_digits(hh)?, two_digits(mm)?, 0))
+            .ok_or(Reason::InvalidTime(name))
+    }
+}
+
+/// A duration that leaves its node never true unless it is more than zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct PositiveMinutes(i32);
+
+impl PositiveMinutes {
+    #[must_use]
+    pub fn get(self) -> i32 {
+        self.0
+    }
+}
+
+impl Operand for PositiveMinutes {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+        match i32::parse(v, name)? {
+            m if m > 0 => Ok(Self(m)),
+            _ => Err(Reason::MinutesNotPositive(name)),
+        }
+    }
+}
+
+/// A bound on an elapsed time, which is never negative, so a negative bound
+/// compares the same way on every tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct NonNegativeMinutes(i32);
+
+impl NonNegativeMinutes {
+    #[must_use]
+    pub fn get(self) -> i32 {
+        self.0
+    }
+}
+
+impl Operand for NonNegativeMinutes {
+    fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+        match i32::parse(v, name)? {
+            m if m >= 0 => Ok(Self(m)),
+            _ => Err(Reason::MinutesNegative(name)),
+        }
+    }
+}
+
+/// A string that is exactly a member's wire name.
+fn word<E: WireEnum>(v: &Value, name: &'static str) -> Result<E, Reason> {
+    let text = v.as_str().ok_or(Reason::InvalidField(name))?;
+    E::from_name(text).ok_or(Reason::UnknownValue(name))
+}
+
+macro_rules! enum_operands {
+    ($($e:ty),* $(,)?) => {$(
+        impl Operand for $e {
+            fn parse(v: &Value, name: &'static str) -> Result<Self, Reason> {
+                word(v, name)
             }
-            Some(_) => Err(invalid(name)),
         }
-    }
+    )*};
 }
 
-impl<T: WireEnum> Field for Spelled<T> {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
-        Option::<String>::read(r, name).map(Spelled::new)
-    }
-}
+enum_operands!(
+    ThresholdDirection,
+    RateDirection,
+    CompositeOp,
+    AlertStateKind,
+    CmpOp,
+    TrendBucket,
+    TempBasalMetric,
+    PumpMode,
+    StateSpanCategory,
+);
 
-/// A string matches a name ignoring ASCII case, falling back to an integer
-/// string (surrounding whitespace allowed); a number is taken raw. Either
-/// integer form must fit an `i32`.
-fn enum_value<E: WireEnum>(v: &Value) -> Option<EnumValue<E>> {
-    match v {
-        Value::String(s) => E::from_name(s)
-            .map(EnumValue::Known)
-            .or_else(|| s.trim().parse().ok().map(EnumValue::from_ordinal)),
-        Value::Number(n) => i32_from(n).map(EnumValue::from_ordinal),
-        _ => None,
-    }
-}
+operand_fields!(
+    Decimal,
+    i32,
+    bool,
+    String,
+    Uuid,
+    Tz,
+    NaiveTime,
+    PositiveMinutes,
+    NonNegativeMinutes,
+    ThresholdDirection,
+    RateDirection,
+    CompositeOp,
+    AlertStateKind,
+    CmpOp,
+    TrendBucket,
+    TempBasalMetric,
+    PumpMode,
+    StateSpanCategory,
+);
 
-impl<E: WireEnum> Field for EnumValue<E> {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
-        match r.get(name) {
-            None => Ok(Self::default()),
-            Some(v) => enum_value(v).ok_or_else(|| invalid(name)),
-        }
-    }
-}
-
-impl<E: WireEnum> Field for Option<Vec<EnumValue<E>>> {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
-        match r.get(name) {
-            None | Some(Value::Null) => Ok(None),
-            Some(Value::Array(items)) => {
-                check_typed_level(r.level)?;
-                items
-                    .iter()
-                    .map(|v| enum_value(v).ok_or_else(|| invalid(name)))
-                    .collect::<ParseResult<Vec<_>>>()
-                    .map(Some)
-            }
-            Some(_) => Err(invalid(name)),
-        }
-    }
-}
-
-impl Field for Option<Box<Node>> {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
-        match r.get(name) {
-            None | Some(Value::Null) => Ok(None),
-            Some(v) => {
-                let path = child_path(r.path, 0, peek_type(v));
-                Node::parse_at(v, r.level, &path).map(|n| Some(Box::new(n)))
+macro_rules! enum_lists {
+    ($($e:ty),* $(,)?) => {$(
+        impl Field for Vec<$e> {
+            fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
+                let items = r.list(name)?;
+                r.ok(items.iter().map(|v| word(v, name)).collect())
             }
         }
+    )*};
+}
+
+enum_lists!(GlucoseBucket, DayOfWeek);
+
+impl Field for Box<Node> {
+    fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
+        let Some(v) = r.get(name) else {
+            r.report(Reason::FieldMissing(name));
+            return None;
+        };
+        let path = child_path(r.path, 0, peek_type(v));
+        read_node(v, r.level, &path, r.issues).map(Box::new)
     }
 }
 
-impl Field for Option<Vec<Option<Node>>> {
-    fn read(r: &Reader<'_>, name: &'static str) -> ParseResult<Self> {
-        match r.get(name) {
-            None | Some(Value::Null) => Ok(None),
-            Some(Value::Array(items)) => {
-                check_typed_level(r.level)?;
-                items
-                    .iter()
-                    .enumerate()
-                    .map(|(i, v)| match v {
-                        Value::Null => Ok(None),
-                        _ => {
-                            let path = child_path(r.path, i, peek_type(v));
-                            Node::parse_at(v, r.level.saturating_add(1), &path).map(Some)
-                        }
-                    })
-                    .collect::<ParseResult<Vec<_>>>()
-                    .map(Some)
-            }
-            Some(_) => Err(invalid(name)),
-        }
+/// A `null` slot is [`Reason::ConditionMissing`].
+impl Field for Vec<Node> {
+    fn read(r: &Reader<'_>, name: &'static str) -> Option<Self> {
+        let items = r.list(name)?;
+        let level = r.level.saturating_add(1);
+        let children: Vec<Option<Node>> = items
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                let path = child_path(r.path, i, peek_type(v));
+                if v.is_null() {
+                    r.issues.report(&path, Reason::ConditionMissing);
+                    None
+                } else {
+                    read_node(v, level, &path, r.issues)
+                }
+            })
+            .collect();
+        children.into_iter().collect()
     }
 }
 
 /// Declares a payload record whose fields read, in declaration order, from
-/// the JSON properties of the same names.
+/// the JSON properties of the same names. `check` runs on a payload whose
+/// fields all read, and reports what is wrong with them together.
 macro_rules! payload {
-    ($(#[$meta:meta])* $name:ident { $($(#[$field_meta:meta])* $field:ident: $ty:ty),* $(,)? }) => {
+    (
+        $(#[$meta:meta])* $name:ident {
+            $($(#[$field_meta:meta])* $field:ident: $ty:ty),* $(,)?
+        }
+        $(check |$p:ident, $r:ident| $check:expr)?
+    ) => {
         $(#[$meta])*
-        #[derive(Debug, Clone, Default, Serialize)]
+        #[derive(Debug, Clone, Serialize)]
         pub struct $name {
             $($(#[$field_meta])* pub $field: $ty),*
         }
@@ -663,76 +718,88 @@ macro_rules! payload {
         impl $name {
             const FIELDS: &'static [&'static str] = &[$(stringify!($field)),*];
 
-            fn read(r: &Reader<'_>) -> ParseResult<Self> {
-                Ok(Self { $($field: Field::read(r, stringify!($field))?),* })
+            fn read(r: &Reader<'_>) -> Option<Self> {
+                r.report_unknown(|k| Self::FIELDS.contains(&k));
+                $(let $field = <$ty as Field>::read(r, stringify!($field));)*
+                let payload = Self { $($field: $field?),* };
+                $({
+                    let ($p, $r) = (&payload, r);
+                    if !$check {
+                        return None;
+                    }
+                })?
+                Some(payload)
             }
         }
     };
 }
 
 payload!(ThresholdPayload {
-    direction: Spelled<ThresholdDirection>,
+    direction: ThresholdDirection,
     #[serde(serialize_with = "exact_decimal")]
     value: Decimal,
 });
 
 payload!(RateOfChangePayload {
-    direction: Spelled<RateDirection>,
+    direction: RateDirection,
     #[serde(serialize_with = "exact_decimal")]
     rate: Decimal,
 });
 
 payload!(SignalLossPayload {
-    timeout_minutes: i32
+    timeout_minutes: PositiveMinutes
 });
 
 payload!(CompositePayload {
-    operator: Spelled<CompositeOp>,
-    /// `None` for an absent or null list, and `None` elements for JSON `null`
-    /// entries. Both fail evaluation (engine-semantics.md §1.4), so only
-    /// [`Node::parse_structure`] and [`parse_payload_structure`] return them.
+    operator: CompositeOp,
     #[serde(skip)]
-    conditions: Option<Vec<Option<Node>>>,
+    conditions: Vec<Node>,
 });
 
 payload!(NotPayload {
     #[serde(skip)]
-    child: Option<Box<Node>>,
+    child: Box<Node>,
 });
 
 payload!(SustainedPayload {
-    minutes: i32,
+    minutes: PositiveMinutes,
     #[serde(skip)]
-    child: Option<Box<Node>>,
+    child: Box<Node>,
 });
 
 payload!(StalenessPayload {
-    operator: Spelled<CmpOp>,
-    value: i32,
+    operator: CmpOp,
+    value: NonNegativeMinutes,
 });
 
 payload!(PredictedPayload {
-    operator: Spelled<CmpOp>,
+    operator: CmpOp,
     #[serde(serialize_with = "exact_decimal")]
     value: Decimal,
-    within_minutes: i32,
+    within_minutes: PositiveMinutes,
 });
 
 payload!(TrendPayload {
-    bucket: Spelled<TrendBucket>,
+    bucket: TrendBucket
 });
 
-payload!(TimeOfDayPayload {
-    from: Option<String>,
-    to: Option<String>,
-    timezone: Option<String>,
-});
+payload!(
+    TimeOfDayPayload {
+        #[serde(serialize_with = "hh_mm")]
+        from: NaiveTime,
+        #[serde(serialize_with = "hh_mm")]
+        to: NaiveTime,
+        #[serde(serialize_with = "zone_name")]
+        timezone: Option<Tz>,
+    }
+    check |p, r| p.from != p.to || r.report(Reason::EmptyWindow)
+);
 
 payload!(
     /// `{operator, value}`: iob, cob, reservoir, site_age, sensor_age,
     /// pump_battery, uploader_battery, sensitivity_ratio.
     ComparePayload {
-        operator: Spelled<CmpOp>,
+        operator: CmpOp,
         #[serde(serialize_with = "exact_decimal")]
         value: Decimal,
     }
@@ -740,15 +807,15 @@ payload!(
 
 payload!(AlertStatePayload {
     alert_id: Uuid,
-    state: Spelled<AlertStateKind>,
+    state: AlertStateKind,
     for_minutes: Option<i32>,
 });
 
 payload!(
     /// `{operator, minutes}`: loop_stale, loop_enaction_stale.
     MinutesComparePayload {
-        operator: Spelled<CmpOp>,
-        minutes: i32,
+        operator: CmpOp,
+        minutes: NonNegativeMinutes,
     }
 );
 
@@ -762,49 +829,62 @@ payload!(
 );
 
 payload!(TempBasalPayload {
-    metric: EnumValue<TempBasalMetric>,
-    operator: Spelled<CmpOp>,
+    metric: TempBasalMetric,
+    operator: CmpOp,
     #[serde(serialize_with = "exact_decimal")]
     value: Decimal,
 });
 
 payload!(GlucoseBucketPayload {
-    buckets: Option<Vec<EnumValue<GlucoseBucket>>>,
+    buckets: Vec<GlucoseBucket>,
 });
 
 payload!(TimeSincePayload {
-    operator: EnumValue<CmpOp>,
-    minutes: i32,
+    operator: CmpOp,
+    minutes: NonNegativeMinutes,
 });
 
 payload!(DayOfWeekPayload {
-    days: Option<Vec<EnumValue<DayOfWeek>>>,
+    days: Vec<DayOfWeek>,
 });
 
 payload!(PumpStatePayload {
-    mode: EnumValue<PumpMode>,
+    mode: PumpMode,
     is_active: bool,
     for_minutes: Option<i32>,
 });
 
 payload!(
     /// `tracker_age`: minutes since the active tracker instance's reference
-    /// timestamp.
+    /// timestamp, negative before a scheduled event.
     TrackerAgePayload {
         tracker_definition_id: Uuid,
-        operator: Spelled<CmpOp>,
+        operator: CmpOp,
         minutes: i32,
     }
 );
 
-payload!(StateSpanPayload {
-    category: EnumValue<StateSpanCategory>,
-    state: Option<String>,
-    is_active: bool,
-    for_minutes: Option<i32>,
-});
+payload!(
+    /// The pump-mode category is `pump_state`'s.
+    StateSpanPayload {
+        category: StateSpanCategory,
+        state: Option<String>,
+        is_active: bool,
+        for_minutes: Option<i32>,
+    }
+    check |p, r| p.category != StateSpanCategory::PumpMode
+        || r.report(Reason::PumpModeCategory)
+);
 
 payload!(SleepSessionPayload { is_active: bool });
+
+fn hh_mm<S: Serializer>(t: &NaiveTime, s: S) -> Result<S::Ok, S::Error> {
+    s.collect_str(&t.format("%H:%M"))
+}
+
+fn zone_name<S: Serializer>(tz: &Option<Tz>, s: S) -> Result<S::Ok, S::Error> {
+    tz.map(Tz::name).serialize(s)
+}
 
 /// The reader rejects a 65th nested container anywhere in the document,
 /// including inside properties the model ignores (engine-semantics.md §1.1).
@@ -814,211 +894,205 @@ const MAX_JSON_DEPTH: usize = 64;
 /// list); the 64th nested frame is rejected.
 const MAX_TYPED_DEPTH: usize = MAX_JSON_DEPTH - 1;
 
-fn check_typed_level(level: usize) -> ParseResult<()> {
-    if level > MAX_TYPED_DEPTH {
-        Err(ParseError::unplaced(Reason::TooDeep))
-    } else {
-        Ok(())
-    }
+fn within_depth(level: usize) -> bool {
+    level <= MAX_TYPED_DEPTH
 }
 
-/// Rejects a document nested deeper than the reader allows, without
+/// Whether the document nests deeper than the reader allows, found without
 /// recursing.
-fn check_json_depth(root: &Value) -> ParseResult<()> {
+fn exceeds_json_depth(root: &Value) -> bool {
     let mut pending = vec![(root, 1usize)];
     while let Some((v, depth)) = pending.pop() {
         let inner = depth.saturating_add(1);
         match v {
-            Value::Array(_) | Value::Object(_) if depth > MAX_JSON_DEPTH => {
-                return Err(ParseError::unplaced(Reason::TooDeep));
-            }
+            Value::Array(_) | Value::Object(_) if depth > MAX_JSON_DEPTH => return true,
             Value::Array(items) => pending.extend(items.iter().map(|c| (c, inner))),
             Value::Object(fields) => pending.extend(fields.values().map(|c| (c, inner))),
             _ => {}
         }
     }
-    Ok(())
+    false
 }
 
-/// Parses a rule body: the payload object for `kind`, read as its own
-/// document and checked for evaluability. Paths are rooted at the kind's wire
-/// name. A JSON `null` is the caller's to handle: it evaluates false.
-pub fn parse_payload(kind: ConditionKind, v: &Value) -> ParseResult<Payload> {
-    let payload = parse_payload_structure(kind, v)?;
-    match crate::validate::first_evaluation_fault_in_payload(&payload) {
-        Some(e) => Err(e),
-        None => Ok(payload),
+/// Reads one document rooted at `root`: the value when nothing is wrong with
+/// it, else every problem found.
+fn read_document<T>(
+    v: &Value,
+    root: &str,
+    read: impl FnOnce(&Issues) -> Option<T>,
+) -> ParseResult<T> {
+    if exceeds_json_depth(v) {
+        return Err(Unevaluable(vec![ParseError::new(root, Reason::TooDeep)]));
+    }
+    let issues = Issues::default();
+    let value = read(&issues);
+    let issues = issues.0.into_inner();
+    match value {
+        Some(value) if issues.is_empty() => Ok(value),
+        _ => Err(Unevaluable(issues)),
     }
 }
 
-/// The structural pass of [`parse_payload`] alone.
-pub fn parse_payload_structure(kind: ConditionKind, v: &Value) -> ParseResult<Payload> {
+/// Reads a rule body: the payload object for `kind`, as its own document.
+/// Paths are rooted at the kind's wire name.
+///
+/// # Errors
+/// Every problem that keeps the body from being evaluated (§1.4), including a
+/// JSON `null` body.
+pub fn parse_payload(kind: ConditionKind, v: &Value) -> ParseResult<Payload> {
     let root = kind.name();
-    check_json_depth(v).map_err(|e| e.placed_at(root))?;
-    parse_payload_at(kind, v, 1, root)
+    read_document(v, root, |issues| {
+        if v.is_null() {
+            issues.report(root, Reason::PayloadMissing);
+            None
+        } else {
+            read_payload(kind, v, 1, root, issues)
+        }
+    })
 }
 
 /// `level` is the payload object's 1-based typed nesting level; `path` is the
 /// owning node's condition path.
-fn parse_payload_at(
+fn read_payload(
     kind: ConditionKind,
     v: &Value,
     level: usize,
     path: &str,
-) -> ParseResult<Payload> {
-    let read = || {
-        check_typed_level(level)?;
-        let Value::Object(obj) = v else {
-            return Err(ParseError::unplaced(Reason::NotAnObject));
-        };
-        let level = level.saturating_add(1);
-        Payload::read(kind, &Reader { obj, level, path })
+    issues: &Issues,
+) -> Option<Payload> {
+    if !within_depth(level) {
+        issues.report(path, Reason::TooDeep);
+        return None;
+    }
+    let Value::Object(obj) = v else {
+        issues.report(path, Reason::NotAnObject);
+        return None;
     };
-    read().map_err(|e| e.placed_at(path))
+    let reader = Reader {
+        obj,
+        level: level.saturating_add(1),
+        path,
+        issues,
+    };
+    Payload::read(kind, &reader)
 }
 
 /// The `type` of a node value, if it has a string one, for naming its path
-/// before it is parsed.
+/// before it is read.
 fn peek_type(v: &Value) -> Option<&str> {
-    match v {
-        Value::Object(o) => get_ci(o, "type").and_then(Value::as_str),
-        _ => None,
+    v.as_object()
+        .and_then(|o| o.get("type"))
+        .and_then(Value::as_str)
+}
+
+/// `level` is the node object's 1-based typed nesting level; `path` its
+/// condition path.
+fn read_node(v: &Value, level: usize, path: &str, issues: &Issues) -> Option<Node> {
+    if !within_depth(level) {
+        issues.report(path, Reason::TooDeep);
+        return None;
     }
+    let Value::Object(obj) = v else {
+        issues.report(path, Reason::NotAnObject);
+        return None;
+    };
+    let kind = match obj.get("type") {
+        None | Some(Value::Null) => {
+            issues.report(path, Reason::TypeMissing);
+            return None;
+        }
+        Some(Value::String(t)) => ConditionKind::from_wire(t),
+        Some(_) => {
+            issues.report(path, Reason::InvalidField("type"));
+            return None;
+        }
+    };
+    let Some(kind) = kind else {
+        issues.report(path, Reason::UnknownKind);
+        return None;
+    };
+    if obj
+        .iter()
+        .any(|(k, v)| !v.is_null() && !matches!(k.as_str(), "type" | "_uid") && k != kind.name())
+    {
+        issues.report(path, Reason::UnknownField);
+    }
+    match obj.get(kind.name()) {
+        None | Some(Value::Null) => {
+            issues.report(path, Reason::PayloadMissing);
+            None
+        }
+        Some(payload) => read_payload(kind, payload, level.saturating_add(1), path, issues),
+    }
+    .map(Node)
 }
 
-/// A parsed condition node. Every payload property present in the JSON is
-/// parsed, whatever the `type`; [`Node::dispatch`] selects the one evaluation
-/// reads.
-#[derive(Debug, Clone, Default)]
-pub struct Node {
-    /// The `type` as written (case preserved for paths), or `None` when
-    /// absent or null.
-    pub type_str: Option<String>,
-    payloads: Vec<Payload>,
-}
+/// A condition node: `type` and the payload it names (engine-semantics.md
+/// §1.2).
+#[derive(Debug, Clone)]
+pub struct Node(Payload);
 
-/// The unwrapped form of a container node (engine-semantics.md §2.1).
+/// The children of a container node (engine-semantics.md §2.1).
 #[derive(Debug, Clone, Copy)]
 pub enum Container<'a> {
-    Composite(&'a CompositePayload, &'a [Option<Node>]),
-    Not(&'a Node),
-    Sustained(&'a SustainedPayload, &'a Node),
+    Composite(&'a CompositePayload),
+    Not(&'a NotPayload),
+    Sustained(&'a SustainedPayload),
 }
 
 impl<'a> Container<'a> {
-    /// The child slots in order; `None` is a JSON-null composite slot.
-    pub fn children(self) -> impl Iterator<Item = Option<&'a Node>> {
-        let (list, single): (&[Option<Node>], _) = match self {
-            Container::Composite(_, conditions) => (conditions, None),
-            Container::Not(child) | Container::Sustained(_, child) => (&[], Some(child)),
+    /// The children in order.
+    pub fn children(self) -> impl Iterator<Item = &'a Node> {
+        let (list, single): (&[Node], _) = match self {
+            Container::Composite(p) => (p.conditions.as_slice(), None),
+            Container::Not(p) => (&[], Some(&*p.child)),
+            Container::Sustained(p) => (&[], Some(&*p.child)),
         };
-        list.iter().map(Option::as_ref).chain(single.map(Some))
+        list.iter().chain(single)
+    }
+}
+
+impl From<Payload> for Node {
+    fn from(payload: Payload) -> Self {
+        Node(payload)
     }
 }
 
 impl Node {
-    /// Parses a full condition node and checks it is evaluable. Paths are
-    /// rooted at the node's `type` as written.
+    /// Reads a full condition node. Paths are rooted at the node's `type`.
+    ///
+    /// # Errors
+    /// Every problem that keeps the node from being evaluated (§1.4).
     pub fn parse(v: &Value) -> ParseResult<Node> {
         Self::parse_rooted(v, peek_type(v).unwrap_or(""))
     }
 
     /// [`Node::parse`] with the root path segment named by the caller (e.g.
     /// `auto_resolve`).
+    ///
+    /// # Errors
+    /// Every problem that keeps the node from being evaluated (§1.4).
     pub fn parse_rooted(v: &Value, root: &str) -> ParseResult<Node> {
-        let node = Self::parse_structure_rooted(v, root)?;
-        match crate::validate::first_evaluation_fault(&node, root) {
-            Some(e) => Err(e),
-            None => Ok(node),
-        }
+        read_document(v, root, |issues| read_node(v, 1, root, issues))
     }
 
-    /// The structural pass of [`Node::parse`] alone: the value must be an
-    /// object, `type` a string (or null/absent), and every payload property
-    /// must parse.
-    pub fn parse_structure(v: &Value) -> ParseResult<Node> {
-        Self::parse_structure_rooted(v, peek_type(v).unwrap_or(""))
-    }
-
-    pub fn parse_structure_rooted(v: &Value, root: &str) -> ParseResult<Node> {
-        check_json_depth(v).map_err(|e| e.placed_at(root))?;
-        Self::parse_at(v, 1, root)
-    }
-
-    /// `level` is the node object's 1-based typed nesting level; `path` its
-    /// condition path.
-    fn parse_at(v: &Value, level: usize, path: &str) -> ParseResult<Node> {
-        let read = || {
-            check_typed_level(level)?;
-            let Value::Object(obj) = v else {
-                return Err(ParseError::unplaced(Reason::NotAnObject));
-            };
-            let type_str = read_string(obj, "type")?;
-            let mut payloads = Vec::new();
-            for &kind in ConditionKind::ALL {
-                match get_ci(obj, kind.name()) {
-                    None | Some(Value::Null) => {}
-                    Some(pv @ Value::Object(_)) => {
-                        payloads.push(parse_payload_at(kind, pv, level.saturating_add(1), path)?);
-                    }
-                    Some(_) => return Err(invalid(kind.name())),
-                }
-            }
-            Ok(Node { type_str, payloads })
-        };
-        read().map_err(|e| e.placed_at(path))
-    }
-
-    /// A rule body as a full node: `{"type": <wire>, "<wire>": <payload>}`,
-    /// with no payload property for a null body.
     #[must_use]
-    pub fn from_rule(kind: ConditionKind, payload: Option<Payload>) -> Node {
-        Node {
-            type_str: Some(kind.name().to_owned()),
-            payloads: payload.into_iter().collect(),
-        }
+    pub fn kind(&self) -> ConditionKind {
+        self.0.kind()
     }
 
-    /// The payload property for `kind`, if present and non-null.
     #[must_use]
-    pub fn payload(&self, kind: ConditionKind) -> Option<&Payload> {
-        self.payloads.iter().find(|p| p.kind() == kind)
+    pub fn payload(&self) -> &Payload {
+        &self.0
     }
 
-    /// The payload evaluation reads: `None` for a missing or unknown `type`.
-    /// A kind reached through its member name or ordinal (e.g.
-    /// `"RateOfChange"`) reads [`Payload::default_for`], not its stored
-    /// payload (engine-semantics.md §1.2).
-    #[must_use]
-    pub fn dispatch(&self) -> Option<Cow<'_, Payload>> {
-        let type_str = self.type_str.as_deref()?;
-        let kind = ConditionKind::resolve(type_str)?;
-        // §1.2 reads the payload named by the lowercased `type`. A `type` that
-        // resolves is ASCII apart from surrounding whitespace, which neither
-        // comparison matches, so folding ASCII case decides the same.
-        let stored = if type_str.eq_ignore_ascii_case(kind.name()) {
-            self.payload(kind)
-        } else {
-            None
-        };
-        Some(stored.map_or_else(|| Cow::Owned(Payload::default_for(kind)), Cow::Borrowed))
-    }
-
-    /// This node's children when it is a container: a composite, not or
-    /// sustained whose stored payload has its children. Any other node,
-    /// including a container missing them, is a leaf (§2.2).
+    /// This node's children when it is a container.
     #[must_use]
     pub fn container(&self) -> Option<Container<'_>> {
-        match self.dispatch()? {
-            Cow::Borrowed(Payload::Composite(p)) => p
-                .conditions
-                .as_deref()
-                .map(|conditions| Container::Composite(p, conditions)),
-            Cow::Borrowed(Payload::Not(p)) => p.child.as_deref().map(Container::Not),
-            Cow::Borrowed(Payload::Sustained(p)) => p
-                .child
-                .as_deref()
-                .map(|child| Container::Sustained(p, child)),
+        match &self.0 {
+            Payload::Composite(p) => Some(Container::Composite(p)),
+            Payload::Not(p) => Some(Container::Not(p)),
+            Payload::Sustained(p) => Some(Container::Sustained(p)),
             _ => None,
         }
     }

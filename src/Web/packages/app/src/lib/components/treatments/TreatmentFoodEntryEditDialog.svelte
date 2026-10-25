@@ -203,7 +203,7 @@
 <Dialog.Root bind:open onOpenChange={(value) => !value && resetAndClose()}>
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
-      <Dialog.Title>Edit Food Entry</Dialog.Title>
+      <Dialog.Title>Edit food entry</Dialog.Title>
     </Dialog.Header>
 
     <form class="@container space-y-4" onsubmit={handleSubmit}>

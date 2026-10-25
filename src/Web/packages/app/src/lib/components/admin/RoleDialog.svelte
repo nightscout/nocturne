@@ -31,7 +31,7 @@
       ],
     },
     {
-      name: "API - Device Status",
+      name: "API - Device status",
       permissions: [
         "api:devicestatus:read",
         "api:devicestatus:create",
@@ -55,7 +55,7 @@
       ],
     },
     {
-      name: "Care Portal",
+      name: "Careportal",
       permissions: [
         "careportal:read",
         "careportal:create",
@@ -116,12 +116,12 @@
   <Dialog.Content class="max-w-2xl max-h-[85vh] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>
-        {isNewRole ? "New Role" : "Edit Role"}
+        {isNewRole ? "New role" : "Edit role"}
       </Dialog.Title>
       <Dialog.Description>
         {#if roleCreatedFromSubjectDialog}
           Create a role with fine-grained permissions for your subject. After
-          saving, you'll return to the subject dialog with this role selected.
+          saving, you will return to the subject dialog with this role selected.
         {:else if isNewRole}
           Create a new role with specific permissions.
         {:else}
@@ -176,7 +176,7 @@
 
           <!-- Custom permission input -->
           <div class="border rounded-lg p-3">
-            <h4 class="text-sm font-medium mb-2">Custom Permission</h4>
+            <h4 class="text-sm font-medium mb-2">Custom permission</h4>
             <div class="flex gap-2">
               <Input
                 bind:value={customPermission}
@@ -200,7 +200,7 @@
           {#if roleFormPermissions.length > 0}
             <div class="border rounded-lg p-3">
               <h4 class="text-sm font-medium mb-2">
-                Selected Permissions ({roleFormPermissions.length})
+                Selected permissions ({roleFormPermissions.length})
               </h4>
               <div class="flex flex-wrap gap-1">
                 {#each roleFormPermissions as perm, i (i)}

@@ -58,7 +58,7 @@ public class HomeAssistantHub(HomeAssistantConnections connections) : TenantAwar
                 "instanceId must be the OAuth client the connection's access token was issued to.");
         }
 
-        if (authorization.MayReceiveCategory(RealtimeCategories.Entries))
+        if (authorization.MayReceiveCategory(RealtimeCategories.Glucose))
             await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup("ha-glucose"), ct);
         await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup($"ha:{instanceId}"), ct);
         await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup("ha-alerts"), ct);

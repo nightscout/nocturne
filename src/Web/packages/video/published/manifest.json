@@ -1,0 +1,523 @@
+{
+  "agp": {
+    "title": "Ambulatory Glucose Profile",
+    "summary": "Your readings from 14 days, shown as one typical day.",
+    "duration": 74.7,
+    "width": 1920,
+    "height": 1080,
+    "video": "agp.mp4",
+    "poster": "agp.webp",
+    "transcript": [
+      {
+        "heading": "The 24-hour glucose pattern",
+        "notes": [
+          "The blue line is your median: the middle reading at each hour, over 14 days.",
+          "Your median is highest at 9am: 169 mg/dL, after breakfast.",
+          "The shaded bands show how much your days differ. At 2pm they are widest: from 80 to 276 mg/dL."
+        ]
+      },
+      {
+        "heading": "Look further back",
+        "notes": [
+          "Is this a real pattern, or two unusual weeks? Open the date range.",
+          "Select 30 Days. The calendar marks the days it covers.",
+          "Then select Apply Filters. The whole report loads again for 30 days."
+        ]
+      },
+      {
+        "heading": "The pattern over 30 days",
+        "notes": [
+          "Over 30 days the shape stays the same: your glucose rises after breakfast and stays high into the afternoon. At 1pm the median is 166 mg/dL."
+        ]
+      },
+      {
+        "heading": "Time in range over 30 days",
+        "notes": [
+          "78% of your readings are in range, 70 to 180 mg/dL. The consensus target is more than 70%."
+        ]
+      }
+    ]
+  },
+  "basal-analysis": {
+    "title": "Basal Rate Analysis",
+    "summary": "How your background insulin changes through the day.",
+    "duration": 75.3,
+    "width": 1920,
+    "height": 1080,
+    "video": "basal-analysis.mp4",
+    "poster": "basal-analysis.webp",
+    "transcript": [
+      {
+        "heading": "Basal rate by hour",
+        "notes": [
+          "The line is your median basal rate at each hour. Most hours sit between 1.2 and 1.4 U/hr.",
+          "At 4pm the median drops to 0.4 U/hr: at this hour your loop often lowers your basal.",
+          "Where the shaded bands are wide, the delivered rate changed more at that hour."
+        ]
+      },
+      {
+        "heading": "How often your loop changes it",
+        "notes": [
+          "Over 14 days, your loop raised your basal 343 times and lowered it only 93 times."
+        ]
+      },
+      {
+        "heading": "Only the latest week",
+        "notes": [
+          "Is this still true now? Open the date range at the top of the report.",
+          "Select 7 Days to look at the latest week only.",
+          "Then select Apply Filters. The report loads again for those 7 days."
+        ]
+      },
+      {
+        "heading": "The last 7 days",
+        "notes": [
+          "In the last 7 days: 161 times higher and 53 times lower. Your loop still raises your basal about three times as often."
+        ]
+      }
+    ]
+  },
+  "battery": {
+    "title": "Battery",
+    "summary": "How the batteries of your devices charge and run down.",
+    "duration": 70.9,
+    "width": 1920,
+    "height": 1080,
+    "video": "battery.mp4",
+    "poster": "battery.webp",
+    "transcript": [
+      {
+        "heading": "One card for each device",
+        "notes": [
+          "Each device that sends status reports gets a card. The Trio battery is at 80% now.",
+          "In the last 7 days it charged 6 times. After each charge, the battery lasted 16h 30m."
+        ]
+      },
+      {
+        "heading": "Look further back",
+        "notes": [
+          "One week shows only a few charges. To see more, change the date range.",
+          "Select 30 Days.",
+          "Then select Apply Filters."
+        ]
+      },
+      {
+        "heading": "Thirty days of charging",
+        "notes": [
+          "Over 30 days the Trio battery charged 29 times, about once a day. Each charge lasted 16h 30m."
+        ]
+      },
+      {
+        "heading": "What the longer range shows",
+        "notes": [
+          "The pump battery went as low as 7% in these 30 days.",
+          "It was below 30% for 17.3% of the time. In the last 7 days alone, it never went below 53%."
+        ]
+      }
+    ]
+  },
+  "comparison": {
+    "title": "Comparison",
+    "summary": "Put two periods side by side, and see what changed.",
+    "duration": 66.5,
+    "width": 1920,
+    "height": 1080,
+    "video": "comparison.mp4",
+    "poster": "comparison.webp",
+    "transcript": [
+      {
+        "heading": "Two weeks against two weeks",
+        "notes": [
+          "The report opens on the last 14 days against the 14 days before. Time in range went from 75.9% to 81.1%."
+        ]
+      },
+      {
+        "heading": "Choose the periods",
+        "notes": [
+          "To compare other periods, open the presets.",
+          "Choose the last 30 days against the 30 days before."
+        ]
+      },
+      {
+        "heading": "What changed",
+        "notes": [
+          "The table updates at once. Over 30 days, time in range went from 72.5% to 78.2%.",
+          "Your Glycemic Risk Index fell from 37 to 29. A bar to the left means lower, and here lower is better."
+        ]
+      },
+      {
+        "heading": "Time in range, side by side",
+        "notes": [
+          "In the earlier 30 days, 72% of your readings were in range.",
+          "In the last 30 days, 78% are in range, and the red very high band is smaller."
+        ]
+      }
+    ]
+  },
+  "data-quality": {
+    "title": "Data Quality",
+    "summary": "Find readings that may come from the sensor, not from your glucose.",
+    "duration": 57.3,
+    "width": 1920,
+    "height": 1080,
+    "video": "data-quality.mp4",
+    "poster": "data-quality.webp",
+    "transcript": [
+      {
+        "heading": "Compression lows to review",
+        "notes": [
+          "A compression low is a false low reading when you sleep on the sensor. Possible ones wait here for your review. Now there are none."
+        ]
+      },
+      {
+        "heading": "Scan your nights",
+        "notes": [
+          "To scan a night for compression lows, pick its date. Add an end date to scan more nights.",
+          "Then select Run Detection. A notice shows how many wait for review."
+        ]
+      },
+      {
+        "heading": "Review what it found",
+        "notes": [
+          "It found 1 possible compression low. It now waits here for your review."
+        ]
+      },
+      {
+        "heading": "Accept or dismiss",
+        "notes": [
+          "For each one, accept it as a false low, or dismiss it as a real low. Your reports still include these readings."
+        ]
+      }
+    ]
+  },
+  "day-in-review": {
+    "title": "Day in Review",
+    "summary": "One day in detail: glucose, insulin, carbs and each decision of your pump.",
+    "duration": 63.8,
+    "width": 1920,
+    "height": 1080,
+    "video": "day-in-review.mp4",
+    "poster": "day-in-review.webp",
+    "transcript": [
+      {
+        "heading": "The day in numbers",
+        "notes": [
+          "71% of the day's readings are in range. None are low, but 20% are very high."
+        ]
+      },
+      {
+        "heading": "Saturday's glucose",
+        "notes": [
+          "You ate 60g of carbs at 6:55am. By 8:45am your glucose was 345 mg/dL."
+        ]
+      },
+      {
+        "heading": "Step through the day",
+        "notes": [
+          "The card shows the last decision of the pump, at 10:45am. It forecast 40 mg/dL.",
+          "Move the scrubber to any moment. Here, back to the start of the day.",
+          "At midnight your glucose was 171 mg/dL. The pump forecast 144 and set 1.40U/hr."
+        ]
+      },
+      {
+        "heading": "Another day",
+        "notes": [
+          "To see another day, step back with the arrow.",
+          "On Friday, 88.5% of your readings were in range, and 1.2% were low."
+        ]
+      }
+    ]
+  },
+  "ehba1c": {
+    "title": "Estimated HbA1c",
+    "summary": "What a lab HbA1c test would read, estimated for each day.",
+    "duration": 65.8,
+    "width": 1920,
+    "height": 1080,
+    "video": "ehba1c.mp4",
+    "poster": "ehba1c.webp",
+    "transcript": [
+      {
+        "heading": "How the estimate works",
+        "notes": [
+          "Each day's estimate uses the average glucose of the 90 days before it. The most recent 30 days count for about half.",
+          "Your latest estimate is 6.5%, from Saturday, October 24."
+        ]
+      },
+      {
+        "heading": "Your estimate over time",
+        "notes": [
+          "From mid-August it stays between 6.4% and 6.6%."
+        ]
+      },
+      {
+        "heading": "Add a lab result",
+        "notes": [
+          "To check the estimate, add a lab HbA1c result. First, enter the date of the blood draw.",
+          "Then enter the result in percent, and a note if you want one.",
+          "Select Add lab result. The result goes into your list."
+        ]
+      },
+      {
+        "heading": "Compare it on the chart",
+        "notes": [
+          "Your lab result shows as a triangle on the chart. On October 10 the lab read 6.8%, and the estimate was 6.6%."
+        ]
+      }
+    ]
+  },
+  "executive-summary": {
+    "title": "Executive Summary",
+    "summary": "Your most important numbers on one page, for the period you choose.",
+    "duration": 70.3,
+    "width": 1920,
+    "height": 1080,
+    "video": "executive-summary.mp4",
+    "poster": "executive-summary.webp",
+    "transcript": [
+      {
+        "heading": "The key numbers",
+        "notes": [
+          "The report opens on the last 14 days. Your time in range is 81%, and its target is 70% or more."
+        ]
+      },
+      {
+        "heading": "Choose the period",
+        "notes": [
+          "To see a longer time, open the date range at the top of the report.",
+          "Choose 30 days. The calendar shows the days it covers.",
+          "Apply, and the whole report loads again."
+        ]
+      },
+      {
+        "heading": "The same page, for 30 days",
+        "notes": [
+          "Every figure now covers 30 days. Your time in range is 78%, against 81% over 14 days."
+        ]
+      },
+      {
+        "heading": "Time in range",
+        "notes": [
+          "On an average day, that is 18 hours 46 minutes in range, 57 minutes low and 4 hours 17 minutes high."
+        ]
+      },
+      {
+        "heading": "What your data tells you",
+        "notes": [
+          "Over 30 days, the report finds two new patterns: time very low and time very high are above their targets."
+        ]
+      }
+    ]
+  },
+  "glucose-distribution": {
+    "title": "Glucose Distribution",
+    "summary": "How your time divides across glucose ranges.",
+    "duration": 64.8,
+    "width": 1920,
+    "height": 1080,
+    "video": "glucose-distribution.mp4",
+    "poster": "glucose-distribution.webp",
+    "transcript": [
+      {
+        "heading": "Time in each range",
+        "notes": [
+          "This ring shows how your time divides across glucose ranges. The green part is the tight range, 70 to 140 mg/dL: 65% of your time.",
+          "The teal part is the rest of the target range, 140 to 180 mg/dL: 16% of your time.",
+          "To see the whole target range as one part, select Hide Tight Range.",
+          "Now one part shows all your time from 70 to 180 mg/dL: 81%. The consensus target is more than 70%."
+        ]
+      },
+      {
+        "heading": "Range by hour of the day",
+        "notes": [
+          "Each column is one hour of the day, split by range. From 1am to 6am, almost all of your time is in range.",
+          "9am is your hardest hour. 33.3% of it is from 180 to 250 mg/dL, and 12.5% is above 250."
+        ]
+      }
+    ]
+  },
+  "heart-rate": {
+    "title": "Heart Rate",
+    "summary": "Your heart rate through each day, with your glucose on the same line.",
+    "duration": 63.4,
+    "width": 1920,
+    "height": 1080,
+    "video": "heart-rate.mp4",
+    "poster": "heart-rate.webp",
+    "transcript": [
+      {
+        "heading": "Your heart rate in numbers",
+        "notes": [
+          "Your average heart rate over these 14 days is 67 bpm.",
+          "Your resting estimate is 53 bpm. Only one reading in ten is lower."
+        ]
+      },
+      {
+        "heading": "One row for each day",
+        "notes": [
+          "The blue dots are your heart rate. At night it stays low: 52 bpm at 3 AM on Oct 18.",
+          "At 5:34 PM it climbs to 150 bpm, your highest. Your glucose stays in range, at 92 mg/dL."
+        ]
+      },
+      {
+        "heading": "Go back a week",
+        "notes": [
+          "The arrows move the rows a week at a time. The down arrow shows the week before."
+        ]
+      },
+      {
+        "heading": "The same hour, a week before",
+        "notes": [
+          "Now Oct 11 sits where Oct 18 was. A week before, your heart rate climbs to 148 bpm at almost the same time."
+        ]
+      }
+    ]
+  },
+  "hourly-stats": {
+    "title": "Hourly Patterns",
+    "summary": "Every day laid over one clock, to find your best and hardest hours.",
+    "duration": 74.3,
+    "width": 1920,
+    "height": 1080,
+    "video": "hourly-stats.mp4",
+    "poster": "hourly-stats.webp",
+    "transcript": [
+      {
+        "heading": "At a glance",
+        "notes": [
+          "Over 14 days, 9am to 10am has the least time in range: 54.2%. Its readings go mostly above range."
+        ]
+      },
+      {
+        "heading": "Hour by hour",
+        "notes": [
+          "Each bar is one hour. At 9am, 45.8% of your readings are above range.",
+          "Lows show at the bottom, in orange and red. At 4pm, 12.2% of your readings are below range."
+        ]
+      },
+      {
+        "heading": "A longer view",
+        "notes": [
+          "Two weeks can hide the real pattern. To see more, open the date range.",
+          "Choose 30 days.",
+          "Apply, and every hour is worked out again from 30 days of data."
+        ]
+      },
+      {
+        "heading": "The pattern over 30 days",
+        "notes": [
+          "Over 30 days the picture changes. 1pm to 2pm now has the least time in range: 52.6%.",
+          "And 3pm to 4pm has the most time below range: 13.8%. The afternoon is the hardest part of your day."
+        ]
+      }
+    ]
+  },
+  "idp": {
+    "title": "Insulin Dosing Profile",
+    "summary": "Your insulin and your glucose, side by side.",
+    "duration": 75.2,
+    "width": 1920,
+    "height": 1080,
+    "video": "idp.mp4",
+    "poster": "idp.webp",
+    "transcript": [
+      {
+        "heading": "Glycemic Risk Index",
+        "notes": [
+          "The Glycemic Risk Index puts the risk of lows and highs into one number, from 0 to 100. A lower score is better.",
+          "The dot shows where your lows and highs put you. Over 14 days your score is 25, in Zone B: 21 to 40."
+        ]
+      },
+      {
+        "heading": "Your boluses",
+        "notes": [
+          "Under your glucose pattern and basal rate, this chart shows how many boluses you give in each hour. Most come at breakfast: 3.7 a day at 7am."
+        ]
+      },
+      {
+        "heading": "Ready for a clinic visit",
+        "notes": [
+          "Before a clinic visit, set the period your care team asks for. Open the date range.",
+          "Select 30 Days. The calendar marks the days it covers.",
+          "Then select Apply Filters. The whole report loads again for 30 days."
+        ]
+      },
+      {
+        "heading": "Thirty days",
+        "notes": [
+          "Over 30 days your score is 29. It is still in Zone B, with highs as the larger part of your risk."
+        ]
+      }
+    ]
+  },
+  "insulin-delivery": {
+    "title": "Insulin Delivery",
+    "summary": "Your basal and bolus insulin, over 30 days.",
+    "duration": 73.4,
+    "width": 1920,
+    "height": 1080,
+    "video": "insulin-delivery.mp4",
+    "poster": "insulin-delivery.webp",
+    "transcript": [
+      {
+        "heading": "Insulin, day by day",
+        "notes": [
+          "Each bar is one day. The lower part of the bar is basal insulin. The upper part is bolus insulin.",
+          "On most days you take 30 to 50 units. Over 30 days, the average is 39.9 units a day: 55% basal and 45% bolus."
+        ]
+      },
+      {
+        "heading": "Insulin by hour of the day",
+        "notes": [
+          "This card splits your insulin by time of day. Evening and night get the most: 14.3 units, 36% of the day."
+        ]
+      },
+      {
+        "heading": "Compare the latest week",
+        "notes": [
+          "Is your last week like the rest of the month? Open the date range.",
+          "Select 7 Days. The calendar marks the days it covers.",
+          "Then select Apply Filters. The report loads again for those 7 days."
+        ]
+      },
+      {
+        "heading": "The last 7 days",
+        "notes": [
+          "In the last 7 days your total daily dose is 37.5 units, against 39.9 over 30 days. The split stays near 56% basal and 44% bolus."
+        ]
+      }
+    ]
+  },
+  "overview": {
+    "title": "Reports",
+    "summary": "Your glucose at a glance, with every report one step away.",
+    "duration": 59.6,
+    "width": 1920,
+    "height": 1080,
+    "video": "overview.mp4",
+    "poster": "overview.webp",
+    "transcript": [
+      {
+        "heading": "Your last 14 days",
+        "notes": [
+          "81% of your readings are in range, 70 to 180 mg/dL. The target is at least 70%.",
+          "Next to it are your key figures. Your average glucose is 135 mg/dL, and your eHbA1c is 6.3%."
+        ]
+      },
+      {
+        "heading": "Your typical day",
+        "notes": [
+          "The blue line is your median glucose at each hour of the day.",
+          "Your glucose is highest at 9am, with a median of 169 mg/dL."
+        ]
+      },
+      {
+        "heading": "Every report",
+        "notes": [
+          "Each report looks at your data in a different way. The AGP shows your typical day in full.",
+          "Hourly Patterns finds the hours of the day that go well, and the hours that are harder."
+        ]
+      }
+    ]
+  }
+}

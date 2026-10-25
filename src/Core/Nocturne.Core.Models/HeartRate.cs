@@ -32,7 +32,7 @@ public class HeartRate : ProcessableDocumentBase
     [JsonPropertyName("mills")]
     public override long Mills
     {
-        get => new DateTimeOffset(Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        get => Timestamp.ToMills();
         set => Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(value).UtcDateTime;
     }
 

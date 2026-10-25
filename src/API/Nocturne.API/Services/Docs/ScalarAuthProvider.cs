@@ -53,8 +53,8 @@ public sealed record ScalarAuthContext(string ClientId, string RedirectUri, stri
 public sealed class ScalarAuthProvider
 {
     /// <summary>
-    /// RFC 7591 software_id of the bundled Scalar docs client. Uniquely identifies the row
-    /// per tenant, so registration is idempotent.
+    /// RFC 7591 software_id of the tenant's one Scalar docs client. Dynamic registration refuses
+    /// it, so a row carrying it is always this provider's.
     /// </summary>
     public const string ScalarSoftwareId = "dev.nocturne.scalar";
 
@@ -72,6 +72,8 @@ public sealed class ScalarAuthProvider
     /// unauthenticated request, so the bound must not rest on that argument staying true.
     /// </remarks>
     internal const int MaxRedirectUris = 5;
+
+    private const int ClientLockClass = 0x4E53_434C;
 
     // Matches the tenant-resolution and public-access caches: long enough to keep the
     // docs page off the database, short enough that a demo reset heals within a couple
@@ -332,13 +334,17 @@ public sealed class ScalarAuthProvider
     /// <paramref name="redirectUri"/> must already be validated: it is persisted as an
     /// allowed OAuth redirect target, and authorize-time matching is byte-exact.
     /// <para>
+    /// The find-or-create holds a per-tenant advisory lock, since no unique index keeps two first
+    /// requests from each inserting a row.
+    /// </para>
+    /// <para>
     /// <c>IsKnown</c> is taken from the bundled directory rather than asserted. The
     /// consent screen keys its "app not recognized" warning off that flag, and this row
     /// is created by an unauthenticated request — it must not be able to badge itself as
     /// vetted.
     /// </para>
     /// </remarks>
-    private async Task<string?> EnsureScalarClientAsync(
+    internal async Task<string?> EnsureScalarClientAsync(
         Guid tenantId, string redirectUri, CancellationToken ct)
     {
         var cacheKey = $"scalar-client:{tenantId}:{redirectUri}";
@@ -347,51 +353,57 @@ public sealed class ScalarAuthProvider
 
         await using var db = await _factory.CreateForTenantAsync(tenantId, ct);
 
-        var client = await db.OAuthClients
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.SoftwareId == ScalarSoftwareId, ct);
+        var clientId = await db.ExecuteInTransactionAsync<string?>(async token =>
+        {
+            await db.LockForTransactionAsync(ClientLockClass, tenantId, token);
 
-        if (client is null)
-        {
-            client = new OAuthClientEntity
+            var client = await db.OAuthClients
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.SoftwareId == ScalarSoftwareId, token);
+
+            if (client is null)
             {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
-                ClientId = Guid.CreateVersion7().ToString(),
-                SoftwareId = ScalarSoftwareId,
-                ClientName = ClientName,
-                DisplayName = ClientName,
-                IsKnown = KnownOAuthClients.MatchBySoftwareId(ScalarSoftwareId) is not null,
-                RedirectUris = JsonSerializer.Serialize(new[] { redirectUri }),
-            };
-            db.OAuthClients.Add(client);
-            await db.SaveChangesAsync(ct);
-        }
-        else
-        {
-            var registered = DeserializeRedirectUris(client.RedirectUris);
-            if (!registered.Contains(redirectUri, StringComparer.Ordinal))
-            {
-                // Each distinct origin this instance is served on adds one entry. A real
-                // deployment has one or two; a cap keeps an unauthenticated caller from
-                // growing the row without bound.
-                if (registered.Count >= MaxRedirectUris)
+                client = new OAuthClientEntity
                 {
-                    _logger.LogWarning(
-                        "Scalar client for tenant {TenantId} already holds {Count} redirect URIs — not adding another",
-                        tenantId, registered.Count);
-                    return null;
-                }
-
-                registered.Add(redirectUri);
-                client.RedirectUris = JsonSerializer.Serialize(registered);
-                client.UpdatedAt = DateTime.UtcNow;
-                await db.SaveChangesAsync(ct);
+                    Id = Guid.CreateVersion7(),
+                    TenantId = tenantId,
+                    ClientId = Guid.CreateVersion7().ToString(),
+                    SoftwareId = ScalarSoftwareId,
+                    ClientName = ClientName,
+                    DisplayName = ClientName,
+                    IsKnown = KnownOAuthClients.MatchBySoftwareId(ScalarSoftwareId) is not null,
+                    RedirectUris = JsonSerializer.Serialize(new[] { redirectUri }),
+                };
+                db.OAuthClients.Add(client);
+                await db.SaveChangesAsync(token);
+                return client.ClientId;
             }
-        }
 
-        _cache.Set(cacheKey, client.ClientId, ClientCacheTtl);
-        return client.ClientId;
+            var registered = DeserializeRedirectUris(client.RedirectUris);
+            if (registered.Contains(redirectUri, StringComparer.Ordinal))
+                return client.ClientId;
+
+            // Each distinct origin this instance is served on adds one entry. A real
+            // deployment has one or two; a cap keeps an unauthenticated caller from
+            // growing the row without bound.
+            if (registered.Count >= MaxRedirectUris)
+            {
+                _logger.LogWarning(
+                    "Scalar client for tenant {TenantId} already holds {Count} redirect URIs: not adding another",
+                    tenantId, registered.Count);
+                return null;
+            }
+
+            registered.Add(redirectUri);
+            client.RedirectUris = JsonSerializer.Serialize(registered);
+            client.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(token);
+            return client.ClientId;
+        }, ct: ct);
+
+        if (clientId is not null)
+            _cache.Set(cacheKey, clientId, ClientCacheTtl);
+        return clientId;
     }
 
     private static List<string> DeserializeRedirectUris(string json)

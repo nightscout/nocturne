@@ -25,6 +25,9 @@ public class ChartDataControllerTests
         _service
             .Setup(s => s.GetBasalSeriesAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
+        _service
+            .Setup(s => s.GetBasalDeliverySpansAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
         _controller = new ChartDataController(_service.Object, NullLogger<ChartDataController>.Instance)
         {
@@ -91,6 +94,25 @@ public class ChartDataControllerTests
     public async Task GetBasalSeries_at_the_cap_is_accepted()
     {
         var result = await _controller.GetBasalSeries(Start, AtCap);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetBasalDeliverySpans_over_the_cap_returns_bad_request_without_computing()
+    {
+        var result = await _controller.GetBasalDeliverySpans(Start, AtCap + 1);
+
+        OverCapDetail(result.Result).Should().Be($"Date range must not exceed {V4ReadLimits.MaxDateSpanDays} days.");
+        _service.Verify(
+            s => s.GetBasalDeliverySpansAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetBasalDeliverySpans_at_the_cap_is_accepted()
+    {
+        var result = await _controller.GetBasalDeliverySpans(Start, AtCap);
 
         result.Result.Should().BeOfType<OkObjectResult>();
     }

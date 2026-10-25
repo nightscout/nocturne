@@ -13,8 +13,7 @@ namespace Nocturne.API.Services.Alerts;
 /// <see cref="AlertRuleEvaluationGate"/> lease.
 /// </summary>
 /// <remarks>
-/// The decider is the engine: <see cref="ManagedExcursionDecider"/> by default, or the one
-/// <c>Alerts:Engine</c> selects (see <c>AddAlertEvaluationEngine</c>).
+/// The decider is the engine: the Rust tracker (see <c>AddAlertEvaluationEngine</c>).
 /// </remarks>
 /// <seealso cref="IExcursionTracker"/>
 /// <seealso cref="IAlertTrackerRepository"/>
@@ -24,16 +23,6 @@ public class ExcursionTracker : IExcursionTracker
     private readonly AlertRuleEvaluationGate _gate;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ExcursionTracker> _logger;
-
-    /// <summary>A tracker deciding with the managed state machine.</summary>
-    public ExcursionTracker(
-        IAlertTrackerRepository repository,
-        AlertRuleEvaluationGate gate,
-        TimeProvider timeProvider,
-        ILogger<ExcursionTracker> logger)
-        : this(repository, gate, timeProvider, logger, ManagedExcursionDecider.Instance)
-    {
-    }
 
     internal ExcursionTracker(
         IAlertTrackerRepository repository,

@@ -81,7 +81,7 @@
         Days for {time(atMinute(minute))}–{time(atMinute(minute + SLOT_MINUTES))}
       </h3>
       <p class="text-sm text-muted-foreground">
-        These are the days that give the data for this time. Open a day to see it in Day in Review at this
+        These are the days that give the data for this time. Open a day to see it in Day in review at this
         time. Press Escape to go back to the chart.
       </p>
     </div>

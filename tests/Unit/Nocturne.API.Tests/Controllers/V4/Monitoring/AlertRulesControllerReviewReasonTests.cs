@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
@@ -53,15 +54,10 @@ public class AlertRulesControllerReviewReasonTests
 
         var validator = new Mock<IAlertRuleConditionValidator>();
         validator
-            .Setup(v => v.ValidateUpdate(
-                It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<StoredConditionTrees>()))
-            .Returns((AlertConditionType _, string body, bool _, string? autoResolve, string? client, StoredConditionTrees _) =>
-                new ConditionUpdateCheck([], body, autoResolve, client, []));
-        validator
             .Setup(v => v.Validate(
                 It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
-            .Returns([Issue]);
+            .Returns((AlertConditionType _, string body, bool _, string? _, string? _) =>
+                body == Body ? new List<RustValidationIssue> { Issue } : new List<RustValidationIssue>());
 
         var referenceService = new Mock<IAlertReferenceService>();
         referenceService
@@ -70,12 +66,14 @@ public class AlertRulesControllerReviewReasonTests
 
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(db),
+            new AlertRepository(new TestNocturneDbContextFactory(db)),
+            MockTenantAccessor.Create(db.TenantId).Object,
             referenceService.Object,
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(db.AsFactory())),
+            new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
             Mock.Of<ILogger<AlertRulesController>>());
 
@@ -105,7 +103,7 @@ public class AlertRulesControllerReviewReasonTests
         {
             Name = "Urgent Low",
             ConditionType = AlertConditionType.Threshold,
-            ConditionParams = JsonSerializer.Deserialize<JsonElement>(Body),
+            ConditionParams = JsonSerializer.Deserialize<JsonElement>("""{"direction":"below","value":55}"""),
             IsEnabled = true,
         }, CancellationToken.None);
 

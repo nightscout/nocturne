@@ -33,18 +33,12 @@ pub struct Rule {
 }
 
 impl Rule {
-    /// The body as the full node `{"type": <wire>, "<wire>": <payload>}`,
-    /// parsed and checked for evaluability (engine-semantics.md §1.4). A JSON
-    /// `null` body has no payload property, and its root evaluates false.
+    /// The body as the node `{"type": <wire>, "<wire>": <payload>}`.
     ///
     /// # Errors
-    /// The body cannot be evaluated.
+    /// The body cannot be evaluated (engine-semantics.md §1.4).
     pub fn parse_body(&self) -> ParseResult<Node> {
-        let payload = match &self.condition_params {
-            Value::Null => None,
-            v => Some(parse_payload(self.condition_type, v)?),
-        };
-        Ok(Node::from_rule(self.condition_type, payload))
+        parse_payload(self.condition_type, &self.condition_params).map(Node::from)
     }
 
     /// The auto-resolve tree when it is present, not `null` and evaluable.
@@ -55,7 +49,8 @@ impl Rule {
 }
 
 /// An auto-resolve tree when it is present, not `null` and evaluable.
-pub(crate) fn parse_auto_resolve(params: Option<&Value>) -> Option<Node> {
+#[must_use]
+pub fn parse_auto_resolve(params: Option<&Value>) -> Option<Node> {
     params
         .filter(|v| !v.is_null())
         .and_then(|v| Node::parse(v).ok())
@@ -66,7 +61,7 @@ pub(crate) fn parse_auto_resolve(params: Option<&Value>) -> Option<Node> {
 #[derive(Debug, Clone, Deserialize)]
 pub struct WireRule {
     pub id: Uuid,
-    /// A kind's wire name, ignoring ASCII case.
+    /// Exactly a kind's wire name.
     pub condition_type: String,
     #[serde(default)]
     pub condition_params: Value,
@@ -89,7 +84,7 @@ impl TryFrom<WireRule> for Rule {
     type Error = String;
 
     fn try_from(w: WireRule) -> Result<Self, String> {
-        let condition_type = ConditionKind::from_name(&w.condition_type).ok_or_else(|| {
+        let condition_type = ConditionKind::from_wire(&w.condition_type).ok_or_else(|| {
             format!(
                 "unknown condition_type '{}'",
                 w.condition_type.escape_default()
@@ -313,9 +308,7 @@ pub(crate) fn evaluate_body(
 ) -> BodyOutcome {
     let wire = rule.condition_type.name();
     let mut env = Env::new(now, rule.id, ctx, timers);
-    let root = body
-        .payload(rule.condition_type)
-        .is_some_and(|p| eval_payload(p, wire, &mut env));
+    let root = eval_payload(body.payload(), wire, &mut env);
 
     // Leaves evaluate alone, at the rule's root path;
     // a leaf touches no timers.
@@ -366,5 +359,5 @@ pub(crate) fn auto_resolve_holds(
         return false;
     };
     let mut env = Env::new(now, rule_id, ctx, timers);
-    eval_node(Some(tree), AUTO_RESOLVE_ROOT, &mut env)
+    eval_node(tree, AUTO_RESOLVE_ROOT, &mut env)
 }

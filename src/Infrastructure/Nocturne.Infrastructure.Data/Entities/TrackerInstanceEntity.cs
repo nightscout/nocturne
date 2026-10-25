@@ -24,11 +24,12 @@ public class TrackerInstanceEntity : ITenantScoped
     public Guid Id { get; set; }
 
     /// <summary>
-    /// User identifier this instance belongs to
+    /// The subject who created this row. It grants nothing: trackers are the tenant's, and any
+    /// member may read or change them.
     /// </summary>
-    [Column("user_id")]
+    [Column("created_by")]
     [MaxLength(255)]
-    public string UserId { get; set; } = string.Empty;
+    public string CreatedBy { get; set; } = string.Empty;
 
     /// <summary>
     /// Foreign key to TrackerDefinition
@@ -41,6 +42,14 @@ public class TrackerInstanceEntity : ITenantScoped
     /// </summary>
     [Column("started_at")]
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// When this run was recorded. A run is often entered after the fact, and a notification
+    /// threshold already due by then does not alert for it. Null on a run recorded before the
+    /// time was kept, which holds nothing back.
+    /// </summary>
+    [Column("recorded_at")]
+    public DateTime? RecordedAt { get; set; }
 
     /// <summary>
     /// When the tracker was completed (null = still active)

@@ -8,7 +8,7 @@ namespace Nocturne.Core.Clinical.LoopAnalysis;
 
 public readonly record struct GlucoseSample(long Mills, double Mgdl);
 
-public readonly record struct CarbEvent(long Mills, double Grams);
+public readonly record struct CarbEvent(long Mills, double Grams, Guid? CorrelationId = null);
 
 /// <summary>Everything the Daily profile is computed from, fetched once for every range it covers.</summary>
 public sealed record DailyProfileInputs

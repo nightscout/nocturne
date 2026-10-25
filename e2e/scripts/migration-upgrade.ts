@@ -10,9 +10,8 @@
 // E2E_SKIP_BUILD=1 reuses an existing nocturne-api:e2e instead of building it.
 
 import { createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { capture, compose, E2E_DIR, ensureImages, run } from "./lib.ts";
+import { capture, clearCrashDumps, compose, E2E_DIR, ensureImages, reportFailure, run } from "./lib.ts";
 
 const PROJECT = "nocturne-e2e-upgrade";
 const PREVIOUS = process.env.E2E_PREVIOUS_API_IMAGE ?? "ghcr.io/nightscout/nocturne/nocturne-api:latest";
@@ -161,6 +160,7 @@ async function main() {
   }
 
   await compose(PROJECT, ["down", "--volumes", "--remove-orphans", "--timeout", "5"], env);
+  clearCrashDumps();
   try {
     // 1. The previous release on a fresh database. It predates NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS,
     // so it runs as Development, the only way it exposes the seed endpoints.
@@ -200,8 +200,7 @@ async function main() {
     }
     console.log(`[upgrade] all ${TENANTS} tenants read back unchanged; total ${Math.round((Date.now() - started) / 1000)}s`);
   } catch (err) {
-    const logs = capture("docker", ["compose", "-p", PROJECT, "-f", join(E2E_DIR, "docker-compose.yml"), "logs", "--no-color", "--timestamps"]);
-    writeFileSync(join(E2E_DIR, "docker-compose-logs.txt"), logs);
+    reportFailure(PROJECT, { printLogs: false });
     throw err;
   } finally {
     if (process.env.E2E_KEEP_STACK !== "1") await compose(PROJECT, ["down", "--volumes", "--remove-orphans", "--timeout", "5"], env);

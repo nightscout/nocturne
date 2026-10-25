@@ -1,0 +1,91 @@
+---
+title: Executive Summary
+---
+
+<script>
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Executive Summary
+
+The Executive Summary answers the question "how did I do in this period?". It
+puts your most important numbers on one page, each with its target.
+
+<Video id="executive-summary" />
+
+## What it shows
+
+### The key figures
+
+The strip at the top shows six figures for the period, with the target under
+each one:
+
+| Figure | What it measures | Target on the page |
+|--------|------------------|--------------------|
+| **Time in range** | Time from 70 to 180 mg/dL | 70% or more |
+| **Below range** | Time below 70 mg/dL | Less than 4% |
+| **Above range** | Time above 180 mg/dL | Less than 25% |
+| **eHbA1c** | Your estimated HbA1c, from your average glucose | Below the target under the figure |
+| **CV** | Coefficient of variation: how much your glucose goes up and down | 33% or less |
+| **Average** | Your average glucose | None |
+
+### Time in Range
+
+The bar shows how your time divides across five ranges: very low, low, in
+range, high and very high. Move the pointer over the bar to see the percentage
+for each range. If the bar shows a narrower inset inside the in-range part,
+that is the tight range, 70 to 140 mg/dL.
+
+**Time Breakdown (per day avg)** turns the percentages into time on an average
+day: how long you were in range, low and high.
+
+### eHbA1c and Glucose Stability
+
+- **eHbA1c** estimates what your lab HbA1c would be, from your average glucose.
+  Your care team sets your own target. **Clinical details** shows the formula.
+- **Glucose Stability** shows the **Standard deviation** and **MAGE** (mean
+  amplitude of glycemic excursions). Lower values mean steadier glucose.
+
+### Low and high events
+
+- **Low Blood Sugar Events** splits your time below 70 mg/dL into below
+  54 mg/dL and 54-70 mg/dL. **Low episodes** gives the number of separate lows.
+- **High Blood Sugar Events** splits your time above 180 mg/dL into
+  180-250 mg/dL and above 250 mg/dL.
+
+### What Your Data is Telling Us
+
+This card shows up to three findings from your data, such as strengths or
+areas to look at. Some findings have a short clinical note that you can expand.
+
+### Glucose Statistics and Data Quality
+
+- **Glucose Statistics** gives the average, median, lowest and highest glucose.
+  Under **Glucose Distribution**, it gives the 10th, 25th, 75th and 90th
+  percentiles.
+- **Data Quality** shows **CGM Active Time**: the part of the period that your
+  CGM sent readings. The target is at least 70% over 14 days. The figures on the
+  page are most reliable at 90% or more.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+To see the summary for a longer period:
+
+1. At the top of the report, select the date range.
+2. Select **30 Days**.
+3. Select **Apply Filters**. All the figures on the page now cover 30 days.
+
+Use the buttons at the bottom of the page to open the
+[AGP](/docs/reports/agp), the [Readings](/docs/reports/readings) or the
+[Treatment Log](/docs/reports/treatments). To prepare for a clinic visit,
+select **Print**.
+
+## Good to know
+
+- If the period has too few days with readings, a badge in the **eHbA1c**
+  card shows how many days the estimate uses. See
+  [Good to know](/docs/reports#good-to-know) on the reports overview.
+- If your CGM active time is below 70%, the **Data Quality** card shows the
+  warning "Limited data may affect report accuracy."

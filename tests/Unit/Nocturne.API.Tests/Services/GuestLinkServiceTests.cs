@@ -138,10 +138,31 @@ public class GuestLinkServiceTests : IDisposable
                 .Where(s => Scope.AllowedGuestScopes.Contains(s))
                 .Append(Scope.TherapyRead)
                 .Append(Scope.ReportsRead)
+                .Append(Scope.AlertsRead)
                 .Distinct());
         result.Info.Scopes.Should().NotContain(Scope.HealthRead);
         result.Info.Scopes.Should().NotContain(Scope.FoodRead);
         result.Info.Scopes.Should().NotContain(s => s.Contains("readwrite", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ScopeOptions_OfferOnlyWhatTheCreatorHolds()
+    {
+        var options = GuestLinkService.ScopeOptions(
+            new HashSet<string> { Scope.GlucoseRead, Scope.AlertsReadWrite, Scope.SharingGuest });
+
+        options.Available.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.AlertsRead]);
+        options.Defaults.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.AlertsRead]);
+    }
+
+    [Fact]
+    public void ScopeOptions_OfferTheGuestVocabularyWithoutAliasesToAnOwner()
+    {
+        var options = GuestLinkService.ScopeOptions(new HashSet<string> { Scope.FullAccess });
+
+        options.Available.Should().NotContain([Scope.HealthRead, Scope.IdentityRead]);
+        options.Available.Should().Contain([Scope.AlertsRead, Scope.TherapyRead, Scope.SleepRead]);
+        options.Available.Should().OnlyContain(s => Scope.AllowedGuestScopes.Contains(s));
     }
 
     [Fact]

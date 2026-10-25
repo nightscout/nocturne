@@ -8,7 +8,7 @@
  * `current`, `error`, `loading` and `ready` alongside `run`, `set`, `refresh`
  * and `withOverride`, and reading any of those getters starts the work, as the
  * framework's does. A command call is a promise carrying `updates()`, behind a
- * wrapper counting `pending`. `fields.issues()` and `fields.allIssues()` answer
+ * wrapper counting `pending` and recording the queries each `updates()` named. `fields.issues()` and `fields.allIssues()` answer
  * `undefined`, not `[]`, when there is nothing to report: the framework builds
  * its issue map with `flatten_issues`, which yields `{}` for no issues, so the
  * lookup misses and the `?.map` short-circuits. Callers have to be written
@@ -38,7 +38,7 @@ export interface RemoteQueryStub<T> extends PromiseLike<T> {
 }
 
 export type RemoteCommandCall<T> = Promise<T> & {
-  updates: () => RemoteCommandCall<T>;
+  updates: (...queries: unknown[]) => RemoteCommandCall<T>;
 };
 
 // `pending` is a getter on the framework's wrapper and a plain property here.
@@ -46,6 +46,12 @@ export type RemoteCommandCall<T> = Promise<T> & {
 export interface RemoteCommandStub<T> {
   (arg?: unknown): RemoteCommandCall<T>;
   pending: number;
+  updated: unknown[][];
+}
+
+/** The queries each `updates()` call on a mocked command named, in call order. */
+export function updatedBy(command: unknown): unknown[][] {
+  return (command as RemoteCommandStub<unknown>).updated;
 }
 
 class QueryResource<T> implements RemoteQueryStub<T> {
@@ -223,13 +229,21 @@ export function remoteCommand<T>(
           stub.pending--;
         }
       })(),
-      { updates: () => call }
+      {
+        updates: (...queries: unknown[]) => {
+          stub.updated.push(queries);
+          return call;
+        },
+      }
     );
 
     return call;
   }
 
-  const stub: RemoteCommandStub<T> = Object.assign(invoke, { pending: 0 });
+  const stub: RemoteCommandStub<T> = Object.assign(invoke, {
+    pending: 0,
+    updated: [],
+  });
 
   return stub;
 }

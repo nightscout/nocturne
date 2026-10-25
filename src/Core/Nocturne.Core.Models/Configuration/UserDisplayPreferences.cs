@@ -21,11 +21,13 @@ public class UserDisplayPreferences
     /// <summary>
     /// JSON options for (de)serializing the stored preferences blob (camelCase / web defaults).
     /// <see cref="EffectiveEnergyUnit"/> is left out: it is resolved on every response, and a stored
-    /// copy would go stale when the region format changes.
+    /// copy would go stale when the region format changes. Enum lists read leniently (see
+    /// <see cref="LenientEnumListConverterFactory"/>), so a blob a newer build wrote still loads.
     /// </summary>
     public static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { OmitResolvedValues } },
+        Converters = { new LenientEnumListConverterFactory() },
     };
 
     private static void OmitResolvedValues(JsonTypeInfo typeInfo)
@@ -125,7 +127,38 @@ public class UserDisplayPreferences
             return "chart.lookback: must be greater than 0";
         }
 
-        return YearOverviewColors?.Validate();
+        return CheckEnumList("dashboardTopWidgets", DashboardTopWidgets)
+            ?? CheckEnumList("dashboardRail.order", DashboardRail?.Order)
+            ?? CheckEnumList("dashboardRail.hidden", DashboardRail?.Hidden)
+            ?? CheckEnumList("hiddenLegacyFallbacks", HiddenLegacyFallbacks)
+            ?? YearOverviewColors?.Validate();
+    }
+
+    internal static string? CheckEnumList<TEnum>(string field, List<TEnum>? values)
+        where TEnum : struct, Enum
+    {
+        if (values == null)
+        {
+            return null;
+        }
+
+        var defined = Enum.GetValues<TEnum>();
+        if (values.Count > defined.Length)
+        {
+            return $"{field}: must not hold more than {defined.Length} values";
+        }
+        foreach (var value in values)
+        {
+            if (!Enum.IsDefined(value))
+            {
+                return $"{field}: '{value}' is not allowed. Valid values: {string.Join(", ", Enum.GetNames<TEnum>())}";
+            }
+        }
+        if (values.Distinct().Count() != values.Count)
+        {
+            return $"{field}: must not repeat a value";
+        }
+        return null;
     }
 
     internal static string? Check(string field, string? value, HashSet<string> allowed) =>
@@ -151,6 +184,10 @@ public class UserDisplayPreferences
         NightModeSchedule = incoming.NightModeSchedule ?? NightModeSchedule;
         CalendarShowTirPercent = incoming.CalendarShowTirPercent ?? CalendarShowTirPercent;
         DashboardTopWidgets = incoming.DashboardTopWidgets ?? DashboardTopWidgets;
+        // Replace the whole arrangement: an empty object resets the rail to its default.
+        DashboardRail = incoming.DashboardRail ?? DashboardRail;
+        // Replace the whole list: an empty list shows every legacy age again.
+        HiddenLegacyFallbacks = incoming.HiddenLegacyFallbacks ?? HiddenLegacyFallbacks;
         // Replace the whole color selection: an empty object resets every metric to automatic.
         YearOverviewColors = incoming.YearOverviewColors ?? YearOverviewColors;
 
@@ -185,9 +222,11 @@ public class UserDisplayPreferences
     /// carried whole and carry no such guarantee: a field added inside either is disclosed on
     /// the next build. Their contents are pinned by a test instead.
     /// <para>
-    /// <see cref="DashboardTopWidgets"/> is withheld: the widgets an owner pins say what they
-    /// treat and track. <see cref="NightModeSchedule"/> is withheld: it reports when the owner
-    /// sleeps, and when a viewer's own screen dims is the viewer's setting.
+    /// <see cref="DashboardTopWidgets"/>, <see cref="DashboardRail"/> and
+    /// <see cref="HiddenLegacyFallbacks"/> are withheld: the widgets and status pills an owner
+    /// picks say what they treat and track.
+    /// <see cref="NightModeSchedule"/> is withheld: it reports when the owner sleeps, and when a
+    /// viewer's own screen dims is the viewer's setting.
     /// </para>
     /// </summary>
     public UserDisplayPreferences ToPresentationOnly() => new()
@@ -268,6 +307,47 @@ public class UserDisplayPreferences
     /// <summary>Ordered widget IDs shown in the dashboard top-widget grid.</summary>
     [JsonPropertyName("dashboardTopWidgets")]
     public List<WidgetId>? DashboardTopWidgets { get; set; }
+
+    /// <summary>
+    /// How the dashboard status rail beside the current glucose is arranged. Null or an empty
+    /// object is the default rail.
+    /// </summary>
+    [JsonPropertyName("dashboardRail")]
+    public DashboardRailPreference? DashboardRail { get; set; }
+
+    /// <summary>
+    /// The legacy consumable ages the user hid from the status rail's tracker pills. Null or empty
+    /// hides none.
+    /// </summary>
+    [JsonPropertyName("hiddenLegacyFallbacks")]
+    public List<LegacyConsumableKind>? HiddenLegacyFallbacks { get; set; }
+}
+
+/// <summary>
+/// The user's arrangement of the dashboard status rail. Items not named in <see cref="Order"/>
+/// follow it in their default order, so an item added in a later build still shows.
+/// </summary>
+public class DashboardRailPreference
+{
+    /// <summary>The items to show first, in this order.</summary>
+    [JsonPropertyName("order")]
+    public List<RailItemId>? Order { get; set; }
+
+    /// <summary>The items not to show.</summary>
+    [JsonPropertyName("hidden")]
+    public List<RailItemId>? Hidden { get; set; }
+}
+
+/// <summary>An item the dashboard status rail can show.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum RailItemId
+{
+    Cob,
+    Basal,
+    Iob,
+    Loop,
+    Reservoir,
+    Trackers,
 }
 
 /// <summary>

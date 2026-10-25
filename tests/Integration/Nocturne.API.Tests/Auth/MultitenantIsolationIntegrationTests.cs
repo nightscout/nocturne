@@ -536,6 +536,18 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task TenantOwner_WithoutPlatformAdmin_CannotReadTheDatabaseCapacity()
+    {
+        using var client = AuthTestHelpers.CreateTenantBearerClient(
+            Fixture, _slugA, _baseDomain, _accessTokenA);
+
+        var response = await client.GetAsync("/api/v4/admin/database-capacity");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "whole-database and other tenants' sizes are for platform administrators only");
+    }
+
+    [Fact]
     public async Task RemovedMember_Token_IsDenied_OnOwnTenant()
     {
         // Sanity: subject A is a member of tenant A and can write before removal.

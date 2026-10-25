@@ -342,6 +342,7 @@ internal sealed class SettingsEvidenceContext
         Exclusions = IntervalSet.Of(inputs.Sources.DataExclusions);
         Series = new EventSeries(inputs.Series, Exclusions);
         CarbMills = EventAnchors.CarbMills(inputs.Series.Carbs);
+        MealPairing = new MealPairing(inputs.Series.Carbs);
         _overrides = IntervalSet.Of(inputs.Sources.Overrides);
         _temporaryTargets = IntervalSet.Of(inputs.Sources.TemporaryTargets);
         _exercise = IntervalSet.Of(inputs.Sources.Exercise);
@@ -357,6 +358,7 @@ internal sealed class SettingsEvidenceContext
     public IntervalSet Exclusions { get; }
     public EventSeries Series { get; }
     public long[] CarbMills { get; }
+    public MealPairing MealPairing { get; }
     public TimeZoneInfo Zone => Inputs.Series.Zone;
 
     /// <summary>
@@ -380,7 +382,7 @@ internal sealed class SettingsEvidenceContext
     /// </summary>
     public IReadOnlyList<long> Isolating => _isolating ??=
     [
-        .. EventAnchors.Meals(Inputs.Series.Carbs).Select(m => m.Mills)
+        .. MealPairing.Meals.Select(m => m.Mills)
             .Concat(EventAnchors.CorrectionBoluses(Insulin.Doses, Inputs.Series.Carbs).Select(c => c.Mills))
             .Concat(Climbs.Select(c => c.Start))
             .Order(),

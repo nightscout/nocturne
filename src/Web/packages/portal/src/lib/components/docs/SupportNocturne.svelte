@@ -1,7 +1,7 @@
 <script lang="ts">
     import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
     import { LINKS } from "$lib/data/links";
-    import { track } from "$lib/analytics";
+    import { campaignUrl, track } from "$lib/analytics";
 
     let { class: className = "" }: { class?: string } = $props();
 
@@ -66,10 +66,10 @@
         Secure checkout via Stripe &middot; Cancel any time &middot; One-off
         donations go through the
         <a
-            href={LINKS.donate}
+            href={campaignUrl(LINKS.donate, "support-card")}
             target="_blank"
             rel="external noopener noreferrer"
-            onclick={() => track("Donate Click", { destination: "foundation" })}
+            onclick={() => track("Donate Click", { destination: "foundation", placement: "support-card" })}
             class="font-semibold hover:underline text-brand">Nightscout Foundation</a
         >.
     </p>

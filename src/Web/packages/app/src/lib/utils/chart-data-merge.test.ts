@@ -38,6 +38,7 @@ function chartData(
     defaultBasalRate: 1,
     thresholds: thresholds(),
     maxIob: 0,
+    minIob: 0,
     maxCob: 0,
     maxBasalRate: 0,
     ...overrides,
@@ -122,6 +123,12 @@ describe("mergeChartData", () => {
 
     expect(mergeChartData(initial, null)).toBe(initial);
   });
+
+  it("takes the lower IOB floor from either half", () => {
+    const merged = mergeChartData(chartData({ minIob: -0.4 }), chartData({ minIob: -1.2 }));
+
+    expect(merged.minIob).toBe(-1.2);
+  });
 });
 
 describe("replaceWindow", () => {
@@ -189,6 +196,20 @@ describe("replaceWindow", () => {
     );
 
     expect(result.maxIob).toBe(2);
+  });
+
+  it("keeps the IOB floor at the lowest value that remains", () => {
+    const point = (iso: string, value: number) => ({ time: T(iso), value });
+    const result = replaceWindow(
+      chartData({
+        iobSeries: [point("2026-08-29T08:00:00Z", -1.5), point("2026-08-29T11:00:00Z", -3)],
+        minIob: -3,
+      }),
+      chartData({ iobSeries: [point("2026-08-29T11:00:00Z", 1)], minIob: 0 }),
+      start
+    );
+
+    expect(result.minIob).toBe(-1.5);
   });
 
   it("sizes the glucose axis from the fresh response and the readings that remain", () => {

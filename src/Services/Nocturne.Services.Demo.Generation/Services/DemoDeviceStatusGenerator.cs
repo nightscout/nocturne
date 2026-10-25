@@ -40,7 +40,7 @@ public static class DemoDeviceStatusGenerator
 
         return Create(
             step.Time,
-            step.Entry.Sgv ?? step.Entry.Mgdl,
+            step.Entry.GlucoseMgdl(),
             step.Iob,
             step.Cob,
             step.TempBasalRate,

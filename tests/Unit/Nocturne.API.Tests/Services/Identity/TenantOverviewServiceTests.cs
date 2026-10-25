@@ -14,6 +14,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
@@ -478,6 +479,7 @@ public class TenantOverviewServiceTests
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
+            new AlertRepository(new InMemoryContextFactory(options)),
             NullLogger<TenantOverviewService>.Instance);
         return (service, clampSeen, contextClampSeen);
     }
@@ -606,6 +608,7 @@ public class TenantOverviewServiceTests
             provider.CreateScope().ServiceProvider,
             new GlucoseStatusClassifier(
                 new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
+            new AlertRepository(new InMemoryContextFactory(options)),
             NullLogger<TenantOverviewService>.Instance);
     }
 

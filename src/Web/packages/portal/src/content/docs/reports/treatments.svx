@@ -1,0 +1,60 @@
+---
+title: Treatment Log
+---
+
+# Treatment Log
+
+The Treatment Log answers the question "what did I record in this period?". It
+lists every insulin dose, carb entry, BG check, note and device event. You can
+search the list, add records, correct them and delete them.
+
+## What it shows
+
+### The totals
+
+The strip at the top shows three figures for the period:
+
+- **Total Records**: the number of records, with the count for each type.
+- **Bolus insulin**: the total bolus insulin, the number of boluses, the
+  boluses per day, and the average bolus.
+- **Carbs**: the total carbs, the number of carb entries, the carbs per day,
+  and the average carbs for each entry.
+
+### The categories
+
+The tiles under the totals filter the list by type: **All**, **Insulin**,
+**Carbs**, **BG Checks**, **Notes** and **Device Events**. Each tile shows its
+count.
+
+### The list
+
+The table lists the records of the period. Select a row to open the record and
+edit it.
+
+## How to use it
+
+The report opens on the last 7 days. To log a meal that is not in the list:
+
+1. Select **Add Treatment**.
+2. Select **Carbs**.
+3. Enter the grams of carbs in **Carbs (g)**.
+4. Select **Create Record**. The new record shows in the list, and the totals
+   include it.
+
+To find a record:
+
+1. Select a category tile, for example **Notes**.
+2. Type a word in **Search**.
+3. To show all records again, select **Clear filters**.
+
+To delete a record, select **Delete** (the bin icon) on its row, and then
+select **Delete** to confirm. To delete more than one record, select the boxes
+at the start of the rows, and then select **Delete Selected**.
+
+## Good to know
+
+- A delete cannot be undone. The confirmation shows the time, type and value of
+  the record before you delete it.
+- The **Carbs** figure counts each carb entry as one meal, so a snack or a
+  treatment for a low counts too.
+- The printed report shows the filters that were active.

@@ -20,6 +20,7 @@ const { now, store, settings } = vi.hoisted(() => {
       pillsData: { cob: null, basal: null, iob: null, loop: null },
       trackerInstances: [] as unknown[],
       trackerDefinitions: [] as unknown[],
+      legacyFallbacks: [] as unknown[],
       timeSinceReading: Symbol("derived sentinel"),
       noteTreatmentWrite: () => {},
     },
@@ -98,7 +99,7 @@ describe("CurrentBGDisplay", () => {
     expect(dialog.elements()).toHaveLength(0);
 
     await page.getByRole("button", { name: /Sensor/ }).click();
-    await page.getByRole("button", { name: "Complete Tracker" }).click();
+    await page.getByRole("button", { name: "Complete tracker" }).click();
 
     await expect.element(dialog).toBeVisible();
     await expect.element(dialog.getByText("Complete Sensor")).toBeVisible();

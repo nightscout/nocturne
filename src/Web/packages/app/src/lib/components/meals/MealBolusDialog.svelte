@@ -243,7 +243,7 @@
             <ArrowLeft class="h-4 w-4" />
           </Button>
           <Dialog.Title>
-            {editingBolus ? "Edit Bolus" : "Add Bolus"}
+            {editingBolus ? "Edit bolus" : "Add bolus"}
           </Dialog.Title>
         </div>
       {:else}
@@ -335,16 +335,22 @@
         {/if}
       </div>
 
-      <div class="pt-2">
-        <Button
-          variant="outline"
-          class="w-full"
-          onclick={() => startEdit(null)}
-        >
-          <Plus class="mr-2 h-4 w-4" />
-          Add bolus
-        </Button>
-      </div>
+      {#if meal?.correlationId}
+        <div class="pt-2">
+          <Button
+            variant="outline"
+            class="w-full"
+            onclick={() => startEdit(null)}
+          >
+            <Plus class="mr-2 h-4 w-4" />
+            Add bolus
+          </Button>
+        </div>
+      {:else}
+        <p class="pt-2 text-center text-sm text-muted-foreground">
+          This meal has no link to an insulin record. You cannot add insulin here.
+        </p>
+      {/if}
     {:else}
       <div class="space-y-4">
         <BolusFormFields bind:form={editForm} {patientInsulins} />

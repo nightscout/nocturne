@@ -4,7 +4,7 @@
   its outline and median at full strength; the comparison is a dashed outline of its box and median on a ring of the background.
 -->
 <script lang="ts">
-  import { getChartContext } from "layerchart";
+  import { Line, Rect, getChartContext } from "layerchart";
   import type { LoopHealthHourValue } from "$lib/api";
   import { BAND_FILL, hourSpan, SPARSE_BAND_FILL } from "./loop-health-view";
 
@@ -40,41 +40,41 @@
   {@const s = shape(hour)}
   {@const sparse = hour.value.sparse ?? true}
   {#if s.box}
-    <rect
+    <Rect
       x={s.x}
       width={s.width}
       {...s.box}
-      rx="1"
+      rx={1}
       fill={color}
-      fill-opacity={sparse ? SPARSE_BAND_FILL : BAND_FILL}
+      fillOpacity={sparse ? SPARSE_BAND_FILL : BAND_FILL}
       stroke={sparse ? color : "none"}
-      stroke-width="1"
+      strokeWidth={1}
       data-testid={sparse ? "sparse-hour" : "hour"}
     />
   {/if}
   {#if s.median != null}
-    <line x1={s.x} x2={s.x + s.width} y1={s.median} y2={s.median} stroke={color} stroke-width="2" />
+    <Line x1={s.x} x2={s.x + s.width} y1={s.median} y2={s.median} stroke={color} strokeWidth={2} />
   {/if}
 {/each}
 {#each drawn(comparison) as hour (`c${hour.hour}`)}
   {@const s = shape(hour)}
   {#if s.box}
-    <rect x={s.x} width={s.width} {...s.box} rx="1" fill="none" stroke="var(--background)" stroke-width="5.25" />
-    <rect
+    <Rect x={s.x} width={s.width} {...s.box} rx={1} fill="none" stroke="var(--background)" strokeWidth={5.25} />
+    <Rect
       x={s.x}
       width={s.width}
       {...s.box}
-      rx="1"
+      rx={1}
       fill="none"
       stroke="var(--foreground)"
-      stroke-opacity="0.85"
-      stroke-width="1.25"
-      stroke-dasharray="3 2"
+      strokeOpacity={0.85}
+      strokeWidth={1.25}
+      dashArray="3 2"
       data-testid="compared-hour"
     />
   {/if}
   {#if s.median != null}
-    <line x1={s.x} x2={s.x + s.width} y1={s.median} y2={s.median} stroke="var(--background)" stroke-width="5.25" />
-    <line x1={s.x} x2={s.x + s.width} y1={s.median} y2={s.median} stroke="var(--foreground)" stroke-width="1.25" stroke-dasharray="3 2" />
+    <Line x1={s.x} x2={s.x + s.width} y1={s.median} y2={s.median} stroke="var(--background)" strokeWidth={5.25} />
+    <Line x1={s.x} x2={s.x + s.width} y1={s.median} y2={s.median} stroke="var(--foreground)" strokeWidth={1.25} dashArray="3 2" />
   {/if}
 {/each}

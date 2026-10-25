@@ -30,7 +30,7 @@
         }
       );
       const amount = `${formatInsulinDisplay(data.lastBolus.insulin)}U`;
-      items.push({ label: "Last Bolus", value: `${amount} @ ${when}` });
+      items.push({ label: "Last bolus", value: `${amount} @ ${when}` });
 
       if (data.lastBolus.notes) {
         items.push({ label: "Notes", value: data.lastBolus.notes });

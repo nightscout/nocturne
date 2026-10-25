@@ -151,8 +151,8 @@
               ? "Suspended"
               : isAdjusted
                 ? activeBasal.origin === BasalDeliveryOrigin.Algorithm
-                  ? "Auto Basal"
-                  : "Temp Basal"
+                  ? "Auto basal"
+                  : "Temp basal"
                 : "Basal"}
           <Tooltip.Item
             label={basalLabel}
@@ -185,9 +185,9 @@
             activeBasalDelivery.origin === BasalDeliveryOrigin.Suspended
               ? "Suspended"
               : activeBasalDelivery.origin === BasalDeliveryOrigin.Algorithm
-                ? "Auto Basal"
+                ? "Auto basal"
                 : activeBasalDelivery.origin === BasalDeliveryOrigin.Manual
-                  ? "Temp Basal"
+                  ? "Temp basal"
                   : "Basal"}
           <Tooltip.Item
             label={basalLabel}
@@ -205,7 +205,7 @@
           />
         {:else if activeTempBasal && activeTempBasal.rate != null}
           <Tooltip.Item
-            label="Temp Basal"
+            label="Temp basal"
             value={activeTempBasal.rate}
             format="decimal"
             color="var(--insulin-temp-basal)"
@@ -221,7 +221,7 @@
       {/if}
       {#if showPumpModes && activePumpMode}
         <Tooltip.Item
-          label="Pump Mode"
+          label="Pump mode"
           value={activePumpMode.state}
           color={activePumpMode.color}
           class="font-medium"

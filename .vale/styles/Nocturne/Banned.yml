@@ -1,0 +1,11 @@
+# Phrases the UI does not use. Each one has a plainer form that names the action.
+#
+# "asks for" makes a screen or a device the actor ("the sign-in page asks for
+# the code"). Tell the reader what to enter or what is required instead.
+extends: existence
+message: "Do not write '%s'. Say what the reader must enter, or what is required."
+link: .claude/skills/simple-english/SKILL.md
+level: error
+ignorecase: true
+tokens:
+  - '\bask(?:s|ed|ing)? for\b'

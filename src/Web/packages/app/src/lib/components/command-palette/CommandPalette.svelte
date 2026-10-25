@@ -27,6 +27,9 @@
     recordRecent,
   } from "./command-palette-store.svelte";
   import CommandPaletteVitals from "./CommandPaletteVitals.svelte";
+  import { consumableAgeHours } from "./consumable-age";
+  import { LegacyConsumableKind } from "$lib/api";
+  import { formatAge } from "$lib/components/trackers/age.svelte";
   import Star from "@lucide/svelte/icons/star";
   import { Button } from "$lib/components/ui/button";
 
@@ -96,6 +99,17 @@
       ]);
   });
 
+  function consumableAge(kind: LegacyConsumableKind): string | undefined {
+    const hours = consumableAgeHours(
+      kind,
+      realtimeStore.legacyFallbacks,
+      realtimeStore.legacyCoverage,
+      realtimeStore.trackerInstances,
+      realtimeStore.now
+    );
+    return hours === undefined ? undefined : formatAge(hours);
+  }
+
   function getStatValue(itemId: string): string | undefined {
     const pills = realtimeStore.pillsData;
     switch (itemId) {
@@ -104,9 +118,9 @@
       case "stat-cob":
         return pills.cob?.display ?? undefined;
       case "stat-cage":
-        return pills.cage?.display ?? undefined;
+        return consumableAge(LegacyConsumableKind.Site);
       case "stat-sage":
-        return pills.sage?.display ?? undefined;
+        return consumableAge(LegacyConsumableKind.Sensor);
       case "stat-a1c":
         return undefined;
       case "stat-tir":
@@ -131,12 +145,12 @@
     switch (itemId) {
       case "qs-dark-mode": {
         const mode = userPrefersMode.current;
-        return `Dark Mode: ${mode === "dark" ? "On" : mode === "light" ? "Off" : "System"}`;
+        return `Dark mode: ${mode === "dark" ? "On" : mode === "light" ? "Off" : "System"}`;
       }
       case "qs-glucose-units":
         return `Units: ${getGlucoseUnits() === "mg/dl" ? "mg/dL" : "mmol/L"}`;
       case "qs-chart-lookback":
-        return `Chart Lookback: ${glucoseChartLookback.current}h`;
+        return `Chart lookback: ${glucoseChartLookback.current}h`;
       default:
         return "";
     }

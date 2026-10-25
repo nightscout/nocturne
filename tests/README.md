@@ -71,8 +71,10 @@ uncommitted change under `src/`, or under `src/Web` and the generated client for
 and rebuilds only when that hash has no image. CI passes `E2E_BUILDX_CACHE=type=gha,...` for a
 buildx layer cache. `E2E_SKIP_BUILD=1` uses whatever `:e2e` images exist; `E2E_KEEP_STACK=1`
 leaves the stack running after `pnpm e2e`. On failure the compose logs are written to
-`e2e/docker-compose-logs.txt`; Playwright keeps traces, screenshots and video for failed tests
-only.
+`e2e/docker-compose-logs.txt` and every container's exit state is printed (with the logs too when
+the stack never came up). A crash in the API writes a minidump and a JSON crash report with every
+thread's stack to `e2e/crash-dumps/`, which CI uploads with the logs. Playwright keeps traces,
+screenshots and video for failed tests only.
 
 **The dev-only endpoints.** Specs seed tenants and mint sessions through
 `/api/v4/dev-only/admin/seed-tenant` and `/api/v4/dev-only/auth/login`. They exist in

@@ -28,6 +28,7 @@ internal sealed class ExcursionResolutionHandler(
     IAlertRepository repository,
     ISignalRBroadcastService broadcastService,
     IInAppNotificationService notificationService,
+    IEngineAlarmRelay alarmRelay,
     TimeProvider timeProvider,
     ILogger<ExcursionResolutionHandler> logger)
     : IExcursionResolutionHandler
@@ -55,13 +56,25 @@ internal sealed class ExcursionResolutionHandler(
 
         try
         {
-            await broadcastService.BroadcastAlertEventAsync("alert_resolved", new
+            var rule = await repository.GetExcursionRuleAsync(tenantId, excursionId, ct);
+            if (rule is null)
             {
-                excursionId,
-                tenantId,
-                resolvedAt = now,
-                reason,
-            });
+                // Only an excursion deleted with its rule (an FK cascade) has none.
+                logger.LogWarning(
+                    "Excursion {ExcursionId} has no rule; alert_resolved not broadcast", excursionId);
+            }
+            else
+            {
+                await broadcastService.BroadcastAlertResolvedAsync(new AlertResolvedEvent
+                {
+                    TenantId = tenantId,
+                    ExcursionId = excursionId,
+                    AlertRuleId = rule.AlertRuleId,
+                    RuleName = rule.Name,
+                    ResolvedAt = now,
+                    Reason = transition.CloseReason,
+                });
+            }
         }
         catch (Exception ex)
         {
@@ -69,6 +82,7 @@ internal sealed class ExcursionResolutionHandler(
         }
 
         await ArchiveInAppNotificationsAsync(tenantId, excursionId, ct);
+        await alarmRelay.ClearIfQuietAsync([excursionId], ct);
 
         logger.LogInformation(
             "Excursion {ExcursionId} resolved (reason={Reason}), {Count} instances closed",

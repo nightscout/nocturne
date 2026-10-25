@@ -117,7 +117,7 @@ describe("Google Health connector page", () => {
       .toBeDisabled();
     await expect
       .element(page.getByRole("status"))
-      .toHaveTextContent("The current scan or import is being stopped.");
+      .toHaveTextContent("Nocturne is stopping the current scan or import.");
     const disconnected = status({ configured: true });
     googleHealthMocks.status.mockResolvedValue(disconnected);
     finishDisconnect(disconnected);
@@ -127,7 +127,7 @@ describe("Google Health connector page", () => {
       .toBeEnabled();
     await expect
       .element(page.getByRole("status"))
-      .toHaveTextContent("Your imported data has been kept.");
+      .toHaveTextContent("Nocturne kept your imported data.");
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
     expect(googleHealthMocks.disconnect).toHaveBeenCalledTimes(1);
   });
@@ -241,13 +241,27 @@ describe("Google Health connector page", () => {
       .element(page.getByText("12 Google pages read for this data type"))
       .toBeVisible();
     googleHealthMocks.status.mockResolvedValue(
-      connected({ importFrom: undefined, backfillComplete: true })
+      connected({
+        importFrom: undefined,
+        backfillComplete: true,
+        backfillSyncedThrough: "2026-08-01T00:00:00Z",
+        historyDays: 30,
+      })
     );
     await expect
       .element(page.getByText("Google Health import completed.", { exact: true }))
       .toBeVisible();
     await expect.element(page.getByRole("progressbar")).not.toBeInTheDocument();
     await expect.element(page.getByLabelText("Import data from")).toHaveValue("");
+    await expect
+      .element(page.getByText("Synchronized back through 2026-08-01.", { exact: false }))
+      .toHaveTextContent("Imported history is kept.");
+    await expect
+      .element(page.getByText("a new import covers the last 30 days", { exact: false }))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("last 7 days", { exact: false }))
+      .not.toBeInTheDocument();
     await page.getByRole("button", { name: "Save import settings" }).click();
     await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
     expect(googleHealthMocks.save).toHaveBeenCalledWith(
@@ -335,12 +349,15 @@ describe("Google Health connector page", () => {
     render(GoogleHealthPage);
     await expect
       .element(
-        page.getByText("Your Nocturne operator hasn't enabled Google Health on this server.")
+        page.getByText("Your Nocturne operator did not enable Google Health on this server.")
       )
       .toBeVisible();
     await expect
       .element(page.getByRole("link", { name: "How Google Health is enabled" }))
-      .toHaveAttribute("href", "https://getnocturne.dev/docs/data-sources/google-health");
+      .toHaveAttribute(
+        "href",
+        "https://getnocturne.dev/docs/data-sources/google-health?utm_source=nocturne-app&utm_medium=app&utm_content=google-health-unavailable"
+      );
     await expect
       .element(page.getByRole("button", { name: "Connect Google Health" }))
       .not.toBeInTheDocument();
@@ -519,6 +536,128 @@ describe("Google Health connector page", () => {
       .toBeEnabled();
   });
 
+  describe("confirming the selection", () => {
+    const review = () =>
+      connected({
+        previewRequired: true,
+        connectionState: GoogleHealthConnectionState.ReviewRequired,
+      });
+    const guidance = () =>
+      page.getByText("Google access is authorized, but nothing is imported", {
+        exact: false,
+      });
+
+    it("keeps the next-step guidance beside the selection until the server confirms it", async () => {
+      googleHealthMocks.status.mockResolvedValue(review());
+      render(GoogleHealthPage);
+      await expect.element(guidance()).toBeVisible();
+      googleHealthMocks.status.mockResolvedValue(connected());
+      await expect.element(guidance()).not.toBeInTheDocument();
+    });
+
+    it("saves without importing and says no import has started", async () => {
+      googleHealthMocks.status.mockResolvedValue(review());
+      render(GoogleHealthPage);
+      await expect.element(guidance()).toBeVisible();
+      googleHealthMocks.status.mockResolvedValue(connected());
+      await page.getByRole("button", { name: "Save import settings", exact: true }).click();
+      await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
+      expect(googleHealthMocks.save).toHaveBeenCalledWith(
+        expect.objectContaining({ previewOnly: false })
+      );
+      expect(googleHealthMocks.sync).not.toHaveBeenCalled();
+      await expect
+        .element(page.getByText("No import has started.", { exact: false }))
+        .toBeVisible();
+      await expect
+        .element(page.getByText("The import is running in the background", { exact: false }))
+        .not.toBeInTheDocument();
+    });
+
+    it("saves and requests an import, reporting the running import", async () => {
+      googleHealthMocks.status.mockResolvedValue(review());
+      googleHealthMocks.sync.mockResolvedValue(
+        connected({ isSyncing: true, syncPhase: GoogleHealthSyncPhase.Preparing })
+      );
+      render(GoogleHealthPage);
+      await page.getByRole("button", { name: "Save selection and import", exact: true }).click();
+      await expect.poll(() => googleHealthMocks.sync.mock.calls.length).toBe(1);
+      expect(googleHealthMocks.save).toHaveBeenCalledWith(
+        expect.objectContaining({ previewOnly: false })
+      );
+      await expect
+        .element(page.getByText("The import is running in the background", { exact: false }))
+        .toBeVisible();
+      await expect
+        .element(page.getByText("No import has started.", { exact: false }))
+        .not.toBeInTheDocument();
+    });
+
+    it("does not promise automatic sync while the operator has turned Google Health off", async () => {
+      googleHealthMocks.status.mockResolvedValue(
+        connected({
+          available: false,
+          connectionState: GoogleHealthConnectionState.Unavailable,
+          selectedTypes: ["steps"],
+        })
+      );
+      render(GoogleHealthPage);
+      await page.getByRole("button", { name: "Save import settings", exact: true }).click();
+      await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
+      expect(googleHealthMocks.sync).not.toHaveBeenCalled();
+      await expect
+        .element(page.getByText("Imports resume when your Nocturne operator", { exact: false }).first())
+        .toBeVisible();
+      await expect
+        .element(page.getByText("Automatic sync picks up", { exact: false }))
+        .not.toBeInTheDocument();
+      await expect
+        .element(page.getByText("Automatic sync imports it", { exact: false }))
+        .not.toBeInTheDocument();
+    });
+
+    it("states only what was saved when a scheduled import is already running", async () => {
+      googleHealthMocks.status.mockResolvedValue(connected({ selectedTypes: ["steps"] }));
+      render(GoogleHealthPage);
+      const button = page.getByRole("button", { name: "Save import settings", exact: true });
+      await expect.element(button).toBeEnabled();
+      googleHealthMocks.status.mockResolvedValue(
+        connected({
+          selectedTypes: ["steps"],
+          isSyncing: true,
+          syncPhase: GoogleHealthSyncPhase.Preparing,
+        })
+      );
+      await button.click();
+      await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
+      await expect.element(page.getByText("Import settings saved.", { exact: true })).toBeVisible();
+      await expect
+        .element(page.getByText("No import has started.", { exact: false }))
+        .not.toBeInTheDocument();
+    });
+
+    it("confirms an empty selection as paused without importing", async () => {
+      googleHealthMocks.status.mockResolvedValue(connected({ selectedTypes: ["steps"] }));
+      render(GoogleHealthPage);
+      await page.getByRole("checkbox", { name: "Import Steps" }).click();
+      googleHealthMocks.status.mockResolvedValue(
+        connected({
+          selectedTypes: [],
+          connectionState: GoogleHealthConnectionState.NothingSelected,
+        })
+      );
+      await page.getByRole("button", { name: "Save import settings", exact: true }).click();
+      await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
+      expect(googleHealthMocks.save).toHaveBeenCalledWith(
+        expect.objectContaining({ dataTypes: [] })
+      );
+      expect(googleHealthMocks.sync).not.toHaveBeenCalled();
+      await expect
+        .element(page.getByText("Import settings saved. Imports are paused", { exact: false }))
+        .toBeVisible();
+    });
+  });
+
   it("shows persisted historical progress after reloading", async () => {
     googleHealthMocks.status.mockResolvedValue(
       connected({ backfillSyncedThrough: "2025-06-01T00:00:00.000Z", backfillComplete: false })
@@ -557,7 +696,7 @@ describe("Google Health connector page", () => {
       .element(page.getByText("Not every requested permission was granted.", { exact: true }))
       .toBeVisible();
     await expect
-      .element(page.getByText("Automatic sync runs approximately every 15 minutes", { exact: false }))
+      .element(page.getByText("Automatic sync runs on a schedule", { exact: false }))
       .not.toBeInTheDocument();
   });
 

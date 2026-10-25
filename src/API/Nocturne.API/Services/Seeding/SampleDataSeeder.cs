@@ -477,7 +477,7 @@ public class SampleDataSeeder
             return (0, 0);
 
         var userId = owner.ToString();
-        var existing = await _trackerRepository.GetDefinitionsForUserAsync(userId, ct);
+        var existing = await _trackerRepository.GetAllDefinitionsAsync(ct);
 
         var definitionsCreated = 0;
         var instancesCreated = 0;
@@ -493,7 +493,7 @@ public class SampleDataSeeder
                 {
                     Id = Guid.CreateVersion7(),
                     TenantId = db.TenantId,
-                    UserId = userId,
+                    CreatedBy = userId,
                     Name = spec.Name,
                     Category = spec.Category,
                     Icon = spec.Icon,
@@ -930,7 +930,7 @@ public class SampleDataSeeder
                     count: 1000,
                     skip: 0,
                     cancellationToken: ct);
-                var candidateReadings = readings.Where(entry => entry.Sgv.HasValue).ToList();
+                var candidateReadings = readings.Where(entry => entry.GlucoseMgdl() > 0).ToList();
                 if (candidateReadings.Count == 0 || candidateReadings.Any(entry =>
                         entry.DataSource != Nocturne.Core.Constants.DataSources.DemoService))
                     continue;

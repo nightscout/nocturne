@@ -1,6 +1,7 @@
 <script lang="ts">
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
     import Play from "@lucide/svelte/icons/play";
+    import { Artwork } from "@nocturne/watercolour";
     import { Button } from "@nocturne/ui/ui/button";
     import FeaturePillars from "$lib/components/features/FeaturePillars.svelte";
     import { DATA_SOURCES } from "$lib/data/connectors";
@@ -62,7 +63,17 @@
     ];
 </script>
 
-<div class="max-w-[1200px] mx-auto px-6 overflow-x-clip">
+<div class="relative max-w-[1200px] mx-auto px-6 overflow-x-clip">
+    <!-- The copy caps at 900px, so on a wide screen the paint takes the
+         rest of the band rather than shrinking into a well. -->
+    <Artwork
+        artwork="heart-rate"
+        palette="ember"
+        motion="auto"
+        autoplay="once"
+        position="absolute"
+        class="pointer-events-none -right-12 top-10 hidden size-[380px] opacity-90 lg:block xl:size-[440px]"
+    />
     <div class="pt-20 pb-16 flex flex-col gap-6 max-w-[900px]">
         <h1 class="text-display font-bold text-foreground m-0">Everything Nocturne does</h1>
         <p class="text-lead text-muted-foreground m-0 max-w-[680px]">

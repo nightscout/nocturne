@@ -117,7 +117,7 @@ fn now_unix() -> i64 {
         .unwrap_or(0)
 }
 
-/// Begins the device flow: registers a client (idempotent per tenant) and requests a device
+/// Begins the device flow: registers a new client and requests a device
 /// code. Returns the info to display plus a `PendingAuth` to hand to `await_authorization`.
 pub async fn begin_device_flow(
     client: &reqwest::Client,
@@ -381,7 +381,8 @@ pub fn clear() -> Result<(), String> {
     }
 }
 
-/// RFC 7591 dynamic client registration. Idempotent per tenant on `software_id`.
+/// RFC 7591 dynamic client registration. Every call issues a new `client_id`; the stored
+/// credentials keep it for refresh.
 async fn register_client(client: &reqwest::Client, api_url: &str) -> Result<String, String> {
     let resp = client
         .post(format!("{api_url}/api/oauth/register"))

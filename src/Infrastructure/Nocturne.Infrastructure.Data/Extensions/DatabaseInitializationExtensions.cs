@@ -1,5 +1,7 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Models.Authorization;
@@ -18,6 +20,20 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// </summary>
 public static class DatabaseInitializationExtensions
 {
+    /// <summary>
+    /// The most migrations one <c>MigrateAsync</c> call applies.
+    /// <para>
+    /// EF builds every migration of a call before applying the first. Each one holds its Designer
+    /// target model, a model of the whole schema at that point, until the call returns. A call's
+    /// memory therefore grows with the number of migrations it applies.
+    /// </para>
+    /// <para>
+    /// Each call commits its own transaction, so a failure keeps the calls before it. A
+    /// <c>suppressTransaction</c> migration already commits part-way through a single call.
+    /// </para>
+    /// </summary>
+    internal const int MigrationsPerCall = 10;
+
     /// <summary>
     /// The migrator <see cref="NocturneDbContext"/>, with server notices forwarded to
     /// <paramref name="logger"/>.
@@ -38,10 +54,13 @@ public static class DatabaseInitializationExtensions
     /// takes from the pool has none. Subscribing there is silent, not wrong-looking.
     /// </para>
     /// </summary>
+    /// <param name="ceiling">The last migration the context sees (<see cref="MigrationCeiling"/>), or
+    /// null for all of them.</param>
     internal static NocturneDbContext CreateMigratorContext(
         NpgsqlDataSource dataSource,
         TenantConnectionInterceptor interceptor,
-        ILogger logger)
+        ILogger logger,
+        string? ceiling = null)
     {
         var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
 
@@ -57,6 +76,8 @@ public static class DatabaseInitializationExtensions
                 .CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds)
                 .UseNocturneMigrations());
         optionsBuilder.AddInterceptors(interceptor);
+        optionsBuilder.ReplaceService<IMigrationsAssembly, CeilingMigrationsAssembly>();
+        ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(new MigrationCeiling(ceiling));
 
         var context = new NocturneDbContext(optionsBuilder.Options);
 
@@ -113,8 +134,17 @@ public static class DatabaseInitializationExtensions
                 logger,
                 cancellationToken);
 
-            using var context = CreateMigratorContext(dataSource, interceptor, logger);
-            await context.Database.MigrateAsync(cancellationToken);
+            List<string> pending;
+            using (var context = CreateMigratorContext(dataSource, interceptor, logger))
+            {
+                pending = (await context.Database.GetPendingMigrationsAsync(cancellationToken)).ToList();
+            }
+
+            foreach (var ceiling in MigrationCeilings(pending))
+            {
+                using var context = CreateMigratorContext(dataSource, interceptor, logger, ceiling);
+                await context.Database.MigrateAsync(cancellationToken);
+            }
 
             logger.LogInformation("PostgreSQL database migrations completed");
         }
@@ -151,6 +181,21 @@ public static class DatabaseInitializationExtensions
                 await dataSource.DisposeAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// The ceiling of each <see cref="MigrationsPerCall"/> call over <paramref name="pending"/>. The
+    /// last is null, so the final call sees every migration, and an empty list still gets that one
+    /// call.
+    /// </summary>
+    internal static IEnumerable<string?> MigrationCeilings(IReadOnlyList<string> pending)
+    {
+        for (var last = MigrationsPerCall - 1; last < pending.Count - 1; last += MigrationsPerCall)
+        {
+            yield return pending[last];
+        }
+
+        yield return null;
     }
 
     /// <summary>

@@ -42,4 +42,17 @@ public interface IChartDataService
         long endTime,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Build the basal delivery spans overlapping a time range, as the dashboard chart draws them,
+    /// without running the full IOB/COB compute pipeline.
+    /// </summary>
+    /// <param name="startTime">Start of the time range in Unix milliseconds</param>
+    /// <param name="endTime">End of the time range in Unix milliseconds</param>
+    /// <returns>Unclipped delivery spans: one that began before the range is returned whole</returns>
+    Task<List<BasalDeliverySpanDto>> GetBasalDeliverySpansAsync(
+        long startTime,
+        long endTime,
+        CancellationToken cancellationToken = default
+    );
 }

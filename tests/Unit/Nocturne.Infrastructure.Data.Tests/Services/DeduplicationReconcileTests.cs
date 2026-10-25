@@ -162,8 +162,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -184,8 +184,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var first = await AddCarb(t, source, 20);
         var second = await AddCarb(t.AddSeconds(20), source, 20);
-        AddPrimaryLink(RecordType.CarbIntake, first, ToMills(t), source);
-        AddPrimaryLink(RecordType.CarbIntake, second, ToMills(t.AddSeconds(20)), source);
+        AddPrimaryLink(RecordType.CarbIntake, first, t.ToMills(), source);
+        AddPrimaryLink(RecordType.CarbIntake, second, t.AddSeconds(20).ToMills(), source);
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -216,7 +216,7 @@ public class DeduplicationReconcileTests : IDisposable
         foreach (var span in inputs)
         {
             await _service.DeduplicateBatchAsync(RecordType.StateSpan,
-                [new DeduplicationInput(span.Id, ToMills(span.StartTimestamp), span.Source!, MatchCriteriaMapper.From(span))]);
+                [new DeduplicationInput(span.Id, span.StartTimestamp.ToMills(), span.Source!, MatchCriteriaMapper.From(span))]);
         }
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.StateSpan, null, CancellationToken.None);
 
@@ -232,8 +232,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var first = await AddCarb(t, "tidepool-connector", 20);
         var twin = await AddCarb(t, "tidepool-connector", 20);
-        AddPrimaryLink(RecordType.CarbIntake, first, ToMills(t), "tidepool-connector");
-        AddPrimaryLink(RecordType.CarbIntake, twin, ToMills(t), "tidepool-connector");
+        AddPrimaryLink(RecordType.CarbIntake, first, t.ToMills(), "tidepool-connector");
+        AddPrimaryLink(RecordType.CarbIntake, twin, t.ToMills(), "tidepool-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -248,9 +248,9 @@ public class DeduplicationReconcileTests : IDisposable
         var first = await AddCarb(t, "unknown", 20);
         var copy = await AddCarb(t.AddSeconds(10), "tidepool-connector", 20);
         var second = await AddCarb(t.AddSeconds(20), "unknown", 20);
-        AddPrimaryLink(RecordType.CarbIntake, first, ToMills(t), "unknown");
-        AddPrimaryLink(RecordType.CarbIntake, copy, ToMills(t.AddSeconds(10)), "tidepool-connector");
-        AddPrimaryLink(RecordType.CarbIntake, second, ToMills(t.AddSeconds(20)), "unknown");
+        AddPrimaryLink(RecordType.CarbIntake, first, t.ToMills(), "unknown");
+        AddPrimaryLink(RecordType.CarbIntake, copy, t.AddSeconds(10).ToMills(), "tidepool-connector");
+        AddPrimaryLink(RecordType.CarbIntake, second, t.AddSeconds(20).ToMills(), "unknown");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -266,8 +266,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 80);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -291,8 +291,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var mylife = await AddSensorGlucose(t, "mylife-connector", firstMgdl);
         var glooko = await AddSensorGlucose(t.AddSeconds(20), "glooko-connector", secondMgdl);
-        AddPrimaryLink(RecordType.SensorGlucose, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.SensorGlucose, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.SensorGlucose, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.SensorGlucose, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.SensorGlucose, null, CancellationToken.None);
@@ -310,8 +310,8 @@ public class DeduplicationReconcileTests : IDisposable
         // 15 minutes apart: past the wide window, so neither pass can reach across.
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddMinutes(15), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddMinutes(15)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddMinutes(15).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -328,8 +328,8 @@ public class DeduplicationReconcileTests : IDisposable
         // Earliest record is soft-deleted; the later non-deleted record must become the surviving primary.
         var deleted = await AddCarb(t, "mylife-connector", 50, deletedAt: DateTime.UtcNow);
         var live = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, deleted, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, live, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, deleted, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, live, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -488,9 +488,9 @@ public class DeduplicationReconcileTests : IDisposable
         var a = await AddCarb(t, "mylife-connector", 50);
         var b = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
         var c = await AddCarb(t.AddSeconds(40), "libre-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, a, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, b, ToMills(t.AddSeconds(20)), "glooko-connector");
-        AddPrimaryLink(RecordType.CarbIntake, c, ToMills(t.AddSeconds(40)), "libre-connector");
+        AddPrimaryLink(RecordType.CarbIntake, a, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, b, t.AddSeconds(20).ToMills(), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, c, t.AddSeconds(40).ToMills(), "libre-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -507,8 +507,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = DateTime.UtcNow;
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        var glookoCanonical = AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        var glookoCanonical = AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(
@@ -528,15 +528,15 @@ public class DeduplicationReconcileTests : IDisposable
         // Candidate group plus its in-window neighbour (these should merge).
         var candA = await AddCarb(t, "mylife-connector", 50);
         var candB = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        var candCanonical = AddPrimaryLink(RecordType.CarbIntake, candA, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, candB, ToMills(t.AddSeconds(20)), "glooko-connector");
+        var candCanonical = AddPrimaryLink(RecordType.CarbIntake, candA, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, candB, t.AddSeconds(20).ToMills(), "glooko-connector");
 
         // A SEPARATE unrelated matching pair far away in time — must NOT be touched.
         var farT = t.AddHours(5);
         var farA = await AddCarb(farT, "mylife-connector", 80);
         var farB = await AddCarb(farT.AddSeconds(20), "glooko-connector", 80);
-        AddPrimaryLink(RecordType.CarbIntake, farA, ToMills(farT), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, farB, ToMills(farT.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, farA, farT.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, farB, farT.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(
@@ -561,8 +561,8 @@ public class DeduplicationReconcileTests : IDisposable
         // A pair the ingest path missed because the connectors' clocks drifted 64 seconds apart.
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(64), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(64)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(64).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -582,9 +582,9 @@ public class DeduplicationReconcileTests : IDisposable
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(64), "glooko-connector", 50);
         var libre = await AddCarb(t.AddSeconds(128), "libre-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(64)), "glooko-connector");
-        AddPrimaryLink(RecordType.CarbIntake, libre, ToMills(t.AddSeconds(128)), "libre-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(64).ToMills(), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, libre, t.AddSeconds(128).ToMills(), "libre-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -601,8 +601,8 @@ public class DeduplicationReconcileTests : IDisposable
         // One connector reporting 50g twice inside the wide window is two real meals.
         var first = await AddCarb(t, "mylife-connector", 50);
         var second = await AddCarb(t.AddSeconds(64), "mylife-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, first, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, second, ToMills(t.AddSeconds(64)), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, first, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, second, t.AddSeconds(64).ToMills(), "mylife-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -624,11 +624,11 @@ public class DeduplicationReconcileTests : IDisposable
         var spanningMember = await AddCarb(WideBase.AddMinutes(20), "libre-connector", 50);
 
         var candidateCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, candidate, ToMills(WideBase), "mylife-connector");
+            RecordType.CarbIntake, candidate, WideBase.ToMills(), "mylife-connector");
         var spanningCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, spanningPrimary, ToMills(WideBase.AddMinutes(10)), "glooko-connector");
+            RecordType.CarbIntake, spanningPrimary, WideBase.AddMinutes(10).ToMills(), "glooko-connector");
         AddLink(
-            RecordType.CarbIntake, spanningMember, ToMills(WideBase.AddMinutes(20)), "libre-connector",
+            RecordType.CarbIntake, spanningMember, WideBase.AddMinutes(20).ToMills(), "libre-connector",
             spanningCanonical, isPrimary: false);
         await _context.SaveChangesAsync();
 
@@ -660,13 +660,13 @@ public class DeduplicationReconcileTests : IDisposable
         var beyond = await AddCarb(WideBase.AddMinutes(30), "mylife-connector", 50);
 
         var candidateCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, candidate, ToMills(WideBase), "mylife-connector");
+            RecordType.CarbIntake, candidate, WideBase.ToMills(), "mylife-connector");
         var spanningCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, spanningPrimary, ToMills(WideBase.AddMinutes(10)), "glooko-connector");
+            RecordType.CarbIntake, spanningPrimary, WideBase.AddMinutes(10).ToMills(), "glooko-connector");
         AddLink(
-            RecordType.CarbIntake, spanningMember, ToMills(WideBase.AddMinutes(20)), "libre-connector",
+            RecordType.CarbIntake, spanningMember, WideBase.AddMinutes(20).ToMills(), "libre-connector",
             spanningCanonical, isPrimary: false);
-        AddPrimaryLink(RecordType.CarbIntake, beyond, ToMills(WideBase.AddMinutes(30)), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, beyond, WideBase.AddMinutes(30).ToMills(), "mylife-connector");
         await _context.SaveChangesAsync();
 
         var deferred = await _service.MergeDuplicateGroupsAsync(
@@ -694,10 +694,10 @@ public class DeduplicationReconcileTests : IDisposable
         var pairA = await AddCarb(WideBase.AddMinutes(2), "libre-connector", 50.5);
         var pairB = await AddCarb(WideBase.AddMinutes(3), "dexcom-connector", 50.5);
 
-        AddPrimaryLink(RecordType.CarbIntake, tightA, ToMills(WideBase), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, tightB, ToMills(WideBase.AddSeconds(10)), "glooko-connector");
-        AddPrimaryLink(RecordType.CarbIntake, pairA, ToMills(WideBase.AddMinutes(2)), "libre-connector");
-        AddPrimaryLink(RecordType.CarbIntake, pairB, ToMills(WideBase.AddMinutes(3)), "dexcom-connector");
+        AddPrimaryLink(RecordType.CarbIntake, tightA, WideBase.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, tightB, WideBase.AddSeconds(10).ToMills(), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairA, WideBase.AddMinutes(2).ToMills(), "libre-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairB, WideBase.AddMinutes(3).ToMills(), "dexcom-connector");
         await _context.SaveChangesAsync();
 
         await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -717,9 +717,9 @@ public class DeduplicationReconcileTests : IDisposable
         var tightB = await AddCarb(WideBase.AddSeconds(10), "glooko-connector", 50.5);
         var partner = await AddCarb(WideBase.AddMinutes(2), "libre-connector", 50.5);
 
-        AddPrimaryLink(RecordType.CarbIntake, tightA, ToMills(WideBase), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, tightB, ToMills(WideBase.AddSeconds(10)), "glooko-connector");
-        AddPrimaryLink(RecordType.CarbIntake, partner, ToMills(WideBase.AddMinutes(2)), "libre-connector");
+        AddPrimaryLink(RecordType.CarbIntake, tightA, WideBase.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, tightB, WideBase.AddSeconds(10).ToMills(), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, partner, WideBase.AddMinutes(2).ToMills(), "libre-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -739,11 +739,11 @@ public class DeduplicationReconcileTests : IDisposable
         var other = await AddCarb(WideBase.AddSeconds(50), "glooko-connector", 50);
 
         var liveCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, live, ToMills(WideBase.AddSeconds(30)), "mylife-connector");
+            RecordType.CarbIntake, live, WideBase.AddSeconds(30).ToMills(), "mylife-connector");
         AddLink(
-            RecordType.CarbIntake, Guid.CreateVersion7(), ToMills(WideBase), "libre-connector",
+            RecordType.CarbIntake, Guid.CreateVersion7(), WideBase.ToMills(), "libre-connector",
             liveCanonical, isPrimary: false);
-        AddPrimaryLink(RecordType.CarbIntake, other, ToMills(WideBase.AddSeconds(50)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, other, WideBase.AddSeconds(50).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -769,12 +769,12 @@ public class DeduplicationReconcileTests : IDisposable
         var pairB = await AddCarb(WideBase.AddMinutes(30), "glooko-connector", 50);
 
         var spanningCanonical = AddPrimaryLink(
-            RecordType.CarbIntake, spanningPrimary, ToMills(WideBase), "mylife-connector");
+            RecordType.CarbIntake, spanningPrimary, WideBase.ToMills(), "mylife-connector");
         AddLink(
-            RecordType.CarbIntake, spanningMember, ToMills(WideBase.AddMinutes(19)), "glooko-connector",
+            RecordType.CarbIntake, spanningMember, WideBase.AddMinutes(19).ToMills(), "glooko-connector",
             spanningCanonical, isPrimary: false);
-        AddPrimaryLink(RecordType.CarbIntake, pairA, ToMills(WideBase.AddMinutes(25)), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, pairB, ToMills(WideBase.AddMinutes(30)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairA, WideBase.AddMinutes(25).ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairB, WideBase.AddMinutes(30).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -791,8 +791,8 @@ public class DeduplicationReconcileTests : IDisposable
     {
         var mylife = await AddCarb(WideBase, "mylife-connector", 50);
         var glooko = await AddCarb(WideBase.AddMilliseconds(offsetMillis), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(WideBase), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(WideBase.AddMilliseconds(offsetMillis)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, WideBase.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, WideBase.AddMilliseconds(offsetMillis).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         await _service.MergeDuplicateGroupsAsync(RecordType.CarbIntake, null, CancellationToken.None);
@@ -816,9 +816,9 @@ public class DeduplicationReconcileTests : IDisposable
         var third = await AddCarb(WideBase.AddMinutes(18), "mylife-connector", 50);
         var canonicals = new[]
         {
-            AddPrimaryLink(RecordType.CarbIntake, first, ToMills(WideBase), "mylife-connector"),
-            AddPrimaryLink(RecordType.CarbIntake, second, ToMills(WideBase.AddMinutes(9)), "glooko-connector"),
-            AddPrimaryLink(RecordType.CarbIntake, third, ToMills(WideBase.AddMinutes(18)), "mylife-connector"),
+            AddPrimaryLink(RecordType.CarbIntake, first, WideBase.ToMills(), "mylife-connector"),
+            AddPrimaryLink(RecordType.CarbIntake, second, WideBase.AddMinutes(9).ToMills(), "glooko-connector"),
+            AddPrimaryLink(RecordType.CarbIntake, third, WideBase.AddMinutes(18).ToMills(), "mylife-connector"),
         };
         await _context.SaveChangesAsync();
 
@@ -841,9 +841,9 @@ public class DeduplicationReconcileTests : IDisposable
         var candidate = await AddCarb(WideBase, "mylife-connector", 99);
         var pairA = await AddCarb(WideBase.AddMinutes(15), "mylife-connector", 50);
         var pairB = await AddCarb(WideBase.AddMinutes(16), "glooko-connector", 50);
-        var candidateCanonical = AddPrimaryLink(RecordType.CarbIntake, candidate, ToMills(WideBase), "mylife-connector");
-        var pairACanonical = AddPrimaryLink(RecordType.CarbIntake, pairA, ToMills(WideBase.AddMinutes(15)), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, pairB, ToMills(WideBase.AddMinutes(16)), "glooko-connector");
+        var candidateCanonical = AddPrimaryLink(RecordType.CarbIntake, candidate, WideBase.ToMills(), "mylife-connector");
+        var pairACanonical = AddPrimaryLink(RecordType.CarbIntake, pairA, WideBase.AddMinutes(15).ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, pairB, WideBase.AddMinutes(16).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         var deferred = await _service.MergeDuplicateGroupsAsync(
@@ -880,11 +880,11 @@ public class DeduplicationReconcileTests : IDisposable
         var betweenId = await AddReading(recordType, between, "mylife-connector");
         var lateA = await AddReading(recordType, late, "mylife-connector");
         var lateB = await AddReading(recordType, late.AddSeconds(20), "glooko-connector");
-        var earlyCanonical = AddPrimaryLink(recordType, earlyA, ToMills(early), "mylife-connector");
-        AddPrimaryLink(recordType, earlyB, ToMills(early.AddSeconds(20)), "glooko-connector");
-        AddPrimaryLink(recordType, betweenId, ToMills(between), "mylife-connector");
-        var lateCanonical = AddPrimaryLink(recordType, lateA, ToMills(late), "mylife-connector");
-        AddPrimaryLink(recordType, lateB, ToMills(late.AddSeconds(20)), "glooko-connector");
+        var earlyCanonical = AddPrimaryLink(recordType, earlyA, early.ToMills(), "mylife-connector");
+        AddPrimaryLink(recordType, earlyB, early.AddSeconds(20).ToMills(), "glooko-connector");
+        AddPrimaryLink(recordType, betweenId, between.ToMills(), "mylife-connector");
+        var lateCanonical = AddPrimaryLink(recordType, lateA, late.ToMills(), "mylife-connector");
+        AddPrimaryLink(recordType, lateB, late.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         LoadedLinks.Clear();
 
@@ -936,11 +936,11 @@ public class DeduplicationReconcileTests : IDisposable
         var pairA = await AddSensorGlucose(t.AddMinutes(20), "dexcom-connector", 150);
         var pairB = await AddSensorGlucose(t.AddMinutes(20).AddSeconds(10), "glooko-connector", 150);
         var late = await AddSensorGlucose(t.AddMinutes(40), "dexcom-connector", 200);
-        var earlyCanonical = AddPrimaryLink(RecordType.SensorGlucose, early, ToMills(t), "dexcom-connector");
-        var pairACanonical = AddPrimaryLink(RecordType.SensorGlucose, pairA, ToMills(t.AddMinutes(20)), "dexcom-connector");
+        var earlyCanonical = AddPrimaryLink(RecordType.SensorGlucose, early, t.ToMills(), "dexcom-connector");
+        var pairACanonical = AddPrimaryLink(RecordType.SensorGlucose, pairA, t.AddMinutes(20).ToMills(), "dexcom-connector");
         var pairBCanonical = AddPrimaryLink(
-            RecordType.SensorGlucose, pairB, ToMills(t.AddMinutes(20).AddSeconds(10)), "glooko-connector");
-        var lateCanonical = AddPrimaryLink(RecordType.SensorGlucose, late, ToMills(t.AddMinutes(40)), "dexcom-connector");
+            RecordType.SensorGlucose, pairB, (t.AddMinutes(20).AddSeconds(10)).ToMills(), "glooko-connector");
+        var lateCanonical = AddPrimaryLink(RecordType.SensorGlucose, late, t.AddMinutes(40).ToMills(), "dexcom-connector");
         await _context.SaveChangesAsync();
 
         var merged = await _service.MergeDuplicateGroupsAsync(
@@ -982,8 +982,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddMinutes(-5);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(now.AddMinutes(-5));
 
@@ -1023,8 +1023,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddMinutes(-5);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         var created = now.AddMinutes(-5);
         await SetAllLinkSysCreatedAt(created);
@@ -1051,10 +1051,10 @@ public class DeduplicationReconcileTests : IDisposable
         var ns2 = await AddBolus(t.AddSeconds(20), "nightscout", 2);
         var tp1 = await AddBolus(t, "tidepool-connector", 2);
         var tp2 = await AddBolus(t.AddSeconds(20), "tidepool-connector", 2);
-        var first = AddPrimaryLink(RecordType.Bolus, ns1, ToMills(t), "nightscout");
-        AddPrimaryLink(RecordType.Bolus, ns2, ToMills(t.AddSeconds(20)), "nightscout");
-        AddLink(RecordType.Bolus, tp1, ToMills(t), "tidepool-connector", first, isPrimary: false);
-        AddPrimaryLink(RecordType.Bolus, tp2, ToMills(t.AddSeconds(20)), "tidepool-connector");
+        var first = AddPrimaryLink(RecordType.Bolus, ns1, t.ToMills(), "nightscout");
+        AddPrimaryLink(RecordType.Bolus, ns2, t.AddSeconds(20).ToMills(), "nightscout");
+        AddLink(RecordType.Bolus, tp1, t.ToMills(), "tidepool-connector", first, isPrimary: false);
+        AddPrimaryLink(RecordType.Bolus, tp2, t.AddSeconds(20).ToMills(), "tidepool-connector");
         await _context.SaveChangesAsync();
         await RestampOnePastTheCursor(tp2, now);
 
@@ -1075,8 +1075,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddHours(-2);
         var tp1 = await AddBolus(t, "tidepool-connector", 2);
         var tp2 = await AddBolus(t, "tidepool-connector", 2);
-        AddPrimaryLink(RecordType.Bolus, tp1, ToMills(t), "tidepool-connector");
-        AddPrimaryLink(RecordType.Bolus, tp2, ToMills(t), "tidepool-connector");
+        AddPrimaryLink(RecordType.Bolus, tp1, t.ToMills(), "tidepool-connector");
+        AddPrimaryLink(RecordType.Bolus, tp2, t.ToMills(), "tidepool-connector");
         await _context.SaveChangesAsync();
         await RestampOnePastTheCursor(tp2, now);
 
@@ -1097,8 +1097,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddHours(-1);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(now.AddHours(-1));
 
@@ -1119,8 +1119,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddMinutes(-5);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
 
         // A linked_records row whose free-form RecordType is not a member of the RecordType enum.
         // Enum.Parse on this string would throw and take down the whole reconcile batch loop.
@@ -1131,7 +1131,7 @@ public class DeduplicationReconcileTests : IDisposable
             CanonicalId = Guid.CreateVersion7(),
             RecordType = "bogustype",
             RecordId = Guid.CreateVersion7(),
-            SourceTimestamp = ToMills(t),
+            SourceTimestamp = t.ToMills(),
             DataSource = "mylife-connector",
             IsPrimary = true,
             SysCreatedAt = DateTime.UtcNow
@@ -1157,8 +1157,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddMinutes(-5);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         var created = now.AddMinutes(-5);
         await SetAllLinkSysCreatedAt(created);
@@ -1233,8 +1233,8 @@ public class DeduplicationReconcileTests : IDisposable
         var t = now.AddHours(-1);
         var mylife = await AddCarb(t, "mylife-connector", 50);
         var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", 50);
-        AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-        AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(now);
 
@@ -1336,8 +1336,8 @@ public class DeduplicationReconcileTests : IDisposable
             var carbs = 50 + i * 10;
             var mylife = await AddCarb(t, "mylife-connector", carbs);
             var glooko = await AddCarb(t.AddSeconds(20), "glooko-connector", carbs);
-            AddPrimaryLink(RecordType.CarbIntake, mylife, ToMills(t), "mylife-connector");
-            AddPrimaryLink(RecordType.CarbIntake, glooko, ToMills(t.AddSeconds(20)), "glooko-connector");
+            AddPrimaryLink(RecordType.CarbIntake, mylife, t.ToMills(), "mylife-connector");
+            AddPrimaryLink(RecordType.CarbIntake, glooko, t.AddSeconds(20).ToMills(), "glooko-connector");
         }
         await _context.SaveChangesAsync();
         await SetAllLinkSysCreatedAt(createdAt);
@@ -1385,7 +1385,7 @@ public class DeduplicationReconcileTests : IDisposable
     [MemberData(nameof(DeduplicatedRecordTypes))]
     public async Task DeleteOrphanedLinksAsync_SweepsAnOrphanOfEveryDeduplicatedType(RecordType recordType)
     {
-        AddLink(recordType, Guid.CreateVersion7(), ToMills(WideBase), "glooko-connector",
+        AddLink(recordType, Guid.CreateVersion7(), WideBase.ToMills(), "glooko-connector",
             Guid.CreateVersion7(), isPrimary: true);
         await _context.SaveChangesAsync();
 
@@ -1426,7 +1426,7 @@ public class DeduplicationReconcileTests : IDisposable
         // A type the sweep does not recognise has every one of its links swept, live record or not,
         // so this is what separates the nine from an unknown key.
         var recordId = AddRecord(recordType);
-        AddPrimaryLink(recordType, recordId, ToMills(WideBase), "glooko-connector");
+        AddPrimaryLink(recordType, recordId, WideBase.ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         await DeduplicationService.DeleteOrphanedLinksAsync(_context);
@@ -1499,7 +1499,7 @@ public class DeduplicationReconcileTests : IDisposable
             CanonicalId = Guid.CreateVersion7(),
             RecordType = recordType,
             RecordId = Guid.CreateVersion7(),
-            SourceTimestamp = ToMills(WideBase),
+            SourceTimestamp = WideBase.ToMills(),
             DataSource = "glooko-connector",
             IsPrimary = true
         });
@@ -1515,7 +1515,7 @@ public class DeduplicationReconcileTests : IDisposable
         // back to it when every member is deleted.
         var recordId = await AddCarb(WideBase, "glooko-connector", 50,
             deletedAt: softDeleted ? WideBase.AddHours(1) : null);
-        AddPrimaryLink(RecordType.CarbIntake, recordId, ToMills(WideBase), "glooko-connector");
+        AddPrimaryLink(RecordType.CarbIntake, recordId, WideBase.ToMills(), "glooko-connector");
         await _context.SaveChangesAsync();
 
         await DeduplicationService.DeleteOrphanedLinksAsync(_context);
@@ -1539,7 +1539,7 @@ public class DeduplicationReconcileTests : IDisposable
                 CanonicalId = Guid.CreateVersion7(),
                 RecordType = "carbintake",
                 RecordId = Guid.CreateVersion7(),
-                SourceTimestamp = ToMills(WideBase),
+                SourceTimestamp = WideBase.ToMills(),
                 DataSource = "glooko-connector",
                 IsPrimary = true
             });
@@ -1577,7 +1577,7 @@ public class DeduplicationReconcileTests : IDisposable
                 CanonicalId = Guid.CreateVersion7(),
                 RecordType = "carbintake",
                 RecordId = theirRecordId,
-                SourceTimestamp = ToMills(WideBase),
+                SourceTimestamp = WideBase.ToMills(),
                 DataSource = "glooko-connector",
                 IsPrimary = true
             });
@@ -1585,7 +1585,7 @@ public class DeduplicationReconcileTests : IDisposable
         }
 
         // The test tenant's link points at the other tenant's record, so it is an orphan here.
-        AddPrimaryLink(RecordType.CarbIntake, theirRecordId, ToMills(WideBase), "mylife-connector");
+        AddPrimaryLink(RecordType.CarbIntake, theirRecordId, WideBase.ToMills(), "mylife-connector");
         await _context.SaveChangesAsync();
 
         await DeduplicationService.DeleteOrphanedLinksAsync(_context);
@@ -1618,20 +1618,20 @@ public class DeduplicationReconcileTests : IDisposable
             var at = first + step * i;
             var mgdl = 60 + 5 * i % 300;
             var reading = await AddSensorGlucose(at, "dexcom-connector", mgdl);
-            AddPrimaryLink(RecordType.SensorGlucose, reading, ToMills(at), "dexcom-connector");
+            AddPrimaryLink(RecordType.SensorGlucose, reading, at.ToMills(), "dexcom-connector");
 
             Guid? copy = null;
             if (copyEvery > 0 && (i % copyEvery == 0 || i == count - 1))
             {
                 copy = await AddSensorGlucose(at.AddSeconds(10), "glooko-connector", mgdl);
-                AddPrimaryLink(RecordType.SensorGlucose, copy.Value, ToMills(at.AddSeconds(10)), "glooko-connector");
+                AddPrimaryLink(RecordType.SensorGlucose, copy.Value, at.AddSeconds(10).ToMills(), "glooko-connector");
             }
 
             Guid? lateCopy = null;
             if (lateCopyEvery > 0 && i % lateCopyEvery == 0)
             {
                 lateCopy = await AddSensorGlucose(at.AddSeconds(45), "libre-connector", mgdl);
-                AddPrimaryLink(RecordType.SensorGlucose, lateCopy.Value, ToMills(at.AddSeconds(45)), "libre-connector");
+                AddPrimaryLink(RecordType.SensorGlucose, lateCopy.Value, at.AddSeconds(45).ToMills(), "libre-connector");
             }
 
             readings.Add(new GlucoseWithCopies(reading, copy, lateCopy));
@@ -1795,12 +1795,6 @@ public class DeduplicationReconcileTests : IDisposable
         }
         await _context.SaveChangesAsync();
     }
-
-    /// <summary>
-    /// Converts a UTC <see cref="DateTime"/> to Unix milliseconds, matching the link source timestamp.
-    /// </summary>
-    private static long ToMills(DateTime d) =>
-        new DateTimeOffset(d, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
     private sealed class LinkLoadRecorder : IMaterializationInterceptor
     {

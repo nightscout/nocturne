@@ -1,0 +1,57 @@
+---
+title: Daily profile
+---
+
+<script>
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Daily profile
+
+The Daily profile aligns your days by the time of day, in five-minute periods of
+the local day. This shows the patterns at each time of day.
+
+The [Loop Analysis overview](/docs/reports/loop-analysis) tells you about the
+filters, net loop correction and how to read the charts. They are the same on
+all five pages.
+
+<Screenshot id="loop-analysis-daily-profile" />
+
+The tiles at the top show the totals:
+
+- **Days with data**.
+- **Total insulin** each day.
+- **Basal / bolus**: the split between basal and bolus.
+- **Automatic / manual bolus**.
+- **Delivered basal ratio**: delivered basal divided by scheduled basal.
+- **Net loop correction** each day.
+
+Four tiles use only complete days: **Total insulin**, **Basal / bolus**,
+**Automatic / manual bolus** and **Net loop correction**. A day counts in these
+tiles only when the report uses 90% of the day or more. Delivery must also be
+known for 90% of the day or more. Known delivery is recorded, or filled from the
+schedule. Net loop correction each day also needs the schedule for 90% of the
+day. The report never increases a part of a day to a full day. Today counts only when 90% of
+the day is before now.
+
+**Days with data** counts each day with glucose or treatments. **Delivered basal
+ratio** adds all the days that have delivery and a schedule.
+
+The charts are under the tiles. From top to bottom:
+
+- **Glucose**, with your target range behind it.
+- **Basal**: the scheduled basal and the delivered basal.
+- **Net loop correction**: the insulin that the loop added or removed. A line
+  shows the mean, with automatic boluses. A band shows the middle half of the
+  temp basal change only. The chart under it shows the sum of the correction for
+  each hour.
+- **Insulin on board** and **carbs on board**.
+- **Manual boluses** and **carbs**: how frequently and how much at each time of
+  day.
+
+<Screenshot id="loop-analysis-daily-glucose" />
+
+To list the days for a time, select the time or press Enter on it. Each day
+links to **Day in Review** at that time. A day that the range includes only
+partly, for example today, shows **Part of the day**.
+

@@ -1,0 +1,9 @@
+[package]
+name = "nocturne-watercolour-core"
+version = "0.1.0"
+edition = "2024"
+description = "Watercolour graphics engine: domain model, CPU reference simulation, Kubelka-Munk optics and application use cases (std only)"
+license = "AGPL-3.0-only"
+publish = false
+
+[dependencies]

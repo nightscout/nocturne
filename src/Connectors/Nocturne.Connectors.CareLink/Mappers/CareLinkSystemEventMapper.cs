@@ -16,7 +16,7 @@ public static class CareLinkSystemEventMapper
         if (timestamp == null)
             return null;
 
-        var mills = new DateTimeOffset(timestamp.Value, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var mills = timestamp.Value.ToMills();
 
         return new SystemEvent
         {
@@ -70,7 +70,7 @@ public static class CareLinkSystemEventMapper
         if (timestamp == null)
             return null;
 
-        var mills = new DateTimeOffset(timestamp.Value, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var mills = timestamp.Value.ToMills();
 
         var metadata = new Dictionary<string, object>();
         if (notification.UnitsRemaining.HasValue)

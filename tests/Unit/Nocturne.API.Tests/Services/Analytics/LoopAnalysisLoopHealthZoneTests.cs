@@ -1,3 +1,5 @@
+using Nocturne.API.Services.ChartData;
+using Nocturne.Core.Clinical.Treatments;
 using FluentAssertions;
 using Moq;
 using Nocturne.API.Services.Analytics;
@@ -68,7 +70,7 @@ public class LoopAnalysisLoopHealthZoneTests
         var series = new Mock<IBasalSeriesBuilder>();
         series
             .Setup(b => b.BuildAsync(
-                It.IsAny<List<TempBasal>>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<TempBasal>>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<IReadOnlyList<ScaleFactorInterval>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         var spans = new Mock<IStateSpanRepository>();
@@ -107,6 +109,7 @@ public class LoopAnalysisLoopHealthZoneTests
             carbIntakeRepository: Mock.Of<ICarbIntakeRepository>(),
             tempBasalRepository: Mock.Of<ITempBasalRepository>(),
             apsSnapshotRepository: snapshots.Object,
+            pumpSnapshotRepository: Mock.Of<IPumpSnapshotRepository>(),
             stateSpanRepository: spans.Object,
             patientDeviceRepository: devices.Object,
             targetRangeScheduleRepository: Mock.Of<ITargetRangeScheduleRepository>(),

@@ -1,6 +1,7 @@
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
 
@@ -115,10 +116,6 @@ internal sealed class ReservoirEstimationService(
             IsEstimated: delivered >= EstimationEpsilon);
     }
 
-    /// <summary>How far before the window a temp basal may start and still deliver into
-    /// it; fetches reach back this far so straddling records aren't missed.</summary>
-    private static readonly TimeSpan TempBasalStraddleLookback = TimeSpan.FromHours(24);
-
     private async Task<double> GetInsulinDeliveredAsync(DateTime from, DateTime to, CancellationToken ct)
     {
         // The anchor reading already reflects a bolus stamped at the same instant
@@ -134,34 +131,30 @@ internal sealed class ReservoirEstimationService(
                 "records were likely truncated and the reservoir estimate may be skewed",
                 RecordFetchLimit, from, to);
         }
+        var tempBasalReadStart = StatisticsService.TempBasalReadStart(from);
         var tempBasalRecords = (await tempBasals.GetAsync(
-            from: from - TempBasalStraddleLookback, to: to, device: null, source: null,
+            from: tempBasalReadStart, to: to, device: null, source: null,
             limit: RecordFetchLimit, offset: 0, descending: false, ct: ct)).ToList();
         if (tempBasalRecords.Count == RecordFetchLimit)
         {
             logger.LogWarning(
                 "Temp basal fetch returned exactly the fetch limit ({Limit}) for window {From:o}..{To:o}; " +
                 "records were likely truncated and the reservoir estimate may be skewed",
-                RecordFetchLimit, from - TempBasalStraddleLookback, to);
+                RecordFetchLimit, tempBasalReadStart, to);
         }
 
         var total = bolusRecords.Sum(b => b.Insulin);
 
-        var fromMs = new DateTimeOffset(DateTime.SpecifyKind(from, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
-        var toMs = new DateTimeOffset(DateTime.SpecifyKind(to, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        var fromMs = from.ToMills();
+        var toMs = to.ToMills();
 
-        // Count only the delivery that falls inside [from, to]: records fetched from
-        // the lookback may straddle the window start, and the newest record's declared
-        // end usually lies in the future — insulin not yet delivered.
         var anyTempBasalDelivery = false;
-        foreach (var tb in StatisticsService.ClipOverlappingTempBasals(tempBasalRecords, toMs))
+        foreach (var tb in StatisticsService.DeliveredWithin(tempBasalRecords, from, toMs))
         {
-            var start = Math.Max(tb.StartMills, fromMs);
-            var end = Math.Min(tb.EndMills!.Value, toMs);
-            if (end <= start || tb.Rate is not { } rate)
+            if (StatisticsService.GetTempBasalInsulin(tb) is not { } insulin)
                 continue;
             anyTempBasalDelivery = true;
-            total += rate * ((end - start) / (1000.0 * 60 * 60));
+            total += insulin;
         }
 
         // No temp basal delivery and no algorithm boluses means basal isn't recorded

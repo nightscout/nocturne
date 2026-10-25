@@ -1,0 +1,31 @@
+export const NightscoutEventType = {
+  Bolus: "Bolus",
+  BolusWizard: "Bolus Wizard",
+  MealBolus: "Meal Bolus",
+  SnackBolus: "Snack Bolus",
+  ComboBolus: "Combo Bolus",
+  CorrectionBolus: "Correction Bolus",
+  RemoteBolusEntry: "Remote Bolus Entry",
+  Smb: "SMB",
+  TempBasal: "Temp Basal",
+  TempBasalStart: "Temp Basal Start",
+  TempBasalEnd: "Temp Basal End",
+  ProfileSwitch: "Profile Switch",
+  CarbCorrection: "Carb Correction",
+  Meal: "Meal",
+  Snack: "Snack",
+  SiteChange: "Site Change",
+  SensorStart: "Sensor Start",
+  SensorChange: "Sensor Change",
+  SensorStop: "Sensor Stop",
+  PumpBatteryChange: "Pump Battery Change",
+  InsulinChange: "Insulin Change",
+  BgCheck: "BG Check",
+  Note: "Note",
+  Announcement: "Announcement",
+  Question: "Question",
+  DadAlert: "D.A.D. Alert",
+} as const;
+
+export type NightscoutEventType =
+  (typeof NightscoutEventType)[keyof typeof NightscoutEventType];

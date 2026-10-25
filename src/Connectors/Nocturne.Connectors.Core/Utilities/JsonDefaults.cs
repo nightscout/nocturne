@@ -25,14 +25,14 @@ public static class JsonDefaults
     ///     worst offenders. Registering the converters here applies them to every type
     ///     these options touch (top-level and nested); property-level <c>[JsonConverter]</c>
     ///     attributes on the models still take precedence where present.
-    ///     A document's identity is its <c>_id</c>; see <see cref="UploaderIdJsonModifier"/>.
+    ///     A document's identity is its <c>_id</c>; see <see cref="IgnoredBasePropertyModifier"/>.
     /// </summary>
     public static readonly JsonSerializerOptions CaseInsensitive = new()
     {
         PropertyNameCaseInsensitive = true,
         TypeInfoResolver = new DefaultJsonTypeInfoResolver
         {
-            Modifiers = { UploaderIdJsonModifier.RemoveBaseIdProperty },
+            Modifiers = { IgnoredBasePropertyModifier.RemoveIgnoredBaseProperties },
         },
         Converters =
         {

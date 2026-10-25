@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "state-span-active-lookup",
-  "description": "lookup is by exact (category, state) key; null state means the any-of-category key; is_active=false asserts key absence; PumpMode category is always false",
+  "description": "lookup is by exact (category, state) key; null state means the any-of-category key; is_active=false asserts key absence; the PumpMode category (pump modes are pump_state's) cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

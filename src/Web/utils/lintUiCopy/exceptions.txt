@@ -1,0 +1,2 @@
+# Deliberate exceptions to the UI copy rules. One per line: rule<TAB>msgid.
+# Put a comment line above each entry that gives the reason.

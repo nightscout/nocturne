@@ -59,7 +59,7 @@ describe("LoopHealthBody", () => {
     await expect.element(page.getByRole("heading", { name: "Unrecorded delivery" })).toBeVisible();
     const links = page.getByRole("link");
     await expect.element(links.first()).toHaveAttribute("href", "/reports/day-in-review?date=2026-10-03&time=23:30");
-    await expect.element(links.first()).toHaveAccessibleName(/Open in Day in Review/);
+    await expect.element(links.first()).toHaveAccessibleName(/Open in Day in review/);
     await expect.element(links.nth(1)).toHaveAttribute("href", "/reports/day-in-review?date=2026-10-05&time=03:10");
     await expect.element(links.nth(2)).toHaveAttribute("href", "/reports/day-in-review?date=2026-10-08&time=06:00");
     await expect.element(links.nth(2)).toHaveTextContent("5 h");
