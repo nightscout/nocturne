@@ -70,7 +70,7 @@ export function reportContext(): Record<
       source:
         "Each side runs the same glucose analysis for its committed date window.",
       controls:
-        "Choose a preset or set both periods and labels, then click Load. Swap exchanges the loaded periods immediately. Display units are in Appearance.",
+        "Choose a preset or set both periods and labels, then select Load. Swap exchanges the loaded periods immediately. Display units are in Appearance.",
       related: ["/reports/day-in-review", "/reports/data-quality"],
     },
     "/reports/hourly-stats": {

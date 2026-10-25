@@ -87,7 +87,7 @@
     },
     {
       title: "Reading age",
-      text: `This measures elapsed time since the newest sensor reading timestamp. It is not the last connector sync or the time since opening the dashboard. The shared display freshness limit is ${STALE_THRESHOLD_MS / 60000} minutes; older readings have a neutral tile and no active arrow.`,
+      text: `This measures elapsed time since the newest sensor reading timestamp. It is not the last connector sync or the time since opening the dashboard. The shared display freshness limit is ${STALE_THRESHOLD_MS / 60000} minutes. Older readings have a neutral tile and no active arrow.`,
     },
   ]);
   let scenario = $state(0);
