@@ -136,6 +136,17 @@ jobs:
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-demo \
             "-p:ContainerImageTags=${{ steps.tags.outputs.version }}"
 
+      - name: Build and push Nocturne.Services.SelfHostSetup container
+        working-directory: src/Services/Nocturne.Services.SelfHostSetup
+        run: |
+          dotnet publish \
+            -c Release \
+            -p:PublishProfile=DefaultContainer \
+            '-p:ContainerRuntimeIdentifiers="linux-x64;linux-arm64"' \
+            -p:ContainerRegistry=${{ env.REGISTRY }} \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-selfhost-setup \
+            "-p:ContainerImageTags=${{ steps.tags.outputs.version }}"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -143,7 +154,7 @@ jobs:
       - name: Add the extra tags to the dotnet containers
         if: steps.tags.outputs.extra_tags != ''
         run: |
-          for image in nocturne-api nocturne-demo; do
+          for image in nocturne-api nocturne-demo nocturne-selfhost-setup; do
             for tag in ${{ steps.tags.outputs.extra_tags }}; do
               docker buildx imagetools create \
                 --tag ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${tag} \
@@ -339,6 +350,7 @@ jobs:
           images=(
             "nocturne-api"
             "nocturne-demo"
+            "nocturne-selfhost-setup"
             "nocturne-web"
           )
 
@@ -362,6 +374,7 @@ jobs:
             echo ""
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.tags.outputs.version }}\`"
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-demo:${{ steps.tags.outputs.version }}\`"
+            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-selfhost-setup:${{ steps.tags.outputs.version }}\`"
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${{ steps.tags.outputs.version }}\`"
             for tag in ${{ steps.tags.outputs.extra_tags }}; do
               echo "- also tagged \`${tag}\`"

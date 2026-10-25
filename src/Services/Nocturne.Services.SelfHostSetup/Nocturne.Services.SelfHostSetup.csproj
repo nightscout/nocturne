@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <OutputType>Exe</OutputType>
+        <Description>First-boot setup page for one-click Nocturne images: claims the instance and chooses its hostname</Description>
+        <Company>Nocturne</Company>
+        <Product>Nocturne Services</Product>
+
+        <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
+        <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
+        <ContainerRepository>selfhost-setup</ContainerRepository>
+        <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled</ContainerBaseImage>
+        <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Nocturne.Services.SelfHostSetup.Tests" />
+    </ItemGroup>
+</Project>

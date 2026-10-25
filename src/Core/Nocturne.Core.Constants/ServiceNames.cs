@@ -214,6 +214,25 @@ public static class ServiceNames
     }
 
     /// <summary>
+    /// The handshake between the one-click images' first-boot setup page and the Compose bundle it
+    /// configures.
+    /// </summary>
+    public static class SelfHost
+    {
+        /// <summary>Compose profile of the setup page, run once by the image's systemd unit.</summary>
+        public const string SetupProfile = "setup";
+
+        /// <summary>Compose profile of the DuckDNS updater, switched on through <c>COMPOSE_PROFILES</c>.</summary>
+        public const string DuckDnsProfile = "duckdns";
+
+        /// <summary>
+        /// Written next to <c>.env</c> once the base domain is settled; the image's systemd unit
+        /// starts the stack only when it exists.
+        /// </summary>
+        public const string CompletionMarker = ".setup-complete";
+    }
+
+    /// <summary>
     /// Configuration keys consumed by services at runtime. Add only when the value is
     /// referenced from at least one place.
     /// </summary>
