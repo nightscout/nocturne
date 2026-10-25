@@ -12,6 +12,17 @@ export function carbAxisMax(carbs: readonly number[]): number {
 }
 
 /**
+ * Top of the insulin axis that the carbs axis is drawn against: the largest daily total rounded up
+ * to a nice tick, and at least 1 U so an empty series still has a scale.
+ */
+export function insulinAxisMax(totals: readonly number[]): number {
+  return scaleLinear()
+    .domain([0, Math.max(...totals, 1)])
+    .nice()
+    .domain()[1];
+}
+
+/**
  * A carbs value expressed on the insulin axis, so a line can be drawn through the chart's own
  * scale: the top of the carbs axis lands on the top of the insulin axis.
  */

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Axis, BarChart, Points, Spline, Tooltip } from "layerchart";
   import { scaleLinear } from "d3-scale";
-  import { carbAxisMax as niceCarbAxisMax, carbsOnInsulinScale } from "./carb-axis";
+  import { carbAxisMax as niceCarbAxisMax, carbsOnInsulinScale, insulinAxisMax as niceInsulinAxisMax } from "./carb-axis";
   import PieChart from "@lucide/svelte/icons/chart-pie";
   import { dashClass, patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
@@ -30,6 +30,14 @@
   // insulin units: the top of the carb axis lands on the top of the insulin axis.
   const hasCarbs = $derived(chartData.some((d) => (d.carbs ?? 0) > 0));
   const carbAxisMax = $derived(niceCarbAxisMax(chartData.map((d) => d.carbs ?? 0)));
+
+  // The insulin axis is fixed here rather than read back from the chart's y scale. The carbs line
+  // and points register with the chart, so their values feed its y domain: rescaling them by that
+  // same domain made each pass move the domain again, until the call stack ran out.
+  const insulinAxisMax = $derived(niceInsulinAxisMax(chartData.map((d) => d.total ?? 0)));
+  const toInsulinScale = $derived((d: DailyBasalBolusRatioData) =>
+    carbsOnInsulinScale(d.carbs ?? 0, carbAxisMax, insulinAxisMax)
+  );
 </script>
 
 <div class="w-full">
@@ -70,6 +78,7 @@
           },
         ]}
         seriesLayout="stack"
+        yDomain={[0, insulinAxisMax]}
         tooltipContext={{ mode: "band" }}
         props={{
           xAxis: {
@@ -83,9 +92,6 @@
       >
         {#snippet aboveMarks({ context })}
           {#if hasCarbs}
-            {@const yMax = Number(context.yScale.domain()[1])}
-            {@const toInsulinScale = (d: DailyBasalBolusRatioData) =>
-              carbsOnInsulinScale(d.carbs ?? 0, carbAxisMax, yMax)}
             <Spline
               data={chartData}
               x="displayDate"

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { carbAxisMax, carbsOnInsulinScale } from "./carb-axis";
+import { carbAxisMax, carbsOnInsulinScale, insulinAxisMax } from "./carb-axis";
 
 describe("carbAxisMax", () => {
   it("rounds the largest value up to a nice tick", () => {
@@ -10,6 +10,16 @@ describe("carbAxisMax", () => {
   it("keeps a scale when every value is zero or there are none", () => {
     expect(carbAxisMax([0, 0])).toBe(1);
     expect(carbAxisMax([])).toBe(1);
+  });
+});
+
+describe("insulinAxisMax", () => {
+  it("rounds the largest daily total up to a nice tick", () => {
+    expect(insulinAxisMax([41.2, 47.9, 38])).toBe(50);
+  });
+
+  it("keeps a scale when there is no insulin", () => {
+    expect(insulinAxisMax([])).toBe(1);
   });
 });
 
