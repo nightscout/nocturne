@@ -150,8 +150,8 @@
             {#if category === "google-health"}
               <p class="text-sm text-muted-foreground">
                 One OAuth client for this instance. Each user connects their own Google account.
-                Copy the callback URL into Google Cloud. Changes apply without a restart; replacing
-                the client ID requires users to reconnect. Imported data is kept.
+                Copy the callback URL into Google Cloud. Changes apply without a restart. If you
+                replace the client ID, users must connect again. Imported data stays.
               </p>
             {/if}
             {#if category === "telegram" && !(platform.configuredFields ?? []).includes("webhookSecretToken")}
@@ -199,8 +199,8 @@
                 <p class="mt-2">
                   Testing limits access to test users and expires refresh tokens after seven days.
                   Publishing to Production removes that testing expiry. An unverified app still
-                  shows a warning and has a 100-user limit. Verification is a separate review;
-                  serving more than 100 users requires a third-party security assessment. Tokens
+                  shows a warning and has a 100-user limit. Verification is a separate review.
+                  For more than 100 users, Google requires a third-party security assessment. Tokens
                   can still expire or be revoked. Each user controls consent in their Google
                   account.
                 </p>
