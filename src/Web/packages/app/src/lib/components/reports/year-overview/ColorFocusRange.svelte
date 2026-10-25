@@ -551,7 +551,7 @@
               size="xs"
               aria-pressed={invert}
               disabled={!usesCustomPalette}
-              title={usesCustomPalette ? undefined : "Theme colors are fixed; pick a palette to invert"}
+              title={usesCustomPalette ? undefined : "Theme colors are fixed. Pick a palette to invert"}
               onclick={() => onInvertChange?.(!invert)}
             >Invert</Button>
             <Button variant="outline" size="xs" aria-label={resetLabel} onclick={reset}>Reset</Button>

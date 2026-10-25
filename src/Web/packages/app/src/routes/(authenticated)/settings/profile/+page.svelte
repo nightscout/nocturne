@@ -12,26 +12,32 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import User from "@lucide/svelte/icons/user";
-  import Activity from "@lucide/svelte/icons/activity";
-  import Droplet from "@lucide/svelte/icons/droplet";
-  import TrendingUp from "@lucide/svelte/icons/trending-up";
   import Clock from "@lucide/svelte/icons/clock";
   import Settings from "@lucide/svelte/icons/settings";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Lock from "@lucide/svelte/icons/lock";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import * as Alert from "$lib/components/ui/alert";
-  import { bgLabel } from "$lib/utils/formatting";
-  import { getProfileSummary, setDefaultProfile } from "$api/generated/profiles.generated.remote";
+  import { goto } from "$app/navigation";
+  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
+  import {
+    getProfileSummary,
+    setDefaultProfile,
+    deleteProfileByName,
+  } from "$api/generated/profiles.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
-  import ScheduleView from "$lib/components/schedule/ScheduleView.svelte";
+  import { relativeAge } from "$lib/utils/formatting";
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import ProfileSchedules from "$lib/components/schedule/ProfileSchedules.svelte";
   import ProfileSwitchDialog from "$lib/components/profile/ProfileSwitchDialog.svelte";
   import ActiveProfileActivation from "$lib/components/profile/ActiveProfileActivation.svelte";
-  import TargetRangeCard from "$lib/components/schedule/TargetRangeCard.svelte";
 
   type Summary = Awaited<ReturnType<typeof getProfileSummary>>;
 
+  let confirmingDelete = $state(false);
+  let deleting = $state(false);
+  let deleteError = $state<string | null>(null);
   let defaultingProfile = $state<string | null>(null);
   let switchDialogOpen = $state(false);
   let switchProfileName = $state("");
@@ -43,6 +49,37 @@
     } finally {
       defaultingProfile = null;
     }
+  }
+
+  async function handleDelete(profileName: string) {
+    deleting = true;
+    deleteError = null;
+    try {
+      await deleteProfileByName(profileName);
+      confirmingDelete = false;
+      // The deleted name is still in the query string, which would render as a
+      // profile whose settings have vanished.
+      await goto(resolve("/settings/profile"), { replaceState: true, noScroll: true });
+    } catch (err) {
+      deleteError = describeSubmitError(err, "We could not delete this profile.");
+    } finally {
+      deleting = false;
+    }
+  }
+
+  /**
+   * Why this profile cannot be deleted, or null when it can. Mirrors the guard the
+   * API enforces, so the control can say what is wrong instead of failing on submit.
+   */
+  function deleteBlockedReason(
+    profileNames: string[],
+    isDefault: boolean
+  ): string | null {
+    if (profileNames.length <= 1)
+      return "This is your only profile. Deleting it would leave your therapy settings with nothing to fall back on.";
+    if (isDefault)
+      return "This is your default profile. Make another profile the default first, then delete this one.";
+    return null;
   }
 
   function openSwitch(profileName: string) {
@@ -105,24 +142,6 @@
     );
   }
 
-  function formatRelativeTime(dateString: Date | string | undefined): string {
-    if (!dateString) return "";
-    try {
-      const date = new Date(dateString);
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-      if (diffDays === 0) return "Today";
-      if (diffDays === 1) return "Yesterday";
-      if (diffDays < 7) return `${diffDays} days ago`;
-      if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-      if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-      return `${Math.floor(diffDays / 365)} years ago`;
-    } catch {
-      return "";
-    }
-  }
 </script>
 
 <svelte:head>
@@ -164,8 +183,7 @@
   {@const carbRatio = selectedProfileName ? getCarbRatioForProfile(data, selectedProfileName) : null}
   {@const sensitivity = selectedProfileName ? getSensitivityForProfile(data, selectedProfileName) : null}
   {@const targetRange = selectedProfileName ? getTargetRangeForProfile(data, selectedProfileName) : null}
-  {@const profileConfigured = (data?.basalSchedules ?? []).length > 0}
-  <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6" {@attach coachmark({ ...coachFor("onboarding.therapy-profile"), completedWhen: () => profileConfigured })}>
+  <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
     <!-- Header -->
     <div class="flex flex-wrap items-start justify-between gap-2">
       <div class="flex items-center gap-3">
@@ -198,7 +216,7 @@
               <User class="h-8 w-8 text-muted-foreground" />
             </div>
             <div>
-              <h3 class="text-lg font-semibold">No Profile Found</h3>
+              <h3 class="text-lg font-semibold">No profile found</h3>
               <p class="text-sm text-muted-foreground max-w-md mx-auto mt-1">
                 Profiles are typically uploaded from your diabetes management
                 app (like AAPS, Loop, or xDrip+). They contain your basal rates,
@@ -208,7 +226,7 @@
             <div class="flex items-center justify-center gap-2">
               <Button variant="outline" href="/settings/connectors">
                 <Settings class="h-4 w-4 mr-2" />
-                Configure Data Sources
+                Configure data sources
               </Button>
             </div>
           </div>
@@ -298,7 +316,7 @@
                     </div>
                     {#if profileTherapy?.createdAt}
                       <p class="text-xs text-muted-foreground truncate">
-                        {formatRelativeTime(profileTherapy.createdAt)}
+                        {relativeAge(profileTherapy.createdAt)}
                       </p>
                     {/if}
                   </div>
@@ -316,6 +334,8 @@
 
       <!-- Selected Profile Details -->
       {#if selectedProfileName && therapy}
+        {@const blockedReason = deleteBlockedReason(profileNames, therapy.isDefault === true)}
+        {@const relayedBy = therapy.dataSource ?? therapy.enteredBy}
         {#if therapy.isExternallyManaged}
           <Alert.Root>
             <Lock class="h-4 w-4" />
@@ -347,16 +367,40 @@
                 </CardTitle>
                 {#if therapy.createdAt}
                   <CardDescription>
-                    Created {formatRelativeTime(therapy.createdAt)}
+                    Created {relativeAge(therapy.createdAt)}
                     {#if therapy.enteredBy}
                       &middot; Entered by {therapy.enteredBy}
+                    {/if}
+                    {#if therapy.dataSource}
+                      &middot; Synced from {therapy.dataSource}
                     {/if}
                   </CardDescription>
                 {/if}
               </div>
-              <Button variant="outline" size="sm" onclick={() => openSwitch(selectedProfileName)}>
-                Switch…
-              </Button>
+              <div class="flex flex-col items-end gap-1 shrink-0">
+                <div class="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onclick={() => openSwitch(selectedProfileName)}>
+                    Switch…
+                  </Button>
+                  <Button
+                    variant="ghost-destructive"
+                    size="sm"
+                    disabled={blockedReason !== null || deleting}
+                    onclick={() => {
+                      deleteError = null;
+                      confirmingDelete = true;
+                    }}
+                  >
+                    <Trash2 class="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                </div>
+                {#if blockedReason}
+                  <p class="text-xs text-muted-foreground max-w-56 text-right">
+                    {blockedReason}
+                  </p>
+                {/if}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -389,52 +433,66 @@
           </CardContent>
         </Card>
 
-        <!-- Schedule Cards Grid -->
-        <div class="grid gap-4 @3xl:grid-cols-2">
-          {#if basal?.entries && basal.entries.length > 0}
-            <ScheduleView
-              title="Basal Rates"
-              description="Background insulin delivery rates"
-              unit="U/hr"
-              icon={Activity}
-              entries={basal.entries}
-            />
+        <ProfileSchedules
+          profileName={selectedProfileName}
+          {basal}
+          {carbRatio}
+          {sensitivity}
+          {targetRange}
+          readOnly={!!therapy.isExternallyManaged}
+        />
+
+        <ConfirmDialog
+          open={confirmingDelete}
+          onOpenChange={(open) => (confirmingDelete = open)}
+          title="Delete the profile &ldquo;{selectedProfileName}&rdquo;?"
+          confirmLabel="Delete profile"
+          destructive
+          busy={deleting}
+          onConfirm={() => handleDelete(selectedProfileName)}
+        >
+          {#snippet description()}
+            This removes its basal rates, carb ratios, insulin sensitivity and target
+            ranges, along with their history. Your other profiles are untouched, and
+            nothing about your glucose readings or treatments changes.
+          {/snippet}
+
+          {#if therapy.isExternallyManaged}
+            <Alert.Root>
+              <RefreshCw class="h-4 w-4" />
+              <Alert.Title>
+                {relayedBy ?? "The source device"} will send this profile again
+              </Alert.Title>
+              <Alert.Description>
+                <div class="space-y-2">
+                  <p>
+                    This profile is synced from {relayedBy ?? "an external source"}. Deleting
+                    it here does not stop it being sent, so it can reappear the next time that
+                    source syncs.
+                  </p>
+                  <p>
+                    To keep it from coming back, turn off profile syncing for that source, or
+                    remove the profile where it lives.
+                  </p>
+                  <Button variant="outline" size="sm" href="/settings/connectors">
+                    <Settings class="h-4 w-4 mr-2" />
+                    Manage data sources
+                  </Button>
+                </div>
+              </Alert.Description>
+            </Alert.Root>
           {/if}
 
-          {#if carbRatio?.entries && carbRatio.entries.length > 0}
-            <ScheduleView
-              title="Carb Ratios (I:C)"
-              description="Grams of carbs per unit of insulin"
-              unit="g/U"
-              icon={Droplet}
-              iconClass="text-success"
-              entries={carbRatio.entries}
-            />
+          {#if deleteError}
+            <p class="text-sm text-destructive">{deleteError}</p>
           {/if}
-
-          {#if sensitivity?.entries && sensitivity.entries.length > 0}
-            <ScheduleView
-              title="Insulin Sensitivity (ISF)"
-              description="BG drop per unit of insulin"
-              unit="{bgLabel()}/U"
-              icon={TrendingUp}
-              entries={sensitivity.entries}
-              sourceUnits="mg/dl"
-            />
-          {/if}
-
-          <TargetRangeCard
-            profileName={selectedProfileName}
-            schedule={targetRange}
-            readOnly={!!therapy.isExternallyManaged}
-          />
-        </div>
+        </ConfirmDialog>
 
         <!-- Additional Therapy Metadata -->
         <Card variant="muted">
           <CardHeader class="pb-3">
             <CardTitle class="text-sm font-medium">
-              Profile Settings
+              Profile settings
             </CardTitle>
           </CardHeader>
           <CardContent>

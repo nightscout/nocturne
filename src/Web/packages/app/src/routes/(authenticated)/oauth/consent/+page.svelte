@@ -97,7 +97,7 @@
         >
           <AlertTriangle class="h-6 w-6 text-destructive" />
         </div>
-        <Card.Title class="text-2xl font-bold">Invalid Request</Card.Title>
+        <Card.Title class="text-2xl font-bold">Invalid request</Card.Title>
         <Card.Description>
           Missing required OAuth parameters.
         </Card.Description>
@@ -120,7 +120,7 @@
           </div>
         {/if}
         <Card.Title class="text-2xl font-bold">
-          {isScopeUpgrade ? "Additional Permissions" : "Authorize Application"}
+          {isScopeUpgrade ? "Additional permissions" : "Authorize application"}
         </Card.Title>
         <Card.Description>
           {#if isScopeUpgrade}

@@ -1,5 +1,3 @@
-import { getLocalTimeZone, now, fromDate } from "@internationalized/date";
-
 import ArrowUp from "@lucide/svelte/icons/arrow-up";
 import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
 import ArrowRight from "@lucide/svelte/icons/arrow-right";
@@ -8,7 +6,6 @@ import ArrowDownRight from "@lucide/svelte/icons/arrow-down-right";
 import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
 import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
 import { canonicalDirection } from "@nocturne/ui/glucose";
-import { formatLocale } from "$lib/utils/formatting";
 import {
   Direction,
 } from "$api-clients";
@@ -92,90 +89,6 @@ const directionInfo: Partial<Record<string, DirectionInfo>> = {
  */
 export function getDirectionInfo(direction?: Direction | string): DirectionInfo {
   return directionInfo[canonicalDirection(direction)] ?? unknownDirectionInfo;
-}
-
-/** Enhanced relative time formatting with internationalization support */
-const getRelativeTimeFormatter = (() => {
-  let formatter: Intl.RelativeTimeFormat | null = null;
-  let cachedFor: string | null = null;
-  return (locale?: string) => {
-    const wanted = locale || formatLocale();
-    // Keyed on the requested tag, not on `resolvedOptions().locale`: ICU answers
-    // "nb-NO" with "nb", so comparing against the resolved tag never matches and
-    // rebuilds the formatter on every call.
-    if (!formatter || wanted !== cachedFor) {
-      cachedFor = wanted;
-      formatter = new Intl.RelativeTimeFormat(wanted, {
-        numeric: "auto",
-        style: "long",
-      });
-    }
-    return formatter;
-  };
-})();
-
-/**
- * Generate human-readable time ago string with enhanced internationalization
- *
- * @param nowMs Reference time. Pass a ticking value (see `Now`) where the
- *   result is rendered, or the text freezes at the age it had on first render.
- */
-export function timeAgo(
-  timestamp: number | string,
-  locale?: string,
-  nowMs?: number
-): string {
-  // Validate input timestamp
-  const timestampNum =
-    typeof timestamp === "string" ? parseInt(timestamp) : timestamp;
-  if (!isFinite(timestampNum) || isNaN(timestampNum) || timestampNum <= 0) {
-    return "Unknown";
-  }
-
-  // Convert to DateValue using @internationalized/date for better timezone handling
-  const inputDate = fromDate(new Date(timestampNum), getLocalTimeZone());
-  const currentDate =
-    nowMs === undefined
-      ? now(getLocalTimeZone())
-      : fromDate(new Date(nowMs), getLocalTimeZone());
-
-  // Calculate difference in milliseconds
-  const diffMs = currentDate.toDate().getTime() - inputDate.toDate().getTime();
-  const absDiffMs = Math.abs(diffMs);
-
-  // Get the relative time formatter for the specified locale
-  const rtf = getRelativeTimeFormatter(locale);
-
-  // Convert to appropriate time units and format
-  if (absDiffMs < 60 * 1000) {
-    // Less than 1 minute
-    const seconds = Math.floor(diffMs / 1000);
-    return rtf.format(-seconds, "second");
-  } else if (absDiffMs < 60 * 60 * 1000) {
-    // Less than 1 hour
-    const minutes = Math.floor(diffMs / (60 * 1000));
-    return rtf.format(-minutes, "minute");
-  } else if (absDiffMs < 24 * 60 * 60 * 1000) {
-    // Less than 1 day
-    const hours = Math.floor(diffMs / (60 * 60 * 1000));
-    return rtf.format(-hours, "hour");
-  } else if (absDiffMs < 7 * 24 * 60 * 60 * 1000) {
-    // Less than 1 week
-    const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-    return rtf.format(-days, "day");
-  } else if (absDiffMs < 30 * 24 * 60 * 60 * 1000) {
-    // Less than 1 month (approximately)
-    const weeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
-    return rtf.format(-weeks, "week");
-  } else if (absDiffMs < 365 * 24 * 60 * 60 * 1000) {
-    // Less than 1 year
-    const months = Math.floor(diffMs / (30 * 24 * 60 * 60 * 1000));
-    return rtf.format(-months, "month");
-  } else {
-    // 1 year or more
-    const years = Math.floor(diffMs / (365 * 24 * 60 * 60 * 1000));
-    return rtf.format(-years, "year");
-  }
 }
 
 // Re-export UI utilities from shared package

@@ -35,13 +35,13 @@
   <Card>
     <CardHeader class="flex flex-row items-center justify-between">
       <div>
-        <CardTitle>Quick Presets</CardTitle>
-        <CardDescription>One-click tracker activation</CardDescription>
+        <CardTitle>Quick presets</CardTitle>
+        <CardDescription>One-step tracker activation</CardDescription>
       </div>
       {#if definitions.length > 0}
         <Button onclick={openNewPreset}>
           <Plus class="h-4 w-4 mr-2" />
-          New Preset
+          New preset
         </Button>
       {/if}
     </CardHeader>
@@ -51,7 +51,7 @@
           <Bookmark class="h-12 w-12 mx-auto mb-3 opacity-50" />
           <p>No presets yet</p>
           <p class="text-sm">
-            Create presets for one-click tracker activation
+            Create presets for one-step tracker activation
           </p>
           {#if definitions.length > 0}
             <Button
@@ -60,7 +60,7 @@
               onclick={openNewPreset}
             >
               <Plus class="h-4 w-4 mr-2" />
-              Create Preset
+              Create preset
             </Button>
           {/if}
         </div>

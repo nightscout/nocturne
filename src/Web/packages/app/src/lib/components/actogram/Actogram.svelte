@@ -1,8 +1,8 @@
 <script lang="ts" generics="T extends ActogramPoint">
   import { Key } from "@nocturne/ui/keys";
-  import { formatShortDate } from "$lib/utils/formatting";
   import type { Snippet } from 'svelte';
   import type {
+    ActogramDay,
     ActogramPoint,
     ActogramRowContext,
     GlucosePoint,
@@ -12,6 +12,7 @@
     sliceIntoRows,
     sliceBgIntoRows,
     resolveTargetRange,
+    formatActogramDay,
     HOURS_PER_ROW,
   } from './actogram';
   import ActogramRow from './ActogramRow.svelte';
@@ -29,17 +30,17 @@
   interface Props {
     data: T[];
     bgData?: GlucosePoint[];
-    days: Date[];
+    days: ActogramDay[];
     thresholds?: ChartThresholds;
     rowHeight?: number;
     visibleCount?: number;
     /** Leading rows a print carries: the report's range, without scroll-back padding. */
     printCount?: number;
     initialOffset?: number;
-    onVisibleRangeChange?: (from: Date, to: Date) => void;
+    onVisibleRangeChange?: (from: ActogramDay, to: ActogramDay) => void;
     row: Snippet<[ActogramRowContext<T>]>;
-    tooltipValue?: Snippet<[{ point: T; day: Date }]>;
-    rowLabel?: Snippet<[{ day: Date }]>;
+    tooltipValue?: Snippet<[{ point: T; day: ActogramDay }]>;
+    rowLabel?: Snippet<[{ day: ActogramDay }]>;
     /** Key for the marks the `row` snippet draws; glucose overlay entries are added. */
     legend?: ChartKeyItem[];
   }
@@ -112,10 +113,6 @@
       navigate(delta);
     }
   }
-
-  function formatDate(date: Date): string {
-    return formatShortDate(date);
-  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -136,7 +133,7 @@
           class="print:hidden"
           disabled={offset === 0}
           onclick={() => navigate(-7)}
-          aria-label="Previous week"
+          aria-label="Newer week"
         >
           <ChevronUp class="size-4" />
         </Button>
@@ -156,8 +153,10 @@
   </div>
 
   <!-- Rows -->
-  {#each visibleDataRows as dataRow, i (`${dataRow.day.getTime()}-${i}`)}
+  {#each visibleDataRows as dataRow, i (`${dataRow.day.date}-${i}`)}
     <div
+      data-testid="actogram-row"
+      data-day={dataRow.day.date}
       class="flex h-(--row-h) items-center break-inside-avoid"
       style:--row-h="{rowHeight}px"
       animate:flip={{ duration: 300, easing: cubicOut }}
@@ -170,7 +169,7 @@
           {@render rowLabel({ day: dataRow.day })}
         {:else}
           <span class="block text-xs text-muted-foreground text-right pr-2">
-            {formatDate(dataRow.day)}
+            {formatActogramDay(dataRow.day)}
           </span>
         {/if}
       </div>
@@ -212,7 +211,7 @@
           size="icon-2xs"
           disabled={offset >= maxOffset}
           onclick={() => navigate(7)}
-          aria-label="Next week"
+          aria-label="Older week"
         >
           <ChevronDown class="size-4" />
         </Button>

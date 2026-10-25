@@ -77,6 +77,7 @@ internal static class ChartDataReadScopeGuard
             data.BasalDeliverySpans = [];
             data.DefaultBasalRate = 0;
             data.MaxBasalRate = 0;
+            data.MinIob = 0;
             data.MaxIob = 0;
             data.MaxCob = 0;
         }
@@ -236,8 +237,8 @@ internal static class CorrelationReadScopeGuard
 /// the IOB/COB state, the tracker statuses and the firing alarm into one small payload.
 /// </summary>
 /// <remarks>
-/// Trackers carry no <see cref="ShareDataCategories"/> category and are gated by the fallback
-/// policy wherever else they are served, so they are not redacted here.
+/// Trackers carry no <see cref="ShareDataCategories"/> category; the controller drops them by
+/// <see cref="TrackerReadAccess"/> instead.
 /// </remarks>
 /// <seealso cref="AnalyticsReadScopes"/>
 internal static class WidgetSummaryReadScopeGuard
@@ -313,12 +314,15 @@ internal static class CurrentTherapyStateReadScopeGuard
 }
 
 /// <summary>
-/// Per-category read scopes for the statistics admitted on <c>glucose.read</c> alone that also
-/// summarise insulin and carbs, and count sensor sessions from device events. Category row level
-/// security hides those categories only from shares, so for a member, guest, OAuth client or token
-/// the narrowing has to happen here.
+/// Per-category read scopes for <c>GET /periods</c> and <c>GET /punch-card</c>, admitted on
+/// <c>glucose.read</c> or <c>reports.read</c>, which also summarise insulin and carbs and count
+/// sensor sessions from device events. Category row level security hides those categories only
+/// from shares, so for a member, guest, OAuth client or token the narrowing has to happen here.
 /// </summary>
 /// <remarks>
+/// Insulin and carb aggregates need <c>reports.read</c> or <c>treatments.read</c>; a list of
+/// individual treatment records needs <c>treatments.read</c>, as <c>insulin-delivery-stats</c> does
+/// for <c>ManualBoluses</c>. A share without the treatments category has no rows to aggregate.
 /// <c>GET /periods</c> is served from <see cref="Nocturne.API.Services.Caching.ITenantCache"/>,
 /// whose value holds every category; <see cref="Redact"/> narrows a copy and never the cached
 /// instance. The treatment and device narrowings are independent.
@@ -326,8 +330,15 @@ internal static class CurrentTherapyStateReadScopeGuard
 /// <seealso cref="AnalyticsReadScopes"/>
 internal static class StatisticsReadScopeGuard
 {
-    public static bool AllowsTreatments(IReadOnlySet<string> grantedScopes) =>
-        AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead);
+    public static readonly IReadOnlyList<string> AdmissionScopes =
+    [
+        Scope.GlucoseRead,
+        Scope.ReportsRead,
+    ];
+
+    public static bool AllowsTreatmentAggregates(IReadOnlySet<string> grantedScopes) =>
+        AnalyticsReadScopes.Allows(grantedScopes, Scope.ReportsRead)
+        || AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead);
 
     public static bool AllowsDevices(IReadOnlySet<string> grantedScopes) =>
         AnalyticsReadScopes.Allows(grantedScopes, Scope.DevicesRead);
@@ -336,7 +347,7 @@ internal static class StatisticsReadScopeGuard
         MultiPeriodStatistics data,
         IReadOnlySet<string> grantedScopes)
     {
-        var treatments = AllowsTreatments(grantedScopes);
+        var treatments = AllowsTreatmentAggregates(grantedScopes);
         var devices = AllowsDevices(grantedScopes);
 
         if (treatments && devices)
@@ -390,6 +401,7 @@ internal static class StatisticsReadScopeGuard
                 Reliability = analytics.Reliability,
                 Time = analytics.Time,
                 ClinicalAssessment = analytics.ClinicalAssessment,
+                TimeZoneUnavailableReason = analytics.TimeZoneUnavailableReason,
             };
 }
 

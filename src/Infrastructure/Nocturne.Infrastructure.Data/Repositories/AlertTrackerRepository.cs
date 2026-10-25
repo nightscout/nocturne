@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -21,15 +22,20 @@ public class AlertTrackerRepository : IAlertTrackerRepository
     public AlertTrackerRepository(INocturneDbContextFactory contexts)
     {
         _contexts = contexts;
+        Timers = new ConditionTimerRepository(contexts);
     }
 
     /// <summary>A repository whose calls run on <paramref name="unit"/>, which the caller owns.</summary>
     public AlertTrackerRepository(DbUnitOfWork unit)
     {
         _unit = unit;
+        Timers = new ConditionTimerRepository(unit);
     }
 
     private ValueTask<DbContextLease> OpenAsync(CancellationToken ct) => DbContextLease.OpenAsync(_unit, _contexts, ct);
+
+    /// <inheritdoc/>
+    public IConditionTimerStore Timers { get; }
 
     /// <summary>
     /// Get the tracker state for a specific alert rule.
@@ -223,8 +229,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
     /// Runs as a <see cref="DbUnitOfWork"/>: this repository's own when it was constructed over one,
     /// else a new unit, and hands the work a repository over it. Opening the connection sets the
     /// tenant GUCs (TenantConnectionInterceptor), so every statement in the transaction runs under the
-    /// context's tenant. Tracker state and excursions are detached before each attempt even when
-    /// tracked before the call, so the work reads them fresh under the rule's lock.
+    /// context's tenant. Tracker state, excursions and timers are detached before each attempt even
+    /// when tracked before the call, so the work reads them fresh under the rule's lock.
     /// </remarks>
     public virtual async Task<T> ExecuteInTransactionAsync<T>(
         Func<IAlertTrackerRepository, CancellationToken, Task<T>> work,
@@ -247,7 +253,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         unit.CommitAsync(
             token => work(bound, token),
             verifySucceeded is null ? null : (result, token) => verifySucceeded(bound, result, token),
-            entity => entity is AlertTrackerStateEntity or AlertExcursionEntity,
+            entity => entity is AlertTrackerStateEntity or AlertExcursionEntity or AlertConditionTimerEntity,
             ct);
 
     private static AlertTrackerState MapTrackerState(AlertTrackerStateEntity entity) => new()

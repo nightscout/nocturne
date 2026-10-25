@@ -46,7 +46,7 @@
 <div class="space-y-2">
   <Label>
     <Smartphone class="h-3.5 w-3.5 text-entry-device-event" />
-    Event Type
+    Event type
   </Label>
   <Popover.Root bind:open={popoverOpen}>
     <Popover.Trigger>

@@ -63,7 +63,7 @@ internal sealed partial class LoopAnalysisService
             ? deviceEventRepository.GetAsync(
                 ToUtc(range.From - EventAnchors.SensorSessionMergeMs), ToUtc(range.To), null, null, int.MaxValue, descending: false, ct: ct)
             : Task.FromResult(Enumerable.Empty<Core.Models.V4.DeviceEvent>());
-        var loaded = await LoadDailyProfileAsync(padded, zone, filter, BasalIobModel.Displayed, ct);
+        var loaded = await LoadDailyProfileAsync(padded, zone, filter, ct);
 
         return new EventsLoaded(new EventResponseInputs
         {
@@ -71,7 +71,7 @@ internal sealed partial class LoopAnalysisService
             Sources = loaded.Sources,
             SensorStarts = [.. (await sensorTask).Where(e => SensorStartTypes.Contains(e.EventType)).Select(e => e.Mills)],
             HistoryVisibleFrom = loaded.Inputs.HistoryVisibleFrom,
-            Now = ToMills(filter.Now),
+            Now = filter.Now.ToMills(),
         });
     }
 }

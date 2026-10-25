@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Twiist.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Twiist.Mappers;
@@ -43,7 +44,7 @@ public class TwiistMealMapper(ILogger logger)
             {
                 Id = Guid.CreateVersion7(),
                 Timestamp = timestamp.Value,
-                LegacyId = $"twiist_meal_{new DateTimeOffset(timestamp.Value, TimeSpan.Zero).ToUnixTimeMilliseconds()}",
+                LegacyId = $"twiist_meal_{timestamp.Value.ToMills()}",
                 Device = DataSources.TwiistConnector,
                 DataSource = DataSources.TwiistConnector,
                 Carbs = (double)meal.Grams.Value,

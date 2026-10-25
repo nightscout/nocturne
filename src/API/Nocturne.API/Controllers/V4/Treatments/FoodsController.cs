@@ -100,6 +100,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// every row. <c>find</c> is free text matched against name, category, and subcategory.
     /// </remarks>
     [HttpGet]
+    [RequireScope(Scope.FoodRead)]
     [RemoteQuery]
     [Authorize]
     [ProducesResponseType(typeof(Food[]), StatusCodes.Status200OK)]
@@ -121,6 +122,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// Get a single food by ID.
     /// </summary>
     [HttpGet("{foodId}")]
+    [RequireScope(Scope.FoodRead)]
     [RemoteQuery]
     [Authorize]
     [ProducesResponseType(typeof(Food), StatusCodes.Status200OK)]
@@ -269,6 +271,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// Get recently used foods (excluding favorites).
     /// </summary>
     [HttpGet("recent")]
+    [RequireScope(Scope.FoodRead)]
     [RemoteQuery]
     [Authorize]
     [ProducesResponseType(typeof(Food[]), StatusCodes.Status200OK)]
@@ -292,6 +295,7 @@ public class FoodsController : ControllerBase, IWriteScopedController
     /// Get how many meal attributions reference a specific food.
     /// </summary>
     [HttpGet("{foodId}/attribution-count")]
+    [RequireScope(Scope.FoodRead)]
     [RemoteQuery]
     [Authorize]
     [ProducesResponseType(typeof(FoodAttributionCount), StatusCodes.Status200OK)]

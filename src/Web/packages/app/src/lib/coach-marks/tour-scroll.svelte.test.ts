@@ -23,11 +23,7 @@ async function readNear(): Promise<void> {
 }
 
 describe("coach mark scrolling", () => {
-  // SvelteKit restores scroll itself. Left on, the browser's restore runs on the popstate that
-  // closes the previous test's overlay, and moves this test's page.
-  beforeEach(async () => {
-    history.scrollRestoration = "manual";
-    await vi.waitFor(() => expect(history.state?.__coachMark).not.toBe(true), { timeout: 5_000 });
+  beforeEach(() => {
     window.scrollTo(0, 0);
   });
 

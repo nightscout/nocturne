@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Nocturne.Core.Models.Serializers;
 using Nocturne.Core.Models.Attributes;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models;
 
@@ -285,9 +286,9 @@ public class TimeValue
     {
         if (TimeAsSeconds.HasValue) return;
 
-        if (TimeSpan.TryParse(Time, out var timeSpan))
+        if (ScheduleEntryTime.TryParseSeconds(Time, out var seconds))
         {
-            TimeAsSeconds = (int)timeSpan.TotalSeconds;
+            TimeAsSeconds = seconds;
         }
     }
 }

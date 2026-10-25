@@ -98,7 +98,7 @@
           {/if}
         </svg>
         <figcaption class="text-xs text-muted-foreground">
-          Reading diagram — illustrative, not your measurements. Colours follow
+          Reading diagram: illustrative, not your measurements. Colors follow
           your Nocturne theme.
         </figcaption>
       </figure>

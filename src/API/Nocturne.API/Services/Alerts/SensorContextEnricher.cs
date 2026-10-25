@@ -1,10 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Configuration;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.V4;
@@ -41,9 +42,8 @@ namespace Nocturne.API.Services.Alerts;
 /// </remarks>
 internal sealed class SensorContextEnricher : ISensorContextEnricher
 {
-    /// <summary>How far back to fetch treatments for IOB/COB. Bolus/temp-basal effects
-    /// decay well within this window for any practical insulin, and the legacy COB algorithm
-    /// only ever decays carbs over a similar horizon.</summary>
+    /// <summary>How far back <see cref="FetchRecentTreatmentsAsync"/> reads. IOB and COB come
+    /// from <see cref="IIobCobReader"/>.</summary>
     private const int TreatmentLookbackHours = 24;
 
     /// <summary>Predictions are produced at fixed intervals from "now"; this is the cadence
@@ -104,16 +104,18 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         var needs = RuleDataNeeds.Walk(rules, _logger);
         var enriched = baseContext;
 
-        if (needs.NeedsIob)
+        // Read uncached and calculated here, not through IIobCobReader.ReadTotalAsync: its live
+        // reading can be a minute old, older than the treatment that triggered this evaluation.
+        if (needs.NeedsIob || needs.NeedsCob)
         {
-            var iobUnits = await ComputeIobAsync(now, ct);
-            enriched = enriched with { IobUnits = iobUnits };
-        }
-
-        if (needs.NeedsCob)
-        {
-            var cobGrams = await ComputeCobAsync(now, ct);
-            enriched = enriched with { CobGrams = cobGrams };
+            var inputs = await ReadIobCobInputsAsync(now, ct);
+            if (inputs is not null)
+            {
+                if (needs.NeedsIob)
+                    enriched = enriched with { IobUnits = await ComputeIobAsync(now, inputs, live: !isReplay, ct) };
+                if (needs.NeedsCob)
+                    enriched = enriched with { CobGrams = await ComputeCobAsync(now, inputs, live: !isReplay, ct) };
+            }
         }
 
         if (needs.NeedsPredicted)
@@ -366,7 +368,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     private async Task<GlucoseBucket?> ResolveGlucoseBucketAsync(
         decimal glucoseMgdl, DateTime at, string? tenantTimeZoneId, CancellationToken ct)
     {
-        var atMills = new DateTimeOffset(DateTime.SpecifyKind(at, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        var atMills = at.ToMills();
         var profileName = await _deps.ActiveProfileResolver.GetProfileNameAsync(atMills, ct);
         // Before the store's first version, its newest, as ProfileVersionCache.ActiveAt reads it.
         var schedule = await _deps.TargetRangeSchedules.GetActiveAtAsync(profileName, at, ct)
@@ -384,27 +386,13 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
                 null);
         }
 
-        // Pick the entry active at the tenant's local time-of-day. `at` is always UTC; the
-        // schedule's time-of-day entries are local wall-clock so we must convert. An
-        // unparseable tenant tz swallows to UTC (matches DayOfWeekEvaluator's stance) so a
+        // An unparseable tenant tz swallows to UTC (as the engine's day_of_week does) so a
         // misconfigured tenant tz field still produces a deterministic bucket rather than no
         // bucket at all.
-        var atUtc = DateTime.SpecifyKind(at, DateTimeKind.Utc);
-        var atLocal = atUtc;
-        if (!string.IsNullOrEmpty(tenantTimeZoneId))
-            atLocal = TimeZoneInfo.ConvertTimeFromUtc(atUtc, TimeZoneHelper.GetTimeZoneInfoFromId(tenantTimeZoneId));
-
-        var sortedEntries = schedule.Entries.OrderBy(e => e.TimeAsSeconds ?? 0).ToList();
-        var localTime = TimeOnly.FromDateTime(atLocal);
-        var secondsFromMidnight = (localTime.Hour * 3600) + (localTime.Minute * 60) + localTime.Second;
-        var active = sortedEntries[0];
-        foreach (var entry in sortedEntries)
-        {
-            if (secondsFromMidnight >= (entry.TimeAsSeconds ?? 0))
-                active = entry;
-            else
-                break;
-        }
+        var zone = string.IsNullOrEmpty(tenantTimeZoneId) ? null : TimeZoneHelper.GetTimeZoneInfoFromId(tenantTimeZoneId);
+        var secondsFromMidnight = ScheduleEntryTime.SecondsOfDay(at.ToMills(), zone);
+        ScheduleEntryTime.TryEntryAt(
+            schedule.Entries, secondsFromMidnight, e => ScheduleEntryTime.SecondsOf(e.TimeAsSeconds, e.Time), out var active);
 
         return GlucoseBucketResolver.Compute(
             glucoseMgdl,
@@ -543,38 +531,37 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// </summary>
     private async Task<List<Treatment>> FetchRecentTreatmentsAsync(DateTime now, CancellationToken ct)
     {
-        var nowMills = new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        var nowMills = now.ToMills();
         var cutoffMills = nowMills - (TreatmentLookbackHours * 60L * 60L * 1000L);
 
         var treatments = await _deps.Treatments.GetTreatmentsByRangeAsync(cutoffMills, nowMills, ct);
         return treatments.ToList();
     }
 
-    private async Task<decimal?> ComputeIobAsync(DateTime now, CancellationToken ct)
+    private async Task<IobCobInputs?> ReadIobCobInputsAsync(DateTime now, CancellationToken ct)
     {
         try
         {
-            // Anchor the IOB calculation at `now` (the live clock for orchestrator runs, the
-            // replay tick for replay). Without this, the calculator falls back to wall-clock
-            // UtcNow which silently makes every replay tick read IOB ≈ 0: the V4 record slice
-            // is [tick-DIA, tick] but the decay anchor sits at today, so every bolus is past
-            // DIA by the time it's measured. Same hazard for COB just below.
-            var nowMills = new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc))
-                .ToUnixTimeMilliseconds();
-            var fetchFrom = DateTime.SpecifyKind(now, DateTimeKind.Utc).AddHours(-TreatmentLookbackHours);
-            var fetchTo = DateTime.SpecifyKind(now, DateTimeKind.Utc);
-            var boluses = (await _deps.Boluses.GetAsync(
-                from: fetchFrom, to: fetchTo, device: null, source: null,
-                limit: 2000, offset: 0, descending: false, ct: ct
-            )).ToList();
-            var tempBasals = (await _deps.TempBasals.GetAsync(
-                from: fetchFrom, to: fetchTo, device: null, source: null,
-                limit: 2000, offset: 0, descending: false, ct: ct
-            )).ToList();
-            var result = await _deps.Iob.CalculateTotalAsync(boluses, tempBasals, time: nowMills, ct: ct);
+            return await _deps.IobCob.ReadInputsAsync(now.ToMills(), ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read treatments for IOB and COB for alert evaluation; leaving both null");
+            return null;
+        }
+    }
+
+    // Both anchored at `now`, the replay tick on replay: a decay anchored at the wall clock would
+    // put every bolus of a past tick beyond DIA.
+    private async Task<decimal?> ComputeIobAsync(DateTime now, IobCobInputs inputs, bool live, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _deps.Iob.CalculateTotalAsync(
+                inputs.Boluses, inputs.TempBasals, now.ToMills(), live: live, ct: ct);
             _logger.LogDebug(
-                "IOB compute @ {Now}: boluses={BolusCount}, tempBasals={TempBasalCount}, result.Iob={Iob}, source={Source}, basal={BasalIob}",
-                now, boluses.Count, tempBasals.Count, result.Iob, result.Source ?? "(none)", result.BasalIob);
+                "IOB compute @ {Now}: boluses={BolusCount}, tempBasals={TempBasalCount}, result.Iob={Iob}, source={Source}",
+                now, inputs.Boluses.Count, inputs.TempBasals.Count, result.Iob, result.Source ?? "(none)");
             return (decimal)result.Iob;
         }
         catch (Exception ex)
@@ -584,30 +571,15 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         }
     }
 
-    private async Task<decimal?> ComputeCobAsync(DateTime now, CancellationToken ct)
+    private async Task<decimal?> ComputeCobAsync(DateTime now, IobCobInputs inputs, bool live, CancellationToken ct)
     {
         try
         {
-            var nowMills = new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc))
-                .ToUnixTimeMilliseconds();
-            var fetchFrom = DateTime.SpecifyKind(now, DateTimeKind.Utc).AddHours(-TreatmentLookbackHours);
-            var fetchTo = DateTime.SpecifyKind(now, DateTimeKind.Utc);
-            var carbIntakes = (await _deps.CarbIntakes.GetAsync(
-                from: fetchFrom, to: fetchTo, device: null, source: null,
-                limit: 2000, offset: 0, descending: false, ct: ct
-            )).ToList();
-            var boluses = (await _deps.Boluses.GetAsync(
-                from: fetchFrom, to: fetchTo, device: null, source: null,
-                limit: 2000, offset: 0, descending: false, ct: ct
-            )).ToList();
-            var tempBasals = (await _deps.TempBasals.GetAsync(
-                from: fetchFrom, to: fetchTo, device: null, source: null,
-                limit: 2000, offset: 0, descending: false, ct: ct
-            )).ToList();
-            var result = await _deps.Cob.CalculateTotalAsync(carbIntakes, boluses, tempBasals, time: nowMills, ct: ct);
+            var result = await _deps.Cob.CalculateTotalAsync(
+                inputs.CarbIntakes, inputs.Boluses, inputs.TempBasals, now.ToMills(), live: live, ct: ct);
             _logger.LogDebug(
                 "COB compute @ {Now}: carbIntakes={CarbCount}, result.Cob={Cob}, source={Source}",
-                now, carbIntakes.Count, result.Cob, result.Source ?? "(none)");
+                now, inputs.CarbIntakes.Count, result.Cob, result.Source ?? "(none)");
             return (decimal)result.Cob;
         }
         catch (Exception ex)
@@ -652,7 +624,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         for (var i = 0; i < curve.Count; i++)
         {
             // Curve index 0 is "now"; first forward step is index 1. Offset minutes are measured
-            // from the current reading; the evaluator filters by WithinMinutes.
+            // from the current reading; the engine filters by WithinMinutes.
             var offsetMinutes = (i + 1) * interval;
             points.Add(new PredictedGlucosePoint(offsetMinutes, (decimal)curve[i]));
         }
@@ -673,14 +645,14 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
     /// </summary>
     private async Task<DateTime?> ActiveProfileStartAsync(string? state, DateTime now, CancellationToken ct)
     {
-        var nowMills = new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        var nowMills = now.ToMills();
         var resolved = await _deps.ProfileActivations.GetAtAsync(nowMills, ct);
         if (resolved is null)
             return null;
 
         var matches = state is null
-            || string.Equals(state, nameof(ProfileState.Active), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(state, resolved.ProfileName, StringComparison.OrdinalIgnoreCase);
+            || string.Equals(state, nameof(ProfileState.Active), StringComparison.Ordinal)
+            || string.Equals(state, resolved.ProfileName, StringComparison.Ordinal);
         return matches ? resolved.Activation.StartTimestamp : null;
     }
 

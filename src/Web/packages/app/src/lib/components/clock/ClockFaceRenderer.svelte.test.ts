@@ -4,10 +4,16 @@ import type { ClockFaceConfig } from "$lib/api";
 import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
 import { TRACKER_SHOW_OPTIONS } from "$lib/clock-builder";
 import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { formatLocale } from "$lib/utils/formatting";
 import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
 import Harness from "./ClockFaceRendererHarness.test.svelte";
 
 const WHITE = "rgb(255, 255, 255)";
+
+const sevenMinutesAgo = new Intl.RelativeTimeFormat(formatLocale(), {
+  style: "narrow",
+  numeric: "auto",
+}).format(-7, "minute");
 
 const config: ClockFaceConfig = {
   rows: [
@@ -81,7 +87,7 @@ describe("ClockFaceRenderer", () => {
     const { text, glucoseColor } = face(reading);
 
     expect(text).toContain("55 mg/dL");
-    expect(text).toContain("7m ago");
+    expect(text).toContain(sevenMinutesAgo);
     expect(glucoseColor("55 mg/dL")).not.toBe(WHITE);
   });
 
@@ -161,7 +167,7 @@ describe("ClockFaceRenderer", () => {
       settings: config.settings,
     };
 
-    expect(face(reading, muted).glucoseColor("7m ago")).toBe(
+    expect(face(reading, muted).glucoseColor(sevenMinutesAgo)).toBe(
       cssColor("--muted-foreground")
     );
   });

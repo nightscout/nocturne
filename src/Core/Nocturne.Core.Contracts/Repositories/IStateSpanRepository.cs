@@ -39,6 +39,34 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Spans of any of <paramref name="categories"/> matching the filters, as
+    /// <see cref="GetStateSpansAsync"/> reads them. An empty set matches nothing.
+    /// </summary>
+    Task<IEnumerable<StateSpan>> GetStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
+        string? source,
+        bool? active,
+        int count,
+        int skip,
+        bool descending,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The number of spans <see cref="GetStateSpansInCategoriesAsync"/> pages over.
+    /// </summary>
+    Task<int> CountStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
+        string? source,
+        bool? active,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns spans of <paramref name="category"/> starting at or after <paramref name="from"/>,
     /// oldest first. Unlike <see cref="GetStateSpansAsync"/>, excludes open spans that started earlier.
     /// </summary>

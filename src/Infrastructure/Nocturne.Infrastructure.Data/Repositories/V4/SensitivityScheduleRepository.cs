@@ -39,10 +39,6 @@ public class SensitivityScheduleRepository : V4RepositoryBase<SensitivitySchedul
     protected override void ApplyUpdate(SensitivityScheduleEntity target, SensitivitySchedule source) =>
         SensitivityScheduleMapper.UpdateEntity(target, source);
 
-    /// <inheritdoc cref="TherapySettingsRepository.Listed"/>
-    protected override IQueryable<SensitivityScheduleEntity> Listed(IQueryable<SensitivityScheduleEntity> rows) =>
-        rows.Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker));
-
     /// <summary>
     /// Gets insulin sensitivity schedule records by profile name.
     /// </summary>

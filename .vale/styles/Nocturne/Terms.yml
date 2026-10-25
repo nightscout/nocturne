@@ -1,0 +1,27 @@
+# Rules 1.11 and 9.4: one item, one name, across the whole interface.
+#
+# Each pair keeps the form the UI already uses most. A reader who sees "sign in"
+# on one page and "log in" on the next asks whether they are two actions.
+#
+# Deliberately absent: "blood glucose" and "BG". A meter reading is a distinct
+# measurement from a sensor reading, and those words mark the difference.
+extends: substitution
+message: "Rule 1.11: write '%s' instead of '%s'. The UI uses one term for this."
+link: .claude/skills/simple-english/SKILL.md
+level: error
+ignorecase: true
+swap:
+  'log in': 'sign in'
+  'logs in': 'signs in'
+  'logged in': 'signed in'
+  'logging in': 'signing in'
+  'log out': 'sign out'
+  'logged out': 'signed out'
+  'logging out': 'signing out'
+  'login': 'sign-in'
+  'logout': 'sign-out'
+  'blood sugar': glucose
+  carbohydrates: carbs
+  carbohydrate: carb
+  'unable to': 'could not'
+  'e-mail': email

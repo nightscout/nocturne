@@ -44,7 +44,15 @@ export const getActogramData = query(actogramSchema, async ({ from, to }) => {
     state: s.state ?? "Unknown",
   }));
 
+  const days = (data.days ?? []).map((d) => ({
+    date: d.date ?? "",
+    startMills: d.startMills ?? 0,
+    endMills: d.endMills ?? d.startMills ?? 0,
+    hourMarks: d.hourMarks ?? [],
+  }));
+
   return {
+    days,
     stepCounts,
     stepDayTotals: data.stepDayTotals ?? {},
     timeZoneUnavailableReason: data.timeZoneUnavailableReason,

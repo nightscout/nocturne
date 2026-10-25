@@ -9,6 +9,7 @@
     glucoseTileVariant,
     type GlucoseUnits,
   } from "@nocturne/ui/glucose";
+  import { relativeAge } from "@nocturne/ui/relative-time";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import type { Reading } from "$lib/glucose-types";
 
@@ -28,10 +29,7 @@
   const displayDelta = $derived(formatGlucoseDelta(delta, units));
   const angle = $derived(trendAngle(delta));
 
-  const minsAgo = $derived(Math.floor((now - reading.mills) / 60000));
-  const timeAgo = $derived(
-    minsAgo < 1 ? "just now" : minsAgo === 1 ? "1 min ago" : `${minsAgo} min ago`,
-  );
+  const timeAgo = $derived(relativeAge(reading.mills, navigator.language, { now }));
 </script>
 
 <div class="flex flex-col items-center gap-2 py-4">

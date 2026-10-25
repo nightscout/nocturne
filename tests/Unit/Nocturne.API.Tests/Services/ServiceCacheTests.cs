@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.API.Tests.Infrastructure;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Platform;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -33,6 +34,7 @@ public class ServiceCacheTests
     private readonly Mock<IEntryDecomposer> _mockEntryDecomposer;
     private readonly Mock<IEntryCache> _mockEntryCache;
     private readonly Mock<ICacheService> _mockCacheService;
+    private readonly Mock<ITenantService> _tenants = new();
     private readonly Mock<IDemoModeService> _mockDemoModeService;
     private readonly Mock<ILogger<EntryService>> _mockEntryLogger;
     private readonly Mock<ILogger<StatusService>> _mockStatusLogger;
@@ -203,8 +205,10 @@ public class ServiceCacheTests
             httpContextAccessor,
             _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
+            _tenants.Object,
             appearanceReader.Object,
             new GlucoseStatusClassifier(mockConfiguration, NullLogger<GlucoseStatusClassifier>.Instance),
+            NoAlertRules(),
             Mock.Of<ICategoryReadContext>(),
             _mockStatusLogger.Object
         );
@@ -293,8 +297,10 @@ public class ServiceCacheTests
             httpContextAccessor,
             _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
+            _tenants.Object,
             appearanceReader.Object,
             new GlucoseStatusClassifier(mockConfiguration, NullLogger<GlucoseStatusClassifier>.Instance),
+            NoAlertRules(),
             Mock.Of<ICategoryReadContext>(),
             _mockStatusLogger.Object
         );
@@ -322,5 +328,13 @@ public class ServiceCacheTests
                 ),
             Times.Once
         );
+    }
+
+    private static IAlertRepository NoAlertRules()
+    {
+        var alerts = new Mock<IAlertRepository>();
+        alerts.Setup(a => a.GetEnabledRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        return alerts.Object;
     }
 }

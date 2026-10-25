@@ -4,7 +4,7 @@
     import X from "@lucide/svelte/icons/x";
     import { Button } from "@nocturne/ui/ui/button";
     import { copyToClipboard } from "@nocturne/ui/utils";
-    import { track } from "$lib/analytics";
+    import { installStepBefore, track } from "$lib/analytics";
 
     interface Props {
         text: string;
@@ -19,14 +19,17 @@
     let failed = $state(false);
     let timer: ReturnType<typeof setTimeout> | undefined;
 
-    async function copy() {
+    async function copy(event: MouseEvent) {
+        // Read before the await: the handler's event no longer has a currentTarget after it.
+        const button = event.currentTarget instanceof Element ? event.currentTarget : undefined;
         if (!(await copyToClipboard(text))) {
             failed = true;
             return;
         }
         failed = false;
         copied = true;
-        track("Docs Copy", { kind });
+        const step = button && installStepBefore(button);
+        track("Docs Copy", step ? { kind, step } : { kind });
         if (timer !== undefined) clearTimeout(timer);
         timer = setTimeout(() => {
             copied = false;

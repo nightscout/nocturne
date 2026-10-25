@@ -63,7 +63,7 @@
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
       <Apple class="h-4 w-4 text-entry-carbs" />
-      Carb Intake
+      Carb intake
     </div>
     {#if onRemove}
       <Button variant="ghost" size="icon-xs" onclick={onRemove}>

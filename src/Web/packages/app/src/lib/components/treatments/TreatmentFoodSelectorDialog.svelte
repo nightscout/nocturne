@@ -362,7 +362,7 @@
   // Handle logging without saving - submit with no foodId, just carbs and note
   function handleLogWithoutSaving() {
     if (entryCarbs <= 0) {
-      toast.error("Please enter carbs amount");
+      toast.error("Enter the carbs amount");
       return;
     }
 
@@ -401,7 +401,7 @@
 <Dialog.Root bind:open {onOpenChange}>
   <Dialog.Content class="max-w-4xl max-h-[90vh] overflow-y-auto">
     <Dialog.Header>
-      <Dialog.Title>Add Food</Dialog.Title>
+      <Dialog.Title>Add food</Dialog.Title>
       <Dialog.Description>
         Search for an existing food or create a new one.
       </Dialog.Description>
@@ -478,7 +478,7 @@
           onclick={handleLogWithoutSaving}
           disabled={!canSubmit || isSubmitting || submitting}
         >
-          {isSubmitting || submitting ? "Logging..." : "Log Carbs"}
+          {isSubmitting || submitting ? "Logging..." : "Log carbs"}
         </Button>
       {:else if isCreatingNew}
         <!-- Creating new food - submit the create form -->
@@ -492,7 +492,7 @@
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Saving...
           {:else}
-            Save & Add
+            Save & add
           {/if}
         </Button>
       {:else if selectedFood && hasEdits}
@@ -508,7 +508,7 @@
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Saving...
           {:else}
-            Save as New
+            Save as new
           {/if}
         </Button>
         <Button
@@ -521,7 +521,7 @@
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Updating...
           {:else}
-            Update & Add
+            Update & add
           {/if}
         </Button>
       {:else if selectedFood}
@@ -531,11 +531,11 @@
           onclick={handleAddFood}
           disabled={!canSubmit || isSubmitting || submitting}
         >
-          {isSubmitting || submitting ? "Adding..." : "Add Food"}
+          {isSubmitting || submitting ? "Adding..." : "Add food"}
         </Button>
       {:else}
         <!-- No selection yet -->
-        <Button type="button" disabled>Add Food</Button>
+        <Button type="button" disabled>Add food</Button>
       {/if}
     </Dialog.Footer>
   </Dialog.Content>

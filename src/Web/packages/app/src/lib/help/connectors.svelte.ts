@@ -6,9 +6,9 @@ export function connectorArticles(): HelpArticle[] {
     "/settings/connectors/google-health",
     "Google Health",
     "First install the Google Health app and make sure you can see the data you want to share there. Then follow the Google setup wizard and connect that same account to Nocturne.",
-    "Your device or source app sends data to Google Health. Nocturne reads the selected account through Google's API and stores supported records in this tenant's existing histories. A Google Cloud project provides permission to use the API; it does not generate health data.",
+    "Your device or source app sends data to Google Health. Nocturne reads the selected account through Google's API and stores supported records in this tenant's existing histories. A Google Cloud project provides permission to use the API. It does not generate health data.",
     "Open Settings → Connectors & Apps → Google Health. Keep the Google Cloud console in another tab. The reference panel below shows the callback path, requested read permissions, supported destinations, and default sync interval from this running version.",
-    "Imported steps, heart rate, and sleep appear in their reports. Weight appears in Patient Record → Weight history. The supported-destinations table below follows the connector's actual capability catalogue.",
+    "Imported steps, heart rate, and sleep appear in their reports. Weight appears in Patient Record → Weight history. The supported-destinations table below follows the connector's actual capability catalog.",
     "The phone/watch must first sync to Google. Local Health Connect records do not guarantee availability in Google's cloud API. Inventory availability, Google sign-in, and import completion are separate states. Unsupported types can be visible but cannot be selected for import.",
     [
       "/reports/steps",
@@ -32,7 +32,7 @@ export function connectorArticles(): HelpArticle[] {
     },
     {
       title: "Bring data from other apps into Google Health (optional)",
-      text: "On Android use Health Connect, Google's on-device data-sharing service. Let your source app write the desired records and let Google Health read them. In Google Health open Connections → Partner apps → Sync your favorite health apps → Set up. Review the data, history, and background permissions, then check that records appear in Google Health. Garmin needs its watch to sync to Garmin Connect first; Google Health does not connect directly to the watch. Google also documents Samsung Galaxy, Xiaomi/Mi Fitness, Oura, Whoop, Strava, and MyFitnessPal connections. On iPhone the route is generally Apple Health. Available types differ by app: a direct Strava connection exports Google Health activities to Strava; importing Strava activities uses Health Connect or Apple Health instead. Google Health supports more types than this Nocturne connector, so check the importable-type table below.",
+      text: "On Android use Health Connect, Google's on-device data-sharing service. Let your source app write the desired records and let Google Health read them. In Google Health open Connections → Partner apps → Sync your favorite health apps → Set up. Review the data, history, and background permissions, then check that records appear in Google Health. Garmin needs its watch to sync to Garmin Connect first. Google Health does not connect directly to the watch. Google also documents Samsung Galaxy, Xiaomi/Mi Fitness, Oura, Whoop, Strava, and MyFitnessPal connections. On iPhone the route is generally Apple Health. Available types differ by app: a direct Strava connection exports Google Health activities to Strava. Importing Strava activities uses Health Connect or Apple Health instead. Google Health supports more types than this Nocturne connector, so check the importable-type table below.",
       links: [
         {
           title: "Install or open Health Connect",
@@ -50,7 +50,7 @@ export function connectorArticles(): HelpArticle[] {
     },
     {
       title: "Open Google's setup wizard",
-      text: "Open the Google Setup documentation linked below. Click its blue button labelled Enable the API and get an OAuth 2.0 Client ID. Use a Google account that can manage your Cloud project. If Google restricts access for your project, resolve that eligibility before continuing. Leave Nocturne open in another tab.",
+      text: "Open the Google Setup documentation linked below. Select its blue button labeled Enable the API and get an OAuth 2.0 Client ID. Use a Google account that can manage your Cloud project. If Google restricts access for your project, resolve that eligibility before continuing. Leave Nocturne open in another tab.",
       links: [
         {
           title: "Open the Google Setup documentation",
@@ -60,7 +60,7 @@ export function connectorArticles(): HelpArticle[] {
     },
     {
       title: "Name your project and enable the API",
-      text: "Choose a new project and enter a project name, or select an existing project you manage. The name is a reminder for you later: any recognisable name is fine. Click Next. Confirm that you want to enable the Google Health API and continue. This enables access to Google's service; it does not create or import any health records.",
+      text: "Choose a new project and enter a project name, or select an existing project you manage. The name is a reminder for you later: any recognisable name is fine. Select Next. Confirm that you want to enable the Google Health API and continue. This enables access to Google's service. It does not create or import any health records.",
     },
     {
       title: "Choose a product name",
@@ -68,11 +68,11 @@ export function connectorArticles(): HelpArticle[] {
     },
     {
       title: "Create the Web application client",
-      text: "For Where are you calling from? select Web Server. In the manual Clients screen the equivalent type is Web application. Copy the complete Callback URL shown by this Nocturne instance under Settings → Connectors & Apps → Google Health into the wizard's redirect field (Authorized redirect URIs). Use your own instance's URL, including its scheme, hostname, port, and callback path exactly. Replace any sample redirect from Google's guide. Click Create. If the wizard's layout changes, the essential choices remain a web client and that exact redirect.",
+      text: "For Where are you calling from? select Web Server. In the manual Clients screen the equivalent type is Web application. Copy the complete Callback URL shown by this Nocturne instance under Settings → Connectors & Apps → Google Health into the wizard's redirect field (Authorized redirect URIs). Use your own instance's URL, including its scheme, hostname, port, and callback path exactly. Replace any sample redirect from Google's guide. Select Create. If the wizard's layout changes, the essential choices remain a web client and that exact redirect.",
     },
     {
       title: "Download the client configuration and fill Nocturne's fields",
-      text: "Download the Client configuration/Credentials JSON. Copy Client ID and Client secret into the fields of the same names on Nocturne's Google Health page. The secret is required on first setup; leave it empty only when keeping a secret that was already saved. Check the Callback URL and choose Import data from for the history you want. Keep this form ready while you add the test user in the next step. Store the downloaded file privately: it contains credentials.",
+      text: "Download the Client configuration/Credentials JSON. Copy Client ID and Client secret into the fields of the same names on Nocturne's Google Health page. The secret is required on first setup. Leave it empty only when keeping a secret that was already saved. Check the Callback URL and choose Import data from for the history you want. Keep this form ready while you add the test user in the next step. Store the downloaded file privately: it contains credentials.",
     },
     {
       title: "Add the Google account as a test user",
@@ -80,7 +80,7 @@ export function connectorArticles(): HelpArticle[] {
     },
     {
       title: "Check the read permissions in Data Access",
-      text: "In Google's Data Access page choose Add or remove scopes, select the Google Health read scopes shown in Nocturne's reference table below, then Update and Save. Nocturne adds basic sign-in identification itself. These scopes govern which records it can read; they do not allow Nocturne to write to your Google Health account.",
+      text: "In Google's Data Access page choose Add or remove scopes, select the Google Health read scopes shown in Nocturne's reference table below, then Update and Save. Nocturne adds basic sign-in identification itself. These scopes govern which records it can read. They do not allow Nocturne to write to your Google Health account.",
     },
     {
       title: "Save and connect with the same account",
@@ -88,15 +88,15 @@ export function connectorArticles(): HelpArticle[] {
     },
     {
       title: "Review the inventory and start an import",
-      text: "In the available-data table, Found means records exist at the source, not that they have been imported. Select supported types and choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Not scanned needs a refreshed inventory; No permission needs the relevant consent; No destination yet is unsupported. Leaving the page does not cancel the server import.",
+      text: "In the available-data table, Found means records exist at the source, not that Nocturne imported them. Select supported types and choose Save selection and import. Save import settings only saves. Refresh inventory only checks availability. Not scanned needs a refreshed inventory. No permission needs the relevant consent. No destination yet is unsupported. Leaving the page does not cancel the server import.",
     },
     {
       title: "Confirm the result in your reports",
-      text: "Watch sync status and Historical import progress. Open Steps, Heart Rate, or Sleep and choose dates containing source records; use Weight history for weight. If empty, check the source account's visible records, granted permissions, import selection, dates, and last error. Google may still be syncing older phone records; wait for that to finish before retrying. Completed historical months that receive records later need the recovery procedure below.",
+      text: "Watch sync status and Historical import progress. Open Steps, Heart Rate, or Sleep and choose dates containing source records. Use Weight history for weight. If empty, check the source account's visible records, granted permissions, import selection, dates, and last error. Google may still be syncing older phone records. Wait for that to finish before retrying. Completed historical months that receive records later need the recovery procedure below.",
     },
     {
-      title: "Personalise branding (optional)",
-      text: "After the connection works, open Branding in Google Auth Platform to adjust the app's display name, logo, and available contact or policy details. This changes how Google presents the app; it does not change your health data or Nocturne's import settings. Follow Google's validation requirements for any fields you add.",
+      title: "Personalize branding (optional)",
+      text: "After the connection works, open Branding in Google Auth Platform to adjust the app's display name, logo, and available contact or policy details. This changes how Google presents the app. It does not change your health data or Nocturne's import settings. Follow Google's validation requirements for any fields you add.",
     },
   ];
   google.sections.push(
@@ -111,11 +111,11 @@ export function connectorArticles(): HelpArticle[] {
     {
       title: "Common setup errors",
       // @wc-include
-      text: "redirect_uri_mismatch: copy the complete Nocturne Callback URL into the same OAuth client's redirect list. Access blocked or test-user errors: check Audience, exact email, enabled API, and current Google access eligibility. ACCOUNT_NOT_LINKED: complete the Google Health app profile with this account. Missing permission: sign in again and grant the required read access. An expired test grant: reconnect; production verification and quota rules belong to Google and can change.",
+      text: "redirect_uri_mismatch: copy the complete Nocturne Callback URL into the same OAuth client's redirect list. Access blocked or test-user errors: check Audience, exact email, enabled API, and current Google access eligibility. ACCOUNT_NOT_LINKED: complete the Google Health app profile with this account. Missing permission: sign in again and grant the required read access. An expired test grant: reconnect. Production verification and quota rules belong to Google and can change.",
     },
     {
       title: "Pause, disconnect, and deletion",
-      text: "Clear selected types and Save import settings to pause imports without deleting history. Disconnect removes the connection but keeps imported records. Delete imported Google data is a separate confirmed action available after disconnecting; it affects this tenant's imported records, not Google's originals. Credentials are stored in the server's encrypted connector configuration. Never paste the secret or token into support conversations.",
+      text: "Clear selected types and Save import settings to pause imports without deleting history. Disconnect removes the connection but keeps imported records. Delete imported Google data is a separate confirmed action available after disconnecting. It affects this tenant's imported records, not Google's originals. Credentials are stored in the server's encrypted connector configuration. Never paste the secret or token into support conversations.",
     }
   );
   google.sources = [
@@ -169,7 +169,7 @@ export function connectorArticles(): HelpArticle[] {
       "dexcom",
       "Dexcom",
       "Glucose available through your Dexcom Share account.",
-      "The account must support sharing; check the selected region and credentials in the setup form. This is a cloud connection, so readings depend on the original device uploading."
+      "The account must support sharing. Check the selected region and credentials in the setup form. This is a cloud connection, so readings depend on the original device uploading."
     ),
     connector(
       "libre",
@@ -193,7 +193,7 @@ export function connectorArticles(): HelpArticle[] {
       "nightscout",
       "Nightscout",
       "Records read from the Nightscout server you configure.",
-      "Use the correct source URL and authorised credential. Ongoing connector sync is different from the one-off Data Migration tool."
+      "Use the correct source URL and authorized credential. Ongoing connector sync is different from the one-off Data Migration tool."
     ),
     connector(
       "tandem",
@@ -223,7 +223,7 @@ export function connectorArticles(): HelpArticle[] {
       "myfitnesspal",
       "MyFitnessPal",
       "Supported nutrition and meal records available through the configured MyFitnessPal connection.",
-      "Check the supported data-type list and source account; this is not a glucose sensor connection."
+      "Check the supported data-type list and source account. This is not a glucose sensor connection."
     ),
     connector(
       "tidepool",
@@ -241,7 +241,7 @@ export function connectorArticles(): HelpArticle[] {
       "nocturne",
       "Nocturne Remote",
       "Records available from the remote Nocturne instance you configure.",
-      "Verify the remote URL, authorised token, tenant, and selected data types. This is a data connection, not a copy of all server settings."
+      "Verify the remote URL, authorized token, tenant, and selected data types. This is a data connection, not a copy of all server settings."
     ),
     connector(
       "homeassistant",

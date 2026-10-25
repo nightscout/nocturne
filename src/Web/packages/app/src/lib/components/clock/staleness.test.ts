@@ -1,10 +1,33 @@
-import { describe, it, expect } from "vitest";
-import {
+import { describe, it, expect, vi } from "vitest";
+import type { RegionFormat } from "$lib/stores/appearance-store.svelte";
+
+vi.mock("$app/environment", () => ({ browser: false }));
+vi.mock("mode-watcher", () => ({}));
+vi.mock("runed", () => ({
+  PersistedState: class {
+    current: unknown;
+    constructor(v: unknown) {
+      this.current = v;
+    }
+  },
+}));
+vi.mock("$lib/stores/appearance-store.svelte", () => ({
+  glucoseUnits: { current: "mg/dl" },
+  timeFormat: { current: "12" },
+  regionFormat: { current: "" },
+  preferredLanguage: { current: "en" },
+}));
+
+const {
   isClockReadingStale,
   readingAgeLabel,
   readingAgeMinutes,
   readingAgePhrase,
-} from "./staleness";
+} = await import("./staleness");
+const store = await import("$lib/stores/appearance-store.svelte");
+
+const narrow = (locale: string) =>
+  new Intl.RelativeTimeFormat(locale, { style: "narrow", numeric: "auto" });
 
 const MIN = 60_000;
 const lastUpdated = 1_700_000_000_000;
@@ -63,12 +86,30 @@ describe("readingAgeLabel", () => {
 });
 
 describe("readingAgePhrase", () => {
-  it("reads 'now' with no preposition under a minute", () => {
-    expect(readingAgePhrase(lastUpdated, lastUpdated + 30_000)).toBe("now");
+  it("reads under a minute as now", () => {
+    expect(readingAgePhrase(lastUpdated, lastUpdated + 30_000)).toBe(
+      narrow("en").format(0, "second")
+    );
   });
 
-  it("appends 'ago' to an elapsed count", () => {
-    expect(readingAgePhrase(lastUpdated, lastUpdated + MIN)).toBe("1m ago");
-    expect(readingAgePhrase(lastUpdated, lastUpdated + 7 * MIN)).toBe("7m ago");
+  it("names the largest whole unit, not a count of minutes", () => {
+    expect(readingAgePhrase(lastUpdated, lastUpdated + 7 * MIN)).toBe(
+      narrow("en").format(-7, "minute")
+    );
+    expect(readingAgePhrase(lastUpdated, lastUpdated + 125 * MIN)).toBe(
+      narrow("en").format(-2, "hour")
+    );
+  });
+
+  it("writes the words in the regional format's language", () => {
+    const previous = store.regionFormat.current;
+    store.regionFormat.current = "de-DE" as RegionFormat;
+    try {
+      expect(readingAgePhrase(lastUpdated, lastUpdated + 7 * MIN)).toBe(
+        narrow("de").format(-7, "minute")
+      );
+    } finally {
+      store.regionFormat.current = previous;
+    }
   });
 });

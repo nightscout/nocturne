@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
@@ -63,6 +64,15 @@ internal sealed class FakeCursorStore : IConnectorSyncCursorStore
         OnSet?.Invoke(resource);
         return Task.CompletedTask;
     }
+
+    public Task<JsonNode?> GetJsonAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
+
+    public Task SetJsonAsync(string connectorName, string resource, JsonNode value, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
+
+    public Task RemoveAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
 }
 
 /// <summary>

@@ -259,6 +259,20 @@ public sealed class ProfileActivationResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task ASpanOfACustomizedSnapshotCarriesThePercentageItWasUploadedWith()
+    {
+        Store(0, "Rhys", ProfileActivationPhase.Effective, percentage: 150, snapshot: Snapshot(1.5), customized: true,
+            enteredBy: "openaps://AndroidAPS");
+
+        var spans = await new ActiveProfileResolver(Resolver(), _repository.Object, new ProfileStoreTimelineSource(_therapy.Object))
+            .GetProfileSpansForRangeAsync(T0 + Hour, T0 + 2 * Hour);
+
+        var span = spans.Should().ContainSingle().Subject;
+        span.Adjustment.Should().BeNull();
+        span.AppliedAdjustment.Should().Be(new CircadianAdjustment(150, 0));
+    }
+
+    [Fact]
     public async Task ACustomizedSnapshotMissingAKindOfScheduleGivesWayToTheStoredProfileScaled()
     {
         Store(0, "Rhys", ProfileActivationPhase.Effective, percentage: 150, snapshot: Snapshot(9.9, everyKind: false),

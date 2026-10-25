@@ -31,7 +31,7 @@
 >
   <h2 class="font-semibold">Reference from this version</h2>
   <p class="text-sm text-muted-foreground">
-    These values come from the same server models and capability catalogue used
+    These values come from the same server models and capability catalog used
     by this running Nocturne version.
   </p>
   {#if facts}
@@ -68,7 +68,7 @@
         Tight range is a subset of in range, so it is not an extra band to add
         to the total. Personal targets from Therapy and notification thresholds
         from Alert Rules are separate. Display rounding can make two nearby
-        boundaries look alike in mmol/L; classification uses the stored glucose
+        boundaries look alike in mmol/L. Classification uses the stored glucose
         value.
       </p>
       {#if facts.maximumPlausibleGlucose !== undefined}<p
@@ -77,12 +77,11 @@
           Glucose statistics exclude non-positive readings and values at or
           above {bg(facts.maximumPlausibleGlucose)}
           {unit}. Missing or excluded readings are not treated as normal
-          glucose. Reading percentages count distinct measurement times;
-          duration measures use the reading cadence, so gaps matter.
+          glucose. Reading percentages count distinct measurement times. Duration measures use the reading cadence, so gaps matter.
         </p>{/if}
       <figure class="space-y-3 rounded-lg bg-muted/30 p-4">
         <figcaption class="text-sm font-medium">
-          Example — invented readings, using the real report chart
+          Example: invented readings, using the real report chart
         </figcaption>
         <TIRStackedChart
           percentages={{
@@ -98,11 +97,11 @@
             high: facts.reportBands.targetTop!,
           }}
           orientation="horizontal"
-          showThresholds
+          keyOnScreen
         />
         <p class="text-sm text-muted-foreground">
           In this example, 76% is in range and 50% is in tight range. The 50% is
-          already included in the 76%. Colours, textures, and chart styling use
+          already included in the 76%. Colors, textures, and chart styling use
           the same component as the reports.
         </p>
       </figure>
@@ -145,7 +144,7 @@
       </p>
       <Table.Root>
         <Table.Caption>
-          Importable types from this version's connector catalogue. Other
+          Importable types from this version's connector catalog. Other
           inventory types can be visible without an import destination.
         </Table.Caption>
         <Table.Header>
@@ -169,30 +168,30 @@
       </Table.Root>
       <figure class="space-y-3 rounded-lg bg-muted/30 p-4">
         <figcaption class="text-sm font-medium">
-          Example connection states — no personal data
+          Example connection states: no personal data
         </figcaption>
         <DataSourceRow
           name="Google Health"
           icon={undefined}
           status="configured"
-          statusMessage="Connected; choose and save the import selection"
+          statusMessage="Connected. Choose and save the import selection"
         />
         <DataSourceRow
           name="Google Health"
           icon={undefined}
           status="syncing"
-          statusMessage="Import is running; check historical progress"
+          statusMessage="Import is running. Check historical progress"
         />
         <p class="text-sm text-muted-foreground">
           These use the same status-row component as Connectors & Apps. A
-          connection can be configured before any data has been imported.
+          connection can be configured before any data is imported.
         </p>
       </figure>
     {/if}
   {:else if resource.error}
     <p class="text-sm text-muted-foreground" role="status">
       The current reference values could not be loaded. The written guide is
-      still available; retry to see this server's exact values.
+      still available. Retry to see this server's exact values.
     </p>
     <Button variant="outline" onclick={() => resource.refresh()}>
       Retry reference values

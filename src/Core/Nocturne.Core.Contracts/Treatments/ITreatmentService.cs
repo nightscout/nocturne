@@ -70,6 +70,13 @@ public interface ITreatmentService
     );
 
     /// <summary>
+    /// The id of the stored treatment at <paramref name="treatment"/>'s time with its event type, or
+    /// <see langword="null"/> when none is stored: Nightscout's upsert key for a document with neither
+    /// <c>identifier</c> nor <c>_id</c>.
+    /// </summary>
+    Task<string?> FindSameEventIdAsync(Treatment treatment, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get treatments modified since a given timestamp, including StateSpan-derived temp basals.
     /// Used by the v3 incremental sync endpoint.
     /// </summary>
@@ -93,6 +100,19 @@ public interface ITreatmentService
     /// A treatment could not be stored. The ones before it are stored and announced.
     /// </exception>
     Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
+        IEnumerable<Treatment> treatments,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// <see cref="CreateTreatmentsAsync"/> for treatments posted to the v1 API, where a meal with a
+    /// <c>preBolus</c> is stored as a bolus and its carbs at the preBolus offset, as Nightscout's
+    /// POST stores it. Both halves are returned, the bolus first.
+    /// </summary>
+    /// <exception cref="TreatmentBatchFailedException">
+    /// A treatment could not be stored. The ones before it are stored and announced.
+    /// </exception>
+    Task<BulkWrite<Treatment>> CreateV1TreatmentsAsync(
         IEnumerable<Treatment> treatments,
         CancellationToken cancellationToken = default
     );

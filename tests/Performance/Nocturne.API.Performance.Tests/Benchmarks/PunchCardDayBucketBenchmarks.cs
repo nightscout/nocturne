@@ -1,5 +1,5 @@
 using BenchmarkDotNet.Attributes;
-using Nocturne.API.Services.Analytics;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Performance.Tests.Benchmarks;

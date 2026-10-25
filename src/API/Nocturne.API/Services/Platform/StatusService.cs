@@ -5,14 +5,17 @@ using System.Linq;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
@@ -44,10 +47,15 @@ public class StatusService : IStatusService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly PublicAccessCacheService _publicAccessCacheService;
+    private readonly ITenantService _tenants;
     private readonly ITenantAppearanceReader _appearanceReader;
     private readonly IGlucoseStatusClassifier _thresholdClassifier;
+    private readonly IAlertRepository _alertRepository;
     private readonly ICategoryReadContext _categoryReadContext;
     private readonly ILogger<StatusService> _logger;
+
+    /// <summary>The cache key of a tenant's system status, before its demo-mode and rules suffixes.</summary>
+    public static string SystemStatusCacheKey(string tenantId) => $"status:system:{tenantId}";
 
     /// <summary>
     /// Whether the caller may see thresholds derived from the tenant's alert rules. A share cannot
@@ -74,8 +82,10 @@ public class StatusService : IStatusService
         IHttpContextAccessor httpContextAccessor,
         ITenantAccessor tenantAccessor,
         PublicAccessCacheService publicAccessCacheService,
+        ITenantService tenants,
         ITenantAppearanceReader appearanceReader,
         IGlucoseStatusClassifier thresholdClassifier,
+        IAlertRepository alertRepository,
         ICategoryReadContext categoryReadContext,
         ILogger<StatusService> logger
     )
@@ -87,8 +97,10 @@ public class StatusService : IStatusService
         _httpContextAccessor = httpContextAccessor;
         _tenantAccessor = tenantAccessor;
         _publicAccessCacheService = publicAccessCacheService;
+        _tenants = tenants;
         _appearanceReader = appearanceReader;
         _thresholdClassifier = thresholdClassifier;
+        _alertRepository = alertRepository;
         _categoryReadContext = categoryReadContext;
         _logger = logger;
     }
@@ -113,7 +125,7 @@ public class StatusService : IStatusService
         // Not an ITenantCache key: the response varies by authentication, not by readable rows (CLAUDE.md, PHI cache invariant).
         var demoSuffix = _demoModeService.IsEnabled ? ":demo" : "";
         var rulesSuffix = ReadsAlertRules ? "" : ":defaults";
-        var cacheKey = $"status:system:{TenantCacheId}" + demoSuffix + rulesSuffix;
+        var cacheKey = SystemStatusCacheKey(TenantCacheId) + demoSuffix + rulesSuffix;
         var cacheTtl = TimeSpan.FromMinutes(2);
 
         var cachedStatus = await _cacheService.GetAsync<StatusResponse>(cacheKey);
@@ -416,9 +428,14 @@ public class StatusService : IStatusService
     {
         var settings = new Dictionary<string, object>();
 
-        // Core display settings
+        // Core display settings. Units are the owner's own choice, else the tenant default chosen in
+        // onboarding, which is what a Nightscout client reads as DISPLAY_UNITS.
         var appearance = await _appearanceReader.GetTenantAppearanceAsync(_tenantAccessor.TenantId);
-        settings["units"] = appearance.GlucoseUnits ?? "mg/dl";
+        var tenantUnits = appearance.GlucoseUnits
+            ?? (_tenantAccessor.Context is { } tenant
+                ? await _tenants.GetDefaultGlucoseUnitsAsync(tenant.TenantId)
+                : null);
+        settings["units"] = tenantUnits ?? GlucoseUnitDefaults.MgDl;
         settings["timeFormat"] = _configuration.GetValue<int>("Display:TimeFormat", 12);
         settings["dayStart"] = _configuration.GetValue<int>("Display:DayStart", 7);
         settings["dayEnd"] = _configuration.GetValue<int>("Display:DayEnd", 21);
@@ -518,8 +535,8 @@ public class StatusService : IStatusService
         var ct = _httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
         try
         {
-            await using var db = await _dbContextFactory.CreateAsync(ct);
-            return await _thresholdClassifier.ResolveThresholdsAsync(db, ct);
+            var rules = await _alertRepository.GetEnabledRulesAsync(_tenantAccessor.TenantId, ct);
+            return _thresholdClassifier.ResolveThresholds(rules);
         }
         catch (DbException ex)
         {
@@ -586,7 +603,7 @@ public class StatusService : IStatusService
             Name = basicStatus.Name ?? "Nocturne",
             Version = basicStatus.Version ?? AppVersion.Current,
             ServerTime = serverTime,
-            SrvDate = new DateTimeOffset(serverTime).ToUnixTimeMilliseconds(),
+            SrvDate = serverTime.ToMills(),
             ApiEnabled = basicStatus.ApiEnabled,
             CareportalEnabled = basicStatus.CareportalEnabled ?? false,
             Head = basicStatus.Head ?? "unknown",
@@ -682,7 +699,7 @@ public class StatusService : IStatusService
             .Select(f => (DateTime?)f.SysUpdatedAt)
             .FirstOrDefaultAsync());
 
-        var settingsTask = ReadableLastModifiedAsync("settings", ctx => ctx.Settings.AsNoTracking()
+        var settingsTask = ReadableLastModifiedAsync("settings", ctx => ctx.Settings.V3Documents().AsNoTracking()
             .OrderByDescending(s => s.SrvModified ?? s.SysUpdatedAt)
             .Select(s =>
                 (DateTime?)(s.SrvModified.HasValue ? s.SrvModified.Value.UtcDateTime : s.SysUpdatedAt))

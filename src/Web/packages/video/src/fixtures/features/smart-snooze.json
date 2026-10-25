@@ -1,0 +1,292 @@
+{
+ "route": "/alerts/01a16d37-8093-7721-8348-cc6a95fecc80",
+ "params": {
+  "id": "01a16d37-8093-7721-8348-cc6a95fecc80"
+ },
+ "capturedAt": 1792833716389,
+ "entries": [
+  {
+   "type": "sgv",
+   "mills": 1792833600000,
+   "sgv": 141,
+   "direction": "Flat",
+   "delta": -0.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792833300000,
+   "sgv": 142,
+   "direction": "Flat",
+   "delta": 0.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792833000000,
+   "sgv": 141,
+   "direction": "Flat",
+   "delta": 0.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792832700000,
+   "sgv": 141,
+   "direction": "Flat",
+   "delta": -1.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792832400000,
+   "sgv": 142,
+   "direction": "Flat",
+   "delta": 0
+  },
+  {
+   "type": "sgv",
+   "mills": 1792832100000,
+   "sgv": 142,
+   "direction": "Flat",
+   "delta": -0.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792831800000,
+   "sgv": 143,
+   "direction": "Flat",
+   "delta": 0.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792831500000,
+   "sgv": 142,
+   "direction": "Flat",
+   "delta": -0.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792831200000,
+   "sgv": 142,
+   "direction": "FortyFiveUp",
+   "delta": 2.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830900000,
+   "sgv": 140,
+   "direction": "FortyFiveUp",
+   "delta": 2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830600000,
+   "sgv": 138,
+   "direction": "FortyFiveUp",
+   "delta": 3.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830300000,
+   "sgv": 134,
+   "direction": "FortyFiveUp",
+   "delta": 4.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830000000,
+   "sgv": 130,
+   "direction": "FortyFiveUp",
+   "delta": 2.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829700000,
+   "sgv": 127,
+   "direction": "Flat",
+   "delta": 1.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829400000,
+   "sgv": 125,
+   "direction": "FortyFiveUp",
+   "delta": 4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829100000,
+   "sgv": 121,
+   "direction": "FortyFiveUp",
+   "delta": 3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828800000,
+   "sgv": 118,
+   "direction": "FortyFiveUp",
+   "delta": 3.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828500000,
+   "sgv": 114,
+   "direction": "FortyFiveUp",
+   "delta": 2.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828200000,
+   "sgv": 112,
+   "direction": "FortyFiveUp",
+   "delta": 4.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827900000,
+   "sgv": 107,
+   "direction": "FortyFiveUp",
+   "delta": 2.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827600000,
+   "sgv": 104,
+   "direction": "FortyFiveUp",
+   "delta": 3.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827300000,
+   "sgv": 100,
+   "direction": "FortyFiveUp",
+   "delta": 2.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827000000,
+   "sgv": 98,
+   "direction": "FortyFiveUp",
+   "delta": 2.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826700000,
+   "sgv": 95,
+   "direction": "FortyFiveUp",
+   "delta": 2.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826400000,
+   "sgv": 92,
+   "direction": "Flat",
+   "delta": 1.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826340000
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826100000,
+   "sgv": 91,
+   "direction": "Flat",
+   "delta": 1.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825800000,
+   "sgv": 89,
+   "direction": "FortyFiveUp",
+   "delta": 2.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825500000,
+   "sgv": 87,
+   "direction": "Flat",
+   "delta": -0.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825200000,
+   "sgv": 88,
+   "direction": "Flat",
+   "delta": 0
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824900000,
+   "sgv": 88,
+   "direction": "Flat",
+   "delta": 0.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824600000,
+   "sgv": 88,
+   "direction": "Flat",
+   "delta": 1.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824300000,
+   "sgv": 86,
+   "direction": "Flat",
+   "delta": 1.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824000000,
+   "sgv": 85,
+   "direction": "Flat",
+   "delta": 0.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823700000,
+   "sgv": 84,
+   "direction": "Flat",
+   "delta": 0.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823400000,
+   "sgv": 83,
+   "direction": "Flat",
+   "delta": 1
+  }
+ ],
+ "results": {
+  "getActiveAlerts": "[[]]",
+  "getRules": "[[1,24,37,50,63],{\"id\":2,\"name\":3,\"description\":4,\"conditionType\":5,\"conditionParams\":6,\"isEnabled\":9,\"sortOrder\":10,\"severity\":11,\"allowThroughDnd\":12,\"scopeClass\":13,\"managedBy\":14,\"reviewReason\":14,\"conditionIssues\":15,\"autoResolveEnabled\":12,\"autoResolveParams\":14,\"clientConfiguration\":16,\"channels\":17},\"01a16d37-7117-77cf-9510-e377c4b0bb7e\",\"Urgent Low\",\"Glucose below 55 mg/dL\",\"threshold\",{\"value\":7,\"direction\":8},55,\"below\",true,0,\"critical\",false,\"undirected\",null,[],{},[18],{\"id\":19,\"channelType\":20,\"destination\":21,\"destinationLabel\":14,\"sortOrder\":10,\"metadata\":14,\"hasSecret\":12,\"recipient\":22},\"01a16d37-711a-7f4f-8f60-4aab81b5a68d\",\"in_app\",\"01a16d37-2bfb-7786-9a35-e795d9ed0195\",{\"subjectId\":21,\"name\":23,\"canReceive\":9},\"dev\",{\"id\":25,\"name\":26,\"description\":27,\"conditionType\":5,\"conditionParams\":28,\"isEnabled\":9,\"sortOrder\":10,\"severity\":30,\"allowThroughDnd\":12,\"scopeClass\":13,\"managedBy\":14,\"reviewReason\":14,\"conditionIssues\":31,\"autoResolveEnabled\":12,\"autoResolveParams\":14,\"clientConfiguration\":32,\"channels\":33},\"01a16d37-711c-7640-b126-14562d8fc084\",\"Low\",\"Glucose below 70 mg/dL\",{\"value\":29,\"direction\":8},70,\"warning\",[],{},[34],{\"id\":35,\"channelType\":20,\"destination\":21,\"destinationLabel\":14,\"sortOrder\":10,\"metadata\":14,\"hasSecret\":12,\"recipient\":36},\"01a16d37-711e-7fe6-aff0-864efecf7ca3\",{\"subjectId\":21,\"name\":23,\"canReceive\":9},{\"id\":38,\"name\":39,\"description\":40,\"conditionType\":5,\"conditionParams\":41,\"isEnabled\":9,\"sortOrder\":10,\"severity\":30,\"allowThroughDnd\":12,\"scopeClass\":13,\"managedBy\":14,\"reviewReason\":14,\"conditionIssues\":44,\"autoResolveEnabled\":12,\"autoResolveParams\":14,\"clientConfiguration\":45,\"channels\":46},\"01a16d37-7120-785a-bccb-daa82c071e4a\",\"High\",\"Glucose above 250 mg/dL\",{\"value\":42,\"direction\":43},250,\"above\",[],{},[47],{\"id\":48,\"channelType\":20,\"destination\":21,\"destinationLabel\":14,\"sortOrder\":10,\"metadata\":14,\"hasSecret\":12,\"recipient\":49},\"01a16d37-7122-7f67-b3ab-4f8d9545acb1\",{\"subjectId\":21,\"name\":23,\"canReceive\":9},{\"id\":51,\"name\":52,\"description\":53,\"conditionType\":54,\"conditionParams\":55,\"isEnabled\":9,\"sortOrder\":10,\"severity\":30,\"allowThroughDnd\":12,\"scopeClass\":13,\"managedBy\":14,\"reviewReason\":14,\"conditionIssues\":57,\"autoResolveEnabled\":12,\"autoResolveParams\":14,\"clientConfiguration\":58,\"channels\":59},\"01a16d37-7124-7cdc-b174-014e73944f0f\",\"Signal Loss\",\"No CGM readings for 30 minutes\",\"signal_loss\",{\"timeout_minutes\":56},30,[],{},[60],{\"id\":61,\"channelType\":20,\"destination\":21,\"destinationLabel\":14,\"sortOrder\":10,\"metadata\":14,\"hasSecret\":12,\"recipient\":62},\"01a16d37-7126-74fe-8407-b6e1fa2d667d\",{\"subjectId\":21,\"name\":23,\"canReceive\":9},{\"id\":64,\"name\":26,\"description\":14,\"conditionType\":5,\"conditionParams\":65,\"isEnabled\":12,\"sortOrder\":10,\"severity\":30,\"allowThroughDnd\":12,\"scopeClass\":13,\"managedBy\":14,\"reviewReason\":14,\"conditionIssues\":66,\"autoResolveEnabled\":12,\"autoResolveParams\":14,\"clientConfiguration\":67,\"channels\":74},\"01a16d37-8093-7721-8348-cc6a95fecc80\",{\"value\":29,\"direction\":8},[],{\"snooze\":68},{\"options\":69,\"maxCount\":73,\"smartSnooze\":12,\"defaultMinutes\":71},[70,71,56,72],5,15,60,3,[75],{\"id\":76,\"channelType\":20,\"destination\":21,\"destinationLabel\":14,\"sortOrder\":10,\"metadata\":14,\"hasSecret\":12,\"recipient\":77},\"01a16d37-8096-7ec0-b351-989e0dc09ff7\",{\"subjectId\":21,\"name\":23,\"canReceive\":9}]",
+  "getAlertHistory": "[{\"page\":1,\"pageSize\":2,\"totalCount\":3,\"totalPages\":3,\"items\":4},1,25,0,[]]",
+  "getRule": "[{\"id\":1,\"name\":2,\"description\":3,\"conditionType\":4,\"conditionParams\":5,\"isEnabled\":8,\"sortOrder\":9,\"severity\":10,\"allowThroughDnd\":8,\"scopeClass\":11,\"managedBy\":3,\"reviewReason\":3,\"conditionIssues\":12,\"autoResolveEnabled\":8,\"autoResolveParams\":3,\"clientConfiguration\":13,\"channels\":21},\"01a16d37-8093-7721-8348-cc6a95fecc80\",\"Low\",null,\"threshold\",{\"value\":6,\"direction\":7},70,\"below\",false,0,\"warning\",\"undirected\",[],{\"snooze\":14},{\"options\":15,\"maxCount\":20,\"smartSnooze\":8,\"defaultMinutes\":17},[16,17,18,19],5,15,30,60,3,[22],{\"id\":23,\"channelType\":24,\"destination\":25,\"destinationLabel\":3,\"sortOrder\":9,\"metadata\":3,\"hasSecret\":8,\"recipient\":26},\"01a16d37-8096-7ec0-b351-989e0dc09ff7\",\"in_app\",\"01a16d37-2bfb-7786-9a35-e795d9ed0195\",{\"subjectId\":25,\"name\":27,\"canReceive\":28},\"dev\",true]",
+  "getAll": "[[]]",
+  "getMyTenants": "[[1],{\"id\":2,\"slug\":3,\"displayName\":4,\"isActive\":5,\"sysCreatedAt\":6},\"01a16d37-2bd1-7bc5-b857-1d35976deda1\",\"films-1792833694655\",\"Sample\",true,\"2026-10-24T09:21:34.674798Z\"]",
+  "getSessionInfo": "[{\"isAuthenticated\":1,\"subjectId\":2,\"name\":3,\"email\":4,\"avatarUrl\":4,\"roles\":5,\"permissions\":7,\"expiresAt\":8},true,\"01a16d37-2bfb-7786-9a35-e795d9ed0195\",\"dev\",null,[6],\"Owner\",[],\"2026-10-24T09:36:52+00:00\"]",
+  "getSummary": "[{\"current\":1,\"history\":9,\"iob\":10,\"cob\":11,\"trackers\":12,\"alarm\":4,\"predictions\":4,\"serverMills\":47},{\"sgv\":2,\"direction\":3,\"trendRate\":4,\"delta\":5,\"mills\":6,\"noise\":7,\"status\":8},141,\"Flat\",null,-0.9,1792833600000,2,\"InRange\",[],1.14,22,[13,24,29,38],{\"id\":14,\"definitionId\":15,\"name\":16,\"icon\":17,\"category\":18,\"mode\":19,\"ageHours\":20,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":22,\"percentElapsed\":23},\"01a16d37-707d-7162-b503-2ef1ef523f62\",\"01a16d37-7001-76be-86e9-2b808bc5cb3e\",\"Infusion Site\",\"syringe\",\"Cannula\",\"Duration\",13.2,\"Info\",72,18,{\"id\":25,\"definitionId\":26,\"name\":27,\"icon\":28,\"category\":27,\"mode\":19,\"ageHours\":20,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":22,\"percentElapsed\":23},\"01a16d37-70fe-79be-9728-c215f3631730\",\"01a16d37-7083-709f-b414-f96e4757a8f7\",\"Reservoir\",\"cylinder\",{\"id\":30,\"definitionId\":31,\"name\":32,\"icon\":33,\"category\":34,\"mode\":19,\"ageHours\":35,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":36,\"percentElapsed\":37},\"01a16d37-6ffb-75fe-9ddd-26d3c5a41246\",\"01a16d37-6fd6-775e-83ea-269972b2e126\",\"CGM Sensor\",\"radio\",\"Sensor\",227.2,240,95,{\"id\":39,\"definitionId\":40,\"name\":41,\"icon\":42,\"category\":43,\"mode\":19,\"ageHours\":44,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":45,\"percentElapsed\":46},\"01a16d37-7111-7cc9-944a-10bbd6426500\",\"01a16d37-7103-796b-b7f7-8acb52e36a37\",\"Pump Battery\",\"battery\",\"Battery\",264.8,504,53,1792833717938]"
+ },
+ "phases": [
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {
+    "updateRule": "[{\"id\":1,\"name\":2,\"description\":3,\"conditionType\":4,\"conditionParams\":5,\"isEnabled\":8,\"sortOrder\":9,\"severity\":10,\"allowThroughDnd\":11,\"scopeClass\":12,\"managedBy\":3,\"reviewReason\":3,\"conditionIssues\":13,\"autoResolveEnabled\":8,\"autoResolveParams\":3,\"clientConfiguration\":14,\"channels\":35},\"01a16d37-8093-7721-8348-cc6a95fecc80\",\"Low\",null,\"threshold\",{\"value\":6,\"direction\":7},70,\"below\",false,0,\"warning\",true,\"undirected\",[],{\"audio\":15,\"snooze\":21,\"visual\":33},{\"sound\":16,\"enabled\":11,\"ascending\":8,\"maxVolume\":17,\"repeatCount\":18,\"startVolume\":19,\"customSoundId\":3,\"ascendDurationSeconds\":20},\"alarm-default\",80,2,50,30,{\"options\":22,\"maxCount\":26,\"conditions\":27,\"smartSnooze\":11,\"defaultMinutes\":24,\"smartSnoozeExtendMinutes\":32},[23,24,20,25],5,15,60,3,[28],{\"type\":29,\"trend\":30},\"trend\",{\"bucket\":31},\"rising\",10,{\"flashColor\":34,\"wakeScreen\":8,\"flashEnabled\":8,\"persistentBanner\":11},\"#ff0000\",[36],{\"id\":37,\"channelType\":38,\"destination\":39,\"destinationLabel\":3,\"sortOrder\":9,\"metadata\":3,\"hasSecret\":8,\"recipient\":40},\"01a16d37-a03a-73ff-9327-1783e62d4811\",\"in_app\",\"01a16d37-2bfb-7786-9a35-e795d9ed0195\",{\"subjectId\":39,\"name\":41,\"canReceive\":11},\"dev\"]",
+    "getRules": "[[1,24,37,50,63],{\"id\":2,\"name\":3,\"description\":4,\"conditionType\":5,\"conditionParams\":6,\"isEnabled\":9,\"sortOrder\":10,\"severity\":11,\"allowThroughDnd\":12,\"scopeClass\":13,\"managedBy\":14,\"reviewReason\":14,\"conditionIssues\":15,\"autoResolveEnabled\":12,\"autoResolveParams\":14,\"clientConfiguration\":16,\"channels\":17},\"01a16d37-7117-77cf-9510-e377c4b0bb7e\",\"Urgent Low\",\"Glucose below 55 mg/dL\",\"threshold\",{\"value\":7,\"direction\":8},55,\"below\",true,0,\"critical\",false,\"undirected\",null,[],{},[18],{\"id\":19,\"channelType\":20,\"destination\":21,\"destinationLabel\":14,\"sortOrder\":10,\"metadata\":14,\"hasSecret\":12,\"recipient\":22},\"01a16d37-711a-7f4f-8f60-4aab81b5a68d\",\"in_app\",\"01a16d37-2bfb-7786-9a35-e795d9ed0195\",{\"subjectId\":21,\"name\":23,\"canReceive\":9},\"dev\",{\"id\":25,\"name\":26,\"description\":27,\"conditionType\":5,\"conditionParams\":28,\"isEnabled\":9,\"sortOrder\":10,\"severity\":30,\"allowThroughDnd\":12,\"scopeClass\":13,\"managedBy\":14,\"reviewReason\":14,\"conditionIssues\":31,\"autoResolveEnabled\":12,\"autoResolveParams\":14,\"clientConfiguration\":32,\"channels\":33},\"01a16d37-711c-7640-b126-14562d8fc084\",\"Low\",\"Glucose below 70 mg/dL\",{\"value\":29,\"direction\":8},70,\"warning\",[],{},[34],{\"id\":35,\"channelType\":20,\"destination\":21,\"destinationLabel\":14,\"sortOrder\":10,\"metadata\":14,\"hasSecret\":12,\"recipient\":36},\"01a16d37-711e-7fe6-aff0-864efecf7ca3\",{\"subjectId\":21,\"name\":23,\"canReceive\":9},{\"id\":38,\"name\":39,\"description\":40,\"conditionType\":5,\"conditionParams\":41,\"isEnabled\":9,\"sortOrder\":10,\"severity\":30,\"allowThroughDnd\":12,\"scopeClass\":13,\"managedBy\":14,\"reviewReason\":14,\"conditionIssues\":44,\"autoResolveEnabled\":12,\"autoResolveParams\":14,\"clientConfiguration\":45,\"channels\":46},\"01a16d37-7120-785a-bccb-daa82c071e4a\",\"High\",\"Glucose above 250 mg/dL\",{\"value\":42,\"direction\":43},250,\"above\",[],{},[47],{\"id\":48,\"channelType\":20,\"destination\":21,\"destinationLabel\":14,\"sortOrder\":10,\"metadata\":14,\"hasSecret\":12,\"recipient\":49},\"01a16d37-7122-7f67-b3ab-4f8d9545acb1\",{\"subjectId\":21,\"name\":23,\"canReceive\":9},{\"id\":51,\"name\":52,\"description\":53,\"conditionType\":54,\"conditionParams\":55,\"isEnabled\":9,\"sortOrder\":10,\"severity\":30,\"allowThroughDnd\":12,\"scopeClass\":13,\"managedBy\":14,\"reviewReason\":14,\"conditionIssues\":57,\"autoResolveEnabled\":12,\"autoResolveParams\":14,\"clientConfiguration\":58,\"channels\":59},\"01a16d37-7124-7cdc-b174-014e73944f0f\",\"Signal Loss\",\"No CGM readings for 30 minutes\",\"signal_loss\",{\"timeout_minutes\":56},30,[],{},[60],{\"id\":61,\"channelType\":20,\"destination\":21,\"destinationLabel\":14,\"sortOrder\":10,\"metadata\":14,\"hasSecret\":12,\"recipient\":62},\"01a16d37-7126-74fe-8407-b6e1fa2d667d\",{\"subjectId\":21,\"name\":23,\"canReceive\":9},{\"id\":64,\"name\":26,\"description\":14,\"conditionType\":5,\"conditionParams\":65,\"isEnabled\":12,\"sortOrder\":10,\"severity\":30,\"allowThroughDnd\":9,\"scopeClass\":13,\"managedBy\":14,\"reviewReason\":14,\"conditionIssues\":66,\"autoResolveEnabled\":12,\"autoResolveParams\":14,\"clientConfiguration\":67,\"channels\":87},\"01a16d37-8093-7721-8348-cc6a95fecc80\",{\"value\":29,\"direction\":8},[],{\"audio\":68,\"snooze\":73,\"visual\":85},{\"sound\":69,\"enabled\":9,\"ascending\":12,\"maxVolume\":70,\"repeatCount\":71,\"startVolume\":72,\"customSoundId\":14,\"ascendDurationSeconds\":56},\"alarm-default\",80,2,50,{\"options\":74,\"maxCount\":78,\"conditions\":79,\"smartSnooze\":9,\"defaultMinutes\":76,\"smartSnoozeExtendMinutes\":84},[75,76,56,77],5,15,60,3,[80],{\"type\":81,\"trend\":82},\"trend\",{\"bucket\":83},\"rising\",10,{\"flashColor\":86,\"wakeScreen\":12,\"flashEnabled\":12,\"persistentBanner\":9},\"#ff0000\",[88],{\"id\":89,\"channelType\":20,\"destination\":21,\"destinationLabel\":14,\"sortOrder\":10,\"metadata\":14,\"hasSecret\":12,\"recipient\":90},\"01a16d37-a03a-73ff-9327-1783e62d4811\",{\"subjectId\":21,\"name\":23,\"canReceive\":9}]",
+    "getRule": "[{\"id\":1,\"name\":2,\"description\":3,\"conditionType\":4,\"conditionParams\":5,\"isEnabled\":8,\"sortOrder\":9,\"severity\":10,\"allowThroughDnd\":11,\"scopeClass\":12,\"managedBy\":3,\"reviewReason\":3,\"conditionIssues\":13,\"autoResolveEnabled\":8,\"autoResolveParams\":3,\"clientConfiguration\":14,\"channels\":35},\"01a16d37-8093-7721-8348-cc6a95fecc80\",\"Low\",null,\"threshold\",{\"value\":6,\"direction\":7},70,\"below\",false,0,\"warning\",true,\"undirected\",[],{\"audio\":15,\"snooze\":21,\"visual\":33},{\"sound\":16,\"enabled\":11,\"ascending\":8,\"maxVolume\":17,\"repeatCount\":18,\"startVolume\":19,\"customSoundId\":3,\"ascendDurationSeconds\":20},\"alarm-default\",80,2,50,30,{\"options\":22,\"maxCount\":26,\"conditions\":27,\"smartSnooze\":11,\"defaultMinutes\":24,\"smartSnoozeExtendMinutes\":32},[23,24,20,25],5,15,60,3,[28],{\"type\":29,\"trend\":30},\"trend\",{\"bucket\":31},\"rising\",10,{\"flashColor\":34,\"wakeScreen\":8,\"flashEnabled\":8,\"persistentBanner\":11},\"#ff0000\",[36],{\"id\":37,\"channelType\":38,\"destination\":39,\"destinationLabel\":3,\"sortOrder\":9,\"metadata\":3,\"hasSecret\":8,\"recipient\":40},\"01a16d37-a03a-73ff-9327-1783e62d4811\",\"in_app\",\"01a16d37-2bfb-7786-9a35-e795d9ed0195\",{\"subjectId\":39,\"name\":41,\"canReceive\":11},\"dev\"]"
+   }
+  }
+ ]
+}

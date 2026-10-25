@@ -8,12 +8,13 @@
   import { DurationInput } from "$lib/components/ui/duration-input";
   import { TrackerNotificationEditor, type TrackerNotification } from "$lib/components/trackers";
   import EventTypeCombobox from "$lib/components/treatments/EventTypeCombobox.svelte";
+  import { Artwork } from "@nocturne/watercolour";
+  import { batteryArtwork, sensorArtwork } from "$lib/watercolour-icons";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
   import { tick } from "svelte";
   import {
     TrackerCategory,
     DashboardVisibility,
-    TrackerVisibility,
     TrackerMode,
     NotificationUrgency,
     type TrackerDefinitionDto,
@@ -36,7 +37,6 @@
     formNotifications?: TrackerNotification[];
     formIsFavorite?: boolean;
     formDashboardVisibility?: DashboardVisibility;
-    formVisibility?: TrackerVisibility;
     formMode?: TrackerMode;
     formStartEventType?: string | undefined;
     formCompletionEventType?: string | undefined;
@@ -60,7 +60,6 @@
     formNotifications = $bindable([]),
     formIsFavorite = $bindable(false),
     formDashboardVisibility = $bindable(DashboardVisibility.Always),
-    formVisibility = $bindable(TrackerVisibility.Private),
     formMode = $bindable(TrackerMode.Duration),
     formStartEventType = $bindable(undefined),
     formCompletionEventType = $bindable(undefined),
@@ -138,6 +137,30 @@
     </div>
   </div>
 
+  {#if formCategory === TrackerCategory.Battery ||
+    formCategory === TrackerCategory.Sensor ||
+    formCategory === TrackerCategory.Cannula}
+    <div class="flex justify-center py-2">
+      {#if formCategory === TrackerCategory.Battery}
+        <Artwork
+          icon={batteryArtwork}
+          palette="water"
+          motion="auto"
+          autoplay="once"
+          class="size-56"
+        />
+      {:else}
+        <Artwork
+          icon={sensorArtwork}
+          palette="slate"
+          motion="auto"
+          autoplay="once"
+          class="size-56"
+        />
+      {/if}
+    </div>
+  {/if}
+
   <div class="space-y-2">
     <Label for="description">Description (optional)</Label>
     <Input
@@ -149,7 +172,7 @@
   </div>
 
   <div class="space-y-2">
-    <Label>Tracker Mode</Label>
+    <Label>Tracker mode</Label>
     <Select.Root type="single" name="{prefix}mode" bind:value={formMode}>
       <Select.Trigger>
         {#if formMode === TrackerMode.Duration}
@@ -180,7 +203,7 @@
 
   {#if formMode === TrackerMode.Duration}
     <div class="space-y-2">
-      <Label for="lifespan">Expected Lifespan</Label>
+      <Label for="lifespan">Expected lifespan</Label>
       <DurationInput
         id="lifespan"
         bind:value={formLifespanHours}
@@ -301,7 +324,7 @@
 
   <TrackerNotificationEditor
     bind:notifications={formNotifications}
-    mode={formMode === TrackerMode.Duration ? "Duration" : "Event"}
+    mode={formMode}
     lifespanHours={formMode === TrackerMode.Duration
       ? formLifespanHours
       : undefined}
@@ -348,7 +371,7 @@
   />
 
   <div class="space-y-2">
-    <Label for="dashboardVisibility">Dashboard Visibility</Label>
+    <Label for="dashboardVisibility">Dashboard visibility</Label>
     <Select.Root
       type="single"
       name="{prefix}dashboardVisibility"
@@ -356,7 +379,7 @@
     >
       <Select.Trigger>
         {#if formDashboardVisibility === DashboardVisibility.Off}
-          Off - Don't show on dashboard
+          Off - Do not show on dashboard
         {:else if formDashboardVisibility === DashboardVisibility.Always}
           Always show
         {:else if formDashboardVisibility === DashboardVisibility.Info}
@@ -374,7 +397,7 @@
       <Select.Content>
         <Select.Item
           value={DashboardVisibility.Off}
-          label="Off - Don't show on dashboard"
+          label="Off - Do not show on dashboard"
         />
         <Select.Item value={DashboardVisibility.Always} label="Always show" />
         <Select.Item
@@ -400,39 +423,8 @@
     </p>
   </div>
 
-  <div class="space-y-2">
-    <Label for="visibility">Public Visibility</Label>
-    <Select.Root
-      type="single"
-      name="{prefix}visibility"
-      bind:value={formVisibility}
-    >
-      <Select.Trigger>
-        {#if formVisibility === TrackerVisibility.Public}
-          Public - Other members can see it
-        {:else}
-          Private - Only you can see
-        {/if}
-      </Select.Trigger>
-      <Select.Content>
-        <Select.Item
-          value={TrackerVisibility.Public}
-          label="Public - Other members can see it"
-        />
-        <Select.Item
-          value={TrackerVisibility.Private}
-          label="Private - Only you can see"
-        />
-      </Select.Content>
-    </Select.Root>
-    <p class="text-xs text-muted-foreground">
-      Whether other people signed in to this site can see it running. Trackers
-      are never shown on a public share link.
-    </p>
-  </div>
-
   <div class="space-y-3 pt-2 border-t">
-    <Label>Event Integration (Nightscout)</Label>
+    <Label>Event integration (Nightscout)</Label>
     <p class="text-xs text-muted-foreground -mt-1">
       Optionally create treatment events when this tracker starts or completes.
       This maintains compatibility with existing CAGE/SAGE pills.
@@ -443,7 +435,7 @@
       <EventTypeCombobox
         bind:value={formStartEventType}
         onSelect={(type) => (formStartEventType = type)}
-        placeholder="None - don't create event"
+        placeholder="None - do not create event"
       />
     </div>
 
@@ -454,7 +446,7 @@
       <EventTypeCombobox
         bind:value={formCompletionEventType}
         onSelect={(type) => (formCompletionEventType = type)}
-        placeholder="None - don't create event"
+        placeholder="None - do not create event"
       />
     </div>
   </div>
@@ -467,7 +459,7 @@
   >
     <Dialog.Header>
       <Dialog.Title>
-        {isNewDefinition ? "New Tracker Definition" : "Edit Definition"}
+        {isNewDefinition ? "New tracker definition" : "Edit definition"}
       </Dialog.Title>
     </Dialog.Header>
 

@@ -38,7 +38,7 @@
   --status-warning: oklch(0.646 0.222 41.116);
   --status-critical: oklch(0.577 0.245 27.325);
   --status-normal: oklch(0.6 0.118 184.704);
-  --status-info: oklch(0.65 0.18 250);
+  --status-info: oklch(0.62 0.16 250);
 
   /* IOB (Insulin on Board) - for charts - should be more prominent than basal */
   --iob-basal: rgba(30, 150, 252, 0.7);
@@ -93,6 +93,7 @@
   --entry-device-event: oklch(0.5 0.2 320);
 }
 
+@media not print {
 .dark {
   /* Insulin Types - Dark Mode - need higher opacity for visibility */
   --insulin-basal: oklch(0.75 0.134 248.6 / 0.35);
@@ -115,6 +116,7 @@
   --entry-carbs: oklch(0.769 0.188 70.08);
   --entry-bg-check: oklch(0.704 0.191 22.216);
   --entry-device-event: oklch(0.76 0.15 320);
+}
 }
 
 /* Tailwind theme integration */

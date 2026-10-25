@@ -80,7 +80,7 @@
         {#if onBulkDelete}
           <Button variant="destructive" size="sm" onclick={onBulkDelete}>
             <Trash2 class="mr-2 h-4 w-4" />
-            Delete Selected
+            Delete selected
           </Button>
         {/if}
       </div>

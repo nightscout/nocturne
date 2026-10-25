@@ -320,7 +320,6 @@ public class ProfileDocumentReadsIntegrationTests : ApiIntegrationTestBase
             Row("plain", "Day", at.AddHours(-2)),
             Row("colon:b:c", "b:c", at.AddHours(-3)),
             Row(null, "V4Only", at.AddHours(-4)),
-            Row($"snap:Exercise{TherapySettings.ProfileSwitchStoreMarker}1", $"Exercise{TherapySettings.ProfileSwitchStoreMarker}1", at.AddHours(1)),
         };
 
         var (stored, ranked) = await WithTenantScopeAsync(async services =>

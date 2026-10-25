@@ -27,9 +27,9 @@ export function dashboardTopics(): DashboardTopic[] {
     [WidgetId.BgDelta]: {
       title: "BG Delta",
       meaning:
-        "The change beside the glucose value is the uploader's delta when supplied. Otherwise Nocturne subtracts the previous sensor reading from the newest one. Plus means higher; minus means lower. It is not necessarily a five-minute difference when readings are farther apart.",
+        "The change beside the glucose value is the uploader's delta when supplied. Otherwise Nocturne subtracts the previous sensor reading from the newest one. Plus means higher. Minus means lower. It is not necessarily a five-minute difference when readings are farther apart.",
       source:
-        "The two newest sensor readings, with any delta supplied by the uploader. The battery badge uses recent device battery reports; the connection indicator describes live browser updates.",
+        "The two newest sensor readings, with any delta supplied by the uploader. The battery badge uses recent device battery reports. The connection indicator describes live browser updates.",
       settings: ["/settings/appearance", "/settings/connectors"],
       availability:
         "Select BG Delta as a top widget in Appearance. A meaningful change needs a supplied delta or two sensor readings. Battery information needs a recent battery report.",
@@ -44,7 +44,7 @@ export function dashboardTopics(): DashboardTopic[] {
         "Sensor reading timestamps and device battery reports from the last 30 minutes.",
       settings: ["/settings/appearance", "/settings/connectors"],
       availability:
-        "Select Last Updated in Appearance. Battery details appear only when a device reports them; their absence does not mean the battery is empty.",
+        "Select Last Updated in Appearance. Battery details appear only when a device reports them. Their absence does not mean the battery is empty.",
       check:
         "Check that the uploader has recent readings and that the connector is syncing. Check device reporting separately if only the battery badge is absent.",
     },
@@ -63,18 +63,18 @@ export function dashboardTopics(): DashboardTopic[] {
     [WidgetId.Meals]: {
       title: "Recent Meals",
       meaning:
-        "Shows up to three of the newest carbohydrate entries from the last six hours. The large number totals those displayed entries, not all daily carbohydrate intake. Last identifies the newest displayed meal.",
-      source: "Recorded carbohydrate entries with a positive amount.",
+        "Shows up to three of the newest carb entries from the last six hours. The large number totals those displayed entries, not all daily carb intake. Last identifies the newest displayed meal.",
+      source: "Recorded carb entries with a positive amount.",
       settings: ["/settings/appearance", "/settings/connectors"],
       availability:
-        "Select Recent Meals in Appearance. Import or record carbohydrate entries; glucose readings alone cannot fill this widget.",
+        "Select Recent Meals in Appearance. Import or record carb entries. Glucose readings alone cannot fill this widget.",
       check:
-        "Check that the source shares carbohydrate records and that the entry is within the last six hours.",
+        "Check that the source shares carb records and that the entry is within the last six hours.",
     },
     [WidgetId.Trackers]: {
       title: "Trackers",
       meaning:
-        "Shows up to four active trackers. The age is measured from their start time. Colours reflect the configured tracker schedule and reached urgency, not glucose ranges.",
+        "Shows up to four active trackers. The age is measured from their start time. Colors reflect the configured tracker schedule and reached urgency, not glucose ranges.",
       source:
         "Tracker definitions, active runs and their server-provided schedules.",
       settings: ["/settings/appearance", "/settings/trackers"],
@@ -86,7 +86,7 @@ export function dashboardTopics(): DashboardTopic[] {
     [WidgetId.TirChart]: {
       title: "Time in Range",
       meaning:
-        "The coloured bar divides recorded glucose into report bands. The large percentage is in range. Below and Above combine their two respective bands. The comparison is a percentage-point difference from the 90-day result. Use the period button to switch between the last 24 hours and 90 days.",
+        "The colored bar divides recorded glucose into report bands. The large percentage is in range. Below and Above combine their two respective bands. The comparison is a percentage-point difference from the 90-day result. Use the period button to switch between the last 24 hours and 90 days.",
       source:
         "Server glucose statistics and the shared report bands. The reading count shows how much recorded data supports the result.",
       settings: [
@@ -95,16 +95,16 @@ export function dashboardTopics(): DashboardTopic[] {
         "/settings/connectors",
       ],
       availability:
-        "Select Time in Range in Appearance. Statistics need enough glucose readings; gaps affect how representative the result is.",
+        "Select Time in Range in Appearance. Statistics need enough glucose readings. Gaps affect how representative the result is.",
       check:
-        "Check the reading count and Data Quality report. See Glucose ranges for the central definition of the bands; personal targets and alert settings have different purposes.",
+        "Check the reading count and Data Quality report. See Glucose ranges for the central definition of the bands. Personal targets and alert settings have different purposes.",
     },
     [WidgetId.DailySummary]: {
       title: "Today's Summary",
       meaning:
-        "Summarises loaded readings since local midnight: average, minimum, maximum, time in range and variability. CV expresses variation relative to the average. This widget currently labels CV below 33% Stable, above 50% Variable, and the values between them Moderate. These are summary labels, not trend arrows.",
+        "Summarizes loaded readings since local midnight: average, minimum, maximum, time in range and variability. CV expresses variation relative to the average. This widget currently labels CV below 33% Stable, above 50% Variable, and the values between them Moderate. These are summary labels, not trend arrows.",
       source:
-        "Readings currently loaded in the browser. Its day starts at browser-local midnight; incomplete loaded history can make this differ from a full server report.",
+        "Readings currently loaded in the browser. Its day starts at browser-local midnight. Incomplete loaded history can make this differ from a full server report.",
       settings: [
         "/settings/appearance",
         "/settings/patient",
@@ -129,7 +129,7 @@ export function dashboardTopics(): DashboardTopic[] {
     [WidgetId.Tdd]: {
       title: "Total Daily Dose",
       meaning:
-        "Bolus totals manual bolus records. Auto totals algorithm bolus records, such as imported automatic or microboluses; it is not every automatic basal adjustment. Basal includes pump basal delivery and basal injections, excluding the Auto amount shown separately. Carbs is recorded carbohydrate intake. The ring uses the same insulin categories as the numbers.",
+        "Bolus totals manual bolus records. Auto totals algorithm bolus records, such as imported automatic or microboluses. It is not every automatic basal adjustment. Basal includes pump basal delivery and basal injections, excluding the Auto amount shown separately. Carbs is recorded carb intake. The ring uses the same insulin categories as the numbers.",
       source:
         "Server insulin-delivery statistics: manual boluses, algorithm boluses, basal delivery records and basal injections. The source's imported record classification determines the category.",
       settings: [
@@ -148,7 +148,7 @@ export function dashboardTopics(): DashboardTopic[] {
       id: "glucose",
       title: "Current glucose",
       meaning:
-        "The large value is the newest sensor measurement in your selected units. Its colour comes from the server's status for that reading. The trend comes from the direction supplied with the reading; a change number alone does not create an arrow.",
+        "The large value is the newest sensor measurement in your selected units. Its color comes from the server's status for that reading. The trend comes from the direction supplied with the reading. A change number alone does not create an arrow.",
       source:
         "The newest sensor reading, its supplied direction and the server's matching status. The difference uses a supplied delta or the previous sensor reading.",
       settings: [
@@ -160,14 +160,14 @@ export function dashboardTopics(): DashboardTopic[] {
       availability:
         "A sensor source supplies measurements and, when supported, trend directions. Unknown directions cannot be displayed as a known trend. A stale reading loses its active trend presentation.",
       check:
-        "X minutes is time since the measurement timestamp, not time since opening the page or the last connector sync. If the reading is old, check the source and connector. Colours, chart bands, therapy targets and alert thresholds are explained centrally in Glucose ranges.",
+        "X minutes is time since the measurement timestamp, not time since opening the page or the last connector sync. If the reading is old, check the source and connector. Colors, chart bands, therapy targets and alert thresholds are explained centrally in Glucose ranges.",
     },
     ...TOP_WIDGET_IDS.map((id) => ({ id, ...top[id] })),
     {
       id: "pills",
       title: "Status pills",
       meaning:
-        "IOB is estimated insulin still active; COB is estimated carbohydrates still being absorbed. Basal is a rate, not a delivered daily total. Loop describes the latest algorithm status. Reservoir is the pump's reported remaining insulin. Tracker pills describe active tracker runs.",
+        "IOB is estimated insulin still active. COB is estimated carbs still being absorbed. Basal is a rate, not a delivered daily total. Loop describes the latest algorithm status. Reservoir is the pump's reported remaining insulin. Tracker pills describe active tracker runs.",
       source:
         "Device or algorithm snapshots, pump reservoir reports and tracker records. These values cannot be reconstructed from glucose alone.",
       settings: [
@@ -196,14 +196,14 @@ export function dashboardTopics(): DashboardTopic[] {
       id: "treatments",
       title: "Recent treatments",
       meaning:
-        "The list shows recent recorded events such as boluses, carbohydrates, meter checks and device changes. These provide context for the glucose curve; they do not prove what caused a change.",
+        "The list shows recent recorded events such as boluses, carbs, meter checks and device changes. These provide context for the glucose curve. They do not prove what caused a change.",
       source:
         "Imported or manually recorded treatment and device-event records.",
       settings: ["/settings/appearance", "/settings/connectors"],
       availability:
         "Enable the treatments dashboard section. The source must share the corresponding records, or you can record them yourself.",
       check:
-        "Check the event time and whether your connector supports that record type. Inspect the real record on the Treatments page to correct it; this demo cannot edit records.",
+        "Check the event time and whether your connector supports that record type. Inspect the real record on the Treatments page to correct it. This demo cannot edit records.",
     },
   ];
 }
@@ -228,19 +228,19 @@ export function chartTopics(): DashboardTopic[] {
     [
       "axes",
       "Axes and time window",
-      "The horizontal axis is time; the glucose axis uses your chosen units. Drag or zoom the overview to inspect a shorter period. Selecting a period changes only the demo.",
+      "The horizontal axis is time. The glucose axis uses your chosen units. Drag or zoom the overview to inspect a shorter period. Selecting a period changes only the demo.",
       "Measurement timestamps and the display's unit preference.",
     ],
     [
       "ranges",
-      "Colours and target areas",
-      "Colours identify the shared glucose bands. Threshold lines and personal target overlays provide different context. See Glucose ranges for boundary definitions instead of repeating them on every page.",
+      "Colors and target areas",
+      "Colors identify the shared glucose bands. Threshold lines and personal target overlays provide different context. See Glucose ranges for boundary definitions instead of repeating them on every page.",
       "Chart thresholds and the therapy profile in force.",
     ],
     [
       "predictions",
       "Predictions",
-      "Forecast lines or a cone show model estimates beyond recorded glucose. IOB, COB, UAM and zero-temp curves express different model assumptions. They are examples here; future readings can differ.",
+      "Forecast lines or a cone show model estimates beyond recorded glucose. IOB, COB, UAM and zero-temp curves express different model assumptions. They are examples here. Future readings can differ.",
       "The prediction service needs supported glucose, therapy and treatment context. Enable predictions in the dashboard and algorithm settings.",
     ],
     [
@@ -257,8 +257,8 @@ export function chartTopics(): DashboardTopic[] {
     ],
     [
       "cob",
-      "Carbohydrates on board",
-      "COB shows estimated carbohydrates remaining to be absorbed. It is distinct from the total grams entered for a meal.",
+      "Carbs on board",
+      "COB shows estimated carbs remaining to be absorbed. It is distinct from the total grams entered for a meal.",
       "Algorithm/device snapshots with COB values.",
     ],
     [
@@ -269,9 +269,9 @@ export function chartTopics(): DashboardTopic[] {
     ],
     [
       "carbs",
-      "Carbohydrate markers",
-      "Markers identify recorded carbohydrate intake, including the amount at that time.",
-      "Carbohydrate entries from an uploader or manual entry.",
+      "Carb markers",
+      "Markers identify recorded carb intake, including the amount at that time.",
+      "Carb entries from an uploader or manual entry.",
     ],
     [
       "meter",
@@ -325,7 +325,7 @@ export function chartTopics(): DashboardTopic[] {
       "activity",
       "Activities",
       "Spans provide activity context, such as exercise or sleep. Use the legend to reveal this track.",
-      "Supported activity spans from your source; availability depends on the connector.",
+      "Supported activity spans from your source. Availability depends on the connector.",
     ],
   ].map(([id, title, meaning, source]) => ({
     ...common,

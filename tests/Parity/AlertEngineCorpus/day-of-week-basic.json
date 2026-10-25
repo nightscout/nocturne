@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "day-of-week-basic",
-  "description": "Monday matches [monday]; mismatch on [tuesday]; empty days list is false",
+  "description": "Monday matches [monday]; mismatch on [tuesday]; an empty days list cannot be evaluated, so its rule is skipped",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

@@ -5,11 +5,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Audit;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Glucose;
@@ -24,9 +26,8 @@ namespace Nocturne.API.Tests.Services.Alerts;
 
 /// <summary>
 /// Drives <see cref="AlertSweepService.CheckSnoozedInstancesAsync"/> end to end over mocked
-/// persistence and glucose, with the real managed engine and evaluators evaluating snooze
-/// conditions. Every clear must hand the instance to <see cref="IAlertSnoozeService.ResumeAsync"/>
-/// and no extension may, so <see cref="ShouldBeCleared"/> and <see cref="ShouldBeExtended"/> check
+/// persistence and glucose, with the real engine evaluating snooze conditions. Every clear must
+/// hand the instance to <see cref="IAlertSnoozeService.ResumeAsync"/> and no extension may, so <see cref="ShouldBeCleared"/> and <see cref="ShouldBeExtended"/> check
 /// that too.
 /// </summary>
 [Trait("Category", "Unit")]
@@ -109,8 +110,12 @@ public class AlertSweepServiceSnoozeTests
         services.AddSingleton(_repository.Object);
         services.AddSingleton(_canonical.Object);
         services.AddSingleton(enricher.Object);
-        services.AddSingleton(Mock.Of<IConditionTimerStore>());
-        services.AddSingleton(Mock.Of<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>());
+        services.AddSingleton<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>(
+            new InMemoryTrackerRepository(instances.Select(i => new AlertRule
+            {
+                Id = i.AlertRuleId,
+                ClientConfiguration = i.ClientConfiguration,
+            })));
         services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddScoped<ExcursionTracker>();
         services.AddScoped<ITenantAccessor, TenantAccessorStub>();
@@ -130,10 +135,10 @@ public class AlertSweepServiceSnoozeTests
             return snooze.Object;
         });
         services.AddScoped<IAuditContext, AuditContext>();
-        services.AddAlertEvaluators();
-        services.AddScoped<ConditionEvaluatorRegistry>();
+        services.AddMetrics();
+        services.AddSingleton<AlertEngineErrors>();
         services.AddSingleton<ConditionVersionLog>();
-        services.AddScoped<IAlertEvaluationEngine, ManagedAlertEngine>();
+        services.AddScoped<IAlertEvaluationEngine, RustBackedAlertEngine>();
 
         await using var provider = services.BuildServiceProvider();
         var sut = new AlertSweepService(provider, NullLogger<AlertSweepService>.Instance, clock);
@@ -165,7 +170,7 @@ public class AlertSweepServiceSnoozeTests
 
     // ---- trend fallback ----
 
-    [Fact]
+    [NativeFact]
     public async Task LowSnooze_NoiseLevelRise_IsNotExtended()
     {
         FiveMinuteReadings(60, 60.5, 61);
@@ -176,7 +181,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeCleared(instance);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task LowSnooze_GenuineRise_IsExtended()
     {
         FiveMinuteReadings(58, 60, 65);
@@ -187,7 +192,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeExtended(instance, minutes: 7);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task HighSnooze_SmallFall_IsExtended_WhereTheSameRiseWouldNotHoldALow()
     {
         FiveMinuteReadings(200, 200, 198.5);
@@ -202,7 +207,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeCleared(low);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task HighSnooze_ASensorErrorReading_IsNotAFall()
     {
         FiveMinuteReadings(200, 200, 0);
@@ -213,7 +218,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeCleared(instance);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task StaleReadings_ClearTheSnooze()
     {
         FiveMinuteReadings(50, 60, 75, ageMinutes: 20);
@@ -224,7 +229,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeCleared(instance);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task NoReadings_ClearTheSnooze()
     {
         _readings = [];
@@ -235,7 +240,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeCleared(instance);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task GlucoseLoadFailure_ClearsTheSnooze()
     {
         _canonical
@@ -248,7 +253,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeCleared(instance);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task NonThresholdRuleWithoutConditions_ClearsTheSnooze()
     {
         FiveMinuteReadings(50, 60, 75);
@@ -260,7 +265,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeCleared(instance);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task SmartSnoozeOff_ClearsTheSnooze()
     {
         FiveMinuteReadings(50, 60, 75);
@@ -273,7 +278,7 @@ public class AlertSweepServiceSnoozeTests
 
     // ---- maxCount ----
 
-    [Fact]
+    [NativeFact]
     public async Task MaxCountReached_ClearsEvenOnAGenuineRise()
     {
         FiveMinuteReadings(50, 60, 75);
@@ -284,7 +289,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeCleared(instance);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task MaxCountOmitted_DefaultsToThree()
     {
         FiveMinuteReadings(50, 60, 75);
@@ -304,7 +309,7 @@ public class AlertSweepServiceSnoozeTests
           {"type":"threshold","threshold":{"direction":"above","value":65}}]}}
         """;
 
-    [Fact]
+    [NativeFact]
     public async Task ThresholdCondition_SeesTheFreshCanonicalValue()
     {
         _readings = [Reading(2, 72, trendRate: 1.5)];
@@ -319,7 +324,7 @@ public class AlertSweepServiceSnoozeTests
         context.TrendRate.Should().Be(1.5m);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ThresholdCondition_FalseForTheFreshValue_ClearsTheSnooze()
     {
         _readings = [Reading(2, 60)];
@@ -330,7 +335,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeCleared(instance);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ThresholdCondition_OnAStaleReading_ReadsNoValueAndClears()
     {
         _readings = [Reading(20, 90, trendRate: 2)];
@@ -344,7 +349,7 @@ public class AlertSweepServiceSnoozeTests
         context.TrendRate.Should().BeNull();
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ThresholdCondition_UsesTheNewestReading()
     {
         _readings = [Reading(7, 50), Reading(2, 72), Reading(12, 40)];
@@ -355,7 +360,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeExtended(instance);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ConfiguredConditions_TakePrecedenceOverTheTrendFallback()
     {
         // A genuine rise that the trend fallback would accept, but the user's predicate fails.
@@ -367,7 +372,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeCleared(instance);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task PredictedCondition_IsUnaffectedByTheGlucoseValue()
     {
         // Predictions are enriched independently of LatestValue; with none available the leaf is
@@ -383,7 +388,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeCleared(instance);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task SignalLossCondition_CountsErrorReadingsAsNoSignal()
     {
         _readings = [Reading(1, 0), Reading(6, 0), Reading(12, 90)];
@@ -400,7 +405,7 @@ public class AlertSweepServiceSnoozeTests
         context.LatestValue.Should().BeNull("the last usable reading is older than a snooze reads glucose from");
     }
 
-    [Fact]
+    [NativeFact]
     public async Task ThresholdCondition_ReadsTheLastUsableValue_NotAnErrorReading()
     {
         _readings = [Reading(1, 0), Reading(4, 72)];
@@ -414,7 +419,7 @@ public class AlertSweepServiceSnoozeTests
 
     // ---- robustness ----
 
-    [Fact]
+    [NativeFact]
     public async Task MalformedConfigOnOneRule_DoesNotStopTheOthers()
     {
         FiveMinuteReadings(50, 60, 75);
@@ -427,7 +432,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeExtended(healthy);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task FailureForOneTenant_DoesNotStopAnother()
     {
         var otherTenant = Guid.NewGuid();
@@ -444,7 +449,7 @@ public class AlertSweepServiceSnoozeTests
         ShouldBeExtended(healthy);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task Resume_runs_in_the_tenants_system_attributed_scope()
     {
         var instance = Instance("""{"snooze":{"smartSnooze":false}}""");
@@ -455,7 +460,7 @@ public class AlertSweepServiceSnoozeTests
             (instance.InstanceId, Tenant, "service:alert-sweep"));
     }
 
-    [Fact]
+    [NativeFact]
     public async Task FailingResume_DoesNotStopTheRestOfTheTenant()
     {
         var failing = Instance("""{"snooze":{"smartSnooze":false}}""");

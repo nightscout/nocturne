@@ -14,7 +14,7 @@
   import Search from '@lucide/svelte/icons/search';
   import Star from '@lucide/svelte/icons/star';
   import X from '@lucide/svelte/icons/x';
-  import Apple from '@lucide/svelte/icons/apple';
+  import { Artwork } from "@nocturne/watercolour";
   import * as Select from '$lib/components/ui/select';
   import { Button } from '$lib/components/ui/button';
   import { Separator } from '$lib/components/ui/separator';
@@ -37,17 +37,17 @@
 </script>
 
 <svelte:head>
-  <title>Food Editor - Nocturne</title>
+  <title>Food editor - Nocturne</title>
 </svelte:head>
 
 <div class="@container flex-1 overflow-auto p-5">
   <!-- Header -->
   <div class="mb-5 flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Food Editor</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Food editor</h1>
       <div class="mt-0.5 text-xs text-muted-foreground">
         {#if state.foods.length === 0 && !state.loading}
-          No foods yet — add one to get started
+          No foods yet. Add one to get started.
         {:else}
           {state.foods.length} foods
         {/if}
@@ -154,13 +154,17 @@
       <div class="py-16 text-center text-muted-foreground">Loading food database...</div>
     {:else if state.foods.length === 0}
       <div class="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center text-muted-foreground">
-        <div class="grid h-14 w-14 place-items-center rounded-2xl bg-carbs/12 text-entry-carbs">
-          <Apple class="h-7 w-7" />
-        </div>
+        <Artwork
+          artwork="apple"
+          palette="moss"
+          motion="auto"
+          autoplay="once"
+          class="size-48"
+        />
         <div class="text-lg font-semibold text-foreground">Build your food database</div>
         <div class="max-w-[380px] text-sm leading-relaxed">
-          Add the foods you eat regularly with their carb counts. Once they're here,
-          logging a meal takes a couple of taps anywhere in Nocturne.
+          Add the foods you eat regularly with their carb counts. When they are in this list,
+          you can log a meal from anywhere in Nocturne in a few steps.
         </div>
         <div class="mt-1.5 flex gap-2">
           <Button size="sm" onclick={() => (state.composerOpen = true)}><Plus class="h-3.5 w-3.5" /> Add your first food</Button>

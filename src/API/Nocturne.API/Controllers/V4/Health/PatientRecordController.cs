@@ -3,11 +3,13 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.V4;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Projections;
@@ -92,6 +94,7 @@ public class PatientRecordController : ControllerBase
     /// Get or create the patient record
     /// </summary>
     [HttpGet]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(PatientRecord), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientRecord>> GetPatientRecord(CancellationToken cancellationToken = default)
@@ -101,11 +104,31 @@ public class PatientRecordController : ControllerBase
     }
 
     /// <summary>
+    /// The patient's timezone, which every report cuts its days on.
+    /// </summary>
+    /// <remarks>
+    /// Served apart from <see cref="GetPatientRecord"/> because a member who may read reports but not
+    /// therapy data still needs the report's days cut on the patient's calendar. The zone alone says
+    /// nothing clinical.
+    /// </remarks>
+    [HttpGet("timezone")]
+    [RequireScope(Scope.GlucoseRead, Scope.ReportsRead, Scope.TherapyRead)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(PatientTimezoneResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PatientTimezoneResponse>> GetPatientTimezone(
+        [FromServices] ITherapySettingsResolver therapySettings,
+        CancellationToken cancellationToken = default)
+    {
+        var timezone = await therapySettings.GetTimezoneAsync(ct: cancellationToken);
+        return Ok(new PatientTimezoneResponse { Timezone = timezone });
+    }
+
+    /// <summary>
     /// Update the patient record
     /// </summary>
     [HttpPut]
     [RequireScope(Scope.TherapyReadWrite)]
-    [RemoteForm(Invalidates = ["GetPatientRecord"])]
+    [RemoteForm(Invalidates = ["GetPatientRecord", "TenantSettings_GetPatientRelationship"])]
     [ProducesResponseType(typeof(PatientRecord), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientRecord>> UpdatePatientRecord(
         [FromBody] PatientRecord model,
@@ -129,6 +152,7 @@ public class PatientRecordController : ControllerBase
     /// Get all patient devices
     /// </summary>
     [HttpGet("devices")]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<PatientDevice>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<PatientDevice>>> GetDevices(CancellationToken cancellationToken = default)
@@ -142,6 +166,7 @@ public class PatientRecordController : ControllerBase
     /// candidate streams the user can register as devices from the settings UI.
     /// </summary>
     [HttpGet("devices/discovered-sources")]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IReadOnlyList<DiscoveredSource>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<DiscoveredSource>>> GetDiscoveredSources(CancellationToken cancellationToken = default)
@@ -287,6 +312,7 @@ public class PatientRecordController : ControllerBase
     /// Get all patient insulins
     /// </summary>
     [HttpGet("insulins")]
+    [RequireScope(Scope.TherapyRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(IEnumerable<PatientInsulin>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<PatientInsulin>>> GetInsulins(CancellationToken cancellationToken = default)

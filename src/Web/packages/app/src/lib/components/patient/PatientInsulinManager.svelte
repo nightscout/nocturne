@@ -223,12 +223,12 @@
             </div>
             <div class="flex-1 min-w-0">
               <Card.Title class="text-sm font-medium">
-                {insulin.name || "Unknown Insulin"}
+                {insulin.name || "Unknown insulin"}
               </Card.Title>
               <Card.Description size="sm">
                 {insulin.insulinCategory
                   ? (insulinCategoryLabels[insulin.insulinCategory] ?? insulin.insulinCategory)
-                  : "Unknown Category"}
+                  : "Unknown category"}
                 {#if insulin.role}
                   &middot; {insulinRoleLabels[insulin.role] ?? insulin.role}
                 {/if}
@@ -259,7 +259,7 @@
   {#if showInlineForm}
     <Card.Root>
       <Card.Header>
-        <Card.Title class="text-sm">Add an Insulin</Card.Title>
+        <Card.Title class="text-sm">Add an insulin</Card.Title>
       </Card.Header>
       <form
         {...insulinList.createForm.enhance(async ({ submit }) => {
@@ -303,7 +303,7 @@
             Cancel
           </Button>
           <Button type="submit" disabled={!canAddInline || !!insulinList.createForm.pending}>
-            {insulinList.createForm.pending ? "Adding..." : "Add Insulin"}
+            {insulinList.createForm.pending ? "Adding..." : "Add insulin"}
           </Button>
         </Card.Footer>
       </form>
@@ -311,7 +311,7 @@
   {:else}
     <Button variant="outline" onclick={() => (showInlineForm = true)}>
       <Plus class="h-4 w-4 mr-1" />
-      Add Insulin
+      Add insulin
     </Button>
   {/if}
 
@@ -392,7 +392,7 @@
   <div class="pt-2">
     <Button size="sm" onclick={() => openDialog()}>
       <Plus class="mr-2 h-4 w-4" />
-      Add Insulin
+      Add insulin
     </Button>
   </div>
 
@@ -401,7 +401,7 @@
     <Dialog.Content class="sm:max-w-lg max-h-[90vh] overflow-y-auto">
       <Dialog.Header>
         <Dialog.Title>
-          {editing ? "Edit Insulin" : "Add Insulin"}
+          {editing ? "Edit insulin" : "Add insulin"}
         </Dialog.Title>
         <Dialog.Description>
           {editing
@@ -482,7 +482,7 @@
     onOpenChange={(open) => {
       if (!open) deleteId = null;
     }}
-    title="Delete Insulin"
+    title="Delete insulin"
     confirmLabel="Delete"
     destructive
     onConfirm={handleDelete}

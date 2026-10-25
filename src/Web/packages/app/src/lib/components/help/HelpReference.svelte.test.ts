@@ -56,7 +56,7 @@ describe("code-backed documentation reference", () => {
     await expect
       .element(
         page.getByText(
-          "Example — invented readings, using the real report chart"
+          "Example: invented readings, using the real report chart"
         )
       )
       .toBeVisible();

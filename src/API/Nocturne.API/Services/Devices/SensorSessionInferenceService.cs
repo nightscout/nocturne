@@ -327,5 +327,5 @@ public sealed class SensorSessionInferenceService(
     }
 
     private static string SyncIdentifierFor(Guid patientDeviceId, InferredSensorStart start)
-        => $"{patientDeviceId:N}:{new DateTimeOffset(start.FirstReadingAfter, TimeSpan.Zero).ToUnixTimeMilliseconds()}";
+        => $"{patientDeviceId:N}:{start.FirstReadingAfter.ToMills()}";
 }

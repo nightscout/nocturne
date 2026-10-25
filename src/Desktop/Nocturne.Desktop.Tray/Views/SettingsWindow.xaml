@@ -194,27 +194,6 @@
                     </Border>
                 </StackPanel>
 
-                <!-- Notifications Section -->
-                <StackPanel Spacing="8">
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="Alarm Notifications"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Text="Choose which server alarms show toast notifications"
-                                   FontSize="12"
-                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                    </StackPanel>
-
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="16,12">
-                        <StackPanel x:Name="AlarmTypesPanel" Spacing="4" />
-                    </Border>
-                </StackPanel>
-
                 <!-- Bottom spacer for scroll breathing room -->
                 <Border Height="8" />
 

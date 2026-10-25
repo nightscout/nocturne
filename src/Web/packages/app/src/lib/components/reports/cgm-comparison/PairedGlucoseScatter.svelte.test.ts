@@ -18,6 +18,7 @@ describe("PairedGlucoseScatter", () => {
 
     const d = (await points.element()).getAttribute("d") ?? "";
     expect(d.match(/M/g)?.length).toBe(pairs.length);
+    expect(getComputedStyle(await points.element()).stroke).toBe("none");
   });
 
   it("labels each axis with its device", async () => {

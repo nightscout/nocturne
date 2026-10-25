@@ -1,0 +1,88 @@
+---
+title: Day in Review
+---
+
+<script>
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Day in Review
+
+Day in Review answers the question "what happened on this day?". It shows one
+day in detail: glucose, insulin, carbs, and each decision of your automated
+insulin delivery (AID) system, if you use one.
+
+<Video id="day-in-review" />
+
+## What it shows
+
+### The day in numbers
+
+- **The range bar** shows how the day's readings divide across five ranges:
+  very low, low, in range, high and very high. Move the pointer over the bar to
+  see each percentage.
+- **The figures** under the bar give the **Mean**, **Median**, **Std Dev**,
+  **CV**, **Range** (lowest to highest), **GMI** and the number of
+  **Readings** for the day.
+- **The insulin ring** shows the day's insulin, split into bolus and basal.
+  Select a bolus in the ring to open it. Under the ring are the **Total Carbs**,
+  the number of **Manual boluses** and the number of **Automatic boluses**.
+
+### Blood Glucose
+
+The chart shows the whole day, from midnight to midnight, with your treatments.
+It is the same chart as in the [Readings](/docs/reports/readings) report.
+
+### The time scrubber and the APS decision
+
+If your AID system sends its decisions, a time scrubber shows under the chart.
+The **APS Decision** card shows the decision at the time the scrubber points
+to:
+
+- **IOB** (insulin on board), split into basal and bolus, and **COB** (carbs
+  on board).
+- **Current BG**, **Eventual BG** (the glucose the system predicted) and
+  **Target**.
+- **Sensitivity**, as a percentage.
+- A badge that says **Enacted** if the system acted, or **Suggested** if it did
+  not. An enacted decision also shows the **Temp Basal** rate it set, and any
+  **Auto-bolus**.
+
+### Treatments Timeline
+
+The table lists every treatment of the day, with its **Time**, **Type**,
+**Carbs** and **Insulin**. Select a column name to sort by that column. Use
+**All Types** to show one type of treatment only.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+The report opens on today. To open another day, you can also select a day in
+the [Year Overview](/docs/reports/year-overview), or a time in the tooltip of a
+glucose chart.
+
+To step through the decisions of your AID system:
+
+1. Under the chart, move the scrubber to a time. The **APS Decision** card
+   shows the decision at that time.
+2. To go to the start of the day, select **Go to start**. You can also press
+   Home.
+3. To move 5 minutes at a time, select the step buttons, or press the left and
+   right arrow keys.
+4. To play the day, select **Play**, or press Space.
+
+To see another day:
+
+1. Select the left arrow next to the date to go back one day.
+2. Select the right arrow to go forward one day.
+
+To correct a treatment, select its row in **Treatments Timeline**. The edit
+dialog opens. To go back to the report you came from, select **Back to Previous
+View**.
+
+## Good to know
+
+- The time scrubber and the **APS Decision** card show only on days that have
+  AID system data.
+- The time scrubber and the **APS Decision** card are not printed.

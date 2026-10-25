@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -9,8 +9,7 @@ namespace Nocturne.API.Services.Alerts.Engines;
 /// <summary>
 /// The Rust engine's evaluations outside the per-rule driver, as pure functions of explicit
 /// state: one condition node (smart snooze, auto-resolve), and the sweep's auto-resolve
-/// decision. <see cref="RustBackedAlertEngine"/> persists what they return, and the shadow
-/// evaluator only compares it.
+/// decision. <see cref="RustBackedAlertEngine"/> persists what they return.
 /// </summary>
 internal static class RustAuxiliaryEvaluation
 {
@@ -18,7 +17,6 @@ internal static class RustAuxiliaryEvaluation
     /// <exception cref="RustAlertEngineException">The engine rejected the node or the request.</exception>
     public static RustEvaluateNodeResponse EvaluateNode(
         AlertEngineErrors errors,
-        string engine,
         Guid ruleId,
         JsonElement node,
         string pathRoot,
@@ -35,7 +33,7 @@ internal static class RustAuxiliaryEvaluation
             Now = now,
             Timers = RustEnvelopeMapper.BuildTimers(timers),
         };
-        return errors.Track("evaluate_node", engine, () => RustAlertEngine.EvaluateNode(request));
+        return errors.Track("evaluate_node", () => RustAlertEngine.EvaluateNode(request));
     }
 
     /// <summary>
@@ -51,11 +49,10 @@ internal static class RustAuxiliaryEvaluation
     /// Evaluates the rule's auto-resolve tree under the <c>auto_resolve</c> path root and, when
     /// it holds, force-closes the excursion with reason auto. Call only when
     /// <see cref="AttemptsAutoResolve"/> is true. A tree that does not parse, or that the engine
-    /// rejects, does not resolve (the managed engine skips it too).
+    /// rejects, does not resolve.
     /// </summary>
     public static RustAutoResolveOutcome AutoResolve(
         AlertEngineErrors errors,
-        string engine,
         AlertRuleSnapshot rule,
         SensorContext context,
         DateTime now,
@@ -66,9 +63,9 @@ internal static class RustAuxiliaryEvaluation
         RustEvaluateNodeResponse response;
         try
         {
-            var node = RustEnvelopeMapper.ParseNode(rule.AutoResolveParams!);
+            var node = RustEnvelopeMapper.ParseJson(rule.AutoResolveParams!);
             response = EvaluateNode(
-                errors, engine, rule.Id, node, AlertConditionTypeNames.AutoResolvePathRoot, context, now, timers);
+                errors, rule.Id, node, AlertConditionTypeNames.AutoResolvePathRoot, context, now, timers);
         }
         catch (Exception ex) when (ex is JsonException or RustAlertEngineException)
         {
@@ -79,7 +76,7 @@ internal static class RustAuxiliaryEvaluation
         if (!response.Value!.Value)
             return new RustAutoResolveOutcome(response, null);
 
-        var close = new RustExcursionDecider(errors, engine)
+        var close = new RustExcursionDecider(errors)
             .ForceClose(rule.Id, state, ExcursionCloseReason.AutoResolve, now);
         return new RustAutoResolveOutcome(response, close);
     }

@@ -43,7 +43,6 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
         """{"units":"mg/dl","dia":4,"basal":[{"time":"00:00","value":0.8},{"time":"06:00","value":1.0}],"carbratio":[{"time":"00:00","value":10}],"sens":[{"time":"00:00","value":40}],"target_low":[{"time":"00:00","value":100}],"target_high":[{"time":"00:00","value":120}]}""";
 
     private readonly NocturneDbContext _context;
-    private readonly Mock<IProfileDecomposer> _profileDecomposer = new();
     private readonly TreatmentDecomposer _decomposer;
 
     public TreatmentDecomposerProfileActivationTests()
@@ -74,7 +73,6 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
             new Mock<ITreatmentFoodService>().Object,
             deviceService.Object,
             Mock.Of<IPatientDeviceStamper>(),
-            _profileDecomposer.Object,
             new Mock<IActiveProfileResolver>().Object,
             new Mock<IPatientInsulinRepository>().Object,
             TempBasalTestDeps.Unscheduled(),
@@ -164,9 +162,7 @@ public class TreatmentDecomposerProfileActivationTests : IDisposable
         await _decomposer.DecomposeAsync(TemporarySwitch(), WriteOrigin.Live);
         await _decomposer.DecomposeAsync(EffectiveSwitch(), WriteOrigin.Live);
 
-        _profileDecomposer.Verify(
-            d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        (await _context.TherapySettings.CountAsync()).Should().Be(0);
         (await _context.StateSpans.CountAsync()).Should().Be(0);
     }
 

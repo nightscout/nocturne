@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type {
-    CreateBasalInjectionRequest,
-    PatientInsulin,
+  import {
+    InsulinRole,
+    type CreateBasalInjectionRequest,
+    type PatientInsulin,
   } from "$lib/api";
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
@@ -23,7 +24,7 @@
   // applying timestamp-based active-date filtering.
   let eligibleInsulins = $derived(
     (basalInsulins ?? []).filter(
-      (i) => i.isCurrent && (i.role === "Basal" || i.role === "Both")
+      (i) => i.isCurrent && (i.role === InsulinRole.Basal || i.role === InsulinRole.Both)
     )
   );
 
@@ -31,7 +32,7 @@
     eligibleInsulins.find((i) => i.id === value.patientInsulinId)
   );
 
-  let isPremix = $derived(selectedInsulin?.role === "Both");
+  let isPremix = $derived(selectedInsulin?.role === InsulinRole.Both);
 
   let isHighDose = $derived(
     typeof value.units === "number" && value.units > 100
@@ -52,7 +53,7 @@
 <div class="space-y-2">
   <Label>
     <Syringe class="h-3.5 w-3.5 text-entry-basal-injection" />
-    Basal Insulin
+    Basal insulin
   </Label>
   <Select.Root
     type="single"
@@ -79,7 +80,7 @@
     <div class="flex items-start gap-1.5 text-xs text-warning">
       <AlertTriangle class="h-3.5 w-3.5 mt-0.5 shrink-0" />
       <span>
-        This insulin is used for both bolus and basal &mdash; log the basal portion only.
+        This insulin is used for both bolus and basal. Log the basal portion only.
       </span>
     </div>
   {/if}
@@ -101,7 +102,7 @@
   {#if isHighDose}
     <div class="flex items-start gap-1.5 text-xs text-warning">
       <AlertTriangle class="h-3.5 w-3.5 mt-0.5 shrink-0" />
-      <span>Confirm the dose &mdash; this is higher than typical.</span>
+      <span>Confirm the dose. This dose is higher than typical.</span>
     </div>
   {/if}
 </div>

@@ -41,6 +41,29 @@ public interface IStateSpanService
         bool descending = true,
         CancellationToken cancellationToken = default);
 
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.GetStateSpansInCategoriesAsync"/>
+    Task<IEnumerable<StateSpan>> GetStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
+        string? source,
+        bool? active,
+        int count,
+        int skip,
+        bool descending,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.CountStateSpansInCategoriesAsync"/>
+    Task<int> CountStateSpansInCategoriesAsync(
+        IReadOnlyCollection<StateSpanCategory> categories,
+        string? state,
+        DateTime? from,
+        DateTime? to,
+        string? source,
+        bool? active,
+        CancellationToken cancellationToken = default);
+
     /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.GetStateSpansStartingFromAsync"/>
     Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
         StateSpanCategory category,

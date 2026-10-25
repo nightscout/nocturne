@@ -18,14 +18,15 @@
   },
   "dependencies": {
     "@floating-ui/dom": "^1.6.0",
-    "@sveltejs/vite-plugin-svelte": "^5.1.1"
+    "@sveltejs/vite-plugin-svelte": "^7.1.2"
   },
   "devDependencies": {
     "@nocturne/eslint-config": "workspace:*",
     "@nocturne/ui": "workspace:*",
     "eslint": "^10.3.0",
     "svelte-check": "^4.4.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vite": "^8.0.12"
   },
   "scripts": {
     "check": "svelte-check --tsconfig ./tsconfig.json",

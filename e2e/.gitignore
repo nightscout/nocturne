@@ -4,3 +4,4 @@ playwright-report/
 blob-report/
 docker-compose-logs.txt
 .state/
+crash-dumps/

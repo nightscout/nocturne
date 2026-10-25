@@ -7,11 +7,12 @@ import { getRequestEvent, query } from "$app/server";
 import { z } from "zod";
 import {
   StateSpanCategory,
-  BasalDeliveryOrigin,
   type StateSpan,
   type ProfileActivationDto,
+  type BasalDeliverySpanDto,
 } from "$lib/api";
 import { profileActivationLabel } from "$lib/utils/profile-activation-label";
+import { readable } from "$lib/server/patient-timezone";
 
 /**
  * Input schema for time spans data queries - supports date range
@@ -34,14 +35,8 @@ export interface ProcessedSpan {
   endTime: Date;
   color: string;
   metadata?: Record<string, unknown>;
-  /** Temp basal rate (U/hr) if applicable */
-  rate?: number | null;
-  /** Temp basal percent if applicable */
-  percent?: number | null;
   /** Profile name if applicable */
   profileName?: string | null;
-  /** Basal delivery origin if applicable */
-  origin?: BasalDeliveryOrigin | null;
 }
 
 /**
@@ -50,7 +45,7 @@ export interface ProcessedSpan {
 export interface TimeSpansPageData {
   pumpModeSpans: ProcessedSpan[];
   profileSpans: ProcessedSpan[];
-  tempBasalSpans: ProcessedSpan[];
+  tempBasalSpans: BasalDeliverySpanDto[];
   overrideSpans: ProcessedSpan[];
   activitySpans: ProcessedSpan[];
   dateRange: { from: Date; to: Date };
@@ -81,13 +76,6 @@ function getPumpModeColor(state: string): string {
 function getProfileColor(_state: string): string {
   // Profiles use a neutral color
   return "var(--chart-1)";
-}
-
-/**
- * Map temp basal state to CSS color variable
- */
-function getTempBasalColor(_state: string): string {
-  return "var(--insulin-basal)";
 }
 
 /**
@@ -145,10 +133,7 @@ function processSpans(
         endTime: new Date(Math.min(span.endMills ?? rangeEnd, rangeEnd)),
         color: colorFn(span.state ?? ""),
         metadata: span.metadata,
-        rate: null,
-        percent: null,
         profileName: typeof profileName === "string" ? profileName : null,
-        origin: null,
       };
     });
 }
@@ -178,70 +163,7 @@ function processProfileActivations(
       startTime: new Date(Math.max(activation.startMills ?? 0, rangeStart)),
       endTime: new Date(Math.min(activation.endMills ?? rangeEnd, rangeEnd)),
       color: getProfileColor(activation.phase ?? ""),
-      rate: null,
-      percent: null,
       profileName: profileActivationLabel(activation) ?? null,
-      origin: null,
-    }));
-}
-
-/**
- * Parse a numeric value from metadata (handles various JSON types)
- */
-function parseMetadataNumber(value: unknown): number | null {
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const parsed = parseFloat(value);
-    return isNaN(parsed) ? null : parsed;
-  }
-  return null;
-}
-
-/**
- * Parse origin string from metadata to BasalDeliveryOrigin enum
- */
-function parseBasalOrigin(value: unknown): BasalDeliveryOrigin {
-  if (typeof value === "string") {
-    if (value === BasalDeliveryOrigin.Algorithm) return BasalDeliveryOrigin.Algorithm;
-    if (value === BasalDeliveryOrigin.Manual) return BasalDeliveryOrigin.Manual;
-    if (value === BasalDeliveryOrigin.Suspended) return BasalDeliveryOrigin.Suspended;
-    if (value === BasalDeliveryOrigin.Scheduled) return BasalDeliveryOrigin.Scheduled;
-  }
-  return BasalDeliveryOrigin.Scheduled;
-}
-
-/**
- * Process basal delivery spans - extracts rate and origin from metadata
- */
-function processBasalSpans(
-  spans: StateSpan[] | null | undefined,
-  rangeStart: number,
-  rangeEnd: number,
-  colorFn: (state: string) => string
-): ProcessedSpan[] {
-  // Handle null/undefined/non-array input
-  if (!spans || !Array.isArray(spans)) {
-    return [];
-  }
-
-  return spans
-    .filter((span) => {
-      const spanStart = span.startMills ?? 0;
-      const spanEnd = span.endMills ?? rangeEnd;
-      return spanEnd > rangeStart && spanStart < rangeEnd;
-    })
-    .map((span) => ({
-      id: span.id ?? randomUUID(),
-      category: span.category ?? StateSpanCategory.PumpMode,
-      state: span.state ?? "Unknown",
-      startTime: new Date(Math.max(span.startMills ?? 0, rangeStart)),
-      endTime: new Date(Math.min(span.endMills ?? rangeEnd, rangeEnd)),
-      color: colorFn(span.state ?? ""),
-      metadata: span.metadata,
-      rate: parseMetadataNumber(span.metadata?.rate) ?? parseMetadataNumber(span.metadata?.absolute),
-      percent: parseMetadataNumber(span.metadata?.percent),
-      profileName: null,
-      origin: parseBasalOrigin(span.metadata?.origin),
     }));
 }
 
@@ -281,19 +203,24 @@ export const getTimeSpansData = query(
     const rangeTo = endOfRange.toISOString();
 
     try {
-      // Fetch all state span categories in parallel
+      // Each category has its own read scope, so a lane the caller may not
+      // read is left empty rather than emptying the others.
       const [pumpModeRes, profileRes, tempBasalRes, overrideRes, activityRes] =
         await Promise.all([
-          apiClient.stateSpans.getPumpModes(rangeFrom, rangeTo),
-          apiClient.profileActivations.getActivations(rangeFrom, rangeTo),
-          apiClient.stateSpans.getStateSpans(undefined, undefined, rangeFrom, rangeTo),
-          apiClient.stateSpans.getOverrides(rangeFrom, rangeTo),
-          apiClient.stateSpans.getActivities(rangeFrom, rangeTo),
+          readable(() => apiClient.stateSpans.getPumpModes(rangeFrom, rangeTo)),
+          readable(() =>
+            apiClient.profileActivations.getActivations(rangeFrom, rangeTo)
+          ),
+          readable(() =>
+            apiClient.chartData.getBasalDeliverySpans(startTime, endTime)
+          ),
+          readable(() => apiClient.stateSpans.getOverrides(rangeFrom, rangeTo)),
+          readable(() => apiClient.stateSpans.getActivities(rangeFrom, rangeTo)),
         ]);
 
       const pumpModeSpans = pumpModeRes?.data ?? [];
       const profileActivations = profileRes ?? [];
-      const tempBasalSpans = tempBasalRes?.data ?? [];
+      const tempBasalSpans = tempBasalRes ?? [];
       const overrideSpans = overrideRes?.data ?? [];
       const activitySpans = activityRes?.data ?? [];
 
@@ -309,12 +236,7 @@ export const getTimeSpansData = query(
           startTime,
           endTime
         ),
-        tempBasalSpans: processBasalSpans(
-          tempBasalSpans,
-          startTime,
-          endTime,
-          getTempBasalColor
-        ),
+        tempBasalSpans,
         overrideSpans: processSpans(
           overrideSpans,
           startTime,
@@ -335,8 +257,6 @@ export const getTimeSpansData = query(
             endTime: new Date(Math.min(span.endMills ?? endTime, endTime)),
             color: getActivityColor(span.category ?? StateSpanCategory.Exercise),
             metadata: span.metadata,
-            rate: null,
-            percent: null,
             profileName: null,
           })),
         dateRange: { from: startOfRange, to: endOfRange },

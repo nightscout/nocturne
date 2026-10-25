@@ -1,6 +1,9 @@
+using Nocturne.API.Tests.Infrastructure;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Profiles;
@@ -8,6 +11,7 @@ using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -25,17 +29,13 @@ public class PropertiesServiceTests
     private readonly Mock<IDDataService> _mockDDataService;
     private readonly Mock<ILogger<PropertiesService>> _mockLogger;
     private readonly Mock<IDeviceAgeService> _mockDeviceAgeService;
+    private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
     private readonly PropertiesService _service;
 
     public PropertiesServiceTests()
     {
         _mockDDataService = new Mock<IDDataService>();
         _mockLogger = new Mock<ILogger<PropertiesService>>();
-        var mockIobCalculator = new Mock<IIobCalculator>();
-        var mockCobCalculator = new Mock<ICobCalculator>();
-        var mockBolusRepo = new Mock<IBolusRepository>();
-        var mockCarbIntakeRepo = new Mock<ICarbIntakeRepository>();
-        var mockTempBasalRepo = new Mock<ITempBasalRepository>();
         var mockAr2Service = new Mock<IAr2Service>();
 
         _mockDeviceAgeService = new Mock<IDeviceAgeService>();
@@ -55,13 +55,12 @@ public class PropertiesServiceTests
         _service = new PropertiesService(
             _mockDDataService.Object,
             _mockLogger.Object,
-            mockIobCalculator.Object,
-            mockCobCalculator.Object,
-            mockBolusRepo.Object,
-            mockCarbIntakeRepo.Object,
-            mockTempBasalRepo.Object,
+            TestIobCobReader.Empty(),
             mockAr2Service.Object,
-            _mockDeviceAgeService.Object
+            _mockDeviceAgeService.Object,
+            _therapySettings.Object,
+            TimeProvider.System,
+            Options.Create(new DbSizeOptions())
         );
     }
 
@@ -86,6 +85,55 @@ public class PropertiesServiceTests
         Assert.True(result.ContainsKey("delta"));
         Assert.True(result.ContainsKey("direction"));
     }
+
+    [Theory]
+    [InlineData(59, "ok")]
+    [InlineData(60, "warn")]
+    [InlineData(74, "warn")]
+    [InlineData(75, "urgent")]
+    public async Task DbSize_StatusFollowsTheConfiguredBudget(int percent, string status)
+    {
+        const long mib = 1024 * 1024;
+        var service = ServiceWithBudget(maxMiB: 100);
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = percent * mib / 2, IndexSize = percent * mib / 2 } });
+
+        var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
+
+        var dbsize = (Dictionary<string, object>)result["dbsize"];
+        dbsize["size"].Should().Be(percent * mib, "the size is the data and the indexes together");
+        dbsize["percentage"].Should().Be(percent);
+        dbsize["status"].Should().Be(status);
+    }
+
+    [Fact]
+    public async Task DbSize_DefaultsToABudgetOf2048MiB()
+    {
+        var service = ServiceWithBudget(new DbSizeOptions());
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DData { DbStats = new DbStats { DataSize = 1024L * 1024 * 1024 } });
+
+        var result = await service.GetPropertiesAsync(new[] { "dbsize" }, CancellationToken.None);
+
+        ((Dictionary<string, object>)result["dbsize"])["percentage"].Should().Be(50);
+    }
+
+    private PropertiesService ServiceWithBudget(int maxMiB) =>
+        ServiceWithBudget(new DbSizeOptions { MaxMiB = maxMiB });
+
+    private PropertiesService ServiceWithBudget(DbSizeOptions budget) =>
+        new(
+            _mockDDataService.Object,
+            _mockLogger.Object,
+            TestIobCobReader.Empty(),
+            Mock.Of<IAr2Service>(),
+            _mockDeviceAgeService.Object,
+            _therapySettings.Object,
+            TimeProvider.System,
+            Options.Create(budget)
+        );
 
     [Fact]
     public async Task GetPropertiesAsync_WithSpecificNames_ReturnsOnlyRequestedProperties()
@@ -333,13 +381,12 @@ public class PropertiesServiceTests
         var service = new PropertiesService(
             _mockDDataService.Object,
             _mockLogger.Object,
-            Mock.Of<IIobCalculator>(),
-            Mock.Of<ICobCalculator>(),
-            Mock.Of<IBolusRepository>(),
-            Mock.Of<ICarbIntakeRepository>(),
-            Mock.Of<ITempBasalRepository>(),
+            TestIobCobReader.Empty(),
             ar2Service.Object,
-            _mockDeviceAgeService.Object
+            _mockDeviceAgeService.Object,
+            _therapySettings.Object,
+            TimeProvider.System,
+            Options.Create(new DbSizeOptions())
         );
         _mockDDataService
             .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
@@ -645,6 +692,116 @@ public class PropertiesServiceTests
     }
 
     [Fact]
+    public async Task GetAllPropertiesAsync_BasalEntriesCarryingOnlyTime_ResolveAsTheSameEntriesWithTimeAsSeconds()
+    {
+        var hour = DateTimeOffset.UtcNow.Hour;
+        var upcoming = $"{(hour + 1) % 24:00}:00";
+        var current = $"{hour:00}:00";
+
+        List<TimeValue> Schedule(bool withSeconds) =>
+        [
+            new() { Time = upcoming, Value = 9.0, TimeAsSeconds = withSeconds ? ((hour + 1) % 24) * 3600 : null },
+            new() { Time = current, Value = 5.0, TimeAsSeconds = withSeconds ? hour * 3600 : null },
+        ];
+
+        async Task<double> CurrentBasal(List<TimeValue> schedule)
+        {
+            _mockDDataService
+                .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateTestDDataWithBasalProfile(schedule));
+            var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+            var basal = (Dictionary<string, object>)result["basal"];
+            return Convert.ToDouble(((Dictionary<string, object>)basal["current"])["basal"]);
+        }
+
+        Assert.Equal(5.0, await CurrentBasal(Schedule(withSeconds: true)));
+        Assert.Equal(5.0, await CurrentBasal(Schedule(withSeconds: false)));
+    }
+
+    private PropertiesService ServiceAt(DateTimeOffset now) =>
+        new(
+            _mockDDataService.Object,
+            _mockLogger.Object,
+            TestIobCobReader.Empty(),
+            Mock.Of<IAr2Service>(),
+            _mockDeviceAgeService.Object,
+            _therapySettings.Object,
+            new FakeTimeProvider(now),
+            Options.Create(new DbSizeOptions())
+        );
+
+    private async Task<double> CurrentBasalAt(DateTimeOffset now, List<TimeValue> schedule)
+    {
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateTestDDataWithBasalProfile(schedule));
+        var result = await ServiceAt(now).GetAllPropertiesAsync(CancellationToken.None);
+        var basal = (Dictionary<string, object>)result["basal"];
+        return Convert.ToDouble(((Dictionary<string, object>)basal["current"])["basal"]);
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_BasalIsTheRateAtThePatientsLocalTimeOfDay()
+    {
+        // 03:00 UTC is 16:00 in Auckland (UTC+13, daylight time).
+        var now = new DateTimeOffset(2026, 1, 15, 3, 0, 0, TimeSpan.Zero);
+        _therapySettings
+            .Setup(x => x.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Pacific/Auckland");
+
+        var rate = await CurrentBasalAt(now,
+        [
+            new() { Time = "03:00", Value = 9.0 },
+            new() { Time = "16:00", Value = 5.0 },
+            new() { Time = "22:00", Value = 7.0 },
+        ]);
+
+        rate.Should().Be(5.0);
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_BasalWithNoKnownZone_ReadsTheScheduleInUtc()
+    {
+        var now = new DateTimeOffset(2026, 1, 15, 3, 0, 0, TimeSpan.Zero);
+
+        var rate = await CurrentBasalAt(now,
+        [
+            new() { Time = "03:00", Value = 9.0 },
+            new() { Time = "16:00", Value = 5.0 },
+        ]);
+
+        rate.Should().Be(9.0);
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_BasalBeforeTheFirstEntry_TakesTheEarliestEntryByTime()
+    {
+        var now = new DateTimeOffset(2026, 1, 15, 3, 0, 0, TimeSpan.Zero);
+
+        var rate = await CurrentBasalAt(now,
+        [
+            new() { Time = "08:00", Value = 3.0 },
+            new() { Time = "06:00", Value = 2.0 },
+        ]);
+
+        rate.Should().Be(2.0);
+    }
+
+    [Fact]
+    public async Task GetPropertiesAsync_WithoutBasalRequested_DoesNotResolveTheTimezone()
+    {
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateTestDDataWithBasalProfile());
+
+        await _service.GetPropertiesAsync(new[] { "iob" }, CancellationToken.None);
+
+        _therapySettings.Verify(
+            x => x.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task GetAllPropertiesAsync_WithTempBasal_ReturnsBasalPropertiesWithTempMarker()
     {
         // Arrange
@@ -880,12 +1037,11 @@ public class PropertiesServiceTests
         };
     }
 
-    private DData CreateTestDDataWithBasalProfile()
+    private DData CreateTestDDataWithBasalProfile(List<TimeValue>? schedule = null)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        // Ensure TimeAsSeconds is calculated for basal schedule
-        var basalSchedule = new List<TimeValue>
+        var basalSchedule = schedule ?? new List<TimeValue>
         {
             new TimeValue
             {

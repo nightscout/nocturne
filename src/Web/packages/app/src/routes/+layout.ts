@@ -7,6 +7,7 @@ import {
     registerPreferenceCookieDomain,
     registerPreferencesWriteThrough,
     reconcilePreferences,
+    showTenantDefaultUnits,
     presentOwnerPreferences,
     applyTenantPresentation,
     setLanguage,
@@ -64,6 +65,7 @@ export const load: LayoutLoad = async ({ url, data }) => {
     } else if (browser && data?.hasAccount) {
         // Server preferences win across devices; an empty server blob seeds from local once.
         reconcilePreferences(data?.serverPreferences)
+        showTenantDefaultUnits(data?.user?.defaultGlucoseUnits)
     }
 
     applyTenantPresentation(data?.tenantPreferences)

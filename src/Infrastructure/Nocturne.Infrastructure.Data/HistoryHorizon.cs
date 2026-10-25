@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Infrastructure.Data;
 
@@ -154,7 +155,7 @@ public static class HistoryHorizon
             .SingleAsync(ct);
 
         Report(read, logger);
-        return DateTimeOffset.FromUnixTimeMilliseconds(HistoryPage.ToMilliseconds(read.Value)).UtcDateTime;
+        return DateTimeOffset.FromUnixTimeMilliseconds(read.Value.ToMills()).UtcDateTime;
     }
 
     private static void Report(HorizonRead read, ILogger logger)
@@ -232,7 +233,7 @@ public static class HistoryHorizon
                 return _outer.Admits(stampMills);
 
             return _horizon is not { IsCompletedSuccessfully: true, Result: { } horizon }
-                || stampMills < HistoryPage.ToMilliseconds(horizon);
+                || stampMills < horizon.ToMills();
         }
 
         public void Dispose()

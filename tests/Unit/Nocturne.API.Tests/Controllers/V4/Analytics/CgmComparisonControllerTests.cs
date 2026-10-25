@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Analytics;
 using Nocturne.Core.Models.V4;
@@ -18,13 +19,14 @@ public class CgmComparisonControllerTests
     private readonly CgmComparisonController _controller;
 
     private static readonly DateTime Start = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime WinterStart = new(2025, 11, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime End = new(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc);
     private static readonly Guid DeviceA = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid DeviceB = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     public CgmComparisonControllerTests()
     {
-        _controller = new CgmComparisonController(_glucose.Object, _devices.Object);
+        _controller = new CgmComparisonController(_glucose.Object, _devices.Object, TenantClockDoubles.In("Europe/London"));
     }
 
     private void RegisterDevice(Guid id, string model, DeviceCategory category = DeviceCategory.CGM) =>
@@ -81,7 +83,7 @@ public class CgmComparisonControllerTests
     public async Task Compare_with_a_range_over_the_analytics_cap_returns_bad_request()
     {
         var result = await _controller.Compare(
-            DeviceA, DeviceB, Start, Start.AddDays(V4ReadLimits.MaxAnalyticsSpanDays).AddSeconds(1));
+            DeviceA, DeviceB, WinterStart, WinterStart.AddDays(V4ReadLimits.MaxAnalyticsSpanDays));
 
         ProblemOf(result, 400).Detail.Should().Be($"Date range must not exceed {V4ReadLimits.MaxAnalyticsSpanDays} days.");
         VerifyNoRead();
@@ -90,14 +92,67 @@ public class CgmComparisonControllerTests
     [Fact]
     public async Task Compare_accepts_a_range_of_exactly_the_analytics_cap()
     {
+        RegisterTwoCgms();
+
+        var result = await _controller.Compare(
+            DeviceA, DeviceB, WinterStart, WinterStart.AddDays(V4ReadLimits.MaxAnalyticsSpanDays).AddMilliseconds(-1));
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task Compare_accepts_the_widest_preset_across_a_fall_back()
+    {
+        RegisterTwoCgms();
+
+        var result = await _controller.Compare(
+            DeviceA, DeviceB, new DateTime(2026, 7, 31, 23, 0, 0, DateTimeKind.Utc), new DateTime(2026, 10, 29, 23, 59, 59, 999, DateTimeKind.Utc));
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task Compare_accepts_the_widest_preset_across_a_spring_forward()
+    {
+        RegisterTwoCgms();
+
+        var result = await _controller.Compare(
+            DeviceA, DeviceB, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 5, 29, 22, 59, 59, 999, DateTimeKind.Utc));
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task Compare_refuses_91_local_days_across_a_fall_back()
+    {
+        var result = await _controller.Compare(
+            DeviceA, DeviceB, new DateTime(2026, 7, 31, 23, 0, 0, DateTimeKind.Utc), new DateTime(2026, 10, 30, 23, 59, 59, 999, DateTimeKind.Utc));
+
+        ProblemOf(result, 400).Detail.Should().Be($"Date range must not exceed {V4ReadLimits.MaxAnalyticsSpanDays} days.");
+        VerifyNoRead();
+    }
+
+    [Fact]
+    public async Task Compare_counts_utc_days_when_the_tenant_has_no_zone()
+    {
+        var controller = new CgmComparisonController(_glucose.Object, _devices.Object, TenantClockDoubles.In(null));
+        RegisterTwoCgms();
+
+        var accepted = await controller.Compare(
+            DeviceA, DeviceB, WinterStart, WinterStart.AddDays(V4ReadLimits.MaxAnalyticsSpanDays).AddMilliseconds(-1));
+        var refused = await controller.Compare(
+            DeviceA, DeviceB, WinterStart, WinterStart.AddDays(V4ReadLimits.MaxAnalyticsSpanDays));
+
+        accepted.Result.Should().BeOfType<OkObjectResult>();
+        ProblemOf(refused, 400);
+    }
+
+    private void RegisterTwoCgms()
+    {
         RegisterDevice(DeviceA, "Sensor A");
         RegisterDevice(DeviceB, "Sensor B");
         RegisterReadings(DeviceA, (0, 100));
         RegisterReadings(DeviceB, (1, 104));
-
-        var result = await _controller.Compare(DeviceA, DeviceB, Start, Start.AddDays(V4ReadLimits.MaxAnalyticsSpanDays));
-
-        result.Result.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]

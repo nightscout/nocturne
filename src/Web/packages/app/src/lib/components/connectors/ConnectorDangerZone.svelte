@@ -61,6 +61,12 @@
     DeviceEvents: "device events",
     StateSpans: "state spans",
     DeviceStatus: "device statuses",
+    TempBasals: "temp basals",
+    HeartRate: "heart rate readings",
+    Steps: "step counts",
+    BodyWeight: "body weights",
+    Sleep: "sleep sessions",
+    Profiles: "profile records",
   };
 
   function formatCountLabel(key: string): string {
@@ -125,7 +131,7 @@
 
   <Card variant="destructive">
     <CardHeader>
-      <CardTitle variant="destructive">Danger Zone</CardTitle>
+      <CardTitle variant="destructive">Danger zone</CardTitle>
       <CardDescription>
         Irreversible actions that affect this connector
       </CardDescription>
@@ -136,10 +142,9 @@
           class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between"
         >
           <div>
-            <p class="font-medium">Delete Configuration</p>
+            <p class="font-medium">Delete configuration</p>
             <p class="text-sm text-muted-foreground">
-              Remove this connector's configuration. The connector will need to
-              be set up again to resume syncing.
+              Remove this connector's configuration. The connector will need to be configured again to resume syncing.
             </p>
           </div>
           <Button
@@ -151,7 +156,7 @@
             }}
           >
             <Trash2 class="mr-2 h-4 w-4" />
-            Delete Config
+            Delete config
           </Button>
         </div>
       {/if}
@@ -165,7 +170,7 @@
           class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between"
         >
           <div>
-            <p class="font-medium">Delete Synced Data</p>
+            <p class="font-medium">Delete synced data</p>
             <p class="text-sm text-muted-foreground">
               Permanently delete all data synced by this connector.
             </p>
@@ -194,7 +199,7 @@
             }}
           >
             <Trash2 class="mr-2 h-4 w-4" />
-            Delete Data
+            Delete data
           </Button>
         </div>
       {/if}
@@ -204,10 +209,10 @@
   <!-- Delete Configuration Dialog -->
   <DangerZoneDialog
     bind:open={showDeleteConfigDialog}
-    title="Delete {displayName} Configuration"
+    title="Delete {displayName} configuration"
     description="You are about to permanently delete all configuration and credentials for this connector. The connector will stop syncing data."
     confirmationPhrase="DELETE CONFIGURATION"
-    confirmButtonText="Delete Configuration"
+    confirmButtonText="Delete configuration"
     onConfirm={handleDeleteConfiguration}
   >
     {#snippet result()}
@@ -248,10 +253,10 @@
   <!-- Delete Data Dialog -->
   <DangerZoneDialog
     bind:open={showDeleteDataDialog}
-    title="Delete {displayName} Data"
+    title="Delete {displayName} data"
     description="You are about to permanently delete all data synchronized by this connector."
     confirmationPhrase="DELETE DATA"
-    confirmButtonText={allowReimport ? "Delete and Allow Re-import" : "Delete All Data"}
+    confirmButtonText={allowReimport ? "Delete and allow re-import" : "Delete all data"}
     onConfirm={handleDeleteData}
   >
     {#snippet content()}

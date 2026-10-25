@@ -1,11 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
@@ -20,8 +20,7 @@ public class EngineNativeGateTests
     /// <summary>
     /// CI sets NOCTURNE_ALERTS_REQUIRE_NATIVE=1 after building the cdylib so a
     /// broken probe cannot silently skip this assembly's rust-engine tests. The gate
-    /// itself is the shared <see cref="NativeLibraryGate"/> in the corpus
-    /// generator's Harness.
+    /// itself is the shared <see cref="NativeLibraryGate"/> in the corpus test support.
     /// </summary>
     [Fact]
     public void Native_library_is_present_when_required() =>
@@ -29,58 +28,33 @@ public class EngineNativeGateTests
 }
 
 /// <summary>
-/// Shared fixtures for the engine-seam tests: engine factories over the generator's
-/// in-memory fakes and scenario-to-seam projections. Corpus location, wire-to-domain
-/// conversions and the JSON deep-diff live in the generator's Harness
-/// (<see cref="CorpusLocator"/>, <see cref="ScenarioConversions"/>,
-/// <see cref="JsonNodeDiff"/>).
+/// Shared fixtures for the engine-seam tests: engine factories over the corpus's in-memory fakes
+/// and scenario-to-seam projections. Corpus location, wire-to-domain conversions and the JSON
+/// deep-diff live in the corpus test support (<see cref="CorpusLocator"/>,
+/// <see cref="ScenarioConversions"/>, <see cref="JsonNodeDiff"/>).
 /// </summary>
 internal static class EngineTestHarness
 {
     public static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0002-000000000001");
 
     // -----------------------------------------------------------------------
-    // Engine factories (over the generator's in-memory fakes)
+    // Engine factories (over the corpus's in-memory fakes)
     // -----------------------------------------------------------------------
 
-    /// <summary>
-    /// Builds a <see cref="ManagedAlertEngine"/> with the evaluator registry sourced from
-    /// the single AddAlertEvaluators registration (so the seam test can never drift behind
-    /// the live engine) and the supplied in-memory state fakes. The returned provider owns
-    /// the evaluator lifetimes; dispose it with the test.
-    /// </summary>
-    public static (ManagedAlertEngine Engine, ServiceProvider Provider) BuildManagedEngine(
-        ManualTimeProvider time,
-        IConditionTimerStore timerStore,
+    /// <summary>An <see cref="ExcursionTracker"/> deciding through the Rust engine, as production does.</summary>
+    public static ExcursionTracker BuildRustTracker(
+        TimeProvider time,
         IAlertTrackerRepository trackerRepo,
-        AlertRuleEvaluationGate? gate = null)
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddSingleton<TimeProvider>(time);
-        services.AddSingleton(timerStore);
-        services.AddAlertEvaluators();
-        services.AddSingleton<ConditionEvaluatorRegistry>();
-        var provider = services.BuildServiceProvider();
+        AlertRuleEvaluationGate? gate = null) =>
+        new(trackerRepo, gate ?? new AlertRuleEvaluationGate(), time, NullLogger<ExcursionTracker>.Instance,
+            new RustExcursionDecider(new AlertEngineErrors(new TestMeterFactory(), time)));
 
-        var tracker = new ExcursionTracker(
-            trackerRepo, gate ?? new AlertRuleEvaluationGate(), time, NullLogger<ExcursionTracker>.Instance);
-        var engine = new ManagedAlertEngine(
-            provider.GetRequiredService<ConditionEvaluatorRegistry>(),
-            tracker,
-            new ConditionVersionLog(),
-            NullLogger<ManagedAlertEngine>.Instance);
-        return (engine, provider);
-    }
-
-    /// <summary>Builds a <see cref="RustBackedAlertEngine"/> over the same in-memory fakes.</summary>
+    /// <summary>Builds a <see cref="RustBackedAlertEngine"/> over the corpus's in-memory fakes.</summary>
     public static RustBackedAlertEngine BuildRustEngine(
         ManualTimeProvider time,
-        IConditionTimerStore timerStore,
         IAlertTrackerRepository trackerRepo)
     {
         return new RustBackedAlertEngine(
-            timerStore,
             trackerRepo,
             new AlertRuleEvaluationGate(),
             new AlertEngineErrors(new TestMeterFactory(), time),
@@ -114,13 +88,12 @@ internal static class EngineTestHarness
 
     /// <summary>
     /// Assembles an <see cref="ExpectedRuleResult"/> from a seam evaluation plus the
-    /// observable state in the fakes — the same projection the corpus generator records.
+    /// observable state in the fakes, in the shape the corpus snapshots record.
     /// </summary>
     public static async Task<ExpectedRuleResult> ToExpectedResultAsync(
         ScenarioRule rule,
         AlertEngineEvaluation evaluation,
         InMemoryTrackerRepository trackerRepo,
-        RecordingTimerStore timerStore,
         CancellationToken ct)
     {
         if (evaluation.Skipped)
@@ -138,8 +111,8 @@ internal static class EngineTestHarness
                 .OrderBy(kv => kv.Key)
                 .Select(kv => new ExpectedLeaf(kv.Key, kv.Value))
                 .ToList(),
-            Transition = RustEnvelopeMapper.TransitionToWire(evaluation.Transition.Type),
-            CloseReason = RustEnvelopeMapper.CloseReasonToWire(evaluation.Transition.CloseReason),
+            Transition = CorpusWire.TransitionWire(evaluation.Transition.Type),
+            CloseReason = evaluation.Transition.CloseReason is { } reason ? CorpusWire.CloseReasonWire(reason) : null,
             Tracker = state is null
                 ? null
                 : new ExpectedTrackerState
@@ -151,7 +124,7 @@ internal static class EngineTestHarness
                     AwaitingRearm = state.AwaitingRearm ? true : null,
                 },
             AutoResolved = evaluation.AutoResolved ? true : null,
-            TimerOps = timerStore.DrainOps() is { Count: > 0 } ops ? ops : null,
+            TimerOps = trackerRepo.Timers.DrainOps() is { Count: > 0 } ops ? ops : null,
         };
     }
 }

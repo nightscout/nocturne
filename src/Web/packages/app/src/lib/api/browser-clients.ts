@@ -5,6 +5,7 @@ import {
   ApsSnapshotClient,
   BGCheckClient,
   BolusClient,
+  ClockFaceAlertsClient,
   ClockFacesClient,
   CurrentTherapyStateClient,
   DeviceEventClient,
@@ -13,6 +14,7 @@ import {
   NutritionClient,
   ProfileClient,
   SensorGlucoseClient,
+  TrackerLegacyFallbacksClient,
   TrackersClient,
 } from "./generated/nocturne-api-client";
 
@@ -39,6 +41,7 @@ function browserHttp(): Http {
 export const apsSnapshotClient = () => new ApsSnapshotClient("", browserHttp());
 export const bgCheckClient = () => new BGCheckClient("", browserHttp());
 export const bolusClient = () => new BolusClient("", browserHttp());
+export const clockFaceAlertsClient = () => new ClockFaceAlertsClient("", browserHttp());
 export const clockFacesClient = () => new ClockFacesClient("", browserHttp());
 export const currentTherapyStateClient = () => new CurrentTherapyStateClient("", browserHttp());
 export const deviceEventClient = () => new DeviceEventClient("", browserHttp());
@@ -47,6 +50,8 @@ export const notificationsClient = () => new NotificationsClient("", browserHttp
 export const nutritionClient = () => new NutritionClient("", browserHttp());
 export const profileClient = () => new ProfileClient("", browserHttp());
 export const sensorGlucoseClient = () => new SensorGlucoseClient("", browserHttp());
+export const trackerLegacyFallbacksClient = () =>
+  new TrackerLegacyFallbacksClient("", browserHttp());
 export const trackersClient = () => new TrackersClient("", browserHttp());
 
 /** Drops the shared fetch so the next client is built on a fresh one. */

@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Nocturne.API.Tests.GoldenFiles.Infrastructure;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Basal;
 using Nocturne.Core.Models.V4;
@@ -35,6 +36,7 @@ public class BadRequestOnInvalidInputPipelineTests : IClassFixture<GoldenFileWeb
                     It.IsAny<IEnumerable<Bolus>>(),
                     It.IsAny<IEnumerable<Bolus>>(),
                     It.IsAny<IEnumerable<TempBasal>>(),
+                    It.IsAny<DateTime>(),
                     It.IsAny<long>(),
                     It.IsAny<TimeZoneInfo?>(),
                     It.IsAny<IEnumerable<BasalInjection>?>(),
@@ -43,9 +45,19 @@ public class BadRequestOnInvalidInputPipelineTests : IClassFixture<GoldenFileWeb
             )
             .Throws(new ArgumentException(Message));
 
+        // The endpoint answers before reaching the service when the tenant has no time zone.
+        var therapySettings = new Mock<ITherapySettingsResolver>();
+        therapySettings
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("UTC");
+
         _client = factory
             .WithWebHostBuilder(builder =>
-                builder.ConfigureServices(services => services.AddScoped(_ => statistics.Object))
+                builder.ConfigureServices(services =>
+                {
+                    services.AddScoped(_ => statistics.Object);
+                    services.AddScoped(_ => therapySettings.Object);
+                })
             )
             .CreateClient();
     }

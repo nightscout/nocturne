@@ -1036,7 +1036,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         if (snapshot is not null)
         {
             var ageMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                - new DateTimeOffset(snapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                - snapshot.Timestamp.ToMills();
             var loopStale = ageMs > 15 * 60 * 1000L;
 
             data["algorithm"] = snapshot.AidAlgorithm.ToString();

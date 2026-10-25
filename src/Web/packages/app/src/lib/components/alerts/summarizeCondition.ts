@@ -1,5 +1,5 @@
 import type { ConditionNode } from "./types";
-import { PumpModeState } from "$api-clients";
+import { AlertWeekday, PumpModeState } from "$api-clients";
 import { bg, bgLabel } from "$lib/utils/formatting";
 
 /**
@@ -153,7 +153,7 @@ export function summarizeCondition(
 		case "do_not_disturb": {
 			const p = node.do_not_disturb;
 			if (!p) return "";
-			const verb = p.is_active ? "Do Not Disturb on" : "Do Not Disturb off";
+			const verb = p.is_active ? "Do not disturb on" : "Do not disturb off";
 			return p.for_minutes ? `${verb} for ${formatMinutes(p.for_minutes)}` : verb;
 		}
 		case "signal_loss": {
@@ -210,22 +210,28 @@ export function summarizeCondition(
 
 function bucketLabel(bucket: string): string {
 	switch (bucket) {
-		case "very_low": return "Very Low";
+		case "very_low": return "Very low";
 		case "low": return "Low";
-		case "tight_range": return "Tight Range";
-		case "in_range": return "In Range";
+		case "tight_range": return "Tight range";
+		case "in_range": return "In range";
 		case "high": return "High";
-		case "very_high": return "Very High";
+		case "very_high": return "Very high";
 		default: return bucket;
 	}
 }
 
-function dayLabel(day: number | string): string {
-	// `DayOfWeek` is wired as a numeric system enum on the wire (no string converter); the
-	// editor stores numbers but the loader may surface either form, so handle both.
-	const idx = typeof day === "number" ? day : Number(day);
-	const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-	return names[idx] ?? String(day);
+const DAY_LABELS: Record<AlertWeekday, string> = {
+	[AlertWeekday.Sunday]: "Sun",
+	[AlertWeekday.Monday]: "Mon",
+	[AlertWeekday.Tuesday]: "Tue",
+	[AlertWeekday.Wednesday]: "Wed",
+	[AlertWeekday.Thursday]: "Thu",
+	[AlertWeekday.Friday]: "Fri",
+	[AlertWeekday.Saturday]: "Sat",
+};
+
+function dayLabel(day: AlertWeekday): string {
+	return DAY_LABELS[day] ?? day;
 }
 
 const PUMP_MODE_LABELS: Record<PumpModeState, string> = {
@@ -233,7 +239,7 @@ const PUMP_MODE_LABELS: Record<PumpModeState, string> = {
 	[PumpModeState.Limited]: "Limited",
 	[PumpModeState.Manual]: "in Manual",
 	[PumpModeState.Boost]: "Boosting",
-	[PumpModeState.EaseOff]: "Easing Off",
+	[PumpModeState.EaseOff]: "Easing off",
 	[PumpModeState.Sleep]: "in Sleep mode",
 	[PumpModeState.Exercise]: "in Exercise mode",
 	[PumpModeState.Liberty]: "in Liberty mode",

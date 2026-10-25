@@ -104,7 +104,7 @@
     <DialogHeader>
       <DialogTitle class="flex items-center gap-2">
         <Bell class="h-5 w-5" />
-        {editedProfile.id ? "Edit Alarm" : "New Alarm"}
+        {editedProfile.id ? "Edit alarm" : "New alarm"}
       </DialogTitle>
       <DialogDescription>
         Configure all aspects of this alarm including sounds, visuals, and smart
@@ -173,11 +173,11 @@
       >
         <div class="flex items-center gap-2">
           <Switch bind:checked={editedProfile.enabled} />
-          <Label>Alarm Enabled</Label>
+          <Label>Alarm enabled</Label>
         </div>
         <div class="flex flex-wrap gap-2">
           <Button variant="outline" onclick={onCancel}>Cancel</Button>
-          <Button onclick={handleSave}>Save Alarm</Button>
+          <Button onclick={handleSave}>Save alarm</Button>
         </div>
       </div>
     </DialogFooter>

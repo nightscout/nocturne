@@ -6,7 +6,7 @@
   "type": "module",
   "packageManager": "pnpm@11.5.0",
   "engines": {
-    "node": ">=24"
+    "node": "^24.22.1 || >=26.12.1"
   },
   "scripts": {
     "e2e": "node scripts/stack.ts run all",

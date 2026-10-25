@@ -1,4 +1,6 @@
 <script module lang="ts">
+  import { SyncPhase } from "$lib/api";
+  import { ConnectorState } from "$lib/constants/connector-states";
   import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
 
   export interface ConnectorStatusWithDescription extends ConnectorStatusDto {
@@ -122,7 +124,7 @@
       <div>
         <CardTitle class="flex items-center gap-2">
           <Cloud class="h-5 w-5" />
-          Server Connectors
+          Server connectors
         </CardTitle>
         <CardDescription>
           Connectors that run on the server to pull data from cloud services
@@ -154,7 +156,7 @@
               Syncing...
             {:else}
               <Download class="h-4 w-4" />
-              Manual Sync
+              Manual sync
             {/if}
           </Button>
         {/if}
@@ -229,7 +231,7 @@
             name={connector.name ?? connector.id ?? "Unknown"}
             icon={connector.icon}
             status={syncProgressByConnector[connector.id ?? ""]?.phase ===
-            "Syncing"
+            SyncPhase.Syncing
               ? "syncing"
               : mapConnectorStatus(connectorStatus)}
             syncProgress={syncProgressByConnector[connector.id ?? ""] ?? null}
@@ -297,7 +299,7 @@
                 entriesLast24Hours: dataSource?.entriesLast24h ?? 0,
                 state:
                   connectorStatusInfo?.state ??
-                  (isDisabled ? "Disabled" : "Offline"),
+                  (isDisabled ? ConnectorState.Disabled : ConnectorState.Offline),
                 isHealthy: false,
                 isEnabled: connectorStatusInfo?.isEnabled,
                 hasDatabaseConfig: connectorStatusInfo?.hasDatabaseConfig,
@@ -310,7 +312,7 @@
               {#if hasData}
                 <Badge variant="info">
                   <Database class="h-3 w-3 mr-1" />
-                  Has Data
+                  Has data
                 </Badge>
               {/if}
             {/snippet}
@@ -336,7 +338,7 @@
                 >
                   {connector.name}
                 </a>
-                <Badge variant="outline">Not Configured</Badge>
+                <Badge variant="outline">Not configured</Badge>
               </div>
               <p class="text-sm text-muted-foreground">
                 {connector.description}
@@ -365,8 +367,7 @@
       {/each}
     </div>
     <p class="text-sm text-muted-foreground mt-4">
-      Click on a connector to configure credentials and settings. Changes take
-      effect immediately.
+      Select a connector to configure credentials and settings. Changes take effect immediately.
     </p>
   </CardContent>
 </Card>

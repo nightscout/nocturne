@@ -3,24 +3,21 @@
  *
  * Processes device status, v4 records, and profile data into the format
  * expected by the status pill components. This mirrors the logic from
- * Nightscout's plugins (cob.js, iob.js, cage.js, sage.js, loop.js, basal.js).
+ * Nightscout's plugins (cob.js, iob.js, loop.js, basal.js).
  *
- * Uses backend types (DeviceStatus, Bolus, CarbIntake, DeviceEvent, Profile)
+ * Uses backend types (DeviceStatus, Bolus, CarbIntake, Profile)
  * from the generated API client.
  */
 
 import type {
 	COBPillData,
 	IOBPillData,
-	CAGEPillData,
-	SAGEPillData,
 	BasalPillData,
 	LoopPillData,
 	AlertLevel,
 	StatusPillsConfig
 } from '$lib/types/status-pills';
-import type { Bolus, CarbIntake, DeviceEvent, ApsSnapshot, ProfileSummary } from '$lib/api';
-import { DeviceEventType } from '$lib/api';
+import type { Bolus, CarbIntake, ApsSnapshot, ProfileSummary } from '$lib/api';
 
 /**
  * DeviceStatus represents device state data from Loop, OpenAPS, or pump systems
@@ -138,8 +135,6 @@ export interface PillsProcessorConfig extends StatusPillsConfig {
 export interface ProcessedPillsData {
 	iob: IOBPillData | null;
 	cob: COBPillData | null;
-	cage: CAGEPillData | null;
-	sage: SAGEPillData | null;
 	basal: BasalPillData | null;
 	loop: LoopPillData | null;
 }
@@ -153,7 +148,6 @@ export function processPillsData(
 	apsSnapshots: ApsSnapshot[],
 	boluses: Bolus[],
 	carbIntakes: CarbIntake[],
-	deviceEvents: DeviceEvent[],
 	profile: ProfileSummary | null,
 	config: Partial<PillsProcessorConfig> = {}
 ): ProcessedPillsData {
@@ -163,8 +157,6 @@ export function processPillsData(
 	return {
 		iob: processIOBFromSnapshot(apsSnapshots, boluses, now, config) ?? processIOB(deviceStatuses, boluses, now, config),
 		cob: processCOBFromSnapshot(apsSnapshots, carbIntakes, now, config) ?? processCOB(deviceStatuses, carbIntakes, now, config),
-		cage: processCAGE(deviceEvents, now, config),
-		sage: processSAGE(deviceEvents, now, config),
 		basal: processBasalFromSnapshot(apsSnapshots, profile, now, config) ?? processBasal(deviceStatuses, profile, now, units, config),
 		loop: processLoopFromSnapshot(apsSnapshots, now, config) ?? processLoop(deviceStatuses, now, units, config)
 	};
@@ -595,140 +587,6 @@ export function processCOB(
 	}
 
 	return null;
-}
-
-/**
- * Process CAGE data from device events
- */
-export function processCAGE(
-	deviceEvents: DeviceEvent[],
-	now: number,
-	config: Partial<PillsProcessorConfig> = {}
-): CAGEPillData | null {
-	const infoThreshold = config.cage?.infoThreshold ?? 44;
-	const warnThreshold = config.cage?.warnThreshold ?? 48;
-	const urgentThreshold = config.cage?.urgentThreshold ?? 72;
-	const displayFormat = config.cage?.displayFormat ?? 'hours';
-
-	// Find most recent site change
-	const siteChanges = deviceEvents
-		.filter(
-			(d) =>
-				(d.eventType === DeviceEventType.SiteChange || d.eventType === DeviceEventType.CannulaChange) &&
-				(d.mills ?? 0) <= now
-		)
-		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0));
-
-	if (siteChanges.length === 0) {
-		return null;
-	}
-
-	const lastChange = siteChanges[0];
-	const eventDate = lastChange.mills ?? 0;
-
-	const ageMs = now - eventDate;
-	const ageHours = Math.floor(ageMs / HOURS(1));
-	const ageDays = Math.floor(ageHours / 24);
-	const remainingHours = ageHours % 24;
-
-	// Determine alert level
-	let level: AlertLevel = 'none';
-	if (ageHours >= urgentThreshold) {
-		level = 'urgent';
-	} else if (ageHours >= warnThreshold) {
-		level = 'warn';
-	} else if (ageHours >= infoThreshold) {
-		level = 'info';
-	}
-
-	// Format display
-	let display: string;
-	if (displayFormat === 'days' && ageHours >= 24) {
-		display = `${ageDays}d${remainingHours}h`;
-	} else {
-		display = `${ageHours}h`;
-	}
-
-	return {
-		age: ageHours,
-		days: ageDays,
-		hours: remainingHours,
-		timeRemaining: urgentThreshold - ageHours,
-		eventDate,
-		notes: lastChange.notes,
-		display,
-		label: 'CAGE',
-		info: [],
-		level,
-		lastUpdated: eventDate
-	};
-}
-
-/**
- * Process SAGE data from device events
- */
-export function processSAGE(
-	deviceEvents: DeviceEvent[],
-	now: number,
-	config: Partial<PillsProcessorConfig> = {}
-): SAGEPillData | null {
-	const infoThreshold = config.sage?.infoThreshold ?? 144; // 6 days
-	const warnThreshold = config.sage?.warnThreshold ?? 164; // 7 days - 4 hours
-	const urgentThreshold = config.sage?.urgentThreshold ?? 166; // 7 days - 2 hours
-
-	// Find most recent sensor change or start
-	const sensorEvents = deviceEvents
-		.filter(
-			(d) =>
-				(d.eventType === DeviceEventType.SensorStart || d.eventType === DeviceEventType.SensorChange) &&
-				(d.mills ?? 0) <= now
-		)
-		.sort((a, b) => (b.mills ?? 0) - (a.mills ?? 0));
-
-	if (sensorEvents.length === 0) {
-		return null;
-	}
-
-	const lastEvent = sensorEvents[0];
-	const eventDate = lastEvent.mills ?? 0;
-
-	const ageMs = now - eventDate;
-	const ageHours = Math.floor(ageMs / HOURS(1));
-	const ageDays = Math.floor(ageHours / 24);
-	const remainingHours = ageHours % 24;
-
-	// Determine alert level
-	let level: AlertLevel = 'none';
-	if (ageHours >= urgentThreshold) {
-		level = 'urgent';
-	} else if (ageHours >= warnThreshold) {
-		level = 'warn';
-	} else if (ageHours >= infoThreshold) {
-		level = 'info';
-	}
-
-	// Format display
-	let display: string;
-	if (ageHours >= 24) {
-		display = `${ageDays}d${remainingHours}h`;
-	} else {
-		display = `${ageHours}h`;
-	}
-
-	return {
-		age: ageHours,
-		days: ageDays,
-		hours: remainingHours,
-		timeRemaining: urgentThreshold - ageHours,
-		eventDate,
-		notes: lastEvent.notes,
-		eventType: lastEvent.eventType,
-		display,
-		label: 'SAGE',
-		info: [],
-		level,
-		lastUpdated: eventDate
-	};
 }
 
 /**

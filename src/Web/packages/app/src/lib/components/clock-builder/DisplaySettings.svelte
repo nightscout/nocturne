@@ -10,6 +10,8 @@
   import Settings from "@lucide/svelte/icons/settings";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import type { ClockSettings } from "$lib/api";
+  import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
 
   interface Props {
     settings: ClockSettings;
@@ -29,6 +31,12 @@
     onReset,
   }: Props = $props();
 
+  // A face that shows alerts hands them to anyone with its link, so only a
+  // member who may read alerts can turn it on.
+  const canShareAlerts = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.read")
+  );
+
   function updateSetting<K extends keyof ClockSettings>(
     key: K,
     value: ClockSettings[K]
@@ -45,7 +53,7 @@
   </Popover.Trigger>
   <Popover.Content class="w-72" side="bottom" align="end">
     <div class="space-y-4">
-      <h4 class="font-medium">Display Settings</h4>
+      <h4 class="font-medium">Display settings</h4>
       <div class="flex items-center justify-between gap-2">
         <Label>Glucose units</Label>
         <Select.Root
@@ -88,7 +96,7 @@
         />
       </div>
       <div class="space-y-2">
-        <Label>Background Image URL</Label>
+        <Label>Background image URL</Label>
         <Input
           type="url"
           placeholder="https://..."
@@ -136,6 +144,28 @@
           onCheckedChange={(v: boolean) => updateSetting("alwaysShowTime", !!v)}
         />
       </div>
+      {#if canShareAlerts}
+        <div class="flex items-center justify-between">
+          <Label>Show firing alerts</Label>
+          <Checkbox
+            checked={settings.showAlerts ?? false}
+            onCheckedChange={(v: boolean) =>
+              onSettingsChange({
+                ...settings,
+                showAlerts: !!v,
+                allowMarkSeen: v ? settings.allowMarkSeen : false,
+              })}
+          />
+        </div>
+        <div class="flex items-center justify-between">
+          <Label>Let viewers mark alerts as seen</Label>
+          <Checkbox
+            checked={settings.allowMarkSeen ?? false}
+            onCheckedChange={(v: boolean) => updateSetting("allowMarkSeen", !!v)}
+            disabled={!settings.showAlerts}
+          />
+        </div>
+      {/if}
       <div class="flex items-center justify-between">
         <Label>Screensaver mode (bouncing)</Label>
         <Checkbox

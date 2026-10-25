@@ -31,7 +31,6 @@ public class TreatmentDecomposerTests : IDisposable
     private readonly Mock<ITreatmentFoodService> _treatmentFoodServiceMock;
     private readonly Mock<ITempBasalRepository> _tempBasalRepoMock;
     private readonly Mock<IDeviceService> _deviceServiceMock;
-    private readonly Mock<IProfileDecomposer> _profileDecomposerMock;
     private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock;
     private readonly Mock<IPatientInsulinRepository> _insulinRepoMock;
     private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new();
@@ -54,7 +53,6 @@ public class TreatmentDecomposerTests : IDisposable
         _treatmentFoodServiceMock = new Mock<ITreatmentFoodService>();
         _tempBasalRepoMock = new Mock<ITempBasalRepository>();
         _deviceServiceMock = new Mock<IDeviceService>();
-        _profileDecomposerMock = new Mock<IProfileDecomposer>();
         _activeProfileResolverMock = new Mock<IActiveProfileResolver>();
         _insulinRepoMock = new Mock<IPatientInsulinRepository>();
 
@@ -73,7 +71,6 @@ public class TreatmentDecomposerTests : IDisposable
             _treatmentFoodServiceMock.Object,
             _deviceServiceMock.Object,
             Mock.Of<IPatientDeviceStamper>(),
-            _profileDecomposerMock.Object,
             _activeProfileResolverMock.Object,
             _insulinRepoMock.Object,
             TempBasalTestDeps.Rates(_basalRateResolverMock.Object),
@@ -3787,42 +3784,6 @@ public class TreatmentDecomposerTests : IDisposable
         activation.Snapshot!.Basal!.Single().Value.Should().Be(0.8);
         activation.Snapshot.Targets!.Single().Should().BeEquivalentTo(new { Low = 80.0, High = 120.0 });
         activation.Snapshot.Dia.Should().Be(4);
-        _profileDecomposerMock.Verify(
-            d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task DecomposeAsync_ProfileSwitchWithoutProfileJson_DoesNotCallProfileDecomposer()
-    {
-        // Arrange
-        var treatment = new Treatment
-        {
-            Id = "profile-switch-no-json",
-            EventType = "Profile Switch",
-            Mills = 1700000000000,
-            Profile = "Default",
-            EnteredBy = "AAPS"
-        };
-
-        var expectedStateSpan = new StateSpan
-        {
-            Id = "state-span-no-pj",
-            Category = StateSpanCategory.Profile,
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime
-        };
-
-        _stateSpanServiceMock
-            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(expectedStateSpan);
-
-        // Act
-        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
-
-        // Assert -- profile decomposer should NOT be called
-        _profileDecomposerMock.Verify(
-            d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     #endregion

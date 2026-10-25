@@ -11,4 +11,7 @@ public static class DateTimeUtcExtensions
         DateTimeKind.Local => value.ToUniversalTime(),
         _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
     };
+
+    /// <summary>The Unix milliseconds of <paramref name="value"/> read as a UTC instant.</summary>
+    public static long ToMills(this DateTime value) => new DateTimeOffset(value.AsUtc()).ToUnixTimeMilliseconds();
 }

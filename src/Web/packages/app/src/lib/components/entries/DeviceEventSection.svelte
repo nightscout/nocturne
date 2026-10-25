@@ -17,29 +17,29 @@
   let { deviceEvent = $bindable(), onRemove }: Props = $props();
 
   const deviceEventTypeLabels: Record<DeviceEventType, string> = {
-    [DeviceEventType.SensorStart]: "Sensor Start",
-    [DeviceEventType.SensorChange]: "Sensor Change",
-    [DeviceEventType.SensorStop]: "Sensor Stop",
-    [DeviceEventType.SiteChange]: "Site Change",
-    [DeviceEventType.InsulinChange]: "Insulin Change",
-    [DeviceEventType.PumpBatteryChange]: "Pump Battery Change",
-    [DeviceEventType.PodChange]: "Pod Change",
-    [DeviceEventType.ReservoirChange]: "Reservoir Change",
-    [DeviceEventType.CannulaChange]: "Cannula Change",
-    [DeviceEventType.TransmitterSensorInsert]: "Transmitter/Sensor Insert",
-    [DeviceEventType.PodActivated]: "Pod Activated",
-    [DeviceEventType.PodDeactivated]: "Pod Deactivated",
-    [DeviceEventType.PumpSuspend]: "Pump Suspend",
-    [DeviceEventType.PumpResume]: "Pump Resume",
+    [DeviceEventType.SensorStart]: "Sensor start",
+    [DeviceEventType.SensorChange]: "Sensor change",
+    [DeviceEventType.SensorStop]: "Sensor stop",
+    [DeviceEventType.SiteChange]: "Site change",
+    [DeviceEventType.InsulinChange]: "Insulin change",
+    [DeviceEventType.PumpBatteryChange]: "Pump battery change",
+    [DeviceEventType.PodChange]: "Pod change",
+    [DeviceEventType.ReservoirChange]: "Reservoir change",
+    [DeviceEventType.CannulaChange]: "Cannula change",
+    [DeviceEventType.TransmitterSensorInsert]: "Transmitter/sensor insert",
+    [DeviceEventType.PodActivated]: "Pod activated",
+    [DeviceEventType.PodDeactivated]: "Pod deactivated",
+    [DeviceEventType.PumpSuspend]: "Pump suspend",
+    [DeviceEventType.PumpResume]: "Pump resume",
     [DeviceEventType.Priming]: "Priming",
-    [DeviceEventType.TubePriming]: "Tube Priming",
-    [DeviceEventType.NeedlePriming]: "Needle Priming",
+    [DeviceEventType.TubePriming]: "Tube priming",
+    [DeviceEventType.NeedlePriming]: "Needle priming",
     [DeviceEventType.Rewind]: "Rewind",
-    [DeviceEventType.DateChanged]: "Date Changed",
-    [DeviceEventType.TimeChanged]: "Time Changed",
-    [DeviceEventType.BolusMaxChanged]: "Bolus Max Changed",
-    [DeviceEventType.BasalMaxChanged]: "Basal Max Changed",
-    [DeviceEventType.ProfileSwitch]: "Profile Switch",
+    [DeviceEventType.DateChanged]: "Date changed",
+    [DeviceEventType.TimeChanged]: "Time changed",
+    [DeviceEventType.BolusMaxChanged]: "Bolus max changed",
+    [DeviceEventType.BasalMaxChanged]: "Basal max changed",
+    [DeviceEventType.ProfileSwitch]: "Profile switch",
   };
 </script>
 
@@ -47,7 +47,7 @@
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
       <Smartphone class="h-4 w-4 text-entry-device-event" />
-      Device Event
+      Device event
     </div>
     {#if onRemove}
       <Button variant="ghost" size="icon-xs" onclick={onRemove}>
@@ -57,7 +57,7 @@
   </div>
 
   <div class="space-y-1.5">
-    <Label for="device-event-type">Event Type</Label>
+    <Label for="device-event-type">Event type</Label>
     <Select.Root
       type="single"
       value={deviceEvent.eventType ?? DeviceEventType.SiteChange}

@@ -31,7 +31,7 @@ public sealed record RiseSearch(List<EventAnchor> Anchors, List<long> Climbs);
 /// </para>
 /// <para>
 /// A climb is announced, and so not a rise, by a carb entry from <see cref="CarbsBeforeMs"/> before
-/// its anchor to <see cref="EventAnchors.CarbFreeMs"/> after it, or by carbs on board at the anchor
+/// its anchor to <see cref="CarbsAfterMs"/> after it, or by carbs on board at the anchor
 /// where those are known; the entry caused it only when the climb starts within
 /// <see cref="CarbAttributionMs"/> of it. A climb within <see cref="MergeMs"/> of an earlier one is
 /// part of it.
@@ -122,6 +122,12 @@ public static class UnannouncedRises
     /// to three hours earlier is the likelier cause of a climb than a second, unlogged one.
     /// </summary>
     public const long CarbsBeforeMs = 3 * LocalSlotBinning.HourMs;
+
+    /// <summary>
+    /// How long after a climb starts a carb entry still announces it: one is often logged once the
+    /// plate is cleared.
+    /// </summary>
+    public const long CarbsAfterMs = 30 * LocalSlotBinning.MinuteMs;
 
     /// <summary>
     /// How long after a carb entry a climb may start and still be that meal's own. A meal's glucose
@@ -255,11 +261,11 @@ public static class UnannouncedRises
 
     /// <summary>
     /// The latest carb entry from <see cref="CarbsBeforeMs"/> before <paramref name="at"/> to
-    /// <see cref="EventAnchors.CarbFreeMs"/> after it, or null.
+    /// <see cref="CarbsAfterMs"/> after it, or null.
     /// </summary>
     private static long? AnnouncingCarbs(long[] carbMills, long at)
     {
-        var i = SortedSearch.FirstEndingAfter(carbMills, at + EventAnchors.CarbFreeMs, static m => m) - 1;
+        var i = SortedSearch.FirstEndingAfter(carbMills, at + CarbsAfterMs, static m => m) - 1;
         return i >= 0 && carbMills[i] >= at - CarbsBeforeMs ? carbMills[i] : null;
     }
 

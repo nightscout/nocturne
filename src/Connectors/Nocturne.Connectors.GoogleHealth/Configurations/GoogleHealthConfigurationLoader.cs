@@ -5,9 +5,10 @@ using Nocturne.Connectors.Core.Services;
 namespace Nocturne.Connectors.GoogleHealth.Configurations;
 
 /// <summary>
-/// Reports every tenant's connector as disabled while the instance has no Google client, so
-/// scheduled polling skips it quietly instead of failing each tenant's sync and marking it
-/// unhealthy for something only the operator can fix.
+/// Enables a tenant's connector exactly while it holds a refresh token its instance's Google
+/// client can use, so the stored grant alone decides whether it syncs. While the instance has no
+/// Google client every tenant reads as disabled, so scheduled polling skips it quietly instead of
+/// failing each tenant's sync and marking it unhealthy for something only the operator can fix.
 /// </summary>
 public sealed class GoogleHealthConfigurationLoader(
     ConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> inner,
@@ -17,7 +18,9 @@ public sealed class GoogleHealthConfigurationLoader(
     public async Task<GoogleHealthConnectorConfiguration> LoadForTenantAsync(CancellationToken ct)
     {
         var configuration = await inner.LoadForTenantAsync(ct);
-        if (!platform.Value.IsConfigured) configuration.Enabled = false;
+        configuration.Enabled = platform.Value.IsConfigured &&
+            !string.IsNullOrWhiteSpace(configuration.RefreshToken) &&
+            !configuration.IssuedToAnotherClient(platform.Value);
         return configuration;
     }
 }

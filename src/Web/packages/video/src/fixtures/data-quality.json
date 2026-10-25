@@ -1,0 +1,26 @@
+{
+ "route": "/reports/data-quality",
+ "capturedAt": 1792812740710,
+ "results": {
+  "getReportSubject": "[{\"name\":1,\"dateOfBirth\":2},\"Demo\",\"1992-04-17\"]",
+  "getSuggestions": "[[]]",
+  "getActiveAlerts": "[[1],{\"id\":2,\"alertRuleId\":3,\"ruleName\":4,\"conditionType\":5,\"severity\":6,\"startedAt\":7,\"acknowledgedAt\":8,\"acknowledgedBy\":8,\"mutedByCaller\":9,\"hysteresisStartedAt\":8,\"snoozedUntil\":8,\"activeInstances\":10},\"01a16b4c-3298-73f4-8335-4b71e6e3d1aa\",\"01a16b34-313e-78c4-8c5a-c6ab1ca653a6\",\"Signal Loss\",\"signal_loss\",\"warning\",\"2026-10-24T00:25:18.210686Z\",null,false,[11],{\"id\":12,\"status\":13,\"triggeredAt\":14,\"suppressionReason\":8,\"snoozedUntil\":8,\"snoozeCount\":15},\"01a16b4c-32ac-7056-ad24-7ff49220c4f4\",\"triggered\",\"2026-10-24T00:25:18.250844Z\",0]",
+  "getAll": "[[1,8,12],{\"id\":2,\"subjectId\":3,\"markKey\":4,\"status\":5,\"seenAt\":6,\"completedAt\":7},\"01a16bdf-2d5c-7926-9227-15b8a28ccdb0\",\"01a16b33-1b22-74f7-a57e-a44dafbe5bcd\",\"quick-tour.current-bg\",\"seen\",\"2026-10-24T03:05:50.786696Z\",null,{\"id\":9,\"subjectId\":3,\"markKey\":10,\"status\":5,\"seenAt\":11,\"completedAt\":7},\"01a16be2-f6aa-7e73-b438-a993debcc06b\",\"quick-tour.chart\",\"2026-10-24T03:09:58.826505Z\",{\"id\":13,\"subjectId\":3,\"markKey\":14,\"status\":5,\"seenAt\":15,\"completedAt\":7},\"01a16bf5-f441-7323-b502-c9b5bc9d51f0\",\"quick-tour.widgets\",\"2026-10-24T03:30:43.393859Z\"]",
+  "getMyTenants": "[[1],{\"id\":2,\"slug\":3,\"displayName\":4,\"isActive\":5,\"sysCreatedAt\":6},\"01a16b33-1a36-79c5-8731-c9017483fed9\",\"promo3\",\"Promo\",true,\"2026-10-23T23:57:53.71552Z\"]",
+  "getSessionInfo": "[{\"isAuthenticated\":1,\"subjectId\":2,\"name\":3,\"email\":4,\"avatarUrl\":4,\"roles\":5,\"permissions\":7,\"expiresAt\":8},true,\"01a16b33-1b22-74f7-a57e-a44dafbe5bcd\",\"dev\",null,[6],\"Owner\",[],\"2026-10-24T03:47:15+00:00\"]",
+  "getRejectedUploads": "[{\"data\":1,\"pagination\":2},[],{\"limit\":3,\"offset\":4,\"total\":4},1,0]",
+  "getSummary": "[{\"current\":1,\"history\":9,\"iob\":7,\"cob\":10,\"trackers\":11,\"alarm\":4,\"predictions\":4,\"serverMills\":47},{\"sgv\":2,\"direction\":3,\"trendRate\":4,\"delta\":5,\"mills\":6,\"noise\":7,\"status\":8},96,\"DoubleDown\",null,-11.3,1792799700000,0,\"Stale\",[],76,[12,23,29,38],{\"id\":13,\"definitionId\":14,\"name\":15,\"icon\":16,\"category\":17,\"mode\":18,\"ageHours\":19,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":21,\"percentElapsed\":22},\"01a16b34-2eaa-7356-90a3-c2cf2a6cfe8b\",\"01a16b34-2cbc-7007-8de0-e136bedae0c1\",\"Infusion Site\",\"syringe\",\"Cannula\",\"Duration\",7.3,\"Info\",72,10,{\"id\":24,\"definitionId\":25,\"name\":26,\"icon\":27,\"category\":26,\"mode\":18,\"ageHours\":28,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":21,\"percentElapsed\":22},\"01a16b34-308c-7d87-bfe7-187702b000f8\",\"01a16b34-2eb1-7db8-9f1d-8c890f8d79ef\",\"Reservoir\",\"cylinder\",7.4,{\"id\":30,\"definitionId\":31,\"name\":32,\"icon\":33,\"category\":34,\"mode\":18,\"ageHours\":35,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":36,\"percentElapsed\":37},\"01a16b34-2cb4-7e79-82ff-b45a64a6f002\",\"01a16b34-2b76-73ec-9062-fdfb2f402d9a\",\"CGM Sensor\",\"radio\",\"Sensor\",221.4,240,92,{\"id\":39,\"definitionId\":40,\"name\":41,\"icon\":42,\"category\":43,\"mode\":18,\"ageHours\":44,\"hoursUntilEvent\":4,\"urgency\":20,\"lifespanHours\":45,\"percentElapsed\":46},\"01a16b34-30d5-70f3-beaf-128f26851d51\",\"01a16b34-3094-7b95-b256-cc85fbe5cc79\",\"Pump Battery\",\"battery\",\"Battery\",259,504,51,1792812742604]"
+ },
+ "phases": [
+  {
+   "results": {}
+  },
+  {
+   "results": {
+    "triggerDetection": "[{\"totalSuggestionsCreated\":1,\"nightsProcessed\":1,\"results\":2},1,[3],{\"nightOf\":4,\"suggestionsCreated\":1},\"2026-10-22\"]",
+    "getSuggestions": "[[1],{\"id\":2,\"startMills\":3,\"endMills\":4,\"confidence\":5,\"status\":6,\"nightOf\":7,\"createdAt\":8,\"reviewedAt\":9,\"stateSpanId\":9,\"lowestGlucose\":10,\"dropRate\":11,\"recoveryMinutes\":12},\"01a16bf7-992a-77f0-8071-bcea20e6c561\",1792687800000,1792689600000,1,\"Pending\",\"2026-10-22\",1792812751146,null,58,6.4,10]",
+    "getActiveAlerts": "[[1],{\"id\":2,\"alertRuleId\":3,\"ruleName\":4,\"conditionType\":5,\"severity\":6,\"startedAt\":7,\"acknowledgedAt\":8,\"acknowledgedBy\":8,\"mutedByCaller\":9,\"hysteresisStartedAt\":8,\"snoozedUntil\":8,\"activeInstances\":10},\"01a16b4c-3298-73f4-8335-4b71e6e3d1aa\",\"01a16b34-313e-78c4-8c5a-c6ab1ca653a6\",\"Signal Loss\",\"signal_loss\",\"warning\",\"2026-10-24T00:25:18.210686Z\",null,false,[11],{\"id\":12,\"status\":13,\"triggeredAt\":14,\"suppressionReason\":8,\"snoozedUntil\":8,\"snoozeCount\":15},\"01a16b4c-32ac-7056-ad24-7ff49220c4f4\",\"triggered\",\"2026-10-24T00:25:18.250844Z\",0]"
+   }
+  }
+ ]
+}

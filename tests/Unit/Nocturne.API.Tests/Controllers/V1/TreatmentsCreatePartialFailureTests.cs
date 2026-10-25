@@ -144,9 +144,19 @@ public class TreatmentsCreatePartialFailureTests
         echoed[0].AdditionalProperties?.ContainsKey(TreatmentEcho.RefusalMember).Should().NotBe(true);
         _events.Verify(
             e => e.OnCreatedAsync(
-                It.Is<IReadOnlyList<Treatment>>(written => written.Select(t => t.Notes).SequenceEqual(new[] { "first", "third" })),
+                It.Is<IReadOnlyList<Treatment>>(written => written.Any(t => t.Notes == "first")),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+        _events.Verify(
+            e => e.OnCreatedAsync(
+                It.Is<IReadOnlyList<Treatment>>(written => written.Any(t => t.Notes == "third")),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _events.Verify(
+            e => e.OnCreatedAsync(
+                It.Is<IReadOnlyList<Treatment>>(written => written.Any(t => t.Notes == "second")),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

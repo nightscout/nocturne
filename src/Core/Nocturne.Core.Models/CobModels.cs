@@ -33,14 +33,3 @@ public class CobCalcResult
     public double IsDecaying { get; set; }
     public DateTimeOffset CarbTime { get; set; }
 }
-
-/// <summary>
-/// COB contribution calculated for a single <see cref="CarbIntake"/>.
-/// </summary>
-public class CarbCobContribution
-{
-    public double CobContrib { get; set; }
-    public double ActivityContrib { get; set; }
-    public long? DecayedBy { get; set; }
-    public bool IsDecaying { get; set; }
-}

@@ -219,22 +219,6 @@ public class ProfileHistoryTests
         profile.Store.Keys.Should().BeEquivalentTo("Day", "Night");
     }
 
-    [Fact]
-    public async Task ProfileSwitchSnapshot_IsNotDelivered()
-    {
-        var correlationId = Guid.CreateVersion7();
-        var snapshot = Settings(correlationId, modified: Cursor.AddMinutes(1));
-        snapshot.ProfileName = $"Exercise{TherapySettings.ProfileSwitchStoreMarker}1727700000000";
-        snapshot.LegacyId = $"65f000000000000000000ac0:{snapshot.ProfileName}";
-        _therapyRepo.Setup(r => r.GetModifiedSinceAsync(Mills(Cursor), 10, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([Live(snapshot)]);
-        SetupProfile(snapshot, Basal(correlationId, modified: Cursor.AddMinutes(1)));
-
-        var page = await _sut.GetProfilesModifiedSinceAsync(Mills(Cursor), 10);
-
-        page.Records.Should().BeEmpty();
-    }
-
     private void SetupProfile(TherapySettings settings, BasalSchedule basal)
     {
         var correlationId = settings.CorrelationId!.Value;

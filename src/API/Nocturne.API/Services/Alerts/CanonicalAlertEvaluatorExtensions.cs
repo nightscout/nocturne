@@ -24,7 +24,7 @@ internal static class CanonicalAlertEvaluatorExtensions
         this ICanonicalAlertEvaluator evaluator,
         IEnumerable<Entry> entries,
         CancellationToken ct) =>
-        entries.Any(e => e.Sgv is > 0) ? evaluator.EvaluateAsync(ct) : Task.CompletedTask;
+        entries.Any(e => e.GlucoseMgdl() > 0) ? evaluator.EvaluateAsync(ct) : Task.CompletedTask;
 
     /// <inheritdoc cref="EvaluateForEntriesAsync"/>
     public static Task EvaluateForReadingsAsync(

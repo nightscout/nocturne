@@ -58,9 +58,9 @@
       return;
     }
 
-    new Notification("Nocturne Test", {
-      body: "This is a test notification from Nocturne. Alarms will appear like this!",
-      icon: "/images/logo-128.png",
+    new Notification("Nocturne test", {
+      body: "This is a test notification from Nocturne. Alarms will appear like this.",
+      icon: "/favicon.png",
       tag: "test-notification",
     });
   }
@@ -151,7 +151,7 @@
   <div class="space-y-4 @container">
     <div class="flex items-center gap-2 text-sm font-medium">
       <Smartphone class="h-4 w-4" />
-      Browser Capabilities
+      Browser capabilities
     </div>
 
     <div class="grid gap-3 @xl:grid-cols-2">
@@ -172,7 +172,7 @@
         </div>
         <div class="flex-1">
           <div class="flex items-center gap-2">
-            <span class="font-medium text-sm">Audio Playback</span>
+            <span class="font-medium text-sm">Audio playback</span>
             {#if !capabilities.audio}
               <span
                 class="px-1.5 py-0.5 text-2xs font-medium rounded bg-muted text-muted-foreground"
@@ -187,7 +187,7 @@
             {#if testingAudio}
               Playing test sound...
             {:else if capabilities.audio}
-              Click to test audio
+              Select to test audio
             {:else}
               Web Audio API not supported
             {/if}
@@ -231,7 +231,7 @@
               <span
                 class="px-1.5 py-0.5 text-2xs font-medium rounded bg-warning/10 text-warning"
               >
-                Needs Permission
+                Needs permission
               </span>
             {:else}
               <NotificationStatusIcon
@@ -245,11 +245,11 @@
             {:else if !capabilities.notifications}
               Notification API not supported
             {:else if capabilities.notificationPermission === "granted"}
-              Click to send test
+              Select to send test
             {:else if capabilities.notificationPermission === "denied"}
               Permission blocked in browser settings
             {:else}
-              Click to enable notifications
+              Select to enable notifications
             {/if}
           </p>
         </div>
@@ -286,7 +286,7 @@
             {#if testingVibration}
               Vibrating...
             {:else if capabilities.vibration}
-              Click to test vibration
+              Select to test vibration
             {:else}
               Only available on mobile devices
             {/if}
@@ -310,7 +310,7 @@
         </div>
         <div class="flex-1">
           <div class="flex items-center gap-2">
-            <span class="font-medium text-sm">Screen Wake Lock</span>
+            <span class="font-medium text-sm">Screen wake lock</span>
             {#if !capabilities.wakeLock}
               <span
                 class="px-1.5 py-0.5 text-2xs font-medium rounded bg-muted text-muted-foreground"
@@ -325,7 +325,7 @@
             {#if testingWakeLock}
               Active (releases in 5s)
             {:else if capabilities.wakeLock}
-              Click to test (5 seconds)
+              Select to test (5 seconds)
             {:else}
               Wake Lock API not supported
             {/if}
@@ -342,8 +342,7 @@
     </div>
 
     <p class="text-xs text-muted-foreground">
-      Click each capability to test it. These determine what alarm features are
-      available in your browser.
+      Select each capability to test it. These determine what alarm features are available in your browser.
     </p>
   </div>
 {/if}

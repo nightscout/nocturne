@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { DeviceEventType } from "$lib/api";
+  import { NightscoutEventType } from "$lib/constants/nightscout-event-types";
   import SensorIcon from "./SensorIcon.svelte";
   import SiteChangeIcon from "./SiteChangeIcon.svelte";
   import ReservoirIcon from "./ReservoirIcon.svelte";
@@ -21,13 +23,13 @@
   }: Props = $props();
 </script>
 
-{#if eventType === "SensorStart" || eventType === "SensorChange" || eventType === "SensorStop" || eventType === "Sensor Start" || eventType === "Sensor Change" || eventType === "Sensor Stop"}
+{#if eventType === DeviceEventType.SensorStart || eventType === DeviceEventType.SensorChange || eventType === DeviceEventType.SensorStop || eventType === NightscoutEventType.SensorStart || eventType === NightscoutEventType.SensorChange || eventType === NightscoutEventType.SensorStop}
   <SensorIcon class={className} {size} {strokeWidth} {color} />
-{:else if eventType === "SiteChange" || eventType === "Site Change"}
+{:else if eventType === DeviceEventType.SiteChange || eventType === NightscoutEventType.SiteChange}
   <SiteChangeIcon class={className} {size} {strokeWidth} {color} />
-{:else if eventType === "InsulinChange" || eventType === "Insulin Change"}
+{:else if eventType === DeviceEventType.InsulinChange || eventType === NightscoutEventType.InsulinChange}
   <ReservoirIcon class={className} {size} {strokeWidth} {color} />
-{:else if eventType === "PumpBatteryChange" || eventType === "Pump Battery Change"}
+{:else if eventType === DeviceEventType.PumpBatteryChange || eventType === NightscoutEventType.PumpBatteryChange}
   <BatteryIcon class={className} {size} {strokeWidth} {color} />
 {:else}
   <!-- Default to sensor icon for unknown device events -->

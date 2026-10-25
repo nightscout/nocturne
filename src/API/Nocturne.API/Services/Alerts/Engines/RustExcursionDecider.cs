@@ -10,13 +10,12 @@ namespace Nocturne.API.Services.Alerts.Engines;
 /// as data, and the caller persists the decision.
 /// </summary>
 /// <param name="errors">Where its failures are counted.</param>
-/// <param name="engine">The <c>engine</c> tag they are counted under.</param>
-internal sealed class RustExcursionDecider(AlertEngineErrors errors, string engine) : IExcursionDecider
+internal sealed class RustExcursionDecider(AlertEngineErrors errors) : IExcursionDecider
 {
     public TrackerDecision Process(
         Guid ruleId, AlertTrackerState? state, TrackerConfig config, bool conditionMet, bool autoResolveMet,
         DateTime now) =>
-        errors.Track("tracker_process", engine, () => ToDecision(RustAlertEngine.TrackerProcess(new RustTrackerProcessRequest
+        errors.Track("tracker_process", () => ToDecision(RustAlertEngine.TrackerProcess(new RustTrackerProcessRequest
         {
             Tracker = RustEnvelopeMapper.BuildTracker(state),
             Now = now,
@@ -27,7 +26,7 @@ internal sealed class RustExcursionDecider(AlertEngineErrors errors, string engi
 
     public TrackerDecision ForceClose(
         Guid ruleId, AlertTrackerState? state, ExcursionCloseReason reason, DateTime now) =>
-        errors.Track("tracker_force_close", engine, () => ToDecision(RustAlertEngine.TrackerForceClose(new RustTrackerForceCloseRequest
+        errors.Track("tracker_force_close", () => ToDecision(RustAlertEngine.TrackerForceClose(new RustTrackerForceCloseRequest
         {
             Tracker = RustEnvelopeMapper.BuildTracker(state),
             Now = now,
@@ -36,7 +35,7 @@ internal sealed class RustExcursionDecider(AlertEngineErrors errors, string engi
 
     public TrackerDecision CloseElapsedHysteresis(
         Guid ruleId, AlertTrackerState? state, TrackerConfig config, DateTime now) =>
-        errors.Track("tracker_close_elapsed_hysteresis", engine, () => ToDecision(
+        errors.Track("tracker_close_elapsed_hysteresis", () => ToDecision(
             RustAlertEngine.TrackerCloseElapsedHysteresis(new RustTrackerCloseElapsedHysteresisRequest
             {
                 Tracker = RustEnvelopeMapper.BuildTracker(state),

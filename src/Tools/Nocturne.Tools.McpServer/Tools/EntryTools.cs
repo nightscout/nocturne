@@ -2,8 +2,8 @@ using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Tools.McpServer.Services;
 
 namespace Nocturne.Tools.McpServer.Tools;
@@ -189,8 +189,15 @@ public static class EntryTools
                 return "No valid glucose values found";
             }
 
-            const double targetLow = GlucoseConstants.TargetBottomMgdl;
-            const double targetHigh = GlucoseConstants.TargetTopMgdl;
+            var timeInRange = await ToolBase.TimeInRangeAsync(
+                ApiService,
+                entries
+                    .Where(e => e.Mgdl > 0)
+                    .Select(e => new SensorGlucose
+                    {
+                        Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(e.Mills).UtcDateTime,
+                        Mgdl = e.Mgdl,
+                    }));
 
             var stats = new
             {
@@ -201,43 +208,8 @@ public static class EntryTools
                 Min = glucoseValues.Min(),
                 Max = glucoseValues.Max(),
                 StandardDeviation = Math.Round(CalculateStandardDeviation(glucoseValues), 1),
-                TimeInRange = new
-                {
-                    VeryLow = glucoseValues.Count(g => g < 54),
-                    Low = glucoseValues.Count(g => g >= 54 && g < targetLow),
-                    InRange = glucoseValues.Count(g => g >= targetLow && g <= targetHigh),
-                    High = glucoseValues.Count(g => g > targetHigh && g <= 250),
-                    VeryHigh = glucoseValues.Count(g => g > 250),
-                },
-                TimeInRangePercentages = new
-                {
-                    VeryLow = Math.Round(
-                        (double)glucoseValues.Count(g => g < 54) / glucoseValues.Length * 100,
-                        1
-                    ),
-                    Low = Math.Round(
-                        (double)glucoseValues.Count(g => g >= 54 && g < targetLow)
-                            / glucoseValues.Length
-                            * 100,
-                        1
-                    ),
-                    InRange = Math.Round(
-                        (double)glucoseValues.Count(g => g >= targetLow && g <= targetHigh)
-                            / glucoseValues.Length
-                            * 100,
-                        1
-                    ),
-                    High = Math.Round(
-                        (double)glucoseValues.Count(g => g > targetHigh && g <= 250)
-                            / glucoseValues.Length
-                            * 100,
-                        1
-                    ),
-                    VeryHigh = Math.Round(
-                        (double)glucoseValues.Count(g => g > 250) / glucoseValues.Length * 100,
-                        1
-                    ),
-                },
+                TimeInRangeMinutes = timeInRange.Minutes,
+                TimeInRangePercentages = timeInRange.Percent,
             };
 
             return JsonSerializer.Serialize(

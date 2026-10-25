@@ -9,13 +9,12 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import { Artwork } from "@nocturne/watercolour";
+  import { weightScaleArtwork } from "$lib/watercolour-icons";
   import * as bw from "$api/generated/bodyWeights.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import type { BodyWeight } from "$api";
 
-  // create/deleteBodyWeight declare a GetBodyWeights invalidation, but it refreshes
-  // getBodyWeights(undefined) — a different cache key from this subscription — so each
-  // mutation below refreshes this query itself.
   const weightsQuery = bw.getBodyWeights({ count: 100, skip: 0 });
   const entries = $derived<BodyWeight[]>(weightsQuery.current ?? []);
 
@@ -37,11 +36,12 @@
     saving = true;
     errorMessage = null;
     try {
-      await bw.create({
-        weightKg: kg,
-        mills: newDate ? new Date(newDate).getTime() : Date.now(),
-      });
-      await weightsQuery.refresh();
+      await bw
+        .create({
+          weightKg: kg,
+          mills: newDate ? new Date(newDate).getTime() : Date.now(),
+        })
+        .updates(bw.getBodyWeights);
       newWeightKg = "";
       newDate = "";
     } catch (e) {
@@ -56,8 +56,7 @@
     pendingDelete = null;
     if (!entry?._id) return;
     try {
-      await bw.deleteBodyWeight(entry._id);
-      await weightsQuery.refresh();
+      await bw.deleteBodyWeight(entry._id).updates(bw.getBodyWeights);
     } catch (e) {
       errorMessage = describeSubmitError(e, "Failed to delete entry");
     }
@@ -65,16 +64,25 @@
 </script>
 
 <svelte:head>
-  <title>Weight History - Settings - Nocturne</title>
+  <title>Weight history - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="mx-auto max-w-2xl space-y-6 p-4">
-  <div class="space-y-1">
-    <h1 class="text-xl font-semibold">Weight history</h1>
-    <p class="text-muted-foreground text-sm">
-      Your weight over time. Each entry is dated when it was recorded — editing your current weight
-      on the Patient Record page adds a new entry here rather than overwriting the last one.
-    </p>
+  <div class="flex items-center gap-4">
+    <Artwork
+      icon={weightScaleArtwork}
+      palette="moss"
+      motion="auto"
+      autoplay="once"
+      class="size-48 shrink-0"
+    />
+    <div class="space-y-1">
+      <h1 class="text-xl font-semibold">Weight history</h1>
+      <p class="text-muted-foreground text-sm">
+        Your weight over time. Each entry is dated when it was recorded. When you edit your current weight
+        on the Patient record page, a new entry is added here. The last entry is not overwritten.
+      </p>
+    </div>
   </div>
 
   <Card.Root>
@@ -83,7 +91,16 @@
     </Card.Header>
     <Card.Content class="space-y-4">
       {#if entries.length === 0}
-        <p class="text-muted-foreground text-sm">No entries yet.</p>
+        <div class="flex flex-col items-center gap-3 py-8 text-center">
+          <Artwork
+            icon={weightScaleArtwork}
+            palette="moss"
+            motion="auto"
+            autoplay="once"
+            class="size-48"
+          />
+          <p class="text-muted-foreground text-sm">No entries yet.</p>
+        </div>
       {:else}
         <ul class="divide-border divide-y">
           {#each entries as entry (entry._id)}

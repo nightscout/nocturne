@@ -2,8 +2,9 @@
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
-  import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
   import KeyRound from "@lucide/svelte/icons/key-round";
+  import { Artwork } from "@nocturne/watercolour";
+  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import { getAuthState } from "../auth.remote";
   import { getAuthStatus } from "$lib/api/generated";
   import { page } from "$app/state";
@@ -52,26 +53,32 @@
 </script>
 
 <svelte:head>
-  <title>Login - Nocturne</title>
+  <title>Sign in - Nocturne</title>
 </svelte:head>
 
 <div class="flex flex-1 items-center justify-center p-4">
   <Card.Root class="w-full max-w-md" data-testid="sign-in-card">
     <Card.Header class="space-y-1 text-center">
-      <div
-        class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
-      >
-        {#if showGuestCode}
+      {#if showGuestCode}
+        <div
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
+        >
           <KeyRound class="h-6 w-6 text-primary" />
-        {:else}
-          <Fingerprint class="h-6 w-6 text-primary" />
-        {/if}
-      </div>
+        </div>
+      {:else}
+        <Artwork
+          artwork="crescent-moon"
+          palette="moonlight"
+          motion="auto"
+          autoplay="once"
+          class="mx-auto mb-4 size-48"
+        />
+      {/if}
       {#if showGuestCode}
         <Card.Title class="text-2xl font-bold">Enter your guest code</Card.Title>
         <Card.Description>
           Enter the code you were given to view health data. The code works
-          once — this device stays signed in for 48 hours.
+          once. This device stays signed in for 48 hours.
         </Card.Description>
       {:else}
         <Card.Title class="text-2xl font-bold">
@@ -103,6 +110,15 @@
       </Card.Footer>
     {:else}
       <Card.Content>
+        <div class="mb-4 flex justify-center">
+          <Artwork
+            icon={fingerprintArtwork}
+            palette="water"
+            motion="auto"
+            autoplay="once"
+            class="size-56"
+          />
+        </div>
         <LoginForm {returnUrl} {tenantless} pendingStepUpToken={data.stepUpToken} />
       </Card.Content>
 
@@ -137,11 +153,11 @@
           <p>
             By signing in, you agree to our
             <a href={resolve("/terms")} class="underline hover:text-foreground">
-              Terms of Service
+              terms of service
             </a>
             and
             <a href={resolve("/privacy")} class="underline hover:text-foreground">
-              Privacy Policy
+              privacy policy
             </a>
           </p>
         </div>

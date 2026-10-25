@@ -65,8 +65,8 @@ public static class DemoLifestyleSeeds
 
     /// <summary>
     /// One state span to seed; local times, null end = still active. Metadata
-    /// follows the decomposer's conventions (e.g. Profile spans carry the name
-    /// in <c>profileName</c>, temporary targets carry <c>targetTop/Bottom</c>)
+    /// follows the decomposer's conventions (e.g. temporary targets carry
+    /// <c>targetTop/Bottom</c>)
     /// so the resolvers that read spans see the same shape as real uploads.
     /// </summary>
     public sealed record SpanSeed(

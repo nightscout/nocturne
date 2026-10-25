@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { BolusType, type PatientInsulin } from "$lib/api";
+  import { BolusType, InsulinRole, type PatientInsulin } from "$lib/api";
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -49,7 +49,7 @@
     if (insulin) {
       form.patientInsulinId = insulin.id;
       form.insulinType = insulin.name ?? "";
-      if (insulin.role === "Basal" || insulin.role === "Both") {
+      if (insulin.role === InsulinRole.Basal || insulin.role === InsulinRole.Both) {
         form.isBasalInsulin = true;
       }
     }
@@ -71,7 +71,7 @@
     />
   </div>
   <div class="space-y-2">
-    <Label>Bolus Type</Label>
+    <Label>Bolus type</Label>
     <Select.Root
       type="single"
       value={form.bolusType ?? ""}
@@ -186,7 +186,7 @@
       variant="option"
       class="cursor-pointer"
     >
-      Basal Insulin
+      Basal insulin
     </Label>
   </div>
 </div>

@@ -80,7 +80,7 @@ public class GlucoseStatisticsCharacterisationTests
     public void CalculateGlycemicVariability_PinsSampleStandardDeviationAndDerivedMetrics()
     {
         var result = _service.CalculateGlycemicVariability(
-            DayCurve, EntriesEveryFiveMinutes(DayCurve), timeZone: null)!;
+            DayCurve, EntriesEveryFiveMinutes(DayCurve), TimeZoneInfo.Utc)!;
 
         // Unlike CalculateBasicStats this centres on the unrounded mean 114.375, giving
         // sqrt(sum((v - 114.375)^2) / 23) = 44.19109933990741.
@@ -117,7 +117,7 @@ public class GlucoseStatisticsCharacterisationTests
     [Fact]
     public void CalculateGlycemicVariability_PinsTheTimestampedMetricsWithoutEntries()
     {
-        var result = _service.CalculateGlycemicVariability([100d, 120d], [], timeZone: null);
+        var result = _service.CalculateGlycemicVariability([100d, 120d], [], TimeZoneInfo.Utc);
 
         result.Should().NotBeNull();
         Metrics(result!).Should().HaveCount(MetricCount)
@@ -141,9 +141,9 @@ public class GlucoseStatisticsCharacterisationTests
     private static IEnumerable<KeyValuePair<string, double>> Metrics(GlycemicVariability variability) =>
         typeof(GlycemicVariability)
             .GetProperties()
-            .Where(property => property.PropertyType == typeof(double) && !property.Name.EndsWith("Target"))
+            .Where(property => property.PropertyType.IsAssignableTo(typeof(double?)) && !property.Name.EndsWith("Target"))
             .Select(property =>
-                KeyValuePair.Create(property.Name, (double)property.GetValue(variability)!));
+                KeyValuePair.Create(property.Name, Convert.ToDouble(property.GetValue(variability))));
 
     #endregion
 
@@ -271,16 +271,20 @@ public class GlucoseStatisticsCharacterisationTests
     /// A day with no reading on one side of 112.5 mg/dL contributes no risk from that side.
     /// </summary>
     [Fact]
-    public void CalculateAdrr_BoundsDaysInUtcWithoutAZone()
+    public void CalculateAdrr_WithoutAZone_IsNullRatherThanBoundedOnUtcDays()
     {
-        var expected = (
-            Risk(60)
-            + (Risk(70) + Risk(250))
-            + (Risk(50) + Risk(300))
-            + Risk(180)
-        ) / 4;
+        _service.CalculateADRR(ThreeLocalDays, timeZone: null).Should().BeNull();
+    }
 
-        _service.CalculateADRR(ThreeLocalDays, timeZone: null).Should().BeApproximately(expected, 1e-9);
+    [Fact]
+    public void CalculateGlycemicVariability_WithoutAZone_WithholdsOnlyTheAverageDailyRiskRange()
+    {
+        var result = _service.CalculateGlycemicVariability(
+            DayCurve, EntriesEveryFiveMinutes(DayCurve), timeZone: null)!;
+
+        result.AverageDailyRiskRange.Should().BeNull();
+        result.StandardDeviation.Should().Be(44.2);
+        result.LowBloodGlucoseIndex.Should().BeGreaterThan(0);
     }
 
     [Fact]

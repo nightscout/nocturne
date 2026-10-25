@@ -1,9 +1,12 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.Services.ChartData.Stages;
 
@@ -18,6 +21,10 @@ public class ProfileLoadStageTests
             _therapySettingsResolver.Object,
             _targetRangeResolver.Object,
             _basalRateResolver.Object,
+            new TenantClockResolver(
+                _therapySettingsResolver.Object,
+                new CategoryReadContext(),
+                NullLogger<TenantClockResolver>.Instance),
             NullLogger<ProfileLoadStage>.Instance
         );
 
@@ -56,7 +63,7 @@ public class ProfileLoadStageTests
         var result = await stage.ExecuteAsync(context, CancellationToken.None);
 
         // Assert
-        result.Timezone.Should().Be("America/New_York");
+        result.Zone.Should().Be(TimeZoneHelper.GetTimeZoneInfoFromId("America/New_York"));
         // Coloring band is the fixed clinical range, independent of the personal target.
         result.Thresholds.VeryLow.Should().Be(54);
         result.Thresholds.Low.Should().Be(70);
@@ -109,7 +116,7 @@ public class ProfileLoadStageTests
         var result = await stage.ExecuteAsync(context, CancellationToken.None);
 
         // Assert
-        result.Timezone.Should().BeNull();
+        result.Zone.Should().BeNull();
         result.Thresholds.VeryLow.Should().Be(54);
         result.Thresholds.Low.Should().Be(70);
         result.Thresholds.High.Should().Be(180);
@@ -117,5 +124,23 @@ public class ProfileLoadStageTests
         result.Thresholds.TargetLow.Should().BeNull();
         result.Thresholds.TargetHigh.Should().BeNull();
         result.DefaultBasalRate.Should().Be(1.0);
+    }
+
+    [Theory]
+    [InlineData("Invalid/Timezone")]
+    [InlineData("")]
+    [InlineData(null)]
+    public async Task ExecuteAsync_WithNoUsableTimezone_LeavesTheZoneNull(string? id)
+    {
+        _therapySettingsResolver
+            .Setup(s => s.HasDataAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _therapySettingsResolver
+            .Setup(s => s.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(id);
+
+        var result = await CreateStage().ExecuteAsync(CreateContext(), CancellationToken.None);
+
+        result.Zone.Should().BeNull();
     }
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { TrackerMode } from "$lib/api";
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
   import * as Tooltip from "$lib/components/ui/tooltip";
@@ -19,7 +20,7 @@
     /** Callback when value changes (alternative to bind:value) */
     onchange?: (value: number | undefined) => void;
     /** Tracker mode for display formatting */
-    mode?: "Duration" | "Event";
+    mode?: TrackerMode;
     /** Lifespan hours for negative threshold validation (Duration mode only) */
     lifespanHours?: number | undefined;
   }
@@ -31,7 +32,7 @@
     id,
     disabled = false,
     onchange,
-    mode = "Duration",
+    mode = TrackerMode.Duration,
     lifespanHours,
   }: Props = $props();
 
@@ -164,7 +165,7 @@
 
   // Validation for negative thresholds in Duration mode
   const exceedsLifespan = $derived(
-    mode === "Duration" &&
+    mode === TrackerMode.Duration &&
       value !== undefined &&
       value < 0 &&
       lifespanHours !== undefined &&
@@ -174,7 +175,7 @@
   // Effective hours for Duration mode negative thresholds
   const effectiveHours = $derived.by(() => {
     if (value === undefined) return null;
-    if (mode === "Event") return null; // Event mode doesn't need this
+    if (mode === TrackerMode.Event) return null; // Event mode doesn't need this
     if (value >= 0) return null; // Positive values don't need effective calculation
     if (lifespanHours === undefined) return null;
     return lifespanHours + value;
@@ -212,32 +213,32 @@
         <p class="font-medium mb-1">Supported formats:</p>
         <ul class="text-sm space-y-0.5">
           <li>
-            <code class="bg-muted px-1 rounded">168</code>
-            — plain hours
+            <code class="bg-muted px-1 rounded">168</code>:
+            plain hours
           </li>
           <li>
             <code class="bg-muted px-1 rounded">7x24</code>
             or
-            <code class="bg-muted px-1 rounded">7*24</code>
-            — multiplication
+            <code class="bg-muted px-1 rounded">7*24</code>:
+            multiplication
           </li>
           <li>
             <code class="bg-muted px-1 rounded">7d</code>
             or
-            <code class="bg-muted px-1 rounded">7 days</code>
-            — days to hours
+            <code class="bg-muted px-1 rounded">7 days</code>:
+            days to hours
           </li>
           <li>
             <code class="bg-muted px-1 rounded">1w</code>
             or
-            <code class="bg-muted px-1 rounded">1 week</code>
-            — weeks to hours
+            <code class="bg-muted px-1 rounded">1 week</code>:
+            weeks to hours
           </li>
           <li>
             <code class="bg-muted px-1 rounded">-24</code>
             or
-            <code class="bg-muted px-1 rounded">-2d</code>
-            — before expiration/event
+            <code class="bg-muted px-1 rounded">-2d</code>:
+            before expiration/event
           </li>
         </ul>
       </Tooltip.Content>
@@ -245,7 +246,7 @@
   </div>
   {#if showComputed && computedHours !== null}
     <p class="text-sm text-muted-foreground px-1">
-      {#if mode === "Event"}
+      {#if mode === TrackerMode.Event}
         {#if computedHours < 0}
           = <span class="font-medium">{formatHours(computedHours)}</span> before event
         {:else}

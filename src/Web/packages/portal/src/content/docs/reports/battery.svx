@@ -1,0 +1,61 @@
+---
+title: Battery
+---
+
+<script>
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Battery
+
+The Battery report answers the question "how do the batteries of my devices
+charge and run down?". It uses the status reports that your uploader app sends,
+for example from your phone or your pump.
+
+<Video id="battery" />
+
+## What it shows
+
+### One card for each device
+
+Each device that sends status reports gets its own card. The badge at the top
+right of the card shows the battery level now. The colour of the battery icon
+shows the status: normal, warning or urgent.
+
+Each card shows:
+
+- **Current**: the battery level now. A lightning icon shows that the battery
+  is charging.
+- **Readings**: the number of battery reports in the period.
+- **Avg level** and **Range**: the average battery level, and the lowest and
+  highest level.
+- **Charge Patterns**: the number of charge **Cycles**, and how long the
+  battery lasted after a charge: **Avg life**, **Longest** and **Shortest**.
+- **Time Distribution**: the part of the period that the battery was **Above
+  80%**, between **30% - 80%**, and **Below 30%**.
+- The number of warnings and critical events, if there were any.
+
+### Recent Charge Cycles
+
+The list shows the last 10 charge cycles. Each one shows the device, when it
+charged and from which level to which level, and how long the charge lasted.
+A cycle that has not finished shows **In Progress**.
+
+## How to use it
+
+The report opens on the last 7 days. One week shows only a few charges. To see
+more:
+
+1. At the top of the report, select the date range.
+2. Select **30 Days**.
+3. Select **Apply Filters**. The report loads again for 30 days.
+4. Look at **Range** and **Time Distribution** to see how low each battery went.
+
+If you have more than one device, select a device name above the cards to show
+only that device. Select **All Devices** to show all of them again. To load the
+latest data, select **Refresh**.
+
+## Good to know
+
+- If the report shows **No Battery Data Available**, make sure that your
+  uploader app sends device status data to Nocturne.

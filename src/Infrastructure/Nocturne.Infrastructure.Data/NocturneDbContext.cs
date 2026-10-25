@@ -107,7 +107,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>
     /// The subject whose own rows a subject-scoped cross-tenant read may reach (the tenant switcher,
     /// the caregiver overview, membership enumeration), carried to the <c>app.current_subject_id</c>
-    /// GUC. <see cref="Guid.Empty"/> leaves the GUC unset, so a policy arm reading it matches no row.
+    /// GUC. <see cref="Guid.Empty"/> leaves the GUC unset, and the <c>subject_pin</c> policy then
+    /// admits every row.
     /// </summary>
     public Guid SubjectId { get; internal set; }
 
@@ -364,6 +365,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<AlertExcursionMuteEntity> AlertExcursionMutes { get; set; }
 
+    public DbSet<AlertExcursionReceiptEntity> AlertExcursionReceipts { get; set; }
+
     public DbSet<AlertInstanceEntity> AlertInstances { get; set; }
 
     public DbSet<AlertDeliveryEntity> AlertDeliveries { get; set; }
@@ -400,6 +403,10 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<SubjectOidcIdentityEntity> SubjectOidcIdentities { get; set; }
 
     public DbSet<CoachMarkStateEntity> CoachMarkStates { get; set; }
+
+    public DbSet<SetupHubItemEntity> SetupHubItems { get; set; }
+
+    public DbSet<SetupHubAdditionEntity> SetupHubAdditions { get; set; }
 
     public DbSet<TranslationDraftEntity> TranslationDrafts { get; set; }
 
@@ -566,6 +573,28 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         typeof(CarbRatioScheduleEntity),
         typeof(SensitivityScheduleEntity),
         typeof(TargetRangeScheduleEntity),
+    ];
+
+    /// <summary>
+    /// <c>SET NULL</c> foreign keys on the high-volume record tables that most rows leave empty.
+    /// The index only serves the referential action when a device, bolus calculation or APS
+    /// snapshot is deleted, which never looks for a null, so it is filtered to the non-null rows.
+    /// On production the columns are 67-100% null.
+    /// </summary>
+    internal static readonly (Type Entity, string Property)[] SparseForeignKeys =
+    [
+        (typeof(ApsSnapshotEntity), nameof(ApsSnapshotEntity.DeviceId)),
+        (typeof(ApsSnapshotEntity), nameof(ApsSnapshotEntity.PatientDeviceId)),
+        (typeof(PumpSnapshotEntity), nameof(PumpSnapshotEntity.DeviceId)),
+        (typeof(PumpSnapshotEntity), nameof(PumpSnapshotEntity.PatientDeviceId)),
+        (typeof(UploaderSnapshotEntity), nameof(UploaderSnapshotEntity.DeviceId)),
+        (typeof(TempBasalEntity), nameof(TempBasalEntity.DeviceId)),
+        (typeof(TempBasalEntity), nameof(TempBasalEntity.PatientDeviceId)),
+        (typeof(TempBasalEntity), nameof(TempBasalEntity.ApsSnapshotId)),
+        (typeof(BolusEntity), nameof(BolusEntity.DeviceId)),
+        (typeof(BolusEntity), nameof(BolusEntity.PatientDeviceId)),
+        (typeof(BolusEntity), nameof(BolusEntity.ApsSnapshotId)),
+        (typeof(BolusEntity), nameof(BolusEntity.BolusCalculationId)),
     ];
 
     /// <summary>
@@ -800,6 +829,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         {
             entity.HasIndex(nameof(ITenantScoped.TenantId))
                 .HasDatabaseName($"IX_{entity.Metadata.GetTableName()}_tenant_id");
+        }
+
+        foreach (var (type, property) in SparseForeignKeys)
+        {
+            var entity = modelBuilder.Entity(type);
+            var column = entity.Property(property).Metadata.GetColumnName();
+            entity.HasIndex(property)
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_{column}")
+                .HasFilter($"{column} IS NOT NULL");
         }
 
         foreach (var entity in V4ProfileNamedEntities.Select(t => modelBuilder.Entity(t)))
@@ -1206,28 +1244,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<TrackerDefinitionEntity>()
-            .HasIndex(d => d.UserId)
-            .HasDatabaseName("ix_tracker_definitions_user_id");
-
-        modelBuilder
-            .Entity<TrackerDefinitionEntity>()
-            .HasIndex(d => new { d.UserId, d.Category })
-            .HasDatabaseName("ix_tracker_definitions_user_category");
-
-        modelBuilder
-            .Entity<TrackerDefinitionEntity>()
-            .HasIndex(d => d.IsFavorite)
-            .HasDatabaseName("ix_tracker_definitions_is_favorite");
-
-        modelBuilder
-            .Entity<TrackerDefinitionEntity>()
             .HasIndex(d => d.CreatedAt)
             .HasDatabaseName("ix_tracker_definitions_created_at");
-
-        modelBuilder
-            .Entity<TrackerInstanceEntity>()
-            .HasIndex(i => i.UserId)
-            .HasDatabaseName("ix_tracker_instances_user_id");
 
         modelBuilder
             .Entity<TrackerInstanceEntity>()
@@ -1242,19 +1260,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder
             .Entity<TrackerInstanceEntity>()
-            .HasIndex(i => new { i.UserId, i.CompletedAt })
-            .HasDatabaseName("ix_tracker_instances_user_completed");
-
-        modelBuilder
-            .Entity<TrackerInstanceEntity>()
             .HasIndex(i => i.StartedAt)
             .HasDatabaseName("ix_tracker_instances_started_at")
             .IsDescending();
-
-        modelBuilder
-            .Entity<TrackerPresetEntity>()
-            .HasIndex(p => p.UserId)
-            .HasDatabaseName("ix_tracker_presets_user_id");
 
         modelBuilder
             .Entity<TrackerPresetEntity>()
@@ -1282,6 +1290,18 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(r => r.ManagedBy)
             .HasDatabaseName("ix_alert_rules_managed_by")
             .HasFilter("managed_by IS NOT NULL");
+
+        modelBuilder
+            .Entity<AlertRuleEntity>()
+            .Property(r => r.StarterKind)
+            .HasConversion<string>();
+
+        modelBuilder
+            .Entity<AlertRuleEntity>()
+            .HasIndex(r => new { r.StarterKind, r.TenantId })
+            .IsUnique()
+            .HasFilter("starter_kind IS NOT NULL")
+            .HasDatabaseName("ix_alert_rules_starter_kind_tenant");
 
         modelBuilder
             .Entity<TrackerNotificationThresholdEntity>()
@@ -1604,7 +1624,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<OAuthClientEntity>()
             .HasIndex(c => new { c.TenantId, c.SoftwareId })
             .HasDatabaseName("ix_oauth_clients_tenant_software_id")
-            .IsUnique()
             .HasFilter("\"software_id\" IS NOT NULL");
 
         modelBuilder
@@ -1893,6 +1912,27 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => e.Token)
             .HasDatabaseName("ix_alert_invites_token")
             .IsUnique();
+
+        modelBuilder.Entity<TenantEntity>()
+            .Property(t => t.PatientRelationship)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<SetupHubItemEntity>(entity =>
+        {
+            entity.Property(e => e.ItemKey).HasConversion<string>();
+            entity.Property(e => e.State).HasConversion<string>();
+            entity.HasIndex(e => new { e.TenantId, e.ItemKey })
+                .IsUnique()
+                .HasDatabaseName("ix_setup_hub_items_tenant_item_key");
+        });
+
+        modelBuilder.Entity<SetupHubAdditionEntity>(entity =>
+        {
+            entity.Property(e => e.ItemKey).HasConversion<string>();
+            entity.Property(e => e.RecordKind).HasConversion<string>();
+            entity.HasIndex(e => new { e.TenantId, e.ItemKey, e.RecordKind })
+                .HasDatabaseName("ix_setup_hub_additions_tenant_item_kind");
+        });
 
         // Signal loss sweep: find tenants that haven't reported recently
         modelBuilder.Entity<TenantEntity>()
@@ -2570,6 +2610,20 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .IsUnique()
                 .HasDatabaseName("ix_alert_excursion_mutes_tenant_subject_excursion");
             entity.HasIndex(e => e.AlertExcursionId);
+        });
+
+        modelBuilder.Entity<AlertExcursionReceiptEntity>(entity =>
+        {
+            entity.Property(e => e.ActorKind).HasConversion<string>();
+
+            entity.HasOne(e => e.AlertExcursion)
+                .WithMany()
+                .HasForeignKey(e => e.AlertExcursionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.AlertExcursionId, e.ActorKind, e.ActorId })
+                .IsUnique()
+                .HasDatabaseName("ix_alert_excursion_receipts_tenant_excursion_actor");
         });
 
         modelBuilder.Entity<AlertInstanceEntity>(entity =>

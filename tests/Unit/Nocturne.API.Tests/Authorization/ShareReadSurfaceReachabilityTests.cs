@@ -77,14 +77,17 @@ public class ShareReadSurfaceReachabilityTests
             // (compression_low_suggestions has no ShareDataCategories entry), so the gate decides
             // error-vs-empty-list, not what a share can see.
             ["Nocturne.API.Controllers.V4.TenantAdmin.CompressionLowController"] = Scope.GlucoseRead,
+            // The firing alarm a share holding alerts.read shows. History is refused to a share by
+            // DenyNoAccountViewer, which a scope sweep cannot see; the integration suite covers it.
+            ["Nocturne.API.Controllers.V4.Monitoring.AlertsController"] = Scope.AlertsRead,
         };
 
     /// <summary>
     /// Reads that serve the share surface through the <c>HasPermissions</c> fallback rather than a
     /// scope gate, keyed <c>Controller.Action</c>. The tracker tables carry no
     /// <see cref="ShareDataCategories"/> category, so RLS hides their rows from a share and the
-    /// endpoints return the public-visibility set — but they must stay reachable, because the
-    /// calendar renders them beside glucose a share can see.
+    /// endpoints return an empty list — but they must stay reachable, because the calendar asks for
+    /// them beside glucose a share can see.
     /// </summary>
     /// <remarks>
     /// Reachability here means the absence of an <see cref="IAuthorizeData"/> requirement, not the
@@ -152,9 +155,10 @@ public class ShareReadSurfaceReachabilityTests
         {
             ["StatisticsController.GetMultiPeriodStatistics"] = Scope.GlucoseRead,
             ["StatisticsController.GetPunchCardData"] = Scope.GlucoseRead,
-            // Basal delivery is wholly the treatment category, so neither action is broadened to
-            // the OR its controller's mixed payloads need.
+            // Basal delivery is wholly the treatment category, so none of these actions is broadened
+            // to the OR its controller's mixed payloads need.
             ["ChartDataController.GetBasalSeries"] = Scope.TreatmentsRead,
+            ["ChartDataController.GetBasalDeliverySpans"] = Scope.TreatmentsRead,
             ["RetrospectiveController.GetBasalTimeline"] = Scope.TreatmentsRead,
         };
 
@@ -187,8 +191,11 @@ public class ShareReadSurfaceReachabilityTests
             if (type.GetCustomAttributes(inherit: true).OfType<IAuthorizeData>().Any())
                 offenders.Add($"{type.Name} (class)");
 
+            // A write-gated action is outside the share surface, so it may also require an
+            // authenticated caller (AlertsController's acknowledgement and delivery actions do).
             offenders.AddRange(Actions(type)
-                .Where(a => a.GetCustomAttributes(inherit: true).OfType<IAuthorizeData>().Any())
+                .Where(a => !IsWriteGated(a)
+                            && a.GetCustomAttributes(inherit: true).OfType<IAuthorizeData>().Any())
                 .Select(a => $"{type.Name}.{a.Name}"));
 
             offenders.Should().BeEmpty(
@@ -210,6 +217,7 @@ public class ShareReadSurfaceReachabilityTests
             // The recycle bin exists to feed Restore; records the owner deleted are not part of
             // the share surface (see the remark on V4CrudControllerBase.ListDeleted).
             ["ListDeleted"] = "deleted-record enumeration is an editing surface",
+            ["GetPendingDeliveries"] = "the delivery adapters' queue, with other recipients' destinations",
         };
 
     [Fact]
@@ -229,10 +237,8 @@ public class ShareReadSurfaceReachabilityTests
             foreach (var action in Actions(type))
             {
                 var actionAttributes = action.GetCustomAttributes(inherit: true).ToList();
-                var isWriteGated = actionAttributes.OfType<RequireDeclaredWriteScopeAttribute>().Any()
-                    || ScopesOf(actionAttributes).Any(s => !s.EndsWith(".read", StringComparison.Ordinal));
 
-                if (isWriteGated)
+                if (IsWriteGated(action))
                 {
                     if (VerbsOf(action).Overlaps(ReadVerbs) && !MemberOnlyReadActions.ContainsKey(action.Name))
                         violations.Add($"{type.Name}.{action.Name}: a write-gated read verb drops off the share "
@@ -326,6 +332,13 @@ public class ShareReadSurfaceReachabilityTests
         controller.GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .Where(m => !m.IsSpecialName && m.GetCustomAttributes(inherit: true)
                 .OfType<IActionHttpMethodProvider>().Any());
+
+    private static bool IsWriteGated(MethodInfo action)
+    {
+        var attributes = action.GetCustomAttributes(inherit: true).ToList();
+        return attributes.OfType<RequireDeclaredWriteScopeAttribute>().Any()
+            || ScopesOf(attributes).Any(s => !s.EndsWith(".read", StringComparison.Ordinal));
+    }
 
     private static HashSet<string> VerbsOf(MethodInfo action) =>
         action.GetCustomAttributes(inherit: true)

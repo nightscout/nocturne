@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Chart, Svg, Axis, Polygon, Points, Tooltip } from "layerchart";
+  import { Chart, Svg, Axis, Circle, Line, Polygon, Points, Tooltip } from "layerchart";
   import { scaleLinear } from "d3-scale";
   import {
     GRIZone,
@@ -248,26 +248,26 @@
                 {#each timeSeriesPoints as point, i (i)}
                   {#if i > 0}
                     {@const prev = timeSeriesPoints[i - 1]}
-                    <line
+                    <Line
                       x1={context.xScale(prev.hypo)}
                       y1={context.yScale(prev.hyper)}
                       x2={context.xScale(point.hypo)}
                       y2={context.yScale(point.hyper)}
                       stroke="var(--muted-foreground)"
-                      stroke-width="1"
-                      stroke-dasharray="2,2"
+                      strokeWidth={1}
+                      dashArray="2 2"
                     />
                   {/if}
                 {/each}
 
                 {#each timeSeriesPoints as point, i (i)}
-                  <circle
+                  <Circle
                     cx={context.xScale(point.hypo)}
                     cy={context.yScale(point.hyper)}
                     r={6}
                     fill={point.fill}
                     stroke={point.stroke}
-                    stroke-width={2}
+                    strokeWidth={2}
                     role="img"
                     aria-label="{formatPeriodLabel(point.periodStart)}: GRI {Math.round(point.gri?.score ?? 0)}"
                     onpointermove={(e) => context.tooltip?.show(e, point)}
@@ -302,13 +302,13 @@
               <Axis
                 placement="bottom"
                 ticks={5}
-                label="Hypoglycemia Component (%)"
+                label="Hypoglycemia component (%)"
                 tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
               />
               <Axis
                 placement="left"
                 ticks={5}
-                label="Hyperglycemia Component (%)"
+                label="Hyperglycemia component (%)"
                 tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
               />
             </Svg>
@@ -325,7 +325,7 @@
                     </div>
 
                     <div class="flex justify-between gap-4">
-                      <span class="text-muted-foreground">GRI Score</span>
+                      <span class="text-muted-foreground">GRI score</span>
                       <span class="font-medium tabular-nums">
                         {Math.round(d.gri?.score ?? 0)}
                       </span>
@@ -333,7 +333,7 @@
 
                     {#if d.averageGlucoseMgdl != null}
                       <div class="flex justify-between gap-4">
-                        <span class="text-muted-foreground">Avg Glucose</span>
+                        <span class="text-muted-foreground">Avg glucose</span>
                         <span class="font-medium tabular-nums">
                           {formatGlucoseValue(d.averageGlucoseMgdl, glucoseUnits.current)} {getUnitLabel(glucoseUnits.current)}
                         </span>
@@ -351,7 +351,7 @@
 
                     {#if d.averageDailyCarbs != null}
                       <div class="flex justify-between gap-4">
-                        <span class="text-muted-foreground">Avg Carbs</span>
+                        <span class="text-muted-foreground">Avg carbs</span>
                         <span class="font-medium tabular-nums">
                           {Math.round(d.averageDailyCarbs)}g
                         </span>
@@ -380,7 +380,7 @@
           </dd>
         </dl>
         <p class="mt-1 max-w-40 text-2xs leading-tight text-muted-foreground">
-          Risk is indicated in percentiles &mdash; 0 is lowest risk and 100 is
+          Risk is indicated in percentiles: 0 is lowest risk and 100 is
           highest risk
         </p>
       </div>

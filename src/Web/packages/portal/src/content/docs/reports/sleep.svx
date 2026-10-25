@@ -1,0 +1,82 @@
+---
+title: Sleep & Overnight
+---
+
+# Sleep & Overnight
+
+The Sleep & Overnight report answers the question "how do I sleep, and what
+does my glucose do while I sleep?". It shows your sleep night by night, with
+your overnight glucose.
+
+## What it shows
+
+Sleep data comes from connected sources (Apple Health, Health Connect, Fitbit,
+Oura, Garmin, Samsung) or from manual entries.
+
+### The key figures
+
+The first strip is about your sleep:
+
+- **Average sleep**: the average time asleep each night.
+- **Nights tracked**: the number of nights with sleep data, out of the nights
+  in the period.
+- **Sleep score**: the average score of the nights that have one. The caption
+  says "includes estimated" if some scores were worked out by Nocturne.
+- **HRV**: your average overnight heart rate variability, in milliseconds.
+
+The second strip is about your glucose while you sleep. It shows when you have
+CGM data for the nights:
+
+- **Overnight TIR**: your average time in range overnight.
+- **Dawn rise**: the average change in glucose before you wake.
+- **Overnight lows**: the number of lows overnight, and the part of the nights
+  that had one.
+
+Some captions compare the last 7 nights with the 7 nights before.
+
+### Weekly Breakdown
+
+Each row is one week. The row shows how many nights you tracked, with the
+figures for that week. Each letter is one night. Select a letter to open the
+full report for that night. A pale letter is a night with no data.
+
+### Sleep Composition
+
+The chart shows the time in each sleep stage, night by night: **Deep**,
+**REM**, **Light** and **Awake**. **Asleep (unstaged)** is sleep that the source
+did not split into stages.
+
+Next to the chart, the report shows your average share of **Deep** and **REM**
+sleep. A band shows the typical range, and a mark shows your own value. The
+caption under the band says which group of people the typical range is for.
+
+### Sleep Actogram
+
+The actogram has one row for each day. The newest day is at the top. The
+coloured blocks show your sleep stages. The line and dots show your glucose.
+Each row covers 48 hours: the day itself, and then the next day in a paler
+colour, so a night is not cut at midnight. Select a date to open the full
+report for that night.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+To look at more nights:
+
+1. At the top of the report, select the date range.
+2. Select **30 Days**.
+3. Select **Apply Filters**. The report loads again for 30 days.
+4. In **Weekly Breakdown**, find a week with low time in range or lows.
+5. Select a night in that week to open its full report.
+
+If you have more than one sleep source, use the menu in the **Sleep
+Composition** card to show one source only.
+
+## Good to know
+
+- **Each source on its own.** When you choose one source, the chart shows all
+  the sessions from that source. Nocturne does not merge nights from different
+  devices.
+- **No sleep data.** If the report shows **No sleep data**, connect a sleep
+  source, or choose a longer period if tracking started recently.

@@ -55,7 +55,7 @@ public class TrackerTriggerServiceTests
                 {
                     Id = Guid.NewGuid(),
                     DefinitionId = definitionId,
-                    UserId = userId,
+                    CreatedBy = userId,
                     StartNotes = startNotes,
                     StartTreatmentId = startTreatmentId,
                     StartedAt = startedAt ?? DateTime.UtcNow,
@@ -112,7 +112,7 @@ public class TrackerTriggerServiceTests
         {
             Id = Guid.NewGuid(),
             Name = "Infusion Site",
-            UserId = userId,
+            CreatedBy = userId,
             LifespanHours = lifespanHours,
             Mode = mode,
             TriggerNotesContains = triggerNotesContains,
@@ -129,7 +129,7 @@ public class TrackerTriggerServiceTests
         {
             Id = Guid.NewGuid(),
             DefinitionId = definition.Id,
-            UserId = definition.UserId,
+            CreatedBy = definition.CreatedBy,
             StartedAt = startedAt,
             StartTreatmentId = startTreatmentId,
         };
@@ -142,6 +142,26 @@ public class TrackerTriggerServiceTests
         DeviceEventType eventType = DeviceEventType.SiteChange,
         string? notes = null) =>
         new() { Id = Guid.NewGuid(), Timestamp = timestamp, EventType = eventType, Notes = notes };
+
+    [Fact]
+    public async Task AStoredTriggerOutsideTheTriggerableList_DoesNotAdvanceTheTracker()
+    {
+        GivenDefinition(triggerEventTypes: ["Pump Suspend", "Sensor Start"]);
+
+        await _sut.OnCreatedAsync([Event(new DateTime(2026, 9, 11, 10, 43, 30, DateTimeKind.Utc), DeviceEventType.PumpSuspend)]);
+
+        _started.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ATriggerableStoredTrigger_StillAdvancesAlongsideAnIgnoredOne()
+    {
+        GivenDefinition(triggerEventTypes: ["Pump Suspend", "Sensor Start"]);
+
+        await _sut.OnCreatedAsync([Event(new DateTime(2026, 9, 11, 10, 43, 30, DateTimeKind.Utc), DeviceEventType.SensorStart)]);
+
+        _started.Should().ContainSingle();
+    }
 
     [Fact]
     public async Task SiteChange_StartsAnInstance_WhenNoneIsRunning()
@@ -218,7 +238,7 @@ public class TrackerTriggerServiceTests
         await _sut.OnCreatedAsync([Event(new DateTime(2026, 9, 11, 10, 43, 30, DateTimeKind.Utc))]);
 
         // A connector-ingested event carries no user, so ownership can only come from the definition.
-        _started.Should().ContainSingle().Which.UserId.Should().Be("someone-else");
+        _started.Should().ContainSingle().Which.CreatedBy.Should().Be("someone-else");
     }
 
     [Fact]
@@ -369,18 +389,14 @@ public class TrackerTriggerServiceTests
         _broadcast.Verify(
             b => b.BroadcastTrackerUpdateAsync(
                 TrackerRealtimeAction.Complete,
-                It.IsAny<TrackerInstanceDto>(),
-                It.IsAny<string>(),
-                It.IsAny<TrackerVisibility>()
+                It.IsAny<TrackerInstanceDto>()
             ),
             Times.Once
         );
         _broadcast.Verify(
             b => b.BroadcastTrackerUpdateAsync(
                 TrackerRealtimeAction.Create,
-                It.IsAny<TrackerInstanceDto>(),
-                It.IsAny<string>(),
-                It.IsAny<TrackerVisibility>()
+                It.IsAny<TrackerInstanceDto>()
             ),
             Times.Once
         );
@@ -432,7 +448,7 @@ public class TrackerTriggerServiceTests
         {
             Id = Guid.NewGuid(),
             DefinitionId = definition.Id,
-            UserId = definition.UserId,
+            CreatedBy = definition.CreatedBy,
             Definition = definition,
             StartTreatmentId = startedBy?.Id.ToString(),
             StartedAt = startedAt,
@@ -441,7 +457,7 @@ public class TrackerTriggerServiceTests
 
     private void VerifyBroadcast(TrackerRealtimeAction action, TrackerInstanceEntity instance, Times times) =>
         _broadcast.Verify(b => b.BroadcastTrackerUpdateAsync(
-            action, It.Is<TrackerInstanceDto>(d => d.Id == instance.Id), instance.UserId, It.IsAny<TrackerVisibility>()), times);
+            action, It.Is<TrackerInstanceDto>(d => d.Id == instance.Id)), times);
 
     private static readonly DateTime T0 = new(2026, 9, 11, 10, 43, 30, DateTimeKind.Utc);
 

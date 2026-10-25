@@ -22,6 +22,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Sleep;
@@ -63,22 +64,26 @@ public class V4ReadLimitClampTests
     public async Task StateSpans_LimitAtCeiling_ReachesServiceUnchanged()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = FullAccess(new StateSpansController(service.Object));
 
         await controller.GetStateSpans(limit: Ceiling, offset: 0);
 
-        VerifySpansFetched(service, Ceiling, 0, Times.Once());
+        service.Verify(s => s.GetStateSpansInCategoriesAsync(
+            It.IsAny<IReadOnlyCollection<StateSpanCategory>>(), null, null, null, null, null,
+            Ceiling, 0, true, It.IsAny<CancellationToken>()), Times.Once());
     }
 
     [Fact]
     public async Task StateSpans_LimitAboveCeiling_IsClamped()
     {
         var service = new Mock<IStateSpanService>();
-        var controller = new StateSpansController(service.Object);
+        var controller = FullAccess(new StateSpansController(service.Object));
 
         await controller.GetStateSpans(limit: AboveCeiling, offset: -1);
 
-        VerifySpansFetched(service, Ceiling, 0, Times.Once());
+        service.Verify(s => s.GetStateSpansInCategoriesAsync(
+            It.IsAny<IReadOnlyCollection<StateSpanCategory>>(), null, null, null, null, null,
+            Ceiling, 0, true, It.IsAny<CancellationToken>()), Times.Once());
     }
 
     [Fact]
@@ -153,13 +158,27 @@ public class V4ReadLimitClampTests
         VerifyActivityCategoriesFetched(service, 0);
     }
 
-    /// <summary>The categories <c>/state-spans/activities</c> merges.</summary>
-    private const int ActivityCategoryCount = 3;
+    [Fact]
+    public async Task StateSpanActivities_ReadsExactlyTheDrawnActivityCategories()
+    {
+        var service = new Mock<IStateSpanService>();
+        var controller = new StateSpansController(service.Object);
+
+        await controller.GetActivities(limit: 100, offset: 0);
+
+        foreach (var category in Enum.GetValues<StateSpanCategory>())
+        {
+            var expected = StateSpanCategories.DrawnActivities.Contains(category) ? Times.Once() : Times.Never();
+            service.Verify(s => s.GetStateSpansAsync(
+                category, null, null, null, null, null,
+                It.IsAny<int>(), 0, true, It.IsAny<CancellationToken>()), expected);
+        }
+    }
 
     private static void VerifyActivityCategoriesFetched(Mock<IStateSpanService> service, int count) =>
         service.Verify(s => s.GetStateSpansAsync(
             It.IsAny<StateSpanCategory?>(), null, null, null, null, null,
-            count, 0, true, It.IsAny<CancellationToken>()), Times.Exactly(ActivityCategoryCount));
+            count, 0, true, It.IsAny<CancellationToken>()), Times.Exactly(StateSpanCategories.DrawnActivities.Count));
 
     /// <summary>The <c>/state-spans</c> sub-routes that pre-filter by a single category.</summary>
     private const int CategorySubRouteCount = 7;
@@ -173,6 +192,14 @@ public class V4ReadLimitClampTests
         await controller.GetExercise(limit: limit, offset: offset);
         await controller.GetIllness(limit: limit, offset: offset);
         await controller.GetTravel(limit: limit, offset: offset);
+    }
+
+    private static T FullAccess<T>(T controller) where T : ControllerBase
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string> { "*" };
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+        return controller;
     }
 
     private static void VerifySpansFetched(Mock<IStateSpanService> service, int count, int skip, Times times) =>
@@ -210,6 +237,7 @@ public class V4ReadLimitClampTests
             Mock.Of<ISensitivityScheduleRepository>(),
             Mock.Of<ITargetRangeScheduleRepository>(),
             Mock.Of<IProfileProjectionService>(),
+            Mock.Of<IProfileDeletionService>(),
             TempBasalTestDeps.NoReresolution());
 
     private static void VerifyTherapySettingsFetched(Mock<ITherapySettingsRepository> repo, int limit, int offset) =>
@@ -523,7 +551,7 @@ public class V4ReadLimitClampTests
 
         await CreateTrackersController(repo).GetInstanceHistory(Ceiling);
 
-        repo.Verify(r => r.GetCompletedInstancesAsync(null, Ceiling, It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(r => r.GetCompletedInstancesAsync(Ceiling, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -533,7 +561,7 @@ public class V4ReadLimitClampTests
 
         await CreateTrackersController(repo).GetInstanceHistory(AboveCeiling);
 
-        repo.Verify(r => r.GetCompletedInstancesAsync(null, Ceiling, It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(r => r.GetCompletedInstancesAsync(Ceiling, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private static TrackersController CreateTrackersController(Mock<ITrackerRepository> repo) =>
@@ -541,10 +569,28 @@ public class V4ReadLimitClampTests
             repo.Object,
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<ITrackerAlertRuleSyncService>(),
-            Mock.Of<INocturneDbContextFactory>(),
+            Mock.Of<IAlertRepository>(),
+            Mock.Of<ITenantAccessor>(),
             Mock.Of<IAlertAcknowledgementService>(),
             Mock.Of<ILogger<TrackersController>>())
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    Items =
+                    {
+                        ["AuthContext"] = new Nocturne.Core.Models.Authorization.AuthContext
+                        {
+                            IsAuthenticated = true,
+                            SubjectId = Guid.NewGuid(),
+                        },
+                        ["GrantedScopes"] = new HashSet<string>
+                        {
+                            Nocturne.Core.Models.Authorization.Scope.AlertsRead,
+                        },
+                    },
+                },
+            },
         };
 }

@@ -40,8 +40,8 @@ describe("InsulinDonutChart", () => {
 
     await clickArc("Bolus 12.8U");
 
-    await expect.element(page.getByText("Manual Bolus 9.8U")).toBeVisible();
-    await expect.element(page.getByText("Automatic Bolus 3.0U")).toBeVisible();
+    await expect.element(page.getByText("Manual bolus 9.8U")).toBeVisible();
+    await expect.element(page.getByText("Automatic bolus 3.0U")).toBeVisible();
     await expect.element(page.getByText("12.8U", { exact: true })).toBeVisible();
   });
 
@@ -50,8 +50,8 @@ describe("InsulinDonutChart", () => {
 
     await clickArc("Basal 6.3U");
 
-    await expect.element(page.getByText("Scheduled Basal 4.0U")).toBeVisible();
-    await expect.element(page.getByText("Additional Basal 2.4U")).toBeVisible();
+    await expect.element(page.getByText("Scheduled basal 4.0U")).toBeVisible();
+    await expect.element(page.getByText("Additional basal 2.4U")).toBeVisible();
   });
 
   it("draws one slice per manual bolus and opens the clicked bolus", async () => {
@@ -59,7 +59,7 @@ describe("InsulinDonutChart", () => {
     const { container } = render(InsulinDonutChart, { props: { ...props, onBolusClick } });
 
     await clickArc("Bolus 12.8U");
-    await clickArc("Manual Bolus 9.8U");
+    await clickArc("Manual bolus 9.8U");
 
     await expect.element(page.getByRole("button", { name: "Bolus 3.3U" })).toBeVisible();
     expect(slices(container)).toHaveLength(3);
@@ -75,14 +75,14 @@ describe("InsulinDonutChart", () => {
       new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
     );
 
-    await expect.element(page.getByText("Automatic Bolus 3.0U")).toBeVisible();
+    await expect.element(page.getByText("Automatic bolus 3.0U")).toBeVisible();
   });
 
   it("steps back to any ancestor from the breadcrumb", async () => {
     const { container } = render(InsulinDonutChart, { props });
 
     await clickArc("Bolus 12.8U");
-    await clickArc("Manual Bolus 9.8U");
+    await clickArc("Manual bolus 9.8U");
     await expect.element(page.getByText("Manual:")).toBeVisible();
 
     await page.getByRole("navigation").getByRole("button", { name: "Bolus" }).click();
@@ -99,11 +99,11 @@ describe("InsulinDonutChart", () => {
     render(InsulinDonutChart, { props });
 
     await clickArc("Bolus 12.8U");
-    await clickArc("Manual Bolus 9.8U");
+    await clickArc("Manual bolus 9.8U");
 
     await expect.element(page.getByText("Manual:")).toBeVisible();
-    await expect.element(page.getByText("Automatic Bolus 3.0U")).not.toBeInTheDocument();
-    await expect.element(page.getByText("Manual Bolus 9.8U", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Automatic bolus 3.0U")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Manual bolus 9.8U", { exact: true })).toBeVisible();
   });
 
   it("returns to All when the drilled level has nothing left to show", async () => {
@@ -135,7 +135,7 @@ describe("InsulinDonutChart", () => {
     });
 
     await clickArc("Bolus 12.8U");
-    await clickArc("Manual Bolus 9.8U");
+    await clickArc("Manual bolus 9.8U");
     await expect.element(page.getByText("Manual:")).toBeVisible();
 
     const fills = [...slices(container)].map((arc) => arc.getAttribute("fill"));
@@ -149,7 +149,7 @@ describe("InsulinDonutChart", () => {
     const { container } = render(InsulinDonutChart, { props });
 
     await clickArc("Bolus 12.8U");
-    await expect.element(page.getByText("Automatic Bolus 3.0U")).toBeVisible();
+    await expect.element(page.getByText("Automatic bolus 3.0U")).toBeVisible();
 
     expect(slices(container)).toHaveLength(1);
     const automatic = container.querySelectorAll("path:not([role='button'])");
@@ -157,14 +157,14 @@ describe("InsulinDonutChart", () => {
     automatic.forEach((arc) => (arc as SVGElement).dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
     await expect.element(page.getByText("Bolus:")).toBeVisible();
-    await expect.element(page.getByText("Automatic Bolus 3.0U")).toBeVisible();
+    await expect.element(page.getByText("Automatic bolus 3.0U")).toBeVisible();
   });
 
   it("draws the manual arc from the total when the backend sends no bolus records", async () => {
     const { container } = render(InsulinDonutChart, { props: { ...props, boluses: [] } });
 
     await clickArc("Bolus 12.8U");
-    await clickArc("Manual Bolus 9.8U");
+    await clickArc("Manual bolus 9.8U");
 
     await expect.element(page.getByText("Manual:")).toBeVisible();
     await expect.element(page.getByText("9.8U", { exact: true })).toBeVisible();

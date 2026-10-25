@@ -61,7 +61,7 @@
 </script>
 
 <svelte:head>
-  <title>Recovery Mode - Nocturne</title>
+  <title>Recovery mode - Nocturne</title>
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
@@ -71,7 +71,7 @@
       <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-warning/10">
         <ShieldAlert class="h-6 w-6 text-warning" />
       </div>
-      <Card.Title class="text-xl">Recovery Mode</Card.Title>
+      <Card.Title class="text-xl">Recovery mode</Card.Title>
       <Card.Description>
         Some accounts here have no way to sign in. If yours is one of them, sign in with one of
         your own recovery codes, or ask an administrator for a one-time recovery code.

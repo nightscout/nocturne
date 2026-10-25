@@ -9,6 +9,7 @@
     complete as completeCareLinkConnect,
     desktopToken as mintDesktopLinkCode,
   } from "$lib/api/generated/careLinkConnects.generated.remote";
+  import { CareLinkRegion } from "$lib/constants/carelink-regions";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Card,
@@ -53,7 +54,7 @@
     // Called after a refresh token is stored, with the region signed in to and the
     // auto-detected profile (if any).
     onConnected?: (info: {
-      server: "EU" | "US";
+      server: CareLinkRegion;
       username?: string | null;
       country?: string | null;
     }) => void;
@@ -61,7 +62,7 @@
 
   type Phase = "idle" | "awaiting-code" | "done";
 
-  let region = $state<"EU" | "US">("EU");
+  let region = $state<CareLinkRegion>(CareLinkRegion.Eu);
   let phase = $state<Phase>("idle");
   let flowState = $state<string | null>(null);
   let codeInput = $state("");
@@ -78,7 +79,7 @@
     try {
       const res = await startCareLinkConnect({ server: region });
       if (!res.authorizeUrl || !res.state) {
-        error = "Could not start CareLink sign-in. Please try again.";
+        error = "Could not start CareLink sign-in. Try again.";
         return;
       }
       flowState = res.state;
@@ -102,7 +103,7 @@
         state: flowState,
       });
       if (!res.success) {
-        error = "Sign-in could not be completed. Please try again.";
+        error = "Sign-in could not be completed. Try again.";
         return;
       }
       connectedUsername = res.username ?? null;
@@ -155,8 +156,8 @@
       Connect your CareLink account
     </CardTitle>
     <CardDescription>
-      Sign in to Medtronic CareLink in your browser. Your password is never sent to Nocturne — only a
-      revocable access token is stored.
+      Sign in to Medtronic CareLink in your browser. Your password is never sent to Nocturne. Nocturne stores only a
+      revocable access token.
     </CardDescription>
   </CardHeader>
   <CardContent class="space-y-4">
@@ -169,15 +170,15 @@
         <Label>Region</Label>
         <div class="flex gap-2">
           <Button
-            variant={region === "EU" ? "default" : "outline"}
+            variant={region === CareLinkRegion.Eu ? "default" : "outline"}
             size="sm"
-            onclick={() => (region = "EU")}
-            disabled={busy}>EU / Outside-US</Button
+            onclick={() => (region = CareLinkRegion.Eu)}
+            disabled={busy}>EU / outside-US</Button
           >
           <Button
-            variant={region === "US" ? "default" : "outline"}
+            variant={region === CareLinkRegion.Us ? "default" : "outline"}
             size="sm"
-            onclick={() => (region = "US")}
+            onclick={() => (region = CareLinkRegion.Us)}
             disabled={busy}>US</Button
           >
         </div>
@@ -197,7 +198,7 @@
         </p>
         <p class="text-xs text-muted-foreground">
           The desktop app opens the CareLink sign-in in its own window and captures the code
-          automatically — no developer tools needed. Generate a link code and open it in the app.
+          automatically. You do not need developer tools. Generate a link code and open it in the app.
         </p>
         <a
           href={DESKTOP_DOWNLOAD_URL}
@@ -228,7 +229,7 @@
             </span>
           </div>
           <p class="text-xs text-muted-foreground">
-            If nothing opens, the app isn't installed yet — copy the code and paste it into the app
+            If nothing opens, the app is not installed yet. Copy the code and paste it into the app
             instead.
           </p>
         {/if}
@@ -239,10 +240,10 @@
       <ol class="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
         <li>In the CareLink tab that opened, sign in and solve the captcha.</li>
         <li>
-          When you finish, the page won't visibly move — it's redirecting to a link your browser
-          can't open. You need to copy that link. Open developer tools first:
+          When you finish, the page does not visibly move. It redirects to a link that your browser
+          cannot open. You need to copy that link. Open developer tools first:
           <span class="font-medium text-foreground">press <kbd class="px-1 rounded border bg-muted">F12</kbd></span>,
-          go to the <span class="font-medium text-foreground">Network</span> tab, and tick
+          go to the <span class="font-medium text-foreground">Network</span> tab, and select
           <span class="font-medium text-foreground">Preserve log</span> before signing in.
         </li>
         <li>
@@ -250,9 +251,9 @@
           <div class="mt-1 rounded bg-muted px-2 py-1 font-mono text-xs break-all text-foreground">
             {REDIRECT_PREFIX}?code=…
           </div>
-          Right-click it → <span class="font-medium text-foreground">Copy → Copy URL</span>.
+          Open its context menu → <span class="font-medium text-foreground">Copy → Copy URL</span>.
         </li>
-        <li>Paste the whole thing below — you don't need to trim it.</li>
+        <li>Paste the whole thing below. You do not need to trim it.</li>
       </ol>
 
       <div class="space-y-2">
@@ -293,7 +294,7 @@
           <p class="text-muted-foreground">
             {connectedUsername
               ? `Signed in as ${connectedUsername}. `
-              : ""}Your refresh token is stored — syncing will use it automatically.
+              : ""}Your refresh token is stored. Syncing uses it automatically.
           </p>
         </div>
       </div>

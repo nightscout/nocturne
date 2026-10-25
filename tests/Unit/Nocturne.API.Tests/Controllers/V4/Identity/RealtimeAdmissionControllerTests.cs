@@ -172,6 +172,44 @@ public class RealtimeAdmissionControllerTests
     }
 
     [Fact]
+    public void A_caller_holding_alerts_readwrite_may_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.AlertsReadWrite).MayAck.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_caller_holding_alerts_acknowledge_may_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.AlertsAcknowledge).MayAck.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_caller_holding_only_device_notify_may_not_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.DeviceNotify).MayAck.Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_caller_holding_only_glucose_read_may_not_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead).MayAck.Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_read_only_follower_may_not_silence_alarms()
+    {
+        AdmissionFor(MemberSession(), Scope.GlucoseRead, Scope.AlertsRead).MayAck.Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_guest_session_may_not_silence_alarms_whatever_its_scopes()
+    {
+        AdmissionFor(
+            new AuthContext { IsAuthenticated = true, AuthType = AuthType.Guest },
+            Scope.GlucoseRead, Scope.AlertsReadWrite).MayAck.Should().BeFalse();
+    }
+
+    [Fact]
     public void Admission_requires_the_glucose_read_a_live_glucose_feed_needs()
     {
         var method = typeof(RealtimeAdmissionController)

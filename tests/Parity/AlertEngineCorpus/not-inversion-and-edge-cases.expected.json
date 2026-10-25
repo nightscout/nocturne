@@ -22,34 +22,7 @@
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
-          "root": false,
-          "leaves": [
-            {
-              "leaf_id": 0,
-              "value": false
-            }
-          ],
-          "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
-        },
-        {
-          "rule_id": "00000000-0000-0000-0000-000000000003",
-          "root": true,
-          "leaves": [
-            {
-              "leaf_id": 0,
-              "value": false
-            }
-          ],
-          "transition": "opened",
-          "tracker": {
-            "state": "active",
-            "confirmation_count": 0,
-            "excursion": 1
-          }
+          "skipped": true
         }
       ]
     },
@@ -69,39 +42,12 @@
           "tracker": {
             "state": "active",
             "confirmation_count": 0,
-            "excursion": 2
+            "excursion": 1
           }
         },
         {
           "rule_id": "00000000-0000-0000-0000-000000000002",
-          "root": false,
-          "leaves": [
-            {
-              "leaf_id": 0,
-              "value": false
-            }
-          ],
-          "transition": "none",
-          "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
-          }
-        },
-        {
-          "rule_id": "00000000-0000-0000-0000-000000000003",
-          "root": true,
-          "leaves": [
-            {
-              "leaf_id": 0,
-              "value": false
-            }
-          ],
-          "transition": "continues",
-          "tracker": {
-            "state": "active",
-            "confirmation_count": 0,
-            "excursion": 1
-          }
+          "skipped": true
         }
       ]
     }

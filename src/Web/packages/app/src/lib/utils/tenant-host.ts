@@ -48,23 +48,8 @@ export function resolveCookieDomain(baseDomain: string | null | undefined): stri
   return `.${host}`;
 }
 
-/** A membership as the tenant list returns it. */
-export type TenantListEntry = Pick<
-  TenantDto,
-  "id" | "slug" | "displayName" | "isActive"
->;
-
-/**
- * The tenants a signed-in visitor can actually reach.
- *
- * An inactive tenant's host answers 403 on every path, so it is never somewhere to send anyone.
- * An absent flag means active: the generated DTO marks every property optional.
- */
-export function activeTenants<T extends { isActive?: boolean | null }>(
-  tenants: readonly T[] | null | undefined
-): T[] {
-  return (tenants ?? []).filter((t) => t.isActive ?? true);
-}
+/** A reachable tenant as the tenant list returns it. */
+export type TenantListEntry = Pick<TenantDto, "id" | "slug" | "displayName">;
 
 /**
  * Where a tenantless host should send a signed-in visitor.
@@ -87,7 +72,7 @@ export function resolveSingleTenantLanding(
 ): string | null {
   if (!baseDomain) return null;
 
-  const slugs = activeTenants(tenants)
+  const slugs = (tenants ?? [])
     .map((t) => t.slug)
     .filter((s): s is string => !!s);
   if (slugs.length !== 1) return null;
@@ -104,28 +89,15 @@ export interface TenantSwitcherTarget {
   displayName: string | null;
 }
 
-export interface TenantSwitcher {
-  targets: TenantSwitcherTarget[];
-  /** How many tenants this user has to move between; below two there is nothing to switch. */
-  totalCount: number;
-}
-
 /**
- * The sidebar tenant switcher: every tenant the visitor can view, including the one they are
- * already on, so the switcher can name what is on screen from the same list it offers.
+ * The sidebar tenant switcher's entries: the reachable tenants, including the one the visitor is
+ * already on, so the switcher can name what is on screen from the same list it offers. A tenant
+ * with no slug has no host to send anyone to.
  */
-export function resolveTenantSwitcher(
-  tenants: readonly TenantListEntry[] | null | undefined
-): TenantSwitcher {
-  const active = activeTenants(tenants);
-
-  return {
-    totalCount: active.length,
-    targets: active
-      .filter((t): t is TenantListEntry & { slug: string } => !!t.slug)
-      .map((t) => ({
-        slug: t.slug,
-        displayName: t.displayName ?? null,
-      })),
-  };
+export function toTenantSwitcherTargets(
+  tenants: readonly TenantListEntry[]
+): TenantSwitcherTarget[] {
+  return tenants
+    .filter((t): t is TenantListEntry & { slug: string } => !!t.slug)
+    .map((t) => ({ slug: t.slug, displayName: t.displayName ?? null }));
 }

@@ -53,7 +53,7 @@
       console.error("Creating the instance failed:", err);
       submitError = describeSubmitError(
         err,
-        "We couldn't create your instance. Please try again in a moment.",
+        "We could not create your instance. Try again in a moment.",
       );
     } finally {
       submitting = false;
@@ -69,16 +69,11 @@
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
     <h1
-      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+      class="font-brand font-hairline leading-tight tracking-tight text-foreground text-3xl md:text-4xl xl:text-5xl"
     >
-      Name your <em
-        class="not-italic font-light text-(--onb-teal)"
-      >
-        instance
-      </em>
-      .
+      Name your <em class="not-italic font-light text-primary">instance</em>.
     </h1>
-    <p class="max-w-140 text-base leading-relaxed text-white/50">
+    <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
       Choose a slug and display name for your Nocturne instance. The slug is a
       short, URL-friendly identifier that cannot be changed later.
     </p>
@@ -112,14 +107,14 @@
       {/snippet}
       {#snippet hint()}
         {#if availability.validating}
-          <p class="text-xs text-white/40">Checking availability...</p>
+          <p class="text-xs text-muted-foreground">Checking availability...</p>
         {:else if availability.valid}
           <p class="flex items-center gap-1.5 text-xs text-success">
             <Check class="h-3 w-3" />
             Available
           </p>
         {:else}
-          <p class="text-xs text-white/30">
+          <p class="text-xs text-muted-foreground">
             Lowercase letters, numbers, and hyphens. At least 3 characters.
           </p>
         {/if}

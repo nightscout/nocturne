@@ -62,7 +62,7 @@ public class ProfileActivation : V4RecordBase, IDeviceAttributed
 
     [JsonIgnore]
     public long? EndMills => EndTimestamp is { } end
-        ? new DateTimeOffset(DateTime.SpecifyKind(end, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        ? end.ToMills()
         : null;
 
     public ProfileActivationPhase Phase { get; set; }

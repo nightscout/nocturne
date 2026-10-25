@@ -93,12 +93,12 @@ public class ScopeSatisfactionTests
     }
 
     [Fact]
-    public void TryGetImpliedReadScope_DoesNotNarrowAuditManage()
+    public void NarrowerScopes_DoesNotNarrowAuditManage()
     {
-        // The Try- form is the one MemberScopeResolver calls; see ImpliedReadScope_DoesNotNarrowAuditManage
+        // NarrowerScopes is the one MemberScopeResolver calls; see ImpliedReadScope_DoesNotNarrowAuditManage
         // for why a hit here would strip manage rights.
-        Scope.TryGetImpliedReadScope(Scope.AuditManage, out _)
-            .Should().BeFalse("audit.manage has no read counterpart to narrow to");
+        Scope.NarrowerScopes(Scope.AuditManage)
+            .Should().BeEmpty("audit.manage has no read counterpart to narrow to");
     }
 
     // ---- full access ----
@@ -127,6 +127,12 @@ public class ScopeSatisfactionTests
         }
     }
 
+    [Fact]
+    public void Satisfies_AlertsReadWriteSatisfiesAlertsAcknowledge()
+    {
+        Scope.Satisfies([Scope.AlertsReadWrite], Scope.AlertsAcknowledge).Should().BeTrue();
+    }
+
     // ---- non-implications ----
 
     [Fact]
@@ -136,6 +142,24 @@ public class ScopeSatisfactionTests
             .Should().BeFalse("pushing a notification is not permission to actuate hardware");
         Scope.Satisfies(Scope.DeviceActuate, Scope.DeviceNotify)
             .Should().BeFalse("actuating hardware is a separate capability, not a superset of notify");
+    }
+
+    [Theory]
+    [InlineData(Scope.AlertsRead)]
+    [InlineData(Scope.DeviceNotify)]
+    [InlineData(Scope.DeviceActuate)]
+    public void Satisfies_OnlyAlertsReadWriteAndFullAccessSilenceAlarms(string granted)
+    {
+        Scope.Satisfies([granted], Scope.AlertsAcknowledge)
+            .Should().BeFalse($"{granted} mutes nobody else's alarm");
+    }
+
+    [Fact]
+    public void Satisfies_AlertsAcknowledgeSatisfiesNothingElse()
+    {
+        Scope.PermissionAtoms.Where(atom => atom != Scope.AlertsAcknowledge)
+            .Where(atom => Scope.Satisfies([Scope.AlertsAcknowledge], atom))
+            .Should().BeEmpty();
     }
 
     [Fact]

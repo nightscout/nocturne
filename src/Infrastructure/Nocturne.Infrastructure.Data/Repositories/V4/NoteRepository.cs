@@ -138,7 +138,7 @@ public class NoteRepository : SyncUpsertRepositoryBase<Note, NoteEntity>, INoteR
         {
             var dedupInputs = inserted.Select(e => new DeduplicationInput(
                 RecordId: e.Id,
-                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                Mills: e.Timestamp.ToMills(),
                 DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
                 Criteria: MatchCriteriaMapper.From(e)
             )).ToList();

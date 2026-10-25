@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.Alerts.Corpus;
 using Nocturne.Core.Alerts.Native;
 using Xunit;
 

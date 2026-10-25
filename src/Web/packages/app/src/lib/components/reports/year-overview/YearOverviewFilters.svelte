@@ -62,7 +62,7 @@
         <Select.Trigger class="w-[200px]">
           <span class="truncate">
             {selectedDataSources.length === 0
-              ? "All Data Sources"
+              ? "All data sources"
               : selectedDataSources.length === 1
                 ? getDataTypeLabel(selectedDataSources[0])
                 : `${selectedDataSources.length} sources`}

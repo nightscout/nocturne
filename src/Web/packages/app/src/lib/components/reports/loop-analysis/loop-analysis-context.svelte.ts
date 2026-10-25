@@ -32,7 +32,7 @@ export class LoopAnalysisState {
 
   constructor(range: ReportsParamsReturn) {
     this.#range = range;
-    this.#envelope = contextResource(() => getEnvelope(this.query), { errorTitle: "Cannot load Loop Analysis" });
+    this.#envelope = contextResource(() => getEnvelope(this.query), { errorTitle: "Cannot load Loop analysis" });
   }
 
   #request() {

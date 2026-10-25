@@ -32,12 +32,12 @@ vi.mock("$api/generated/patientRecords.generated.remote", () => ({
 import type { RealtimeStore } from "$lib/stores/realtime-store.svelte";
 import Wrapper from "./meal-bolus-dialog-test-wrapper.svelte";
 
-function mount() {
+function mount(meal: { correlationId?: string; boluses?: { id: string; mills: number; insulin: number }[] } = { correlationId: "c1" }) {
   let store!: RealtimeStore;
   const onSave = vi.fn();
   render(Wrapper, {
     props: {
-      meal: { boluses: [{ id: "b1", mills: Date.now(), insulin: 4 }] },
+      meal: { boluses: [{ id: "b1", mills: Date.now(), insulin: 4 }], ...meal },
       onstore: (s: RealtimeStore) => (store = s),
       onSave,
     },
@@ -100,5 +100,13 @@ describe("MealBolusDialog", () => {
 
     await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
     expect(store.treatmentRevision).toBe(before);
+  });
+
+  it("does not offer a bolus on a meal with no correlation id", async () => {
+    mount({ boluses: [] });
+
+    await expect.element(page.getByText("No insulin records for this meal")).toBeVisible();
+    await expect.element(page.getByText("You cannot add insulin here.", { exact: false })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Add bolus" })).not.toBeInTheDocument();
   });
 });

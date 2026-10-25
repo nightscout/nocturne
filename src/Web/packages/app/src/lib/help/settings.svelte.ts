@@ -25,7 +25,7 @@ export function settingsArticles(): HelpArticle[] {
       "Your signed-in account and its registered authentication methods.",
       "Use the account fields, passkey, authenticator, and recovery-code controls here. Active browser sessions are in Settings → Active Access.",
       "Your account is used to sign in and identify your membership across tenants.",
-      "Recovery codes and authentication secrets grant account access. Save recovery information privately; it is not the patient's clinical record.",
+      "Recovery codes and authentication secrets grant account access. Save recovery information privately. It is not the patient's clinical record.",
       ["/settings/access", "/settings/patient"]
     ),
     guide(
@@ -33,9 +33,9 @@ export function settingsArticles(): HelpArticle[] {
       "Patient Record",
       "Describe the person whose data this tenant contains.",
       "Clinical details, devices, and insulins entered here or imported where supported.",
-      "Use Clinical Information, Devices, and Insulins here. Therapy schedules are in Settings → Therapy; dated weights and locations have their own pages.",
+      "Use Clinical Information, Devices, and Insulins here. Therapy schedules are in Settings → Therapy. Dated weights and locations have their own pages.",
       "Patient information provides context for other views and calculations that need it.",
-      "Changing a patient detail does not rewrite device measurements. Use the correct tenant and units; optional missing details can limit dependent features.",
+      "Changing a patient detail does not rewrite device measurements. Use the correct tenant and units. Optional missing details can limit dependent features.",
       ["/settings/profile", "/settings/weight", "/settings/timezone"]
     ),
     guide(
@@ -45,7 +45,7 @@ export function settingsArticles(): HelpArticle[] {
       "Your saved display preferences and browser-local documentation preferences.",
       "Set theme, language, glucose units, dates, and times here. Help visibility, layout, transparency, and blur are here and in help's Display options.",
       "Display settings format charts and values. They do not change the underlying stored glucose units or readings.",
-      "Open and close help with the book next to Nocturne, the close button, or Escape. Your original page and inputs stay in place. Navigation drawer and Replace page use the existing menu for help; Right drawer uses a panel; Side by side keeps the page usable on wide screens. Hidden help can always be enabled here. Documentation appearance is saved in this browser.",
+      "Open and close help with the book next to Nocturne, the close button, or Escape. Your original page and inputs stay in place. Navigation drawer and Replace page use the existing menu for help. Right drawer uses a panel. Side by side keeps the page usable on wide screens. Hidden help can always be enabled here. Documentation appearance is saved in this browser.",
       []
     ),
     guide(
@@ -53,7 +53,7 @@ export function settingsArticles(): HelpArticle[] {
       "Therapy",
       "Inspect imported therapy profiles, personal targets, and schedules.",
       "Profiles uploaded by a device/app or received from a connector, with their effective times.",
-      "Choose the default profile here and inspect target, basal, carbohydrate-ratio, and sensitivity schedules. Correct the source profile in the originating app/device when this page only offers a read-only schedule.",
+      "Choose the default profile here and inspect target, basal, carb-ratio, and sensitivity schedules. Correct the source profile in the originating app/device when this page only offers a read-only schedule.",
       "Schedules provide context for insulin calculations, scheduled basal, and personal target overlays.",
       "A scheduled rate is not proof of actual delivery. Historical profile timing matters. Personal targets do not replace the report reference bands or automatically update alert thresholds.",
       ["/settings/connectors", "/reports/basal-analysis", "/alerts"]
@@ -64,7 +64,7 @@ export function settingsArticles(): HelpArticle[] {
       "Configure detection and inspect maintenance tools.",
       "Saved quality settings and analyses of stored readings.",
       "Set typical bedtime/wake time and automatic detection here. Use the links to quality reports and the maintenance card for the specific operation.",
-      "Detection creates review suggestions; maintenance can change records subsequently used by charts and reports.",
+      "Detection creates review suggestions. Maintenance can change records subsequently used by charts and reports.",
       "Inspect the affected period and confirmation before cleanup. A suggestion is not proof a reading is incorrect, and changing detection settings is different from accepting a correction.",
       ["/reports/data-quality", "/reports/data-quality/compression-lows"]
     ),
@@ -73,8 +73,8 @@ export function settingsArticles(): HelpArticle[] {
       "Notifications & Trackers",
       "Track supplies, devices, and recurring events.",
       "Tracker definitions, presets, start events, completions, and notifications recorded in Nocturne.",
-      "Use Active, History, Definitions, and Presets on this page. Start or complete a tracker using its controls; edit the definition for duration and reminder behaviour.",
-      "Active trackers provide due/urgency information and reminders; completed events form the history.",
+      "Use Active, History, Definitions, and Presets on this page. Start or complete a tracker using its controls. Edit the definition for duration and reminder behavior.",
+      "Active trackers provide due/urgency information and reminders. Completed events form the history.",
       "A reminder depends on its definition, start time, and enabled notification delivery. It does not confirm a physical device was changed. Completing and editing a definition are different actions.",
       ["/alerts", "/settings/connectors", "/tools/packing"]
     ),
@@ -92,7 +92,7 @@ export function settingsArticles(): HelpArticle[] {
       "/settings/connectors",
       "Connectors & Apps",
       "Connectors bring information from device services into Nocturne.",
-      "Server connectors, uploaders, authorised apps, client devices, and tokens configured for this tenant.",
+      "Server connectors, uploaders, authorized apps, client devices, and tokens configured for this tenant.",
       "Find your source under Server Connectors and open its setup/settings. Review connection status and latest sync. Apps, uploaders, and API tokens have separate controls here.",
       "Imported records feed the dashboard, reports, and patient histories. Each connector supports its own data types.",
       "A configured connector may still need sign-in or import selection. Connected does not prove a historical import is complete. Empty data may be a permission, date, or source-sync problem.",
@@ -109,7 +109,7 @@ export function settingsArticles(): HelpArticle[] {
       "Tenant memberships, roles, invitations, guest links, and public-sharing settings.",
       "Use member permissions, invitations, requests, roles, and guest/public links here. Changes require the appropriate management permission.",
       "Permissions control available pages and operations for members and shared viewers.",
-      "A guest link grants the access you configure to anyone who possesses it. Review scope and time limits; revoking access does not remove copies someone already made.",
+      "A guest link grants the access you configure to anyone who possesses it. Review scope and time limits. Revoking access does not remove copies someone already made.",
       ["/settings/access", "/settings/connectors"]
     ),
     guide(
@@ -126,10 +126,10 @@ export function settingsArticles(): HelpArticle[] {
       "/settings/translations",
       "Translations",
       "Inspect and contribute translated interface text.",
-      "Nocturne's translation catalogues and saved contributions.",
-      "Choose a language here; choose your interface language in Appearance. Open a language to edit entries and submit a contribution.",
+      "Nocturne's translation catalogs and saved contributions.",
+      "Choose a language here. Choose your interface language in Appearance. Open a language to edit entries and submit a contribution.",
       "Approved translations supply interface text, including these help pages.",
-      "English is the original help text. Untranslated entries fall back to English; preserve placeholders when contributing a translation.",
+      "English is the original help text. Untranslated entries fall back to English. Preserve placeholders when contributing a translation.",
       ["/settings/appearance"]
     ),
     guide(
@@ -139,7 +139,7 @@ export function settingsArticles(): HelpArticle[] {
       "Manual entries and supported imports, including Google Health weights.",
       "Add the weight in kilograms and its recorded time here. Imported weight selection is in Google Health connector settings.",
       "These entries form the patient's weight history and provide dated context for features that use weight.",
-      "Check units and timestamps before saving. A missing entry does not mean zero weight; repeated readings can come from different sources.",
+      "Check units and timestamps before saving. A missing entry does not mean zero weight. Repeated readings can come from different sources.",
       ["/settings/patient", "/settings/connectors/google-health"]
     ),
     guide(
@@ -147,9 +147,9 @@ export function settingsArticles(): HelpArticle[] {
       "Timezone history",
       "Record when the patient moved to a different timezone.",
       "Dated timezone changes entered here and timezone information recorded during imports.",
-      "Choose the location timezone and local arrival time. Fix already-imported data is a separate operation here; inspect its affected period first.",
+      "Choose the location timezone and local arrival time. Fix already-imported data is a separate operation here. Inspect its affected period first.",
       "Timezone history helps place events and daily patterns at the correct local time.",
-      "A timezone is not just a fixed UTC offset: daylight-saving changes matter. A correction can affect existing data interpretation; ordinary display-format settings are in Appearance.",
+      "A timezone is not just a fixed UTC offset: daylight-saving changes matter. A correction can affect existing data interpretation. Ordinary display-format settings are in Appearance.",
       ["/settings/patient", "/settings/appearance"]
     ),
     guide(
@@ -159,7 +159,7 @@ export function settingsArticles(): HelpArticle[] {
       "The Nightscout API or MongoDB source you configure.",
       "Choose the migration source, credentials, and optional date range here. Inspect active progress, skipped-record notes, and history.",
       "Successfully imported records become available to the normal charts and reports.",
-      "Keep source credentials private. Completion counts and skipped records matter; a finished job does not mean every source record was accepted. Migration is separate from ongoing connector sync.",
+      "Keep source credentials private. Completion counts and skipped records matter. A finished job does not mean every source record was accepted. Migration is separate from ongoing connector sync.",
       ["/settings/connectors", "/settings/nightscout-transition"]
     ),
     guide(
@@ -167,7 +167,7 @@ export function settingsArticles(): HelpArticle[] {
       "Nightscout Transition",
       "Inspect the transition status between Nightscout and Nocturne.",
       "Server transition configuration and recorded transition status.",
-      "Review the status on this page. Migration history is under Data Migration; ongoing data sources are under Connectors & Apps.",
+      "Review the status on this page. Migration history is under Data Migration. Ongoing data sources are under Connectors & Apps.",
       "The status helps the administrator see how the deployment is progressing.",
       "Availability depends on the server's transition configuration. It is not a control for changing glucose values.",
       ["/settings/migration", "/settings/connectors"]
@@ -179,7 +179,7 @@ export function settingsArticles(): HelpArticle[] {
       "Platform tenant records and administrator identities.",
       "Platform administrators manage tenant display names, slugs, and active status here.",
       "Tenant selection separates each patient's records, configuration, and membership.",
-      "Check the tenant before changing its status. A slug affects its address; platform permissions differ from a role inside one tenant.",
+      "Check the tenant before changing its status. A slug affects its address. Platform permissions differ from a role inside one tenant.",
       ["/tenants"]
     ),
     guide(
@@ -197,8 +197,8 @@ export function settingsArticles(): HelpArticle[] {
       "Discord Integration",
       "Link a Discord identity and manage its use with Nocturne.",
       "Your linked chat identities and server bot configuration.",
-      "Link, label, select the default, or revoke an identity here; follow the bot's server-install controls where available.",
-      "The linked identity supports bot interactions authorised for your account.",
+      "Link, label, select the default, or revoke an identity here. Follow the bot's server-install controls where available.",
+      "The linked identity supports bot interactions authorized for your account.",
       "Bot availability depends on deployment configuration. Revoking a link does not delete patient data or messages already sent.",
       ["/settings/account"]
     ),
@@ -217,7 +217,7 @@ export function settingsArticles(): HelpArticle[] {
       "Audit history",
       "Inspect recorded administrative actions.",
       "Audit records retained by this server.",
-      "Use the filters and detail controls here; access requires the relevant permission.",
+      "Use the filters and detail controls here. Access requires the relevant permission.",
       "The history helps you understand who changed configuration or access.",
       "Only events recorded by the server appear. Retention and visibility depend on deployment and permissions.",
       []

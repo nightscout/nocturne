@@ -1,6 +1,10 @@
 test-results
 node_modules
 
+# Vitest browser failure screenshots and attachments
+.vitest-attachments/
+__screenshots__/
+
 # Output
 .output
 .vercel

@@ -113,7 +113,7 @@ public class ApsSnapshot : V4RecordBase
     /// Timestamp of prediction start in Unix milliseconds, computed from <see cref="PredictedStartTimestamp"/>.
     /// Returns <c>null</c> when <see cref="PredictedStartTimestamp"/> is not set.
     /// </summary>
-    public long? PredictedStartMills => PredictedStartTimestamp.HasValue ? new DateTimeOffset(PredictedStartTimestamp.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : null;
+    public long? PredictedStartMills => PredictedStartTimestamp.HasValue ? PredictedStartTimestamp.Value.ToMills() : null;
 
     /// <summary>Full serialized Loop status object for round-trip fidelity.</summary>
     public string? LoopJson { get; set; }

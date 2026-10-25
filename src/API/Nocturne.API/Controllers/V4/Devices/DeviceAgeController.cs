@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
+using Nocturne.API.Attributes;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Devices;
 
@@ -47,6 +49,7 @@ public class DeviceAgeController : ControllerBase
     /// Get cannula/site age (CAGE)
     /// </summary>
     [HttpGet("cannula")]
+    [RequireScope(Scope.DevicesRead)]
     [ProducesResponseType(typeof(DeviceAgeInfo), 200)]
     public async Task<ActionResult<DeviceAgeInfo>> GetCannulaAge(
         [FromQuery] int? info = null,
@@ -66,6 +69,7 @@ public class DeviceAgeController : ControllerBase
     /// Returns both Sensor Start and Sensor Change events
     /// </summary>
     [HttpGet("sensor")]
+    [RequireScope(Scope.DevicesRead)]
     [ProducesResponseType(typeof(SensorAgeInfo), 200)]
     public async Task<ActionResult<SensorAgeInfo>> GetSensorAge(
         [FromQuery] int? info = null,
@@ -84,6 +88,7 @@ public class DeviceAgeController : ControllerBase
     /// Get insulin reservoir age (IAGE)
     /// </summary>
     [HttpGet("insulin")]
+    [RequireScope(Scope.DevicesRead)]
     [ProducesResponseType(typeof(DeviceAgeInfo), 200)]
     public async Task<ActionResult<DeviceAgeInfo>> GetInsulinAge(
         [FromQuery] int? info = null,
@@ -102,6 +107,7 @@ public class DeviceAgeController : ControllerBase
     /// Get pump battery age (BAGE)
     /// </summary>
     [HttpGet("battery")]
+    [RequireScope(Scope.DevicesRead)]
     [ProducesResponseType(typeof(DeviceAgeInfo), 200)]
     public async Task<ActionResult<DeviceAgeInfo>> GetBatteryAge(
         [FromQuery] int? info = null,
@@ -120,6 +126,7 @@ public class DeviceAgeController : ControllerBase
     /// Get all device ages in a single call
     /// </summary>
     [HttpGet("all")]
+    [RequireScope(Scope.DevicesRead)]
     [ProducesResponseType(200)]
     public async Task<ActionResult> GetAllDeviceAges([FromQuery] Guid? patientDeviceId = null)
     {

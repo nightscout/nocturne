@@ -4,6 +4,8 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Npgsql;
 using Xunit;
@@ -12,7 +14,7 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration.Auth;
 
 /// <summary>
-/// The statistics endpoints admitted on <c>glucose.read</c> alone also summarise insulin and carbs.
+/// The statistics endpoints admitted on <c>glucose.read</c> or <c>reports.read</c> also summarise insulin and carbs.
 /// Category row level security applies only to shares, so for a member token nothing below the
 /// controller hides the treatments: the response must be narrowed by the caller's scopes.
 /// </summary>
@@ -71,8 +73,38 @@ public class StatisticsTreatmentScopeIntegrationTests(ApiIntegrationTestFixture 
     }
 
     [Fact]
+    public async Task Reports_only_token_reads_multi_period_treatment_aggregates()
+    {
+        await SeedGlucoseAndTreatmentsAsync();
+        using var reportsOnly = await CreateTokenClientAsync(Scope.ReportsRead);
+
+        ClearCaches();
+        var lastDay = await LastDayAsync(reportsOnly);
+
+        lastDay.GetProperty("treatmentSummary").GetProperty("bolusCount").GetInt32().Should().Be(1);
+        lastDay.GetProperty("insulinDelivery").ValueKind.Should().Be(JsonValueKind.Object);
+        lastDay.GetProperty("treatmentCount").GetInt32().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Reports_only_token_reads_punch_card_insulin_and_carbs()
+    {
+        await SetPatientTimezoneAsync("UTC");
+        await SeedGlucoseAndTreatmentsAsync();
+        using var reportsOnly = await CreateTokenClientAsync(Scope.ReportsRead);
+        var today = DateTime.UtcNow.Date;
+        var path = $"/api/v4/statistics/punch-card?startDate={today.AddDays(-1):yyyy-MM-dd}&endDate={today.AddDays(1):yyyy-MM-dd}";
+
+        var response = await PunchCardAsync(reportsOnly, path);
+
+        response.GetProperty("globalMaxCarbs").GetDouble().Should().BeGreaterThan(0);
+        response.GetProperty("globalMaxInsulin").GetDouble().Should().BeGreaterThan(0);
+    }
+
+    [Fact]
     public async Task Glucose_only_token_reads_punch_card_without_insulin_or_carbs()
     {
+        await SetPatientTimezoneAsync("UTC");
         await SeedGlucoseAndTreatmentsAsync();
         using var glucoseOnly = await CreateTokenClientAsync(Scope.GlucoseRead);
         var today = DateTime.UtcNow.Date;
@@ -95,8 +127,17 @@ public class StatisticsTreatmentScopeIntegrationTests(ApiIntegrationTestFixture 
             && day.GetProperty("totalInsulin").GetDouble() == 0
             && day.GetProperty("totalBolus").GetDouble() == 0
             && day.GetProperty("totalBasal").GetDouble() == 0
-            && day.GetProperty("carbToInsulinRatio").GetDouble() == 0);
+            && day.GetProperty("carbToInsulinRatio").ValueKind == JsonValueKind.Null);
     }
+
+    private Task SetPatientTimezoneAsync(string timezone) =>
+        WithTenantScopeAsync(async services =>
+        {
+            var patients = services.GetRequiredService<IPatientRecordRepository>();
+            var patient = await patients.GetOrCreateAsync();
+            patient.Timezone = timezone;
+            return await patients.UpdateAsync(patient, WriteOrigin.Live);
+        });
 
     private async Task SeedGlucoseAndTreatmentsAsync()
     {

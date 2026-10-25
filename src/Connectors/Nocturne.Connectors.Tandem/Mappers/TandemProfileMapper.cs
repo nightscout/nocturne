@@ -37,7 +37,7 @@ public sealed class TandemProfileMapper(ILogger logger)
         return new Profile
         {
             DefaultProfile = active?.Name ?? pumpProfiles[0].Name,
-            Mills = TandemMapHelpers.ToMills(now),
+            Mills = now.ToMills(),
             CreatedAt = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             StartDate = now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
             Units = "mg/dl",

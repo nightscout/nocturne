@@ -13,11 +13,12 @@
   } from "$lib/utils/formatting";
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
   import { entrySummary } from "$lib/utils/entry-summary";
-  import type { BolusCalculation } from "$lib/api";
+  import type { BolusCalculation, MealPeriod } from "$lib/api";
   import { CalculationType } from "$lib/api";
   import type { EntryRecord } from "$lib/constants/entry-categories";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
   import { getAll as getBolusCalculations } from "$lib/api/generated/bolusCalculations.generated.remote";
+  import { carbMarkerName } from "../meal-period-labels.svelte";
   import { useApsPrediction } from "./aps-prediction.svelte";
   import { inspectionSearchWindow } from "./inspection-window";
   import InspectionChart from "./InspectionChart.svelte";
@@ -33,6 +34,7 @@
     bolusDataSource?: string;
     carbGrams?: number;
     carbLabel?: string;
+    carbMealPeriod?: MealPeriod;
     carbDataSource?: string;
     entry?: EntryRecord | null;
     correlatedRecords?: EntryRecord[];
@@ -58,6 +60,7 @@
     bolusDataSource,
     carbGrams,
     carbLabel,
+    carbMealPeriod,
     carbDataSource,
     entry: _entry,
     correlatedRecords,
@@ -77,6 +80,7 @@
   }: Props = $props();
 
   const bolusSourceName = $derived(getDataSourceDisplayName(bolusDataSource));
+  const carbName = $derived(carbMarkerName({ label: carbLabel, mealPeriod: carbMealPeriod }));
   const carbSourceName = $derived(getDataSourceDisplayName(carbDataSource));
   // Show a single "Source" row if both come from the same source, otherwise per-treatment sources
   const unifiedSourceName = $derived(
@@ -103,7 +107,7 @@
     }
     if (carbGrams != null) {
       let carbText = `${formatCarbDisplay(carbGrams)}g carbs`;
-      if (carbLabel) carbText += ` (${carbLabel})`;
+      if (carbName) carbText += ` (${carbName})`;
       parts.push(carbText);
     }
     return parts.join(" + ");
@@ -168,7 +172,7 @@
         {/if}
         {#if carbGrams != null}
           <Badge variant={ENTRY_CATEGORIES.carbs.badge}>
-            {formatCarbDisplay(carbGrams)}g{carbLabel ? ` ${carbLabel}` : " carbs"}
+            {formatCarbDisplay(carbGrams)}g{carbName ? ` ${carbName}` : " carbs"}
           </Badge>
         {/if}
       </Dialog.Title>
@@ -208,11 +212,11 @@
           <span class="font-medium">{unifiedSourceName}</span>
         {:else}
           {#if bolusSourceName}
-            <span class="text-muted-foreground">Bolus Source</span>
+            <span class="text-muted-foreground">Bolus source</span>
             <span class="font-medium">{bolusSourceName}</span>
           {/if}
           {#if carbSourceName}
-            <span class="text-muted-foreground">Carb Source</span>
+            <span class="text-muted-foreground">Carb source</span>
             <span class="font-medium">{carbSourceName}</span>
           {/if}
         {/if}
@@ -223,11 +227,11 @@
     {#if bolusCalc}
       <div class="py-3">
         <p class="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-          Decision Audit
+          Decision audit
         </p>
         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           {#if bolusCalc.bloodGlucoseInput != null}
-            <span class="text-muted-foreground">BG Input</span>
+            <span class="text-muted-foreground">BG input</span>
             <span class="font-medium">
               {bg(bolusCalc.bloodGlucoseInput, glucoseUnits)} {bgLabel(glucoseUnits)}
               {#if bolusCalc.bloodGlucoseInputSource}
@@ -239,12 +243,12 @@
           {/if}
 
           {#if bolusCalc.carbInput != null}
-            <span class="text-muted-foreground">Carb Input</span>
+            <span class="text-muted-foreground">Carb input</span>
             <span class="font-medium">{bolusCalc.carbInput} g</span>
           {/if}
 
           {#if bolusCalc.carbRatio != null}
-            <span class="text-muted-foreground">Carb Ratio</span>
+            <span class="text-muted-foreground">Carb ratio</span>
             <span class="font-medium">1:{bolusCalc.carbRatio}</span>
           {/if}
 
@@ -259,12 +263,12 @@
           {/if}
 
           {#if bolusCalc.insulinOnBoard != null}
-            <span class="text-muted-foreground">IOB Correction</span>
+            <span class="text-muted-foreground">IOB correction</span>
             <span class="font-medium">{bolusCalc.insulinOnBoard.toFixed(2)} U</span>
           {/if}
 
           {#if bolusCalc.calculationType}
-            <span class="text-muted-foreground">Calculation Type</span>
+            <span class="text-muted-foreground">Calculation type</span>
             <span>
               <Badge variant={calcTypeBadgeVariant}>
                 {bolusCalc.calculationType}
@@ -273,7 +277,7 @@
           {/if}
 
           {#if bolusCalc.splitNow != null && bolusCalc.splitExt != null}
-            <span class="text-muted-foreground">Split Bolus</span>
+            <span class="text-muted-foreground">Split bolus</span>
             <span class="font-medium">{bolusCalc.splitNow}% now / {bolusCalc.splitExt}% ext</span>
           {/if}
 
@@ -301,7 +305,7 @@
     {#if correlatedRecords && correlatedRecords.length > 0}
       <div class="py-3">
         <p class="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-          Related Entries
+          Related entries
         </p>
         <div class="space-y-2">
           {#each correlatedRecords as record, i (record.data.id ?? `${record.data.mills}-${i}`)}

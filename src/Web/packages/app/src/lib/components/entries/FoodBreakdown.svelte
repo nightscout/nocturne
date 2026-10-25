@@ -57,7 +57,7 @@
       breakdown = await getCarbIntakeFoodBreakdown(id).run();
     } catch (err) {
       console.error("Failed to load food breakdown:", err);
-      loadError = remoteErrorMessage(err, "Unable to load food breakdown.");
+      loadError = remoteErrorMessage(err, "Could not load food breakdown.");
     } finally {
       isLoading = false;
     }
@@ -112,7 +112,7 @@
 
 <div class="rounded-lg border p-4 space-y-4">
   <div class="space-y-1">
-    <div class="text-sm font-semibold">Food Breakdown</div>
+    <div class="text-sm font-semibold">Food breakdown</div>
     <div class="text-xs text-muted-foreground">
       Add foods to match carbs when it helps. Partial attribution is fine.
     </div>
@@ -130,7 +130,7 @@
         <div
           class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2"
         >
-          <span class="text-sm font-medium">Total Carbs</span>
+          <span class="text-sm font-medium">Total carbs</span>
           <span class="text-lg font-bold tabular-nums">{totalCarbs}g</span>
         </div>
       {/if}

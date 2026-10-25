@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { ArtworkHero } from "@nocturne/watercolour";
+    import { DOCS_HERO } from "$lib/data/docs-artwork";
     import Callout from "@nocturne/cms/components/Callout.svelte";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
@@ -7,9 +9,19 @@
 
     const runCommand =
         "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/oracle-cloud-install.sh)";
+
+    const hero = DOCS_HERO["installation/oracle-cloud"];
 </script>
 
 <div class="max-w-3xl">
+    <ArtworkHero
+        artwork={hero.artwork}
+        palette={hero.palette}
+        motion="auto"
+        autoplay="once"
+        size={400}
+        wrap={hero.wrap ?? true}
+    />
     <h1 class="text-4xl font-bold tracking-tight mb-4">Oracle Cloud</h1>
     <p class="text-lg text-muted-foreground mb-8">
         Run Nocturne on Oracle Cloud's Always Free tier. One command in the browser sets
@@ -21,12 +33,12 @@
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-8">
         <li>
             An <a href="https://www.oracle.com/cloud/free/" class="text-primary hover:underline">Oracle Cloud account</a>.
-            Sign-up asks for a payment card to verify your identity. The region you pick at sign-up becomes your home region. The free server can only be created there, and the choice cannot be changed later, so pick the region closest to you. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage. Oracle halved the cores and memory in June 2026, so older guides that quote 4 cores and 24 GB are out of date. This guide uses half the cores and memory and a quarter of the storage, which stays well inside the free allowance.
+            Sign-up requires a payment card to verify your identity. The region you pick at sign-up becomes your home region. The free server can only be created there, and the choice cannot be changed later, so pick the region closest to you. Always Free gives you 2 Ampere cores, 12 GB of memory and 200 GB of storage. Oracle halved the cores and memory in June 2026, so older guides that quote 4 cores and 24 GB are out of date. This guide uses half the cores and memory and a quarter of the storage, which stays well inside the free allowance.
         </li>
         <li>
             A domain name. Nocturne gives every site its own subdomain, so the DNS provider
             must support wildcard records. If you do not have a domain, a free one from DuckDNS
-            works well; <a href="#duckdns" class="text-primary hover:underline">see below</a>.
+            works well: <a href="#duckdns" class="text-primary hover:underline">see below</a>.
         </li>
         <li>
             A decision about how to keep the server from being reclaimed as idle. It changes
@@ -39,12 +51,12 @@
         <a href="https://www.duckdns.org" class="text-primary hover:underline">DuckDNS</a> is a
         free dynamic DNS service that gives out names under <strong>duckdns.org</strong>, each
         with a wildcard for the subdomains below it. The installer uses your DuckDNS token to
-        point your name at your server, so there is nothing to set up by hand.
+        point your name at your server, so there is nothing to configure by hand.
     </p>
     <ol class="list-decimal list-inside space-y-2 text-muted-foreground mb-8">
         <li>Sign in at duckdns.org with one of the accounts it offers, such as GitHub or Google.</li>
         <li>
-            Under <strong>domains</strong>, type a name and click <strong>add domain</strong>.
+            Under <strong>domains</strong>, type a name and select <strong>add domain</strong>.
             Your domain is then
             <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">yourname.duckdns.org</code>.
         </li>
@@ -64,19 +76,12 @@
         Oracle switches off servers on Always Free accounts that it judges idle for seven
         days in a row. Its measure is whether the processor, network and memory each stayed
         below 20 percent of capacity for nearly all of that week. A Nocturne server for one
-        person does very little work by that yardstick, so left alone it is likely to be
-        stopped after its first quiet week. There are two ways to prevent that, and one of them
-        changes the command in <a href="#step-2" class="text-primary hover:underline">Step 2</a>,
+        person does very little work by that yardstick. Left alone, it is likely to be stopped after its first quiet week. There are two ways to prevent that. One of them changes the command in <a href="#step-2" class="text-primary hover:underline">Step 2</a>,
         so pick now rather than later.
     </p>
-    <Callout type="tip" title="Which one should you pick?">
-        Pay As You Go suits most people: it is a single change in the Oracle console, adds
-        nothing to the server, and paying accounts are served first when Ampere capacity is
-        scarce. The trade-off is that the card already on file <em>can</em> be charged if
-        anything outside the free allowance is ever created. Choose Folding@home instead if you
-        would rather keep an Always Free account that cannot be billed at all, and you do not
-        mind a second piece of software with network access on the server that holds your
-        health data.
+    <Callout type="tip" title="Which option to choose">
+        Pay As You Go suits most people. It is a single change in the Oracle console and adds nothing to the server. Paying accounts are served first when Ampere capacity is scarce. The trade-off is that the card already on file <em>can</em> be charged if
+        anything outside the free allowance is ever created. Choose Folding@home instead if you want an Always Free account that cannot be billed at all. This puts a second piece of software with network access on the server that holds your health data.
     </Callout>
     <details class="mb-3">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">
@@ -91,11 +96,7 @@
             itself cost anything.
         </p>
         <p class="text-sm text-muted-foreground mb-2">
-            What changes is that the card can now be charged if something outside the free tier
-            is ever created. The installer closes that off from both ends: it refuses a server
-            size above the free allowance, and it writes an Oracle quota policy that stops the
-            account creating anything outside the Always Free compute shapes at all, whether or
-            not you have upgraded. That policy is a real limit rather than a warning: Oracle
+            The change is that the card can now be charged if something outside the free tier is ever created. The installer closes that off from both ends. It refuses a server size above the free allowance. It also writes an Oracle quota policy. The policy stops the account creating anything outside the Always Free compute shapes, whether or not you upgraded. That policy is a real limit rather than a warning: Oracle
             refuses the request instead of billing you for it. The installer also sets a spending
             alert that emails you the moment the account is billed one unit of your currency.
             Nothing needs adding to the command in
@@ -108,11 +109,9 @@
         </summary>
         <p class="text-sm text-muted-foreground mt-2 mb-2">
             <a href="https://foldingathome.org" class="text-primary hover:underline">Folding@home</a>
-            is a research project that simulates how proteins fold, to help understand diseases
-            such as Alzheimer's, cancer and, yes, diabetes. With this option the installer adds
+            is a research project that simulates how proteins fold. It helps to understand diseases such as Alzheimer's, cancer and, yes, diabetes. With this option the installer adds
             its client to the server and runs it from 02:00 to 04:00 UTC each night. Two hours a
-            day of real computation is well above Oracle's idle threshold, so the server is never
-            a candidate for reclamation, and the time goes to something useful.
+            day of real computation is well above Oracle's idle threshold. The server is then never a candidate for reclamation, and the time goes to something useful.
         </p>
         <p class="text-sm text-muted-foreground mb-2">
             The client runs at the lowest priority the system has, so Nocturne and its alarms
@@ -129,22 +128,21 @@
         </p>
     </details>
 
-    <h2 id="step-1" class="text-2xl font-bold mt-8 mb-4 scroll-mt-24">Step 1: Open Cloud Shell</h2>
+    <h2 id="step-1" data-install-step="1" class="text-2xl font-bold mt-8 mb-4 scroll-mt-24">Step 1: Open Cloud Shell</h2>
     <p class="text-muted-foreground mb-8">
         Sign in to the <a href="https://cloud.oracle.com" class="text-primary hover:underline">Oracle Cloud console</a>
-        and click the terminal icon in the top-right toolbar, labelled <strong>Developer tools</strong>,
+        and select the terminal icon in the top-right toolbar, labeled <strong>Developer tools</strong>,
         then <strong>Cloud Shell</strong>. A terminal opens at the bottom of the page. It is already
         signed in as you, so there is nothing to install or configure.
     </p>
 
-    <h2 id="step-2" class="text-2xl font-bold mt-8 mb-4 scroll-mt-24">Step 2: Run the installer</h2>
+    <h2 id="step-2" data-install-step="2" class="text-2xl font-bold mt-8 mb-4 scroll-mt-24">Step 2: Run the installer</h2>
     <p class="text-muted-foreground mb-4">
         Paste this into Cloud Shell, replacing
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">nocturne.example.com</code>
         with your domain, such as
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">yourname.duckdns.org</code>.
-        Nocturne will answer on that name and every site you create gets a
-        subdomain under it, so pick something you are happy to keep. If you chose Folding@home
+        Nocturne will answer on that name. Every site you create gets a subdomain under it, so pick something you are happy to keep. If you chose Folding@home
         above, add <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">FOLDING=1</code> in
         front.
     </p>
@@ -160,10 +158,7 @@
     </Callout>
     <p class="text-muted-foreground mb-4">
         If your domain is under duckdns.org, the installer asks early on for your DuckDNS token.
-        <strong>Nothing appears on screen as you paste it</strong> – the token is hidden, and the
-        installer tells you how many characters it read so you can see the paste landed. If
-        DuckDNS does not accept it you can paste another. Press Enter with nothing pasted and it
-        tells you the address to set yourself in
+        <strong>Nothing appears on screen as you paste it</strong>. The token is hidden. The installer tells you how many characters it read, so you can see that the paste landed. If DuckDNS does not accept it, you can paste another. If you press Enter with nothing pasted, the installer tells you the address to set yourself in
         <a href="#step-3" class="text-primary hover:underline">Step 3</a> instead. For any other
         domain, it prints the two records to create by hand. Either way it keeps working while the
         server boots, and waits for DNS before it requests certificates.
@@ -171,55 +166,45 @@
     <details class="mb-4">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">What the script does</summary>
         <ul class="list-disc list-inside space-y-1 text-sm text-muted-foreground mt-2 mb-2">
-            <li>Sets up a spending alert that emails you if the account is ever charged, and a quota policy that stops the account creating anything outside the Always Free compute shapes</li>
+            <li>Creates a spending alert that emails you if the account is ever charged. Also creates a quota policy that stops the account creating anything outside the Always Free compute shapes</li>
             <li>Creates a virtual network with ports 80 and 443 open, in your home region</li>
             <li>Reserves a public IP address so it never changes</li>
-            <li>Points your DuckDNS name at that address when you give it the token; for any other domain, it prints the two records to create by hand</li>
+            <li>Points your DuckDNS name at that address when you give it the token. For any other domain, it prints the two records to create by hand</li>
             <li>Generates an SSH key in your Cloud Shell home if you do not have one</li>
             <li>Starts an Ampere A1 server with 1 core and 6 GB of memory, half the Always Free allowance, retrying when Oracle has no free capacity</li>
-            <li>Installs Folding@home on a nightly schedule if you asked for it above</li>
-            <li>On the server: opens the firewall, installs Docker, downloads the Nocturne release bundle, generates the database passwords and starts everything once DNS resolves, checking each of these again on every run</li>
+            <li>Installs Folding@home on a nightly schedule if you chose it above</li>
+            <li>On the server, the installer opens the firewall and installs Docker. It downloads the Nocturne release bundle and generates the database passwords. It starts everything once DNS resolves. It checks each of these again on every run</li>
         </ul>
         <CodeBlock code={installScript} class="mt-2" maxHeight="400px" />
     </details>
     <Callout type="warning" title="If Oracle has no free capacity">
         <p class="mb-2">
-            Ampere A1 servers are popular and regions often run out. The installer tries every
-            availability domain in your region and keeps retrying for 30 minutes. It already
-            asks for the smallest size the installer offers, 1 core and 6 GB, so there is
-            nothing smaller to fall back to. If it gives up, run the command again
-            later: it remembers your domain, so the command no longer needs it, and everything
-            already created is reused. Upgrading to Pay As You Go also tends to end these
-            errors, since paying accounts are served first when servers are scarce.
+            Ampere A1 servers are popular and regions often run out. The installer tries every availability domain in your region and keeps retrying for 30 minutes. It already requests the smallest size the installer offers, 1 core and 6 GB, so there is nothing smaller to fall back to. If it gives up, run the command again later. It remembers your domain, so the command no longer needs it. Everything already created is reused. Upgrading to Pay As You Go also tends to end these errors, since paying accounts are served first when servers are scarce.
         </p>
         <p class="mb-2">To have it keep trying for longer instead of re-running by hand:</p>
         <CodeBlock code={"CAPACITY_RETRY_MINUTES=180 " + runCommand} />
     </Callout>
     <Callout type="info" title="If anything goes wrong, run it again">
         <p>
-            Running the installer a second time is the fix for almost any failure. It looks every
-            resource up before creating it, and checks the server itself on every run, so a run
-            that was interrupted or stopped part-way carries on from where it got to rather than
-            starting over. It remembers your domain, so the command on its own is enough.
+            Running the installer a second time is the fix for almost any failure. It looks every resource up before creating it. It also checks the server itself on every run. A run that was interrupted or stopped part-way carries on from where it got to, rather than starting over. It remembers your domain, so the command on its own is enough.
         </p>
     </Callout>
 
-    <h2 id="step-3" class="text-2xl font-bold mt-8 mb-4 scroll-mt-24">Step 3: Add the DNS records</h2>
+    <h2 id="step-3" data-install-step="3" class="text-2xl font-bold mt-8 mb-4 scroll-mt-24">Step 3: Add the DNS records</h2>
     <p class="text-muted-foreground mb-4">
         Skip this step if you gave the installer a DuckDNS token. For a DuckDNS name without one,
-        sign in at duckdns.org, put the IP address the script printed into the
-        <strong>current ip</strong> box next to your name and click <strong>update ip</strong>.
+        sign in at duckdns.org. Put the IP address the script printed into the <strong>current ip</strong> box next to your name and select <strong>update ip</strong>.
         For any other domain, create two <strong>A</strong> records at your domain provider,
         pointing at that address:
     </p>
     <CodeBlock code={"nocturne.example.com      A   <the IP address>\n*.nocturne.example.com    A   <the IP address>"} class="mb-4" />
     <p class="text-muted-foreground mb-8">
         The second one is a wildcard. It makes every site's subdomain resolve without a record
-        each. If you use Cloudflare, leave the proxy off for both records, shown as a grey cloud.
+        each. If you use Cloudflare, leave the proxy off for both records, shown as a gray cloud.
         Cloudflare's proxy cannot carry the certificates Nocturne issues for its own subdomains.
     </p>
 
-    <h2 id="step-4" class="text-2xl font-bold mt-8 mb-4 scroll-mt-24">Step 4: Create your first site</h2>
+    <h2 id="step-4" data-install-step="4" class="text-2xl font-bold mt-8 mb-4 scroll-mt-24">Step 4: Create your first site</h2>
     <p class="text-muted-foreground mb-8">
         Once the script reports that Nocturne is answering, open
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">https://your-domain</code>
@@ -255,10 +240,7 @@
             on the server.
         </li>
         <li>
-            Nothing backs up your data automatically. In the Oracle console, under Block
-            Storage, you can take a backup of the server's boot volume at any time. The free
-            tier includes five volume backups, so take them by hand and delete old ones rather
-            than attaching a scheduled policy, which would keep more than five and be charged.
+            Nothing backs up your data automatically. In the Oracle console, under Block Storage, you can take a backup of the server's boot volume at any time. The free tier includes five volume backups. Take them by hand and delete old ones. Do not attach a scheduled policy, because it would keep more than five and be charged.
         </li>
         <li>
             To remove everything, terminate the instance in the Oracle console, then delete the
@@ -266,7 +248,7 @@
         </li>
     </ul>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Next Steps</h2>
+    <h2 data-install-step="next-steps" class="text-2xl font-bold mt-8 mb-4">Next steps</h2>
     <NextSteps />
 
     <SupportNocturne />

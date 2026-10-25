@@ -5,7 +5,6 @@
 import { getRequestEvent, query } from "$app/server";
 import { error, redirect } from "@sveltejs/kit";
 import { classifyRequestHost } from "$lib/server/tenantless-host";
-import { activeTenants } from "$lib/utils/tenant-host";
 import { errorStatus } from "$lib/forms/submit-error";
 
 /**
@@ -24,7 +23,7 @@ export const getCurrentTenantId = query(async () => {
 
   const apiClient = locals.apiClient;
   try {
-    const tenants = activeTenants(await apiClient.myTenants.getMyTenants());
+    const tenants = await apiClient.myTenants.getMyTenants(true);
     const { slug } = classifyRequestHost(request);
 
     return (tenants.find((t) => t.slug === slug) ?? tenants[0])?.id ?? null;

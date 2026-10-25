@@ -107,7 +107,7 @@
   const figures = $derived.by<Figure[]>(() => {
     const list: Figure[] = [
       {
-        label: "Predictions analysed",
+        label: "Predictions analyzed",
         value: (primary?.predictions ?? 0).toLocaleString(),
         note: comparing
           ? `${(comparison?.predictions ?? 0).toLocaleString()} in the compared range`

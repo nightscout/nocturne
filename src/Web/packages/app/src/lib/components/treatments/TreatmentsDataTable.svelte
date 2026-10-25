@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { NightscoutEventType } from "$lib/constants/nightscout-event-types";
   import type {
     EntryRecord,
     EntryCategoryId,
@@ -94,10 +95,10 @@
   // Map category IDs to display labels
   const categoryLabels: Record<EntryCategoryId, string> = {
     bolus: "Bolus",
-    carbs: "Carb Intake",
-    bgCheck: "BG Check",
+    carbs: "Carb intake",
+    bgCheck: "BG check",
     note: "Note",
-    deviceEvent: "Device Event",
+    deviceEvent: "Device event",
     basalInjection: "Long-acting injection",
   };
 
@@ -161,7 +162,11 @@
       case "note": {
         const parts: string[] = [];
         if (record.data.eventType) parts.push(record.data.eventType);
-        if (record.data.isAnnouncement && !parts.includes("Announcement")) parts.push("Announcement");
+        if (
+          record.data.isAnnouncement &&
+          record.data.eventType !== NightscoutEventType.Announcement
+        )
+          parts.push("Announcement");
         return parts.length > 0 ? parts.join(" \u00B7 ") : "\u2014";
       }
       case "deviceEvent":

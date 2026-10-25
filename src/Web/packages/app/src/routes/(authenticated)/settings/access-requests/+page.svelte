@@ -20,6 +20,7 @@
   } from "$lib/api/generated/accessRequests.generated.remote";
   import { getRoles } from "$lib/api/generated/roles.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import { relativeAge } from "$lib/utils/formatting";
   import FormError from "$lib/forms/FormError.svelte";
 
   // Queries
@@ -62,19 +63,6 @@
   let errorMessage = $state<string | null>(null);
   let approveFailure = $state<{ subjectId: string; message: string } | null>(null);
 
-  function formatRelativeTime(dateInput: string | Date): string {
-    const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
-  }
-
   function clearMessages() {
     setTimeout(() => {
       successMessage = null;
@@ -101,7 +89,7 @@
     } catch (err) {
       approveFailure = {
         subjectId,
-        message: describeSubmitError(err, "Failed to approve request. Please try again."),
+        message: describeSubmitError(err, "Failed to approve request. Try again."),
       };
     } finally {
       approvingId = null;
@@ -116,7 +104,7 @@
       successMessage = "Access request denied.";
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to deny request. Try again.");
       clearMessages();
     } finally {
       denyingId = null;
@@ -125,7 +113,7 @@
 </script>
 
 <svelte:head>
-  <title>Access Requests - Settings - Nocturne</title>
+  <title>Access requests - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container w-full py-6 space-y-6">
@@ -134,7 +122,7 @@
       <UserPlus class="h-6 w-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Access Requests</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Access requests</h1>
       <p class="text-muted-foreground">
         Review and manage pending requests to access your data
       </p>
@@ -202,9 +190,7 @@
                 class="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0"
               >
                 <Clock class="h-3 w-3" />
-                {request.createdAt
-                  ? formatRelativeTime(request.createdAt)
-                  : "Unknown"}
+                {relativeAge(request.createdAt, { fallback: "Unknown" })}
               </div>
             </div>
           </Card.Header>
@@ -245,7 +231,7 @@
                     {:else}
                       <ChevronDown class="h-4 w-4" />
                     {/if}
-                    Direct Permissions (optional)
+                    Direct permissions (optional)
                   </Button>
                 {/snippet}
               </Collapsible.Trigger>

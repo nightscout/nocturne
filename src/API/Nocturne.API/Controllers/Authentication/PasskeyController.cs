@@ -411,11 +411,9 @@ public class PasskeyController : ControllerBase
     /// </para>
     /// <para>
     /// Hence the two steps. The candidate list comes from tables that are not tenant-scoped, so one
-    /// query answers it. The membership check cannot join to them in the same statement: a single
-    /// anti-join spans every candidate at once, and the reach that makes it cross-tenant is granted
-    /// one subject at a time (<c>app.current_subject_id</c>), so no one pin can cover the statement.
-    /// It is asked per candidate instead, through <see cref="ITenantMemberService"/>, whose
-    /// enumeration carries that subject's own reach.
+    /// query answers it. The membership check is asked per candidate through
+    /// <see cref="ITenantMemberService"/>, whose enumeration is pinned to that subject
+    /// (<c>app.current_subject_id</c>) and so reads only that subject's memberships.
     /// </para>
     /// The preconditions mean only a half-finished enrolment can match, never an account that can
     /// already sign in or that belongs to a tenant — so with several candidates (duplicates left by
@@ -812,7 +810,7 @@ public class PasskeyController : ControllerBase
     }
 
     /// <summary>
-    /// Mark the current tenant's onboarding as complete.
+    /// Mark the current tenant's onboarding core as complete, enrolling it in the setup hub.
     /// </summary>
     [HttpPost("onboarding/complete")]
     [Authorize]
@@ -829,6 +827,7 @@ public class PasskeyController : ControllerBase
         if (tenant.OnboardingCompletedAt == null)
         {
             tenant.OnboardingCompletedAt = DateTime.UtcNow;
+            tenant.SetupHubEnrolledAt = tenant.OnboardingCompletedAt;
             await db.SaveChangesAsync();
         }
 

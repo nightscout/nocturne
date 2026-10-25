@@ -26,14 +26,6 @@
   const rangeKey = $derived(JSON.stringify(reportsParams.dateRangeInput ?? {}));
 </script>
 
-<svelte:head>
-  <title>Basal Rate Analysis - Nocturne Reports</title>
-  <meta
-    name="description"
-    content="Analyze your basal insulin delivery patterns with percentile visualization"
-  />
-</svelte:head>
-
 {#key rangeKey}
   <BasalAnalysisContent {analysisDates} {dateInfo} />
 {/key}

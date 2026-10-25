@@ -92,8 +92,8 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         foreach (var name in spans.Select(s => s.ProfileName).Distinct(StringComparer.Ordinal))
         {
             var schedules = (await _scheduleRepo.GetByProfileNameAsync(name, ct))
-                .OrderBy(s => s.Timestamp)
-                .ToList();
+                .OrderByDescending(s => s.Timestamp)
+                .ToArray();
             var settings = (await _therapyRepo.GetByProfileNameAsync(name, ct))
                 .OrderByDescending(t => t.Timestamp)
                 .ToArray();
@@ -143,73 +143,21 @@ internal sealed class BasalSegmentService : IBasalSegmentService
         }
 
         var schedules = resources.Schedules;
-        if (schedules.Count == 0)
+        if (schedules.Length == 0)
         {
             yield return new ScheduleAssignment(fromMills, toMills, profileName, [], percentage, timeshiftMs, resources.TimeZoneAt(fromMills));
             yield break;
         }
 
-        // Find the last schedule whose Timestamp ≤ fromMills as the initial active version.
-        var fromUtc = DateTimeOffset.FromUnixTimeMilliseconds(fromMills).UtcDateTime;
-        var initialIdx = LastIndexAtOrBefore(schedules, fromUtc);
-        long sliceStart = fromMills;
-        BasalSchedule activeSchedule;
-
-        if (initialIdx >= 0)
-        {
-            activeSchedule = schedules[initialIdx];
-        }
-        else
-        {
-            // No schedule existed at fromMills: up to the first one, the newest is read, as
-            // ProfileVersionCache.ActiveAt reads it for IBasalRateResolver.
-            var firstStartMs = new DateTimeOffset(schedules[0].Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            var leadingEnd = Math.Min(firstStartMs, toMills);
-            if (leadingEnd > sliceStart)
-            {
-                yield return new ScheduleAssignment(
-                    sliceStart, leadingEnd, profileName, schedules[^1].Entries, percentage, timeshiftMs, resources.TimeZoneAt(sliceStart));
-                sliceStart = leadingEnd;
-            }
-            if (sliceStart >= toMills) yield break;
-            activeSchedule = schedules[0];
-        }
-
-        // Walk later versions: each one whose Timestamp falls inside (sliceStart, toMills) starts a new slice.
-        for (int i = Math.Max(0, initialIdx + 1); i < schedules.Count; i++)
-        {
-            var versionStartMs = new DateTimeOffset(schedules[i].Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            if (versionStartMs <= sliceStart) continue;
-            if (versionStartMs >= toMills) break;
-
+        foreach (var slice in ProfileVersionCache.Slice(schedules, fromMills, toMills, BeforeFirstVersion.Newest))
             yield return new ScheduleAssignment(
-                sliceStart, versionStartMs, profileName,
-                activeSchedule.Entries, percentage, timeshiftMs, resources.TimeZoneAt(sliceStart));
-
-            sliceStart = versionStartMs;
-            activeSchedule = schedules[i];
-        }
-
-        if (sliceStart < toMills)
-            yield return new ScheduleAssignment(
-                sliceStart, toMills, profileName,
-                activeSchedule.Entries, percentage, timeshiftMs, resources.TimeZoneAt(sliceStart));
+                slice.StartMills, slice.EndMills, profileName,
+                slice.Version.Entries, percentage, timeshiftMs, resources.TimeZoneAt(slice.StartMills));
     }
 
-    private static int LastIndexAtOrBefore(List<BasalSchedule> sortedAsc, DateTime cutoff)
-    {
-        // Linear scan — typical schedule history is tiny.
-        int idx = -1;
-        for (int i = 0; i < sortedAsc.Count; i++)
-        {
-            if (sortedAsc[i].Timestamp <= cutoff) idx = i;
-            else break;
-        }
-        return idx;
-    }
-
+    /// <param name="Schedules">The profile's schedule versions, newest first.</param>
     /// <param name="Settings">The profile's settings versions, newest first.</param>
-    private sealed record ProfileResources(List<BasalSchedule> Schedules, TherapySettings[] Settings, string? PatientTimezone)
+    private sealed record ProfileResources(BasalSchedule[] Schedules, TherapySettings[] Settings, string? PatientTimezone)
     {
         public string? TimeZoneAt(long mills, string? switchTimezone = null) =>
             ScheduleTimeHelper.TimezoneOf(

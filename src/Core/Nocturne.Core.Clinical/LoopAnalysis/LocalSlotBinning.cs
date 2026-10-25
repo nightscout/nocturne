@@ -1,4 +1,5 @@
 using System.Globalization;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Clinical.LoopAnalysis;
 
@@ -67,6 +68,32 @@ public static class LocalSlotBinning
     public static DateOnly LocalDay(long mills, TimeZoneInfo tz) => DateOnly.FromDateTime(LocalTime(mills, tz));
 
     /// <summary>
+    /// The first and last local day in <paramref name="tz"/> of the instants <paramref name="from"/> and
+    /// <paramref name="to"/>, which are read as UTC.
+    /// </summary>
+    public static (DateOnly First, DateOnly Last) LocalDaySpan(DateTime from, DateTime to, TimeZoneInfo tz) =>
+        (LocalDay(from.ToMills(), tz), LocalDay(to.ToMills(), tz));
+
+    /// <summary>
+    /// Every local day in <paramref name="tz"/> from the day of <paramref name="from"/> through the day of
+    /// <paramref name="to"/>, inclusive, oldest first. Empty when <paramref name="to"/> falls on an earlier day.
+    /// </summary>
+    public static IReadOnlyList<DateOnly> LocalDays(DateTime from, DateTime to, TimeZoneInfo tz)
+    {
+        var (first, last) = LocalDaySpan(from, to, tz);
+        var days = new List<DateOnly>();
+        for (var day = first; day <= last; day = day.AddDays(1))
+            days.Add(day);
+        return days;
+    }
+
+    /// <summary>The UTC day of an instant, for a report with no tenant zone that says so on its response.</summary>
+    public static DateOnly UtcDay(long mills) => LocalDay(mills, TimeZoneInfo.Utc);
+
+    /// <summary>The UTC days <paramref name="from"/> to <paramref name="to"/> touch, for a report with no tenant zone that says so on its response.</summary>
+    public static IReadOnlyList<DateOnly> UtcDays(DateTime from, DateTime to) => LocalDays(from, to, TimeZoneInfo.Utc);
+
+    /// <summary>
     /// The local days <paramref name="from"/> to <paramref name="to"/> (exclusive) touch, whole: day
     /// <c>d</c> runs from <c>Starts[d]</c> to <c>Starts[d + 1]</c>, so <c>Starts</c> holds one more
     /// entry than there are days. An empty range touches no day.
@@ -88,9 +115,16 @@ public static class LocalSlotBinning
     /// The UTC instant local <paramref name="day"/> begins in <paramref name="tz"/>. A zone whose
     /// midnight is skipped by a DST transition begins the day at the first instant after it.
     /// </summary>
-    public static long DayStartMills(DateOnly day, TimeZoneInfo tz)
+    public static long DayStartMills(DateOnly day, TimeZoneInfo tz) => LocalInstantMills(day, 0, tz);
+
+    /// <summary>
+    /// The UTC instant local <paramref name="hour"/> o'clock of <paramref name="day"/> falls at in
+    /// <paramref name="tz"/>. A skipped local time resolves to the first instant after the gap, an
+    /// ambiguous one to its first occurrence.
+    /// </summary>
+    public static long LocalInstantMills(DateOnly day, int hour, TimeZoneInfo tz)
     {
-        var local = day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var local = day.ToDateTime(new TimeOnly(hour, 0), DateTimeKind.Unspecified);
         while (tz.IsInvalidTime(local))
             local = local.AddMinutes(1);
         var offset = tz.IsAmbiguousTime(local)

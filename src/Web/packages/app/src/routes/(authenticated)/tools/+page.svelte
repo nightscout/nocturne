@@ -24,7 +24,7 @@
               <Luggage class="h-5 w-5 text-primary" />
             </div>
             <div>
-              <CardTitle class="text-base">Packing Calculator</CardTitle>
+              <CardTitle class="text-base">Packing calculator</CardTitle>
               <CardDescription size="sm">
                 Calculate supplies needed for a trip
               </CardDescription>

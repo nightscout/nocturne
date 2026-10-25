@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
@@ -160,12 +161,12 @@ public class DeviceStatusGroupRepository : IDeviceStatusGroupRepository
         if (settled.Count <= limit)
             return settled;
 
-        var last = HistoryPage.ToMilliseconds(settled[limit - 1].Group.ModifiedAt);
-        return settled.TakeWhile((s, i) => i < limit || HistoryPage.ToMilliseconds(s.Group.ModifiedAt) == last);
+        var last = settled[limit - 1].Group.ModifiedAt.ToMills();
+        return settled.TakeWhile((s, i) => i < limit || s.Group.ModifiedAt.ToMills() == last);
     }
 
     private static DateTime Millisecond(DateTime stamp) =>
-        DateTimeOffset.FromUnixTimeMilliseconds(HistoryPage.ToMilliseconds(stamp)).UtcDateTime;
+        DateTimeOffset.FromUnixTimeMilliseconds(stamp.ToMills()).UtcDateTime;
 
     private static IEnumerable<AnchorRow> Ordered(IEnumerable<AnchorRow> anchors, bool descending) =>
         descending

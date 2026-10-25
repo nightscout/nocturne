@@ -13,6 +13,12 @@ public interface ITherapySettingsResolver
     Task<double> GetDIAAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);
 
     /// <summary>
+    /// The value <see cref="GetDIAAsync"/> returns, with where it comes from and the current
+    /// primary bolus insulin.
+    /// </summary>
+    Task<Core.Models.V4.InsulinActionTime> GetActionTimeAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns the carb absorption rate in grams per hour. Defaults to 20.0.
     /// </summary>
     Task<double> GetCarbAbsorptionRateAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);

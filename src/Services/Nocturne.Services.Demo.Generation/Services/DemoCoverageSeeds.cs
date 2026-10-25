@@ -70,7 +70,7 @@ public static class DemoCoverageSeeds
         var mills = source.Mills + 120_000;
         var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
         var variation = source.Mills / 300_000 % 5 - 2;
-        var glucose = Math.Clamp((source.Sgv ?? source.Mgdl) + variation, 40, 400);
+        var glucose = Math.Clamp(source.GlucoseMgdl() + variation, 40, 400);
 
         return new Entry
         {

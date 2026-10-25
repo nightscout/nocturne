@@ -5,7 +5,7 @@ namespace Nocturne.Core.Models.Alerts;
 
 /// <summary>
 /// The type of condition an alert rule evaluates.
-/// Used as a discriminator to route rules to the correct IConditionEvaluator.
+/// The discriminator of a condition node (<c>type</c>), by its wire name.
 /// </summary>
 /// <seealso cref="AlertRuleSeverity"/>
 [JsonConverter(typeof(JsonStringEnumConverter<AlertConditionType>))]

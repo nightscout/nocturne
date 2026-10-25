@@ -22,7 +22,7 @@ Nothing takes effect until you press **Save** (or **Create** for a new rule).
   callouts={[
     { anchor: 'enabled', label: 'Enabled' },
     { anchor: 'severity', label: 'Severity' },
-    { anchor: 'allow-dnd', label: 'Allow through Do Not Disturb' },
+    { anchor: 'allow-dnd', label: 'Allow through Do not disturb' },
   ]}
 />
 
@@ -36,12 +36,12 @@ Nothing takes effect until you press **Save** (or **Create** for a new rule).
 
 | Severity | What it does |
 |----------|--------------|
-| **Critical** | Always gets through Do Not Disturb. Use it for the alerts that must never be silenced, such as an urgent low. |
-| **Warning** | The default. Silenced by Do Not Disturb unless you tick the box below. |
+| **Critical** | Always gets through Do not disturb. Use it for the alerts that must never be silenced, such as an urgent low. |
+| **Warning** | The default. Silenced by Do not disturb unless you tick the box below. |
 | **Info** | Sent once and then marked as acknowledged straight away. It will not keep nagging. Use it for reminders, such as an old pump site. |
 
-- **Allow through Do Not Disturb** lets a Warning or Info rule reach you even
-  while Do Not Disturb is on. Critical rules always get through, so the box
+- **Allow through Do not disturb** lets a Warning or Info rule reach you even
+  while Do not disturb is on. Critical rules always get through, so the box
   makes no difference to them.
 
 ## Condition
@@ -107,7 +107,7 @@ recorded in alert history; it just does not notify anyone.
 
 | Channel | Where the alert goes |
 |---------|----------------------|
-| **In-App** | The Nocturne notification centre of the member chosen as the channel's recipient. A new channel goes to you unless you pick someone else on the site. |
+| **In-app** | The Nocturne notification center of the member chosen as the channel's recipient. A new channel goes to you unless you pick someone else on the site. |
 | **Discord**, **Slack**, **Telegram**, **WhatsApp** | A direct message to a linked account, or a post in a channel or group the Nocturne bot has joined. See [Chat bots](/docs/bots). |
 | **Email** | An email to an address you choose. Needs email set up first; see [Email alerts](/docs/alerts/email). |
 | **Webhook** | A message sent to a web address you control, for connecting other systems. |

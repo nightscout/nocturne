@@ -36,25 +36,18 @@
   // selected range so the header and footer never disagree with the query.
   const reportsResource = contextResource(
     () => getReportsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading AGP Report", dateParams: reportsParams }
+    { errorTitle: "Error loading AGP report", dateParams: reportsParams }
   );
 
   const entries = $derived(reportsResource.current?.entries ?? []);
   const analysis = $derived(reportsResource.current?.analysis);
   const averagedStats = $derived(reportsResource.current?.averagedStats);
+  const edges = $derived(analysis?.timeInRange?.thresholds);
   const lastUpdated = $derived(reportsResource.current?.dateRange?.lastUpdated);
   const startDate = $derived(reportsResource.date.from);
   const endDate = $derived(reportsResource.date.to);
   const dayCount = $derived(reportsResource.date.dayCount);
 </script>
-
-<svelte:head>
-  <title>Ambulatory Glucose Profile - Nocturne Reports</title>
-  <meta
-    name="description"
-    content="Standard AGP report with glucose pattern overlay, percentile bands, and time-in-range analysis"
-  />
-</svelte:head>
 
 {#if reportsResource.current}
 <div class="@container space-y-8">
@@ -63,7 +56,7 @@
     <div class="flex items-center justify-between flex-wrap gap-4">
       <div class="print:hidden">
         <p class="text-muted-foreground">
-          Your typical daily glucose pattern — a standardized clinical report
+          Your typical daily glucose pattern: a standardized clinical report
         </p>
       </div>
       <div class="flex items-center gap-2 print:hidden">
@@ -101,7 +94,7 @@
     </CardHeader>
     <CardContent size="sm" class="space-y-2">
       <p>
-        The <strong>Ambulatory Glucose Profile</strong>
+        The <strong>ambulatory glucose profile</strong>
         shows what a "typical" day looks like for your glucose levels. It overlays
         all your daily readings to reveal consistent patterns.
       </p>
@@ -112,7 +105,7 @@
         <div class="mt-2 space-y-2 pl-4 border-l border-info/30">
           <p>
             <strong>The dark line</strong>
-            is your median (middle) glucose at each hour — what happens most often.
+            is your median (middle) glucose at each hour. It shows what happens most often.
           </p>
           <p>
             <strong>The darker shaded area</strong>
@@ -124,8 +117,11 @@
           </p>
           <p>
             <strong>The shaded band</strong>
-            ({bgRange(70, 180)}) is the consensus target range. The consensus target
-            is at least 70% of time in this zone.
+            {#if edges?.targetBottom != null && edges.targetTop != null}
+              ({bgRange(edges.targetBottom, edges.targetTop)})
+            {/if}
+            is the consensus target range. The consensus target
+            is at least 70% of time in this range.
           </p>
         </div>
       </details>
@@ -149,14 +145,17 @@
       ]}
     />
 
-    <ReliabilityBadge reliability={analysis?.reliability} />
+    <ReliabilityBadge
+      reliability={analysis?.reliability}
+      timeZoneUnavailableReason={reportsResource.current?.timeZoneUnavailableReason}
+    />
 
     <!-- Main AGP Chart -->
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <BarChart3 class="w-5 h-5" />
-          Glucose Pattern (24-hour overlay)
+          Glucose pattern (24-hour overlay)
         </CardTitle>
         <CardDescription>
           Median glucose with percentile bands showing your typical daily
@@ -164,7 +163,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="h-80 @lg:h-96 w-full">
-        <AmbulatoryGlucoseProfile {averagedStats} />
+        <AmbulatoryGlucoseProfile {averagedStats} thresholds={edges} />
       </CardContent>
     </Card>
 
@@ -174,7 +173,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Target class="w-5 h-5 text-glucose-in-range" />
-            Time in Range Distribution
+            Time in range distribution
           </CardTitle>
           <CardDescription>
             How your time is distributed across glucose ranges
@@ -190,7 +189,7 @@
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <TrendingUp class="w-5 h-5" />
-            Measured Against Consensus Targets
+            Measured against consensus targets
           </CardTitle>
           <CardDescription>
             Each figure from this window next to the international consensus
@@ -215,7 +214,7 @@
                   : undefined,
             },
             {
-              label: `Time below ${bg(70)} ${bgLabel()}`,
+              label: edges?.low != null ? `Time below ${bg(edges.low)} ${bgLabel()}` : "Time below range",
               value:
                 tir.low != null || tir.veryLow != null
                   ? (tir.low ?? 0) + (tir.veryLow ?? 0)
@@ -259,7 +258,7 @@
     <CardContent class="pt-6">
       <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6 text-sm">
         <div>
-          <h4 class="font-semibold mb-2">About This Report</h4>
+          <h4 class="font-semibold mb-2">About this report</h4>
           <p class="text-muted-foreground">
             The AGP is a standardized report format recommended by diabetes
             organizations worldwide. It shows how glucose varies across a typical
@@ -267,7 +266,7 @@
           </p>
         </div>
         <div>
-          <h4 class="font-semibold mb-2">For Healthcare Providers</h4>
+          <h4 class="font-semibold mb-2">For healthcare providers</h4>
           <p class="text-muted-foreground">
             This AGP follows international consensus guidelines. The modal day
             view with 10th-90th percentile bands helps identify variability

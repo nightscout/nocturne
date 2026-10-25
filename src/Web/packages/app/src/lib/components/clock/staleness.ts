@@ -8,6 +8,8 @@
  * wall-mounted clock showing an hours-old value with no age indication.
  */
 
+import { relativeAge } from "$lib/utils/formatting";
+
 /** Whole minutes elapsed between `lastUpdated` and `now`, floored at 0. */
 export function readingAgeMinutes(lastUpdated: number, now: number): number {
   return Math.max(0, Math.floor((now - lastUpdated) / 60000));
@@ -38,11 +40,7 @@ export function readingAgeLabel(lastUpdated: number, now: number): string {
     : `${readingAgeMinutes(lastUpdated, now)}m`;
 }
 
-/**
- * Reading age for a clock's age element. "now" is a moment rather than an
- * elapsed count, so it takes no "ago".
- */
+/** Reading age for a clock's age element, in the regional format's own words. */
 export function readingAgePhrase(lastUpdated: number, now: number): string {
-  const label = readingAgeLabel(lastUpdated, now);
-  return isJustNow(lastUpdated, now) ? label : `${label} ago`;
+  return relativeAge(lastUpdated, { now });
 }

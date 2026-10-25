@@ -2,14 +2,16 @@ using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Configuration;
 using Nocturne.API.Extensions;
+using Nocturne.API.RateLimiting;
 using Xunit;
 
 namespace Nocturne.API.Tests.RateLimiting;
 
 /// <summary>
-/// Pins the rate-limit policies applied to controller actions against the one table that resolves
-/// its partition through <see cref="Nocturne.API.RateLimiting.ClientRateLimitKey"/>.
+/// Pins the rate-limit policies applied to controller actions against the registry that resolves
+/// its partition through <see cref="ClientRateLimitKey"/>.
 /// </summary>
 /// <remarks>
 /// A policy registered on its own with a partition key of its own would key on the connection —
@@ -26,15 +28,11 @@ public class ClientAddressPolicyCoverageTests
         applied.Should().HaveCountGreaterThan(5,
             "the scan should discover the rate-limited actions");
 
-        var tableAndHostKeyed = ClientAddressPolicyNames()
-            .Append(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)
-            // Keys on the hashed credential rather than the connection, which is what this test
-            // is protecting against; see ServiceRegistrationExtensions.TranslationDraftPartitionKey.
-            .Append(ServiceRegistrationExtensions.TranslationDraftsRateLimitPolicy)
-            .ToList();
+        var registered = ServiceRegistrationExtensions.RateLimitPartitionKeys(
+            new ClientRateLimitKey(new ConfigurationBuilder().Build())).Keys;
 
-        applied.Except(tableAndHostKeyed).Should().BeEmpty(
-            "a policy outside the table keys on the connection, so every user behind the SSR "
+        applied.Except(registered).Should().BeEmpty(
+            "a policy outside the registry keys on the connection, so every user behind the SSR "
             + "server would share its window");
     }
 

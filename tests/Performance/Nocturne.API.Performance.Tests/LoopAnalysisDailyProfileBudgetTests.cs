@@ -60,7 +60,7 @@ public class LoopAnalysisDailyProfileBudgetTests(ITestOutputHelper output)
             carbRatioEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 10 }],
             basalEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 0.8 }]);
         var timeline = new TherapyTimeline([new TherapySegment(compareFrom, to + 1, snapshot)]);
-        var iob = new IobCalculator(null!, null!, null!, null!, null!);
+        var iob = new IobCalculator(null!, null!, null!, null!, null!, null!);
         var cob = new CobCalculator(NullLogger<CobCalculator>.Instance, iob, null!, null!, null!, null!);
         var overrides = Enumerable.Range(0, 26)
             .Select(w => new ScaleFactorInterval(compareFrom + w * 7 * Day, compareFrom + w * 7 * Day + 3 * 60 * Minute, 0.8))
@@ -75,9 +75,9 @@ public class LoopAnalysisDailyProfileBudgetTests(ITestOutputHelper output)
             Timestamp = tb.StartMills, Rate = tb.Rate!.Value, Origin = BasalDeliveryOrigin.Algorithm,
         });
         var delivered = NetInsulinAboveSchedule.DeliveredFromSeries(series, to, evidence);
-        var scheduled = NetInsulinAboveSchedule.ScheduledBaseline(
-            [new BasalSegment(compareFrom, to, 0.8, 0.8, "Default")], overrides);
-        var ticks = IobCobSeries.Build(iob, cob, boluses, carbs, temps, timeline, null, compareFrom, to - 1, to - 1, 5 * Minute);
+        var basal = new ScheduledBasal([new BasalSegment(compareFrom, to, 0.8, 0.8, "Default")], overrides);
+        var scheduled = basal.Segments(clipped);
+        var ticks = IobCobSeries.Build(iob, cob, boluses, carbs, temps, timeline, basal, null, compareFrom, to - 1, to - 1, 5 * Minute);
 
         var inputs = new DailyProfileInputs
         {

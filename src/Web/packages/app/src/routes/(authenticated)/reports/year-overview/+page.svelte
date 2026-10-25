@@ -796,6 +796,7 @@
             {getCellHatch}
             {navigateToDayInReview}
             {glucoseColorScale}
+            glucoseBands={GLUCOSE_BANDS}
             {units}
             {unitLabel}
             {formatUnits}

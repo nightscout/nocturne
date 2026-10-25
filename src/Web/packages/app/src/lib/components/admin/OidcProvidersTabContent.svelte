@@ -49,14 +49,14 @@
     <Card>
       <CardHeader class="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>Identity Providers</CardTitle>
+          <CardTitle>Identity providers</CardTitle>
           <CardDescription>
             Configure OpenID Connect providers for single sign-on.
           </CardDescription>
         </div>
         <Button onclick={onAdd}>
           <Plus class="h-4 w-4" />
-          Add Provider
+          Add provider
         </Button>
       </CardHeader>
       <CardContent>

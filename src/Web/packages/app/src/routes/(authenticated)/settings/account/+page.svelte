@@ -422,7 +422,7 @@
 
       <!-- Section 2: Authenticator Apps -->
       <SecurityCredentialCard
-        title="Authenticator Apps"
+        title="Authenticator apps"
         description="Use an authenticator app like Google Authenticator or Authy to generate time-based one-time passwords for sign-in."
         icon={Smartphone}
         addLabel="Add authenticator"
@@ -446,7 +446,7 @@
         <Card.Header>
           <Card.Title class="flex items-center gap-2">
             <ShieldAlert class="h-5 w-5" />
-            Recovery Codes
+            Recovery codes
           </Card.Title>
           <Card.Description>
             Recovery codes allow you to access your account if you lose all your
@@ -465,7 +465,7 @@
                     Your old recovery codes stopped working after a Nocturne
                     update. Generate new codes to keep a backup way to sign in.
                   {:else if recoveryStatus.hasCodes}
-                    Every recovery code has been used
+                    Every recovery code was used
                   {:else}
                     No recovery codes yet
                   {/if}
@@ -512,7 +512,7 @@
         <Card.Header>
           <Card.Title variant="muted" class="flex items-center gap-2">
             <Server class="h-5 w-5" />
-            Server-Side Account Recovery
+            Server-side account recovery
           </Card.Title>
         </Card.Header>
         <Card.Content>
@@ -532,9 +532,7 @@
                 environment variable on your server.
               </p>
               <p class="text-sm text-muted-foreground">
-                This enables a temporary recovery flow that allows you to register
-                a new passkey. It requires physical access to the server
-                environment.
+                This enables a temporary recovery flow. You can register a new passkey with it. It requires physical access to the server environment.
               </p>
             </div>
           </div>
@@ -553,7 +551,7 @@
           >
             <User class="h-8 w-8 text-primary" />
           </div>
-          <Card.Title class="text-2xl font-bold">Not Signed In</Card.Title>
+          <Card.Title class="text-2xl font-bold">Not signed in</Card.Title>
           <Card.Description class="mt-2">
             Sign in to access your account dashboard and manage your settings.
           </Card.Description>
@@ -565,7 +563,7 @@
             class="w-full @sm:w-auto min-w-[200px]"
           >
             <User class="mr-2 h-5 w-5" />
-            Sign In with Nocturne
+            Sign in with Nocturne
           </Button>
         </Card.Content>
       </Card.Root>
@@ -579,8 +577,8 @@
     <Dialog.Header>
       <Dialog.Title>Name your passkey</Dialog.Title>
       <Dialog.Description>
-        Give this passkey a name to help you identify it later (e.g. "MacBook
-        Touch ID", "YubiKey 5").
+        Give this passkey a name to help you identify it later, for example "MacBook
+        Touch ID" or "YubiKey 5".
       </Dialog.Description>
     </Dialog.Header>
     <div class="space-y-4 py-4">

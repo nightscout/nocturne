@@ -1,0 +1,305 @@
+{
+ "route": "/settings/trackers",
+ "params": {},
+ "capturedAt": 1792830849654,
+ "entries": [
+  {
+   "type": "sgv",
+   "mills": 1792830600000,
+   "sgv": 103,
+   "direction": "FortyFiveDown",
+   "delta": -2.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830300000,
+   "sgv": 106,
+   "direction": "FortyFiveDown",
+   "delta": -3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830000000,
+   "sgv": 109,
+   "direction": "Flat",
+   "delta": -1.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829700000,
+   "sgv": 110,
+   "direction": "Flat",
+   "delta": 0.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829400000,
+   "sgv": 110,
+   "direction": "Flat",
+   "delta": 0.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829100000,
+   "sgv": 109,
+   "direction": "Flat",
+   "delta": -1.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828800000,
+   "sgv": 110,
+   "direction": "Flat",
+   "delta": -1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828500000,
+   "sgv": 111,
+   "direction": "Flat",
+   "delta": -1.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828200000,
+   "sgv": 113,
+   "direction": "Flat",
+   "delta": -0.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827900000,
+   "sgv": 113,
+   "direction": "Flat",
+   "delta": 0.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827600000,
+   "sgv": 113,
+   "direction": "Flat",
+   "delta": -1.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827300000,
+   "sgv": 115,
+   "direction": "Flat",
+   "delta": -0.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827000000,
+   "sgv": 115,
+   "direction": "Flat",
+   "delta": -1.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826700000,
+   "sgv": 117,
+   "direction": "Flat",
+   "delta": -1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826400000,
+   "sgv": 118,
+   "direction": "Flat",
+   "delta": 0
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826340000
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826100000,
+   "sgv": 118,
+   "direction": "Flat",
+   "delta": -0.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825800000,
+   "sgv": 118,
+   "direction": "Flat",
+   "delta": -1.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825500000,
+   "sgv": 120,
+   "direction": "FortyFiveUp",
+   "delta": 3.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825200000,
+   "sgv": 116,
+   "direction": "FortyFiveUp",
+   "delta": 3.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824900000,
+   "sgv": 113,
+   "direction": "SingleUp",
+   "delta": 5.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824600000,
+   "sgv": 108,
+   "direction": "SingleUp",
+   "delta": 8.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824300000,
+   "sgv": 99,
+   "direction": "DoubleUp",
+   "delta": 11.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824000000,
+   "sgv": 88,
+   "direction": "DoubleUp",
+   "delta": 10.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823700000,
+   "sgv": 78,
+   "direction": "SingleUp",
+   "delta": 8.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823400000,
+   "sgv": 69,
+   "direction": "Flat",
+   "delta": -1.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823100000,
+   "sgv": 71,
+   "direction": "Flat",
+   "delta": -1.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822800000,
+   "sgv": 72,
+   "direction": "FortyFiveDown",
+   "delta": -3.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822500000,
+   "sgv": 75,
+   "direction": "SingleDown",
+   "delta": -7.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822200000,
+   "sgv": 82,
+   "direction": "SingleDown",
+   "delta": -7.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821900000,
+   "sgv": 90,
+   "direction": "SingleDown",
+   "delta": -5.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821600000,
+   "sgv": 95,
+   "direction": "SingleDown",
+   "delta": -8.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821300000,
+   "sgv": 104,
+   "direction": "SingleDown",
+   "delta": -6.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792821000000,
+   "sgv": 110,
+   "direction": "SingleDown",
+   "delta": -7.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792820700000,
+   "sgv": 118,
+   "direction": "SingleDown",
+   "delta": -8.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792820400000,
+   "sgv": 126,
+   "direction": "SingleDown",
+   "delta": -7.6
+  }
+ ],
+ "results": {
+  "getDefinitions": "[[1,17,27,37],{\"id\":2,\"name\":3,\"description\":4,\"category\":5,\"icon\":6,\"triggerEventTypes\":7,\"triggerNotesContains\":4,\"lifespanHours\":9,\"lowReservoirUnits\":4,\"lowReservoirUrgency\":10,\"notificationThresholds\":11,\"isFavorite\":12,\"dashboardVisibility\":13,\"visibility\":14,\"startEventType\":8,\"completionEventType\":4,\"mode\":15,\"createdAt\":16,\"updatedAt\":4},\"01a16d0b-b51e-7a84-997b-9b0f93de83e0\",\"CGM Sensor\",null,\"Sensor\",\"radio\",[8],\"Sensor Start\",240,\"Warn\",[],false,\"Always\",\"Private\",\"Duration\",\"2026-10-24T08:34:06.23899Z\",{\"id\":18,\"name\":19,\"description\":4,\"category\":20,\"icon\":21,\"triggerEventTypes\":22,\"triggerNotesContains\":4,\"lifespanHours\":24,\"lowReservoirUnits\":4,\"lowReservoirUrgency\":10,\"notificationThresholds\":25,\"isFavorite\":12,\"dashboardVisibility\":13,\"visibility\":14,\"startEventType\":23,\"completionEventType\":4,\"mode\":15,\"createdAt\":26,\"updatedAt\":4},\"01a16d0b-b54a-7884-8615-1c4a91b9f61c\",\"Infusion Site\",\"Cannula\",\"syringe\",[23],\"Site Change\",72,[],\"2026-10-24T08:34:06.282387Z\",{\"id\":28,\"name\":29,\"description\":4,\"category\":30,\"icon\":31,\"triggerEventTypes\":32,\"triggerNotesContains\":4,\"lifespanHours\":34,\"lowReservoirUnits\":4,\"lowReservoirUrgency\":10,\"notificationThresholds\":35,\"isFavorite\":12,\"dashboardVisibility\":13,\"visibility\":14,\"startEventType\":33,\"completionEventType\":4,\"mode\":15,\"createdAt\":36,\"updatedAt\":4},\"01a16d0b-b64a-7df9-a633-b36a33b9378d\",\"Pump Battery\",\"Battery\",\"battery\",[33],\"Pump Battery Change\",504,[],\"2026-10-24T08:34:06.538726Z\",{\"id\":38,\"name\":39,\"description\":4,\"category\":39,\"icon\":40,\"triggerEventTypes\":41,\"triggerNotesContains\":4,\"lifespanHours\":24,\"lowReservoirUnits\":4,\"lowReservoirUrgency\":10,\"notificationThresholds\":43,\"isFavorite\":12,\"dashboardVisibility\":13,\"visibility\":14,\"startEventType\":42,\"completionEventType\":4,\"mode\":15,\"createdAt\":44,\"updatedAt\":4},\"01a16d0b-b5ca-7dfd-8c0f-54a322a9c231\",\"Reservoir\",\"cylinder\",[42],\"Insulin Change\",[],\"2026-10-24T08:34:06.410434Z\"]",
+  "getActiveInstances": "[[1,13,22,32],{\"id\":2,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":7,\"completedAt\":8,\"expectedEndAt\":9,\"scheduledAt\":8,\"startNotes\":8,\"completionNotes\":8,\"completionReason\":8,\"ageHours\":10,\"isActive\":11,\"lastAckedAt\":8,\"ackSnoozeMins\":8,\"schedule\":12},\"01a16d0b-b5c4-73ba-8cfd-d04618de3ec5\",\"01a16d0b-b54a-7884-8615-1c4a91b9f61c\",\"Infusion Site\",\"Cannula\",\"syringe\",\"2026-10-23T20:12:00Z\",null,\"2026-10-26T20:12:00Z\",12.36970031611111,true,[],{\"id\":14,\"definitionId\":15,\"definitionName\":16,\"category\":16,\"icon\":17,\"startedAt\":18,\"completedAt\":8,\"expectedEndAt\":19,\"scheduledAt\":8,\"startNotes\":8,\"completionNotes\":8,\"completionReason\":8,\"ageHours\":20,\"isActive\":11,\"lastAckedAt\":8,\"ackSnoozeMins\":8,\"schedule\":21},\"01a16d0b-b644-75e7-8dbe-6bcb8df254c9\",\"01a16d0b-b5ca-7dfd-8c0f-54a322a9c231\",\"Reservoir\",\"cylinder\",\"2026-10-23T20:09:00Z\",\"2026-10-26T20:09:00Z\",12.419700318305555,[],{\"id\":23,\"definitionId\":24,\"definitionName\":25,\"category\":26,\"icon\":27,\"startedAt\":28,\"completedAt\":8,\"expectedEndAt\":29,\"scheduledAt\":8,\"startNotes\":8,\"completionNotes\":8,\"completionReason\":8,\"ageHours\":30,\"isActive\":11,\"lastAckedAt\":8,\"ackSnoozeMins\":8,\"schedule\":31},\"01a16d0b-b543-731e-9ecf-ed1e1e9cb912\",\"01a16d0b-b51e-7a84-997b-9b0f93de83e0\",\"CGM Sensor\",\"Sensor\",\"radio\",\"2026-10-14T22:11:00Z\",\"2026-10-24T22:11:00Z\",226.3863669851389,[],{\"id\":33,\"definitionId\":34,\"definitionName\":35,\"category\":36,\"icon\":37,\"startedAt\":38,\"completedAt\":8,\"expectedEndAt\":39,\"scheduledAt\":8,\"startNotes\":8,\"completionNotes\":8,\"completionReason\":8,\"ageHours\":40,\"isActive\":11,\"lastAckedAt\":8,\"ackSnoozeMins\":8,\"schedule\":41},\"01a16d0b-b658-7613-8044-c0c12159fc7a\",\"01a16d0b-b64a-7df9-a633-b36a33b9378d\",\"Pump Battery\",\"Battery\",\"battery\",\"2026-10-13T08:33:00Z\",\"2026-11-03T08:33:00Z\",264.0197003185833,[]]",
+  "getPresets": "[[]]",
+  "getInstanceHistory": "[[1,15,26,32,38,44,50,61,67,73,84,90,96,101,107,113,119,125,131,137,143,149,155,161,167,173],{\"id\":2,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":7,\"completedAt\":8,\"expectedEndAt\":9,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":12,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":14},\"01a16d0b-b5ba-7d9d-86a3-ac41cfc135b3\",\"01a16d0b-b54a-7884-8615-1c4a91b9f61c\",\"Infusion Site\",\"Cannula\",\"syringe\",\"2026-10-20T21:42:00Z\",\"2026-10-23T20:12:00Z\",\"2026-10-23T21:42:00Z\",null,\"Completed\",82.8697019891111,false,[],{\"id\":16,\"definitionId\":17,\"definitionName\":18,\"category\":18,\"icon\":19,\"startedAt\":20,\"completedAt\":21,\"expectedEndAt\":22,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":23,\"ageHours\":24,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":25},\"01a16d0b-b639-744a-ad85-b8d48661114b\",\"01a16d0b-b5ca-7dfd-8c0f-54a322a9c231\",\"Reservoir\",\"cylinder\",\"2026-10-20T20:07:00Z\",\"2026-10-23T20:09:00Z\",\"2026-10-23T20:07:00Z\",\"Refilled\",84.45303532455556,[],{\"id\":27,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":28,\"completedAt\":7,\"expectedEndAt\":29,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":30,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":31},\"01a16d0b-b5b0-7491-b519-289271e29bb2\",\"2026-10-17T20:38:00Z\",\"2026-10-20T20:38:00Z\",155.93636865805556,[],{\"id\":33,\"definitionId\":17,\"definitionName\":18,\"category\":18,\"icon\":19,\"startedAt\":34,\"completedAt\":20,\"expectedEndAt\":35,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":23,\"ageHours\":36,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":37},\"01a16d0b-b62f-7daf-8edf-ef5359ade2ea\",\"2026-10-17T20:12:00Z\",\"2026-10-20T20:12:00Z\",156.36970199175,[],{\"id\":39,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":40,\"completedAt\":28,\"expectedEndAt\":41,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":42,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":43},\"01a16d0b-b5a6-706b-b018-ae040f6b474a\",\"2026-10-14T20:19:00Z\",\"2026-10-17T20:19:00Z\",228.2530353252222,[],{\"id\":45,\"definitionId\":17,\"definitionName\":18,\"category\":18,\"icon\":19,\"startedAt\":46,\"completedAt\":34,\"expectedEndAt\":47,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":23,\"ageHours\":48,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":49},\"01a16d0b-b624-7308-9222-165d9437d5d1\",\"2026-10-14T20:09:00Z\",\"2026-10-17T20:09:00Z\",228.41970199208333,[],{\"id\":51,\"definitionId\":52,\"definitionName\":53,\"category\":54,\"icon\":55,\"startedAt\":56,\"completedAt\":57,\"expectedEndAt\":58,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":59,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":60},\"01a16d0b-b539-713b-881e-10ea8aff8271\",\"01a16d0b-b51e-7a84-997b-9b0f93de83e0\",\"CGM Sensor\",\"Sensor\",\"radio\",\"2026-10-04T21:08:00Z\",\"2026-10-14T22:11:00Z\",\"2026-10-14T21:08:00Z\",467.4363686588611,[],{\"id\":62,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":63,\"completedAt\":40,\"expectedEndAt\":64,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":65,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":66},\"01a16d0b-b59b-71a1-9992-6006eaf1282e\",\"2026-10-11T21:45:00Z\",\"2026-10-14T21:45:00Z\",298.81970199230557,[],{\"id\":68,\"definitionId\":17,\"definitionName\":18,\"category\":18,\"icon\":19,\"startedAt\":69,\"completedAt\":46,\"expectedEndAt\":70,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":23,\"ageHours\":71,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":72},\"01a16d0b-b61a-775d-986d-df1ea46af726\",\"2026-10-11T19:33:00Z\",\"2026-10-14T19:33:00Z\",301.0197019924167,[],{\"id\":74,\"definitionId\":75,\"definitionName\":76,\"category\":77,\"icon\":78,\"startedAt\":79,\"completedAt\":80,\"expectedEndAt\":81,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":82,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":83},\"01a16d0b-b64e-7c72-b595-b7c9fba384a4\",\"01a16d0b-b64a-7df9-a633-b36a33b9378d\",\"Pump Battery\",\"Battery\",\"battery\",\"2026-09-22T09:44:00Z\",\"2026-10-13T08:33:00Z\",\"2026-10-13T09:44:00Z\",766.8363686592222,[],{\"id\":85,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":86,\"completedAt\":63,\"expectedEndAt\":87,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":88,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":89},\"01a16d0b-b591-7a9c-8baa-3d3f0bea9db0\",\"2026-10-08T20:00:00Z\",\"2026-10-11T20:00:00Z\",372.56970199269443,[],{\"id\":91,\"definitionId\":17,\"definitionName\":18,\"category\":18,\"icon\":19,\"startedAt\":92,\"completedAt\":69,\"expectedEndAt\":93,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":23,\"ageHours\":94,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":95},\"01a16d0b-b611-7b9a-ac16-e6da82051d37\",\"2026-10-08T20:37:00Z\",\"2026-10-11T20:37:00Z\",371.9530353261389,[],{\"id\":97,\"definitionId\":17,\"definitionName\":18,\"category\":18,\"icon\":19,\"startedAt\":98,\"completedAt\":92,\"expectedEndAt\":92,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":23,\"ageHours\":99,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":100},\"01a16d0b-b604-7055-b4ce-99814e06fd95\",\"2026-10-05T20:37:00Z\",443.95303532625,[],{\"id\":102,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":103,\"completedAt\":86,\"expectedEndAt\":104,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":105,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":106},\"01a16d0b-b586-7e6e-9398-611790f85e7e\",\"2026-10-05T21:03:00Z\",\"2026-10-08T21:03:00Z\",443.51970199302775,[],{\"id\":108,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":109,\"completedAt\":103,\"expectedEndAt\":110,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":111,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":112},\"01a16d0b-b57b-7981-aab1-bd5b5e9cafe4\",\"2026-10-02T20:53:00Z\",\"2026-10-05T20:53:00Z\",515.6863686598056,[],{\"id\":114,\"definitionId\":17,\"definitionName\":18,\"category\":18,\"icon\":19,\"startedAt\":115,\"completedAt\":98,\"expectedEndAt\":116,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":23,\"ageHours\":117,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":118},\"01a16d0b-b5f8-7337-8bd9-fb627872dc78\",\"2026-10-02T22:57:00Z\",\"2026-10-05T22:57:00Z\",513.6197019932222,[],{\"id\":120,\"definitionId\":52,\"definitionName\":53,\"category\":54,\"icon\":55,\"startedAt\":121,\"completedAt\":56,\"expectedEndAt\":122,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":123,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":124},\"01a16d0b-b52e-7bd5-856c-5951390938a5\",\"2026-09-24T22:55:00Z\",\"2026-10-04T22:55:00Z\",705.6530353266667,[],{\"id\":126,\"definitionId\":17,\"definitionName\":18,\"category\":18,\"icon\":19,\"startedAt\":127,\"completedAt\":115,\"expectedEndAt\":128,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":23,\"ageHours\":129,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":130},\"01a16d0b-b5ef-74a9-8715-ec4a4d0d43b6\",\"2026-09-29T21:22:00Z\",\"2026-10-02T21:22:00Z\",587.2030353269722,[],{\"id\":132,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":133,\"completedAt\":109,\"expectedEndAt\":134,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":135,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":136},\"01a16d0b-b570-701d-8a93-bda8c196b636\",\"2026-09-29T22:02:00Z\",\"2026-10-02T22:02:00Z\",586.5363686604167,[],{\"id\":138,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":139,\"completedAt\":133,\"expectedEndAt\":140,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":141,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":142},\"01a16d0b-b566-7ded-be65-f7cab6e8e134\",\"2026-09-26T23:03:00Z\",\"2026-09-29T23:03:00Z\",657.5197019938611,[],{\"id\":144,\"definitionId\":17,\"definitionName\":18,\"category\":18,\"icon\":19,\"startedAt\":145,\"completedAt\":127,\"expectedEndAt\":146,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":23,\"ageHours\":147,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":148},\"01a16d0b-b5e2-77e4-91c9-a31bcb62c2e9\",\"2026-09-26T22:30:00Z\",\"2026-09-29T22:30:00Z\",658.069701994,[],{\"id\":150,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":151,\"completedAt\":139,\"expectedEndAt\":152,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":153,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":154},\"01a16d0b-b558-7b67-ae4f-eb96da5d2272\",\"2026-09-23T20:59:00Z\",\"2026-09-26T20:59:00Z\",731.5863686607778,[],{\"id\":156,\"definitionId\":17,\"definitionName\":18,\"category\":18,\"icon\":19,\"startedAt\":157,\"completedAt\":145,\"expectedEndAt\":158,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":23,\"ageHours\":159,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":160},\"01a16d0b-b5d8-72c9-956c-c094e9c43276\",\"2026-09-23T22:22:00Z\",\"2026-09-26T22:22:00Z\",730.2030353275555,[],{\"id\":162,\"definitionId\":52,\"definitionName\":53,\"category\":54,\"icon\":55,\"startedAt\":163,\"completedAt\":121,\"expectedEndAt\":164,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":165,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":166},\"01a16d0b-b523-7294-aeb5-71a1c764faf7\",\"2026-09-15T00:16:00Z\",\"2026-09-25T00:16:00Z\",944.3030353276389,[],{\"id\":168,\"definitionId\":17,\"definitionName\":18,\"category\":18,\"icon\":19,\"startedAt\":169,\"completedAt\":157,\"expectedEndAt\":170,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":23,\"ageHours\":171,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":172},\"01a16d0b-b5ce-7b5e-b291-56c064468a50\",\"2026-09-20T23:02:00Z\",\"2026-09-23T23:02:00Z\",801.5363686610833,[],{\"id\":174,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":175,\"completedAt\":151,\"expectedEndAt\":176,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":177,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":178},\"01a16d0b-b54e-7066-b888-bb5081d001c4\",\"2026-09-20T22:15:00Z\",\"2026-09-23T22:15:00Z\",802.3197019945278,[]]",
+  "getActiveAlerts": "[[]]",
+  "getSummary": "[{\"current\":1,\"history\":9,\"iob\":10,\"cob\":11,\"trackers\":12,\"alarm\":4,\"predictions\":4,\"serverMills\":47},{\"sgv\":2,\"direction\":3,\"trendRate\":4,\"delta\":5,\"mills\":6,\"noise\":7,\"status\":8},103,\"FortyFiveDown\",null,-2.8,1792830600000,1,\"InRange\",[],9.03,75,[13,24,29,38],{\"id\":14,\"definitionId\":15,\"name\":16,\"icon\":17,\"category\":18,\"mode\":19,\"ageHours\":20,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":22,\"percentElapsed\":23},\"01a16d0b-b5c4-73ba-8cfd-d04618de3ec5\",\"01a16d0b-b54a-7884-8615-1c4a91b9f61c\",\"Infusion Site\",\"syringe\",\"Cannula\",\"Duration\",12.4,\"Info\",72,17,{\"id\":25,\"definitionId\":26,\"name\":27,\"icon\":28,\"category\":27,\"mode\":19,\"ageHours\":20,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":22,\"percentElapsed\":23},\"01a16d0b-b644-75e7-8dbe-6bcb8df254c9\",\"01a16d0b-b5ca-7dfd-8c0f-54a322a9c231\",\"Reservoir\",\"cylinder\",{\"id\":30,\"definitionId\":31,\"name\":32,\"icon\":33,\"category\":34,\"mode\":19,\"ageHours\":35,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":36,\"percentElapsed\":37},\"01a16d0b-b543-731e-9ecf-ed1e1e9cb912\",\"01a16d0b-b51e-7a84-997b-9b0f93de83e0\",\"CGM Sensor\",\"radio\",\"Sensor\",226.4,240,94,{\"id\":39,\"definitionId\":40,\"name\":41,\"icon\":42,\"category\":43,\"mode\":19,\"ageHours\":44,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":45,\"percentElapsed\":46},\"01a16d0b-b658-7613-8044-c0c12159fc7a\",\"01a16d0b-b64a-7df9-a633-b36a33b9378d\",\"Pump Battery\",\"battery\",\"Battery\",264,504,52,1792830851474]",
+  "getMyTenants": "[[1],{\"id\":2,\"slug\":3,\"displayName\":4,\"isActive\":5,\"sysCreatedAt\":6},\"01a16d0b-6d1e-7efc-b7c1-312b09b5d3f2\",\"films-1792830827786\",\"Sample\",true,\"2026-10-24T08:33:47.80701Z\"]",
+  "getAll": "[[]]",
+  "getSessionInfo": "[{\"isAuthenticated\":1,\"subjectId\":2,\"name\":3,\"email\":4,\"avatarUrl\":4,\"roles\":5,\"permissions\":7,\"expiresAt\":8},true,\"01a16d0b-6d39-7f79-bd78-fb86b69969a0\",\"dev\",null,[6],\"Owner\",[],\"2026-10-24T08:49:06+00:00\"]"
+ },
+ "phases": [
+  {
+   "results": {}
+  },
+  {
+   "results": {
+    "getTriggerEventTypes": "[[1,2,3,4,5,6,7,8,9,10],\"Sensor Start\",\"Sensor Change\",\"Sensor Stop\",\"Transmitter Sensor Insert\",\"Site Change\",\"Cannula Change\",\"Pod Change\",\"Insulin Change\",\"Reservoir Change\",\"Pump Battery Change\"]"
+   }
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {
+    "updateDefinition": "[{\"submission\":1,\"result\":2},true,{\"id\":3,\"name\":4,\"description\":5,\"category\":6,\"icon\":7,\"triggerEventTypes\":8,\"triggerNotesContains\":5,\"lifespanHours\":10,\"lowReservoirUnits\":5,\"lowReservoirUrgency\":11,\"notificationThresholds\":12,\"isFavorite\":18,\"dashboardVisibility\":20,\"visibility\":21,\"startEventType\":9,\"completionEventType\":5,\"mode\":22,\"createdAt\":23,\"updatedAt\":24},\"01a16d0b-b54a-7884-8615-1c4a91b9f61c\",\"Infusion Site\",null,\"Cannula\",\"syringe\",[9],\"Site Change\",72,\"Warn\",[13],{\"id\":14,\"urgency\":11,\"hours\":15,\"description\":16,\"displayOrder\":17,\"pushEnabled\":18,\"audioEnabled\":18,\"audioSound\":5,\"vibrateEnabled\":18,\"respectQuietHours\":1,\"alertRuleId\":5,\"offsetMinutes\":19},\"01a16d0b-e901-7ecd-bf59-8dcd66cd654c\",-6,\"Change your site tonight\",0,false,3960,\"Always\",\"Private\",\"Duration\",\"2026-10-24T08:34:06.282387Z\",\"2026-10-24T08:34:19.567586Z\"]",
+    "getDefinitions": "[[1,17,36,46],{\"id\":2,\"name\":3,\"description\":4,\"category\":5,\"icon\":6,\"triggerEventTypes\":7,\"triggerNotesContains\":4,\"lifespanHours\":9,\"lowReservoirUnits\":4,\"lowReservoirUrgency\":10,\"notificationThresholds\":11,\"isFavorite\":12,\"dashboardVisibility\":13,\"visibility\":14,\"startEventType\":8,\"completionEventType\":4,\"mode\":15,\"createdAt\":16,\"updatedAt\":4},\"01a16d0b-b51e-7a84-997b-9b0f93de83e0\",\"CGM Sensor\",null,\"Sensor\",\"radio\",[8],\"Sensor Start\",240,\"Warn\",[],false,\"Always\",\"Private\",\"Duration\",\"2026-10-24T08:34:06.23899Z\",{\"id\":18,\"name\":19,\"description\":4,\"category\":20,\"icon\":21,\"triggerEventTypes\":22,\"triggerNotesContains\":4,\"lifespanHours\":24,\"lowReservoirUnits\":4,\"lowReservoirUrgency\":10,\"notificationThresholds\":25,\"isFavorite\":12,\"dashboardVisibility\":13,\"visibility\":14,\"startEventType\":23,\"completionEventType\":4,\"mode\":15,\"createdAt\":34,\"updatedAt\":35},\"01a16d0b-b54a-7884-8615-1c4a91b9f61c\",\"Infusion Site\",\"Cannula\",\"syringe\",[23],\"Site Change\",72,[26],{\"id\":27,\"urgency\":10,\"hours\":28,\"description\":29,\"displayOrder\":30,\"pushEnabled\":12,\"audioEnabled\":12,\"audioSound\":4,\"vibrateEnabled\":12,\"respectQuietHours\":31,\"alertRuleId\":32,\"offsetMinutes\":33},\"01a16d0b-e901-7ecd-bf59-8dcd66cd654c\",-6,\"Change your site tonight\",0,true,\"01a16d0b-e977-7623-b624-6b335566e627\",3960,\"2026-10-24T08:34:06.282387Z\",\"2026-10-24T08:34:19.567586Z\",{\"id\":37,\"name\":38,\"description\":4,\"category\":39,\"icon\":40,\"triggerEventTypes\":41,\"triggerNotesContains\":4,\"lifespanHours\":43,\"lowReservoirUnits\":4,\"lowReservoirUrgency\":10,\"notificationThresholds\":44,\"isFavorite\":12,\"dashboardVisibility\":13,\"visibility\":14,\"startEventType\":42,\"completionEventType\":4,\"mode\":15,\"createdAt\":45,\"updatedAt\":4},\"01a16d0b-b64a-7df9-a633-b36a33b9378d\",\"Pump Battery\",\"Battery\",\"battery\",[42],\"Pump Battery Change\",504,[],\"2026-10-24T08:34:06.538726Z\",{\"id\":47,\"name\":48,\"description\":4,\"category\":48,\"icon\":49,\"triggerEventTypes\":50,\"triggerNotesContains\":4,\"lifespanHours\":24,\"lowReservoirUnits\":4,\"lowReservoirUrgency\":10,\"notificationThresholds\":52,\"isFavorite\":12,\"dashboardVisibility\":13,\"visibility\":14,\"startEventType\":51,\"completionEventType\":4,\"mode\":15,\"createdAt\":53,\"updatedAt\":4},\"01a16d0b-b5ca-7dfd-8c0f-54a322a9c231\",\"Reservoir\",\"cylinder\",[51],\"Insulin Change\",[],\"2026-10-24T08:34:06.410434Z\"]",
+    "getActiveInstances": "[[1,17,26,36],{\"id\":2,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":7,\"completedAt\":8,\"expectedEndAt\":9,\"scheduledAt\":8,\"startNotes\":8,\"completionNotes\":8,\"completionReason\":8,\"ageHours\":10,\"isActive\":11,\"lastAckedAt\":8,\"ackSnoozeMins\":8,\"schedule\":12},\"01a16d0b-b5c4-73ba-8cfd-d04618de3ec5\",\"01a16d0b-b54a-7884-8615-1c4a91b9f61c\",\"Infusion Site\",\"Cannula\",\"syringe\",\"2026-10-23T20:12:00Z\",null,\"2026-10-26T20:12:00Z\",12.372156295555556,true,[13],{\"urgency\":14,\"firesAt\":15,\"description\":16},\"Warn\",\"2026-10-26T14:12:00Z\",\"Change your site tonight\",{\"id\":18,\"definitionId\":19,\"definitionName\":20,\"category\":20,\"icon\":21,\"startedAt\":22,\"completedAt\":8,\"expectedEndAt\":23,\"scheduledAt\":8,\"startNotes\":8,\"completionNotes\":8,\"completionReason\":8,\"ageHours\":24,\"isActive\":11,\"lastAckedAt\":8,\"ackSnoozeMins\":8,\"schedule\":25},\"01a16d0b-b644-75e7-8dbe-6bcb8df254c9\",\"01a16d0b-b5ca-7dfd-8c0f-54a322a9c231\",\"Reservoir\",\"cylinder\",\"2026-10-23T20:09:00Z\",\"2026-10-26T20:09:00Z\",12.42215659025,[],{\"id\":27,\"definitionId\":28,\"definitionName\":29,\"category\":30,\"icon\":31,\"startedAt\":32,\"completedAt\":8,\"expectedEndAt\":33,\"scheduledAt\":8,\"startNotes\":8,\"completionNotes\":8,\"completionReason\":8,\"ageHours\":34,\"isActive\":11,\"lastAckedAt\":8,\"ackSnoozeMins\":8,\"schedule\":35},\"01a16d0b-b543-731e-9ecf-ed1e1e9cb912\",\"01a16d0b-b51e-7a84-997b-9b0f93de83e0\",\"CGM Sensor\",\"Sensor\",\"radio\",\"2026-10-14T22:11:00Z\",\"2026-10-24T22:11:00Z\",226.38882325802777,[],{\"id\":37,\"definitionId\":38,\"definitionName\":39,\"category\":40,\"icon\":41,\"startedAt\":42,\"completedAt\":8,\"expectedEndAt\":43,\"scheduledAt\":8,\"startNotes\":8,\"completionNotes\":8,\"completionReason\":8,\"ageHours\":44,\"isActive\":11,\"lastAckedAt\":8,\"ackSnoozeMins\":8,\"schedule\":45},\"01a16d0b-b658-7613-8044-c0c12159fc7a\",\"01a16d0b-b64a-7df9-a633-b36a33b9378d\",\"Pump Battery\",\"Battery\",\"battery\",\"2026-10-13T08:33:00Z\",\"2026-11-03T08:33:00Z\",264.02215659144446,[]]",
+    "getInstanceHistory": "[[1,19,30,38,44,52,58,69,77,83,94,102,108,113,121,129,135,141,147,155,163,169,177,183,189,195],{\"id\":2,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":7,\"completedAt\":8,\"expectedEndAt\":9,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":12,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":14},\"01a16d0b-b5ba-7d9d-86a3-ac41cfc135b3\",\"01a16d0b-b54a-7884-8615-1c4a91b9f61c\",\"Infusion Site\",\"Cannula\",\"syringe\",\"2026-10-20T21:42:00Z\",\"2026-10-23T20:12:00Z\",\"2026-10-23T21:42:00Z\",null,\"Completed\",82.87215640747222,false,[15],{\"urgency\":16,\"firesAt\":17,\"description\":18},\"Warn\",\"2026-10-23T15:42:00Z\",\"Change your site tonight\",{\"id\":20,\"definitionId\":21,\"definitionName\":22,\"category\":22,\"icon\":23,\"startedAt\":24,\"completedAt\":25,\"expectedEndAt\":26,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":27,\"ageHours\":28,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":29},\"01a16d0b-b639-744a-ad85-b8d48661114b\",\"01a16d0b-b5ca-7dfd-8c0f-54a322a9c231\",\"Reservoir\",\"cylinder\",\"2026-10-20T20:07:00Z\",\"2026-10-23T20:09:00Z\",\"2026-10-23T20:07:00Z\",\"Refilled\",84.4554899236389,[],{\"id\":31,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":32,\"completedAt\":7,\"expectedEndAt\":33,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":34,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":35},\"01a16d0b-b5b0-7491-b519-289271e29bb2\",\"2026-10-17T20:38:00Z\",\"2026-10-20T20:38:00Z\",155.93882325802778,[36],{\"urgency\":16,\"firesAt\":37,\"description\":18},\"2026-10-20T14:38:00Z\",{\"id\":39,\"definitionId\":21,\"definitionName\":22,\"category\":22,\"icon\":23,\"startedAt\":40,\"completedAt\":24,\"expectedEndAt\":41,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":27,\"ageHours\":42,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":43},\"01a16d0b-b62f-7daf-8edf-ef5359ade2ea\",\"2026-10-17T20:12:00Z\",\"2026-10-20T20:12:00Z\",156.3721566235278,[],{\"id\":45,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":46,\"completedAt\":32,\"expectedEndAt\":47,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":48,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":49},\"01a16d0b-b5a6-706b-b018-ae040f6b474a\",\"2026-10-14T20:19:00Z\",\"2026-10-17T20:19:00Z\",228.25548995708334,[50],{\"urgency\":16,\"firesAt\":51,\"description\":18},\"2026-10-17T14:19:00Z\",{\"id\":53,\"definitionId\":21,\"definitionName\":22,\"category\":22,\"icon\":23,\"startedAt\":54,\"completedAt\":40,\"expectedEndAt\":55,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":27,\"ageHours\":56,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":57},\"01a16d0b-b624-7308-9222-165d9437d5d1\",\"2026-10-14T20:09:00Z\",\"2026-10-17T20:09:00Z\",228.42215662411112,[],{\"id\":59,\"definitionId\":60,\"definitionName\":61,\"category\":62,\"icon\":63,\"startedAt\":64,\"completedAt\":65,\"expectedEndAt\":66,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":67,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":68},\"01a16d0b-b539-713b-881e-10ea8aff8271\",\"01a16d0b-b51e-7a84-997b-9b0f93de83e0\",\"CGM Sensor\",\"Sensor\",\"radio\",\"2026-10-04T21:08:00Z\",\"2026-10-14T22:11:00Z\",\"2026-10-14T21:08:00Z\",467.4388232908889,[],{\"id\":70,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":71,\"completedAt\":46,\"expectedEndAt\":72,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":73,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":74},\"01a16d0b-b59b-71a1-9992-6006eaf1282e\",\"2026-10-11T21:45:00Z\",\"2026-10-14T21:45:00Z\",298.8221566243611,[75],{\"urgency\":16,\"firesAt\":76,\"description\":18},\"2026-10-14T15:45:00Z\",{\"id\":78,\"definitionId\":21,\"definitionName\":22,\"category\":22,\"icon\":23,\"startedAt\":79,\"completedAt\":54,\"expectedEndAt\":80,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":27,\"ageHours\":81,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":82},\"01a16d0b-b61a-775d-986d-df1ea46af726\",\"2026-10-11T19:33:00Z\",\"2026-10-14T19:33:00Z\",301.0221566246111,[],{\"id\":84,\"definitionId\":85,\"definitionName\":86,\"category\":87,\"icon\":88,\"startedAt\":89,\"completedAt\":90,\"expectedEndAt\":91,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":92,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":93},\"01a16d0b-b64e-7c72-b595-b7c9fba384a4\",\"01a16d0b-b64a-7df9-a633-b36a33b9378d\",\"Pump Battery\",\"Battery\",\"battery\",\"2026-09-22T09:44:00Z\",\"2026-10-13T08:33:00Z\",\"2026-10-13T09:44:00Z\",766.8388232913888,[],{\"id\":95,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":96,\"completedAt\":71,\"expectedEndAt\":97,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":98,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":99},\"01a16d0b-b591-7a9c-8baa-3d3f0bea9db0\",\"2026-10-08T20:00:00Z\",\"2026-10-11T20:00:00Z\",372.57215662480553,[100],{\"urgency\":16,\"firesAt\":101,\"description\":18},\"2026-10-11T14:00:00Z\",{\"id\":103,\"definitionId\":21,\"definitionName\":22,\"category\":22,\"icon\":23,\"startedAt\":104,\"completedAt\":79,\"expectedEndAt\":105,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":27,\"ageHours\":106,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":107},\"01a16d0b-b611-7b9a-ac16-e6da82051d37\",\"2026-10-08T20:37:00Z\",\"2026-10-11T20:37:00Z\",371.9554899583056,[],{\"id\":109,\"definitionId\":21,\"definitionName\":22,\"category\":22,\"icon\":23,\"startedAt\":110,\"completedAt\":104,\"expectedEndAt\":104,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":27,\"ageHours\":111,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":112},\"01a16d0b-b604-7055-b4ce-99814e06fd95\",\"2026-10-05T20:37:00Z\",443.9554899583889,[],{\"id\":114,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":115,\"completedAt\":96,\"expectedEndAt\":116,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":117,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":118},\"01a16d0b-b586-7e6e-9398-611790f85e7e\",\"2026-10-05T21:03:00Z\",\"2026-10-08T21:03:00Z\",443.52215662516664,[119],{\"urgency\":16,\"firesAt\":120,\"description\":18},\"2026-10-08T15:03:00Z\",{\"id\":122,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":123,\"completedAt\":115,\"expectedEndAt\":124,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":125,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":126},\"01a16d0b-b57b-7981-aab1-bd5b5e9cafe4\",\"2026-10-02T20:53:00Z\",\"2026-10-05T20:53:00Z\",515.688823292,[127],{\"urgency\":16,\"firesAt\":128,\"description\":18},\"2026-10-05T14:53:00Z\",{\"id\":130,\"definitionId\":21,\"definitionName\":22,\"category\":22,\"icon\":23,\"startedAt\":131,\"completedAt\":110,\"expectedEndAt\":132,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":27,\"ageHours\":133,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":134},\"01a16d0b-b5f8-7337-8bd9-fb627872dc78\",\"2026-10-02T22:57:00Z\",\"2026-10-05T22:57:00Z\",513.6221566257223,[],{\"id\":136,\"definitionId\":60,\"definitionName\":61,\"category\":62,\"icon\":63,\"startedAt\":137,\"completedAt\":64,\"expectedEndAt\":138,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":139,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":140},\"01a16d0b-b52e-7bd5-856c-5951390938a5\",\"2026-09-24T22:55:00Z\",\"2026-10-04T22:55:00Z\",705.6554899591389,[],{\"id\":142,\"definitionId\":21,\"definitionName\":22,\"category\":22,\"icon\":23,\"startedAt\":143,\"completedAt\":131,\"expectedEndAt\":144,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":27,\"ageHours\":145,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":146},\"01a16d0b-b5ef-74a9-8715-ec4a4d0d43b6\",\"2026-09-29T21:22:00Z\",\"2026-10-02T21:22:00Z\",587.2054899591944,[],{\"id\":148,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":149,\"completedAt\":123,\"expectedEndAt\":150,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":151,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":152},\"01a16d0b-b570-701d-8a93-bda8c196b636\",\"2026-09-29T22:02:00Z\",\"2026-10-02T22:02:00Z\",586.5388232926389,[153],{\"urgency\":16,\"firesAt\":154,\"description\":18},\"2026-10-02T16:02:00Z\",{\"id\":156,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":157,\"completedAt\":149,\"expectedEndAt\":158,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":159,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":160},\"01a16d0b-b566-7ded-be65-f7cab6e8e134\",\"2026-09-26T23:03:00Z\",\"2026-09-29T23:03:00Z\",657.5221566261389,[161],{\"urgency\":16,\"firesAt\":162,\"description\":18},\"2026-09-29T17:03:00Z\",{\"id\":164,\"definitionId\":21,\"definitionName\":22,\"category\":22,\"icon\":23,\"startedAt\":165,\"completedAt\":143,\"expectedEndAt\":166,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":27,\"ageHours\":167,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":168},\"01a16d0b-b5e2-77e4-91c9-a31bcb62c2e9\",\"2026-09-26T22:30:00Z\",\"2026-09-29T22:30:00Z\",658.0721566263055,[],{\"id\":170,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":171,\"completedAt\":157,\"expectedEndAt\":172,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":173,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":174},\"01a16d0b-b558-7b67-ae4f-eb96da5d2272\",\"2026-09-23T20:59:00Z\",\"2026-09-26T20:59:00Z\",731.5888232931111,[175],{\"urgency\":16,\"firesAt\":176,\"description\":18},\"2026-09-26T14:59:00Z\",{\"id\":178,\"definitionId\":21,\"definitionName\":22,\"category\":22,\"icon\":23,\"startedAt\":179,\"completedAt\":165,\"expectedEndAt\":180,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":27,\"ageHours\":181,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":182},\"01a16d0b-b5d8-72c9-956c-c094e9c43276\",\"2026-09-23T22:22:00Z\",\"2026-09-26T22:22:00Z\",730.2054899599444,[],{\"id\":184,\"definitionId\":60,\"definitionName\":61,\"category\":62,\"icon\":63,\"startedAt\":185,\"completedAt\":137,\"expectedEndAt\":186,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":187,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":188},\"01a16d0b-b523-7294-aeb5-71a1c764faf7\",\"2026-09-15T00:16:00Z\",\"2026-09-25T00:16:00Z\",944.3054899600278,[],{\"id\":190,\"definitionId\":21,\"definitionName\":22,\"category\":22,\"icon\":23,\"startedAt\":191,\"completedAt\":179,\"expectedEndAt\":192,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":27,\"ageHours\":193,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":194},\"01a16d0b-b5ce-7b5e-b291-56c064468a50\",\"2026-09-20T23:02:00Z\",\"2026-09-23T23:02:00Z\",801.5388232934445,[],{\"id\":196,\"definitionId\":3,\"definitionName\":4,\"category\":5,\"icon\":6,\"startedAt\":197,\"completedAt\":171,\"expectedEndAt\":198,\"scheduledAt\":10,\"startNotes\":10,\"completionNotes\":10,\"completionReason\":11,\"ageHours\":199,\"isActive\":13,\"lastAckedAt\":10,\"ackSnoozeMins\":10,\"schedule\":200},\"01a16d0b-b54e-7066-b888-bb5081d001c4\",\"2026-09-20T22:15:00Z\",\"2026-09-23T22:15:00Z\",802.3221566268611,[201],{\"urgency\":16,\"firesAt\":202,\"description\":18},\"2026-09-23T16:15:00Z\"]",
+    "getPresets": "[[]]",
+    "getActiveAlerts": "[[]]"
+   }
+  }
+ ]
+}

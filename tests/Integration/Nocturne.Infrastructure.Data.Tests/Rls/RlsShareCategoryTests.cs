@@ -444,7 +444,14 @@ public class RlsShareCategoryTests
             else
             {
                 usingExpr.Should().Contain($"'{scope}'", $"{table} must gate on its governing scope {scope}");
-                if (ShareDataCategories.RecencyColumnFor(table) is not null)
+                if (ShareDataCategories.SpanEndColumnFor(table) is { } end)
+                {
+                    usingExpr.Should().Contain("share_full_history",
+                        $"{table} holds spans, so its policy must clamp shares without full history by overlap");
+                    usingExpr.Should().Contain($"{end} IS NULL",
+                        $"{table} is clamped by overlap, so a span still running stays visible");
+                }
+                else if (ShareDataCategories.RecencyColumnFor(table) is not null)
                 {
                     usingExpr.Should().Contain("share_full_history",
                         $"{table} is time-series data, so its policy must clamp shares without full history to 24 hours");

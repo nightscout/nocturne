@@ -2,11 +2,7 @@ using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Clinical.Schedules;
 
-/// <summary>
-/// Resolves the active value from a time-of-day schedule at a given seconds-from-midnight.
-/// Finds the most recent entry at-or-before the query time, defaulting to the first entry
-/// when the query time precedes all entries.
-/// </summary>
+/// <summary>Resolves the active value of a time-of-day schedule by <see cref="ScheduleEntryTime.TryEntryAt{T}"/>.</summary>
 public static class ScheduleResolution
 {
     /// <summary>
@@ -15,21 +11,9 @@ public static class ScheduleResolution
     /// <returns>The active value, or null if the list is empty.</returns>
     public static double? FindValueAtTime(List<ScheduleEntry> entries, int secondsFromMidnight)
     {
-        if (entries.Count == 0)
-            return null;
-
-        var sorted = entries.OrderBy(e => e.TimeAsSeconds ?? 0).ToList();
-        var result = sorted[0].Value;
-
-        foreach (var entry in sorted)
-        {
-            if (secondsFromMidnight >= (entry.TimeAsSeconds ?? 0))
-                result = entry.Value;
-            else
-                break;
-        }
-
-        return result;
+        return ScheduleEntryTime.TryEntryAt(entries, secondsFromMidnight, SecondsOf, out var entry)
+            ? entry.Value
+            : null;
     }
 
     /// <summary>
@@ -41,20 +25,12 @@ public static class ScheduleResolution
         int secondsFromMidnight
     )
     {
-        if (entries.Count == 0)
-            return null;
-
-        var sorted = entries.OrderBy(e => e.TimeAsSeconds ?? 0).ToList();
-        var result = (sorted[0].Low, sorted[0].High);
-
-        foreach (var entry in sorted)
-        {
-            if (secondsFromMidnight >= (entry.TimeAsSeconds ?? 0))
-                result = (entry.Low, entry.High);
-            else
-                break;
-        }
-
-        return result;
+        return ScheduleEntryTime.TryEntryAt(entries, secondsFromMidnight, SecondsOf, out var entry)
+            ? (entry.Low, entry.High)
+            : null;
     }
+
+    private static int SecondsOf(ScheduleEntry entry) => ScheduleEntryTime.SecondsOf(entry.TimeAsSeconds, entry.Time);
+
+    private static int SecondsOf(TargetRangeEntry entry) => ScheduleEntryTime.SecondsOf(entry.TimeAsSeconds, entry.Time);
 }

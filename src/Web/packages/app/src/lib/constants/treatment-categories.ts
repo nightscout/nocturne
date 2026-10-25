@@ -1,4 +1,5 @@
 import type { Treatment, Bolus, CarbIntake } from "$lib/api";
+import { NightscoutEventType } from "$lib/constants/nightscout-event-types";
 
 /**
  * Treatment category definitions for UI organization
@@ -7,42 +8,52 @@ import type { Treatment, Bolus, CarbIntake } from "$lib/api";
 export const TREATMENT_CATEGORIES = {
   bolus: {
     id: "bolus",
-    name: "Bolus & Insulin",
+    name: "Bolus & insulin",
     description: "Insulin doses, corrections, and combo boluses",
-    eventTypes: ["Snack Bolus", "Meal Bolus", "Correction Bolus", "Combo Bolus"],
+    eventTypes: [
+      NightscoutEventType.SnackBolus,
+      NightscoutEventType.MealBolus,
+      NightscoutEventType.CorrectionBolus,
+      NightscoutEventType.ComboBolus,
+    ],
     icon: "syringe" as const,
     colorClass: "text-entry-bolus",
     badge: "entry-bolus" as const,
   },
   basal: {
     id: "basal",
-    name: "Basal & Profiles",
+    name: "Basal & profiles",
     description: "Temp basals and profile switches",
-    eventTypes: ["Temp Basal Start", "Temp Basal End", "Temp Basal", "Profile Switch"],
+    eventTypes: [
+      NightscoutEventType.TempBasalStart,
+      NightscoutEventType.TempBasalEnd,
+      NightscoutEventType.TempBasal,
+      NightscoutEventType.ProfileSwitch,
+    ],
     icon: "activity" as const,
     colorClass: "text-entry-basal",
     badge: "entry-basal" as const,
   },
   carbs: {
     id: "carbs",
-    name: "Carbs & Nutrition",
+    name: "Carbs & nutrition",
     description: "Meals, snacks, and carb corrections",
-    eventTypes: ["Carb Correction"],
+    eventTypes: [NightscoutEventType.CarbCorrection],
     icon: "utensils" as const,
     colorClass: "text-entry-carbs",
     badge: "entry-carbs" as const,
   },
   device: {
     id: "device",
-    name: "Device Events",
+    name: "Device events",
     description: "Sensor, pump, and site changes",
     eventTypes: [
-      "Site Change",
-      "Sensor Start",
-      "Sensor Change",
-      "Sensor Stop",
-      "Pump Battery Change",
-      "Insulin Change",
+      NightscoutEventType.SiteChange,
+      NightscoutEventType.SensorStart,
+      NightscoutEventType.SensorChange,
+      NightscoutEventType.SensorStop,
+      NightscoutEventType.PumpBatteryChange,
+      NightscoutEventType.InsulinChange,
     ],
     icon: "smartphone" as const,
     colorClass: "text-entry-device-event",
@@ -50,9 +61,15 @@ export const TREATMENT_CATEGORIES = {
   },
   notes: {
     id: "notes",
-    name: "Notes & Alerts",
+    name: "Notes & alerts",
     description: "Notes, announcements, and BG checks",
-    eventTypes: ["BG Check", "Note", "Announcement", "Question", "D.A.D. Alert"],
+    eventTypes: [
+      NightscoutEventType.BgCheck,
+      NightscoutEventType.Note,
+      NightscoutEventType.Announcement,
+      NightscoutEventType.Question,
+      NightscoutEventType.DadAlert,
+    ],
     icon: "file-text" as const,
     colorClass: "text-muted-foreground",
     badge: "secondary" as const,

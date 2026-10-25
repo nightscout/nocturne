@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { formatNumber, formatNumericDate } from "$lib/utils/formatting";
+  import {
+    formatInsulinToCarbRatio,
+    formatNumber,
+    formatNumericDate,
+  } from "$lib/utils/formatting";
   import {
     Card,
     CardContent,
@@ -21,6 +25,7 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
   import {
     getInsulinDeliveryStatistics,
@@ -54,7 +59,7 @@
   // returned full daily data.
   const dailyRatiosResource = contextResource(
     () => getDailyBasalBolusRatios(statisticsDates),
-    { errorTitle: "Error Loading Insulin Delivery Data" }
+    { errorTitle: "Error loading insulin delivery data" }
   );
 
   // Headline insulin figures for the selected range. The fixed-bucket
@@ -63,7 +68,7 @@
   const insulinResource = contextResource(
     () => getInsulinDeliveryStatistics(statisticsDates),
     {
-      errorTitle: "Error Loading Insulin Delivery Data",
+      errorTitle: "Error loading insulin delivery data",
       dateParams: reportsParams,
     }
   );
@@ -72,9 +77,13 @@
   // backend-side from pump-confirmed records, bucketed by the user's timezone.
   const hourlyDeliveryResource = contextResource(
     () => getHourlyInsulinDelivery(statisticsDates),
-    { errorTitle: "Error Loading Insulin Delivery Data" }
+    { errorTitle: "Error loading insulin delivery data" }
   );
   const hourlyDelivery = $derived(hourlyDeliveryResource.current);
+  const timeZoneReason = $derived(
+    dailyRatiosResource.current?.timeZoneUnavailableReason ??
+      hourlyDelivery?.timeZoneUnavailableReason
+  );
 
   const emptyStats: InsulinDeliveryStatistics = {
     totalBolus: 0,
@@ -92,7 +101,7 @@
     avgBolus: 0,
     mealBoluses: 0,
     correctionBoluses: 0,
-    icRatio: 0,
+    unpairedCarbs: 0,
     bolusesPerDay: 0,
     carbCount: 0,
     carbBolusCount: 0,
@@ -104,14 +113,6 @@
   const endDate = $derived(insulinResource.date.to);
   const dayCount = $derived(insulinResource.date.dayCount);
 </script>
-
-<svelte:head>
-  <title>Insulin Delivery Report - Nocturne Reports</title>
-  <meta
-    name="description"
-    content="Analyze your insulin delivery patterns including basal/bolus ratios and TDD trends"
-  />
-</svelte:head>
 
 {#if insulinResource.current}
 <div class="@container space-y-8">
@@ -128,7 +129,7 @@
           variant="outline"
           size="sm"
         >
-          Basal Analysis
+          Basal analysis
           <ArrowRight class="h-4 w-4" />
         </Button>
       </div>
@@ -153,12 +154,12 @@
     <CardHeader class="pb-3">
       <CardTitle class="flex items-center gap-2 text-base">
         <HelpCircle class="h-5 w-5 text-info" />
-        Understanding Basal/Bolus Balance
+        Understanding basal/bolus balance
       </CardTitle>
     </CardHeader>
     <CardContent size="sm" class="space-y-2">
       <p>
-        Your <strong>Total Daily Dose (TDD)</strong>
+        Your <strong>total daily dose (TDD)</strong>
         is split between two types of insulin:
       </p>
       <ul class="list-inside list-disc space-y-1 pl-2 text-muted-foreground">
@@ -185,15 +186,23 @@
       { label: "Basal", value: (insulinStats.basalPercent ?? 0).toFixed(0), unit: "%", note: `${(insulinStats.totalBasal ?? 0).toFixed(1)}U total` },
       { label: "Bolus", value: (insulinStats.bolusPercent ?? 0).toFixed(0), unit: "%", note: `${(insulinStats.totalBolus ?? 0).toFixed(1)}U total`, detail: `manual ${(insulinStats.manualBolus ?? 0).toFixed(1)} U / automatic ${(insulinStats.automaticBolus ?? 0).toFixed(1)} U` },
       { label: "Boluses/Day", value: (insulinStats.bolusesPerDay ?? 0).toFixed(1), note: `avg ${(insulinStats.avgBolus ?? 0).toFixed(1)}U each` },
-      { label: "Avg I:C", value: (insulinStats.icRatio ?? 0) > 0 ? `1:${(insulinStats.icRatio ?? 0).toFixed(0)}` : "–", note: `${(insulinStats.totalCarbs ?? 0).toFixed(0)}g carbs` },
+      { label: "ICR", value: formatInsulinToCarbRatio(insulinStats.icRatio), note: (insulinStats.unpairedCarbs ?? 0) > 0 ? `${(insulinStats.unpairedCarbs ?? 0).toFixed(0)} g not paired with a bolus` : undefined },
     ]}
   />
+
+  {#if timeZoneReason}
+    <p class="text-sm text-muted-foreground">
+      <TimeZoneNote reason={timeZoneReason}>
+        This report cannot show insulin by local day or hour of day.
+      </TimeZoneNote>
+    </p>
+  {/if}
 
   <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <PieChart class="h-5 w-5 text-muted-foreground" />
-        Daily Basal/Bolus Breakdown
+        Daily basal/bolus breakdown
       </CardTitle>
       <CardDescription>
         See how your insulin was split each day, against the carbs you logged
@@ -211,7 +220,7 @@
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Syringe class="h-5 w-5 text-muted-foreground" />
-        Hourly Insulin Delivery
+        Hourly insulin delivery
       </CardTitle>
       <CardDescription>
         Average insulin delivered by hour of day, split by basal, manual bolus and automatic bolus
@@ -227,7 +236,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Info class="h-5 w-5 text-muted-foreground" />
-          Bolus Breakdown
+          Bolus breakdown
         </CardTitle>
         <CardDescription>
           Understanding your bolus insulin usage
@@ -236,14 +245,14 @@
       <CardContent>
         <dl class="m-0 divide-y divide-border">
           <div class="flex flex-wrap items-baseline justify-between gap-x-4 py-2 first:pt-0">
-            <dt class="text-sm font-medium text-muted-foreground">Total Boluses</dt>
+            <dt class="text-sm font-medium text-muted-foreground">Total boluses</dt>
             <dd class="m-0 flex items-baseline gap-2">
               <span class="text-lg font-semibold tabular-nums">{insulinStats.manualBolusCount ?? 0}</span>
               <span class="text-xs text-muted-foreground">Over {dayCount} days</span>
             </dd>
           </div>
           <div class="flex flex-wrap items-baseline justify-between gap-x-4 py-2">
-            <dt class="text-sm font-medium text-muted-foreground">Meal Boluses</dt>
+            <dt class="text-sm font-medium text-muted-foreground">Meal boluses</dt>
             <dd class="m-0 flex items-baseline gap-2">
               <span class="text-lg font-semibold tabular-nums">{insulinStats.mealBoluses ?? 0}</span>
               <span class="text-xs text-muted-foreground">
@@ -257,7 +266,7 @@
             </dd>
           </div>
           <div class="flex flex-wrap items-baseline justify-between gap-x-4 py-2">
-            <dt class="text-sm font-medium text-muted-foreground">Correction Boluses</dt>
+            <dt class="text-sm font-medium text-muted-foreground">Correction boluses</dt>
             <dd class="m-0 flex items-baseline gap-2">
               <span class="text-lg font-semibold tabular-nums">{insulinStats.correctionBoluses ?? 0}</span>
               <span class="text-xs text-muted-foreground">
@@ -280,28 +289,25 @@
     <CardHeader>
       <CardTitle class="flex items-center gap-2 text-base">
         <Layers class="h-5 w-5 text-muted-foreground" />
-        Clinical Reference
+        Clinical reference
       </CardTitle>
     </CardHeader>
     <CardContent variant="muted" class="space-y-3">
       <p>
-        <strong>Total Daily Dose (TDD):</strong>
+        <strong>Total daily dose (TDD):</strong>
         Typically ranges from 0.4-1.0 units/kg body weight for Type 1 diabetes. Your
         TDD of
         <strong>{(insulinStats.tdd ?? 0).toFixed(1)}U/day</strong>
         can be compared to this reference.
       </p>
-      <p>
-        <strong>I:C Ratio Check:</strong>
-        Your average insulin-to-carb ratio of 1:{(insulinStats.icRatio ?? 0).toFixed(
-          0
-        )}
-        {#if (insulinStats.icRatio ?? 0) > 0}
-          means you use about 1 unit of insulin for every {(insulinStats.icRatio ?? 0).toFixed(
-            0
-          )} grams of carbs.
-        {/if}
-      </p>
+      {#if insulinStats.icRatio != null}
+        <p>
+          <strong>ICR check:</strong>
+          Your insulin-to-carb ratio of {formatInsulinToCarbRatio(insulinStats.icRatio)}
+          means you use about 1 unit of insulin for every {insulinStats.icRatio.toFixed(1)}
+          grams of carbs.
+        </p>
+      {/if}
     </CardContent>
   </Card>
 
@@ -309,14 +315,14 @@
   <div class="flex flex-wrap items-center justify-center gap-2 print:hidden">
     <Button href="/reports" variant="outline" size="sm">
       <ArrowLeft class="h-4 w-4" />
-      All Reports
+      All reports
     </Button>
     <Button href="/reports/basal-analysis" size="sm">
-      Basal Rate Analysis
+      Basal rate analysis
       <ArrowRight class="h-4 w-4" />
     </Button>
     <Button href="/reports/treatments" variant="outline" size="sm">
-      Treatment Log
+      Treatment log
     </Button>
   </div>
 

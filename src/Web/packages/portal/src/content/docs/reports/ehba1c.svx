@@ -1,0 +1,80 @@
+---
+title: Estimated HbA1c
+---
+
+<script>
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Estimated HbA1c
+
+The Estimated HbA1c report answers the question "what would a lab HbA1c test
+read, and how has it changed?". It estimates your HbA1c (eHbA1c) for each day,
+from your glucose readings. You can add your lab results to check the estimate.
+
+<Video id="ehba1c" />
+
+## What it shows
+
+### How the estimate works
+
+For each day, the report takes the average glucose of the 90 days before it.
+The recent days count more than the older days: the most recent 30 days give
+about half of the estimate. This is similar to how a lab HbA1c reflects your
+glucose over the life of a red blood cell. The report then changes the average
+glucose to an HbA1c with the ADAG formula:
+
+eHbA1c (%) = (average glucose in mg/dL + 46.7) / 28.7
+
+### The figures
+
+Above the chart, the report shows:
+
+- Your **latest estimate**, with its date.
+- The **Weighted mean glucose** that the latest estimate uses.
+- The **Highest** and **Lowest** estimates, with their dates.
+
+### The chart
+
+The line is your eHbA1c over time. The shaded zones behind the line show these
+ranges:
+
+| Zone | HbA1c |
+|------|-------|
+| Non-diabetic range | 4.0-5.7% |
+| Type 1 diabetes target | 5.7-7.0% |
+| Elevated | 7.0-9.0% |
+| Very high | Above 9.0% |
+
+Each lab result shows as a triangle. Move the pointer over the chart to see the
+eHbA1c on that day, and any lab result from the same day.
+
+The report shows HbA1c in percent by default. If you chose mmol/mol in your
+settings, the report shows mmol/mol, and the zones change to match.
+
+## How to use it
+
+To add a lab result and compare it with the estimate:
+
+1. In the **Lab results** card, enter the **Date of blood draw**. Use the date
+   of the blood test, not today's date.
+2. Enter the **Result**, in percent or in mmol/mol. The field label shows which
+   unit to use.
+3. Optional: enter a **Note**, such as the name of the lab.
+4. Select **Add lab result**. The result shows in the list.
+5. Find the triangle on the chart for that date. Compare it with the line.
+
+To delete a lab result, select the delete button next to it in the list, and
+then confirm.
+
+## Good to know
+
+- **A month of data per point.** Each point on the chart needs at least a month
+  of readings in the 90 days before it. If you do not have enough history yet,
+  the chart does not show.
+- **Lab results do not change the estimate.** The estimate uses only your
+  glucose readings. Lab results show on the chart for comparison only.
+- **All years at once.** This report does not use the date range. It shows
+  every year that has data.
+- **The name and the unit.** You can choose the name (for example, HbA1c or
+  A1c) and the unit in your settings. The report uses your choice.

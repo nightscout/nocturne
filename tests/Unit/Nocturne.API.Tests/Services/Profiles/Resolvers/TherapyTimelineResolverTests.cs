@@ -126,6 +126,18 @@ public sealed class TherapyTimelineResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task BuildAsync_TakesDiaFromTheResolver_WhenNoTherapySettingsExist()
+    {
+        _therapySettings.Setup(t => t.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(4.5);
+        SetupSpans(new ProfileSpan("Rhys", From, To, null));
+
+        var timeline = await _sut.BuildAsync(From, To);
+
+        timeline.SnapshotAt(From).Dia.Should().Be(4.5);
+    }
+
+    [Fact]
     public async Task BuildAsync_ReadsAnActivationsOwnDia_WhenItsInsulinCarriesNone()
     {
         _therapySettings.Setup(t => t.GetDIAAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))

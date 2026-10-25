@@ -27,6 +27,7 @@ using Nocturne.API.Multitenancy;
 using Nocturne.API.OpenApi;
 using Scalar.AspNetCore;
 using Nocturne.Aspire.Scalar;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
@@ -146,12 +147,13 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddHostedService<AuditRetentionService>();
 builder.Services.AddHostedService<SoftDeleteCleanupService>();
-builder.Services.AddSingleton<IGoogleHealthCoordinatorStore, PostgresGoogleHealthCoordinatorStore>();
 builder.Services.AddSingleton<GoogleHealthCoordinator>();
 builder.Services.AddSingleton<IGoogleHealthGrantHolders, PostgresGoogleHealthGrantHolders>();
 builder.Services.AddSingleton<IGoogleHealthSyncCoordinator>(provider =>
     provider.GetRequiredService<GoogleHealthCoordinator>());
-builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
+builder.Services.AddScoped<GoogleHealthService>();
+builder.Services.AddScoped<IGoogleHealthService>(provider => provider.GetRequiredService<GoogleHealthService>());
+builder.Services.AddScoped<IConnectorDataPurge>(provider => provider.GetRequiredService<GoogleHealthService>());
 builder.Services.AddGoogleHealthPlatform();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHostedService<GoogleHealthWorker>();
@@ -549,7 +551,7 @@ app.Services.GetRequiredService<CredentialPathRedactor>()
 var isNSwagGeneration = IsRunningInNSwagContext();
 
 if (!isNSwagGeneration)
-    app.Services.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>();
+    app.Services.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineNativeLibrary>();
 if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 {
     // Validate that the migrator connection string is present and uses a different role.

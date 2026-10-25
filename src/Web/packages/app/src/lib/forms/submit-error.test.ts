@@ -97,7 +97,7 @@ describe("a thrown HttpError", () => {
 
 describe("errorIssues", () => {
   const issues = [
-    { scope: "condition", path: "root", reason: "conditions_empty", field: null },
+    { scope: "condition", path: "root", reason: "list_empty", field: null },
   ];
 
   it("reads a well-formed issue set off the body", () => {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { GLUCOSE_WINDOW_HOURS } from "$lib/stores/initial-reads";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import {
     formatGlucoseValue,
@@ -21,10 +22,10 @@
 
   const realtimeStore = tryGetRealtimeStore();
 
-  // Engine for the sidebar chart — no predictions, no inspection, no request of its own
+  // Engine for the sidebar chart: no predictions, no inspection, no request of its own; the store starts with its window
   const sidebarEngine = createChartDataEngine({
     enablePredictions: false,
-    focusHours: 3,
+    focusHours: GLUCOSE_WINDOW_HOURS,
     dataWindow: "display",
     glucoseSource: "realtime",
   });

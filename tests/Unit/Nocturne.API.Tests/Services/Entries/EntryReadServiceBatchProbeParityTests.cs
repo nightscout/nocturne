@@ -7,6 +7,7 @@ using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Infrastructure;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -147,7 +148,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         var at = Start.AddMilliseconds(offsetMillis);
 
         var batch = await _sut.CheckDuplicatesAsync([Probe(device, type, at)]);
-        var single = await _sut.CheckDuplicateAsync(device, type, ToMills(at));
+        var single = await _sut.CheckDuplicateAsync(device, type, at.ToMills());
 
         (batch.Single() != null).Should().Be(expectDuplicate);
         batch.Single()?.Id.Should().Be(single?.Id);
@@ -167,10 +168,10 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         }
 
         var batch = await _sut.CheckDuplicatesAsync([Probe("Dexcom G6", type, Start)]);
-        var single = await _sut.CheckDuplicateAsync("Dexcom G6", type, ToMills(Start));
+        var single = await _sut.CheckDuplicateAsync("Dexcom G6", type, Start.ToMills());
 
-        batch.Single()!.Mills.Should().Be(ToMills(Start));
-        single!.Mills.Should().Be(ToMills(Start));
+        batch.Single()!.Mills.Should().Be(Start.ToMills());
+        single!.Mills.Should().Be(Start.ToMills());
     }
 
     [Fact]
@@ -179,7 +180,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         SeedSgv(Start.AddTicks(5_000), 120, "Dexcom G6");
 
         var batch = await _sut.CheckDuplicatesAsync([Probe("Dexcom G6", "sgv", Start)]);
-        var single = await _sut.CheckDuplicateAsync("Dexcom G6", "sgv", ToMills(Start));
+        var single = await _sut.CheckDuplicateAsync("Dexcom G6", "sgv", Start.ToMills());
 
         batch.Single().Should().NotBeNull();
         single.Should().NotBeNull();
@@ -197,7 +198,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         SeedSgv(Start, 120, "Dexcom G6", higher);
 
         var batch = await _sut.CheckDuplicatesAsync([Probe("Dexcom G6", "sgv", Start)]);
-        var single = await _sut.CheckDuplicateAsync("Dexcom G6", "sgv", ToMills(Start));
+        var single = await _sut.CheckDuplicateAsync("Dexcom G6", "sgv", Start.ToMills());
 
         batch.Single()!.Id.Should().Be(single!.Id);
         batch.Single()!.Id.Should().Be(higher.ToString());
@@ -244,10 +245,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
     }
 
     private static EntryDuplicateProbe Probe(string? device, string type, DateTime at) =>
-        new(device, type, ToMills(at));
-
-    private static long ToMills(DateTime at) =>
-        new DateTimeOffset(at, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        new(device, type, at.ToMills());
 
     private Guid SeedSgv(DateTime timestamp, double mgdl, string device, Guid? forcedId = null)
     {

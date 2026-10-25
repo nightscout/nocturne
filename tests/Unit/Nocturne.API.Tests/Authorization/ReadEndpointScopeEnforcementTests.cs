@@ -9,15 +9,17 @@ using Xunit;
 namespace Nocturne.API.Tests.Authorization;
 
 /// <summary>
-/// Guards the per-action authorization invariant for the V1/V2/V3 (Nightscout-compat) READ plane,
-/// the mirror of <see cref="WriteEndpointScopeEnforcementTests"/>.
+/// Guards the per-action authorization invariant for the V1/V2/V3 (Nightscout-compat) and V4 READ
+/// planes, the mirror of <see cref="WriteEndpointScopeEnforcementTests"/> and
+/// <see cref="V4WriteScopeGatingTests"/>.
 ///
 /// The controller-level <c>HasPermissions</c> policy is the same object as the global
 /// <c>FallbackPolicy</c>, and it succeeds on any non-empty <c>PermissionTrie</c>. So without a
 /// per-action <see cref="RequireScopeAttribute"/> a grant scoped to one category reads every
 /// category: a <c>sleep.read</c> token could GET glucose from <c>/api/v1/entries</c> and basal
 /// rates, carb ratios and ISF from <c>/api/v1/profile</c>. This test fails if a new read endpoint
-/// ships without per-action authorization.
+/// ships without per-action authorization. The V4 plane carries the same rule with its own
+/// exemption lists.
 /// </summary>
 public class ReadEndpointScopeEnforcementTests
 {
@@ -84,61 +86,150 @@ public class ReadEndpointScopeEnforcementTests
 
     private const string CallerNarrowedAnswer = "answer narrowed to the caller's read scopes";
 
+    private const string V4Namespace = "Nocturne.API.Controllers.V4";
+
+    private static class V4Reason
+    {
+        /// <summary>Rows keyed by the caller's own subject id or memberships; nothing another member holds is read.</summary>
+        public const string OwnData = "caller's own data, keyed by their subject";
+
+        /// <summary>The action, or the service it calls, checks the scope or the share and guest access itself and answers Forbid, NotFound or a narrowed result.</summary>
+        public const string ActionChecksAccess = "scope or share access checked in the action or its service";
+
+        /// <summary>The tenant's trackers, read whole by a member holding alerts.read and not at all by anyone else (see TrackerReadAccess).</summary>
+        public const string TenantTrackers = "tenant's trackers, alerts.read checked in the action";
+
+        /// <summary>Instance-level or compiled-in reference data; no tenant row is read.</summary>
+        public const string StaticReference = "static reference data, no tenant rows";
+
+        /// <summary>Answers 501 and stores nothing.</summary>
+        public const string NotStored = "answers 501, stores nothing";
+
+        /// <summary>The row is found by a bearer token in the route, so possessing the token is the control.</summary>
+        public const string CapabilityToken = "row found by a capability token in the route";
+
+        /// <summary>Every caller may ask; the action drops or refuses the parts the caller's scopes do not read.</summary>
+        public const string CallerNarrowedAnswer = "answer narrowed to the caller's read scopes in the action";
+    }
+
+    private static IReadOnlyDictionary<string, string> V4ExemptControllers => V4ScopeGuardExemptions.Controllers;
+
+    private static readonly IReadOnlyDictionary<string, string> V4ExemptReadActions =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["CoachMarkController.GetAll"] = V4Reason.OwnData,
+            ["ClockFacesController.List"] = V4Reason.OwnData,
+            ["ClockFacesController.GetStarter"] = V4Reason.OwnData,
+            ["UserPreferencesController.GetPreferences"] = V4Reason.OwnData,
+            ["TranslationsController.GetDrafts"] = V4Reason.OwnData,
+            ["ConnectedAppsController.List"] = V4Reason.OwnData,
+            ["SessionsController.List"] = V4Reason.OwnData,
+            ["GuestLinkController.GetGuestLinks"] = V4Reason.OwnData,
+            ["ChatIdentityController.GetLinks"] = V4Reason.OwnData,
+            ["ChatIdentityController.GetPending"] = V4Reason.CapabilityToken,
+            ["BackupSignInPromptController.GetBackupSignInPrompt"] = V4Reason.OwnData,
+            ["MembershipRequestController.GetMyRequest"] = V4Reason.OwnData,
+            ["MyPermissionsController.GetMyPermissions"] = V4Reason.OwnData,
+            ["MyTenantsController.GetMyTenants"] = V4Reason.OwnData,
+            ["MyTenantsController.GetOverview"] = V4Reason.ActionChecksAccess,
+            ["PlatformController.GetTenants"] = V4Reason.OwnData,
+            ["FoodsController.GetFavorites"] = V4Reason.OwnData,
+            ["NotificationsController.GetNotifications"] = V4Reason.OwnData,
+            ["TrackersController.GetPresets"] = V4Reason.TenantTrackers,
+
+            ["MemberInviteController.ListInvites"] = V4Reason.ActionChecksAccess,
+            ["MemberInviteController.GetEffectivePermissions"] = V4Reason.ActionChecksAccess,
+            ["MemberRecoveryController.GetLockedOutMembers"] = V4Reason.ActionChecksAccess,
+            ["MembershipRequestController.GetPendingRequests"] = V4Reason.ActionChecksAccess,
+            ["MembershipRequestController.GetMembershipRequestSettings"] = V4Reason.ActionChecksAccess,
+            ["RoleController.GetRoles"] = V4Reason.ActionChecksAccess,
+            ["ShareLinkController.GetShareLink"] = V4Reason.ActionChecksAccess,
+            ["GuestLinkController.GetGuestLinkScopeOptions"] = V4Reason.ActionChecksAccess,
+            ["TenantSettingsController.GetTenantSettings"] = V4Reason.ActionChecksAccess,
+            ["AuditController.GetMutationAuditLog"] = V4Reason.ActionChecksAccess,
+            ["AuditController.GetReadAccessAuditLog"] = V4Reason.ActionChecksAccess,
+            ["AuditController.GetAuditConfig"] = V4Reason.ActionChecksAccess,
+            ["TenantAppearanceController.GetTenantAppearance"] = V4Reason.ActionChecksAccess,
+
+            ["TrackersController.GetDefinitions"] = V4Reason.TenantTrackers,
+            ["TrackersController.GetDefinition"] = V4Reason.TenantTrackers,
+            ["TrackersController.GetActiveInstances"] = V4Reason.TenantTrackers,
+            ["TrackersController.GetInstanceHistory"] = V4Reason.TenantTrackers,
+            ["TrackersController.GetUpcomingInstances"] = V4Reason.TenantTrackers,
+            ["TrackerLegacyFallbacksController.GetLegacyFallbacks"] = V4Reason.ActionChecksAccess,
+
+            ["DeviceCatalogController.GetCatalog"] = V4Reason.StaticReference,
+            ["DeviceCatalogController.GetCatalogByCategory"] = V4Reason.StaticReference,
+            ["InsulinCatalogController.GetCatalog"] = V4Reason.StaticReference,
+            ["InsulinCatalogController.GetCatalogByCategory"] = V4Reason.StaticReference,
+            ["ClientDevicesController.GetCapabilityCatalog"] = V4Reason.StaticReference,
+            ["TranslationsController.GetCatalogSource"] = V4Reason.StaticReference,
+            ["PlatformController.GetTransitionStatus"] = V4Reason.StaticReference,
+            ["SystemController.GetChannelStatuses"] = V4Reason.StaticReference,
+            ["TrackersController.GetTriggerEventTypes"] = V4Reason.StaticReference,
+            ["ServicesController.GetUploaderApps"] = V4Reason.StaticReference,
+            ["ServicesController.GetUploaderSetup"] = V4Reason.StaticReference,
+            ["ServicesController.GetConnectorCapabilities"] = V4Reason.StaticReference,
+            ["ServicesController.GetApiInfo"] = V4Reason.StaticReference,
+            ["SupportController.GetFallbackUrl"] = V4Reason.StaticReference,
+
+            ["DatabaseCapacityController.Get"] = V4ScopeGuardExemptions.PlatformAdminRole,
+
+            ["WebhookSettingsController.GetWebhookSettings"] = V4Reason.NotStored,
+
+            // UISettingsSection.ReadScope per section; StateSpanReadScopeGuard per category.
+            ["UISettingsController.GetUISettings"] = V4Reason.CallerNarrowedAnswer,
+            ["UISettingsController.GetSectionSettings"] = V4Reason.CallerNarrowedAnswer,
+            ["StateSpansController.GetStateSpans"] = V4Reason.CallerNarrowedAnswer,
+            ["StateSpansController.GetStateSpan"] = V4Reason.CallerNarrowedAnswer,
+        };
+
     [Fact]
     public void EveryV1V2AndV3ReadAction_RequiresAnOAuthScope()
     {
-        var assembly = typeof(RequireScopeAttribute).Assembly;
-        var violations = new List<string>();
-        var readActionsChecked = 0;
-
-        foreach (var type in assembly.GetTypes())
-        {
-            if (type.Namespace is not ("Nocturne.API.Controllers.V1"
-                or "Nocturne.API.Controllers.V2"
-                or "Nocturne.API.Controllers.V3"))
-                continue;
-            if (type.IsAbstract || !typeof(ControllerBase).IsAssignableFrom(type))
-                continue;
-            if (ExemptControllers.Contains(type.Name))
-                continue;
-            if (type.GetCustomAttribute<AllowAnonymousAttribute>() != null)
-                continue;
-
-            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
-            {
-                var verbs = method.GetCustomAttributes<HttpMethodAttribute>()
-                    .SelectMany(a => a.HttpMethods)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                if (!verbs.Overlaps(ReadVerbs))
-                    continue;
-
-                // Endpoints deliberately marked [AllowAnonymous] are intentionally public.
-                if (method.GetCustomAttribute<AllowAnonymousAttribute>() != null)
-                    continue;
-
-                readActionsChecked++;
-
-                var hasPerActionAuthz =
-                    method.GetCustomAttribute<RequireScopeAttribute>() != null
-                    || method.GetCustomAttribute<RequirePermissionAttribute>() != null
-                    || type.GetCustomAttribute<RequireScopeAttribute>() != null
-                    || type.GetCustomAttribute<RequirePermissionAttribute>() != null;
-
-                if (!hasPerActionAuthz && !ExemptReadActions.ContainsKey($"{type.Name}.{method.Name}"))
-                    violations.Add($"{type.Name}.{method.Name} [{string.Join(",", verbs)}]");
-            }
-        }
+        var actions = ReadActions(IsV1ToV3, ExemptControllers).ToList();
 
         // Sanity: the scan must actually discover the read surface, otherwise the assertion
         // below would pass vacuously if the reflection query silently matched nothing.
-        readActionsChecked.Should().BeGreaterThan(50,
+        actions.Should().HaveCountGreaterThan(50,
             "the reflection scan should discover the V1/V2/V3 read endpoints");
+
+        var violations = actions
+            .Where(a => !HasReadGate(a.Controller, a.Action)
+                        && !ExemptReadActions.ContainsKey($"{a.Controller.Name}.{a.Action.Name}"))
+            .Select(a => $"{a.Controller.Name}.{a.Action.Name} [{string.Join(",", a.Verbs)}]")
+            .ToList();
 
         violations.Should().BeEmpty(
             "every V1/V2/V3 read endpoint must carry [RequireScope] or [RequirePermission] so a " +
             "grant scoped to one data category cannot read every other category. " +
             "Unprotected: " + string.Join("; ", violations));
+    }
+
+    /// <summary>
+    /// The V4 plane has the same hole: a controller-level <c>[Authorize]</c> admits every
+    /// authenticated credential, so a read action with no scope lets a <c>glucose.read</c> key read
+    /// whatever it returns. A V4 read action with no gate must be named in
+    /// <see cref="V4ExemptReadActions"/> with the mechanism that governs it instead.
+    /// </summary>
+    [Fact]
+    public void EveryV4ReadAction_RequiresAnOAuthScope()
+    {
+        var actions = ReadActions(IsV4, new HashSet<string>(V4ExemptControllers.Keys)).ToList();
+
+        actions.Should().HaveCountGreaterThan(150,
+            "the reflection scan should discover the V4 read endpoints");
+
+        var violations = actions
+            .Where(a => !HasReadGate(a.Controller, a.Action)
+                        && !V4ExemptReadActions.ContainsKey($"{a.Controller.Name}.{a.Action.Name}"))
+            .Select(a => $"{a.Controller.Name}.{a.Action.Name} [{string.Join(",", a.Verbs)}]")
+            .ToList();
+
+        violations.Should().BeEmpty(
+            "every V4 read endpoint must carry [RequireScope] or [RequirePermission], or be named in " +
+            "V4ExemptReadActions with the mechanism that governs it. Unprotected: " +
+            string.Join("; ", violations));
     }
 
     /// <summary>
@@ -152,29 +243,16 @@ public class ReadEndpointScopeEnforcementTests
 
         foreach (var name in ExemptControllers)
         {
-            var type = assembly.GetTypes().SingleOrDefault(t =>
-                t.Name == name
-                && t.Namespace is "Nocturne.API.Controllers.V1"
-                    or "Nocturne.API.Controllers.V2" or "Nocturne.API.Controllers.V3");
+            var type = assembly.GetTypes().SingleOrDefault(t => t.Name == name && IsV1ToV3(t));
 
             type.Should().NotBeNull($"{name} is exempted but no longer exists in V1/V2/V3");
             type!.GetCustomAttribute<AllowAnonymousAttribute>().Should().BeNull(
-                $"{name} is [AllowAnonymous], which the scan already skips — remove the exemption");
+                $"{name} is [AllowAnonymous], which the scan already skips, remove the exemption");
 
-            var ungatedReads = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                .Where(m => m.GetCustomAttributes<HttpMethodAttribute>()
-                    .SelectMany(a => a.HttpMethods)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
-                    .Overlaps(ReadVerbs))
-                .Where(m => m.GetCustomAttribute<AllowAnonymousAttribute>() == null)
-                .Where(m => m.GetCustomAttribute<RequireScopeAttribute>() == null
-                            && m.GetCustomAttribute<RequirePermissionAttribute>() == null
-                            && type.GetCustomAttribute<RequireScopeAttribute>() == null
-                            && type.GetCustomAttribute<RequirePermissionAttribute>() == null)
-                .ToList();
-
-            ungatedReads.Should().NotBeEmpty(
-                $"{name} now gates every read action, so its exemption is stale — remove it");
+            ReadActions(t => t == type)
+                .Where(a => !HasReadGate(a.Controller, a.Action))
+                .Should().NotBeEmpty(
+                    $"{name} now gates every read action, so its exemption is stale, remove it");
         }
     }
 
@@ -203,40 +281,114 @@ public class ReadEndpointScopeEnforcementTests
     }
 
     [Fact]
-    public void ExemptReadActions_NameALiveReadAction()
+    public void ExemptReadActions_NameALiveReadAction() =>
+        AssertNamesLiveUngatedReadActions(ExemptReadActions.Keys, IsV1ToV3, "V1/V2/V3");
+
+    [Fact]
+    public void V4ExemptReadActions_NameALiveReadAction() =>
+        AssertNamesLiveUngatedReadActions(V4ExemptReadActions.Keys, IsV4, "V4");
+
+    [Fact]
+    public void V4ExemptControllers_AreStillNeeded()
+    {
+        foreach (var name in V4ExemptControllers.Keys)
+        {
+            var type = typeof(RequireScopeAttribute).Assembly.GetTypes()
+                .SingleOrDefault(t => t.Name == name && IsV4(t));
+
+            type.Should().NotBeNull($"{name} is exempted but no longer exists in V4");
+            type!.GetCustomAttribute<AllowAnonymousAttribute>().Should().BeNull(
+                $"{name} is [AllowAnonymous], which the scan already skips, remove the exemption");
+
+            ReadActions(t => t == type)
+                .Where(a => !HasReadGate(a.Controller, a.Action))
+                .Should().NotBeEmpty(
+                    $"{name} now gates every read action, so its exemption is stale, remove it");
+        }
+    }
+
+    [Fact]
+    public void V4ExemptControllers_CarryTheMechanismTheyClaim()
     {
         var assembly = typeof(RequireScopeAttribute).Assembly;
 
-        foreach (var (key, _) in ExemptReadActions)
+        foreach (var (name, reason) in V4ExemptControllers)
+        {
+            var attributes = assembly.GetTypes()
+                .Single(t => t.Name == name && IsV4(t))
+                .GetCustomAttributes(inherit: true);
+
+            V4ScopeGuardExemptions.Carries(attributes, reason)
+                .Should().BeTrue($"{name} claims '{reason}' but does not carry it");
+        }
+    }
+
+    private static void AssertNamesLiveUngatedReadActions(
+        IEnumerable<string> keys, Func<Type, bool> inPlane, string plane)
+    {
+        foreach (var key in keys)
         {
             var parts = key.Split('.', 2);
 
             // Resolved by the type that declares the action: the same controller name exists in more
             // than one version namespace (NotificationsController in V1 and V2). An [AllowAnonymous]
             // controller is skipped by the scan, so no exemption can name it (V1 StatusController).
-            var matches = assembly.GetTypes()
-                .Where(t => t.Name == parts[0]
-                    && t.Namespace is "Nocturne.API.Controllers.V1"
-                        or "Nocturne.API.Controllers.V2" or "Nocturne.API.Controllers.V3"
-                    && t.GetCustomAttribute<AllowAnonymousAttribute>() is null)
-                .Select(t => (Type: t, Method: t
-                    .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                    .FirstOrDefault(m => m.Name == parts[1])))
-                .Where(x => x.Method is not null)
+            var matches = ReadActions(inPlane)
+                .Where(a => a.Controller.Name == parts[0] && a.Action.Name == parts[1])
                 .ToList();
 
-            matches.Should().HaveCount(1,
-                $"{key} must name exactly one live V1/V2/V3 read action");
-            var method = matches[0].Method!;
+            matches.Should().HaveCount(1, $"{key} must name exactly one live {plane} read action");
 
-            method!.GetCustomAttributes<HttpMethodAttribute>()
-                .SelectMany(a => a.HttpMethods)
-                .Should().Contain(v => ReadVerbs.Contains(v),
-                    $"{key} is exempted from the READ rule but is not a read action");
+            HasReadGate(matches[0].Controller, matches[0].Action)
+                .Should().BeFalse($"{key} now carries a gate, so its exemption is stale, remove it");
+        }
+    }
 
-            (method.GetCustomAttribute<RequireScopeAttribute>() is null
-                && method.GetCustomAttribute<RequirePermissionAttribute>() is null)
-                .Should().BeTrue($"{key} now carries a gate, so its exemption is stale — remove it");
+    private static bool IsV1ToV3(Type type) =>
+        type.Namespace is "Nocturne.API.Controllers.V1"
+            or "Nocturne.API.Controllers.V2" or "Nocturne.API.Controllers.V3";
+
+    private static bool IsV4(Type type) =>
+        type.Namespace == V4Namespace
+        || type.Namespace?.StartsWith(V4Namespace + ".", StringComparison.Ordinal) == true;
+
+    private static bool HasReadGate(Type controller, MethodInfo action) =>
+        action.GetCustomAttribute<RequireScopeAttribute>() != null
+        || action.GetCustomAttribute<RequirePermissionAttribute>() != null
+        || controller.GetCustomAttribute<RequireScopeAttribute>() != null
+        || controller.GetCustomAttribute<RequirePermissionAttribute>() != null;
+
+    /// <summary>
+    /// Every read action of the controllers in a plane that is not anonymous. Includes actions
+    /// inherited from a V4 base controller, which carry no attribute of their own and are gated, if
+    /// at all, on the concrete controller.
+    /// </summary>
+    private static IEnumerable<(Type Controller, MethodInfo Action, HashSet<string> Verbs)> ReadActions(
+        Func<Type, bool> inPlane, IReadOnlySet<string>? exemptControllers = null)
+    {
+        foreach (var type in typeof(RequireScopeAttribute).Assembly.GetTypes())
+        {
+            if (!inPlane(type) || type.IsAbstract || !typeof(ControllerBase).IsAssignableFrom(type))
+                continue;
+            if (exemptControllers?.Contains(type.Name) == true)
+                continue;
+            if (type.GetCustomAttribute<AllowAnonymousAttribute>() != null)
+                continue;
+
+            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+            {
+                var verbs = method.GetCustomAttributes<HttpMethodAttribute>()
+                    .SelectMany(a => a.HttpMethods)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                if (!verbs.Overlaps(ReadVerbs))
+                    continue;
+
+                if (method.GetCustomAttribute<AllowAnonymousAttribute>() != null)
+                    continue;
+
+                yield return (type, method, verbs);
+            }
         }
     }
 }

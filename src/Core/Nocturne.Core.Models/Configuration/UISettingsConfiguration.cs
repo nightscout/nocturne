@@ -8,6 +8,12 @@ namespace Nocturne.Core.Models.Configuration;
 /// addressable and separately persisted.
 /// In demo mode, these are generated from demo configuration; in production, they come from the database.
 /// Note: Therapy settings are managed via Nightscout Profiles (/api/v1/profile).
+/// <para>
+/// A section is null when it was withheld or not sent: a read omits each section whose
+/// <see cref="UISettingsSection.ReadScope"/> the caller does not hold, and a save leaves a null
+/// section's stored value untouched, so the read-modify-write a section save performs cannot
+/// overwrite a section its caller never saw.
+/// </para>
 /// </summary>
 public class UISettingsConfiguration
 {
@@ -15,7 +21,7 @@ public class UISettingsConfiguration
     /// Device settings including connected devices and device preferences
     /// </summary>
     [JsonPropertyName("devices")]
-    public DeviceSettings Devices { get; set; } = new();
+    public DeviceSettings? Devices { get; set; } = new();
 
     /// <summary>
     /// Algorithm settings including prediction, autosens, and loop configuration
@@ -33,13 +39,13 @@ public class UISettingsConfiguration
     /// Notification settings including alarms, quiet hours, and notification channels
     /// </summary>
     [JsonPropertyName("notifications")]
-    public NotificationSettings Notifications { get; set; } = new();
+    public NotificationSettings? Notifications { get; set; } = new();
 
     /// <summary>
     /// Services settings including connected services/connectors and sync preferences
     /// </summary>
     [JsonPropertyName("services")]
-    public ServicesSettings Services { get; set; } = new();
+    public ServicesSettings? Services { get; set; } = new();
 
     /// <summary>
     /// Data quality settings including sleep schedule and compression low detection
@@ -319,7 +325,7 @@ public static class WidgetCatalog
             "Stacked chart showing time in glucose ranges",
             "BarChart3"),
         Top(WidgetId.DailySummary, "Daily Summary",
-            "Today's glucose statistics overview",
+            "Last 24 hours of glucose statistics",
             "CalendarDays"),
         Top(WidgetId.Clock, "Clock",
             "Current time and date display",

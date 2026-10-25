@@ -2,12 +2,14 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
@@ -29,6 +31,7 @@ public class DataOverviewServiceTests : IDisposable
     private readonly DataOverviewService _service;
     private readonly Mock<ITenantCache> _cacheService = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
+    private readonly CategoryReadContext _readContext = new();
     private readonly Mock<INocturneDbContextFactory> _factory = new();
     private readonly ListLogger<DataOverviewService> _logger = new();
     private IInterceptor[] _interceptors = [];
@@ -65,11 +68,14 @@ public class DataOverviewServiceTests : IDisposable
                 return ctx;
             });
 
-        _therapySettings.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
+        _therapySettings.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync("UTC");
         var mockStatisticsService = new Mock<IStatisticsService>();
+        mockStatisticsService.SetupGet(s => s.HourlyBandThresholds).Returns(ServedThresholds);
+
+        mockStatisticsService.WithRealTimeInRange();
         _service = new DataOverviewService(
             _factory.Object,
-            _therapySettings.Object,
+            new TenantClockResolver(_therapySettings.Object, _readContext, NullLogger<TenantClockResolver>.Instance),
             mockStatisticsService.Object,
             _cacheService.Object,
             _logger
@@ -210,7 +216,7 @@ public class DataOverviewServiceTests : IDisposable
             day.Counts["Boluses"].Should().Be(count * 2);
             day.TotalCount.Should().Be(count * 12);
             day.AverageGlucoseMgdl.Should().Be(150);
-            day.TimeInRangePercent.Should().Be(50);
+            day.TimeInRangePercent.Should().Be(0);
             day.TotalBolusUnits.Should().Be(bolus);
             day.TotalBasalUnits.Should().Be(basal);
             day.TotalDailyDose.Should().Be(tdd);
@@ -219,6 +225,25 @@ public class DataOverviewServiceTests : IDisposable
     }
 
     #region GetAvailableYearsAsync Tests
+
+    private static readonly GlycemicThresholds ServedThresholds = new()
+    {
+        VeryLow = 50,
+        Low = 63,
+        TargetBottom = 63,
+        TargetTop = 140,
+        High = 140,
+        VeryHigh = 260,
+    };
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetAvailableYearsAsync_ServesTheBandEdgesTheStatisticsServiceClassifiesOn()
+    {
+        var result = await _service.GetAvailableYearsAsync();
+
+        result.Thresholds.Should().BeSameAs(ServedThresholds);
+    }
 
     [Fact]
     [Trait("Category", "Unit")]
@@ -1612,6 +1637,22 @@ public class DataOverviewServiceTests : IDisposable
         var june15 = result.Days.FirstOrDefault(d => d.Date == "2024-06-15");
         june15.Should().NotBeNull();
         june15!.TimeInRangePercent.Should().BeApproximately(75.0, 0.1); // 3 of 4 readings in range
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetDailySummaryAsync_WeighsADayMixingSensorCadencesByTime()
+    {
+        var baseTime = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime;
+        for (var i = 0; i < 60; i++)
+            _dbContext.SensorGlucose.Add(new SensorGlucoseEntity { Id = Guid.NewGuid(), Timestamp = baseTime.AddMinutes(i), Mgdl = 120.0, DataSource = "dexcom" });
+        for (var i = 0; i < 12; i++)
+            _dbContext.SensorGlucose.Add(new SensorGlucoseEntity { Id = Guid.NewGuid(), Timestamp = baseTime.AddMinutes(60 + i * 5), Mgdl = 250.0, DataSource = "dexcom" });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.GetDailySummaryAsync(2024);
+
+        result.Days.Single(d => d.Date == "2024-06-15").TimeInRangePercent.Should().Be(50.0);
     }
 
     [Fact]

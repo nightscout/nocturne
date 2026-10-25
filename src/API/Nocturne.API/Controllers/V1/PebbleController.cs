@@ -5,14 +5,15 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
-using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -22,21 +23,21 @@ namespace Nocturne.API.Controllers.V1;
 /// Based on the legacy pebble.js implementation.
 /// </summary>
 /// <remarks>
-/// The action requires only <c>glucose.read</c> while the response also carries IOB and COB from
-/// treatments and pump/uploader battery from device status. This is the accepted narrowing described
-/// on <see cref="V2.PropertiesController"/>, which names the per-category follow-up.
+/// The action requires only <c>glucose.read</c> while the response also carries IOB and COB, from the
+/// AID system or treatments (<see cref="IIobCobReader"/>), and the uploader battery. This is
+/// the accepted narrowing described on <see cref="V2.PropertiesController"/>, which names the
+/// per-category follow-up.
 /// </remarks>
 /// <seealso cref="IEntryService"/>
-/// <seealso cref="DeviceStatusProjectionService"/>
-/// <seealso cref="ITreatmentService"/>
+/// <seealso cref="IIobCobReader"/>
 [ApiController]
 [Tags("V1")]
 [Route("")]
 public class PebbleController : ControllerBase
 {
     private readonly IEntryService _entryService;
-    private readonly DeviceStatusProjectionService _projectionService;
-    private readonly ITreatmentService _treatmentService;
+    private readonly IIobCobReader _iobCobReader;
+    private readonly IUploaderSnapshotRepository _uploaderSnapshots;
     private readonly ITenantAppearanceReader _appearanceReader;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<PebbleController> _logger;
@@ -46,27 +47,29 @@ public class PebbleController : ControllerBase
     /// </summary>
     public const int MaxCount = 288;
 
+    private const int UploaderLookback = 20;
+
     /// <summary>
     /// Initializes a new instance of <see cref="PebbleController"/>.
     /// </summary>
     /// <param name="entryService">Service for glucose entry retrieval.</param>
-    /// <param name="projectionService">Service for projecting device status from V4 snapshots.</param>
-    /// <param name="treatmentService">Service for treatment data retrieval.</param>
+    /// <param name="iobCobReader">Reader of the IOB and COB now.</param>
+    /// <param name="uploaderSnapshots">Repository of uploader snapshots, for the battery.</param>
     /// <param name="appearanceReader">Reader of the owner's display preferences, for the default units.</param>
     /// <param name="tenantAccessor">Accessor for the current tenant.</param>
     /// <param name="logger">Logger instance.</param>
     public PebbleController(
         IEntryService entryService,
-        DeviceStatusProjectionService projectionService,
-        ITreatmentService treatmentService,
+        IIobCobReader iobCobReader,
+        IUploaderSnapshotRepository uploaderSnapshots,
         ITenantAppearanceReader appearanceReader,
         ITenantAccessor tenantAccessor,
         ILogger<PebbleController> logger
     )
     {
         _entryService = entryService;
-        _projectionService = projectionService;
-        _treatmentService = treatmentService;
+        _iobCobReader = iobCobReader;
+        _uploaderSnapshots = uploaderSnapshots;
         _appearanceReader = appearanceReader;
         _tenantAccessor = tenantAccessor;
         _logger = logger;
@@ -105,13 +108,15 @@ public class PebbleController : ControllerBase
 
             // Fetch required data in parallel
             var entriesTask = _entryService.GetEntriesAsync(type: "sgv", count: count + 1, skip: 0, cancellationToken);
-            var deviceStatusTask = _projectionService.GetAsync(count: 1, skip: 0, find: null, ct: cancellationToken);
             var calsTask = _entryService.GetEntriesAsync(type: "cal", count: count, skip: 0, cancellationToken);
+            var iobCobTask = ReadIobCobAsync(cancellationToken);
+            var batteryTask = ReadBatteryAsync(cancellationToken);
 
-            await Task.WhenAll(entriesTask, deviceStatusTask, calsTask);
+            await Task.WhenAll(entriesTask, calsTask, iobCobTask, batteryTask);
 
             var entries = (await entriesTask).ToArray();
-            var deviceStatuses = (await deviceStatusTask).ToArray();
+            var iobCob = await iobCobTask;
+            var battery = await batteryTask;
             var cals = (await calsTask).ToArray();
 
             // Build bgs array
@@ -121,7 +126,7 @@ public class PebbleController : ControllerBase
                 var entry = entries[i];
                 var bg = new PebbleBg
                 {
-                    Sgv = FormatGlucose(entry.Sgv ?? entry.Mgdl, useMmol),
+                    Sgv = FormatGlucose(entry.GlucoseMgdl(), useMmol),
                     Trend = entry.Trend ?? DirectionExtensions.ParseToTrendNumber(entry.Direction),
                     Direction = entry.Direction ?? "NONE",
                     Datetime = entry.Mills
@@ -136,24 +141,10 @@ public class PebbleController : ControllerBase
                         useMmol
                     );
 
-                    // Get battery from device status
-                    var uploaderStatus = deviceStatuses.FirstOrDefault();
-                    if (uploaderStatus?.Uploader?.Battery != null)
-                    {
-                        bg.Battery = uploaderStatus.Uploader.Battery.ToString();
-                    }
-
-                    // Get IOB from device status (Loop stores it there)
-                    if (uploaderStatus?.Loop?.Iob != null)
-                    {
-                        bg.Iob = uploaderStatus.Loop.Iob.Iob?.ToString("F2") ?? "0";
-                    }
-
-                    // Get COB from device status
-                    if (uploaderStatus?.Loop?.Cob != null)
-                    {
-                        bg.Cob = uploaderStatus.Loop.Cob.Cob ?? 0;
-                    }
+                    bg.Battery = battery;
+                    bg.Iob = iobCob is null ? null : IobResult.FormatDisplay(iobCob.Iob.Iob);
+                    // Nightscout's pebble shows COB to one decimal.
+                    bg.Cob = iobCob?.Cob is null ? null : Math.Round(iobCob.Cob.Cob, 1);
                 }
 
                 bgs.Add(bg);
@@ -191,6 +182,37 @@ public class PebbleController : ControllerBase
                 Bgs = new List<PebbleBg>(),
                 Cals = new List<PebbleCal>()
             });
+        }
+    }
+
+    private async Task<IobCobReading?> ReadIobCobAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _iobCobReader.ReadTotalAsync(
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), live: true, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Pebble IOB and COB unavailable");
+            return null;
+        }
+    }
+
+    private async Task<string?> ReadBatteryAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var newest = await _uploaderSnapshots.GetAsync(
+                from: null, to: null, device: null, source: null,
+                limit: UploaderLookback, offset: 0, descending: true, ct: cancellationToken
+            );
+            return newest.FirstOrDefault(u => u.Battery >= 0)?.Battery?.ToString(CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Pebble battery unavailable");
+            return null;
         }
     }
 

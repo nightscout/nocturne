@@ -21,6 +21,7 @@
 	function swatchStyle(value: string, active: boolean, tinted: boolean): string {
 		const border = active ? '2px solid' : value === '' ? '1px solid' : '0 solid';
 		const text = tinted ? `color: ${value}; font-weight: ${active ? 800 : 400};` : 'font-weight: 400;';
+		// @wc-ignore
 		return `${text} background-color: ${value}50; border: ${border} ${value};`;
 	}
 </script>

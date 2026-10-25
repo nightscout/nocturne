@@ -5,6 +5,8 @@
   import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import UserPlus from "@lucide/svelte/icons/user-plus";
+  import { Artwork } from "@nocturne/watercolour";
+  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import {
     startRegistration,
     type PublicKeyCredentialCreationOptionsJSON,
@@ -59,7 +61,7 @@
   // record with its validity flags set — the details of a spent invite aren't served to whoever
   // holds the link.
   const inviteError = $derived.by(() => {
-    if (!token) return "No invite token provided. Please check the link you were given.";
+    if (!token) return "No invite token provided. Check the link you were given.";
     if (inviteInfoQuery?.error)
       return describeSubmitError(
         inviteInfoQuery.error,
@@ -82,7 +84,7 @@
       console.error("Accepting the invite failed:", err);
       acceptError = describeSubmitError(
         err,
-        "We couldn't add you to this instance. Please try again in a moment."
+        "We could not add you to this instance. Try again in a moment."
       );
     } finally {
       isAccepting = false;
@@ -148,7 +150,7 @@
       passkeyError = describePasskeyError(
         err,
         "register",
-        "We couldn't create your account. Please try again."
+        "We could not create your account. Try again."
       );
     } finally {
       isRegistering = false;
@@ -174,7 +176,7 @@
         >
           <AlertTriangle class="h-6 w-6 text-destructive" />
         </div>
-        <Card.Title class="text-2xl font-bold">Invite Unavailable</Card.Title>
+        <Card.Title class="text-2xl font-bold">Invite unavailable</Card.Title>
         <Card.Description>{inviteError}</Card.Description>
       </Card.Header>
     {:else if !inviteInfo}
@@ -195,9 +197,9 @@
         >
           <Check class="h-6 w-6 text-success" />
         </div>
-        <Card.Title class="text-2xl font-bold">You're In</Card.Title>
+        <Card.Title class="text-2xl font-bold">You are in</Card.Title>
         <Card.Description>
-          Your account has been created and you've joined
+          We created your account and added you to
           {inviteInfo.tenantName ?? "the site"}.
         </Card.Description>
       </Card.Header>
@@ -217,7 +219,7 @@
         >
           <Check class="h-6 w-6 text-primary" />
         </div>
-        <Card.Title class="text-2xl font-bold">You're Already In</Card.Title>
+        <Card.Title class="text-2xl font-bold">You are already a member</Card.Title>
         <Card.Description>
           You already have access to
           <strong>{inviteInfo.tenantName ?? "this site"}</strong>.
@@ -237,10 +239,10 @@
         >
           <UserPlus class="h-6 w-6 text-primary" />
         </div>
-        <Card.Title class="text-2xl font-bold">Accept Invite</Card.Title>
+        <Card.Title class="text-2xl font-bold">Accept invite</Card.Title>
         {#if viewer?.name}
           <Card.Description>
-            You're signed in as <strong>{viewer.name}</strong>
+            You are signed in as <strong>{viewer.name}</strong>
           </Card.Description>
         {/if}
       </Card.Header>
@@ -263,7 +265,7 @@
                 Joining...
               {:else}
                 <UserPlus class="mr-2 h-5 w-5" />
-                Accept Invite
+                Accept invite
               {/if}
             </Button>
           {/if}
@@ -272,11 +274,13 @@
     {:else}
       <!-- Not authenticated — show OIDC + passkey options -->
       <Card.Header class="space-y-1 text-center">
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
-        >
-          <UserPlus class="h-6 w-6 text-primary" />
-        </div>
+        <Artwork
+          icon={fingerprintArtwork}
+          palette="water"
+          motion="auto"
+          autoplay="once"
+          class="mx-auto mb-4 size-56"
+        />
         <Card.Title class="text-2xl font-bold">Join Nocturne</Card.Title>
       </Card.Header>
 

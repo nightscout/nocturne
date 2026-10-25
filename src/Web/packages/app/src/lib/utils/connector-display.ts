@@ -5,6 +5,7 @@ import Plug from "@lucide/svelte/icons/plug";
 import Settings from "@lucide/svelte/icons/settings";
 import Smartphone from "@lucide/svelte/icons/smartphone";
 import Sparkles from "@lucide/svelte/icons/sparkles";
+import { ConnectorState } from "$lib/constants/connector-states";
 import type { DataSourceStatus } from "$lib/components/settings/DataSourceRow.svelte";
 
 /** Minimal connector status shape needed for display mapping */
@@ -35,15 +36,15 @@ export function getCategoryIcon(category: string | undefined) {
 export function mapConnectorStatus(
   connectorStatus: ConnectorDisplayStatus
 ): DataSourceStatus {
-  if (connectorStatus.state === "Syncing") return "syncing";
-  if (connectorStatus.state === "BackingOff") return "backing-off";
+  if (connectorStatus.state === ConnectorState.Syncing) return "syncing";
+  if (connectorStatus.state === ConnectorState.BackingOff) return "backing-off";
   if (
-    connectorStatus.state === "Error" ||
-    (!connectorStatus.isHealthy && connectorStatus.state !== "Configured")
+    connectorStatus.state === ConnectorState.Error ||
+    (!connectorStatus.isHealthy && connectorStatus.state !== ConnectorState.Configured)
   )
     return "error";
-  if (connectorStatus.state === "Configured") return "configured";
-  if (connectorStatus.state === "Disabled") return "disabled";
-  if (connectorStatus.state === "Offline") return "offline";
+  if (connectorStatus.state === ConnectorState.Configured) return "configured";
+  if (connectorStatus.state === ConnectorState.Disabled) return "disabled";
+  if (connectorStatus.state === ConnectorState.Offline) return "offline";
   return "active";
 }

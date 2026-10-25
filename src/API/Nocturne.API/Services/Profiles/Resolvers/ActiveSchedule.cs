@@ -49,7 +49,7 @@ internal static class ActiveSchedule
             (await patientRecordRepo.GetAsync(ct))?.Timezone,
             snapshot?.Timezone,
             (await versions.GetActiveAtAsync(therapyRepo, profileName, timestamp, ct))?.Timezone);
-        var secondsFromMidnight = ScheduleTimeHelper.GetSecondsFromMidnight(
+        var secondsFromMidnight = ScheduleEntryTime.SecondsOfDay(
             shiftedMills, TimeZoneHelper.GetTimeZoneInfoFromId(timezone));
 
         return new At<TEntry>(entries, secondsFromMidnight, adjustment);

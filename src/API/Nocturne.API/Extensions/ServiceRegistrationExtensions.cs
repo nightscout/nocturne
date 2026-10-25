@@ -12,12 +12,14 @@ using Nocturne.API.Multitenancy;
 using Nocturne.API.RateLimiting;
 using Nocturne.API.Services.AidDetection;
 using Nocturne.API.Services.Alerts;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Alerts.Webhooks;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.CoachMarks;
+using Nocturne.API.Services.SetupHub;
+using Nocturne.API.Services.SetupHub.Items;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Content;
@@ -55,6 +57,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.CoachMarks;
+using Nocturne.Core.Contracts.SetupHub;
 using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Alerts;
@@ -207,6 +210,40 @@ public static class ServiceRegistrationExtensions
         context.Request.Host.Host.ToLowerInvariant();
 
     /// <summary>
+    /// Rate-limiting policy for the anonymous alert reads and receipts of a no-account viewer: a
+    /// clock face's alerts, and the "seen" a share, guest or clock records.
+    /// </summary>
+    public const string NoAccountAlertsRateLimitPolicy = "no-account-alerts";
+
+    /// <summary>
+    /// Partition key for <see cref="NoAccountAlertsRateLimitPolicy"/>: the request host, lowered,
+    /// and the hashed credential the request presents (session or bearer, as
+    /// <see cref="TranslationDraftPartitionKey"/> reads them, or a guest session cookie), else the
+    /// clock face in the route, else one anonymous bucket for the host.
+    /// </summary>
+    /// <remarks>
+    /// The limiter runs before authentication, so the key reads the request rather than the auth
+    /// context, and never the client address, which the caller controls through X-Forwarded-For.
+    /// A public share is its own host, so its viewers share a bucket no one without the link can
+    /// spend.
+    /// </remarks>
+    internal static string NoAccountAlertsPartitionKey(HttpContext context)
+    {
+        var host = context.Request.Host.Host.ToLowerInvariant();
+        var cookie = context.RequestServices.GetService<IOptions<OidcOptions>>()?.Value.Cookie;
+        var credential =
+            (cookie is null ? null : context.Request.Cookies[cookie.AccessTokenName])
+            ?? (cookie is null ? null : context.Request.Cookies[cookie.RefreshTokenName])
+            ?? context.Request.Cookies[GuestSessionHandler.CookieName]
+            ?? TokenCredential(context.Request);
+
+        var who = !string.IsNullOrEmpty(credential)
+            ? Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(credential)))
+            : context.Request.RouteValues["id"]?.ToString() ?? AnonymousDraftPartition;
+        return $"{host}|{who}";
+    }
+
+    /// <summary>
     /// Rate-limiting policy for the per-session translation draft store.
     /// </summary>
     public const string TranslationDraftsRateLimitPolicy = "translation-drafts";
@@ -246,6 +283,29 @@ public static class ServiceRegistrationExtensions
         return string.IsNullOrEmpty(credential)
             ? AnonymousDraftPartition
             : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(credential)));
+    }
+
+    /// <summary>
+    /// Every rate-limit policy's partition key, by policy name. The registration reads its keys from
+    /// here, and <c>RateLimitPartitionKeyGuardTests</c> calls each entry and fails a registered
+    /// policy that has none.
+    /// </summary>
+    /// <remarks>
+    /// The limiter runs before <c>AuthenticationMiddleware</c>, so a key that reads the auth
+    /// context sees nothing and collapses into one shared bucket.
+    /// </remarks>
+    internal static IReadOnlyDictionary<string, Func<HttpContext, string>> RateLimitPartitionKeys(
+        ClientRateLimitKey clientRateLimitKey)
+    {
+        var keys = new Dictionary<string, Func<HttpContext, string>>
+        {
+            [StatisticsComputeRateLimitPolicy] = StatisticsComputePartitionKey,
+            [TranslationDraftsRateLimitPolicy] = TranslationDraftPartitionKey,
+            [NoAccountAlertsRateLimitPolicy] = NoAccountAlertsPartitionKey,
+        };
+        foreach (var (policy, _, _) in ClientAddressPolicies)
+            keys[policy] = clientRateLimitKey.Resolve;
+        return keys;
     }
 
     /// <summary>
@@ -301,8 +361,12 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBraceExpansionService, BraceExpansionService>();
         services.AddScoped<ITimeQueryService, TimeQueryService>();
 
+        services.Configure<DbSizeOptions>(configuration.GetSection(DbSizeOptions.SectionName));
+        services.AddSingleton<StoreSizeEstimator>();
+        services.AddScoped<IStoreSizeReader, StoreSizeReader>();
         services.AddScoped<IDDataService, DDataService>();
         services.AddScoped<IPropertiesService, PropertiesService>();
+        services.AddScoped<IIobCobReader, IobCobReader>();
         services.AddScoped<ISummaryService, SummaryService>();
         // Prediction service — configurable via Predictions:Source (None, DeviceStatus, OrefWasm)
         var predictionSource = PredictionOptions.ResolveSource(configuration);
@@ -348,6 +412,109 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<ITranslationContributionService, GitHubTranslationService>();
         services.AddSingleton<IContentContributionService, GitHubContentService>();
         services.AddScoped<ITranslationDraftService, TranslationDraftService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers every rate-limit policy, each partitioned by its entry in <see cref="RateLimitPartitionKeys"/>.
+    /// </summary>
+    internal static IServiceCollection AddApiRateLimiting(
+        this IServiceCollection services,
+        IConfiguration configuration
+    )
+    {
+        var partitionKeys = RateLimitPartitionKeys(new ClientRateLimitKey(configuration));
+
+        services.AddRateLimiter(options =>
+        {
+            foreach (var (policy, permitLimit, window) in ClientAddressPolicies)
+            {
+                options.AddPolicy(
+                    policy,
+                    context =>
+                        RateLimitPartition.GetFixedWindowLimiter(
+                            partitionKey: partitionKeys[policy](context),
+                            factory: _ => new FixedWindowRateLimiterOptions
+                            {
+                                PermitLimit = permitLimit,
+                                Window = window,
+                                QueueLimit = 0,
+                            }
+                        )
+                );
+            }
+
+            // Statistics compute POSTs: 60 per tenant host per minute. These actions compute over a
+            // caller-supplied body rather than over stored data, and reports.read — the scope
+            // gating them — is held by every public share link, so an anonymous viewer can post
+            // them. The partition is the Host rather than the client because what this bounds is one
+            // tenant's compute across all of its viewers, and the limiter runs before tenant
+            // resolution while the tenant (or share token) is already the subdomain.
+            options.AddPolicy(
+                StatisticsComputeRateLimitPolicy,
+                context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey: partitionKeys[StatisticsComputeRateLimitPolicy](context),
+                        factory: _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 60,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                        }
+                    )
+            );
+
+            // Translation drafts: 60 per session per minute, sliding. Autosave
+            // batches every 800ms while typing, so the ceiling has to clear
+            // normal editing while still bounding the per-call database work an
+            // editor session can force. Partitioned by credential rather than
+            // IP because the caller controls X-Forwarded-For; see
+            // TranslationDraftPartitionKey.
+            options.AddPolicy(
+                TranslationDraftsRateLimitPolicy,
+                context =>
+                    RateLimitPartition.GetSlidingWindowLimiter(
+                        partitionKey: partitionKeys[TranslationDraftsRateLimitPolicy](context),
+                        factory: _ => new SlidingWindowRateLimiterOptions
+                        {
+                            PermitLimit = 60,
+                            Window = TimeSpan.FromMinutes(1),
+                            SegmentsPerWindow = 6,
+                            QueueLimit = 0,
+                        }
+                    )
+            );
+
+            // A clock polls its alerts every 10 seconds from each screen it is open on, so a face on
+            // a few dozen screens shares one bucket; a receipt is one press per alarm.
+            options.AddPolicy(
+                NoAccountAlertsRateLimitPolicy,
+                context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey: partitionKeys[NoAccountAlertsRateLimitPolicy](context),
+                        factory: _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 300,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                        }
+                    )
+            );
+
+            options.OnRejected = async (context, ct) =>
+            {
+                context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                await context.HttpContext.Response.WriteAsJsonAsync(
+                    new
+                    {
+                        error = "rate_limit_exceeded",
+                        error_description = "Too many requests. Please try again later.",
+                    },
+                    ct
+                );
+            };
+        });
 
         return services;
     }
@@ -472,6 +639,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantMemberService, TenantMemberService>();
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<ITenantService, TenantService>();
+        services.AddScoped<IUnitsAndTimezoneService, UnitsAndTimezoneService>();
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();
         services.AddScoped<IGlucoseStatusClassifier, GlucoseStatusClassifier>();
         services.AddScoped<IInstanceSetupState, InstanceSetupState>();
@@ -509,81 +677,7 @@ public static class ServiceRegistrationExtensions
             ConnectCallback = new PinnedConnector(OutboundAddressPolicy.NotLinkLocal).ConnectAsync,
         });
 
-        var clientRateLimitKey = new ClientRateLimitKey(configuration);
-
-        services.AddRateLimiter(options =>
-        {
-            foreach (var (policy, permitLimit, window) in ClientAddressPolicies)
-            {
-                options.AddPolicy(
-                    policy,
-                    context =>
-                        RateLimitPartition.GetFixedWindowLimiter(
-                            partitionKey: clientRateLimitKey.Resolve(context),
-                            factory: _ => new FixedWindowRateLimiterOptions
-                            {
-                                PermitLimit = permitLimit,
-                                Window = window,
-                                QueueLimit = 0,
-                            }
-                        )
-                );
-            }
-
-            // Statistics compute POSTs: 60 per tenant host per minute. These actions compute over a
-            // caller-supplied body rather than over stored data, and reports.read — the scope
-            // gating them — is held by every public share link, so an anonymous viewer can post
-            // them. The partition is the Host rather than the client because what this bounds is one
-            // tenant's compute across all of its viewers, and the limiter runs before tenant
-            // resolution while the tenant (or share token) is already the subdomain.
-            options.AddPolicy(
-                StatisticsComputeRateLimitPolicy,
-                context =>
-                    RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: StatisticsComputePartitionKey(context),
-                        factory: _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 60,
-                            Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            // Translation drafts: 60 per session per minute, sliding. Autosave
-            // batches every 800ms while typing, so the ceiling has to clear
-            // normal editing while still bounding the per-call database work an
-            // editor session can force. Partitioned by credential rather than
-            // IP because the caller controls X-Forwarded-For; see
-            // TranslationDraftPartitionKey.
-            options.AddPolicy(
-                TranslationDraftsRateLimitPolicy,
-                context =>
-                    RateLimitPartition.GetSlidingWindowLimiter(
-                        partitionKey: TranslationDraftPartitionKey(context),
-                        factory: _ => new SlidingWindowRateLimiterOptions
-                        {
-                            PermitLimit = 60,
-                            Window = TimeSpan.FromMinutes(1),
-                            SegmentsPerWindow = 6,
-                            QueueLimit = 0,
-                        }
-                    )
-            );
-
-            options.OnRejected = async (context, ct) =>
-            {
-                context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-                await context.HttpContext.Response.WriteAsJsonAsync(
-                    new
-                    {
-                        error = "rate_limit_exceeded",
-                        error_description = "Too many requests. Please try again later.",
-                    },
-                    ct
-                );
-            };
-        });
+        services.AddApiRateLimiting(configuration);
 
         return services;
     }
@@ -659,6 +753,7 @@ public static class ServiceRegistrationExtensions
         });
         services.AddScoped<IBatteryService, BatteryService>();
         services.AddScoped<IProfileWriteService, ProfileWriteService>();
+        services.AddScoped<IProfileDeletionService, ProfileDeletionService>();
         services.AddScoped<IProfileActivationResolver, Services.ProfileActivations.ProfileActivationResolver>();
         services.AddScoped<Services.ProfileActivations.ProfileActivationWriter>();
         services.AddScoped<Services.ProfileActivations.NativeProfileSwitches>();
@@ -667,6 +762,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ProfileStoreTimelineSource>();
         services.AddScoped<IBasalRateResolver, BasalRateResolver>();
         services.AddScoped<IBasalSegmentService, BasalSegmentService>();
+        services.AddScoped<IActiveProfileSchedulesService, ActiveProfileSchedulesService>();
         services.AddScoped<ISensitivityResolver, SensitivityResolver>();
         services.AddScoped<ICarbRatioResolver, CarbRatioResolver>();
         services.AddScoped<ITargetRangeResolver, TargetRangeResolver>();
@@ -725,6 +821,8 @@ public static class ServiceRegistrationExtensions
         // definitions (and self-healing if a managed rule is ever lost).
         services.AddScoped<ITrackerAlertRuleSyncService, TrackerAlertRuleSyncService>();
         services.AddHostedService<TrackerAlertRuleBackfillService>();
+        services.AddScoped<ConsumableTrackerWriter>();
+        services.AddScoped<ILegacyFallbackService, LegacyFallbackService>();
         services.AddScoped<IDeviceAgeService, DeviceAgeService>();
         services.AddScoped<ISensorSessionInferenceService, SensorSessionInferenceService>();
         services.AddSingleton<ISensorSessionInferenceRunner, SensorSessionInferenceRunner>();
@@ -744,6 +842,18 @@ public static class ServiceRegistrationExtensions
 
         // Coach marks
         services.AddScoped<ICoachMarkService, CoachMarkService>();
+
+        // Setup hub
+        services.AddScoped<ISetupHubService, SetupHubService>();
+        services.AddScoped<ISetupHubItem, ConnectDataItem>();
+        services.AddScoped<ISetupHubItem, AlertsItem>();
+        services.AddScoped<AlertSetupService>();
+        services.AddScoped<ISetupHubItem, DevicesItem>();
+        services.AddScoped<DeviceSetupService>();
+        services.AddScoped<ISetupHubItem, TherapyItem>();
+        services.AddScoped<ITherapySetupService, TherapySetupService>();
+        services.AddScoped<ISetupHubItem, SharingItem>();
+        services.AddScoped<ISetupHubItem, AboutItem>();
 
         // Timezone timeline (fake-UTC connector conversion + travel/relocation)
         services.AddScoped<ITimezoneTimelineService, TimezoneTimelineService>();
@@ -908,10 +1018,13 @@ public static class ServiceRegistrationExtensions
         // categories. Open generic so every V4 model type resolves; the repository chokepoint fires it
         // for live writes only. Additive to the legacy v1 IDataEventSink<T> projections above.
         services.AddScoped(typeof(IV4RecordBroadcaster<>), typeof(SignalRV4RecordBroadcaster<>));
+        services.AddScoped<IGlucoseReadingBroadcaster, HomeAssistantGlucoseBroadcaster>();
 
         // Push notifications
         services.AddScoped<INotificationV2Service, NotificationV2Service>();
         services.AddScoped<INotificationV1Service, NotificationV1Service>();
+        services.AddSingleton<LegacyAlarmSnoozeStore>();
+        services.AddSingleton<LegacyNotificationStore>();
         services.AddScoped<IApnsClientFactory, ApnsClientFactory>();
         services.AddHttpClient(
             "dotAPNS",
@@ -952,7 +1065,7 @@ public static class ServiceRegistrationExtensions
 
     /// <summary>
     /// Alert engines, device health monitoring, compression low detection,
-    /// and all notifier implementations (SignalR, webhook, Pushover).
+    /// and all notifier implementations (SignalR, webhook).
     /// </summary>
     public static IServiceCollection AddAlertingAndMonitoring(
         this IServiceCollection services,
@@ -981,23 +1094,13 @@ public static class ServiceRegistrationExtensions
                     new PinnedConnector(OutboundAddressPolicy.PubliclyRoutable).ConnectAsync,
             });
 
-        // Condition evaluators. Scoped because SustainedEvaluator depends on the scoped
-        // IConditionTimerStore (DbContext-backed); the registry is also scoped because it captures
-        // IEnumerable<IConditionEvaluator>.
-        services.AddAlertEvaluators();
-        services.AddScoped<ConditionEvaluatorRegistry>();
-
-        // Sustained-condition timer store
-        services.AddScoped<IConditionTimerStore, ConditionTimerRepository>();
-
         // The excursion tracker's per-rule serialisation gate is a singleton: the sweep and the
         // per-reading path evaluate the same rule from different scopes.
         services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddScoped<AlertRuleRearm>();
         services.AddScoped<AlertRuleRetirement>();
 
-        // Alert evaluation engine and excursion tracker seams (Alerts:Engine = managed | shadow | rust)
-        services.AddAlertEvaluationEngine(configuration);
+        services.AddAlertEvaluationEngine();
 
         // Alert engine core
         services.AddScoped<IAlertRepository, AlertRepository>();
@@ -1010,8 +1113,11 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
         services.AddScoped<IAlertDeliveryService, AlertDeliveryService>();
         services.AddScoped<IAlertAcknowledgementService, AlertAcknowledgementService>();
+        services.AddScoped<AlertReceiptService>();
         services.AddScoped<IAlertSnoozeService, AlertSnoozeService>();
         services.AddScoped<IExcursionResolutionHandler, ExcursionResolutionHandler>();
+        services.AddScoped<IEngineAlarmRelay, EngineAlarmRelay>();
+        services.AddScoped<IAlarmAckHandler, AlarmAckHandler>();
         services.AddScoped<IAlertReferenceService, AlertReferenceService>();
         services.AddScoped<IAlertReplayService, AlertReplayService>();
         // Scope-class classification (scoped Do Not Disturb, ADR 0004): stateless over
@@ -1103,25 +1209,19 @@ public static class ServiceRegistrationExtensions
     }
 
     /// <summary>
-    /// Registers the <see cref="Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine"/> and
-    /// <see cref="IExcursionTracker"/> seams: all three engine implementations, the tracker
-    /// deciding with the selected engine, plus the singleton
-    /// <see cref="Nocturne.API.Services.Alerts.Engines.AlertEngineSelection"/> resolved
-    /// from the <c>Alerts:Engine</c> flag (<c>managed</c> | <c>shadow</c> | <c>rust</c>,
-    /// default <c>managed</c>). Program resolves the selection at startup so the native-library
-    /// probe runs once, before the host serves traffic; see
-    /// <see cref="Nocturne.API.Services.Alerts.Engines.AlertEngineSelector"/> for what a failed
-    /// probe does in each mode.
+    /// Registers the <see cref="Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine"/>,
+    /// <see cref="IExcursionTracker"/> and <see cref="Nocturne.Core.Contracts.Alerts.IAlertReplayEngine"/>
+    /// seams over the nocturne_alerts native library, plus the singleton
+    /// <see cref="Nocturne.API.Services.Alerts.Engines.AlertEngineNativeLibrary"/>, which Program
+    /// resolves at startup so a library that fails its probe stops the host before it serves traffic.
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="configuration">Configuration carrying the <c>Alerts:Engine</c> flag.</param>
     /// <param name="nativeProbe">
     /// Native-library probe override for tests; defaults to
     /// <see cref="Nocturne.Core.Alerts.Native.AlertsInterop.Probe"/>.
     /// </param>
     public static IServiceCollection AddAlertEvaluationEngine(
         this IServiceCollection services,
-        IConfiguration configuration,
         Func<Nocturne.Core.Alerts.Native.NativeProbeResult>? nativeProbe = null)
     {
         services.AddMetrics();
@@ -1132,129 +1232,23 @@ public static class ServiceRegistrationExtensions
         services.AddHealthChecks()
             .AddCheck<Nocturne.API.Services.Alerts.Engines.AlertEngineHealthCheck>("alert-engine");
 
-        services.AddScoped<Nocturne.API.Services.Alerts.Engines.ManagedAlertEngine>();
-        services.AddScoped<Nocturne.API.Services.Alerts.Engines.RustBackedAlertEngine>();
-        services.AddScoped<
-            Nocturne.API.Services.Alerts.Engines.IShadowRuleEvaluator,
-            Nocturne.API.Services.Alerts.Engines.RustShadowRuleEvaluator>();
-        services.AddScoped<Nocturne.API.Services.Alerts.Engines.ShadowAlertEngine>();
+        services.AddSingleton(sp => Nocturne.API.Services.Alerts.Engines.AlertEngineNativeLibrary.Load(
+            nativeProbe ?? Nocturne.Core.Alerts.Native.AlertsInterop.Probe,
+            sp.GetRequiredService<ILoggerFactory>()
+                .CreateLogger(typeof(Nocturne.API.Services.Alerts.Engines.AlertEngineNativeLibrary).FullName!)));
 
-        // The managed engine always tracks with the managed decider; shadow mode compares
-        // through ShadowAlertEngine instead.
-        services.AddScoped(sp => new ExcursionTracker(
+        services.AddScoped<IExcursionTracker>(sp => new ExcursionTracker(
             sp.GetRequiredService<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>(),
             sp.GetRequiredService<AlertRuleEvaluationGate>(),
             sp.GetRequiredService<TimeProvider>(),
-            sp.GetRequiredService<ILogger<ExcursionTracker>>()));
-        services.AddScoped<IExcursionTracker>(sp =>
-        {
-            var mode = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>().Mode;
-            if (mode == Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Managed)
-                return sp.GetRequiredService<ExcursionTracker>();
+            sp.GetRequiredService<ILogger<ExcursionTracker>>(),
+            new Nocturne.API.Services.Alerts.Engines.RustExcursionDecider(
+                sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineErrors>())));
+        services.AddSingleton<Nocturne.Core.Contracts.Alerts.IAlertReplayEngine,
+            Nocturne.API.Services.Alerts.Engines.RustAlertReplayEngine>();
+        services.AddScoped<Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine,
+            Nocturne.API.Services.Alerts.Engines.RustBackedAlertEngine>();
 
-            var errors = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineErrors>();
-            IExcursionDecider decider = mode == Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Rust
-                ? new Nocturne.API.Services.Alerts.Engines.RustExcursionDecider(
-                    errors, Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.RustEngine)
-                : new Nocturne.API.Services.Alerts.Engines.ShadowExcursionDecider(
-                    ManagedExcursionDecider.Instance,
-                    new Nocturne.API.Services.Alerts.Engines.RustExcursionDecider(
-                        errors, Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.ShadowEngine),
-                    sp.GetRequiredService<ILogger<Nocturne.API.Services.Alerts.Engines.ShadowExcursionDecider>>());
-            return new ExcursionTracker(
-                sp.GetRequiredService<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>(),
-                sp.GetRequiredService<AlertRuleEvaluationGate>(),
-                sp.GetRequiredService<TimeProvider>(),
-                sp.GetRequiredService<ILogger<ExcursionTracker>>(),
-                decider);
-        });
-
-        services.AddSingleton(sp =>
-        {
-            var logger = sp.GetRequiredService<ILoggerFactory>()
-                .CreateLogger(typeof(Nocturne.API.Services.Alerts.Engines.AlertEngineSelector).FullName!);
-            return Nocturne.API.Services.Alerts.Engines.AlertEngineSelector.Select(
-                configuration[Nocturne.API.Services.Alerts.Engines.AlertEngineSelector.ConfigurationKey],
-                nativeProbe ?? Nocturne.Core.Alerts.Native.AlertsInterop.Probe,
-                logger);
-        });
-
-        services.AddSingleton<Nocturne.API.Services.Alerts.Engines.ManagedAlertReplayEngine>();
-        services.AddSingleton<Nocturne.Core.Contracts.Alerts.IAlertReplayEngine>(sp =>
-        {
-            var managed = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.ManagedAlertReplayEngine>();
-            var errors = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineErrors>();
-            return sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>().Mode switch
-            {
-                Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Rust =>
-                    new Nocturne.API.Services.Alerts.Engines.RustAlertReplayEngine(errors),
-                Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Shadow =>
-                    new Nocturne.API.Services.Alerts.Engines.ShadowAlertReplayEngine(
-                        managed,
-                        new Nocturne.API.Services.Alerts.Engines.RustAlertReplayEngine(errors)
-                        {
-                            EngineTag = Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.ShadowEngine,
-                        },
-                        sp.GetRequiredService<ILogger<Nocturne.API.Services.Alerts.Engines.ShadowAlertReplayEngine>>()),
-                _ => managed,
-            };
-        });
-
-        services.AddScoped<Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine>(sp =>
-            sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>().Mode switch
-            {
-                Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Rust =>
-                    sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.RustBackedAlertEngine>(),
-                Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Shadow =>
-                    sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.ShadowAlertEngine>(),
-                _ => sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.ManagedAlertEngine>(),
-            });
-
-        return services;
-    }
-
-    /// <summary>
-    /// Registers every <see cref="IConditionEvaluator"/> implementation that the
-    /// <see cref="ConditionEvaluatorRegistry"/> resolves at runtime. Extracted from
-    /// <see cref="AddAlertingAndMonitoring"/> so production wiring and the registry
-    /// coverage tests can share the same single source of truth — adding a new
-    /// evaluator here automatically updates both.
-    /// </summary>
-    public static IServiceCollection AddAlertEvaluators(this IServiceCollection services)
-    {
-        services.AddScoped<IConditionEvaluator, ThresholdEvaluator>();
-        services.AddScoped<IConditionEvaluator, RateOfChangeEvaluator>();
-        services.AddScoped<IConditionEvaluator, SignalLossEvaluator>();
-        services.AddScoped<IConditionEvaluator, StalenessEvaluator>();
-        services.AddScoped<IConditionEvaluator, CompositeEvaluator>();
-        services.AddScoped<IConditionEvaluator, NotEvaluator>();
-        services.AddScoped<IConditionEvaluator, SustainedEvaluator>();
-        services.AddScoped<IConditionEvaluator, PredictedEvaluator>();
-        services.AddScoped<IConditionEvaluator, TrendEvaluator>();
-        services.AddScoped<IConditionEvaluator, TimeOfDayEvaluator>();
-        services.AddScoped<IConditionEvaluator, IobEvaluator>();
-        services.AddScoped<IConditionEvaluator, CobEvaluator>();
-        services.AddScoped<IConditionEvaluator, ReservoirEvaluator>();
-        services.AddScoped<IConditionEvaluator, SiteAgeEvaluator>();
-        services.AddScoped<IConditionEvaluator, SensorAgeEvaluator>();
-        services.AddScoped<IConditionEvaluator, AlertStateEvaluator>();
-        services.AddScoped<IConditionEvaluator, LoopStaleEvaluator>();
-        services.AddScoped<IConditionEvaluator, LoopEnactionStaleEvaluator>();
-        services.AddScoped<IConditionEvaluator, PumpSuspendedEvaluator>();
-        services.AddScoped<IConditionEvaluator, PumpBatteryEvaluator>();
-        services.AddScoped<IConditionEvaluator, TempBasalEvaluator>();
-        services.AddScoped<IConditionEvaluator, UploaderBatteryEvaluator>();
-        services.AddScoped<IConditionEvaluator, OverrideActiveEvaluator>();
-        services.AddScoped<IConditionEvaluator, SensitivityRatioEvaluator>();
-        services.AddScoped<IConditionEvaluator, DoNotDisturbEvaluator>();
-        services.AddScoped<IConditionEvaluator, GlucoseBucketEvaluator>();
-        services.AddScoped<IConditionEvaluator, TimeSinceLastCarbEvaluator>();
-        services.AddScoped<IConditionEvaluator, TimeSinceLastBolusEvaluator>();
-        services.AddScoped<IConditionEvaluator, DayOfWeekEvaluator>();
-        services.AddScoped<IConditionEvaluator, PumpStateEvaluator>();
-        services.AddScoped<IConditionEvaluator, StateSpanActiveEvaluator>();
-        services.AddScoped<IConditionEvaluator, SleepSessionActiveEvaluator>();
-        services.AddScoped<IConditionEvaluator, TrackerAgeEvaluator>();
         return services;
     }
 

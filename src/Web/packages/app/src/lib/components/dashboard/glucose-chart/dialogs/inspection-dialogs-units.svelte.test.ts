@@ -11,6 +11,7 @@ vi.mock("$lib/api/generated/bolusCalculations.generated.remote", () => ({
   getAll: vi.fn(async () => ({ data: [{ bloodGlucoseInput: 220 }] })),
 }));
 
+import { MealPeriod } from "$lib/api";
 import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
 import DeliveryInspectionDialog from "./DeliveryInspectionDialog.svelte";
 import GlucoseInspectionDialog from "./GlucoseInspectionDialog.svelte";
@@ -92,5 +93,36 @@ describe("inspection dialogs in the chart's units", () => {
     });
 
     await expect.element(page.getByRole("dialog").getByText("150 mg/dL")).toBeVisible();
+  });
+});
+
+describe("treatment inspection dialog meal period", () => {
+  it("words a meal period in sentence case when no food name was logged", async () => {
+    render(TreatmentInspectionDialog, {
+      ...shared,
+      carbGrams: 40,
+      carbMealPeriod: MealPeriod.LateNight,
+      hasGlucoseContext: false,
+      hasDeliveryContext: false,
+    });
+
+    const dialog = page.getByRole("dialog");
+    await expect.element(dialog.getByText("40g Late night", { exact: true })).toBeVisible();
+    await expect.element(dialog.getByText("40g carbs (Late night)", { exact: true })).toBeVisible();
+  });
+
+  it("shows the food name in place of the meal period", async () => {
+    render(TreatmentInspectionDialog, {
+      ...shared,
+      carbGrams: 40,
+      carbLabel: "Porridge",
+      carbMealPeriod: MealPeriod.Breakfast,
+      hasGlucoseContext: false,
+      hasDeliveryContext: false,
+    });
+
+    const dialog = page.getByRole("dialog");
+    await expect.element(dialog.getByText("40g Porridge")).toBeVisible();
+    await expect.element(dialog.getByText("Breakfast")).not.toBeInTheDocument();
   });
 });

@@ -174,6 +174,35 @@ public class ScopeTranslatorTests
         Assert.Contains("api:activity:read", permissions);
     }
 
+    [Theory]
+    [InlineData("notifications:*:ack")]
+    [InlineData("*:*:ack")]
+    public void FromPermissions_NightscoutAck_MapsToAlertsAcknowledgeOnly(string permission)
+    {
+        var scopes = ScopeTranslator.FromPermissions([permission]);
+
+        Assert.Equal([Scope.AlertsAcknowledge], scopes);
+    }
+
+    [Fact]
+    public void FromPermissions_NightscoutAck_GainsNoOtherAuthority()
+    {
+        var scopes = ScopeTranslator.FromPermissions(["notifications:*:ack"]);
+
+        Assert.All(
+            Scope.PermissionAtoms.Where(atom => atom != Scope.AlertsAcknowledge),
+            atom => Assert.False(Scope.Satisfies(scopes, atom), $"notifications:*:ack must not grant {atom}"));
+    }
+
+    [Fact]
+    public void ToPermissions_AlertsAcknowledge_RoundTripsThroughNightscoutAck()
+    {
+        var permissions = ScopeTranslator.ToPermissions([Scope.AlertsAcknowledge]);
+
+        Assert.Equal(["notifications:*:ack"], permissions);
+        Assert.Equal([Scope.AlertsAcknowledge], ScopeTranslator.FromPermissions(permissions));
+    }
+
     [Fact]
     public void FromPermissions_MultiplePermissions_AggregatesScopes()
     {

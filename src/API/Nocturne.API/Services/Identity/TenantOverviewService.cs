@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -27,17 +28,20 @@ public class TenantOverviewService : ITenantOverviewService
     private readonly INocturneDbContextFactory _factory;
     private readonly IServiceProvider _scope;
     private readonly IGlucoseStatusClassifier _classifier;
+    private readonly IAlertRepository _alertRepository;
     private readonly ILogger<TenantOverviewService> _logger;
 
     public TenantOverviewService(
         INocturneDbContextFactory factory,
         IServiceProvider scope,
         IGlucoseStatusClassifier classifier,
+        IAlertRepository alertRepository,
         ILogger<TenantOverviewService> logger)
     {
         _factory = factory;
         _scope = scope;
         _classifier = classifier;
+        _alertRepository = alertRepository;
         _logger = logger;
     }
 
@@ -140,7 +144,8 @@ public class TenantOverviewService : ITenantOverviewService
                 .Min();
         }
 
-        var thresholds = await _classifier.ResolveThresholdsAsync(db, ct);
+        var thresholds = _classifier.ResolveThresholds(
+            await _alertRepository.GetEnabledRulesAsync(tenant.Id, ct));
 
         var reading = latest is null
             ? null

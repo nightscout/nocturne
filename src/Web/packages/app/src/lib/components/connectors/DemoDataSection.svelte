@@ -70,7 +70,7 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Sparkles class="h-5 w-5 text-demo" />
-        Demo Data
+        Demo data
       </Dialog.Title>
       <Dialog.Description>
         Manage the simulated demo data in your Nocturne instance
@@ -111,14 +111,14 @@
           class="rounded-lg border border-demo/30 bg-demo/5 p-4"
         >
           <p class="text-sm text-demo">
-            <strong>This is demo data</strong>
-            — synthetic glucose readings generated for testing and demonstration purposes.
+            <strong>This is demo data</strong>:
+            synthetic glucose readings generated for testing and demonstration purposes.
           </p>
         </div>
 
         <div class="space-y-3">
           <p class="text-sm text-muted-foreground">
-            You can safely delete all demo data. It's very easy to regenerate:
+            You can safely delete all demo data. It is easy to regenerate:
           </p>
           <ul
             class="text-sm text-muted-foreground list-disc list-inside space-y-1"
@@ -144,7 +144,7 @@
             Deleting...
           {:else}
             <Trash2 class="h-4 w-4" />
-            Clear Demo Data
+            Clear demo data
           {/if}
         </Button>
       {/if}

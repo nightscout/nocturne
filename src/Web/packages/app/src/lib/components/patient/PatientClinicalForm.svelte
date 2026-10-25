@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Scale from "@lucide/svelte/icons/scale";
   import { labelFor } from "$lib/components/ui/enum-value";
   import { Input } from "$lib/components/ui/input";
   import * as Select from "$lib/components/ui/select";
@@ -7,12 +8,14 @@
   import { diabetesTypeLabels, biologicalSexLabels } from "./labels";
   import { ClinicalState } from "./state.svelte";
   import TimezoneCombobox from "./TimezoneCombobox.svelte";
-
+    
   interface Props {
     onstate?: (state: ClinicalState) => void;
+    /** Runs once the record, and the weight if it changed, have saved. */
+    onsaved?: () => void | Promise<void>;
   }
 
-  let { onstate }: Props = $props();
+  let { onstate, onsaved }: Props = $props();
 
   let formEl = $state<HTMLFormElement | null>(null);
   const clinical = new ClinicalState(() => formEl);
@@ -27,7 +30,7 @@
   class="@container"
   bind:this={formEl}
   {...clinical.guard.enhance(async () => {
-    await clinical.weight.save();
+    if (await clinical.weight.save()) await onsaved?.();
   })}
 >
   <!-- Hidden fields for read-only record data -->
@@ -45,22 +48,15 @@
   {/if}
 
   <div class="grid gap-4 @sm:grid-cols-2">
-    <!-- aria-required, not required: bits-ui puts `required` on a 1px hidden
-         input that still takes part in constraint validation, so an empty
-         select blocks the submit event with a bubble anchored off-screen — the
-         Save button would appear to do nothing. The requirement is enforced by
-         the guard's schema, which reports it on the field. -->
     <FormField
-      label="Diabetes Type"
+      label="Diabetes type"
       id="diabetes-type"
-      required
       issues={clinical.guard.issuesFor("diabetesType")}
     >
       {#snippet control(field)}
         <Select.Root type="single" name="diabetesType" bind:value={clinical.diabetesType}>
           <Select.Trigger
             id={field.id}
-            aria-required="true"
             aria-invalid={field["aria-invalid"]}
             aria-describedby={field["aria-describedby"]}
           >
@@ -69,6 +65,7 @@
               : "Select type"}
           </Select.Trigger>
           <Select.Content>
+            <Select.Item value="" label="Not set" />
             {#each Object.entries(diabetesTypeLabels) as [value, label] (value)}
               <Select.Item {value} {label} />
             {/each}
@@ -78,7 +75,7 @@
     </FormField>
 
     {#if clinical.diabetesType === DiabetesType.Other}
-      <FormField label="Specify Type" id="diabetes-type-other">
+      <FormField label="Specify type" id="diabetes-type-other">
         {#snippet control(field)}
           <Input
             {...field}
@@ -90,7 +87,7 @@
       </FormField>
     {/if}
 
-    <FormField label="Diagnosis Date" id="diagnosis-date">
+    <FormField label="Diagnosis date" id="diagnosis-date">
       {#snippet control(field)}
         <Input
           {...field}
@@ -102,7 +99,7 @@
       {/snippet}
     </FormField>
 
-    <FormField label="Date of Birth" id="date-of-birth">
+    <FormField label="Date of birth" id="date-of-birth">
       {#snippet control(field)}
         <Input
           {...field}
@@ -136,14 +133,14 @@
       {/snippet}
     </FormField>
 
-    <FormField label="Preferred Name" id="preferred-name">
+    <FormField label="Preferred name" id="preferred-name">
       {#snippet control(field)}
         <Input
           {...field}
           name="preferredName"
           autocomplete="nickname"
           bind:value={clinical.preferredName}
-          placeholder="How you'd like to be addressed"
+          placeholder="How you want to be addressed"
         />
       {/snippet}
     </FormField>
@@ -178,11 +175,11 @@
       {#snippet hint()}
         {#if clinical.timezoneAutoDetected}
           <p class="text-xs text-muted-foreground">
-            Auto-detected from your browser. Save to confirm — alerts with time-of-day rules use this to interpret window hours in your local time, starting from when you save.
+            Detected automatically from your browser. Save to confirm. Alerts with time-of-day rules use this time zone to read window hours in your local time, starting from when you save.
           </p>
         {:else}
           <p class="text-xs text-muted-foreground">
-            Used by alerts, schedules, and analytics. Changing it takes effect from when you save — past data isn't reinterpreted.
+            Used by alerts, schedules, and analytics. A change takes effect when you save. Past data is not reinterpreted.
           </p>
         {/if}
       {/snippet}
@@ -191,18 +188,21 @@
     <FormField
       label="Weight (kg)"
       id="weight"
-      description="Recorded to your weight history when you save — only if it's changed."
+      description="Recorded to your weight history when you save, but only if it changed."
       issues={clinical.weight.saveError}
     >
       {#snippet control(field)}
-        <Input
-          {...field}
-          type="number"
-          step="0.1"
-          min="0"
-          bind:value={clinical.weight.weightKg}
-          placeholder="e.g. 70"
-        />
+        <div class="flex items-center gap-2">
+          <Scale class="size-6 shrink-0 text-muted-foreground" />
+          <Input
+            {...field}
+            type="number"
+            step="0.1"
+            min="0"
+            bind:value={clinical.weight.weightKg}
+            placeholder="e.g. 70"
+          />
+        </div>
       {/snippet}
     </FormField>
   </div>

@@ -32,7 +32,7 @@ of it.
 | **Severity** | Critical |
 | **For at least** | Off |
 
-The alert that must always get through. Critical means Do Not Disturb never
+The alert that must always get through. Critical means Do not disturb never
 holds it back. No "for at least" delay, because a late alert here costs more
 than a false one.
 

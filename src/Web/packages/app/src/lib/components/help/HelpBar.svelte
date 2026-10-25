@@ -21,7 +21,7 @@
     <p class="min-w-0 flex-1 text-sm">
       <span class="font-medium">Help with {article.title}</span>
       <span class="hidden text-muted-foreground lg:inline">
-        — Explanations, settings, and getting started
+       : Explanations, settings, and getting started
       </span>
     </p>
     <Button

@@ -48,6 +48,22 @@ class MessageTranslator {
     }
   }
 
+  handleEngineAlarm(event: AlarmEvent, alarm: unknown): void {
+    try {
+      this.socketIOServer.broadcastToAlarmNamespace(event, this.translateAlarm(event, alarm), this.tenantSlug);
+    } catch (error) {
+      logger.error('Error translating engine alarm:', error);
+    }
+  }
+
+  handleEngineClearAlarm(clear: unknown): void {
+    try {
+      this.socketIOServer.broadcastToAlarmNamespace('clear_alarm', clear, this.tenantSlug);
+    } catch (error) {
+      logger.error('Error handling engine clear alarm:', error);
+    }
+  }
+
   handleNotification(notification: unknown): void {
     try {
       const translatedNotification = this.translateNotification(notification);
@@ -125,6 +141,14 @@ class MessageTranslator {
     }
   }
 
+  handleTrackerDefinitionUpdate(data: unknown): void {
+    try {
+      this.socketIOServer.broadcastTrackerDefinitionUpdate(data, this.tenantSlug);
+    } catch (error) {
+      logger.error('Error handling tracker definition update:', error);
+    }
+  }
+
   handleSyncProgress(data: unknown): void {
     try {
       this.socketIOServer.broadcastSyncProgress(data, this.tenantSlug);
@@ -184,7 +208,7 @@ class MessageTranslator {
     };
   }
 
-  private translateAlarm(event: AlarmEvent, data: unknown): Payload {
+  translateAlarm(event: AlarmEvent, data: unknown): Payload {
     const alarm = fieldsOf(data);
     return {
       level: event === 'urgent_alarm' ? AlarmLevel.Urgent : AlarmLevel.Warn,

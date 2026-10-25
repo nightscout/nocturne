@@ -42,7 +42,7 @@ describe("ReportsFilterSidebar", () => {
     await expect.element(page.getByLabelText("Report filter", { exact: true })).toBeVisible();
     expect(log).toEqual(["begin"]);
 
-    await page.getByRole("button", { name: "Apply Filters" }).click();
+    await page.getByRole("button", { name: "Apply filters" }).click();
     await expect.poll(() => log).toEqual(["begin", "apply"]);
   });
 

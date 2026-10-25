@@ -1,6 +1,6 @@
 <script lang="ts">
   import { labelFor } from "$lib/components/ui/enum-value";
-  import type { BasalInjection, PatientInsulin } from "$lib/api";
+  import { InsulinRole, type BasalInjection, type PatientInsulin } from "$lib/api";
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -27,7 +27,7 @@
 
   let eligibleInsulins = $derived(
     patientInsulins.filter(
-      (i) => i.isCurrent && (i.role === "Basal" || i.role === "Both"),
+      (i) => i.isCurrent && (i.role === InsulinRole.Basal || i.role === InsulinRole.Both),
     ),
   );
 
@@ -35,7 +35,7 @@
   let selectedInsulin = $derived(
     eligibleInsulins.find((i) => i.id === selectedId),
   );
-  let isPremix = $derived(selectedInsulin?.role === "Both");
+  let isPremix = $derived(selectedInsulin?.role === InsulinRole.Both);
   let isHighDose = $derived(
     typeof injection.units === "number" && injection.units > 100,
   );
@@ -71,7 +71,7 @@
   </div>
 
   <div class="space-y-1.5">
-    <Label>Basal Insulin</Label>
+    <Label>Basal insulin</Label>
     <Select.Root
       type="single"
       value={selectedId ?? ""}
@@ -100,7 +100,7 @@
       >
         <AlertTriangle class="h-3.5 w-3.5 mt-0.5 shrink-0" />
         <span>
-          This insulin is used for both bolus and basal &mdash; log the basal
+          This insulin is used for both bolus and basal. Log the basal
           portion only.
         </span>
       </div>
@@ -122,7 +122,7 @@
         class="flex items-start gap-1.5 text-xs text-warning"
       >
         <AlertTriangle class="h-3.5 w-3.5 mt-0.5 shrink-0" />
-        <span>Confirm the dose &mdash; this is higher than typical.</span>
+        <span>Confirm the dose. This dose is higher than typical.</span>
       </div>
     {/if}
   </div>

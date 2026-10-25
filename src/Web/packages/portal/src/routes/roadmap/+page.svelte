@@ -1,8 +1,8 @@
 <script lang="ts">
+    import { Artwork } from "@nocturne/watercolour";
     import { getRoadmapData, type RoadmapMilestone } from "$lib/data/portal";
     import { Button } from "@nocturne/ui/ui/button";
     import MilestoneCard from "$lib/components/MilestoneCard.svelte";
-    import Milestone from "@lucide/svelte/icons/milestone";
     import GitPullRequest from "@lucide/svelte/icons/git-pull-request";
     import ExternalLink from "@lucide/svelte/icons/external-link";
     import AlertCircle from "@lucide/svelte/icons/circle-alert";
@@ -87,7 +87,7 @@
         </div>
     {:else if roadmapData.length === 0}
         <div class="flex flex-col items-center justify-center gap-3 py-25 text-muted-foreground text-sm">
-            <Milestone class="size-5" aria-hidden="true" />
+            <Artwork artwork="footprints" palette="moss" motion="auto" autoplay="once" class="size-48" />
             <p class="m-0 text-sm">No milestones found.</p>
         </div>
     {:else}

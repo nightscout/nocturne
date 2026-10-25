@@ -110,4 +110,21 @@ public class ServicesControllerDeleteFailureMappingTests
         failure.StatusCode.Should().Be(500);
         failure.Value.Should().BeOfType<DataSourceDeleteResult>();
     }
+
+    [Fact]
+    public async Task DeleteConnectorData_SyncRunning_Returns409()
+    {
+        _dataSourceService
+            .Setup(s => s.DeleteConnectorDataAsync(ConnectorId, It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DataSourceDeleteResult.Failed(
+                ConnectorId,
+                DataSourceDeleteError.SyncRunning,
+                "A sync is running"));
+
+        var response = await CreateController().DeleteConnectorData(ConnectorId, cancellationToken: CancellationToken.None);
+
+        var conflict = response.Result.Should().BeOfType<ObjectResult>().Subject;
+        conflict.StatusCode.Should().Be(409);
+        conflict.Value.Should().BeOfType<ProblemDetails>();
+    }
 }

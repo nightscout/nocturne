@@ -44,7 +44,7 @@
       );
     return [
       {
-        header: "Health Data",
+        header: "Health data",
         categories: [
           ...rowsFor(["health.read"]),
           ...rowsFor(healthReadScopes, { isSubItem: true, coveredBy: "health" }),
@@ -52,7 +52,7 @@
       },
       {
         header: "Platform",
-        categories: rowsFor(["alerts.read", "reports.read"]),
+        categories: rowsFor(["alerts.read", "alerts.acknowledge", "reports.read"]),
       },
       {
         header: "Account",

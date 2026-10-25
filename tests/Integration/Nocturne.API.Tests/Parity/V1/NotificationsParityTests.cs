@@ -7,7 +7,7 @@ namespace Nocturne.API.Tests.Integration.Parity.V1;
 
 /// <summary>
 /// Parity tests for /api/v1/notifications/* and /api/v1/adminnotifies endpoints.
-/// Covers notification acknowledgment, admin notifications, and Pushover integration.
+/// Covers notification acknowledgment and admin notifications.
 /// </summary>
 public class NotificationsParityTests : ParityTestBase
 {
@@ -121,24 +121,6 @@ public class NotificationsParityTests : ParityTestBase
         await NocturneClient.PostAsJsonAsync("/api/v1/adminnotifies", notification);
 
         await AssertDeleteParityAsync("/api/v1/adminnotifies?find[group]=to-delete");
-    }
-
-    #endregion
-
-    #region POST /api/v1/notifications/pushovercallback
-
-    [Fact]
-    public async Task PostPushoverCallback_Valid_ReturnsSameShape()
-    {
-        var callback = new
-        {
-            receipt = "test-receipt-123",
-            acknowledged = 1,
-            acknowledged_at = TestTimeProvider.GetTestTime().ToUnixTimeSeconds(),
-            acknowledged_by = "user123"
-        };
-
-        await AssertPostParityAsync("/api/v1/notifications/pushovercallback", callback);
     }
 
     #endregion

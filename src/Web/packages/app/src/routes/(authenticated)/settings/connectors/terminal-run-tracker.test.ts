@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SyncPhase } from "$lib/api";
 import type { SyncProgressEvent } from "$lib/websocket/types";
 import { createTerminalRunTracker } from "./terminal-run-tracker";
 
@@ -26,12 +27,12 @@ describe("createTerminalRunTracker", () => {
   it("reports nothing while every connector is still syncing", () => {
     const tracker = createTerminalRunTracker();
 
-    expect(tracker.hasNewlyFinishedRun(map(event("glooko", "Syncing")))).toBe(
+    expect(tracker.hasNewlyFinishedRun(map(event("glooko", SyncPhase.Syncing)))).toBe(
       false,
     );
   });
 
-  it.each(["Completed", "Failed"] as const)(
+  it.each([SyncPhase.Completed, SyncPhase.Failed] as const)(
     "reports a %s run once",
     (phase) => {
       const tracker = createTerminalRunTracker();
@@ -44,7 +45,7 @@ describe("createTerminalRunTracker", () => {
 
   it("does not re-report while another connector keeps emitting progress", () => {
     const tracker = createTerminalRunTracker();
-    const finished = event("glooko", "Completed");
+    const finished = event("glooko", SyncPhase.Completed);
 
     expect(tracker.hasNewlyFinishedRun(map(finished))).toBe(true);
 
@@ -52,7 +53,7 @@ describe("createTerminalRunTracker", () => {
     for (const messageNumber of [1, 2, 3]) {
       expect(
         tracker.hasNewlyFinishedRun(
-          map(finished, event("dexcom", "Syncing", `2026-08-21T00:00:0${messageNumber}Z`)),
+          map(finished, event("dexcom", SyncPhase.Syncing, `2026-08-21T00:00:0${messageNumber}Z`)),
         ),
       ).toBe(false);
     }
@@ -60,18 +61,18 @@ describe("createTerminalRunTracker", () => {
 
   it("reports each connector in a batch as it finishes", () => {
     const tracker = createTerminalRunTracker();
-    const glooko = event("glooko", "Completed");
+    const glooko = event("glooko", SyncPhase.Completed);
 
     expect(tracker.hasNewlyFinishedRun(map(glooko))).toBe(true);
     expect(
-      tracker.hasNewlyFinishedRun(map(glooko, event("dexcom", "Failed"))),
+      tracker.hasNewlyFinishedRun(map(glooko, event("dexcom", SyncPhase.Failed))),
     ).toBe(true);
   });
 
   it("reports a second run of the same connector inside the linger window", () => {
     const tracker = createTerminalRunTracker();
-    const first = event("glooko", "Completed", "2026-08-21T00:00:00Z");
-    const second = event("glooko", "Completed", "2026-08-21T00:00:01Z");
+    const first = event("glooko", SyncPhase.Completed, "2026-08-21T00:00:00Z");
+    const second = event("glooko", SyncPhase.Completed, "2026-08-21T00:00:01Z");
 
     expect(tracker.hasNewlyFinishedRun(map(first))).toBe(true);
     expect(tracker.hasNewlyFinishedRun(map(second))).toBe(true);
@@ -79,7 +80,7 @@ describe("createTerminalRunTracker", () => {
 
   it("re-arms once the finished entry is cleared from the store", () => {
     const tracker = createTerminalRunTracker();
-    const finished = event("glooko", "Completed");
+    const finished = event("glooko", SyncPhase.Completed);
 
     expect(tracker.hasNewlyFinishedRun(map(finished))).toBe(true);
     expect(tracker.hasNewlyFinishedRun({})).toBe(false);

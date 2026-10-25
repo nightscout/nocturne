@@ -45,7 +45,6 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
     };
     private readonly IDeduplicationService _dedup = Mock.Of<IDeduplicationService>();
     private readonly Mock<IStateSpanService> _stateSpans = new();
-    private readonly Mock<IProfileDecomposer> _profileDecomposer = new();
 
     public TreatmentDecomposerReclassificationTests()
     {
@@ -119,7 +118,6 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
             foods.Object,
             Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(),
-            _profileDecomposer.Object,
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),
@@ -197,7 +195,7 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
     }
 
     [Fact]
-    public async Task A_profile_switch_reuploaded_as_a_note_loses_its_activation_and_snapshot()
+    public async Task A_profile_switch_reuploaded_as_a_note_loses_its_activation()
     {
         await DecomposeAsync(new Treatment
         {
@@ -212,7 +210,6 @@ public class TreatmentDecomposerReclassificationTests : IDisposable
             .Should().Match<ProfileActivationEntity>(a => a.LegacyId == "ps-1" && a.DeletedAt != null);
         (await _context.GetBlockingLegacyIdsAsync<ProfileActivationEntity>(["ps-1"])).Held.Should().BeEmpty(
             "a reclassification is not the user deleting the switch");
-        _profileDecomposer.Verify(d => d.DeleteByLegacyIdAsync("ps-1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
         (await _context.Notes.SingleAsync()).Text.Should().Be("Weekend");
     }
 

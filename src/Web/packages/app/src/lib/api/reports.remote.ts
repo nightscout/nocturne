@@ -4,11 +4,12 @@
  */
 import { z } from "zod";
 import { getRequestEvent, query } from "$app/server";
-import { ClusterConfidence } from "$lib/api";
+import { ClusterConfidence, SleepSource } from "$lib/api";
 import { fetchAllGlucose } from "./glucose-pagination";
-import { DateRangeSchema, resolveReportRange } from "./report-range";
+import { DateRangeSchema, resolvePatientToday, resolveReportRange } from "./report-range";
 import { readable } from "$lib/server/patient-timezone";
 import { compare } from "$api/generated/cgmComparisons.generated.remote";
+import { getTrends } from "$api/generated/sleepReports.generated.remote";
 
 export type { DateRangeInput } from "./report-range";
 
@@ -24,6 +25,9 @@ export const getReportSubject = query(async () => {
     dateOfBirth: record?.dateOfBirth ?? null,
   };
 });
+
+/** The patient's current calendar day as `YYYY-MM-DD`, which reports build relative windows from. */
+export const getReportsToday = query(async () => resolvePatientToday());
 
 /** Get sensor glucose readings for a date range */
 export const getEntries = query(DateRangeSchema.optional(), async (input) => {
@@ -100,7 +104,7 @@ export const getReportsData = query(
     const { apiClient } = locals;
     const { startDate, endDate } = await resolveReportRange(input);
 
-    const [entries, { analysis, averagedStats, personalRange }] = await Promise.all([
+    const [entries, { analysis, averagedStats, personalRange, timeZoneUnavailableReason }] = await Promise.all([
       fetchAllGlucose(apiClient, startDate, endDate),
       apiClient.statistics.getRangeAnalytics(startDate, endDate),
     ]);
@@ -110,6 +114,7 @@ export const getReportsData = query(
       analysis,
       averagedStats,
       personalRange,
+      timeZoneUnavailableReason,
       dateRange: {
         from: startDate,
         to: endDate,
@@ -130,8 +135,14 @@ export const getReportsAnalysis = query(
     const { apiClient } = locals;
     const { startDate, endDate } = await resolveReportRange(input);
 
-    const { analysis, averagedStats, hourlyBandThresholds, personalRange, contributingDevices } =
-      await apiClient.statistics.getRangeAnalytics(startDate, endDate);
+    const {
+      analysis,
+      averagedStats,
+      hourlyBandThresholds,
+      personalRange,
+      contributingDevices,
+      timeZoneUnavailableReason,
+    } = await apiClient.statistics.getRangeAnalytics(startDate, endDate);
 
     return {
       analysis,
@@ -139,11 +150,25 @@ export const getReportsAnalysis = query(
       hourlyBandThresholds,
       personalRange,
       contributingDevices,
+      timeZoneUnavailableReason,
       dateRange: {
         from: startDate,
         to: endDate,
       },
     };
+  }
+);
+
+/**
+ * Insulin and carbohydrate delivery over a date range, with the per-day figures the API takes
+ * over the window's calendar days.
+ */
+export const getReportsInsulinDelivery = query(
+  DateRangeSchema.optional(),
+  async (input) => {
+    const { apiClient } = getRequestEvent().locals;
+    const { startDate, endDate } = await resolveReportRange(input);
+    return apiClient.statistics.getInsulinDeliveryStatistics(startDate, endDate);
   }
 );
 
@@ -168,6 +193,19 @@ export const getCgmComparison = query(
       endDate,
       toleranceMinutes: input.toleranceMinutes,
     });
+  }
+);
+
+/**
+ * Multi-night sleep trends over a date range. The bounds are the patient's days, as the API
+ * counts them against its span limit.
+ */
+export const getSleepTrends = query(
+  DateRangeSchema.extend({ source: z.enum(SleepSource).optional() }),
+  async (input) => {
+    const { startDate, endDate } = await resolveReportRange(input);
+
+    return getTrends({ from: startDate, to: endDate, source: input.source });
   }
 );
 

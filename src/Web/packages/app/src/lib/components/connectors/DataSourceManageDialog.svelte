@@ -20,7 +20,7 @@
   import { getCategoryIcon } from "$lib/utils/connector-display";
   import {
     formatNumber,
-    lastSeen,
+    relativeAge,
   } from "$lib/utils/formatting";
 
   interface Props {
@@ -147,9 +147,9 @@
             </div>
           </div>
           <div>
-            <span class="text-muted-foreground">Last Record Received</span>
+            <span class="text-muted-foreground">Last record received</span>
             <p class="mt-1 font-medium">
-              {lastSeen(selectedDataSource.lastSeen)}
+              {relativeAge(selectedDataSource.lastSeen, { fallback: "Never" })}
             </p>
           </div>
           <div>
@@ -180,7 +180,7 @@
               <AlertTriangle class="h-5 w-5 text-warning shrink-0 mt-0.5" />
               <div>
                 <p class="text-sm font-medium text-warning">
-                  Delete All Data from This Source
+                  Delete all data from this source
                 </p>
                 <p class="text-sm text-warning mt-1">
                   This will permanently delete all entries, treatments, and
@@ -204,7 +204,7 @@
             }}
           >
             <Pencil class="h-4 w-4" />
-            Delete Data...
+            Delete data...
           </Button>
         {/if}
       </Dialog.Footer>
@@ -222,7 +222,7 @@
           class="flex items-center gap-2"
         >
           <AlertTriangle class="h-5 w-5" />
-          Permanently Delete Data
+          Permanently delete data
         </AlertDialog.Title>
         <AlertDialog.Description class="grid gap-4">
           {#if selectedDataSource}
@@ -334,7 +334,7 @@
               Deleting...
             {:else}
               <Trash2 class="h-4 w-4" />
-              {allowReimport ? "Delete and Allow Re-import" : "Delete All Data"}
+              {allowReimport ? "Delete and allow re-import" : "Delete all data"}
             {/if}
           </Button>
         {/if}

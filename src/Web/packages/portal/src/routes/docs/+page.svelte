@@ -1,34 +1,46 @@
 <script lang="ts">
     import { resolve } from "$app/paths";
+    import { ArtworkHero, ConfirmationBackground } from "@nocturne/watercolour";
     import Content from "../../content/docs/index.svx";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
+    import { DOCS_HERO } from "$lib/data/docs-artwork";
+
+    const hero = DOCS_HERO[""];
 
     const GUIDES = [
         {
             href: resolve("/docs/getting-started"),
-            title: "Quick Start",
+            title: "Quick start",
             desc: "Get up and running with Nocturne in just a few minutes.",
         },
         {
             href: resolve("/docs/installation"),
-            title: "Installation Guide",
+            title: "Installation guide",
             desc: "Step-by-step guides for deploying Nocturne with Docker Compose, Portainer, and more.",
         },
         {
             href: resolve("/docs/configuration"),
-            title: "Configuration Guide",
+            title: "Configuration guide",
             desc: "Learn how to configure connectors, settings, and customize your instance.",
         },
         {
             href: resolve("/scalar"),
-            title: "API Reference",
+            title: "API reference",
             desc: "Interactive API documentation powered by Scalar. Explore endpoints, test requests, and integrate with Nocturne.",
         },
     ];
 </script>
 
 <div class="max-w-3xl">
+    <ArtworkHero
+        artwork={hero.artwork}
+        palette={hero.palette}
+        motion="auto"
+        autoplay="once"
+        size={400}
+        wrap={hero.wrap ?? true}
+    />
     <Content />
 
     <ul class="not-prose m-0 p-0 list-none border-t border-border">
@@ -54,4 +66,11 @@
         The documentation is still growing. If a guide you need is missing,
         check back soon or contribute one on GitHub.
     </p>
+
+    <div
+        class="relative mt-4 h-8 w-24 overflow-hidden sm:h-10 sm:w-[120px] dark:hidden"
+        aria-hidden="true"
+    >
+        <ConfirmationBackground palette="moss" motion="auto" autoplay="once" />
+    </div>
 </div>

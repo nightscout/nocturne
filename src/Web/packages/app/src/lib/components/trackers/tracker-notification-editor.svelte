@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { TrackerMode } from "$lib/api";
+  import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { enumValue } from "$lib/components/ui/enum-value";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -18,7 +21,7 @@
     /** Additional CSS classes */
     class?: string;
     /** Tracker mode for display formatting */
-    mode?: "Duration" | "Event";
+    mode?: TrackerMode;
     /** Lifespan hours for negative threshold validation (Duration mode only) */
     lifespanHours?: number | undefined;
   }
@@ -26,9 +29,13 @@
   let {
     notifications = $bindable([]),
     class: className,
-    mode = "Duration",
+    mode = TrackerMode.Duration,
     lifespanHours,
   }: Props = $props();
+
+  const canOpenRule = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.read")
+  );
 
   const urgencyOptions: {
     value: NotificationUrgency;
@@ -83,7 +90,7 @@
 
 <div class={cn("space-y-3", className)} data-testid="tracker-thresholds">
   <div class="flex items-center justify-between">
-    <Label>Notification Thresholds</Label>
+    <Label>Notification thresholds</Label>
     <Button
       variant="outline"
       size="sm"
@@ -138,7 +145,7 @@
 
           <div class="flex-shrink-0 w-36">
             <Label size="sm" variant="muted" class="mb-1 block">
-              {mode === "Event" ? "Hours" : "After (hours)"}
+              {mode === TrackerMode.Event ? "Hours" : "After (hours)"}
             </Label>
             <DurationInput
               value={notification.hours}
@@ -164,7 +171,7 @@
           <div class="ml-auto flex-shrink-0 pt-5 flex items-center gap-1">
             <!-- New tab: this editor lives in a dialog, so in-place navigation
                  would discard the tracker edits made so far. -->
-            {#if notification.alertRuleId}
+            {#if notification.alertRuleId && canOpenRule}
               <Button
                 variant="ghost-muted"
                 href="/alerts/{notification.alertRuleId}"
@@ -193,16 +200,16 @@
 
   {#if notifications.length > 0}
     <p class="text-xs text-muted-foreground">
-      {#if mode === "Event"}
-        Negative = before event, Positive = after event.
+      {#if mode === TrackerMode.Event}
+        Negative = before event, positive = after event.
       {:else}
-        Positive = after start, Negative = before expiration.
+        Positive = after start, negative = before expiration.
       {/if}
     </p>
   {/if}
 
   <p class="text-xs text-muted-foreground">
     Each threshold is delivered through a managed alert rule. Use Channels to
-    open that rule; a new threshold gets its rule after the tracker is saved.
+    open that rule. A new threshold gets its rule after you save the tracker.
   </p>
 </div>

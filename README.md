@@ -56,6 +56,8 @@ Nocturne/
 - [Docker Desktop](https://www.docker.com/products/docker-desktop)
 - [Node.js 24+](https://nodejs.org/)
 - [pnpm 9+](https://pnpm.io/)
+- Optional: [Rust](https://rustup.rs/), only to change the alert engine (`crates/`). Without it, the
+  build downloads the engine library that main published for your checkout's `crates/`.
 
 Aspire orchestrates all services with a single command:
 
@@ -66,6 +68,7 @@ aspire start
 Aspire will automatically:
 
 - Start PostgreSQL in a container
+- Build the alert engine's native library (`crates/nocturne-alerts-ffi`) when Rust is installed
 - Run database migrations
 - Start the Nocturne API and SvelteKit frontend
 - Launch any configured data connectors

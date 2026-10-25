@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
-using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -31,9 +31,6 @@ public class WireContractCompletenessTests
     [
         new(typeof(SensorContext), "WireContext", typeof(ScenarioContext),
         [
-            // Per-call evaluation threading owned by the engine, not tick data.
-            nameof(SensorContext.CurrentRuleId),
-            nameof(SensorContext.CurrentPath),
             // Computed projection of ActiveTempBasal; exists only as a ReplayFact carrier.
             nameof(SensorContext.TempBasalRate),
             // Scoped DND suppression is applied host-side (DndSuppressionGate); the engine

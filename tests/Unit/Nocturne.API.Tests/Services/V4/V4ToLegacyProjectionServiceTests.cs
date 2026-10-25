@@ -443,13 +443,13 @@ public class V4ToLegacyProjectionServiceTests
         var result = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
 
         var meal = result.Single(t => t.EventType == TreatmentTypes.MealBolus);
-        meal.SrvCreated.Should().Be(ToMills(carb.CreatedAt));
-        meal.SrvModified.Should().Be(ToMills(mealBolus.ModifiedAt));
+        meal.SrvCreated.Should().Be(carb.CreatedAt.ToMills());
+        meal.SrvModified.Should().Be(mealBolus.ModifiedAt.ToMills());
 
         var single = result.Single(t => t.EventType == TreatmentTypes.CorrectionBolus);
-        single.SrvCreated.Should().Be(ToMills(correction.CreatedAt));
-        single.SrvModified.Should().Be(ToMills(correction.ModifiedAt));
-        single.Mills.Should().Be(ToMills(correction.Timestamp));
+        single.SrvCreated.Should().Be(correction.CreatedAt.ToMills());
+        single.SrvModified.Should().Be(correction.ModifiedAt.ToMills());
+        single.Mills.Should().Be(correction.Timestamp.ToMills());
     }
 
     [Fact]
@@ -467,12 +467,9 @@ public class V4ToLegacyProjectionServiceTests
         var result = (await _service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 100)).ToList();
 
         result.Should().ContainSingle();
-        result[0].SrvCreated.Should().Be(ToMills(bolus.SysCreatedAt));
+        result[0].SrvCreated.Should().Be(bolus.SysCreatedAt.ToMills());
         result[0].SrvCreated.Should().NotBe(result[0].Mills);
     }
-
-    private static long ToMills(DateTime value) =>
-        new DateTimeOffset(value, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
     [Fact]
     public async Task GetProjectedTreatmentsModifiedSince_ExcludesRecordAtCursor()

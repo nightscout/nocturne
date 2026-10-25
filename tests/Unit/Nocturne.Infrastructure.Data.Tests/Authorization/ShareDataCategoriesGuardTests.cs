@@ -22,7 +22,7 @@ public class ShareDataCategoriesGuardTests
     {
         // Configuration that applies to all of history rather than to rows of it: therapy and
         // profile schedules, alert and tracker setup, devices and connector settings.
-        "alert_condition_timers", "alert_custom_sounds", "alert_rule_channels", "alert_rules", "alert_tracker_state",
+        "alert_condition_timers", "alert_custom_sounds", "alert_rule_channels", "alert_tracker_state",
         "basal_schedules", "carb_ratio_schedules", "client_devices", "clock_faces", "coach_mark_states",
         "connector_configurations", "data_source_metadata", "devices", "dnd_windows", "patient_devices",
         "patient_insulins", "patient_records", "sensitivity_schedules", "settings", "target_range_schedules",
@@ -38,8 +38,12 @@ public class ShareDataCategoriesGuardTests
         // Internal bookkeeping.
         "dedup_reconcile_state",
 
-        // Time-series whose member clamp is not yet decided.
-        "alert_deliveries", "alert_excursion_mutes", "discrepancy_analyses", "discrepancy_details",
+        // The owner's onboarding state.
+        "setup_hub_additions", "setup_hub_items",
+
+        // Dedup links. Linking runs in the writer's own context, so clamped, a history-limited member's
+        // upload of older data would miss its group and start a duplicate one. A row holds only link
+        // metadata (record type, source, time), no values.
         "linked_records",
 
         // Owner/tenant.settings-only endpoint; history-clamped callers are refused.

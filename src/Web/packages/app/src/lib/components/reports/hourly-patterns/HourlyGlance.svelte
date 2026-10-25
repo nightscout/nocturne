@@ -68,7 +68,7 @@
   <p class="px-4 py-3 text-sm text-muted-foreground">
     {#if comparison === HourlyComparison.CloseTogether}
       The compared hours were all within {spread} percentage points of each other in time
-      in range, too close to call any of them better or worse.
+      in range. This is too close to call any of them better or worse.
     {:else if direction === "above"}
       No hour stood out on its own above the rest. The hours at that end tied with one another.
     {:else}

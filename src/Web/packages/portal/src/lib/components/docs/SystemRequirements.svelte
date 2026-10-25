@@ -48,19 +48,17 @@
             <strong>Memory.</strong> Those six use roughly 1 to 1.5 GB between them at rest,
             most of it PostgreSQL and the API. 2 GB leaves little spare once the operating
             system is accounted for, which is why it is the floor rather than a comfortable
-            target; the extra memory at 4 GB is used by PostgreSQL as disk cache and is the
+            target. The extra memory at 4 GB is used by PostgreSQL as disk cache and is the
             single cheapest thing you can give it.
         </p>
         <p>
-            <strong>CPU.</strong> The API is the only component that does sustained work. One
-            core is enough for a single site, and the whole 76-site deployment above draws
+            <strong>CPU.</strong> The API is the only component that does sustained work. One core is enough for a single site. The whole 76-site deployment above draws
             about 1.3 cores in total, so headroom here matters less than it looks.
         </p>
         <p>
             <strong>Storage.</strong> The container images account for about 2.5 GB before any
-            data. A single CGM writes roughly 105,000 glucose readings a year, which with
-            indexes and write-ahead logs comes to well under 1 GB per year. 10 GB fits the
-            images and several years of one person's data; 20 GB is for households, longer
+            data. A single CGM writes roughly 105,000 glucose readings a year. With indexes and write-ahead logs, this comes to well under 1 GB per year. 10 GB fits the
+            images and several years of one person's data. 20 GB is for households, longer
             history, or an imported Nightscout database.
         </p>
     </div>

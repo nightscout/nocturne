@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.V4;
+
 namespace Nocturne.Core.Models.Basal;
 
 /// <summary>
@@ -67,7 +69,7 @@ public static class BasalCalculator
         // two boundaries at the same instant and silently mask the second value. Keep the last
         // upload for each second-of-day, then sort.
         var entries = assignment.Entries
-            .Select(e => (Seconds: e.TimeAsSeconds ?? ParseTimeAsSeconds(e.Time), e.Value))
+            .Select(e => (Seconds: ScheduleEntryTime.SecondsOf(e.TimeAsSeconds, e.Time), e.Value))
             .GroupBy(e => e.Seconds)
             .Select(g => g.Last())
             .OrderBy(e => e.Seconds)
@@ -120,7 +122,7 @@ public static class BasalCalculator
                 var localBoundary = day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified)
                     .AddSeconds(entry.Seconds);
                 var boundaryUtc = LocalToUtcAcrossDst(localBoundary, tz);
-                var boundary = new DateTimeOffset(boundaryUtc, TimeSpan.Zero).ToUnixTimeMilliseconds()
+                var boundary = boundaryUtc.ToMills()
                     - timeshiftMs;
                 if (boundary <= fromMills) continue;
                 if (boundary >= toMills) continue;
@@ -137,40 +139,16 @@ public static class BasalCalculator
         long timeshiftMs,
         double percentage)
     {
-        var localTod = LocalSecondsFromMidnight(atMills + timeshiftMs, tz);
-        var scheduled = FindEntryAt(sortedEntries, localTod);
+        var localTod = ScheduleEntryTime.SecondsOfDay(atMills + timeshiftMs, tz);
+        ScheduleEntryTime.TryEntryAt(sortedEntries, localTod, e => e.Seconds, out var entry);
+        var scheduled = entry.Value;
         return (scheduled * (percentage / 100.0), scheduled);
-    }
-
-    private static double FindEntryAt(List<(int Seconds, double Value)> sortedEntries, int secondsFromMidnight)
-    {
-        var result = sortedEntries[0].Value;
-        foreach (var entry in sortedEntries)
-        {
-            if (secondsFromMidnight >= entry.Seconds) result = entry.Value;
-            else break;
-        }
-        return result;
-    }
-
-    private static int LocalSecondsFromMidnight(long timeMills, TimeZoneInfo tz)
-    {
-        var dto = DateTimeOffset.FromUnixTimeMilliseconds(timeMills);
-        var local = TimeZoneInfo.ConvertTime(dto, tz);
-        return (int)local.TimeOfDay.TotalSeconds;
     }
 
     private static TimeZoneInfo ResolveTimeZone(string? timezoneId)
     {
         if (string.IsNullOrEmpty(timezoneId)) return TimeZoneInfo.Utc;
         return TimeZoneHelper.GetTimeZoneInfoFromId(timezoneId);
-    }
-
-    private static int ParseTimeAsSeconds(string hhmm)
-    {
-        if (TimeOnly.TryParse(hhmm, out var t))
-            return (int)t.ToTimeSpan().TotalSeconds;
-        return 0;
     }
 
     /// <summary>

@@ -104,7 +104,7 @@ support tested in Ar2Tests and Ar2Service)
 [ ] - profileeditor.test.js
 [x] - pump.test.js (PumpServiceTests)
 [ ] - pushnotify.test.js
-[x] - pushover.test.js (PushoverServiceTests)
+[ ] - pushover.test.js
 [ ] - query.test.js
 [ ] - rawbg.test.js
 [ ] - reports.test.js

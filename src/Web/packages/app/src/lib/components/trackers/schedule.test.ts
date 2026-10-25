@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { NotificationUrgency, type TrackerInstanceDto } from "$api";
+import {
+  LegacyConsumableKind,
+  NotificationUrgency,
+  type LegacyFallbackDto,
+  type TrackerInstanceDto,
+} from "$api";
 import { reachedStep, reachedUrgency } from "./schedule";
 
 const HOUR = 60 * 60 * 1000;
@@ -51,5 +56,21 @@ describe("reachedStep", () => {
       [NotificationUrgency.Warn, 5, "Change soon"],
     ]);
     expect(reachedStep(instance, start + 6 * HOUR)?.description).toBe("Change soon");
+  });
+});
+
+describe("reachedUrgency for a legacy fallback", () => {
+  it("reads a fallback's schedule as it reads a running tracker's", () => {
+    const fallback: LegacyFallbackDto = {
+      kind: LegacyConsumableKind.Site,
+      ageHours: 50,
+      schedule: [
+        { urgency: NotificationUrgency.Info, firesAt: at(44) },
+        { urgency: NotificationUrgency.Warn, firesAt: at(48) },
+        { urgency: NotificationUrgency.Urgent, firesAt: at(72) },
+      ],
+    };
+    expect(reachedUrgency(fallback, start + 50 * HOUR)).toBe(NotificationUrgency.Warn);
+    expect(reachedUrgency(fallback, start + 10 * HOUR)).toBeNull();
   });
 });

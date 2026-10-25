@@ -34,6 +34,8 @@ export interface TransformedChartData {
 	defaultBasalRate: number;
 	maxBasalRate: number;
 	maxIob: number;
+	/** Lowest IOB in the window, at most 0. Net basal IOB goes below 0 while basal is withheld. Defaults to 0. */
+	minIob?: number;
 	maxCob: number;
 	glucoseData: Array<{
 		time: Date;

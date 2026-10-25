@@ -19,7 +19,7 @@ describe("NoteSection", () => {
 	it("renders announcement checkbox", async () => {
 		render(NoteSection, { note: {} });
 
-		await expect.element(page.getByText("Is Announcement")).toBeVisible();
+		await expect.element(page.getByText("Is announcement")).toBeVisible();
 	});
 
 	it("does not show remove button when onRemove is not provided", async () => {

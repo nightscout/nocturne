@@ -65,6 +65,7 @@ public class AlertDeliveryServiceOutcomeTests : IDisposable
             _factory.AsNocturneFactory(),
             Mock.Of<ITenantAccessor>(a => a.TenantId == Tenant),
             _broadcast.Object,
+            Mock.Of<IEngineAlarmRelay>(),
             provider,
             NullLogger<AlertDeliveryService>.Instance);
     }

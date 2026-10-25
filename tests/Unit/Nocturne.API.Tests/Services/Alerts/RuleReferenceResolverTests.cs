@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -9,14 +10,14 @@ namespace Nocturne.API.Tests.Services.Alerts;
 [Trait("Category", "Unit")]
 public class RuleReferenceResolverTests
 {
-    [Fact]
+    [NativeFact]
     public void Empty_input_returns_empty()
     {
         RuleReferenceResolver.FilterEvaluable(Array.Empty<AlertRuleSnapshot>())
             .Should().BeEmpty();
     }
 
-    [Fact]
+    [NativeFact]
     public void Rule_with_no_alert_state_references_kept()
     {
         var rule = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"above","value":180}""");
@@ -25,7 +26,7 @@ public class RuleReferenceResolverTests
             .Should().ContainSingle().Which.Should().Be(rule);
     }
 
-    [Fact]
+    [NativeFact]
     public void Top_level_alert_state_referencing_enabled_rule_kept()
     {
         var parentId = Guid.NewGuid();
@@ -38,7 +39,7 @@ public class RuleReferenceResolverTests
         result.Should().HaveCount(2);
     }
 
-    [Fact]
+    [NativeFact]
     public void Top_level_alert_state_referencing_unknown_rule_dropped()
     {
         var parent = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"above","value":180}""");
@@ -50,7 +51,7 @@ public class RuleReferenceResolverTests
         result.Should().ContainSingle().Which.Should().Be(parent);
     }
 
-    [Fact]
+    [NativeFact]
     public void Alert_state_referencing_an_enabled_rule_outside_the_batch_kept()
     {
         var parentId = Guid.NewGuid();
@@ -61,7 +62,7 @@ public class RuleReferenceResolverTests
             .Should().ContainSingle().Which.Should().Be(child);
     }
 
-    [Fact]
+    [NativeFact]
     public void Nested_alert_state_inside_composite_excludes_chain_when_unresolved()
     {
         var orphan = Guid.NewGuid();
@@ -80,7 +81,7 @@ public class RuleReferenceResolverTests
             .Should().BeEmpty();
     }
 
-    [Fact]
+    [NativeFact]
     public void Nested_alert_state_inside_sustained_kept_when_resolved()
     {
         var parentId = Guid.NewGuid();
@@ -97,7 +98,7 @@ public class RuleReferenceResolverTests
             .Should().HaveCount(2);
     }
 
-    [Fact]
+    [NativeFact]
     public void Self_reference_treated_as_evaluable()
     {
         var id = Guid.NewGuid();
@@ -108,7 +109,7 @@ public class RuleReferenceResolverTests
             .Should().ContainSingle().Which.Should().Be(rule);
     }
 
-    [Fact]
+    [NativeFact]
     public void Malformed_json_does_not_drop_rule()
     {
         var rule = MakeRule(Guid.NewGuid(), AlertConditionType.Composite, "{ broken json");
@@ -117,7 +118,7 @@ public class RuleReferenceResolverTests
             .Should().ContainSingle().Which.Should().Be(rule);
     }
 
-    [Fact]
+    [NativeFact]
     public void Order_preserved()
     {
         var a = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"above","value":180}""");
@@ -130,7 +131,7 @@ public class RuleReferenceResolverTests
         result.Select(r => r.Id).Should().Equal(a.Id, b.Id, c.Id);
     }
 
-    [Theory]
+    [NativeTheory]
     [InlineData("""{"operator":"and"}""")]
     [InlineData("""{"operator":"and","conditions":[null]}""")]
     [InlineData("""{"operator":"and","conditions":[{"alert_state":{"state":"firing"}}]}""")]
@@ -142,6 +143,27 @@ public class RuleReferenceResolverTests
 
         RuleReferenceResolver.FilterEvaluable(new[] { bad, ok })
             .Should().Equal(bad, ok);
+    }
+
+    [NativeFact]
+    public void An_alert_state_in_the_auto_resolve_tree_does_not_drop_the_rule()
+    {
+        var rule = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"above","value":180}""") with
+        {
+            AutoResolveEnabled = true,
+            AutoResolveParams = $$$"""{"type":"alert_state","alert_state":{"alert_id":"{{{Guid.NewGuid()}}}","state":"firing"}}""",
+        };
+
+        RuleReferenceResolver.FilterEvaluable(new[] { rule }).Should().Equal(rule);
+    }
+
+    [NativeFact]
+    public void A_body_that_does_not_read_names_no_reference()
+    {
+        // Evaluation rejects the rule; this filter only drops references that do not resolve.
+        var rule = MakeRule(Guid.NewGuid(), AlertConditionType.AlertState, """{"alert_id":"garbage","state":"active"}""");
+
+        RuleReferenceResolver.FilterEvaluable(new[] { rule }).Should().ContainSingle();
     }
 
     private static AlertRuleSnapshot MakeRule(Guid id, AlertConditionType type, string json) =>

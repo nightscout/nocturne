@@ -127,16 +127,18 @@ describe("renderClockElementValue", () => {
   });
 
   it("renders the reading age from the reading, not a sample", () => {
-    expect(render(el({ type: "age" }))).toBe("7m ago");
+    expect(render(el({ type: "age" }))).toBe(
+      new Intl.RelativeTimeFormat("en-GB", { style: "narrow", numeric: "auto" }).format(-7, "minute")
+    );
   });
 
-  it("drops the preposition for a reading under a minute old", () => {
+  it("reads a reading under a minute old as now", () => {
     expect(
       render(el({ type: "age" }), mgdl12, {
         ...glucose,
         lastUpdated: now.getTime(),
       })
-    ).toBe("now");
+    ).toBe(new Intl.RelativeTimeFormat("en-GB", { style: "narrow", numeric: "auto" }).format(0, "second"));
   });
 
   it("renders a placeholder, not a number, when there is no reading", () => {

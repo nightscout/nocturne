@@ -104,8 +104,8 @@ describe("initial reads prefetch script", () => {
     await initializing;
     store.destroy();
 
-    expect(prefetched).toHaveLength(12);
-    // The store also falls back to the latest readings when the day holds few; that read is conditional.
+    expect(prefetched).toHaveLength(13);
+    // The store also falls back to the latest readings when the window holds few; that read is conditional.
     const fallback = `/api/v4/glucose/sensor?limit=${RECENT_READINGS}`;
     expect(storeCalls.map((c) => c.url).filter((url) => url !== fallback).sort()).toEqual(
       prefetched.map((c) => c.url).sort()

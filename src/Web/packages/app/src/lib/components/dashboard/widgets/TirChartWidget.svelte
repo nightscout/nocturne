@@ -36,7 +36,7 @@
   }
 </script>
 
-<WidgetCard title="Time in Range">
+<WidgetCard title="Time in range">
   {#snippet subtitleSnippet()}
     <Button
       variant="ghost-muted"
@@ -83,7 +83,6 @@
           {percentages}
           orientation={isLargeScreen.current ? "horizontal" : "vertical"}
           showLabels={!isLargeScreen.current}
-          showThresholds={false}
           compact
         />
       </div>
@@ -109,7 +108,12 @@
         <span>Below {(veryLow + low).toFixed(0)}%</span>
         <span>Above {(high + veryHigh).toFixed(0)}%</span>
       </div>
-      <ReliabilityBadge reliability={showAverage ? stats?.last90Days?.reliability : stats?.lastDay?.reliability} />
+      {@const period = showAverage ? stats?.last90Days : stats?.lastDay}
+      <ReliabilityBadge
+        compact
+        reliability={period?.reliability}
+        timeZoneUnavailableReason={period?.analytics?.timeZoneUnavailableReason}
+      />
     {:else}
       <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
         <p class="text-xs">{showAverage ? "No 90-day data available" : "No data available"}</p>
@@ -118,7 +122,7 @@
     {:catch err}
       <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
         <p class="text-xs">Failed to load data</p>
-        <p class="text-xs text-destructive">{remoteErrorMessage(err, "Please try again.")}</p>
+        <p class="text-xs text-destructive">{remoteErrorMessage(err, "Try again.")}</p>
       </div>
     {/await}
   {/if}

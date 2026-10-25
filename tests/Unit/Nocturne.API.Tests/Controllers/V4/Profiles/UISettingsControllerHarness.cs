@@ -9,6 +9,7 @@ using Nocturne.API.Controllers.V4.Profiles;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
 
@@ -16,7 +17,8 @@ namespace Nocturne.API.Tests.Controllers.V4.Profiles;
 
 /// <summary>
 /// A <see cref="UISettingsController"/> wired to a real <see cref="UISettingsService"/> over an
-/// in-memory database, so every write can be asserted through the read that serves it.
+/// in-memory database, so every write can be asserted through the read that serves it. The caller
+/// holds full access unless a test names its scopes.
 /// </summary>
 internal static class UISettingsControllerHarness
 {
@@ -78,11 +80,16 @@ internal static class UISettingsControllerHarness
     internal static UISettingsController NewController(
         IUISettingsService settingsService,
         IDemoModeService demoMode,
-        IHttpClientFactory httpClientFactory
+        IHttpClientFactory httpClientFactory,
+        params string[] grantedScopes
     )
     {
         var services = new ServiceCollection();
         services.AddControllers();
+
+        var httpContext = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
+        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(
+            grantedScopes.Length == 0 ? [Scope.FullAccess] : grantedScopes);
 
         return new UISettingsController(
             NullLogger<UISettingsController>.Instance,
@@ -91,13 +98,7 @@ internal static class UISettingsControllerHarness
             settingsService
         )
         {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext
-                {
-                    RequestServices = services.BuildServiceProvider(),
-                },
-            },
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
     }
 

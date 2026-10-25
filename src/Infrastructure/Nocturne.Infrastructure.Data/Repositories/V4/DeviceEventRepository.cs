@@ -229,7 +229,7 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
         {
             var dedupInputs = inserted.Select(e => new DeduplicationInput(
                 RecordId: e.Id,
-                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                Mills: e.Timestamp.ToMills(),
                 DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
                 Criteria: MatchCriteriaMapper.From(e)
             )).ToList();
@@ -294,6 +294,20 @@ public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, Devic
             .FirstOrDefaultAsync(ct);
 
         return entity is null ? null : DeviceEventMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountByEventTypesSinceAsync(
+        DeviceEventType[] eventTypes,
+        DateTime since,
+        CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var eventTypeStrings = eventTypes.Select(t => t.ToString()).ToList();
+        return await ctx.DeviceEvents
+            .AsNoTracking()
+            .Where(e => eventTypeStrings.Contains(e.EventType) && e.Timestamp >= since)
+            .CountAsync(ct);
     }
 
     /// <inheritdoc />

@@ -187,7 +187,7 @@ public class FoodRepository : IFoodRepository
 
         return new ModifiedSincePage<Food>(
             entities.Select(ToHistoryFood).ToList(),
-            entities.Count > 0 ? HistoryPage.ToMilliseconds(entities[^1].SysUpdatedAt) : null
+            entities.Count > 0 ? entities[^1].SysUpdatedAt.ToMills() : null
         );
     }
 

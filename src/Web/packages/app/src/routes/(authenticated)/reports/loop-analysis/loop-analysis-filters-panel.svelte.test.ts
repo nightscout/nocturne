@@ -72,7 +72,7 @@ describe("the reports Filters panel on a Loop Analysis page", () => {
     await page.getByRole("button", { name: "Open filters" }).click();
     await page.getByLabelText("Exercise").click();
     await page.getByRole("button", { name: "7 Days" }).click();
-    await page.getByRole("button", { name: "Apply Filters" }).click();
+    await page.getByRole("button", { name: "Apply filters" }).click();
 
     await expect.poll(() => nav.history.length).toBe(before + 1);
     const applied = new URL(nav.history.at(-1)!);
@@ -98,7 +98,7 @@ describe("the reports Filters panel on a Loop Analysis page", () => {
 
     await page.getByRole("button", { name: "Open filters" }).click();
     await page.getByLabelText("Overrides").click();
-    await page.getByRole("button", { name: "Apply Filters" }).click();
+    await page.getByRole("button", { name: "Apply filters" }).click();
 
     await expect.poll(() => nav.history.length).toBe(before + 1);
     const applied = new URL(nav.history.at(-1)!).searchParams;

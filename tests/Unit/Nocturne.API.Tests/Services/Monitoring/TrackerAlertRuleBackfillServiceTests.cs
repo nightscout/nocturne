@@ -48,7 +48,7 @@ public class TrackerAlertRuleBackfillServiceTests : IDisposable
             var definitionId = Guid.CreateVersion7();
             seed.TrackerDefinitions.Add(new TrackerDefinitionEntity
             {
-                Id = definitionId, TenantId = _tenantId, UserId = "dev", Name = "Cannula"
+                Id = definitionId, TenantId = _tenantId, CreatedBy = "dev", Name = "Cannula"
             });
             seed.TrackerNotificationThresholds.Add(new TrackerNotificationThresholdEntity
             {

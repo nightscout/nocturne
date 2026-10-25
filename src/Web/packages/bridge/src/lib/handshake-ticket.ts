@@ -43,6 +43,8 @@ export interface RealtimeGrant {
   categories: string[];
   /** Whether the credential may read only the last 24 hours. */
   historyClamped: boolean;
+  /** Whether the credential may silence the tenant's alarms from the `/alarm` namespace. */
+  mayAck: boolean;
 }
 
 export interface HandshakeTicketPayload extends RealtimeGrant {
@@ -61,10 +63,10 @@ export function canonicalSubjectId(value: unknown): string | undefined {
 
 /**
  * Reads an admission, from the API or a ticket, failing closed: anything absent
- * or malformed grants no room, and a missing clamp reads as clamped.
+ * or malformed grants no room or ack, and a missing clamp reads as clamped.
  */
 export function readRealtimeGrant(value: unknown): RealtimeGrant {
-  if (!isRecord(value)) return { tenantRelay: false, categories: [], historyClamped: true };
+  if (!isRecord(value)) return { tenantRelay: false, categories: [], historyClamped: true, mayAck: false };
   const { categories } = value;
   return {
     tenantRelay: value.tenantRelay === true,
@@ -73,6 +75,7 @@ export function readRealtimeGrant(value: unknown): RealtimeGrant {
       ? categories.filter((c): c is string => typeof c === 'string')
       : [],
     historyClamped: value.historyClamped !== false,
+    mayAck: value.mayAck === true,
   };
 }
 

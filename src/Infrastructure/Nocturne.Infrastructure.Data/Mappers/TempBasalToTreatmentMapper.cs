@@ -32,8 +32,8 @@ public static class TempBasalToTreatmentMapper
                 ? tempBasal.LegacyId
                 : tempBasal.Id.ToString(),
             Mills = tempBasal.StartMills,
-            SrvCreated = new DateTimeOffset(tempBasal.CreatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-            SrvModified = new DateTimeOffset(tempBasal.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            SrvCreated = tempBasal.CreatedAt.ToMills(),
+            SrvModified = tempBasal.ModifiedAt.ToMills(),
             EventType = "Temp Basal",
             Duration = durationMinutes,
             Absolute = relative ? null : rate,

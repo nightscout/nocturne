@@ -1,3 +1,6 @@
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Clinical.Treatments;
 using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -11,6 +14,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Glucose;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
@@ -23,6 +27,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.LoopAnalysis;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Widget;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -66,6 +71,7 @@ public partial class AnalyticsReadScopeGuardTests
         LastPumpSyncMills = 1,
         DefaultBasalRate = 0.9,
         MaxBasalRate = 1.2,
+        MinIob = -0.5,
         MaxIob = 4,
         MaxCob = 40,
         DeviceEventMarkers = [new DeviceEventMarkerDto { Time = 1 }],
@@ -117,6 +123,7 @@ public partial class AnalyticsReadScopeGuardTests
 
         data.DefaultBasalRate.Should().Be(0);
         data.MaxBasalRate.Should().Be(0);
+        data.MinIob.Should().Be(0);
         data.MaxIob.Should().Be(0);
         data.MaxCob.Should().Be(0);
     }
@@ -183,6 +190,7 @@ public partial class AnalyticsReadScopeGuardTests
         data.HeartRateSeries.Should().HaveCount(1);
         data.StepSeries.Should().HaveCount(1);
         data.ActivitySpans.Should().HaveCount(2);
+        data.MinIob.Should().Be(-0.5);
         data.MaxIob.Should().Be(4);
     }
 
@@ -394,22 +402,26 @@ public partial class AnalyticsReadScopeGuardTests
         iob
             .Setup(c => c.CalculateTotalAsync(
                 It.IsAny<List<Bolus>>(), It.IsAny<List<TempBasal>?>(),
-                It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                It.IsAny<long>(), It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new IobResult());
 
         var cob = new Mock<ICobCalculator>();
         cob
             .Setup(c => c.CalculateTotalAsync(
                 It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(),
-                It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<TempBasal>?>(), It.IsAny<long>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CobResult());
 
-        var basal = new Mock<IBasalRateResolver>();
-        basal.Setup(r => r.GetBasalRateAsync(It.IsAny<long>())).ReturnsAsync(0.8);
+        var timelines = new Mock<ITherapyTimelineResolver>();
+        timelines
+            .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
+                new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(3.0, 75, 30.0, null, null, 0, null, null, null))]));
 
         var controller = new RetrospectiveController(
             iob.Object, cob.Object, entries.Object, boluses.Object, carbs.Object,
-            tempBasals.Object, projectionService: null!, basal.Object,
+            tempBasals.Object, projectionService: null!, timelines.Object, MockStateSpans.Empty().Object, Mock.Of<IApsSnapshotRepository>(),
+            Mock.Of<IPumpSnapshotRepository>(), new IobCobReader(iob.Object, cob.Object, boluses.Object, tempBasals.Object, carbs.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             NullLogger<RetrospectiveController>.Instance)
         {
             ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),
@@ -625,7 +637,7 @@ public partial class AnalyticsReadScopeGuardTests
         var service = new Mock<IWidgetSummaryService>();
         service
             .Setup(s => s.GetSummaryAsync(
-                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Summary());
 
         var context = ContextWith(Granted(Scope.GlucoseRead));
@@ -926,6 +938,53 @@ public partial class AnalyticsReadScopeGuardTests
         result.LastDay.TreatmentCount.Should().Be(2);
     }
 
+    [Fact]
+    public void MultiPeriod_GlucoseOnlyGrant_KeepsTheTimeZoneReasonOfEachPeriod()
+    {
+        var cached = AllPeriodsWithTreatments();
+        foreach (var period in Periods(cached))
+            period.Analytics!.TimeZoneUnavailableReason = TimeZoneUnavailableReason.NotConfigured;
+
+        var redacted = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.GlucoseRead));
+
+        Periods(redacted).Should().OnlyContain(p =>
+            p.Analytics!.TimeZoneUnavailableReason == TimeZoneUnavailableReason.NotConfigured);
+    }
+
+    [Fact]
+    public void MultiPeriod_ReportsReadGrant_KeepsTreatmentAggregates()
+    {
+        var cached = AllPeriodsWithTreatments();
+
+        var result = StatisticsReadScopeGuard.Redact(cached, Granted(Scope.ReportsRead));
+
+        Periods(result).Should().OnlyContain(p =>
+            p.TreatmentSummary != null && p.InsulinDelivery != null && p.TreatmentCount == 2);
+    }
+
+    [Theory]
+    [InlineData(Scope.GlucoseRead, false)]
+    [InlineData(Scope.ReportsRead, true)]
+    [InlineData(Scope.TreatmentsRead, true)]
+    [InlineData(Scope.TreatmentsReadWrite, true)]
+    public void AllowsTreatmentAggregates_NeedsReportsOrTreatmentsRead(string scope, bool expected)
+    {
+        StatisticsReadScopeGuard.AllowsTreatmentAggregates(Granted(scope)).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Statistics_PeriodsAndPunchCardAdmitGlucoseOrReportsRead()
+    {
+        StatisticsReadScopeGuard.AdmissionScopes.Should().BeEquivalentTo([Scope.GlucoseRead, Scope.ReportsRead]);
+
+        foreach (var action in new[] { nameof(StatisticsController.GetMultiPeriodStatistics), nameof(StatisticsController.GetPunchCardData) })
+        {
+            var gate = GateOn<StatisticsController>(action)!;
+            gate.RequiredScopes.Should().BeEquivalentTo(StatisticsReadScopeGuard.AdmissionScopes);
+            gate.RequiresAll.Should().BeFalse("holding either scope must admit the caller");
+        }
+    }
+
     private static PeriodStatistics[] Periods(MultiPeriodStatistics data) =>
         [data.LastDay, data.Last3Days, data.LastWeek, data.LastMonth, data.Last90Days];
 
@@ -960,6 +1019,7 @@ public partial class AnalyticsReadScopeGuardTests
             nameof(GlucoseAnalytics.Reliability),
             nameof(GlucoseAnalytics.Time),
             nameof(GlucoseAnalytics.ClinicalAssessment),
+            nameof(GlucoseAnalytics.TimeZoneUnavailableReason),
         ]);
     }
 

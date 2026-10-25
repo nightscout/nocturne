@@ -74,16 +74,16 @@
   let focusedDetail = $state<number | null>(null);
   const glucoseDetails = $derived([
     {
-      title: "Value and colour",
-      text: "The value is the newest sensor measurement. Its colour uses the server status for that same reading. Enabled glucose threshold alert rules can affect this classification. Report bands and your personal therapy target are separate; use the central Glucose ranges reference below.",
+      title: "Value and color",
+      text: "The value is the newest sensor measurement. Its color uses the server status for that same reading. Enabled glucose threshold alert rules can affect this classification. Report bands and your personal therapy target are separate. Use the central Glucose ranges reference below.",
     },
     {
       title: "Trend arrow",
-      text: "The source must supply a recognised direction with the sensor reading. Rising, falling and steady arrows describe that reported trend. An empty or unknown direction does not become a measured trend. The active arrow is hidden when the reading is stale.",
+      text: "The source must supply a recognized direction with the sensor reading. Rising, falling and steady arrows describe that reported trend. An empty or unknown direction does not become a measured trend. The active arrow is hidden when the reading is stale.",
     },
     {
       title: "Difference",
-      text: "Nocturne uses the delta supplied with the newest sensor reading, or subtracts the previous sensor reading if no delta is supplied. Plus means the value increased; minus means it decreased. Compare the reading times: the interval may be longer than five minutes.",
+      text: "Nocturne uses the delta supplied with the newest sensor reading, or subtracts the previous sensor reading if no delta is supplied. Plus means the value increased. Minus means it decreased. Compare the reading times: the interval may be longer than five minutes.",
     },
     {
       title: "Reading age",
@@ -130,7 +130,7 @@
       direction: GlucoseTrend.SingleDown,
       age: 1,
       label: "Very low",
-      text: "The server classifies this example urgent low. The same shared theme supplies its tile colour.",
+      text: "The server classifies this example urgent low. The same shared theme supplies its tile color.",
     },
     {
       value: 280,
@@ -139,7 +139,7 @@
       direction: GlucoseTrend.DoubleUp,
       age: 1,
       label: "Very high",
-      text: "The source supplies a double rising direction. The server classification determines the very-high tile colour.",
+      text: "The source supplies a double rising direction. The server classification determines the very-high tile color.",
     },
     {
       value: 106,
@@ -148,7 +148,7 @@
       direction: GlucoseTrend.Flat,
       age: 15,
       label: "Older measurement",
-      text: "The last measurement is older than the shared freshness limit. Its tile becomes neutral and the active arrow is hidden; the old measurement still exists.",
+      text: "The last measurement is older than the shared freshness limit. Its tile becomes neutral and the active arrow is hidden. The old measurement still exists.",
     },
     {
       value: 106,
@@ -381,7 +381,7 @@
             90-day button shows a daily average over the longer rolling window. {scenario ===
             0
               ? "Auto contributes 4 U to the 42 U total."
-              : "Auto is absent because this example has no algorithm bolus insulin; the total is 38 U."}
+              : "Auto is absent because this example has no algorithm bolus insulin. The total is 38 U."}
           </p>{/if}
       {/if}
     {/each}

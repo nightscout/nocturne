@@ -25,7 +25,7 @@ public sealed record PumpSuspensionSnapshot(DateTime StartedAt);
 public sealed record PumpStateSnapshot(PumpModeState Mode, DateTime StartedAt);
 
 /// <summary>Lightweight projection of an active StateSpan for the generic state-span-active
-/// condition. The category and state are echoed back so the evaluator can audit lookups,
+/// condition. The category and state are echoed back so the engine can audit lookups,
 /// even though the dictionary key already encodes them.</summary>
 public sealed record StateSpanSnapshot(StateSpanCategory Category, string? State, DateTime StartedAt);
 

@@ -28,7 +28,7 @@ permissions:
 
 env:
   NODE_VERSION: "24"
-  PNPM_VERSION: "10"
+  PNPM_VERSION: "11.5.0"
 
 jobs:
   build:
@@ -69,6 +69,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
+          check-latest: true
           cache: "pnpm"
           cache-dependency-path: src/Web/pnpm-lock.yaml
 

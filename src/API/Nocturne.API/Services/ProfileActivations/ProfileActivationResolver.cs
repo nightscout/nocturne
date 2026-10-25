@@ -2,6 +2,7 @@ using Nocturne.API.Services.Caching;
 using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.ProfileActivations;
@@ -21,7 +22,6 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
 {
     private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(1);
     private const long MillisPerMinute = 60_000;
-    private const long MillisPerDay = 86_400_000;
     private const int MaxActivationsPerRead = 5_000;
 
     private readonly IProfileActivationRepository _activations;
@@ -76,7 +76,7 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
             $"{TenantCacheFamily.ProfileActivations}:effective-sources",
             async () => (await _activations.GetEffectiveSourcesAsync(ct))
                 .GroupBy(s => ProfileActivationSource.KeyOf(s.DataSource, s.App, s.EnteredBy), StringComparer.Ordinal)
-                .Select(g => new FirstEffective(g.Key, g.Min(s => ToMills(s.FirstStart))))
+                .Select(g => new FirstEffective(g.Key, g.Min(s => s.FirstStart.ToMills())))
                 .ToArray(),
             Ttl, ct);
 
@@ -92,7 +92,7 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
     {
         var name = activation.BaseProfileName;
         var snapshot = activation.Snapshot is { HasSchedules: true } schedules ? schedules : null;
-        var scaling = new CircadianAdjustment(activation.Percentage, activation.TimeshiftMs % MillisPerDay);
+        var scaling = CircadianAdjustment.Of(activation);
 
         if (snapshot is { HasEverySchedule: true } && activation.SnapshotIsCustomized)
             return new ResolvedProfileActivation(activation, name, ProfileScheduleSource.CustomizedSnapshot, snapshot, null);
@@ -113,7 +113,4 @@ internal sealed class ProfileActivationResolver : IProfileActivationResolver
         Math.DivRem(mills, MillisPerMinute, out var rem) * MillisPerMinute - (rem < 0 ? MillisPerMinute : 0);
 
     private static DateTime ToUtc(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
-
-    private static long ToMills(DateTime utc) =>
-        new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
 }

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { formatRange, formatTimeSince } from "./alertTime";
+import { describe, it, expect } from "vitest";
+import { formatRange } from "./alertTime.svelte";
 
 describe("alertTime", () => {
   describe("formatRange", () => {
@@ -14,34 +14,6 @@ describe("alertTime", () => {
         new Date("2025-03-05T15:00:00Z")
       );
       expect(s).toContain(" — ");
-    });
-  });
-
-  describe("formatTimeSince", () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date("2025-03-05T15:00:00Z"));
-    });
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it("returns 'Unknown' when undefined", () => {
-      expect(formatTimeSince(undefined)).toBe("Unknown");
-    });
-    it("returns 'Just now' for very recent", () => {
-      expect(formatTimeSince(new Date("2025-03-05T14:59:50Z"))).toBe("Just now");
-    });
-    it("returns minutes for sub-hour", () => {
-      expect(formatTimeSince(new Date("2025-03-05T14:48:00Z"))).toBe("12m ago");
-    });
-    it("returns hours+minutes for sub-day", () => {
-      expect(formatTimeSince(new Date("2025-03-05T11:55:00Z"))).toBe(
-        "3h 5m ago"
-      );
-    });
-    it("returns days for older", () => {
-      expect(formatTimeSince(new Date("2025-03-03T15:00:00Z"))).toBe("2d ago");
     });
   });
 });

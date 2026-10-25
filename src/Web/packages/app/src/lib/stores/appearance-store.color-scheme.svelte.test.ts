@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const modeWatcher = vi.hoisted(() => ({ preferred: "system" }));
 
@@ -29,6 +29,11 @@ describe("color scheme cookie mirroring", () => {
   beforeEach(() => {
     document.cookie = `${PREFS_COOKIE_NAME}=;path=/;max-age=0`;
     modeWatcher.preferred = "system";
+  });
+
+  afterEach(() => {
+    glucoseUnits.current = "mg/dl";
+    document.cookie = `${PREFS_COOKIE_NAME}=;path=/;max-age=0`;
   });
 
   it.each(["light", "dark", "system"] as const)(

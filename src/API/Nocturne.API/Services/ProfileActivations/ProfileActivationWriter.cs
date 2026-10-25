@@ -122,12 +122,13 @@ public sealed class ProfileActivationWriter
 
     /// <summary>
     /// Clears the cache and re-resolves every schedule-derived temp basal rate, after activations
-    /// were removed in bulk without being read.
+    /// were removed in bulk without being read. <paramref name="profileNames"/> are the profiles whose
+    /// schedules the same removal deleted.
     /// </summary>
-    public async Task AfterBulkRemovalAsync(CancellationToken ct)
+    public async Task AfterBulkRemovalAsync(IReadOnlyCollection<string> profileNames, CancellationToken ct)
     {
         await InvalidateAsync(ct);
-        await _tempBasalRates.AfterProfilesChangedAsync([], ct);
+        await _tempBasalRates.AfterProfilesChangedAsync(profileNames, ct);
     }
 
     /// <summary>

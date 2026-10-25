@@ -381,7 +381,7 @@ internal sealed class LegacyStateSpanTable(
 
         var treatment = project(span, metadata);
         treatment.Id = span.Id.ToString();
-        treatment.Mills = HistoryPage.ToMilliseconds(span.StartTimestamp);
+        treatment.Mills = span.StartTimestamp.ToMills();
         treatment.RawTimestamp ??= TreatmentUploadedTimestamp.OfSpan(metadata);
         treatment.EnteredBy = metadata.TryReadString("enteredBy");
         treatment.Notes = metadata.TryReadString(LegacyTreatmentTables.NotesKey);
@@ -980,8 +980,8 @@ internal static class LegacyTreatmentTables
 
     private static Treatment Stamp(Treatment treatment, DateTime createdAt, DateTime modifiedAt, bool deleted)
     {
-        treatment.SrvCreated = new DateTimeOffset(createdAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
-        treatment.SrvModified = new DateTimeOffset(modifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        treatment.SrvCreated = createdAt.ToMills();
+        treatment.SrvModified = modifiedAt.ToMills();
         if (deleted)
             treatment.IsValid = false;
         return treatment;
@@ -998,6 +998,7 @@ internal static class LegacyTreatmentTables
                 ?? TreatmentTypes.MealBolus,
             Mills = bolus.Mills,
             Insulin = bolus.Insulin,
+            PreBolus = TreatmentUploadedPreBolus.Of(bolus.AdditionalProperties),
             Carbs = carb.Carbs,
             FoodType = DeriveFoodType(foods),
             Fat = DeriveTotalFat(foods),
@@ -1021,6 +1022,7 @@ internal static class LegacyTreatmentTables
             EventType = TreatmentUploadedEventType.Of(bolus.AdditionalProperties) ?? TreatmentTypes.CorrectionBolus,
             Mills = bolus.Mills,
             Insulin = bolus.Insulin,
+            PreBolus = TreatmentUploadedPreBolus.Of(bolus.AdditionalProperties),
             EnteredBy = bolus.Device,
             DataSource = bolus.DataSource,
             SyncIdentifier = bolus.SyncIdentifier,

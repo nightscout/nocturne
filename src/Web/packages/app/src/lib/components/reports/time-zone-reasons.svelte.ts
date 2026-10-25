@@ -17,7 +17,7 @@ export function timeZoneReasonCopy(reason: TimeZoneUnavailableReason): TimeZoneR
       };
     case TimeZoneUnavailableReason.Unrecognised:
       return {
-        cause: "This server does not recognise the time zone in the profile settings.",
+        cause: "This server does not recognize the time zone in the profile settings.",
         remedy: "The owner of this data can correct the time zone in the profile settings.",
       };
     case TimeZoneUnavailableReason.NotConfigured:

@@ -292,6 +292,46 @@ public class MigrationJobServiceTests
         }
     }
 
+    private static MigrationJob CreateJob()
+    {
+        var (_, provider) = CreateService();
+        var id = Guid.NewGuid();
+        return new MigrationJob(
+            id,
+            Guid.NewGuid(),
+            ApiRequest(),
+            new MigrationJobInfo { Id = id, Mode = MigrationMode.Api, CreatedAt = DateTime.UtcNow },
+            tenantContext: null,
+            NullLogger.Instance,
+            provider);
+    }
+
+    [Fact]
+    public void UpdateCollectionProgress_keeps_a_recorded_failure_reason()
+    {
+        var job = CreateJob();
+        job.UpdateCollectionProgress("entries", 10, 4, 0, false);
+        job.RecordCollectionFailure("entries", "the source stopped answering");
+
+        job.UpdateCollectionProgress("entries", 10, 5, 1, true);
+
+        var progress = job.GetStatus().CollectionProgress["entries"];
+        progress.FailureReason.Should().Be("the source stopped answering");
+        progress.DocumentsMigrated.Should().Be(5);
+        progress.DocumentsFailed.Should().Be(1);
+    }
+
+    [Fact]
+    public void UpdateCollectionProgress_keeps_a_recorded_skip_reason()
+    {
+        var job = CreateJob();
+        job.RecordCollectionSkipped("profile", "no profile endpoint");
+
+        job.UpdateCollectionProgress("profile", 3, 3, 0, true);
+
+        job.GetStatus().CollectionProgress["profile"].SkippedReason.Should().Be("no profile endpoint");
+    }
+
     /// <summary>Holds every source request until released, keeping the job in a live state.</summary>
     private sealed class BlockingHandler : HttpMessageHandler
     {

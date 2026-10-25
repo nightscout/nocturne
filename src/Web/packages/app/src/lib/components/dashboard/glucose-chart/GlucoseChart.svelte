@@ -332,6 +332,7 @@
         bolusDataSource={inspection.context.nearbyBolus?.dataSource}
         carbGrams={inspection.context.nearbyCarbs?.carbs}
         carbLabel={inspection.context.nearbyCarbs?.label}
+        carbMealPeriod={inspection.context.nearbyCarbs?.mealPeriod}
         carbDataSource={inspection.context.nearbyCarbs?.dataSource}
         iob={inspection.context.iob}
         cob={inspection.context.cob}

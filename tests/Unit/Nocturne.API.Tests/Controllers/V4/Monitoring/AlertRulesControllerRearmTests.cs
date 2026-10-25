@@ -13,6 +13,7 @@ using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
@@ -59,23 +60,19 @@ public class AlertRulesControllerRearmTests
 
         var validator = new Mock<IAlertRuleConditionValidator>();
         validator
-            .Setup(v => v.ValidateUpdate(
-                It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<StoredConditionTrees>()))
-            .Returns((AlertConditionType _, string body, bool _, string? autoResolve, string? client, StoredConditionTrees _) =>
-                new ConditionUpdateCheck([], body, autoResolve, client, []));
-        validator
             .Setup(v => v.Validate(
                 It.IsAny<AlertConditionType>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns([]);
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(db),
+            new AlertRepository(new TestNocturneDbContextFactory(db)),
+            MockTenantAccessor.Create(db.TenantId).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
-            new AlertRuleRearm(gate ?? new AlertRuleEvaluationGate(), new AlertTrackerRepository(db.AsFactory())),
+            new AlertRuleRearm(gate ?? new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
             Mock.Of<ILogger<AlertRulesController>>());
         return (controller, db);

@@ -5,6 +5,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -226,6 +227,20 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
     protected async Task<string?> GetPostgresConnectionStringAsync()
     {
         return await Fixture.GetConnectionStringAsync(ServiceNames.PostgreSql);
+    }
+
+    /// <summary>
+    /// An authenticated client whose credential is clamped to the last 24 hours of history.
+    /// </summary>
+    protected async Task<HttpClient> CreateHistoryClampedClientAsync(
+        string name = "Clamped Follower",
+        Guid? tenantId = null)
+    {
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        var (_, token) = await AuthTestHelpers.SeedHistoryClampedSubjectAsync(
+            conn, tenantId ?? Fixture.TenantId, name);
+        return AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, token);
     }
 
     /// <summary>

@@ -48,6 +48,12 @@ public interface IMigrationJobService
 
     /// <summary>Lists the calling tenant's migration sources. Source URLs frequently identify a person, so sources are never listed cross-tenant.</summary>
     Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>Reads a Nightscout instance's display units and current profile's units and timezone.</summary>
+    /// <exception cref="MigrationSourceException">The instance could not be read.</exception>
+    /// <exception cref="System.Text.Json.JsonException">The instance answered with something other than JSON.</exception>
+    Task<NightscoutDisplaySettings> ReadDisplaySettingsAsync(
+        string nightscoutUrl, string? apiSecret, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -191,7 +197,7 @@ public class MigrationJobService : IMigrationJobService
             "Started migration job {JobId} in {Mode} mode from {Source}",
             jobId,
             request.Mode,
-            sourceDesc
+            SanitizeForLog(sourceDesc)
         );
 
         return jobInfo;
@@ -300,16 +306,7 @@ public class MigrationJobService : IMigrationJobService
             };
         }
 
-        using var scope = _serviceProvider.CreateScope();
-        var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
-        var httpClient = httpClientFactory.CreateClient(HttpClientName);
-        httpClient.BaseAddress = baseAddress;
-
-        // Add API secret header if provided (Nightscout expects the SHA1 hash)
-        if (!string.IsNullOrEmpty(request.NightscoutApiSecret))
-        {
-            httpClient.DefaultRequestHeaders.Add("api-secret", MigrationJob.HashApiSecret(request.NightscoutApiSecret));
-        }
+        var httpClient = CreateSourceClient(baseAddress, request.NightscoutApiSecret);
 
         try
         {
@@ -334,6 +331,31 @@ public class MigrationJobService : IMigrationJobService
                 ErrorMessage = ex.Message,
             };
         }
+    }
+
+    public async Task<NightscoutDisplaySettings> ReadDisplaySettingsAsync(
+        string nightscoutUrl, string? apiSecret, CancellationToken ct = default)
+    {
+        if (!NightscoutBaseUri.TryFor(nightscoutUrl, out var baseAddress))
+            throw new MigrationSourceException(NightscoutBaseUri.InvalidUrlMessage, MigrationFailureCause.Unreachable);
+
+        var httpClient = CreateSourceClient(baseAddress, apiSecret);
+        var status = await MigrationJob.ReadFromSourceAsync(
+            httpClient, "api/v1/status.json", "status", ct, NightscoutRead.ImportProbe);
+        var profiles = await MigrationJob.ReadFromSourceAsync(httpClient, "api/v1/profile.json", "profile", ct);
+        return NightscoutDisplaySettings.Parse(status, profiles);
+    }
+
+    private HttpClient CreateSourceClient(Uri baseAddress, string? apiSecret)
+    {
+        var httpClient = _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName);
+        httpClient.BaseAddress = baseAddress;
+
+        // Nightscout expects the SHA1 hash of the secret.
+        if (!string.IsNullOrEmpty(apiSecret))
+            httpClient.DefaultRequestHeaders.Add("api-secret", MigrationJob.HashApiSecret(apiSecret));
+
+        return httpClient;
     }
 
     private async Task<TestMigrationConnectionResult> TestMongoConnectionAsync(
@@ -452,6 +474,13 @@ public class MigrationJobService : IMigrationJobService
 
         return sources;
     }
+
+    /// <summary>
+    /// The source description carries the caller's Nightscout URL or Mongo database name;
+    /// stripping CR/LF keeps it from forging log lines.
+    /// </summary>
+    private static string? SanitizeForLog(string? value) =>
+        value?.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }
 
 /// <summary>
@@ -477,6 +506,14 @@ internal class MigrationJob
     private DateTime _startedAt;
     private DateTime? _completedAt;
     private readonly ConcurrentDictionary<string, CollectionProgress> _collectionProgress = new();
+
+    /// <summary>
+    /// Newest source timestamp this run actually brought across, for
+    /// <see cref="MigrationSourceEntity.LastMigratedDataTimestamp"/>. Collections are pulled one
+    /// after another on the job's own task, so a plain field suffices.
+    /// </summary>
+    private DateTime? _newestMigratedData;
+
     private static readonly System.Text.Json.JsonSerializerOptions s_caseInsensitiveJson = new() { PropertyNameCaseInsensitive = true };
 
     /// <summary>
@@ -640,6 +677,14 @@ internal class MigrationJob
             {
                 var source = await db.MigrationSources.FirstAsync(s => s.Id == sourceId, ct);
                 source.LastMigrationAt = _completedAt ?? DateTime.UtcNow;
+
+                // A run bounded to an older date range covers ground an earlier run already
+                // covered, so the watermark only ever advances.
+                if (_newestMigratedData is { } newest
+                    && newest > (source.LastMigratedDataTimestamp ?? DateTime.MinValue))
+                {
+                    source.LastMigratedDataTimestamp = newest;
+                }
             }
 
             await db.SaveChangesAsync(ct);
@@ -652,6 +697,12 @@ internal class MigrationJob
 
     private long MigratedCount(string collection) =>
         _collectionProgress.TryGetValue(collection, out var p) ? p.DocumentsMigrated : 0;
+
+    private void ObserveDataWatermark(DateTime? candidate)
+    {
+        if (candidate is { } stamp && stamp > (_newestMigratedData ?? DateTime.MinValue))
+            _newestMigratedData = stamp;
+    }
 
     /// <summary>
     /// Finds or creates the migration source row for this job's target. Sources dedupe per
@@ -928,7 +979,7 @@ internal class MigrationJob
             : failure.Message;
 
     /// <summary>Marks a collection finished-and-failed, keeping whatever it managed to import.</summary>
-    private void RecordCollectionFailure(string collectionName, string reason) =>
+    internal void RecordCollectionFailure(string collectionName, string reason) =>
         _collectionProgress[collectionName] = Progress(collectionName) with
         {
             IsComplete = true,
@@ -936,7 +987,7 @@ internal class MigrationJob
         };
 
     /// <summary>Marks a collection passed over rather than attempted. See <see cref="CollectionProgress.SkippedReason"/>.</summary>
-    private void RecordCollectionSkipped(string collectionName, string reason) =>
+    internal void RecordCollectionSkipped(string collectionName, string reason) =>
         _collectionProgress[collectionName] = Progress(collectionName) with
         {
             IsComplete = true,
@@ -1142,13 +1193,12 @@ internal class MigrationJob
         }
     }
 
-    private void UpdateCollectionProgress(
+    internal void UpdateCollectionProgress(
         string collectionName, long totalDocuments, long migrated, long failed, bool isComplete,
         DecompositionTally tally = default)
     {
-        _collectionProgress[collectionName] = new CollectionProgress
+        _collectionProgress[collectionName] = Progress(collectionName) with
         {
-            CollectionName = collectionName,
             TotalDocuments = totalDocuments,
             DocumentsMigrated = migrated,
             DocumentsFailed = failed,
@@ -1161,7 +1211,7 @@ internal class MigrationJob
     }
 
     /// <summary>What a collection's decompositions stored and passed over; see <see cref="DecompositionResult"/>.</summary>
-    private readonly record struct DecompositionTally(
+    internal readonly record struct DecompositionTally(
         long RecordsStored, long RecordsSkippedDeleted, long DocumentsSkippedDeleted, long DocumentsSkippedUnsupported)
     {
         public long DocumentsSkipped => DocumentsSkippedDeleted + DocumentsSkippedUnsupported;
@@ -1199,20 +1249,23 @@ internal class MigrationJob
     ///     <paramref name="Oldest"/> reads the page's oldest record, answering <c>null</c> when the
     ///     page carries no usable timestamp to page back from, <paramref name="AdmittedThrough"/>
     ///     is the latest record time the filter for a cursor admits, <paramref name="Envelope"/> is
-    ///     how far above the anchor the first page reaches, and <paramref name="AtOrBefore"/> is
-    ///     whether a record's instant is at or before the anchor.
+    ///     how far above the anchor the first page reaches, <paramref name="AtOrBefore"/> is
+    ///     whether a record's instant is at or before the anchor, and <paramref name="Newest"/>
+    ///     reads the page's newest instant, for
+    ///     <see cref="MigrationSourceEntity.LastMigratedDataTimestamp"/>.
     /// </summary>
     private sealed record PageCursor(
         Func<DateTime, string> Filter,
         Func<IReadOnlyList<ProcessableDocumentBase>, DateTime?> Oldest,
         Func<DateTime, DateTime> AdmittedThrough,
         TimeSpan Envelope,
-        Func<ProcessableDocumentBase, DateTime, bool> AtOrBefore
+        Func<ProcessableDocumentBase, DateTime, bool> AtOrBefore,
+        Func<IReadOnlyList<ProcessableDocumentBase>, DateTime?> Newest
     );
 
     /// <summary>Entries page on the numeric <c>date</c> field, which mirrors mills exactly.</summary>
     private static readonly PageCursor s_dateCursor = new(
-        to => $"&find[date][$lte]={new DateTimeOffset(to, TimeSpan.Zero).ToUnixTimeMilliseconds()}",
+        to => $"&find[date][$lte]={to.ToMills()}",
         page =>
         {
             var dated = page.Where(d => d.Mills > 0).ToList();
@@ -1222,7 +1275,10 @@ internal class MigrationJob
         },
         to => to,
         TimeSpan.Zero,
-        (_, _) => true);
+        (_, _) => true,
+        page => page.Any(d => d.Mills > 0)
+            ? DateTimeOffset.FromUnixTimeMilliseconds(page.Max(d => d.Mills)).UtcDateTime
+            : null);
 
     /// <summary>
     ///     Every other collection pages on the ISO-8601 <c>created_at</c> string, inside the
@@ -1233,7 +1289,12 @@ internal class MigrationJob
         page => BackwardTimePager.OldestWrittenCreatedAt(page, d => d.CreatedAt),
         BackwardTimePager.CreatedAtAdmittedThrough,
         BackwardTimePager.CreatedAtOffsetEnvelope,
-        (d, anchor) => BackwardTimePager.CreatedAtWithin(d.CreatedAt, null, anchor));
+        (d, anchor) => BackwardTimePager.CreatedAtWithin(d.CreatedAt, null, anchor),
+        page => page
+            .Select(d => UploaderTimestamp.TryParse(d.CreatedAt, out var parsed)
+                ? parsed.UtcDateTime
+                : (DateTime?)null)
+            .Max());
 
     /// <summary>
     ///     A legacy collection pulled page by page over a time cursor. <paramref name="Name"/> is
@@ -1389,6 +1450,7 @@ internal class MigrationJob
                     var before = tally.DocumentsSkipped;
                     tally = tally.Add(await decompose(page, ct), collection.OneRecordPerDocument);
                     totalMigrated += page.Length - (tally.DocumentsSkipped - before);
+                    ObserveDataWatermark(collection.Cursor.Newest(page));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                 {
@@ -1793,9 +1855,8 @@ internal class MigrationJob
 
             await dbContext.SaveChangesAsync(ct);
 
-            _collectionProgress[collectionName] = new CollectionProgress
+            _collectionProgress[collectionName] = Progress(collectionName) with
             {
-                CollectionName = collectionName,
                 TotalDocuments = totalDocs,
                 DocumentsMigrated = totalMigrated,
                 DocumentsFailed = totalFailed,
@@ -1851,10 +1912,7 @@ internal class MigrationJob
             OutputMode = MongoDB.Bson.IO.JsonOutputMode.RelaxedExtendedJson
         };
         var json = doc.ToJson(jsonWriterSettings);
-        var status = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus>(json, new System.Text.Json.JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
+        var status = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus>(json, JsonDefaults.CaseInsensitive);
 
         if (status == null)
             return;

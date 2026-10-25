@@ -242,6 +242,28 @@ public class ProfileDecomposerTests
         result.CreatedRecords.Should().HaveCount(15);
     }
 
+    [Fact]
+    public async Task DecomposeBatchAsync_SkipsAProfileSwitchSnapshotStore_AndKeepsAStoreThatOnlyContainsTheMarker()
+    {
+        var repos = new Repositories();
+        var profile = BuildProfile(id: "remote1", stores: ["Default", "Weekend@@@@@1672567200000", "Night@@@@@Mode"]);
+
+        await repos.Decomposer.DecomposeBatchAsync([profile], WriteOrigin.Live);
+
+        repos.Written.Select(r => r.LegacyId).Distinct()
+            .Should().BeEquivalentTo(["remote1:Default", "remote1:Night@@@@@Mode"]);
+    }
+
+    [Theory]
+    [InlineData("Weekend@@@@@1672567200000", true)]
+    [InlineData("Rhys (110%,1h)@@@@@1777636800000", true)]
+    [InlineData("Night@@@@@Mode", false)]
+    [InlineData("Night@@@@@12a", false)]
+    [InlineData("Night@@@@1672567200000", false)]
+    [InlineData("Default", false)]
+    public void IsProfileSwitchStoreName_MatchesOnlyTheSyntheticShape(string storeName, bool expected) =>
+        ProfileDecomposer.IsProfileSwitchStoreName(storeName).Should().Be(expected);
+
     /// <summary>
     /// Two profiles created together must not share a correlation id, while the stores of one profile
     /// do — the ids the single-profile path always minted.
@@ -400,7 +422,6 @@ public class ProfileDecomposerTests
             therapyMock
                 .Setup(x => x.GetNewestDocumentRowAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(stored
-                    .Where(s => !s.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker))
                     .OrderByDescending(s => s.Timestamp)
                     .FirstOrDefault());
             therapyMock

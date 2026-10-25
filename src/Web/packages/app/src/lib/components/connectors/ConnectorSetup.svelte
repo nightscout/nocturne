@@ -408,7 +408,7 @@
         <Card data-testid="connector-enable">
           <CardContent class="flex items-center justify-between gap-4 py-4">
             <div class="space-y-0.5 min-w-0">
-              <Label size="lg">Enable Connector</Label>
+              <Label size="lg">Enable connector</Label>
               <p class="text-sm text-muted-foreground">
                 When enabled, the connector will actively sync data
               </p>
@@ -455,7 +455,7 @@
               <AlertCircle
                 class="h-12 w-12 mx-auto mb-4 text-muted-foreground"
               />
-              <p class="font-medium">No Runtime Configuration Available</p>
+              <p class="font-medium">No runtime configuration available</p>
               <p class="text-sm text-muted-foreground mt-2">
                 This connector does not support runtime configuration.
                 {#if connectorInfo?.documentationUrl}
@@ -483,7 +483,7 @@
       {#if showCapabilities && connectorCapabilities}
         <Card>
           <CardHeader>
-            <CardTitle>Sync Capabilities</CardTitle>
+            <CardTitle>Sync capabilities</CardTitle>
             <CardDescription>
               What this connector supports for manual sync
             </CardDescription>

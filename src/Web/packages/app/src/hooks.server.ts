@@ -35,6 +35,7 @@ import * as js from '../../../locales/js.loader.server.js'
 import { locales } from '../../../locales/data.js'
 import supportedLocales from '../../../supportedLocales.json';
 import { renderColorScheme } from "$lib/server/color-scheme-html";
+import { dropModulepreloads } from "$lib/server/link-header";
 import { LANGUAGE_COOKIE_NAME } from "$lib/stores/appearance-store.svelte";
 
 // Await so no request can render before catalogs are registered: a lookup
@@ -114,6 +115,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
         expiresAt: session.expiresAt,
         preferredLanguage: session.preferredLanguage ?? undefined,
         preferences: session.preferences ?? undefined,
+        defaultGlucoseUnits: session.defaultGlucoseUnits ?? undefined,
         avatarUrl: session.avatarUrl ?? undefined,
       };
 
@@ -544,10 +546,18 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
   return response;
 };
 
-const colorSchemeHandle: Handle = ({ event, resolve }) =>
-  resolve(event, {
+// The head keeps its modulepreload tags; only the header is trimmed, so Early Hints carry CSS and fonts.
+const colorSchemeHandle: Handle = async ({ event, resolve }) => {
+  const response = await resolve(event, {
     transformPageChunk: ({ html }) => renderColorScheme(html, event.cookies),
   });
+  const link = response.headers.get("link");
+  if (link === null) return response;
+  const trimmed = dropModulepreloads(link);
+  if (trimmed === "") response.headers.delete("link");
+  else response.headers.set("link", trimmed);
+  return response;
+};
 
 /**
  * Liveness probe for the Aspire health check. Answers before any auth or

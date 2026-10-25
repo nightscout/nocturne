@@ -7,7 +7,7 @@ describe("TitleFaviconSettings", () => {
 	it("renders the card title", async () => {
 		render(TitleFaviconSettings);
 
-		await expect.element(page.getByText("Browser Tab Settings")).toBeVisible();
+		await expect.element(page.getByText("Browser tab settings")).toBeVisible();
 		await expect
 			.element(page.getByText("Customize how glucose data appears in the browser tab"))
 			.toBeVisible();

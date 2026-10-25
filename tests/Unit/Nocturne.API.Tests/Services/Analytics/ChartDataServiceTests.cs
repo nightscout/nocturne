@@ -1,3 +1,4 @@
+using Nocturne.Core.Clinical.LoopAnalysis;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -6,6 +7,7 @@ using Nocturne.API.Helpers;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.ChartData;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Basal;
@@ -24,6 +26,11 @@ public class ChartDataServiceTests
 {
     // Common test timestamp: 2023-11-15T00:00:00Z in millis
     private const long TestMills = 1700000000000L;
+
+    private static IStateSpanRepository NoOverrides() =>
+        Mock.Of<IStateSpanRepository>(r => r.GetByCategories(
+            It.IsAny<IEnumerable<StateSpanCategory>>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>())
+            == Task.FromResult(new Dictionary<StateSpanCategory, List<StateSpan>>()));
 
     #region BuildGlucoseData Tests
 
@@ -322,18 +329,18 @@ public class ChartDataServiceTests
                 },
             };
 
-            var result = ChartDataService.BuildCarbMarkers(carbs, null);
+            var result = ChartDataService.BuildCarbMarkers(carbs, TimeZoneInfo.Utc);
 
             result.Should().HaveCount(1);
             result[0].Carbs.Should().Be(30.0);
-            result[0].Label.Should().NotBeNullOrEmpty();
+            result[0].MealPeriod.Should().NotBeNull();
             result[0].Time.Should().Be(TestMills);
             result[0].TreatmentId.Should().Be("treat-1");
             result[0].IsOffset.Should().BeFalse();
         }
 
         [Fact]
-        public void WithoutFoodType_UsesMealName()
+        public void WithoutFoodType_CarriesMealPeriod()
         {
             // 12:00 UTC = Lunch time
             var noonUtcMills = DateTimeOffset
@@ -349,10 +356,32 @@ public class ChartDataServiceTests
                 },
             };
 
-            var result = ChartDataService.BuildCarbMarkers(carbs, null);
+            var result = ChartDataService.BuildCarbMarkers(carbs, TimeZoneInfo.Utc);
 
             result.Should().HaveCount(1);
-            result[0].Label.Should().Be("Lunch");
+            result[0].MealPeriod.Should().Be(MealPeriod.Lunch);
+            result[0].Label.Should().BeNull();
+        }
+
+        [Fact]
+        public void WithoutAZone_LeavesTheMealPeriodOut()
+        {
+            var noonUtcMills = DateTimeOffset
+                .Parse("2023-11-15T12:00:00Z")
+                .ToUnixTimeMilliseconds();
+            var carbs = new List<CarbIntake>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Carbs = 20.0,
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(noonUtcMills).UtcDateTime,
+                },
+            };
+
+            var result = ChartDataService.BuildCarbMarkers(carbs, null);
+
+            result.Should().ContainSingle().Which.MealPeriod.Should().BeNull();
         }
 
         [Fact]
@@ -673,80 +702,52 @@ public class ChartDataServiceTests
 
     #endregion
 
-    #region GetMealNameForTime Tests
+    #region GetMealPeriod Tests
 
-    public class GetMealNameForTimeTests
+    public class GetMealPeriodTests
     {
+        private static long MillsAtUtcHour(int hourUtc) =>
+            new DateTimeOffset(2023, 11, 15, hourUtc, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
         [Theory]
-        [InlineData(5, "Breakfast")]
-        [InlineData(10, "Breakfast")]
-        [InlineData(11, "Lunch")]
-        [InlineData(14, "Lunch")]
-        [InlineData(15, "Snack")]
-        [InlineData(16, "Snack")]
-        [InlineData(17, "Dinner")]
-        [InlineData(20, "Dinner")]
-        [InlineData(21, "Late Night")]
-        [InlineData(23, "Late Night")]
-        [InlineData(0, "Late Night")]
-        [InlineData(4, "Late Night")]
-        public void UtcTimeBuckets(int hourUtc, string expected)
+        [InlineData(5, MealPeriod.Breakfast)]
+        [InlineData(10, MealPeriod.Breakfast)]
+        [InlineData(11, MealPeriod.Lunch)]
+        [InlineData(14, MealPeriod.Lunch)]
+        [InlineData(15, MealPeriod.Snack)]
+        [InlineData(16, MealPeriod.Snack)]
+        [InlineData(17, MealPeriod.Dinner)]
+        [InlineData(20, MealPeriod.Dinner)]
+        [InlineData(21, MealPeriod.LateNight)]
+        [InlineData(23, MealPeriod.LateNight)]
+        [InlineData(0, MealPeriod.LateNight)]
+        [InlineData(4, MealPeriod.LateNight)]
+        public void UtcZoneBuckets(int hourUtc, MealPeriod expected)
         {
-            // Build a mills value for 2023-11-15 at the specified UTC hour
-            var dto = new DateTimeOffset(2023, 11, 15, hourUtc, 30, 0, TimeSpan.Zero);
-            var mills = dto.ToUnixTimeMilliseconds();
-
-            var result = ChartDataService.GetMealNameForTime(mills, null);
-
-            result.Should().Be(expected);
+            ChartDataService.GetMealPeriod(MillsAtUtcHour(hourUtc), TimeZoneInfo.Utc)
+                .Should().Be(expected);
         }
 
         [Fact]
-        public void NullTimezone_FallsBackToUtc()
+        public void NoZone_GivesNoPeriod()
         {
-            // 12:00 UTC = Lunch
-            var dto = new DateTimeOffset(2023, 11, 15, 12, 0, 0, TimeSpan.Zero);
-            var mills = dto.ToUnixTimeMilliseconds();
-
-            var result = ChartDataService.GetMealNameForTime(mills, null);
-
-            result.Should().Be("Lunch");
+            ChartDataService.GetMealPeriod(MillsAtUtcHour(12), null).Should().BeNull();
         }
 
         [Fact]
-        public void TimezoneConversion_NewYork()
+        public void ZoneConversion_NewYork_LateNight()
         {
-            // 6:00 UTC in America/New_York (UTC-5 in November) = 1:00 AM local = "Late Night"
-            var dto = new DateTimeOffset(2023, 11, 15, 6, 0, 0, TimeSpan.Zero);
-            var mills = dto.ToUnixTimeMilliseconds();
+            var zone = TimeZoneHelper.GetTimeZoneInfoFromId("America/New_York");
 
-            var result = ChartDataService.GetMealNameForTime(mills, "America/New_York");
-
-            result.Should().Be("Late Night");
+            ChartDataService.GetMealPeriod(MillsAtUtcHour(6), zone).Should().Be(MealPeriod.LateNight);
         }
 
         [Fact]
-        public void TimezoneConversion_NewYork_Breakfast()
+        public void ZoneConversion_NewYork_Breakfast()
         {
-            // 12:00 UTC in America/New_York (UTC-5) = 7:00 AM local = "Breakfast"
-            var dto = new DateTimeOffset(2023, 11, 15, 12, 0, 0, TimeSpan.Zero);
-            var mills = dto.ToUnixTimeMilliseconds();
+            var zone = TimeZoneHelper.GetTimeZoneInfoFromId("America/New_York");
 
-            var result = ChartDataService.GetMealNameForTime(mills, "America/New_York");
-
-            result.Should().Be("Breakfast");
-        }
-
-        [Fact]
-        public void InvalidTimezone_FallsBackToUtc()
-        {
-            // 12:00 UTC = Lunch (falls back to UTC on invalid tz)
-            var dto = new DateTimeOffset(2023, 11, 15, 12, 0, 0, TimeSpan.Zero);
-            var mills = dto.ToUnixTimeMilliseconds();
-
-            var result = ChartDataService.GetMealNameForTime(mills, "Invalid/Timezone");
-
-            result.Should().Be("Lunch");
+            ChartDataService.GetMealPeriod(MillsAtUtcHour(12), zone).Should().Be(MealPeriod.Breakfast);
         }
     }
 
@@ -878,7 +879,7 @@ public class ChartDataServiceTests
             var definition = new TrackerDefinitionEntity
             {
                 Id = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 Name = "CGM Sensor",
                 Category = TrackerCategory.Sensor,
                 Icon = "activity",
@@ -895,7 +896,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = startedAtDateTime, // expires at startTime + 24h
                 Definition = definition,
             };
@@ -920,7 +921,7 @@ public class ChartDataServiceTests
             var definition = new TrackerDefinitionEntity
             {
                 Id = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 Name = "Doctor Appointment",
                 Category = TrackerCategory.Appointment,
                 Icon = "calendar",
@@ -938,7 +939,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow.AddDays(-7),
                 ScheduledAt = scheduledTime,
                 Definition = definition,
@@ -981,7 +982,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 ScheduledAt = scheduledTime,
                 Definition = new TrackerDefinitionEntity
@@ -1027,7 +1028,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 Definition = definition,
             };
@@ -1061,7 +1062,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 ScheduledAt = DateTimeOffset
                     .FromUnixTimeMilliseconds(TestMills + (18L * 60 * 60 * 1000))
@@ -1072,7 +1073,7 @@ public class ChartDataServiceTests
             {
                 Id = Guid.NewGuid(),
                 DefinitionId = defId,
-                UserId = "user1",
+                CreatedBy = "user1",
                 StartedAt = DateTime.UtcNow,
                 ScheduledAt = DateTimeOffset
                     .FromUnixTimeMilliseconds(TestMills + (6L * 60 * 60 * 1000))
@@ -1723,7 +1724,7 @@ public class ChartDataServiceTests
 
             var series = await Service(repository.Object, TimeProvider.System).GetBasalSeriesAsync(Start, End);
 
-            requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(Start - ChartDataService.BufferMs).UtcDateTime);
+            requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(Start - DailyProfileCalculator.ActingMs).UtcDateTime);
             series.Should().ContainSingle();
             series[0].Timestamp.Should().Be(Start);
             series[0].Rate.Should().BeApproximately(0.4, 0.001);
@@ -1769,12 +1770,61 @@ public class ChartDataServiceTests
                 (now, 0.8));
         }
 
+        [Fact]
+        public async Task ReadsTheOverridesOverTheWindow_AndScalesTheScheduleByThem()
+        {
+            var repository = new Mock<ITempBasalRepository>();
+            repository
+                .Setup(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
+            var segments = new Mock<IBasalSegmentService>();
+            segments
+                .Setup(s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .Returns(new[] { new BasalSegment(Start, End, 1.0, 1.0, "Default") }.ToAsyncEnumerable());
+            var stateSpans = new Mock<IStateSpanRepository>();
+            stateSpans
+                .Setup(r => r.GetByCategories(
+                    It.IsAny<IEnumerable<StateSpanCategory>>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Dictionary<StateSpanCategory, List<StateSpan>>
+                {
+                    [StateSpanCategory.Override] =
+                    [
+                        new StateSpan
+                        {
+                            Category = StateSpanCategory.Override,
+                            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start + 10 * Minute).UtcDateTime,
+                            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(Start + 30 * Minute).UtcDateTime,
+                            Metadata = new Dictionary<string, object> { ["insulinNeedsScaleFactor"] = 0.5 },
+                        },
+                    ],
+                });
+            using var cts = new CancellationTokenSource();
+
+            var series = await Service(
+                    repository.Object, TimeProvider.System, hasTherapySettings: true,
+                    segments: segments.Object, stateSpans: stateSpans.Object)
+                .GetBasalSeriesAsync(Start, End, cts.Token);
+
+            series.Select(p => (p.Timestamp, p.Rate)).Should().Equal(
+                (Start, 1.0), (Start + 10 * Minute, 0.5), (Start + 30 * Minute, 1.0));
+            stateSpans.Verify(
+                r => r.GetByCategories(
+                    It.Is<IEnumerable<StateSpanCategory>>(c => c.SequenceEqual(new[] { StateSpanCategory.Override })),
+                    DateTimeOffset.FromUnixTimeMilliseconds(Start).UtcDateTime,
+                    DateTimeOffset.FromUnixTimeMilliseconds(End).UtcDateTime,
+                    cts.Token),
+                Times.Once);
+        }
+
         private static ChartDataService Service(
             ITempBasalRepository repository,
             TimeProvider timeProvider,
             bool hasTherapySettings = false,
             IBasalRateResolver? basalRate = null,
-            IBasalSegmentService? segments = null)
+            IBasalSegmentService? segments = null,
+            IStateSpanRepository? stateSpans = null)
         {
             var settings = new Mock<ITherapySettingsResolver>();
             settings.Setup(s => s.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(hasTherapySettings);
@@ -1784,10 +1834,71 @@ public class ChartDataServiceTests
                 new BasalSeriesBuilder(
                     settings.Object, segments ?? Mock.Of<IBasalSegmentService>(), NullLogger<BasalSeriesBuilder>.Instance),
                 repository,
+                stateSpans ?? NoOverrides(),
                 settings.Object,
                 basalRate ?? Mock.Of<IBasalRateResolver>(),
                 timeProvider,
                 NullLogger<ChartDataService>.Instance);
+        }
+    }
+
+    #endregion
+
+    #region GetBasalDeliverySpansAsync Tests
+
+    public class GetBasalDeliverySpansAsyncTests
+    {
+        private const long Start = TestMills;
+        private const long End = TestMills + 60 * 60 * 1000;
+        private const long Minute = 60 * 1000;
+
+        private static TempBasal Span(long startMills, long endMills, TempBasalOrigin origin, double rate) => new()
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(endMills).UtcDateTime,
+            Rate = rate,
+            Origin = origin,
+        };
+
+        [Fact]
+        public async Task ReadsFromBufferAndReturnsEveryOriginWithSuspendedAtZero()
+        {
+            var rows = new[]
+            {
+                Span(Start - 20 * Minute, Start + 10 * Minute, TempBasalOrigin.Manual, 0.4),
+                Span(Start + 10 * Minute, Start + 20 * Minute, TempBasalOrigin.Suspended, 0.9),
+                Span(Start + 20 * Minute, Start + 30 * Minute, TempBasalOrigin.Inferred, 1.1),
+                Span(Start - 5 * 60 * Minute, Start - 4 * 60 * Minute, TempBasalOrigin.Algorithm, 2.0),
+            };
+            var repository = new Mock<ITempBasalRepository>();
+            DateTime? requestedFrom = null;
+            repository
+                .Setup(r => r.GetAsync(
+                    It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                    It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .Callback<DateTime?, DateTime?, string?, string?, int, int, bool, CancellationToken>(
+                    (from, _, _, _, _, _, _, _) => requestedFrom = from)
+                .ReturnsAsync(rows);
+
+            var service = new ChartDataService(
+                [],
+                Mock.Of<IChartDataAssembler>(),
+                new BasalSeriesBuilder(Mock.Of<ITherapySettingsResolver>(), Mock.Of<IBasalSegmentService>(), NullLogger<BasalSeriesBuilder>.Instance),
+                repository.Object,
+                NoOverrides(),
+                Mock.Of<ITherapySettingsResolver>(),
+                Mock.Of<IBasalRateResolver>(),
+                new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(End)),
+                NullLogger<ChartDataService>.Instance);
+
+            var spans = await service.GetBasalDeliverySpansAsync(Start, End);
+
+            requestedFrom.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(Start - DailyProfileCalculator.ActingMs).UtcDateTime);
+            spans.Select(s => (s.Origin, s.Rate)).Should().Equal(
+                (BasalDeliveryOrigin.Manual, 0.4),
+                (BasalDeliveryOrigin.Suspended, 0.0),
+                (BasalDeliveryOrigin.Inferred, 1.1));
+            spans[0].StartMills.Should().Be(Start - 20 * Minute);
         }
     }
 

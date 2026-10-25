@@ -211,34 +211,23 @@ public class EntryService : IEntryService
     private static void ApplyJsonPatch(Entry entry, JsonElement patchData)
     {
         // The identity used to upsert (LegacyId matching) must survive the round-trip; restore it
-        // after the merge unless the patch explicitly changes _id (mirrors TreatmentService).
+        // after the merge, even when the patch names _id.
         var originalId = entry.Id;
 
-        var existingJson = JsonSerializer.Serialize(entry);
-        using var existingDoc = JsonDocument.Parse(existingJson);
-
-        var merged = new Dictionary<string, object?>();
-        foreach (var prop in existingDoc.RootElement.EnumerateObject())
-            merged[prop.Name] = prop.Value.Clone();
-        foreach (var prop in patchData.EnumerateObject())
-            merged[prop.Name] = prop.Value.Clone();
-
-        var mergedJson = JsonSerializer.Serialize(merged);
-        var patched = JsonSerializer.Deserialize<Entry>(mergedJson);
-        if (patched == null) return;
-
-        var props = typeof(Entry).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-        foreach (var prop in props)
-        {
-            if (!prop.CanWrite) continue;
-            try
-            {
-                prop.SetValue(entry, prop.GetValue(patched));
-            }
-            catch { /* skip computed properties that throw on set */ }
-        }
+        JsonMergePatch.ApplyInPlace(entry, patchData, CarrySgvAndMgdl);
 
         entry.Id = originalId;
+    }
+
+    private static void CarrySgvAndMgdl(Entry patched, JsonElement patchData)
+    {
+        // The existing entry's sgv and mgdl are one stored value, so a patch that moves only one of them carries the other.
+        var patchesSgv = patchData.TryGetProperty("sgv", out _);
+        var patchesMgdl = patchData.TryGetProperty("mgdl", out _);
+        if (patchesSgv && !patchesMgdl && patched.Sgv is { } sgv)
+            patched.Mgdl = sgv;
+        else if (patchesMgdl && !patchesSgv && patched.Mgdl != 0)
+            patched.Sgv = patched.Mgdl;
     }
 
     /// <inheritdoc />

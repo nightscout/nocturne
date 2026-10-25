@@ -95,7 +95,7 @@ public class ProfileProjectionService : IProfileProjectionService
     /// settings row re-sends its document's live stores at the delete's stamp, since the client knows
     /// the document by one identifier, or, when no store of it is live, a deleted document with
     /// <c>isValid: false</c>. A schedule row, live or deleted, only leads to the live settings that
-    /// own it. Profile-switch snapshots are not documents and are never delivered.
+    /// own it.
     /// </remarks>
     public async Task<ModifiedSincePage<Profile>> GetProfilesModifiedSinceAsync(
         long cursorMills, int limit, CancellationToken ct = default)
@@ -131,7 +131,6 @@ public class ProfileProjectionService : IProfileProjectionService
 
             var stamped = new Dictionary<string, Profile>(StringComparer.Ordinal);
             foreach (var document in candidates.Values
-                         .Where(c => !TherapySettings.IsProfileSwitchSnapshot(c.Record))
                          .GroupBy(c => TherapySettings.DocumentIdOf(c.Record), StringComparer.Ordinal))
             {
                 var live = await _therapyRepo.GetDocumentRowsAsync(document.Key, ct);
@@ -194,7 +193,7 @@ public class ProfileProjectionService : IProfileProjectionService
             .Min();
 
     private static long Stamp(IV4Record record) =>
-        new DateTimeOffset(record.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        record.ModifiedAt.ToMills();
 
     /// <summary>
     /// Every settings record <see cref="ScheduleForProfileAsync{TRecord}"/> could pair with one of

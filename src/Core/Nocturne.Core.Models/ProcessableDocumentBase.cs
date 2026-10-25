@@ -17,12 +17,17 @@ public abstract class ProcessableDocumentBase : IProcessableDocument
     /// Ignored here because System.Text.Json serializes this declaration as its own property next
     /// to every override's renamed <c>_id</c>, shipping a second, unconverted copy of the id.
     /// Readers that must keep an uploader's <c>id</c> also drop it: see
-    /// <see cref="Serializers.UploaderIdJsonModifier"/>.
+    /// <see cref="Serializers.IgnoredBasePropertyModifier"/>.
     /// </remarks>
     [JsonIgnore]
     public abstract string? Id { get; set; }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Ignored for the same reason as <see cref="Id"/>: it would be written as a camelCase
+    /// <c>createdAt</c> beside every override's <c>created_at</c>.
+    /// </remarks>
+    [JsonIgnore]
     public abstract string? CreatedAt { get; set; }
 
     /// <inheritdoc />

@@ -1,13 +1,15 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Alerts.Native;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
-/// Startup scan that logs a warning for every enabled alert rule whose condition trees a save
-/// would now reject (<see cref="IAlertRuleConditionValidator"/>). A rule stored before that check
-/// existed may be skipped on every evaluation or never able to fire. The log names the rule and
-/// each problem's path and reason code, so an operator can find and fix it. Changes nothing.
+/// Startup scan that logs a warning for every enabled alert rule with a condition tree that cannot
+/// be evaluated (<see cref="IAlertRuleConditionValidator"/>), such as one stored before saves
+/// checked it. The log names the rule and each problem's path and reason code, so an operator can
+/// find and fix it. Changes nothing.
 /// </summary>
 /// <remarks>
 /// Per tenant because <c>alert_rules</c> is RLS-scoped and fail-closed; see
@@ -34,6 +36,7 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
         {
             using var scope = _serviceProvider.CreateScope();
             var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
+            var alerts = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
             var validator = scope.ServiceProvider.GetRequiredService<IAlertRuleConditionValidator>();
 
             List<Guid> tenantIds;
@@ -51,7 +54,7 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
             {
                 try
                 {
-                    flagged += await AuditTenantAsync(factory, validator, tenantId, stoppingToken);
+                    flagged += await AuditTenantAsync(alerts, validator, tenantId, stoppingToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -62,7 +65,7 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
             if (flagged > 0)
             {
                 _logger.LogWarning(
-                    "{Count} enabled alert rule(s) have conditions a save would reject", flagged);
+                    "{Count} enabled alert rule(s) have conditions that cannot be evaluated", flagged);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -72,42 +75,41 @@ public sealed class AlertRuleConditionAuditService : BackgroundService
     }
 
     private async Task<int> AuditTenantAsync(
-        INocturneDbContextFactory factory,
+        IAlertRepository alerts,
         IAlertRuleConditionValidator validator,
         Guid tenantId,
         CancellationToken ct)
     {
-        await using var db = await factory.CreateForTenantAsync(tenantId, ct);
+        var (rules, unreadable) = await alerts.ReadEnabledRulesAsync(tenantId, ct);
 
-        var rules = await db.AlertRules
-            .AsNoTracking()
-            .Where(r => r.TenantId == tenantId && r.IsEnabled)
-            .Select(r => new
-            {
-                r.Id,
-                r.ConditionType,
-                r.ConditionParams,
-                r.AutoResolveEnabled,
-                r.AutoResolveParams,
-                r.ClientConfiguration,
-            })
-            .ToListAsync(ct);
-
-        var flagged = 0;
+        // The repository has already logged each unreadable rule by id.
+        var flagged = unreadable.Count;
         foreach (var rule in rules)
         {
-            var issues = validator.Validate(
-                rule.ConditionType,
-                rule.ConditionParams,
-                rule.AutoResolveEnabled,
-                rule.AutoResolveParams,
-                rule.ClientConfiguration);
+            IReadOnlyList<RustValidationIssue> issues;
+            try
+            {
+                issues = validator.Validate(
+                    rule.ConditionType,
+                    rule.ConditionParams,
+                    rule.AutoResolveEnabled,
+                    rule.AutoResolveParams,
+                    rule.ClientConfiguration);
+            }
+            catch (RustAlertEngineException ex)
+            {
+                flagged++;
+                _logger.LogError(ex,
+                    "The alert engine could not check the conditions of alert rule {AlertRuleId} for tenant {TenantId}",
+                    rule.Id, tenantId);
+                continue;
+            }
             if (issues.Count == 0)
                 continue;
 
             flagged++;
             _logger.LogWarning(
-                "Alert rule {AlertRuleId} for tenant {TenantId} has conditions a save would reject: {Issues}",
+                "Alert rule {AlertRuleId} for tenant {TenantId} has conditions that cannot be evaluated: {Issues}",
                 rule.Id,
                 tenantId,
                 string.Join("; ", issues.Select(i => $"{i.Scope} {i.Path}: {i.Reason}")));

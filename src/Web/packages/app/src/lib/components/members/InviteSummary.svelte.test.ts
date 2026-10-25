@@ -31,7 +31,7 @@ describe("InviteSummary", () => {
       .element(page.getByText("Viewer", { exact: true }))
       .toBeVisible();
     await expect
-      .element(page.getByText("Blood Glucose", { exact: true }))
+      .element(page.getByText("Blood glucose", { exact: true }))
       .toBeVisible();
     await expect
       .element(page.getByText("Reports", { exact: true }))
@@ -39,7 +39,7 @@ describe("InviteSummary", () => {
     await expect
       .element(
         page.getByText(
-          /can't change records, treatment\s+settings or who has access/
+          /cannot change records, treatment\s+settings or who has access/
         )
       )
       .toBeVisible();
@@ -64,7 +64,7 @@ describe("InviteSummary", () => {
     await expect
       .element(
         page.getByText(
-          /can't change records, treatment\s+settings or who has access/
+          /cannot change records, treatment\s+settings or who has access/
         )
       )
       .not.toBeInTheDocument();
@@ -79,7 +79,7 @@ describe("InviteSummary", () => {
     });
 
     await expect
-      .element(page.getByText(/only see the last 24 hours/))
+      .element(page.getByText(/see only the last 24 hours/))
       .toBeVisible();
   });
 
@@ -87,7 +87,7 @@ describe("InviteSummary", () => {
     render(InviteSummary, { props: { invite: viewerInvite, signedIn: false } });
 
     await expect
-      .element(page.getByText(/only see the last 24 hours/))
+      .element(page.getByText(/see only the last 24 hours/))
       .not.toBeInTheDocument();
   });
 
@@ -95,7 +95,7 @@ describe("InviteSummary", () => {
     render(InviteSummary, { props: { invite: viewerInvite, signedIn: false } });
 
     await expect
-      .element(page.getByText(/choose how you'd like to sign in/))
+      .element(page.getByText(/choose how to sign in/))
       .toBeVisible();
   });
 
@@ -144,7 +144,7 @@ describe("InviteSummary", () => {
 
     await expect
       .element(
-        page.getByText(/While you have Nocturne open, you'll see alerts/)
+        page.getByText(/While Nocturne is open, you will see alerts/)
       )
       .toBeVisible();
     await expect
@@ -173,10 +173,10 @@ describe("InviteSummary", () => {
       .element(page.getByText(/Alex Carer\s+for a new invite link/))
       .toBeVisible();
     await expect
-      .element(page.getByText(/choose how you'd like to sign in/))
+      .element(page.getByText(/choose how to sign in/))
       .not.toBeInTheDocument();
     await expect
-      .element(page.getByText(/What you'll have access to/))
+      .element(page.getByText(/What you will have access to/))
       .not.toBeInTheDocument();
   });
 });

@@ -14,9 +14,10 @@ namespace Nocturne.API.Services.Realtime;
 public static class RealtimeGroups
 {
     /// <summary>
-    /// Tenant-wide live data: the <c>dataUpdate</c>, <c>trackerUpdate</c> and <c>device_action</c>
-    /// broadcasts a connection receives after <c>DataHub.Authorize</c>. Restricted to a credential
-    /// that belongs to the tenant — see <c>HubAuthorization.CanJoinTenantRelay</c>.
+    /// Tenant-wide live data: the <c>dataUpdate</c>, <c>trackerUpdate</c>,
+    /// <c>trackerDefinitionUpdate</c> and <c>device_action</c> broadcasts a connection receives after
+    /// <c>DataHub.Authorize</c>. Restricted to a credential that belongs to the tenant — see
+    /// <c>HubAuthorization.CanJoinTenantRelay</c>.
     /// </summary>
     public const string Authorized = "authorized";
 

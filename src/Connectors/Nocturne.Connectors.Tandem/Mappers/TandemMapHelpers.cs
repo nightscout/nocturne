@@ -13,8 +13,4 @@ public static class TandemMapHelpers
 
     /// <summary>Converts a milliunit amount to whole units (rounded to two decimals).</summary>
     public static double MilliunitsToUnits(double milliunits) => Round2(milliunits / 1000.0);
-
-    /// <summary>Unix milliseconds for a UTC timestamp.</summary>
-    public static long ToMills(DateTime utc) =>
-        new DateTimeOffset(utc, TimeSpan.Zero).ToUnixTimeMilliseconds();
 }

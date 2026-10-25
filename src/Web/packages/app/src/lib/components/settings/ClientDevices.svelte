@@ -14,7 +14,7 @@
   import Clock from "@lucide/svelte/icons/clock";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Pencil from "@lucide/svelte/icons/pencil";
-  import { timeAgo } from "$lib/utils";
+  import { relativeAge } from "$lib/utils/formatting";
   import { Now } from "$lib/hooks/now.svelte";
 
   const now = new Now();
@@ -75,7 +75,7 @@
       editingId = null;
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to rename device. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to rename device. Try again.");
       clearMessages();
     } finally {
       isSaving = null;
@@ -90,7 +90,7 @@
       successMessage = "Device revoked.";
       clearMessages();
     } catch (err) {
-      errorMessage = describeSubmitError(err, "Failed to revoke device. Please try again.");
+      errorMessage = describeSubmitError(err, "Failed to revoke device. Try again.");
       clearMessages();
     } finally {
       isRevoking = null;
@@ -264,7 +264,7 @@
             {#if device.lastSeenAt}
               <span class="flex items-center gap-1.5">
                 <Clock class="h-3 w-3" />
-                Last seen {timeAgo(new Date(device.lastSeenAt).getTime(), undefined, now.current)}
+                Last seen {relativeAge(device.lastSeenAt, { now: now.current, fallback: "Unknown" })}
               </span>
             {/if}
           </div>

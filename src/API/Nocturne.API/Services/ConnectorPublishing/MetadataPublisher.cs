@@ -371,21 +371,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             var list = records.ToList();
             if (list.Count == 0) return true;
 
-            var toCreate = new List<BodyWeight>();
-            foreach (var record in list)
-            {
-                // Upsert on the connector's deterministic Id so re-syncs update the same row.
-                var existing = record.Id != null
-                    ? await _bodyWeightService.GetBodyWeightByIdAsync(record.Id, cancellationToken)
-                    : null;
-                if (existing != null)
-                    await _bodyWeightService.UpdateBodyWeightAsync(record.Id!, record, cancellationToken);
-                else
-                    toCreate.Add(record);
-            }
-
-            if (toCreate.Count > 0)
-                await _bodyWeightService.CreateBodyWeightsAsync(toCreate, cancellationToken);
+            await _bodyWeightService.CreateBodyWeightsAsync(list, cancellationToken);
 
             Logger.LogDebug("Published {Count} BodyWeight records for {Source}", list.Count, source);
             return true;
@@ -408,20 +394,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             var list = records.ToList();
             if (list.Count == 0) return true;
 
-            var toCreate = new List<StepCount>();
-            foreach (var record in list)
-            {
-                var existing = record.Id != null
-                    ? await _stepCountService.GetStepCountByIdAsync(record.Id, cancellationToken)
-                    : null;
-                if (existing != null)
-                    await _stepCountService.UpdateStepCountAsync(record.Id!, record, cancellationToken);
-                else
-                    toCreate.Add(record);
-            }
-
-            if (toCreate.Count > 0)
-                await _stepCountService.CreateStepCountsAsync(toCreate, cancellationToken);
+            await _stepCountService.CreateStepCountsAsync(list, cancellationToken);
 
             Logger.LogDebug("Published {Count} StepCount records for {Source}", list.Count, source);
             return true;
@@ -444,20 +417,7 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             var list = records.ToList();
             if (list.Count == 0) return true;
 
-            var toCreate = new List<HeartRate>();
-            foreach (var record in list)
-            {
-                var existing = record.Id != null
-                    ? await _heartRateService.GetHeartRateByIdAsync(record.Id, cancellationToken)
-                    : null;
-                if (existing != null)
-                    await _heartRateService.UpdateHeartRateAsync(record.Id!, record, cancellationToken);
-                else
-                    toCreate.Add(record);
-            }
-
-            if (toCreate.Count > 0)
-                await _heartRateService.CreateHeartRatesAsync(toCreate, cancellationToken);
+            await _heartRateService.CreateHeartRatesAsync(list, cancellationToken);
 
             Logger.LogDebug("Published {Count} HeartRate records for {Source}", list.Count, source);
             return true;

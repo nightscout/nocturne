@@ -4,7 +4,6 @@
 # its test pass. See tests/README.md.
 #
 # <FullyQualifiedName (no theory arguments)> | <bug>
-Nocturne.API.Tests.Integration.Parity.V1.FoodParityTests.GetFoodQuickpicks_WithData_ReturnsSameShape | food/quickpicks omits hidden when false and serves hideafteruse as a bool, where Nightscout echoes the stored strings
 Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Empty_ReturnsSameShape | v2 properties omit buckets/upbat/bgnow/pump/openaps/loop/bwp and differ on age-plugin and dbsize empty states; the with-data cases also compare Nightscout before it reloads
 Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Pretty_ReturnsSameShape | v2 properties omit buckets/upbat/bgnow/pump/openaps/loop/bwp and differ on age-plugin and dbsize empty states; the with-data cases also compare Nightscout before it reloads
 Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_WithData_ReturnsSameShape | v2 properties omit buckets/upbat/bgnow/pump/openaps/loop/bwp and differ on age-plugin and dbsize empty states; the with-data cases also compare Nightscout before it reloads

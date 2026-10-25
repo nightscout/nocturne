@@ -5,6 +5,7 @@ import { getRequestStatus } from "$lib/server/request-status";
 import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
 import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
 import { toIsoString } from "$lib/utils/api-date";
+import { toTenantSwitcherTargets, type TenantSwitcherTarget } from "$lib/utils/tenant-host";
 import { autoLoginEndpoint, autoLoginRedirect } from "$lib/server/auto-login";
 
 /** Permissions that grant read access to glucose data (mirrors API's CanRead + OAuth scopes). */
@@ -33,6 +34,18 @@ async function readShowBackupSignInPrompt(apiClient: App.Locals["apiClient"]): P
   }
 }
 
+/** A failed read hides the switcher: it is navigation, and must not take the shell down with it. */
+async function readTenantTargets(
+  apiClient: App.Locals["apiClient"]
+): Promise<TenantSwitcherTarget[]> {
+  try {
+    return toTenantSwitcherTargets(await apiClient.myTenants.getMyTenants(true));
+  } catch (error) {
+    console.error("Failed to read the tenant switcher targets:", error);
+    return [];
+  }
+}
+
 export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, parent, depends }) => {
   depends(SHELL_DATA_KEY);
 
@@ -58,6 +71,10 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     locals.user && !locals.isGuestSession
       ? readShowBackupSignInPrompt(locals.apiClient)
       : Promise.resolve(false);
+  const tenantTargets =
+    locals.user && !locals.isGuestSession
+      ? readTenantTargets(locals.apiClient)
+      : Promise.resolve([]);
   const status = await getRequestStatus(locals);
   const anonymousReadAccess = status?.anonymousReadAccess ?? false;
 
@@ -80,6 +97,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   }
 
   // Guest sessions bypass onboarding — the data owner's instance is already set up.
+  let onboardingComplete = false;
   if (!locals.isGuestSession && !publicViewAllowed) {
     // If the instance needs setup, redirect there regardless of auth state.
     // This covers fresh installs where no tenant or credentials exist yet.
@@ -91,6 +109,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     if (!onboarding.isComplete) {
       throw redirect(303, "/setup");
     }
+    onboardingComplete = true;
   }
 
   // A fresh instance with no resolved tenant reports "setup_required" — send it to setup rather
@@ -144,6 +163,7 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
   const nextResetAt = toIsoString(status?.nextResetAt);
 
   const showBackupSignInPrompt = !tenantless && !isDemo && (await backupSignInPrompt);
+  const resolvedTenantTargets = await tenantTargets;
 
   return {
     user: locals.user ?? null,
@@ -151,7 +171,9 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     guestExpiresAt: locals.guestExpiresAt ?? null,
     canViewRealtimeData,
     showBackupSignInPrompt,
+    tenantTargets: resolvedTenantTargets,
     isDemo,
     nextResetAt,
+    onboardingComplete,
   };
 };

@@ -1,0 +1,92 @@
+---
+title: Insulin Delivery
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Insulin Delivery
+
+The Insulin Delivery report answers the question "how much insulin do I use,
+and how is it split?". It shows your total daily dose and the split between
+basal and bolus insulin.
+
+<Video id="insulin-delivery" />
+
+## What it shows
+
+Your total daily dose (TDD) has two parts:
+
+- **Basal insulin**: the background insulin that covers the needs of your body
+  between meals.
+- **Bolus insulin**: the insulin for meals and to correct high glucose.
+
+The page says that a typical split is about 50/50. The split changes with diet,
+activity and your own needs.
+
+### The key figures
+
+| Figure | What it shows |
+|--------|---------------|
+| **Avg TDD** | Your average total insulin each day |
+| **Basal** | The basal part of your insulin, as a percentage, with the total units |
+| **Bolus** | The bolus part of your insulin, as a percentage, with the total units |
+| **Boluses/Day** | The number of boluses each day, with the average bolus size |
+| **ICR** | Your insulin-to-carb ratio: the grams of your meals for each unit of their boluses. The note shows the carbs that had no bolus, such as hypo treatments. The ratio does not include them |
+
+### Daily Basal/Bolus Breakdown
+
+Each bar is one day. The lower part of the bar is basal insulin. The upper part
+is bolus insulin. Move the pointer over a bar to see the units for that day.
+
+### Hourly Insulin Delivery
+
+The chart shows the average insulin at each hour of the day, split into basal
+and bolus. If your data has temp basals, the basal part is split into
+**Scheduled Basal** and **Temp Basal**.
+
+Under the chart, the units are added up for three parts of the day: **Morning
+(6am-12pm)**, **Afternoon (12pm-6pm)** and **Evening/Night**. Evening/Night is
+6pm to 6am, so it covers 12 hours. The other two parts cover 6 hours each.
+
+### Bolus Breakdown
+
+This card shows the **Total Boluses**, and how many were **Meal Boluses** and
+**Correction Boluses**.
+
+### Clinical Reference
+
+This card compares your TDD with a typical range for type 1 diabetes: 0.4 to 1.0
+units for each kilogram of body weight. It also says what your insulin-to-carb
+ratio means: 1 unit of insulin for each number of grams of carbs.
+
+## How to use it
+
+The report opens on the last 30 days. To see if your last week is like the rest
+of the month:
+
+1. Look at the **Avg TDD**, **Basal** and **Bolus** figures for 30 days.
+2. At the top of the report, select the date range.
+3. Select **7 Days**.
+4. Select **Apply Filters**. The report loads again for 7 days.
+5. Compare the figures with the figures for 30 days.
+
+To see how your basal rate changes through the day, select **Basal Analysis**
+to open the [Basal Rate Analysis](/docs/reports/basal-analysis).
+
+## Good to know
+
+- If the period has too few days with data, a badge under the date shows how
+  many days the report uses.
+- If the period has no basal or bolus records, the daily chart shows **No
+  insulin data available**.
+
+<Callout type="warning" title="Talk to your care team first">
+
+  The total daily dose, the basal/bolus split and the ICR help your care
+  team review your settings. Do not change your doses or pump settings because
+  of these figures alone. Discuss changes with your diabetes care team.
+
+</Callout>

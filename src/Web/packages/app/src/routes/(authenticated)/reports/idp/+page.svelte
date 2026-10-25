@@ -20,11 +20,13 @@
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import GlycemicRiskIndexChart from "$lib/components/reports/GlycemicRiskIndexChart.svelte";
   import ScheduledBasalRateChart from "$lib/components/reports/ScheduledBasalRateChart.svelte";
   import HourlyBolusChart from "$lib/components/reports/HourlyBolusChart.svelte";
   import ScheduleFooter from "$lib/components/reports/ScheduleFooter.svelte";
+  import ActiveProfileHeading from "$lib/components/reports/ActiveProfileHeading.svelte";
   import AidSystemUseCard from "$lib/components/reports/AidSystemUseCard.svelte";
   import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import { bgPatternClass } from "$lib/components/charts/print/chart-print-patterns";
@@ -41,17 +43,18 @@
   // selected range, so the page has one day count rather than two.
   const reportsResource = contextResource(
     () => getIdpData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading IDP Report", dateParams: reportsParams }
+    { errorTitle: "Error loading IDP report", dateParams: reportsParams }
   );
 
   const data = $derived({
     entries: reportsResource.current?.entries ?? [],
     boluses: reportsResource.current?.boluses ?? [],
     insulinDeliveryStats: reportsResource.current?.insulinDeliveryStats,
-    profileSummary: reportsResource.current?.profileSummary,
+    activeSchedules: reportsResource.current?.activeSchedules ?? [],
     analysis: reportsResource.current?.analysis,
     averagedStats: reportsResource.current?.averagedStats,
     aidSystemMetrics: reportsResource.current?.aidSystemMetrics,
+    timeZoneUnavailableReason: reportsResource.current?.timeZoneUnavailableReason,
   });
 
   // Derived values from data
@@ -67,14 +70,6 @@
   const endDate = $derived(reportsResource.date.to);
   const dayCount = $derived(reportsResource.date.dayCount);
 </script>
-
-<svelte:head>
-  <title>Insulin Dosing Profile - Nocturne Reports</title>
-  <meta
-    name="description"
-    content="Insulin Dosing Profile report with delivery statistics, glucose metrics, basal analysis, and bolus distribution"
-  />
-</svelte:head>
 
 {#if reportsResource.current}
 <div class="@container space-y-8">
@@ -99,7 +94,7 @@
 
   <FigureStrip
     figures={[
-      { label: "Avg Total Daily Dose", value: insulinStats?.tdd?.toFixed(1) ?? "--", unit: "U/day" },
+      { label: "Avg total daily dose", value: insulinStats?.tdd?.toFixed(1) ?? "--", unit: "U/day" },
       { label: "Average", value: stats.mean ? String(bg(stats.mean)) : "--", unit: bgLabel() },
       { label: a1cLabel(true), value: formatA1cValue(variability.estimatedA1cDisplay), unit: a1cUnitLabel(), note: "From mean glucose", },
       { label: "CV", value: variability.coefficientOfVariation?.toFixed(0) ?? "--", unit: "%", note: variability.coefficientOfVariationTarget != null ? `Target: ≤${variability.coefficientOfVariationTarget}%` : undefined },
@@ -110,12 +105,21 @@
     <ReliabilityBadge reliability={analysis.reliability} />
   {/if}
 
+  {#if data.timeZoneUnavailableReason}
+    <p class="text-sm text-muted-foreground">
+      <TimeZoneNote reason={data.timeZoneUnavailableReason}>
+        The hourly figures place each reading at the local time its device reported. Days of data
+        are counted on UTC days.
+      </TimeZoneNote>
+    </p>
+  {/if}
+
   <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6">
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Syringe class="w-5 h-5 text-insulin" />
-          Insulin Summary
+          Insulin summary
         </CardTitle>
         <CardDescription>
           Daily insulin delivery breakdown
@@ -158,11 +162,11 @@
 
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <div class="text-muted-foreground">Avg Delivered Basal</div>
+            <div class="text-muted-foreground">Avg delivered basal</div>
             <div class="font-semibold">{avgBasal?.toFixed(1) ?? "--"} U/day</div>
           </div>
           <div>
-            <div class="text-muted-foreground">Avg Scheduled Basal</div>
+            <div class="text-muted-foreground">Avg scheduled basal</div>
             <div class="font-semibold">{avgScheduled?.toFixed(1) ?? "--"} U/day</div>
           </div>
         </div>
@@ -175,17 +179,17 @@
             <div class="font-semibold">{insulinStats?.bolusesPerDay?.toFixed(1) ?? "--"}</div>
           </div>
           <div>
-            <div class="text-muted-foreground">Avg Bolus Size</div>
+            <div class="text-muted-foreground">Avg bolus size</div>
             <div class="font-semibold">{insulinStats?.avgBolus?.toFixed(1) ?? "--"} U</div>
           </div>
           <div>
-            <div class="text-muted-foreground">Meal Boluses/Day</div>
+            <div class="text-muted-foreground">Meal boluses/day</div>
             <div class="font-semibold">
               {insulinStats?.mealBoluses != null ? (insulinStats.mealBoluses / dayCount).toFixed(1) : "--"}
             </div>
           </div>
           <div>
-            <div class="text-muted-foreground">Correction Boluses/Day</div>
+            <div class="text-muted-foreground">Correction boluses/day</div>
             <div class="font-semibold">
               {insulinStats?.correctionBoluses != null ? (insulinStats.correctionBoluses / dayCount).toFixed(1) : "--"}
             </div>
@@ -198,7 +202,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Droplets class="w-5 h-5 text-glucose-in-range" />
-          Glucose Metrics
+          Glucose metrics
         </CardTitle>
         <CardDescription>
           Key glucose indicators for this period
@@ -208,7 +212,7 @@
         {#if analysis}
           {@const tir = analysis.timeInRange?.percentages ?? {}}
           <div class="space-y-2">
-            <div class="text-sm font-medium">Time in Range</div>
+            <div class="text-sm font-medium">Time in range</div>
             <div class="h-56 w-full">
               <TIRStackedChart percentages={tir} />
             </div>
@@ -229,7 +233,7 @@
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Target class="w-5 h-5" />
-          Glycemic Risk Index
+          Glycemic risk index
         </CardTitle>
         <CardDescription>
           Composite metric of hypo and hyperglycemia risk
@@ -251,7 +255,7 @@
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Activity class="w-5 h-5" />
-        Glucose Pattern
+        Glucose pattern
       </CardTitle>
       <CardDescription>
         Daily glucose overlay with basal rate, bolus distribution, and dosing profile
@@ -259,22 +263,27 @@
     </CardHeader>
     <CardContent class="space-y-6">
       <div class="h-80 w-full @2xl:h-96">
-        <AmbulatoryGlucoseProfile averagedStats={data.averagedStats} />
+        <AmbulatoryGlucoseProfile averagedStats={data.averagedStats} thresholds={analysis?.timeInRange?.thresholds} />
       </div>
 
       <div>
-        <h4 class="text-sm font-semibold text-muted-foreground mb-1">Scheduled Basal Rate</h4>
-        <div class="h-24 w-full">
-          <ScheduledBasalRateChart entries={data.profileSummary?.basalSchedules?.[0]?.entries ?? []} />
-        </div>
+        <h4 class="text-sm font-semibold text-muted-foreground mb-1">Scheduled basal rate</h4>
+        {#each data.activeSchedules as profile (profile.profileName)}
+          <ActiveProfileHeading {profile} multiple={data.activeSchedules.length > 1} />
+          <div class="h-24 w-full">
+            <ScheduledBasalRateChart entries={profile.basal ?? []} />
+          </div>
+        {:else}
+          <div class="h-24 w-full"></div>
+        {/each}
       </div>
 
       <div class="w-full">
-        <h4 class="text-sm font-semibold text-muted-foreground mb-1">User-Initiated Boluses Per Day</h4>
+        <h4 class="text-sm font-semibold text-muted-foreground mb-1">User-initiated boluses per day</h4>
         <HourlyBolusChart {boluses} {dayCount} />
       </div>
 
-      <ScheduleFooter profile={data.profileSummary} />
+      <ScheduleFooter profiles={data.activeSchedules} />
     </CardContent>
   </Card>
 

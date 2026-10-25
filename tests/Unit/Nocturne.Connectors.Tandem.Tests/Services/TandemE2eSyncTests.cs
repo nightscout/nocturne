@@ -719,6 +719,15 @@ public class TandemE2eSyncTests
             _cursors[(connectorName, resource)] = cursor;
             return Task.CompletedTask;
         }
+
+        public Task<JsonNode?> GetJsonAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task SetJsonAsync(string connectorName, string resource, JsonNode value, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task RemoveAsync(string connectorName, string resource, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     /// <summary>Records every published record; the Nocturne analog of upstream's FakeNightscout.</summary>

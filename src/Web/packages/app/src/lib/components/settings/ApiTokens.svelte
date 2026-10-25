@@ -111,7 +111,6 @@
         limitTo24Hours: newTokenLimitTo24Hours,
       });
       createdToken = data.token ?? null;
-      await grantsQuery.refresh();
     } catch (err) {
       mutationError = describeSubmitError(err, "Failed to create token.");
       closeCreateDialog();
@@ -154,7 +153,6 @@
 
     try {
       await revokeGrant(revokeTarget.id!);
-      await grantsQuery.refresh();
       successMessage = "API token revoked.";
       clearMessages();
     } catch (err) {
@@ -209,7 +207,7 @@
         <div>
           <Card.Title class="flex items-center gap-2">
             <KeyRound class="h-5 w-5" />
-            API Tokens
+            API tokens
           </Card.Title>
           <Card.Description>
             Tokens use the <code class="text-xs font-mono">noc_</code> prefix and
@@ -226,7 +224,7 @@
     <Card.Content class="space-y-3">
       {#if loadError}
         <p class="text-sm text-muted-foreground">
-          Your tokens couldn't be loaded, so this list may be incomplete.
+          Your tokens could not be loaded. This list can be incomplete.
           Refresh the page to try again.
         </p>
       {:else if grants.length === 0}
@@ -252,7 +250,7 @@
                   <p class="text-sm font-medium">{grant.label}</p>
                   {#if grant.isLegacy}
                     <Badge variant="warning">
-                      Legacy — rotate to per-device key
+                      Legacy: rotate to per-device key
                     </Badge>
                   {/if}
                 </div>
@@ -356,7 +354,7 @@
       <Dialog.Header>
         <Dialog.Title>Create API token</Dialog.Title>
         <Dialog.Description>
-          Choose a label and select the scopes this token should have access to.
+          Choose a label and select the scopes that this token can access.
         </Dialog.Description>
       </Dialog.Header>
       <div class="space-y-4 py-4">

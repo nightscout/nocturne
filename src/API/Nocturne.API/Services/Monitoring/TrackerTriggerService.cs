@@ -49,13 +49,10 @@ public class TrackerTriggerService : IDeviceEventReactor
     /// <summary>
     /// Canonicalises a requested trigger list against <see cref="TriggerableEventTypes"/>. Blank entries
     /// are dropped, so a form can post one empty value to mean "none"; an unknown name is an error
-    /// rather than a trigger that silently never fires, unless it is in <paramref name="alreadyStored"/>,
-    /// where it predates the list and is dropped so the definition can still be saved. Null passes
-    /// through as "not supplied".
+    /// rather than a trigger that silently never fires. Null passes through as "not supplied".
     /// </summary>
     public static bool TryNormaliseTriggers(
         IEnumerable<string>? requested,
-        IReadOnlyCollection<string> alreadyStored,
         out List<string>? normalised,
         out string? error)
     {
@@ -70,8 +67,6 @@ public class TrackerTriggerService : IDeviceEventReactor
             var canonical = CanonicalTrigger(name);
             if (canonical is null)
             {
-                if (alreadyStored.Contains(name, StringComparer.OrdinalIgnoreCase))
-                    continue;
                 error = $"'{name}' is not an event a tracker can restart on";
                 return false;
             }
@@ -105,10 +100,9 @@ public class TrackerTriggerService : IDeviceEventReactor
         if (created.Count == 0)
             return;
 
-        // Definitions are read tenant-wide rather than per-user: a device event is a fact about the
-        // tenant's hardware, so every tracker configured to follow that event advances, and the new
-        // instance is owned by whoever owns the definition. There is no user on a connector-ingested
-        // event to scope this by, and the managed alert rules trackers sync are already tenant-visible.
+        // Every tracker configured to follow the event advances: a device event is a fact about the
+        // tenant's hardware, and trackers are the tenant's. The new instance records the definition's
+        // creator, since a connector-ingested event carries no user.
         var definitions = await _trackerRepository.GetAllDefinitionsAsync(ct);
 
         var triggers = definitions
@@ -173,11 +167,11 @@ public class TrackerTriggerService : IDeviceEventReactor
                 run.Definition.Name);
 
             await _broadcast.BroadcastTrackerUpdateAsync(
-                TrackerRealtimeAction.Delete, TrackerInstanceDto.FromEntity(revert.Removed), run.Definition.UserId, run.Definition.Visibility);
+                TrackerRealtimeAction.Delete, TrackerInstanceDto.FromEntity(revert.Removed));
             foreach (var reopened in revert.Reopened)
             {
                 await _broadcast.BroadcastTrackerUpdateAsync(
-                    TrackerRealtimeAction.Reopen, TrackerInstanceDto.FromEntity(reopened), run.Definition.UserId, run.Definition.Visibility);
+                    TrackerRealtimeAction.Reopen, TrackerInstanceDto.FromEntity(reopened));
                 if (reopened.StartTreatmentId is { } startedBy && deletedIds.Contains(startedBy))
                     pending.Push(reopened);
             }
@@ -228,7 +222,7 @@ public class TrackerTriggerService : IDeviceEventReactor
             completeTreatmentId: startTreatmentId,
             (tx, token) => tx.StartInstanceAsync(
                 definition.Id,
-                definition.UserId,
+                definition.CreatedBy,
                 startNotes: null,
                 startTreatmentId: startTreatmentId,
                 startedAt: deviceEvent.Timestamp,
@@ -271,11 +265,11 @@ public class TrackerTriggerService : IDeviceEventReactor
     }
 
     /// <summary>
-    /// Reads a definition's trigger list, which stores legacy Nightscout event-type strings, and resolves
-    /// them to the typed device event types they correspond to. Entries naming something that is not a
-    /// device event (a bolus type, say) map to nothing and are dropped.
+    /// Reads a definition's trigger list, which stores Nightscout event-type names, and resolves the
+    /// ones in <see cref="TriggerableEventTypes"/> (through <see cref="CanonicalTrigger"/>, as the
+    /// definition DTO does) to their device event types. Any other stored name is ignored.
     /// </summary>
-    private static HashSet<DeviceEventType> ParseTriggerEventTypes(string? json)
+    internal static HashSet<DeviceEventType> ParseTriggerEventTypes(string? json)
     {
         if (string.IsNullOrEmpty(json))
             return [];
@@ -290,13 +284,16 @@ public class TrackerTriggerService : IDeviceEventReactor
             return [];
         }
 
-        if (eventTypes is null)
-            return [];
+        return eventTypes is null ? [] : ParseTriggerEventTypes(eventTypes);
+    }
 
-        return [.. eventTypes
+    /// <inheritdoc cref="ParseTriggerEventTypes(string?)"/>
+    internal static HashSet<DeviceEventType> ParseTriggerEventTypes(IEnumerable<string> eventTypes) =>
+        [.. eventTypes
+            .Select(CanonicalTrigger)
+            .OfType<string>()
             .Select(name => TreatmentTypes.DeviceEventTypeMap.TryGetValue(name, out var parsed)
                 ? parsed
                 : (DeviceEventType?)null)
             .OfType<DeviceEventType>()];
-    }
 }

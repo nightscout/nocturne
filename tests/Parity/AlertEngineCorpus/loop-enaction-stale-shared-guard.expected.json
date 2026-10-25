@@ -48,18 +48,19 @@
       "rules": [
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
-          "root": true,
+          "root": false,
           "leaves": [
             {
               "leaf_id": 0,
-              "value": true
+              "value": false
             }
           ],
-          "transition": "continues",
+          "transition": "hysteresis_started",
           "tracker": {
-            "state": "active",
+            "state": "hysteresis",
             "confirmation_count": 0,
-            "excursion": 1
+            "excursion": 1,
+            "hysteresis_started_at": "2026-01-05T12:10:00Z"
           }
         }
       ]

@@ -88,20 +88,34 @@ services:
       DOTNET_gcServer: "0"
       DOTNET_GCConserveMemory: "5"
       # 90% of the container limit (hex) instead of the default 75%: the heap peaks while the
-      # migrations run on a fresh database, then settles around 140 MB.
+      # migrations run on a fresh database, then settles around 140 MB. The peak grows with the
+      # migration count, and at 512 MB the onboarding migrations ran it out of memory.
       DOTNET_GCHeapHardLimitPercent: "0x5A"
       DOTNET_TieredPGO: "0"
+      # A crash (a native fault or an unhandled exception) writes a minidump and a JSON crash
+      # report with every thread's native and managed stack to e2e/crash-dumps, which CI uploads.
+      DOTNET_DbgEnableMiniDump: "1"
+      DOTNET_DbgMiniDumpType: "1"
+      DOTNET_DbgMiniDumpName: /crash-dumps/api.%p.dmp
+      DOTNET_EnableCrashReport: "1"
+      DOTNET_CreateDumpDiagnostics: "1"
       Logging__LogLevel__Default: Warning
       Logging__LogLevel__Nocturne: Information
       Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
     ports:
       - "127.0.0.1:${E2E_API_PORT:-1630}:8080"
+    volumes:
+      # Created by scripts/lib.ts `compose`, writable by the image's non-root user.
+      - ./crash-dumps:/crash-dumps
+    # createdump attaches to the crashing process with ptrace, which the host's Yama policy may refuse.
+    cap_add:
+      - SYS_PTRACE
     depends_on:
       postgres:
         condition: service_healthy
       mocks:
         condition: service_healthy
-    mem_limit: 512m
+    mem_limit: 640m
     cpus: 2.0
     healthcheck:
       # The aspnet base image carries no curl or wget; bash's /dev/tcp does the probe.

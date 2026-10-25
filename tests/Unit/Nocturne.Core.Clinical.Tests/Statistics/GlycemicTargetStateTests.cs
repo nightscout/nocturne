@@ -44,6 +44,33 @@ public class GlycemicTargetStateTests
         _service.AssessAgainstTargets(analytics).CVAssessment.Status.Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData(0, GlycemicVariabilityStatus.Stable)]
+    [InlineData(36, GlycemicVariabilityStatus.Stable)]
+    [InlineData(36.4, GlycemicVariabilityStatus.Stable)]
+    [InlineData(36.5, GlycemicVariabilityStatus.Moderate)]
+    [InlineData(50, GlycemicVariabilityStatus.Moderate)]
+    [InlineData(50.4, GlycemicVariabilityStatus.Moderate)]
+    [InlineData(50.5, GlycemicVariabilityStatus.Variable)]
+    [InlineData(80, GlycemicVariabilityStatus.Variable)]
+    public void CoefficientOfVariationStatus_IsJudgedAtTheWholePercentItIsDisplayedAt(
+        double cv,
+        GlycemicVariabilityStatus expected)
+    {
+        new GlycemicVariability { CoefficientOfVariation = cv }
+            .CoefficientOfVariationStatus.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CalculateGlycemicVariability_ServesTheStatusOfItsOwnCv()
+    {
+        var steady = _service.CalculateGlycemicVariability([100d, 102d, 98d, 101d], [], TimeZoneInfo.Utc)!;
+        var swinging = _service.CalculateGlycemicVariability([60d, 300d, 80d, 320d], [], TimeZoneInfo.Utc)!;
+
+        steady.CoefficientOfVariationStatus.Should().Be(GlycemicVariabilityStatus.Stable);
+        swinging.CoefficientOfVariationStatus.Should().Be(GlycemicVariabilityStatus.Variable);
+    }
+
     [Fact]
     public void CvAssessment_WithoutVariability_IsNotAssessed()
     {

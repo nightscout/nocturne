@@ -1,0 +1,71 @@
+---
+title: Site Change Impact
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Site Change Impact
+
+The Site Change Impact report answers the question "what does my glucose do
+around an infusion site change?". It lays all your site changes on top of each
+other, so a pattern that repeats becomes clear.
+
+## What it shows
+
+### The header
+
+Above the chart, the report shows the number of **site changes analyzed** and
+the average **days between changes**. A site change, a pod change and a cannula
+change all count.
+
+### Glucose Pattern Around Site Changes
+
+The vertical line in the chart is the moment of the site change. The chart
+shows your glucose from 12 hours before the change to 24 hours after it.
+
+- **The median line** is the middle glucose at each time.
+- **The darker band** is the 25th to 75th percentile.
+- **The lighter band** is the 10th to 25th and 75th to 90th percentile.
+- **The target lines** mark the target range, 70 to 180 mg/dL.
+
+The left side of the chart shows the hours before the change. A rise there can
+mean that the old site absorbs insulin less well. The right side shows the
+hours after the fresh site goes in.
+
+Under the chart, four figures compare the two sides: **Avg before**, **Avg
+after**, **TIR before** and **TIR after**. These are averages across all the
+site changes in the period, not the result of one change.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+The report opens on the last 30 days. More site changes give a more reliable
+pattern. To include more of them:
+
+1. At the top of the report, select the date range.
+2. Select **90 Days**.
+3. Select **Apply Filters**. The report now uses all the site changes in 90
+   days.
+4. Look at the median line before and after the vertical line. Compare the
+   shape with the shape for 30 days.
+
+## Good to know
+
+- The report needs at least 2 site changes in the period. With fewer, it shows
+  **Insufficient Data** and the number of site changes it found.
+- The report also needs enough glucose readings around the site changes. If
+  there are too few, it shows **Insufficient Data**.
+- The report finds site changes from the device events in your data. If your
+  pump or app does not record site changes, log them in the
+  [Treatment Log](/docs/reports/treatments).
+
+<Callout type="info" title="A pattern to discuss">
+
+  A steady rise in the hours before your site changes is a pattern to discuss
+  with your care team. Do not change how often you change your site, or your
+  doses, because of this report alone.
+
+</Callout>

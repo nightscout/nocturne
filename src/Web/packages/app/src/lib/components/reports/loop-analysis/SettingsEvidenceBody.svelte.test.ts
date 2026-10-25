@@ -3,12 +3,16 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { SettingsEvidenceConfidence, SettingsEvidenceWithheldReason, TimeZoneUnavailableReason } from "$lib/api";
 import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import WithTooltipProvider from "$lib/test-stubs/WithTooltipProvider.test-stub.svelte";
 import SettingsEvidenceBody from "./SettingsEvidenceBody.svelte";
 import {
   settingsEvidenceRange,
   settingsEvidenceResponse,
   WITHHELD_SETTINGS_EVIDENCE,
 } from "./settings-evidence.test-fixtures";
+
+const renderBody = ({ props }: { props: Record<string, unknown> }) =>
+  render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: props } });
 
 /** A block's disclosure, by the hour span its summary begins with. */
 const block = (section: string, span: RegExp) =>
@@ -31,7 +35,7 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("states that these are observations, not advice, above every chart", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse() } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse() } } });
 
     await expect.element(page.getByText("Observations, not advice")).toBeVisible();
     await expect.element(page.getByText(/Speak to your diabetes care team before you change a setting/)).toBeVisible();
@@ -40,7 +44,7 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("shows each block's observed value against the profile's, with n and confidence", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse() } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse() } } });
 
     const night = block("Basal", /^\s*2/);
     await expect.element(night.first()).toHaveTextContent(/1\.05\s*U\/h, profile 0\.80/);
@@ -52,7 +56,7 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("says in plain words why a block has no figure, a missing meal in this block", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse() } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse() } } });
 
     await expect.element(block("Carb ratio", /^\s*5\s*PM|^\s*17/).first()).toHaveTextContent("No meal in this block has carbs logged");
     await expect.element(block("Insulin sensitivity (ISF)", /^\s*12\s*AM|^\s*0/).first()).toHaveTextContent("No correction boluses in this block");
@@ -61,7 +65,7 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("opens a block to say why its confidence is not higher, what would raise it, and the candidates it did not use", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse() } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse() } } });
 
     const night = block("Basal", /^\s*4/).first();
     await night.getByText(/1\.05/).click();
@@ -78,7 +82,7 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("marks a figure towards more insulin on its closed summary row, in words", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse() } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse() } } });
 
     const isf = block("Insulin sensitivity (ISF)", /^\s*11/).first();
     await expect.element(isf.getByText("More insulin than your profile")).toBeVisible();
@@ -87,7 +91,7 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("ends the chart's reading of a figure towards more insulin with the note", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse() } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse() } } });
 
     const slider = page.getByRole("slider", { name: "Basal by time of day" });
     (slider.element() as HTMLElement).focus();
@@ -98,7 +102,7 @@ describe("SettingsEvidenceBody", () => {
   it("opens a figure towards more insulin on the note, and says which way every other figure points", async () => {
     const response = settingsEvidenceResponse();
     response.primary!.basal![2] = { ...response.primary!.basal![2], towardsMoreInsulin: false, towardsLessInsulin: false };
-    render(SettingsEvidenceBody, { props: { response } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response } } });
 
     const isf = block("Insulin sensitivity (ISF)", /^\s*11/).first();
     await isf.getByText(/41/).first().click();
@@ -121,7 +125,7 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("says which way a higher value points for every setting", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse() } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse() } } });
 
     await expect.element(page.getByText("A higher basal rate means more insulin every hour.")).toBeVisible();
     await expect
@@ -133,20 +137,21 @@ describe("SettingsEvidenceBody", () => {
   it("draws a low-confidence figure quietly, and keys the observed mark even when every figure is low", async () => {
     const response = settingsEvidenceResponse();
     response.primary!.basal = response.primary!.basal!.map((b) => ({ ...b, confidence: SettingsEvidenceConfidence.Low }));
-    render(SettingsEvidenceBody, { props: { response } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response } } });
 
     const low = block("Basal", /^\s*2/).first().getByTestId("observed-value");
     await expect.element(low).not.toHaveClass("font-semibold");
     await expect.element(low).toHaveClass("text-muted-foreground");
     const basal = page.getByRole("region", { name: "Basal" });
     await expect.element(basal.getByTestId("spread-low").first()).toHaveAttribute("stroke-dasharray", "3 2");
+    await expect.element(basal.getByTestId("spread-low").first()).toHaveAttribute("stroke-opacity", "0.5");
     await expect.element(basal.getByTestId("spread")).not.toBeInTheDocument();
     await expect.element(basal.getByText("Observed, middle half of episodes")).toBeVisible();
     await expect.element(basal.getByText("Low confidence", { exact: true }).first()).toBeVisible();
   });
 
   it("says once that carb ratio needs logged meals when no block had any", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse({ primary: settingsEvidenceRange({ meals: false }) }) } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse({ primary: settingsEvidenceRange({ meals: false }) }) } } });
 
     await expect.element(page.getByText("Carb ratio needs meals with carbs logged. No meal in this range has carbs logged.")).toBeVisible();
     await expect.element(page.getByRole("list", { name: "Carb ratio by block" })).not.toBeInTheDocument();
@@ -154,7 +159,7 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("leads a narrow episode table with the figure's value and leaves out the IOB columns", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse() } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse() } } });
 
     const isf = block("Insulin sensitivity (ISF)", /^\s*11/).first();
     await isf.getByText(/41/).first().click();
@@ -166,7 +171,7 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("lists a block's episodes with what acted, each opening Day in Review", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse() } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse() } } });
     await atWidth(1280, async () => {
     const isf = block("Insulin sensitivity (ISF)", /^\s*11/).first();
     await isf.getByText(/41/).first().click();
@@ -183,7 +188,7 @@ describe("SettingsEvidenceBody", () => {
     await expect.element(page.getByText(/negative when the loop gave less basal than the schedule/).first()).toBeVisible();
     const link = isf.getByRole("link");
     await expect.element(link).toHaveAttribute("href", "/reports/day-in-review?date=2026-06-12&time=14:00");
-    await expect.element(link).toHaveAccessibleName(/in Day in Review/);
+    await expect.element(link).toHaveAccessibleName(/in Day in review/);
 
     const night = block("Basal", /^\s*2/).first();
     await night.getByText(/1\.05/).click();
@@ -194,19 +199,20 @@ describe("SettingsEvidenceBody", () => {
 
   it("shows ISF in the viewer's units", async () => {
     glucoseUnits.current = "mmol";
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse() } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse() } } });
 
     await expect.element(block("Insulin sensitivity (ISF)", /^\s*11/).first()).toHaveTextContent(/2\.3\s*mmol\/L per U, profile 2\.8/);
   });
 
   it("adds the compared range beside each figure", async () => {
-    render(SettingsEvidenceBody, {
+    renderBody({
       props: { response: settingsEvidenceResponse({ comparison: settingsEvidenceRange({ shift: 0.2, meals: false }) }) },
     });
 
     await expect.element(block("Basal", /^\s*2/).first()).toHaveTextContent(/compared 1\.25\s*\(n = 14, Moderate confidence\)/);
     const basal = page.getByRole("region", { name: "Basal" });
     await expect.element(basal.getByTestId("observed-compared-low")).toHaveAttribute("fill", "var(--background)");
+    await expect.element(basal.getByTestId("compared-spread").first()).toHaveAttribute("stroke-opacity", "0.85");
     await expect.element(basal.getByTestId("observed-compared").first()).toHaveAttribute("d", expect.stringMatching(/Z$/));
     await expect.element(basal.getByText("Compared range, low confidence")).toBeVisible();
     await expect.element(block("Carb ratio", /^\s*6/).first()).toHaveTextContent("compared –");
@@ -214,21 +220,21 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("says the page is withheld rather than showing empty evidence", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse(WITHHELD_SETTINGS_EVIDENCE) } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse(WITHHELD_SETTINGS_EVIDENCE) } } });
 
     await expect.element(page.getByText("Your access does not include the data for this page")).toBeVisible();
     await expect.element(page.getByRole("slider")).not.toBeInTheDocument();
   });
 
   it("explains a missing time zone", async () => {
-    render(SettingsEvidenceBody, {
+    renderBody({
       props: { response: settingsEvidenceResponse({ timeZoneUnavailableReason: TimeZoneUnavailableReason.NotConfigured, primary: undefined }) },
     });
     await expect.element(page.getByText("This report needs a time zone")).toBeVisible();
   });
 
   it("says a history-clamped viewer's page is withheld because it needs more than 24 hours", async () => {
-    render(SettingsEvidenceBody, {
+    renderBody({
       props: {
         response: settingsEvidenceResponse({
           historyClamped: true,
@@ -247,7 +253,7 @@ describe("SettingsEvidenceBody", () => {
   it("names each rule's span from the thresholds the report serves", async () => {
     const response = settingsEvidenceResponse();
     response.rules = { ...response.rules, basalCarbFreeMs: 3 * 3_600_000, carbRatioWindowMs: 5 * 3_600_000 };
-    render(SettingsEvidenceBody, { props: { response } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response } } });
 
     await expect.element(page.getByText(/insulin that the meal needed in 5 hours\./)).toBeVisible();
     const night = block("Basal", /^\s*4/).first();
@@ -256,7 +262,7 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("links ISF to the loop's own sensitivity ratio in Loop health", async () => {
-    render(SettingsEvidenceBody, {
+    renderBody({
       props: { response: settingsEvidenceResponse(), sensitivityHref: "/reports/loop-analysis/loop-health?days=14#sensitivity" },
     });
     await expect
@@ -265,12 +271,12 @@ describe("SettingsEvidenceBody", () => {
   });
 
   it("names a filter the viewer's access ignored", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse({ ignoredFilters: ["excludeOverrides"] }) } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse({ ignoredFilters: ["excludeOverrides"] }) } } });
     await expect.element(page.getByText("The report did not use some filters")).toBeVisible();
   });
 
   it("does not offer Enter on its charts, where Enter opens nothing", async () => {
-    render(SettingsEvidenceBody, { props: { response: settingsEvidenceResponse() } });
+    render(WithTooltipProvider, { props: { component: SettingsEvidenceBody, componentProps: { response: settingsEvidenceResponse() } } });
 
     const chart = page.getByRole("slider", { name: "Basal by time of day" });
     await expect.element(chart).toHaveAccessibleDescription(/Use Home and End/);

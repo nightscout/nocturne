@@ -340,6 +340,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         {
             LegacyId = entry.Id,
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills).UtcDateTime,
+            // sgv is the field a legacy client edits; a PATCH or GET-edit-PUT carries a stale mgdl beside it.
             Mgdl = entry.Sgv ?? entry.Mgdl,
             Direction = MapDirection(entry.Direction),
             TrendRate = entry.TrendRate,

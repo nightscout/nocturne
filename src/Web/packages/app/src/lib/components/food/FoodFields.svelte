@@ -237,7 +237,7 @@
 
     <div class="col-span-2 flex flex-col gap-1 @md:col-span-3 @6xl:col-span-1">
       <Label id="{uid}-gi-label" size="sm" variant="muted">
-        Glycemic Index
+        Glycemic index
       </Label>
       <ToggleGroup.Root
         aria-labelledby="{uid}-gi-label"

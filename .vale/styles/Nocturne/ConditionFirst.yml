@@ -1,0 +1,12 @@
+# Rule 5.4: put the required condition before the command, split by a comma.
+#
+# This matches only the highest-precision signal, a conditional clause trailing
+# after a comma. A bare mid-sentence "if" is far more often legitimate
+# descriptive prose, so it is not matched. Full 5.4 checking stays a model job.
+extends: existence
+message: "Rule 5.4: move this condition to the start of the sentence."
+link: .claude/skills/simple-english/SKILL.md
+level: suggestion
+ignorecase: true
+tokens:
+  - ',\s+(?:if|when|unless)\s+\w+'

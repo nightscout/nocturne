@@ -46,7 +46,7 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="max-w-md" data-testid="totp-setup-dialog">
     <Dialog.Header>
-      <Dialog.Title>Set up authenticator app</Dialog.Title>
+      <Dialog.Title>Configure authenticator app</Dialog.Title>
       <Dialog.Description>
         Scan the QR code with your authenticator app, then enter the 6-digit
         code to verify.

@@ -194,6 +194,18 @@ public class NutritionControllerGetMealsTests : IDisposable
     }
 
     [Fact]
+    public async Task GetMeals_OrphanCarbHasNullCorrelationId()
+    {
+        var now = DateTime.UtcNow;
+        SeedCarbIntake(now.AddMinutes(-5), 25.0, correlationId: null);
+
+        var controller = CreateController();
+        var result = await controller.GetMeals(now.AddHours(-1), now.AddHours(1));
+
+        ExtractBody(result).Should().ContainSingle().Which.CorrelationId.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetMeals_CorrelatedAndOrphan_EmitsBothEventTypes()
     {
         var now = DateTime.UtcNow;
@@ -208,7 +220,7 @@ public class NutritionControllerGetMealsTests : IDisposable
         var body = ExtractBody(result);
         body.Should().HaveCount(2);
         body.Should().ContainSingle(e => e.CorrelationId == cid && e.Boluses.Length == 1 && e.TotalCarbs == 30.0);
-        body.Should().ContainSingle(e => e.CorrelationId == Guid.Empty && e.Boluses.Length == 0 && e.TotalCarbs == 20.0);
+        body.Should().ContainSingle(e => e.CorrelationId == null && e.Boluses.Length == 0 && e.TotalCarbs == 20.0);
     }
 
     [Fact]

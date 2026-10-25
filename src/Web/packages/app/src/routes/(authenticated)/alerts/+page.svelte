@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BellRing from "@lucide/svelte/icons/bell-ring";
   import { isoNow } from "$lib/utils/now";
   import { formatClock } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
@@ -36,12 +37,12 @@
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
-  import Bell from "@lucide/svelte/icons/bell";
   import Plus from "@lucide/svelte/icons/plus";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Check from "@lucide/svelte/icons/check";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import { Artwork } from "@nocturne/watercolour";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import { resolve } from "$app/paths";
 
@@ -49,7 +50,8 @@
   import DndNoticeStrip from "$lib/components/alerts/DndNoticeStrip.svelte";
   import { isDndInEffect, isDndManualActive } from "$lib/components/alerts/dnd";
   import { refreshOnReturn } from "$lib/utils/refresh-on-return.svelte";
-  import { severity, severityLabel } from "$lib/components/alerts/severity";
+  import { severity } from "$lib/components/alerts/severity";
+  import { severityLabel } from "$lib/components/alerts/severityLabel.svelte";
 
   // Every write on this page — rule toggle/delete/test-fire, acknowledge, and
   // clearing the manual mute — is gated on alerts.readwrite server-side.
@@ -81,7 +83,6 @@
     togglingRuleId = ruleId;
     try {
       await toggleRule(ruleId);
-      await rulesQuery.refresh();
     } catch (err) {
       toast.error(mutationError(err));
     } finally {
@@ -93,7 +94,6 @@
     deletingRuleId = ruleId;
     try {
       await deleteRule(ruleId);
-      await rulesQuery.refresh();
     } catch (err) {
       toast.error(mutationError(err));
     } finally {
@@ -126,7 +126,6 @@
         dndScheduleStart: current.dndScheduleStart,
         dndScheduleEnd: current.dndScheduleEnd,
       });
-      await dndQuery.refresh();
     } catch (err) {
       toast.error(mutationError(err));
     } finally {
@@ -139,7 +138,7 @@
     try {
       // Optimistically badge every unacknowledged excursion so the card updates
       // at once; the command's GetActiveAlerts invalidation reconciles it in the
-      // same round-trip (same pattern as AlertBanner/FiringToast).
+      // same round-trip (same pattern as createAlertActions).
       await acknowledge({}).updates(
         activeAlertsQuery.withOverride((current) =>
           (current ?? []).map((a) =>
@@ -172,11 +171,11 @@
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div class="flex items-center gap-3">
       <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-        <Bell class="h-6 w-6 text-primary" />
+        <BellRing class="size-6 text-primary" />
       </div>
       <div>
         <h1 class="text-2xl font-bold tracking-tight">Alerts</h1>
-        <p class="text-sm text-muted-foreground">Rules that decide when, how, and where you're notified.</p>
+        <p class="text-sm text-muted-foreground">Rules that decide when, how, and where you are notified.</p>
       </div>
     </div>
     {#if canManageAlerts}
@@ -242,8 +241,7 @@
           {needsReview === 1
             ? "1 alert rule needs review."
             : `${needsReview} alert rules need review.`}
-          An update changed or turned off rules set up in an older format, or their conditions
-          may not alert as set. They are marked below.
+          Some rules were created in an older format. An update changed or turned off some of them. For others, the conditions possibly do not alert as set. Each one is marked below.
         </p>
       </div>
     {/if}
@@ -286,8 +284,8 @@
       </a>
     </div>
 
-    <!-- Active alerts banner (kept as a persistent surface separate from the
-         FiringToast which handles fresh-fire moments). -->
+    <!-- Active alerts on this page, beside the app-wide AlertBanner and
+         CriticalAlertTakeover. -->
     {#if activeAlerts.length > 0}
       <Card variant="destructive">
         <CardHeader>
@@ -353,7 +351,13 @@
       <CardContent>
         {#if rules.length === 0}
           <div class="rounded-md border border-dashed py-10 text-center text-muted-foreground">
-            <Bell class="mx-auto h-8 w-8 opacity-50" />
+            <Artwork
+              artwork="alarm-bell"
+              palette="moonlight"
+              motion="auto"
+              autoplay="once"
+              class="mx-auto size-48"
+            />
             <p class="mt-2 text-sm font-medium">No alert rules yet</p>
             <p class="mt-1 text-xs">Add a rule so Nocturne can notify you when glucose goes out of range.</p>
             {#if canManageAlerts}

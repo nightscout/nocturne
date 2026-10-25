@@ -168,7 +168,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.Twiist.
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Parity", "Parity", "{B894CC6B-1533-CC50-3E2E-2BCC4EC32D58}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Alerts.ParityCorpus.Generator", "tests\Parity\Nocturne.Alerts.ParityCorpus.Generator\Nocturne.Alerts.ParityCorpus.Generator.csproj", "{F3A26250-F21F-4C7B-B4F2-D30E0381FEBD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Alerts.Corpus", "tests\Parity\Nocturne.Alerts.Corpus\Nocturne.Alerts.Corpus.csproj", "{F3A26250-F21F-4C7B-B4F2-D30E0381FEBD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Core.Alerts.Native", "src\Core\Nocturne.Core.Alerts.Native\Nocturne.Core.Alerts.Native.csproj", "{A7A23EBB-850C-41DF-9FC9-8002DC06157F}"
 EndProject

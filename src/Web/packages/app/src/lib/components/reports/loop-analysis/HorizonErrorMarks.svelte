@@ -5,7 +5,7 @@
   spread and its bias.
 -->
 <script lang="ts">
-  import { getChartContext } from "layerchart";
+  import { Line, Rect, getChartContext } from "layerchart";
   import type { PredictionHorizonAccuracy } from "$lib/api";
 
   interface Props {
@@ -45,10 +45,10 @@
 
 {#each axis as h, i (h.minutes)}
   {#if h.settingsSignal}
-    <rect {...column(i, 0.04)} y={plotTop} height={plotHeight} class="fill-muted/60" />
+    <Rect {...column(i, 0.04)} y={plotTop} height={plotHeight} class="fill-muted/60" />
   {/if}
   {#if selected === i}
-    <rect {...column(i, 0.04)} y={plotTop} height={plotHeight} class="fill-foreground/5 stroke-foreground/30" stroke-dasharray="3 2" />
+    <Rect {...column(i, 0.04)} y={plotTop} height={plotHeight} class="fill-foreground/5 stroke-foreground/30" dashArray="3 2" />
   {/if}
 {/each}
 
@@ -58,10 +58,10 @@
     {@const opacity = h.error.sparse ? SPARSE_OPACITY : 1}
     {@const bias = yScale(scale(h.error.mean ?? 0))}
     {@const outer = band(i, h.error.p10, h.error.p90, 0.22)}
-    <rect {...outer} rx="2" fill="color-mix(in oklab, {color} 28%, transparent)" fill-opacity={opacity} />
-    <rect {...band(i, h.error.p25, h.error.p75, 0.22)} rx="2" fill="color-mix(in oklab, {color} 55%, transparent)" fill-opacity={opacity} />
-    <line x1={outer.x - 3} x2={outer.x + outer.width + 3} y1={bias} y2={bias} class="stroke-card" stroke-width="6" stroke-linecap="round" opacity={opacity} />
-    <line x1={outer.x - 3} x2={outer.x + outer.width + 3} y1={bias} y2={bias} class="stroke-foreground" stroke-width="2" stroke-linecap="round" opacity={opacity} />
+    <Rect {...outer} rx={2} fill="color-mix(in oklab, {color} 28%, transparent)" fillOpacity={opacity} />
+    <Rect {...band(i, h.error.p25, h.error.p75, 0.22)} rx={2} fill="color-mix(in oklab, {color} 55%, transparent)" fillOpacity={opacity} />
+    <Line x1={outer.x - 3} x2={outer.x + outer.width + 3} y1={bias} y2={bias} class="stroke-card" strokeWidth={6} stroke-linecap="round" opacity={opacity} />
+    <Line x1={outer.x - 3} x2={outer.x + outer.width + 3} y1={bias} y2={bias} class="stroke-foreground" strokeWidth={2} stroke-linecap="round" opacity={opacity} />
     <text x={outer.x + outer.width / 2} y={plotTop - 16} text-anchor="middle" class="fill-muted-foreground text-2xs tabular-nums">
       MAE {formatMae(h.mae ?? 0)}
     </text>
@@ -76,7 +76,7 @@
   {#if h.error && i >= 0}
     {@const outer = band(i, h.error.p10, h.error.p90, 0.3)}
     {@const bias = yScale(scale(h.error.mean ?? 0))}
-    <rect {...outer} rx="2" fill="none" stroke="var(--foreground)" stroke-opacity="0.8" stroke-width="1.25" stroke-dasharray="3 2" />
-    <line x1={outer.x} x2={outer.x + outer.width} y1={bias} y2={bias} stroke="var(--foreground)" stroke-width="1.5" stroke-dasharray="3 2" />
+    <Rect {...outer} rx={2} fill="none" stroke="var(--foreground)" strokeOpacity={0.8} strokeWidth={1.25} dashArray="3 2" />
+    <Line x1={outer.x} x2={outer.x + outer.width} y1={bias} y2={bias} stroke="var(--foreground)" strokeWidth={1.5} dashArray="3 2" />
   {/if}
 {/each}

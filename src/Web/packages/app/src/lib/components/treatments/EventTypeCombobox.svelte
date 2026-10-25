@@ -159,7 +159,7 @@
               <Check
                 class={cn("mr-2 h-4 w-4", !value ? "opacity-100" : "opacity-0")}
               />
-              None (don't create event)
+              None (do not create event)
             </Command.Item>
           {/if}
           {#each filteredEventTypes as type (type)}

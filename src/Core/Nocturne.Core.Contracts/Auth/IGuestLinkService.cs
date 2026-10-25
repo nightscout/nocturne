@@ -45,6 +45,12 @@ public interface IGuestLinkService
 
 public record GuestLinkCreationResult(string Code, string FullUrl, GuestLinkInfo Info);
 
+/// <summary>
+/// The categories a member may put on a new guest link: the guest vocabulary narrowed to the scopes
+/// they hold, and the subset a link gets when none are chosen.
+/// </summary>
+public record GuestLinkScopeOptions(IReadOnlyList<string> Available, IReadOnlyList<string> Defaults);
+
 public record GuestLinkActivationResult(bool Success, GuestSessionInfo? Session, string? Error);
 
 /// <summary>

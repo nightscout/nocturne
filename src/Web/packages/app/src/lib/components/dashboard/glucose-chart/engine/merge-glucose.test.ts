@@ -34,4 +34,26 @@ describe("mergeRealtimeGlucose", () => {
 
     expect(points.map((p) => p.color)).toEqual(["var(--glucose-high)"]);
   });
+
+  it("adds the live tail past the end of the server series and keeps the server's own points", () => {
+    const chartData = transformChartData({
+      thresholds,
+      glucoseData: [
+        { time: 1_000, sgv: 90, direction: "Flat" },
+        { time: 2_000, sgv: 95, direction: "Flat" },
+      ],
+    } as Parameters<typeof transformChartData>[0]);
+    const tail: Entry[] = [
+      { _id: "x", type: "sgv", mills: 2_000, sgv: 999 },
+      { _id: "y", type: "sgv", mills: 3_000, sgv: 300 },
+    ];
+
+    const points = mergeRealtimeGlucose(chartData, tail, 0, 10_000);
+
+    expect(points.map((p) => [p.time.getTime(), p.sgv])).toEqual([
+      [1_000, 90],
+      [2_000, 95],
+      [3_000, 300],
+    ]);
+  });
 });

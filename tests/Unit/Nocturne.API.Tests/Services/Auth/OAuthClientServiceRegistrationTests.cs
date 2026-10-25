@@ -3,18 +3,18 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
-/// Dynamic client registration against the tenant's seeded known-directory clients: the verified
-/// identity follows the directory's redirect URIs, never the registrant's.
+/// Dynamic client registration: every call is a new client, and the verified identity follows the
+/// directory's redirect URIs, never the registrant's.
 /// </summary>
 public class OAuthClientServiceRegistrationTests : IDisposable
 {
     private const string HomeAssistant = "io.home-assistant.nocturne";
+    private const string HomeAssistantRedirect = "https://my.home-assistant.io/redirect/oauth";
     private const string Trio = "org.nightscout.trio";
     private const string TrioCallback = "org.nightscout.trio://oauth/callback";
 
@@ -26,29 +26,7 @@ public class OAuthClientServiceRegistrationTests : IDisposable
         _options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-
-        using var context = NewContext();
-        context.OAuthClients.AddRange(
-            Seed("seeded-ha", HomeAssistant, "Home Assistant", "[]"),
-            Seed("seeded-trio", Trio, "Trio", $"[\"{TrioCallback}\"]"),
-            Seed("seeded-tray", "com.nocturne.tray", "Nocturne Tray", "[\"http://127.0.0.1/callback\"]"));
-        context.SaveChanges();
     }
-
-    private OAuthClientEntity Seed(string clientId, string softwareId, string name, string redirectUris) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        TenantId = _tenantId,
-        ClientId = clientId,
-        SoftwareId = softwareId,
-        ClientName = name,
-        DisplayName = name,
-        ClientUri = "https://directory.example/" + clientId,
-        IsKnown = true,
-        RedirectUris = redirectUris,
-        CreatedAt = DateTime.UtcNow,
-        UpdatedAt = DateTime.UtcNow,
-    };
 
     private NocturneDbContext NewContext() =>
         new(_options) { TenantId = _tenantId };
@@ -59,122 +37,97 @@ public class OAuthClientServiceRegistrationTests : IDisposable
     private static Task<OAuthClientInfo> Register(
         OAuthClientService service, string? softwareId, params string[] uris) =>
         service.RegisterClientAsync(
-            softwareId, "Registrant", "https://registrant.example", null, uris, "glucose.read", null);
+            softwareId, "Registrant", "https://registrant.example", null, uris, "glucose.read", "203.0.113.7");
 
-    [Fact]
-    public async Task Register_WithACallbackTheSeedDoesNotList_GetsAnUnverifiedClientAndLeavesTheSeedAlone()
+    [Theory]
+    [InlineData(HomeAssistant, HomeAssistantRedirect, false)]
+    [InlineData(Trio, TrioCallback, true)]
+    [InlineData("com.example.app", "com.example.app://oauth/callback", false)]
+    public async Task Register_TheSameSoftwareIdAndRedirectUriTwice_MintsTwoClients(
+        string softwareId, string redirectUri, bool known)
     {
         using var context = NewContext();
-        var uris = new[] { "https://ha.example.net/auth/external/callback" };
+        var service = CreateService(context);
 
-        var info = await Register(CreateService(context), HomeAssistant, uris);
+        var first = await Register(service, softwareId, redirectUri);
+        var second = await Register(service, softwareId, redirectUri);
 
-        info.ClientId.Should().NotBe("seeded-ha");
-        info.IsKnown.Should().BeFalse();
-        info.SoftwareId.Should().BeNull();
-        info.DisplayName.Should().Be("Registrant");
-        info.RedirectUris.Should().BeEquivalentTo(uris);
-
-        var seed = await context.OAuthClients.AsNoTracking().SingleAsync(c => c.SoftwareId == HomeAssistant);
-        seed.ClientId.Should().Be("seeded-ha");
-        seed.RedirectUris.Should().Be("[]");
-        seed.ClientUri.Should().Be("https://directory.example/seeded-ha");
-        seed.IsKnown.Should().BeTrue();
+        second.ClientId.Should().NotBe(first.ClientId);
+        second.Id.Should().NotBe(first.Id);
+        first.IsKnown.Should().Be(known);
+        second.IsKnown.Should().Be(known);
+        var stored = await context.OAuthClients.AsNoTracking()
+            .Where(c => c.SoftwareId == softwareId)
+            .Select(c => c.ClientId)
+            .ToListAsync();
+        stored.Should().BeEquivalentTo([first.ClientId, second.ClientId]);
     }
 
     [Fact]
-    public async Task Register_WithoutRedirectUris_ReturnsTheSeed()
-    {
-        using var context = NewContext();
-
-        var info = await Register(CreateService(context), HomeAssistant);
-
-        info.ClientId.Should().Be("seeded-ha");
-        info.IsKnown.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task Register_WithTheDirectoryCallback_ReturnsTheVerifiedSeed()
+    public async Task Register_WithTheDirectoryCallback_GetsTheDirectoryIdentity()
     {
         using var context = NewContext();
 
         var info = await Register(CreateService(context), Trio, TrioCallback);
 
-        info.ClientId.Should().Be("seeded-trio");
         info.IsKnown.Should().BeTrue();
+        info.SoftwareId.Should().Be(Trio);
+        info.DisplayName.Should().Be("Trio");
+        info.ClientUri.Should().Be("https://triodocs.org");
+        info.LogoUri.Should().Be("/logos/trio.svg");
     }
 
     [Fact]
-    public async Task Register_WithTheDirectoryLoopbackCallbackOnAnotherPort_ReturnsTheVerifiedSeed()
-    {
-        using var context = NewContext();
-
-        var info = await Register(CreateService(context), "com.nocturne.tray", "http://127.0.0.1:5555/callback");
-
-        info.ClientId.Should().Be("seeded-tray");
-        info.IsKnown.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task Register_WithAKnownSoftwareIdAndAForeignCallback_GetsAnUnverifiedClient()
+    public async Task Register_WithAKnownSoftwareIdAndAForeignCallback_IsStoredUnverifiedUnderTheRegistrantsName()
     {
         using var context = NewContext();
         var uris = new[] { "https://elsewhere.example/callback" };
 
         var info = await Register(CreateService(context), Trio, uris);
 
-        info.ClientId.Should().NotBe("seeded-trio");
         info.IsKnown.Should().BeFalse();
+        info.SoftwareId.Should().Be(Trio);
+        info.DisplayName.Should().Be("Registrant");
+        info.ClientUri.Should().Be("https://registrant.example");
+        info.LogoUri.Should().BeNull();
         info.RedirectUris.Should().BeEquivalentTo(uris);
-        (await context.OAuthClients.AsNoTracking().SingleAsync(c => c.SoftwareId == Trio))
-            .RedirectUris.Should().Be($"[\"{TrioCallback}\"]");
+        var stored = await context.OAuthClients.AsNoTracking().SingleAsync(c => c.ClientId == info.ClientId);
+        stored.ClientName.Should().Be("Registrant");
+        stored.CreatedFromIp.Should().Be("203.0.113.7");
     }
 
     [Fact]
-    public async Task Register_AKnownSoftwareIdWithNoSeed_IsVerifiedOnlyWithTheDirectoryCallback()
+    public async Task Register_WithTheDirectoryLoopbackCallbackOnAnotherPort_IsVerified()
     {
         using var context = NewContext();
-        context.OAuthClients.RemoveRange(context.OAuthClients);
-        await context.SaveChangesAsync();
-        var service = CreateService(context);
 
-        var foreign = await Register(service, Trio, "https://elsewhere.example/callback");
-        var genuine = await Register(service, Trio, TrioCallback);
+        var info = await Register(CreateService(context), "com.nocturne.tray", "http://127.0.0.1:5555/callback");
 
-        foreign.IsKnown.Should().BeFalse();
-        foreign.SoftwareId.Should().BeNull();
-        genuine.IsKnown.Should().BeTrue();
-        genuine.SoftwareId.Should().Be(Trio);
-        genuine.DisplayName.Should().Be("Trio");
-        genuine.ClientUri.Should().Be("https://triodocs.org");
+        info.IsKnown.Should().BeTrue();
+        info.DisplayName.Should().Be("Nocturne Tray");
     }
 
     [Fact]
-    public async Task Register_AnUnknownSoftwareIdTwiceWithTheSameUris_ReturnsTheSameClient()
+    public async Task Register_ADirectoryAppWithoutRedirectUris_IsVerified()
     {
         using var context = NewContext();
-        var service = CreateService(context);
-        var uris = new[] { "com.example.app://oauth/callback" };
 
-        var first = await Register(service, "com.example.app", uris);
-        var second = await Register(service, "com.example.app", uris);
+        var info = await Register(CreateService(context), HomeAssistant);
 
-        first.IsKnown.Should().BeFalse();
-        second.ClientId.Should().Be(first.ClientId);
+        info.IsKnown.Should().BeTrue();
+        info.DisplayName.Should().Be("Home Assistant");
     }
 
     [Fact]
-    public async Task Register_AnUnknownSoftwareIdWithOtherUris_DoesNotReturnTheFirstRegistrantsClient()
+    public async Task Register_AnUnknownSoftwareId_IsSelfRegisteredAndKeepsItsSoftwareId()
     {
         using var context = NewContext();
-        var service = CreateService(context);
 
-        var first = await Register(service, "com.example.app", "com.example.app://oauth/callback");
-        var second = await Register(service, "com.example.app", "https://elsewhere.example/callback");
+        var info = await Register(CreateService(context), "com.example.app", "com.example.app://oauth/callback");
 
-        second.ClientId.Should().NotBe(first.ClientId);
-        second.SoftwareId.Should().BeNull();
-        second.RedirectUris.Should().BeEquivalentTo(["https://elsewhere.example/callback"]);
+        info.IsKnown.Should().BeFalse();
+        info.SoftwareId.Should().Be("com.example.app");
+        info.DisplayName.Should().Be("Registrant");
     }
 
     public void Dispose()

@@ -104,10 +104,10 @@ public class EntriesController : ControllerBase
         }
 
         _logger.LogDebug(
-            "Returning current entry with ID: {EntryId}, Mills: {Mills}, SGV: {Sgv}",
+            "Returning current entry with ID: {EntryId}, Mills: {Mills}, Glucose: {Glucose}",
             currentEntry.Id,
             currentEntry.Mills,
-            currentEntry.Sgv ?? currentEntry.Mgdl
+            currentEntry.GlucoseMgdl()
         );
 
         // Return as array to match legacy API format with V1 response structure

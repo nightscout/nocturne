@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ConnectorConfigCategory } from "$lib/constants/connector-config-categories";
   import { SvelteSet } from "svelte/reactivity";
   import { Label } from "$lib/components/ui/label";
   import { Input } from "$lib/components/ui/input";
@@ -132,7 +133,7 @@
       const category = getPropertyMeta(propName).category;
 
       // Skip credential-category fields - they're shown in the credentials card
-      if (category === "Credentials") continue;
+      if (category === ConnectorConfigCategory.Credentials) continue;
 
       if (!groups[category]) {
         groups[category] = {
@@ -153,10 +154,10 @@
 
   // Separate main and advanced groups
   const mainGroups = $derived(
-    groupedProperties.filter((g) => g.name !== "Advanced")
+    groupedProperties.filter((g) => g.name !== ConnectorConfigCategory.Advanced)
   );
   const advancedGroup = $derived(
-    groupedProperties.find((g) => g.name === "Advanced")
+    groupedProperties.find((g) => g.name === ConnectorConfigCategory.Advanced)
   );
 
   // Get secret fields
@@ -176,7 +177,7 @@
     return Object.entries(schema.properties)
       .filter(
         ([name, propSchema]) =>
-          getPropertyMeta(name).category === "Credentials" &&
+          getPropertyMeta(name).category === ConnectorConfigCategory.Credentials &&
           !secretFieldSet.has(name) &&
           propSchema["x-hidden"] !== true
       )
@@ -321,7 +322,7 @@
                 <RotateCcw class="h-3 w-3" />
               </Button>
             {:else if hasEnvOverride(propName)}
-              <Badge variant="outline">From Env</Badge>
+              <Badge variant="outline">From env</Badge>
             {/if}
           </div>
           {#if meta.description}
@@ -355,7 +356,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
       <Select
@@ -393,7 +394,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
       <Input
@@ -444,7 +445,7 @@
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline">From Env</Badge>
+          <Badge variant="outline">From env</Badge>
         {/if}
       </div>
       <Input

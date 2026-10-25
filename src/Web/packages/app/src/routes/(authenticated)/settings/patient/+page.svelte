@@ -10,21 +10,6 @@
     PatientInsulinManager,
   } from "$lib/components/patient";
   import type { ClinicalState } from "$lib/components/patient";
-  import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
-  import * as patientRemote from "$api/generated/patientRecords.generated.remote";
-
-  const patientRecord = patientRemote.getPatientRecord();
-  const devices = patientRemote.getDevices();
-  const insulins = patientRemote.getInsulins();
-
-  const patientConfigured = $derived(!!patientRecord.current?.diabetesType);
-  const devicesConfigured = $derived(
-    (devices.current ?? []).some((d) => d.isCurrent === true),
-  );
-  const insulinsConfigured = $derived(
-    (insulins.current ?? []).some((i) => i.isCurrent === true),
-  );
 
   let clinicalState = $state<ClinicalState | undefined>(undefined);
 
@@ -34,7 +19,7 @@
 </script>
 
 <svelte:head>
-  <title>Patient Record - Settings - Nocturne</title>
+  <title>Patient record - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -43,7 +28,7 @@
       <HeartPulse class="h-6 w-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Patient Record</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Patient record</h1>
       <p class="text-muted-foreground">
         Manage your clinical information, devices, and insulins
       </p>
@@ -51,11 +36,11 @@
   </div>
 
   <!-- Clinical Information -->
-  <Card.Root {@attach coachmark({ ...coachFor("onboarding.patient-details"), completedWhen: () => patientConfigured })}>
+  <Card.Root>
     <Card.Header>
       <div class="flex items-center gap-2">
         <HeartPulse class="h-5 w-5 text-muted-foreground" />
-        <Card.Title>Clinical Information</Card.Title>
+        <Card.Title>Clinical information</Card.Title>
       </div>
       <Card.Description>
         Basic information about your diabetes management
@@ -68,7 +53,7 @@
       <FormActions
         class="w-full"
         formId="clinical-form"
-        submitLabel="Save Changes"
+        submitLabel="Save changes"
         form={clinicalState?.form}
         pending={!!clinicalState?.weight.saving}
         error={clinicalState?.guard.submitError}
@@ -80,7 +65,7 @@
   </Card.Root>
 
   <!-- Devices -->
-  <Card.Root {@attach coachmark({ ...coachFor("onboarding.devices"), completedWhen: () => devicesConfigured })}>
+  <Card.Root>
     <Card.Header>
       <div class="flex items-center gap-2">
         <Cpu class="h-5 w-5 text-muted-foreground" />
@@ -96,7 +81,7 @@
   </Card.Root>
 
   <!-- Insulins -->
-  <Card.Root {@attach coachmark({ ...coachFor("onboarding.insulins"), completedWhen: () => insulinsConfigured })}>
+  <Card.Root>
     <Card.Header>
       <div class="flex items-center gap-2">
         <Syringe class="h-5 w-5 text-muted-foreground" />

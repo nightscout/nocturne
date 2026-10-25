@@ -25,7 +25,7 @@
   const lastMealTime = $derived(recentMeals[0]?.mills);
 </script>
 
-<WidgetCard title="Recent Meals">
+<WidgetCard title="Recent meals">
   {#if recentMeals.length > 0}
     <div class="space-y-2">
       <div class="flex items-center justify-between">

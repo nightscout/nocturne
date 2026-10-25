@@ -270,7 +270,7 @@ public class EventResponseCalculatorTests
     }
 
     [Fact]
-    public void ACorrectionBolus_IsAManualBolusWithNoCarbsWithinHalfAnHour()
+    public void ACorrectionBolus_IsAManualBolusPairedWithNoMeal()
     {
         var correction = Local(2024, 6, 11, 15, 0);
         var mealBolus = Local(2024, 6, 12, 12, 0);
@@ -278,7 +278,7 @@ public class EventResponseCalculatorTests
         var range = Calculate(
             [Cohort(1, EventAnchorKind.CorrectionBolus)],
             glucose: Flat(180),
-            carbs: [new(mealBolus + 20 * Minute, 40)],
+            carbs: [new(mealBolus + 45 * Minute, 40)],
             doses: [new(correction, 2, false), new(mealBolus, 4, false), new(correction + Hour, 0.5, true)]);
 
         range.Events.Should().ContainSingle().Which.At.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(correction).UtcDateTime);

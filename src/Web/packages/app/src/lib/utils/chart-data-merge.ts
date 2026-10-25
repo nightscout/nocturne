@@ -152,6 +152,7 @@ export function mergeChartData(
 
 		// Take the max values from either dataset
 		maxIob: Math.max(initial.maxIob ?? 0, historical.maxIob ?? 0),
+		minIob: Math.min(initial.minIob ?? 0, historical.minIob ?? 0),
 		maxCob: Math.max(initial.maxCob ?? 0, historical.maxCob ?? 0),
 		maxBasalRate: Math.max(initial.maxBasalRate ?? 0, historical.maxBasalRate ?? 0),
 	};
@@ -232,6 +233,8 @@ export function replaceWindow(
 	};
 	const peak = (floor: number, values: Iterable<number | undefined>) =>
 		Math.max(floor, ...Array.from(values, (v) => v ?? 0));
+	const trough = (ceiling: number, values: Iterable<number | undefined>) =>
+		Array.from(values, (v) => v ?? 0).reduce((low, v) => Math.min(low, v), ceiling);
 
 	const glucoseData = swap(current.glucoseData, recent.glucoseData, (p) => p.time);
 	// Mirrors the server's sizing: 20 over the highest reading, between 300 and 400.
@@ -281,6 +284,7 @@ export function replaceWindow(
 		defaultBasalRate: current.defaultBasalRate,
 		thresholds: { ...current.thresholds, glucoseYMax },
 		maxIob: peak(recent.maxIob ?? 0, iobSeries.map((p) => p.value)),
+		minIob: trough(recent.minIob ?? 0, iobSeries.map((p) => p.value)),
 		maxCob: peak(recent.maxCob ?? 0, cobSeries.map((p) => p.value)),
 		maxBasalRate: peak(recent.maxBasalRate ?? 0, basalSeries.map((p) => p.rate ?? undefined)),
 	};

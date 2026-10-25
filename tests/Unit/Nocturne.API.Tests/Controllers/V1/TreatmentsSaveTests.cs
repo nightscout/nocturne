@@ -208,11 +208,9 @@ public class TreatmentsSaveTests
         var sameEvent = Guid.CreateVersion7().ToString();
         var replaced = new Treatment { Id = sameEvent, EventType = "Note", Notes = "edited" };
         _service
-            .Setup(s => s.GetTreatmentsByRangeAsync(mills, mills, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([
-                new Treatment { Id = Guid.CreateVersion7().ToString(), EventType = "Correction Bolus", Mills = mills },
-                new Treatment { Id = sameEvent, EventType = "Note", Mills = mills },
-            ]);
+            .Setup(s => s.FindSameEventIdAsync(
+                It.Is<Treatment>(t => t.Mills == mills && t.EventType == "Note"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sameEvent);
         _service
             .Setup(s => s.UpdateTreatmentAsync(sameEvent, It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(replaced);
@@ -229,10 +227,9 @@ public class TreatmentsSaveTests
     [Fact]
     public async Task Put_WithoutAnId_CreatesWhenNothingIsStoredAtThatTimeWithThatEventType()
     {
-        var mills = DateTimeOffset.Parse("2026-09-30T01:00:00Z").ToUnixTimeMilliseconds();
         _service
-            .Setup(s => s.GetTreatmentsByRangeAsync(mills, mills, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new Treatment { Id = Guid.CreateVersion7().ToString(), EventType = "Correction Bolus", Mills = mills }]);
+            .Setup(s => s.FindSameEventIdAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
 
         var result = await _controller.SaveTreatments(
             Body(new { eventType = "Note", notes = "hello", created_at = "2026-09-30T01:00:00.000Z" }));

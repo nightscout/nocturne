@@ -19,7 +19,7 @@ export function isDndScheduleActiveNow(s: Settings): boolean {
 }
 
 /**
- * Whether Do Not Disturb is on now, by either path. It silences every rule that
+ * Whether Do not disturb is on now, by either path. It silences every rule that
  * is neither critical nor allowed through it.
  */
 export function isDndInEffect(s: Settings): boolean {

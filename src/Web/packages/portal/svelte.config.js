@@ -3,12 +3,13 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { mdsvex } from 'mdsvex';
 import rehypeSlug from 'rehype-slug';
 import { remarkVars } from '@nocturne/cms/remark/vars';
+import { rehypeInstallSteps } from './src/lib/markdown/rehype-install-steps.js';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
   preprocess: [
     vitePreprocess(),
-    mdsvex({ extensions: ['.svx'], remarkPlugins: [remarkVars], rehypePlugins: [rehypeSlug] }),
+    mdsvex({ extensions: ['.svx'], remarkPlugins: [remarkVars], rehypePlugins: [rehypeSlug, rehypeInstallSteps] }),
   ],
   extensions: ['.svelte', '.svx'],
   kit: {

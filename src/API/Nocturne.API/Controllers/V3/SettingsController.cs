@@ -6,6 +6,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Repositories;
@@ -274,6 +275,11 @@ public class SettingsController : BaseV3Controller<Settings>
                 "Invalid request body",
                 "Request body must contain valid settings data"
             );
+        }
+
+        if (SettingsKeys.IsReserved(id))
+        {
+            return CreateV3ErrorResponse(400, "Invalid request data", $"Settings key '{id}' is reserved.");
         }
 
         settings.SrvModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();

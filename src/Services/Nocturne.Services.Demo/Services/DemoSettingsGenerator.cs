@@ -292,12 +292,6 @@ public class DemoSettingsGenerator
                         },
                     },
                 },
-                Channels = new NotificationChannelsConfig
-                {
-                    Push = new ChannelConfig { Enabled = true },
-                    Email = new ChannelConfig { Enabled = false },
-                    Sms = new ChannelConfig { Enabled = false },
-                },
                 EmergencyContacts = new List<EmergencyContactConfig>
                 {
                     new()

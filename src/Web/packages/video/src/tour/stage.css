@@ -1,0 +1,133 @@
+/* Fallbacks the app's font stacks name; a report draws no glyph from them. */
+@font-face { font-family: "Apple Color Emoji"; src: local("Apple Color Emoji"); }
+@font-face { font-family: "Segoe UI Emoji"; src: local("Segoe UI Emoji"); }
+@font-face { font-family: "Segoe UI Symbol"; src: local("Segoe UI Symbol"); }
+@font-face { font-family: "SFMono-Regular"; src: local("SFMono-Regular"); }
+
+html,
+body {
+  margin: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--background);
+  color-scheme: dark;
+}
+
+[data-composition-id] {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.tour-viewport {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+}
+
+.tour-camera {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  transform-origin: 0 0;
+}
+
+.tour-report {
+  width: 1440px;
+  margin: 0 auto;
+}
+
+/* The tour's own layers (cursor, notes, title, logo) stack above anything the app draws, its z-50 dialogs included. */
+.tour-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1030;
+  width: 34px;
+  height: 34px;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.45));
+}
+
+.tour-heading,
+.tour-note {
+  position: absolute;
+  left: 50%;
+  z-index: 1020;
+  width: 1560px;
+  text-align: center;
+  translate: -50% 0;
+  pointer-events: none;
+}
+
+.tour-heading {
+  top: 884px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.tour-note {
+  top: 928px;
+  font-size: 38px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.tour-title {
+  position: absolute;
+  inset: 0;
+  z-index: 1040;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklch, var(--background) 84%, transparent);
+  text-align: center;
+  pointer-events: none;
+}
+
+.tour-title h1 {
+  margin: 0 0 20px;
+  font-size: 120px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.tour-title p {
+  margin: 0;
+  font-size: 44px;
+  color: var(--muted-foreground);
+}
+
+/* The logo fills this; it draws its own background. */
+.tour-end {
+  position: absolute;
+  inset: 0;
+  z-index: 1050;
+  pointer-events: none;
+}
+
+.tour-url {
+  position: absolute;
+  right: 40px;
+  bottom: 18px;
+  z-index: 1045;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+  opacity: 0.75;
+  pointer-events: none;
+}

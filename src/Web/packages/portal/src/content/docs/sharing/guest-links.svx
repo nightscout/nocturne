@@ -33,6 +33,18 @@ been used can't be forwarded on and opened again by somebody else.
 You can have **five** active guest links at once (one per person you're sharing
 with) and give each one a label so you can tell them apart.
 
+## Choosing what they see
+
+When you create a guest link you pick which categories it shares: glucose,
+treatments, device status, therapy settings, alerts, heart rate, step count,
+sleep and reports. Only categories you can see yourself are offered. Most are
+ticked to start with; untick any you'd rather keep back.
+
+With **Alerts** shared, the guest sees an alarm while it is firing and can press
+**Seen**. That takes the alarm off their screen and records that they saw it,
+under the link's label; it does not acknowledge or silence the alarm for anyone
+else. Your rules, quiet hours and alert history stay private.
+
 <Callout type="tip" title="When to use it: a specialist appointment">
 
   You're seeing your specialist on Tuesday and want them to look at your recent

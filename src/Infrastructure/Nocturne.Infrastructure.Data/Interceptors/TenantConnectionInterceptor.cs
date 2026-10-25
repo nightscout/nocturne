@@ -22,9 +22,9 @@ namespace Nocturne.Infrastructure.Data.Interceptors;
 /// transaction it holds open holds back only that tenant's v3 history (<see cref="HistoryHorizon"/>);
 /// the pool reset returns the name to the connection string's before the next lessee.
 ///
-/// The same open path carries app.current_subject_id for a subject pin, for policies that
-/// may read it; none does today. Both are set only when non-empty, so an unpinned context
-/// leaves the GUC unset.
+/// The same open path carries app.current_subject_id for a subject pin, which the subject_pin
+/// policy on the identity tables reads. Both are set only when non-empty, so an unpinned context
+/// leaves the GUC unset and the subject_pin policy admits every row.
 ///
 /// Additionally, on the first open against any given connection string, the
 /// interceptor verifies that the connected role is neither a superuser nor

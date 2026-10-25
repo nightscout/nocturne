@@ -22,9 +22,8 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\..\src\Core\Nocturne.Core.Alerts.Native\Nocturne.Core.Alerts.Native.csproj" />
-        <!-- The corpus generator project carries the C# scenario harness (ScenarioRunner +
-             ScenarioModels) that drives the live C# alert engine for the three-way parity
-             suite. It references Nocturne.API transitively. -->
-        <ProjectReference Include="..\..\Parity\Nocturne.Alerts.ParityCorpus.Generator\Nocturne.Alerts.ParityCorpus.Generator.csproj" />
+        <!-- The corpus test support: scenario models, locator and the native-library gate.
+             It references Nocturne.API transitively. -->
+        <ProjectReference Include="..\..\Parity\Nocturne.Alerts.Corpus\Nocturne.Alerts.Corpus.csproj" />
     </ItemGroup>
 </Project>

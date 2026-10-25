@@ -113,7 +113,6 @@ public class V1AuthenticationRegressionTests : IClassFixture<AuthenticationTestF
     [InlineData("/api/v1/profile")]
     [InlineData("/api/v1/activity")]
     [InlineData("/api/v1/adminnotifies")]
-    [InlineData("/api/v1/notifications/pushover")]
     public async Task V1_PostEndpoints_ShouldRejectUnauthenticatedRequests(string endpoint)
     {
         // Arrange
@@ -234,28 +233,6 @@ public class V1AuthenticationRegressionTests : IClassFixture<AuthenticationTestF
         var response = await _authenticatedClient.DeleteAsync(endpoint);
 
         // Assert - should NOT be 401 or 403 (may be 404 for non-existent records)
-        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
-    // ====================================================================
-    // Webhook endpoint: Pushover callback must be accessible without auth
-    // (Pushover sends callbacks to our webhook - it doesn't have our api-secret)
-    // ====================================================================
-
-    [Fact]
-    public async Task V1_PushoverCallback_ShouldBeAccessibleWithoutAuthentication()
-    {
-        // Arrange - Pushover sends a JSON callback to this webhook endpoint
-        var content = new StringContent(
-            """{"receipt":"test-receipt","acknowledged":1,"acknowledged_at":1234567890}""",
-            Encoding.UTF8,
-            "application/json");
-
-        // Act
-        var response = await _anonymousClient.PostAsync("/api/v1/notifications/pushovercallback", content);
-
-        // Assert - webhook should not require authentication
         Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
     }

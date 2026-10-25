@@ -12,6 +12,8 @@
     "check": "pnpm --recursive check",
     "test": "pnpm --recursive test",
     "translations:sync": "cd packages/app && wuchale",
+    "test:copy-guard": "node --test \"utils/lintUiCopy/*.test.ts\"",
+    "lint:copy": "pnpm run test:copy-guard && cd packages/app && wuchale -l warn && cd ../.. && node utils/lintUiCopy/index.ts",
     "clean": "pnpm --recursive clean && rm -rf node_modules",
     "generate-api-client": "cd ../API/Nocturne.API && nswag run nswag.json",
     "generate-zod-schemas": "node utils/generateZodSchemas/index.ts",
@@ -32,7 +34,7 @@
     "zod": "^4.3.6"
   },
   "engines": {
-    "node": ">=24",
+    "node": "^24.22.1 || >=26.12.1",
     "pnpm": ">=9"
   },
   "dependencies": {

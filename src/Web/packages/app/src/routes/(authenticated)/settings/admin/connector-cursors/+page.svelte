@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Database from "@lucide/svelte/icons/database";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { formatMediumDateTime } from "$lib/utils/formatting";
@@ -215,16 +216,16 @@
 </script>
 
 <svelte:head>
-  <title>Reset Connector Cursors - Administration - Nocturne</title>
+  <title>Reset connector cursors - Administration - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl space-y-6 p-3 @md:p-6">
   <div class="flex items-center gap-3">
     <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-      <RefreshCw class="h-6 w-6 text-primary" />
+      <Database class="size-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Reset Connector Cursors</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Reset connector cursors</h1>
       <p class="text-muted-foreground">
         Re-pull a tenant's connector history after fixing a connector bug
       </p>
@@ -238,7 +239,7 @@
       This forces a full re-pull of history for every configured connector on
       the selected tenant. Re-ingested records dedupe on their idempotency keys,
       so it is safe to re-run. A large re-pull can take several minutes, so it
-      runs as a background job &mdash; progress appears below and you can leave
+      runs as a background job. Progress appears below, and you can leave
       this page while it finishes.
     </Alert.Description>
   </Alert.Root>
@@ -365,7 +366,7 @@
               {#if jobStatus.errorMessage}
                 <span class="text-destructive">
                   {jobStatus.errorMessage === "connector_reset_failed"
-                    ? "One or more connectors failed; review the connector details and retry the failed range."
+                    ? "One or more connectors failed. Review the connector details and retry the failed range."
                     : jobStatus.errorMessage}
                 </span>
               {/if}
@@ -450,7 +451,7 @@
       from {fromDate}
     {:else}
       from the beginning
-    {/if}. This starts a background job &mdash; you can watch per-connector
+    {/if}. This starts a background job. You can watch per-connector
     progress here or leave the page while it runs.
   {/snippet}
 </ConfirmDialog>

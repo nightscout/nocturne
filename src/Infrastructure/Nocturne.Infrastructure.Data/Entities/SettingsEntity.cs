@@ -40,6 +40,7 @@ public class SettingsEntity : ITenantScoped, IAuditable, ISystemTimestamped
     /// <summary>
     /// The setting value as JSON string (can be any JSON value)
     /// </summary>
+    [AuditRedacted]
     [Column("value")]
     public string? Value { get; set; }
 
@@ -131,6 +132,7 @@ public class SettingsEntity : ITenantScoped, IAuditable, ISystemTimestamped
     /// <summary>
     /// Additional properties from import (stored as JSON)
     /// </summary>
+    [AuditRedacted]
     [Column("additional_properties", TypeName = "jsonb")]
     public string? AdditionalPropertiesJson { get; set; }
 }

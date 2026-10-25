@@ -1,0 +1,46 @@
+---
+title: Readings
+---
+
+# Readings
+
+The Readings report (also called **Day-by-Day View**) answers the question
+"what happened, reading by reading?". It shows every glucose reading in the
+period on one chart, with your insulin and carbs.
+
+## What it shows
+
+The **Blood Glucose** chart is the same chart as on your dashboard, for the
+period you choose.
+
+- **Glucose**: each dot is one reading. The colour of the dot follows its
+  glucose value. Horizontal lines mark the low and high limits of the range. If
+  your profile has a target, dashed lines mark it too.
+- **Treatments**: markers show your boluses and carb entries at the time you
+  gave them.
+- **Basal, IOB and COB**: tracks under the glucose show your basal rate,
+  insulin on board (IOB) and carbs on board (COB).
+- **Events**: markers show device events, such as a site change or a sensor
+  start.
+
+Move the pointer over the chart to see the values at that time. The legend
+under the chart names each item. Select an item in the legend to show or hide
+it on the chart.
+
+The small chart under the main chart shows the whole period. Drag across it to
+zoom in on part of the period.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+The report opens on the last 7 days. To look closer at a few days:
+
+1. At the top of the report, select the date range.
+2. Select **3 Days**.
+3. Select **Apply Filters**. The chart now shows only those 3 days.
+4. Move the pointer over a meal to see the carbs, the bolus and the glucose
+   after it.
+
+To see a single day in full detail, open
+[Day in Review](/docs/reports/day-in-review).

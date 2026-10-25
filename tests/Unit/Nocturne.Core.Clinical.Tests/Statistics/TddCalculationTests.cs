@@ -914,7 +914,9 @@ public class TddCalculationTests
             boluses,
             algorithmBoluses,
             tempBasals,
-            Mills(EndDate)
+            StartDate,
+            Mills(EndDate),
+            TimeZoneInfo.Utc
         );
 
         var day = result.DailyData.Should().ContainSingle().Subject;
@@ -951,7 +953,9 @@ public class TddCalculationTests
             boluses,
             Array.Empty<Bolus>(),
             tempBasals,
-            Mills(EndDate));
+            StartDate,
+            Mills(EndDate),
+            TimeZoneInfo.Utc);
 
         result.DaysWithData.Should().Be(1);
         result.DailyData.Should().HaveCount(1);
@@ -987,7 +991,9 @@ public class TddCalculationTests
             Array.Empty<Bolus>(),
             Array.Empty<Bolus>(),
             tempBasals,
-            Mills(EndDate));
+            StartDate,
+            Mills(EndDate),
+            TimeZoneInfo.Utc);
 
         result.DaysWithData.Should().Be(1);
 
@@ -1037,7 +1043,9 @@ public class TddCalculationTests
             Array.Empty<Bolus>(),
             Array.Empty<Bolus>(),
             tempBasals,
-            Mills(EndDate));
+            StartDate,
+            Mills(StartDate.AddDays(2)),
+            TimeZoneInfo.Utc);
 
         result.DaysWithData.Should().Be(2);
         result.DailyData.Should().HaveCount(2);
@@ -1105,7 +1113,7 @@ public class TddCalculationTests
         result.Stats.Count.Should().Be(4);
         result.Stats.MinRate.Should().Be(0.8);
         result.Stats.MaxRate.Should().Be(1.5);
-        result.Stats.AvgRate.Should().Be(1.1); // (0.8 + 1.2 + 1.5 + 0.9) / 4
+        result.Stats.AvgRate.Should().Be(1.1); // four equal 60-minute segments, so the time-weighted mean is the plain mean
 
         // Total delivered: 0.8 + 1.2 + 1.5 + 0.9 = 4.4 U (each is rate * 60min / 60)
         result.Stats.TotalDelivered.Should().Be(4.4);
@@ -1286,6 +1294,48 @@ public class TddCalculationTests
         result.TotalBolus.Should().Be(0.3);
         result.TotalBasal.Should().Be(0);
         result.ManualBolusCount.Should().Be(1);
+    }
+
+    #endregion
+
+    #region Per-Day Figures Over A Window With A Gap
+
+    [Fact]
+    public void PerDayFigures_DivideByTheWindowsCalendarDays_NotTheDaysThatHoldData()
+    {
+        var windowEnd = StartDate.AddDays(4);
+        var tempBasals = new List<TempBasal>
+        {
+            MakeScheduledBasal(0, rateUPerHr: 1.0, durationMinutes: 8 * 60),
+            MakeScheduledBasal(3 * 24, rateUPerHr: 1.0, durationMinutes: 8 * 60),
+        };
+        var boluses = new List<Bolus>
+        {
+            MakeBolus(7, units: 6.0),
+            MakeBolus(3 * 24 + 7, units: 6.0),
+        };
+        var carbs = new List<CarbIntake>
+        {
+            new() { Carbs = 40, Timestamp = StartDate.AddHours(7) },
+            new() { Carbs = 40, Timestamp = StartDate.AddHours(3 * 24 + 7) },
+        };
+
+        var result = _statisticsService.CalculateInsulinDeliveryStatistics(
+            boluses,
+            Array.Empty<Bolus>(),
+            tempBasals,
+            carbs,
+            StartDate,
+            windowEnd,
+            Mills(windowEnd));
+
+        result.WindowDays.Should().Be(4);
+        result.TotalInsulin.Should().Be(28.0);
+        result.Tdd.Should().Be(7.0);
+        result.TotalBasalPerDay.Should().Be(4.0);
+        result.BolusesPerDay.Should().Be(0.5);
+        result.TotalCarbs.Should().Be(80.0);
+        result.CarbsPerDay.Should().Be(20.0);
     }
 
     #endregion

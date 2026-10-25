@@ -154,10 +154,10 @@ public class HistoryClampedWriteTests(RlsCompletenessFixture fx) : IAsyncLifetim
     private async Task<(Guid Definition, Guid Running)> SeedRunningTrackerAsync()
     {
         await using var owner = await _provider.GetRequiredService<INocturneDbContextFactory>().CreateForTenantAsync(_tenant);
-        var definition = new TrackerDefinitionEntity { Id = Guid.CreateVersion7(), UserId = "member", Name = "site" };
+        var definition = new TrackerDefinitionEntity { Id = Guid.CreateVersion7(), CreatedBy = "member", Name = "site" };
         var running = new TrackerInstanceEntity
         {
-            Id = Guid.CreateVersion7(), UserId = "member", DefinitionId = definition.Id, StartedAt = DateTime.UtcNow.AddDays(-5),
+            Id = Guid.CreateVersion7(), CreatedBy = "member", DefinitionId = definition.Id, StartedAt = DateTime.UtcNow.AddDays(-5),
         };
         owner.TrackerDefinitions.Add(definition);
         owner.TrackerInstances.Add(running);

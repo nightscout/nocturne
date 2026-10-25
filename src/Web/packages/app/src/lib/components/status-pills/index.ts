@@ -10,7 +10,6 @@ export { default as TrackerPill } from './TrackerPill.svelte';
 export { default as TrackerPillBar } from './TrackerPillBar.svelte';
 
 // Re-export types
-// Note: CAGEPillData and SAGEPillData are deprecated - use TrackerPill system instead
 export type {
 	AlertLevel,
 	PillInfoItem,

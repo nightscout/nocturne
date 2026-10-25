@@ -51,7 +51,7 @@ internal sealed partial class LoopAnalysisService
         var deviceTask = patientDeviceRepository.GetByDateRangeAsync(fromUtc, toUtc, ct);
         await Task.WhenAll(predictionTask, evidenceTask, glucoseTask, bolusTask, carbTask, spanTask, deviceTask);
 
-        var snapshots = LoopCycles.Distinct(await predictionTask, p => ToMills(p.PredictedStart), p => p.Enacted)
+        var snapshots = LoopCycles.Distinct(await predictionTask, p => p.PredictedStart.ToMills(), p => p.Enacted)
             .Select(PredictionAccuracyCalculator.Parse)
             .OfType<PredictionSnapshot>()
             .ToList();
@@ -74,8 +74,8 @@ internal sealed partial class LoopAnalysisService
             Snapshots = snapshots,
             Glucose = [.. glucose.Select(g => new GlucoseSample(g.Mills, g.Mgdl)).Where(g => g.Mgdl > 0).OrderBy(g => g.Mills)],
             GlucoseExclusions = IntervalSet.Of(sources.DataExclusions),
-            ReadingsUntil = Math.Min(readingsEnd, ToMills(filter.Now)),
-            HistoryVisibleFrom = filter.HistoryVisibleFrom is { } edge ? ToMills(edge) : null,
+            ReadingsUntil = Math.Min(readingsEnd, filter.Now.ToMills()),
+            HistoryVisibleFrom = filter.HistoryVisibleFrom is { } edge ? edge.ToMills() : null,
             CarbMills = [.. (await carbTask).Where(c => c.Carbs > 0).Select(c => c.Mills).Order()],
             ManualBolusMills = [.. (await bolusTask).Where(b => b.Kind != BolusKind.Algorithm && b.Insulin > 0).Select(b => b.Mills).Order()],
             Adjusted = IntervalSet.Of(sources.Overrides.Concat(sources.TemporaryTargets).Concat(sources.Exercise)),

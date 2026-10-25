@@ -3,11 +3,9 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
-using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
@@ -59,9 +57,7 @@ public class YearSummaryTests(ApiIntegrationTestFixture fixture, ITestOutputHelp
         }
         else if (clamped)
             readContext.ClampMemberHistory();
-        var settings = new Mock<ITherapySettingsResolver>();
-        settings.Setup(resolver => resolver.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(timezone);
-        var service = ActivatorUtilities.CreateInstance<DataOverviewService>(scope.ServiceProvider, settings.Object);
+        var service = ActivatorUtilities.CreateInstance<DataOverviewService>(scope.ServiceProvider, DataOverviewClock.Resolving(timezone));
         string[]? sources = source is null ? null : [source];
         using var commands = new MetricCommands(Fixture.TenantId);
         var daily = await service.GetDailySummaryAsync(2024, sources);

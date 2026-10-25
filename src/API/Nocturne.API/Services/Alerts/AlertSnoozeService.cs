@@ -24,6 +24,7 @@ internal sealed class AlertSnoozeService(
     ISensorContextEnricher contextEnricher,
     ICanonicalGlucoseService canonicalGlucose,
     ISignalRBroadcastService broadcastService,
+    IEngineAlarmRelay alarmRelay,
     TimeProvider timeProvider,
     ILogger<AlertSnoozeService> logger)
     : IAlertSnoozeService
@@ -73,6 +74,8 @@ internal sealed class AlertSnoozeService(
         {
             logger.LogWarning(ex, "Failed to broadcast alert_snoozed for instance {InstanceId}", instanceId);
         }
+
+        await alarmRelay.ClearIfQuietAsync([instance.AlertExcursionId], ct);
 
         logger.LogInformation(
             "Alert instance {InstanceId} snoozed until {SnoozedUntil} (count {Count})",

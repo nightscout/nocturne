@@ -73,16 +73,19 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
 
         var start = fromMs;
         var store = stores.StoreFor(active?.ProfileName, fromMs);
+        var applied = active is { Source: ProfileScheduleSource.CustomizedSnapshot, Activation: var activation }
+            ? CircadianAdjustment.Of(activation)
+            : null;
         foreach (var change in stores.ChangesWithin(fromMs, toMs))
         {
             var next = stores.StoreFor(active?.ProfileName, change);
             if (string.Equals(next, store, StringComparison.Ordinal))
                 continue;
-            spans.Add(new ProfileSpan(store, start, change, active?.Scaling, active?.Schedules));
+            spans.Add(new ProfileSpan(store, start, change, active?.Scaling, active?.Schedules, applied));
             (start, store) = (change, next);
         }
 
-        spans.Add(new ProfileSpan(store, start, toMs, active?.Scaling, active?.Schedules));
+        spans.Add(new ProfileSpan(store, start, toMs, active?.Scaling, active?.Schedules, applied));
     }
 
     /// <remarks>

@@ -7,6 +7,7 @@ using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.API.Hubs;
 
@@ -218,10 +219,10 @@ public class DataHub : TenantAwareHub
             IEnumerable<Core.Models.DeviceStatus> deviceStatuses = [];
             if (authorization.Satisfies(Scope.DevicesRead))
             {
-                deviceStatuses = await projectionService.GetAsync(
+                deviceStatuses = await projectionService.GetMatchingAsync(
+                    FindQuery.Empty,
                     count: 1000,
                     skip: 0,
-                    find: null,
                     ct: default
                 );
             }

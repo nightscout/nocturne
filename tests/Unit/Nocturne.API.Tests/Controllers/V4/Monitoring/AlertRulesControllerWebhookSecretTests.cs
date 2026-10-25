@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
@@ -43,6 +44,28 @@ public class AlertRulesControllerWebhookSecretTests
         var stored = await db.AlertRuleChannels.AsNoTracking().SingleAsync(CancellationToken.None);
         stored.Secret.Should().NotBeNullOrEmpty().And.NotBe(PlaintextSecret);
         encryption.Decrypt(stored.Secret!).Should().Be(PlaintextSecret);
+    }
+
+    [Fact]
+    public async Task GetRules_and_GetRule_report_that_a_secret_exists_and_return_neither_it_nor_its_ciphertext()
+    {
+        var (controller, db, _) = CreateController();
+        var id = Created(await controller.CreateRule(Rule(Channel(PlaintextSecret)), CancellationToken.None)).Id;
+        var ciphertext = (await db.AlertRuleChannels.AsNoTracking().SingleAsync(CancellationToken.None)).Secret!;
+
+        var list = (await controller.GetRules(CancellationToken.None)).Result
+            .Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<List<AlertRuleResponse>>().Subject;
+        var single = Ok(await controller.GetRule(id, CancellationToken.None));
+
+        list.Should().ContainSingle().Which.Channels.Should().ContainSingle().Which.HasSecret.Should().BeTrue();
+        single.Channels.Should().ContainSingle().Which.HasSecret.Should().BeTrue();
+        // Unescaped, so a base64 '+' or '/' in the ciphertext matches as written.
+        var raw = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+        foreach (var body in new[] { JsonSerializer.Serialize(list, raw), JsonSerializer.Serialize(single, raw) })
+        {
+            body.Should().NotContain(PlaintextSecret);
+            body.Should().NotContain(ciphertext);
+        }
     }
 
     [Fact]
@@ -188,12 +211,14 @@ public class AlertRulesControllerWebhookSecretTests
 
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(ctx),
+            new AlertRepository(new TestNocturneDbContextFactory(ctx)),
+            MockTenantAccessor.Create(ctx.TenantId).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             encryption,
-            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx.AsFactory())),
+            new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
             Mock.Of<ILogger<AlertRulesController>>());
 

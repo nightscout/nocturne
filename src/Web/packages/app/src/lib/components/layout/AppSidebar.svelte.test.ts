@@ -11,15 +11,10 @@ import { flushIdle, resetIdle } from "$lib/test-stubs/when-idle";
 vi.mock("$lib/utils/when-idle", () => import("$lib/test-stubs/when-idle"));
 
 // The sidebar's own remote calls; none says anything about which nav entries it offers.
-const membership: { tenants: unknown[] } = vi.hoisted(() => ({ tenants: [] }));
-const getMyTenants = vi.hoisted(() => vi.fn());
 const getDnd = vi.hoisted(() => vi.fn());
 const updateDnd = vi.hoisted(() => vi.fn());
 vi.mock("$api/user-preferences.remote", () => ({
   updateLanguagePreference: () => Promise.resolve(),
-}));
-vi.mock("$lib/api/generated/myTenants.generated.remote", () => ({
-  getMyTenants: () => getMyTenants(),
 }));
 vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
   get: () => getDnd(),
@@ -49,22 +44,20 @@ const option = (name: string) => page.getByRole("option", { name, exact: true })
 const MEMBER = { subjectId: "s1", name: "Sam", roles: [], permissions: [] };
 
 const TENANTS = [
-  { id: "t1", slug: "alpha", displayName: "Alpha", isActive: true },
-  { id: "t2", slug: "bravo", displayName: "Bravo", isActive: true },
-  { id: "t3", slug: "charlie", displayName: "Charlie", isActive: true },
+  { slug: "alpha", displayName: "Alpha" },
+  { slug: "bravo", displayName: "Bravo" },
+  { slug: "charlie", displayName: "Charlie" },
 ];
 
 /** The sidebar as a member of every tenant above sees it, viewing one that is not the first. */
 function renderViewingBravo() {
   pageState.data = { effectivePermissions: ["*"] };
-  membership.tenants = TENANTS;
-
   render(Harness, {
     user: MEMBER,
     currentSlug: "bravo",
     baseDomain: "example.com",
+    tenantTargets: TENANTS,
   });
-  flushIdle();
 }
 
 describe("AppSidebar", () => {
@@ -75,11 +68,8 @@ describe("AppSidebar", () => {
     await page.viewport(1280, 900);
     pageState.data = {};
     pageState.url.pathname = "/";
-    membership.tenants = [];
     visited.urls = [];
     resetIdle();
-    getMyTenants.mockReset();
-    getMyTenants.mockImplementation(() => remoteQuery(() => membership.tenants));
     getDnd.mockReset();
     getDnd.mockImplementation(() => remoteQuery(() => ({ dndManualActive: false })));
     updateDnd.mockReset();
@@ -89,12 +79,12 @@ describe("AppSidebar", () => {
   it("keeps help and the sidebar toggle inside the collapsed desktop header", async () => {
     localStorage.setItem("nocturne-help-visibility", "icon");
     render(Harness, { user: MEMBER });
-    await group("Toggle Sidebar").first().click();
+    await group("Toggle sidebar").first().click();
     const help = group("Open page help");
     await expect.element(help).toBeVisible();
     await vi.waitFor(() => {
       const icon = help.element().getBoundingClientRect();
-      const toggle = group("Toggle Sidebar").first().element().getBoundingClientRect();
+      const toggle = group("Toggle sidebar").first().element().getBoundingClientRect();
       const header = help.element().closest('[data-slot="sidebar-header"]')!.getBoundingClientRect();
       expect(icon.left).toBeGreaterThanOrEqual(header.left);
       expect(icon.right).toBeLessThanOrEqual(header.right);
@@ -117,7 +107,7 @@ describe("AppSidebar", () => {
     await expect.element(page.getByText("Underlying report")).toBeVisible();
     expect(document.querySelector('[aria-label="Report filter"]')?.closest("[inert]")).not.toBeNull();
     await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
-    await link("Heart Rate").click();
+    await link("Heart rate").click();
     await expect.element(page.getByRole("heading", { name: "Heart Rate", exact: true })).toBeVisible();
     expect(pageState.url.pathname + pageState.url.search).toBe("/reports/steps?range=week");
     await group("Close page help").click();
@@ -139,7 +129,7 @@ describe("AppSidebar", () => {
     expect(originalSteps.getBoundingClientRect().left).toBe(originalPosition.left);
     expect(originalSteps.getBoundingClientRect().top).toBe(originalPosition.top);
     const docs = page.getByRole("navigation", { name: "Documentation navigation" });
-    await docs.getByRole("link", { name: "Heart Rate", exact: true }).click();
+    await docs.getByRole("link", { name: "Heart rate", exact: true }).click();
     await expect.element(page.getByRole("heading", { name: "Heart Rate", exact: true })).toBeVisible();
     expect(pageState.url.pathname).toBe("/reports/steps");
     navigation.scrollTop = 180;
@@ -215,7 +205,7 @@ describe("AppSidebar", () => {
     await expect.element(group("Reports")).toBeVisible();
   });
 
-  it("names the tenant on screen, not the first one the member belongs to", async () => {
+  it("names the tenant on screen by its name and slug, before the switcher opens", async () => {
     renderViewingBravo();
 
     await expect.element(group("Bravo (bravo)")).toBeVisible();
@@ -234,6 +224,15 @@ describe("AppSidebar", () => {
       .not.toHaveAttribute("aria-selected");
   });
 
+  it("lists every tenant the moment the switcher opens", async () => {
+    renderViewingBravo();
+
+    await group("Bravo (bravo)").click();
+
+    await expect.element(option("Alpha (alpha)")).toBeVisible();
+    await expect.element(option("Charlie (charlie)")).toBeVisible();
+  });
+
   it("goes to the host of the tenant the visitor picks", async () => {
     renderViewingBravo();
 
@@ -242,27 +241,40 @@ describe("AppSidebar", () => {
     expect(visited.urls).toEqual(["https://charlie.example.com/"]);
   });
 
-  it("lists the member's tenants once the page is idle, not on mount", async () => {
+  it("offers the member's own data on the apex host, where no tenant is on screen", async () => {
     pageState.data = { effectivePermissions: ["*"] };
-    membership.tenants = TENANTS;
+
+    render(Harness, { user: MEMBER, baseDomain: "example.com", tenantTargets: TENANTS });
+
+    await group("My data").click();
+
+    await expect.element(option("My data")).toHaveAttribute("aria-selected", "true");
+    await expect.element(option("Alpha (alpha)")).toBeVisible();
+  });
+
+  it("shows a multi-tenant member the switcher and the Tenants item", async () => {
+    renderViewingBravo();
+
+    await expect.element(page.getByText("Viewing data for")).toBeVisible();
+    await expect.element(link("Tenants")).toBeVisible();
+  });
+
+  it("offers a single-tenant member no switcher and no Tenants item", async () => {
+    pageState.data = { effectivePermissions: ["*"] };
 
     render(Harness, {
       user: MEMBER,
-      currentSlug: "bravo",
+      currentSlug: "alpha",
       baseDomain: "example.com",
+      tenantTargets: TENANTS.slice(0, 1),
     });
 
     await expect.element(link("Dashboard")).toBeVisible();
-    expect(getMyTenants).not.toHaveBeenCalled();
-    await expect.element(group("Bravo (bravo)")).not.toBeInTheDocument();
-
-    flushIdle();
-
-    await expect.element(group("Bravo (bravo)")).toBeVisible();
-    expect(getMyTenants).toHaveBeenCalled();
+    await expect.element(page.getByText("Viewing data for")).not.toBeInTheDocument();
+    await expect.element(link("Tenants")).not.toBeInTheDocument();
   });
 
-  it("reads the Do Not Disturb state the first time the alerts group opens", async () => {
+  it("reads the Do not disturb state the first time the alerts group opens", async () => {
     pageState.data = { effectivePermissions: ["*"] };
 
     render(Harness, { user: MEMBER });
@@ -275,7 +287,7 @@ describe("AppSidebar", () => {
     await group("Alerts").click();
 
     await expect
-      .element(page.getByRole("switch", { name: "Toggle Do Not Disturb" }))
+      .element(page.getByRole("switch", { name: "Toggle Do not disturb" }))
       .toBeVisible();
     await vi.waitFor(() => expect(getDnd).toHaveBeenCalledOnce());
 
@@ -285,31 +297,29 @@ describe("AppSidebar", () => {
     expect(getDnd).toHaveBeenCalledOnce();
   });
 
-  it("never lists tenants for a guest or a signed-out viewer", async () => {
+  it("never offers the switcher to a guest or a signed-out viewer", async () => {
     pageState.data = { effectivePermissions: ["*"] };
-    membership.tenants = TENANTS;
 
-    render(Harness, { user: MEMBER, isGuestSession: true, baseDomain: "example.com" });
+    render(Harness, { user: MEMBER, isGuestSession: true, baseDomain: "example.com", tenantTargets: TENANTS });
     render(Harness, { baseDomain: "example.com" });
-    flushIdle();
 
     await expect.element(link("Dashboard").first()).toBeVisible();
-    expect(getMyTenants).not.toHaveBeenCalled();
+    await expect.element(page.getByText("Viewing data for")).not.toBeInTheDocument();
   });
 
-  it("reads the Do Not Disturb state straight away on an alerts page", async () => {
+  it("reads the Do not disturb state straight away on an alerts page", async () => {
     pageState.data = { effectivePermissions: ["*"] };
     pageState.url.pathname = "/alerts/dnd";
 
     render(Harness, { user: MEMBER });
 
     await expect
-      .element(page.getByRole("switch", { name: "Toggle Do Not Disturb" }))
+      .element(page.getByRole("switch", { name: "Toggle Do not disturb" }))
       .toBeVisible();
     await vi.waitFor(() => expect(getDnd).toHaveBeenCalledOnce());
   });
 
-  it("holds the Do Not Disturb switch until the settings it saves back have been read", async () => {
+  it("holds the Do not disturb switch until the settings it saves back have been read", async () => {
     pageState.data = { effectivePermissions: ["*"] };
     let resolveRead: (settings: unknown) => void = () => {};
     getDnd.mockImplementation(() =>
@@ -322,7 +332,7 @@ describe("AppSidebar", () => {
     flushIdle();
     await group("Alerts").click();
 
-    const toggle = page.getByRole("switch", { name: "Toggle Do Not Disturb" });
+    const toggle = page.getByRole("switch", { name: "Toggle Do not disturb" });
     await expect.element(toggle).toBeDisabled();
     await vi.waitFor(() => expect(getDnd).toHaveBeenCalledOnce());
 
@@ -341,8 +351,8 @@ describe("AppSidebar", () => {
     );
   });
 
-  describe("Do Not Disturb indicator", () => {
-    const dndLink = () => page.getByRole("link", { name: "Do Not Disturb" });
+  describe("Do not disturb indicator", () => {
+    const dndLink = () => page.getByRole("link", { name: "Do not disturb" });
     const showsBellOff = () =>
       document.querySelector('a[href$="/alerts/dnd"] svg.lucide-bell-off') !== null;
 
@@ -359,7 +369,7 @@ describe("AppSidebar", () => {
 
       await expect
         .element(dndLink())
-        .toHaveAttribute("title", "Scheduled Do Not Disturb window is on now");
+        .toHaveAttribute("title", "Scheduled Do not disturb window is on now");
       await vi.waitFor(() => expect(showsBellOff()).toBe(true));
     });
 
@@ -368,7 +378,7 @@ describe("AppSidebar", () => {
 
       await expect
         .element(dndLink())
-        .toHaveAttribute("title", "Scheduled Do Not Disturb window configured");
+        .toHaveAttribute("title", "Scheduled Do not disturb window configured");
       expect(showsBellOff()).toBe(false);
     });
 
@@ -376,7 +386,7 @@ describe("AppSidebar", () => {
       await renderWith({ dndManualActive: false, dndScheduleEnabled: false, dndScheduleActiveNow: false });
 
       await expect
-        .element(page.getByRole("switch", { name: "Toggle Do Not Disturb" }))
+        .element(page.getByRole("switch", { name: "Toggle Do not disturb" }))
         .toBeEnabled();
       await expect.element(dndLink()).not.toHaveAttribute("title");
       expect(showsBellOff()).toBe(false);
@@ -386,7 +396,7 @@ describe("AppSidebar", () => {
       await renderWith({ dndManualActive: false, dndScheduleEnabled: true, dndScheduleActiveNow: false });
       await expect
         .element(dndLink())
-        .toHaveAttribute("title", "Scheduled Do Not Disturb window configured");
+        .toHaveAttribute("title", "Scheduled Do not disturb window configured");
 
       getDnd.mockImplementation(() =>
         remoteQuery(() => ({ dndManualActive: false, dndScheduleEnabled: true, dndScheduleActiveNow: true })),
@@ -396,7 +406,8 @@ describe("AppSidebar", () => {
       await vi.waitFor(() => expect(getDnd).toHaveBeenCalledTimes(2));
       await expect
         .element(dndLink())
-        .toHaveAttribute("title", "Scheduled Do Not Disturb window is on now");
+        .toHaveAttribute("title", "Scheduled Do not disturb window is on now");
     });
   });
 });
+

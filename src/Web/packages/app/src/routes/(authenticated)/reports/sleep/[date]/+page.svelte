@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SleepScoreSource } from "$api";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import { getSingleNightByDate } from "$api/generated/sleepReports.generated.remote";
@@ -19,7 +20,7 @@
   const date = $derived(page.params.date ?? "");
 
   const nightResource = contextResource(() => getSingleNightByDate(date), {
-    errorTitle: "Error Loading Night Report",
+    errorTitle: "Error loading night report",
   });
 
   const report = $derived(nightResource.current);
@@ -50,11 +51,10 @@
   const subtitleDetail = $derived([durationLabel, sourceLabel].filter(Boolean).join(" · "));
 
   setReportPrintMeta(() => ({
-    title: "Sleep Night Report",
     period: printedDate && timeSpan ? { label: `${printedDate}, ${timeSpan}` } : undefined,
   }));
 
-  const scoreBadgeLabel = $derived(report?.scoreSource === "Device" ? "Device" : "Estimated");
+  const scoreBadgeLabel = $derived(report?.scoreSource === SleepScoreSource.Device ? "Device" : "Estimated");
 
   const timeAsleepMinutes = $derived.by(() => {
     const b = report?.stageBreakdown;
@@ -90,10 +90,6 @@
   });
 </script>
 
-<svelte:head>
-  <title>{dateDisplay ? `${dateDisplay} - Sleep Report` : "Sleep Report"} - Nocturne</title>
-</svelte:head>
-
 {#if report && session}
   <div class="@container space-y-6">
     <div>
@@ -102,7 +98,7 @@
         class="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
-        Sleep & Overnight
+        Sleep & overnight
       </a>
       <p class="mt-2 text-lg font-semibold print:hidden">{dateDisplay}</p>
       {#if timeSpan}
@@ -136,7 +132,7 @@
     <div class="grid gap-6 @lg:grid-cols-2">
       <Card class="@container">
         <CardHeader>
-          <CardTitle>Overnight Time in Range</CardTitle>
+          <CardTitle>Overnight time in range</CardTitle>
         </CardHeader>
         <CardContent class="space-y-3">
           {#if tirPercentages}

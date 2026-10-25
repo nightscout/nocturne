@@ -9,7 +9,7 @@
     InsulinFormulation,
     CreateBasalInjectionRequest,
   } from "$lib/api";
-  import { InsulinCategory as InsulinCategoryEnum } from "$lib/api";
+  import { InsulinCategory as InsulinCategoryEnum, InsulinRole } from "$lib/api";
   import type { EntryRecord } from "$lib/constants/entry-categories";
   import {
     ENTRY_CATEGORIES,
@@ -193,7 +193,7 @@
     addName = "";
     const isLongActing = addCategory === InsulinCategoryEnum.LongActing
       || addCategory === InsulinCategoryEnum.UltraLongActing;
-    addRole = isLongActing ? "Basal" : "Bolus";
+    addRole = isLongActing ? InsulinRole.Basal : InsulinRole.Bolus;
     addDia = isLongActing ? 24.0 : 4.0;
     addPeak = isLongActing ? 0 : 75;
     addCurve = isLongActing ? "bilinear" : "rapid-acting";
@@ -306,7 +306,7 @@
   let basalEligibleInsulins = $derived.by(() => {
     const ts = editMills;
     return patientInsulins.filter((i) => {
-      if (i.role !== "Basal" && i.role !== "Both") return false;
+      if (i.role !== InsulinRole.Basal && i.role !== InsulinRole.Both) return false;
       const start = i.startDate ? new Date(i.startDate).getTime() : -Infinity;
       const end = i.endDate ? new Date(i.endDate).getTime() : Infinity;
       return ts >= start && ts <= end;
@@ -451,7 +451,7 @@
             <ActiveKindIcon class="mr-1 h-3.5 w-3.5" />
             {activeCategory.name}
           </Badge>
-          {isCreate ? "Add Record" : "Edit Record"}
+          {isCreate ? "Add record" : "Edit record"}
         </Dialog.Title>
         <Dialog.Description>
           {isCreate
@@ -493,7 +493,7 @@
 
         <!-- Date and Time -->
         <div class="space-y-2">
-          <Label for="datetime">Date & Time</Label>
+          <Label for="datetime">Date & time</Label>
           <Input
             id="datetime"
             type="datetime-local"
@@ -575,8 +575,8 @@
             {isLoading
               ? "Saving..."
               : isCreate
-                ? "Create Record"
-                : "Save Changes"}
+                ? "Create record"
+                : "Save changes"}
           </Button>
         </Dialog.Footer>
       </form>
@@ -591,7 +591,7 @@
               if (created?.id) {
                 bolusForm.patientInsulinId = created.id;
                 bolusForm.insulinType = created.name ?? "";
-                if (created.role === "Basal" || created.role === "Both") {
+                if (created.role === InsulinRole.Basal || created.role === InsulinRole.Both) {
                   bolusForm.isBasalInsulin = true;
                 }
               }
@@ -600,7 +600,7 @@
           })}
         >
           <div class="flex items-center justify-between">
-            <h4 class="text-sm font-medium">Add New Insulin</h4>
+            <h4 class="text-sm font-medium">Add new insulin</h4>
           </div>
           <div class="space-y-4">
             <InsulinFormFields
@@ -634,16 +634,16 @@
               size="sm"
               disabled={!addCategory || !addName.trim() || addSaving}
             >
-              {addSaving ? "Adding..." : "Add Insulin"}
+              {addSaving ? "Adding..." : "Add insulin"}
             </Button>
           </div>
         </form>
       {/if}
     {:else}
       <Dialog.Header>
-        <Dialog.Title>No Record Selected</Dialog.Title>
+        <Dialog.Title>No record selected</Dialog.Title>
         <Dialog.Description>
-          Click on a row in the table to view and edit its details.
+          Select a row in the table to view and edit its details.
         </Dialog.Description>
       </Dialog.Header>
     {/if}

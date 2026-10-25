@@ -1,0 +1,173 @@
+---
+title: Settings evidence
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Settings evidence
+
+Settings evidence compares your profile with your data, for three settings:
+
+- **Basal**, in two-hour blocks of the day.
+- **Insulin sensitivity (ISF)**, also known as the correction factor, and
+  **carb ratio**, in four blocks: overnight
+  (midnight to 6 am), morning (6 am to 11 am), midday (11 am to 5 pm) and evening
+  (5 pm to midnight).
+
+The [Loop Analysis overview](/docs/reports/loop-analysis) tells you about the
+filters, net loop correction and how to read the charts. They are the same on
+all five pages.
+
+<Screenshot id="loop-analysis-settings-evidence" />
+
+Each figure shows the number of days or events that it uses, their spread, a
+confidence level, and a list of all the days or events. A hollow dot shows a
+figure with low confidence. To see more, open a block. It shows the concerns,
+how many days or events the report did not use and why, and the days or events
+that it used.
+
+<Callout type="warning" title="Speak to your diabetes care team before you change a setting">
+
+  These figures are observations of your own data. They are not
+  recommendations. A figure can look correct and be incorrect because of
+  something that the data does not show. Speak to your diabetes care team before you
+  change a setting.
+
+</Callout>
+
+## How the report calculates each figure
+
+**Basal.** For each two-hour block on each day, the report estimates the basal
+rate that would keep glucose stable. It starts from your scheduled rate. It
+adds the insulin that the loop added or removed. It uses an ISF to adjust for
+glucose that went up or down across the block. This ISF comes from your data
+when the report has a confident one. If not, it comes from your profile, adjusted by how your data compares with your profile in the other blocks. The
+figure is the average of the days that the report can use.
+
+The figure shows only when 70% of these days or more agree on one direction:
+the loop added insulin, or it removed insulin. A day where the loop changed
+delivery by less than 10% of the schedule agrees with the two directions. The
+figure does not show when glucose increased or decreased by more than
+10 mg/dL (0.6 mmol/L) an hour on average.
+
+**The report counts the insulin that acted in each block.** The report counts
+the insulin that the loop added in the block where the pump delivered it. It
+then adds the insulin that was active at the start of the block. It removes the
+insulin that was still active at the end. So each block counts the insulin that
+acted in it. The blocks are two hours long because the insulin of the loop acts
+over the next one or two hours.
+
+**Insulin sensitivity (ISF).** The report follows each correction bolus for 4 hours. If
+you log carbs 3 to 4 hours after the bolus, the window stops at the carbs. The
+figure is the decrease in glucose divided by the insulin that acted. The page
+shows the median of the corrections in each block. The report uses the reading
+at the end of the window, not the lowest reading. The lowest of many readings is
+usually a little too low.
+
+**Carb ratio.** The report follows each meal from 15 minutes before it (to
+include a bolus before the meal) to 4 hours after it. The figure is the grams
+eaten divided by the insulin that the meal needed. This is the insulin that
+acted, adjusted for the change between the start glucose and the end glucose.
+The page shows the median of the meals in each block.
+
+The ISF and the carb ratio measure insulin above your
+**observed** basal, when the report has a confident basal figure for that time.
+If not, they use your schedule, and the figure gets a concern. If your scheduled
+basal is too low, the loop adds insulin. That added insulin is not for the meal
+or the correction.
+
+## What the report does not use
+
+The report does not use a day or an event if one of these conditions occurs in
+its window. Each day or event counts once, under the first condition that it
+fails. The page shows how many it did not use for each reason.
+
+**Basal blocks:**
+
+- The loop was open, or an override, temporary target, exercise or illness was
+  active.
+- Carbs were logged in the 4 hours before the block or during it, or carbs were
+  on board.
+- Glucose increased as it does after a meal, in the 4 hours before the block or
+  during it.
+- A manual bolus occurred in the 5 hours before the block or during it.
+- A manual temp basal or a suspend occurred.
+- Delivery records cover less than 90% of the block.
+- Basal delivery was not recorded and was different from the schedule.
+- Insulin on board is not known at the start or the end of the block.
+- The insulin on board at the start and the end comes from different sources.
+- There is no reading near the start or the end of the block.
+- The block is outside your filters.
+
+**Corrections:**
+
+- Carbs were logged from 1 hour before to 3 hours after.
+- Another meal, correction or meal-like rise occurred in the window.
+- An override, temporary target, exercise or illness was active.
+- No target range was set.
+- Glucose was not above your target range, or it moved more than
+  15 mg/dL (0.8 mmol/L) in the 15 minutes before.
+- The insulin on board was already more than the bolus, or it was negative by
+  more than the bolus.
+- Glucose went below 70 mg/dL (3.9 mmol/L) in the window.
+- Less than 0.5 U of insulin acted.
+- Readings, delivery records or insulin on board are missing, or the insulin on
+  board at the start and the end comes from different sources.
+- The window is outside your filters, or not fully in the range.
+
+**Meals:**
+
+- Another meal, correction or meal-like rise occurred in the window.
+- An override, temporary target, exercise or illness was active.
+- Glucose at the start was below 70 mg/dL or above 180 mg/dL (3.9 or
+  10.0 mmol/L), or it moved more than 15 mg/dL (0.8 mmol/L) in the 15 minutes
+  before the meal.
+- The meal needed less than 0.5 U of insulin.
+- Readings, delivery records or insulin on board are missing, or the insulin on
+  board at the start and the end comes from different sources.
+- The window is outside your filters, or not fully in the range.
+
+The page shows a figure only when it has 5 days or more (basal) or 3 events or
+more (ISF and carb ratio).
+
+## Confidence
+
+Each figure has **High**, **Moderate** or **Low** confidence. A figure with no
+concerns has High confidence. One concern gives Moderate, and two or more give
+Low. A figure from fewer than 6 days or events always has Low confidence. High
+confidence means that the report found none of these concerns. It does not mean
+that the figure is correct. These are the concerns:
+
+- Fewer than 10 days or events give the figure.
+- The days or events are very different from each other: the middle half of
+  the values is wider than half of the figure.
+- The report used the ISF of your profile, not an ISF from your data, to convert
+  changes in glucose. The converted change was 15% or more of the figure.
+- The report measured insulin against a basal that it did not check for this
+  time of day.
+- Much of the insulin was still active at the end of the window.
+- More than half of the events overlapped other meals, boluses or rises.
+- Fewer than one day in five has carb entries. So the fasting time comes from
+  glucose only.
+- Glucose usually still changed at the end of the window.
+- The decrease in insulin on board from the start to the end of the block was
+  15% or more of the basal figure.
+- 15% or more of the corrections went below 70 mg/dL (3.9 mmol/L), so the
+  report did not use them. So the ISF can show less effect for each unit than
+  the true value.
+
+## Why figures for more insulin need more evidence
+
+Some figures point to **more insulin** than your profile by 10% or more: a
+higher basal, a lower ISF, or a lower carb ratio. The 10% compares
+the rounded figure that the page shows with your profile. If 15% or more of such
+a figure comes from another estimate, its confidence decreases by one level.
+Other estimates are the ISF that converts glucose changes, the basal that the
+report measures insulin above, and the insulin on board at the start and the
+end of the window. Many corrections that went low have the same effect on an
+ISF. The page shows this as a concern. An error in this direction can cause a low.
+So the report needs stronger evidence for it.
+

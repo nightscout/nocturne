@@ -140,35 +140,6 @@ public class SummaryServiceTests
     }
 
     [Fact]
-    public async Task GetSummaryAsync_EndedSwitchSnapshotIsNotTheDefault()
-    {
-        var rows = NightAndDay(nightFirst: true);
-        rows.Insert(
-            0,
-            StoredRow($"Night{TherapySettings.ProfileSwitchStoreMarker}1", false, 3, 0.2, Minutes(0))
-        );
-
-        var summary = await SummaryJsonAsync(rows, null);
-
-        summary["profile"]!["carbratio"]![0]!["value"]!.GetValue<double>().Should().Be(12);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("Night")]
-    public async Task GetSummaryAsync_ResolvesTheEntryPastMoreThanTenNewerSwitchSnapshots(string? switchedProfile)
-    {
-        var rows = NightAndDay(nightFirst: true);
-        for (var i = 0; i < 12; i++)
-            rows.Insert(0, StoredRow($"Night{TherapySettings.ProfileSwitchStoreMarker}{i}", false, 3, 0.2, Minutes(i)));
-
-        var summary = await SummaryJsonAsync(rows, switchedProfile);
-
-        summary["profile"]!["carbratio"]![0]!["value"]!.GetValue<double>()
-            .Should().Be(switchedProfile is null ? 12 : 8);
-    }
-
-    [Fact]
     public async Task GetSummaryAsync_ProfileStartingInTheFutureStillResolves()
     {
         var rows = new List<TherapySettings> { StoredRow("Day", true, 12, 0.9, Minutes(5)) };
@@ -264,7 +235,7 @@ public class SummaryServiceTests
         _mockTherapySettings
             .Setup(r => r.GetDocumentRowsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string documentId, CancellationToken _) => rows
-                .Where(r => TherapySettings.DocumentIdOf(r) == documentId && !TherapySettings.IsProfileSwitchSnapshot(r))
+                .Where(r => TherapySettings.DocumentIdOf(r) == documentId)
                 .ToList());
 
         foreach (var row in rows)

@@ -188,6 +188,20 @@ public class ProfileSnapshotServiceTests
         result.Segments.Should().ContainSingle().Which.Dia.Should().Be(5.0);
     }
 
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1.0)]
+    public async Task NoData_IgnoresAPrimaryBolusInsulinDiaThatIsNotPositive(double insulinDia)
+    {
+        _therapySettings.Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _insulins.Setup(r => r.GetPrimaryBolusInsulinAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PatientInsulin { Dia = insulinDia });
+
+        var result = await _sut.BuildAsync(null);
+
+        result.Segments.Should().ContainSingle().Which.Dia.Should().Be(3.0);
+    }
+
     [Fact]
     public async Task ResolverFault_PropagatesAndDoesNotEmitDefaults()
     {

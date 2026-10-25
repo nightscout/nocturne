@@ -52,7 +52,7 @@
 
   // State
   let config = $state<InternalConfig>({ rows: [], settings: {} });
-  let clockName = $state("My Clock Face");
+  let clockName = $state("My clock face");
   const save = useToastSubmission("Failed to save clock face");
   let loading = $state(true);
   let selectedElementId = $state<string | null>(null);
@@ -339,7 +339,7 @@
       toast.error(remoteErrorMessage(err, "Failed to reset clock face"));
       return;
     }
-    clockName = "My Clock Face";
+    clockName = "My clock face";
     selectedElementId = null;
     history.clear();
   }
@@ -356,7 +356,7 @@
     loading = true;
     try {
       const clockFace = await getClockFaceById(id).run();
-      clockName = clockFace.name ?? "My Clock Face";
+      clockName = clockFace.name ?? "My clock face";
       if (clockFace.config) {
         config = initializeInternalConfig(clockFace.config);
       }
@@ -398,7 +398,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <svelte:head>
-  <title>Clock Builder - Nocturne</title>
+  <title>Clock builder - Nocturne</title>
 </svelte:head>
 
 {#snippet chartElementPreview(element: InternalElement)}
@@ -559,7 +559,7 @@
                   : ''}"
                 onclick={() => (selectedElementId = backgroundChart._id)}
               >
-                Background Chart
+                Background chart
               </button>
               {#if selectedElementId === backgroundChart._id}
                 {@render removeButton(bgChartRowIndex, backgroundChart._id)}

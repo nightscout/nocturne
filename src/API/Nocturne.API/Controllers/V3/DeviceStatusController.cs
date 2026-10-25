@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -78,23 +79,24 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         {
             var parameters = ParseV3QueryParameters();
 
-            // Convert V3 filter criteria (field$op=value) to MongoDB-style JSON query
-            var findQuery =
-                ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
-                ?? ConvertV3FilterToV1Find(parameters.Filter);
+            var find = DeviceStatusProjectionService
+                .ParseFind(
+                    ConvertFilterCriteriaToFindQuery(parameters.FilterCriteria)
+                        ?? ConvertV3FilterToV1Find(parameters.Filter))
+                .WithFieldRenamed("identifier", "_id");
 
             var deviceStatusList = (
-                await _projection.GetAsync(
+                await _projection.GetMatchingAsync(
+                    find,
                     parameters.Limit,
                     parameters.Offset,
-                    findQuery,
                     cancellationToken,
                     parameters.Sort.Descending,
                     ReadSortFieldOf(parameters.Sort)
                 )
             ).ToList();
 
-            var mappedData = deviceStatusList.Select(MapToV3Dto).ToList();
+            var mappedData = deviceStatusList.Select(ToDocument).ToList();
 
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(deviceStatusList.Cast<object>());
@@ -104,8 +106,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 return StatusCode(304);
             }
 
-            // Create V3 response. Pass the model-derived timestamp explicitly: the mapped
-            // DTOs are dictionaries the timestamp reflection can't read, and the emitted
+            // The documents are JSON nodes the timestamp reflection can't read, and the emitted
             // ETag must match the one the 304 check above compares against.
             var response = CreateV3CollectionResponse(
                 mappedData,
@@ -158,7 +159,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             return CreateV3ErrorResponse(404, "Device status not found");
         }
 
-        return CreateV3SuccessResponse(MapToV3Dto(result));
+        return CreateV3SuccessResponse(ToDocument(result));
     }
 
     /// <summary>
@@ -281,7 +282,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                 return CreatedAtAction(
                     nameof(GetDeviceStatusById),
                     new { id = projectedResults.First().Id },
-                    new V3Envelope<object> { Result = projectedResults.Select(MapToV3Dto).ToList() }
+                    new V3Envelope<object> { Result = projectedResults.Select(ToDocument).ToList() }
                 );
             }
 
@@ -380,7 +381,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             new Dictionary<string, object>
             {
                 ["status"] = 200,
-                ["result"] = MapToV3Dto(updated),
+                ["result"] = ToDocument(updated),
             }
         );
     }
@@ -474,7 +475,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             SetHistoryCursorHeaders(deviceStatuses.Max(d => d.SrvModified ?? d.Mills));
         }
 
-        var mappedData = deviceStatuses.Select(MapToV3Dto);
+        var mappedData = deviceStatuses.Select(ToDocument);
         return CreateV3SuccessResponse(mappedData);
     }
 
@@ -535,33 +536,5 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         }
     }
 
-    internal static object MapToV3Dto(DeviceStatus status)
-    {
-        // Build dictionary with only non-null optional fields to match Nightscout behavior
-        var dto = new Dictionary<string, object?>
-        {
-            ["device"] = status.Device,
-            ["created_at"] = status.CreatedAt,
-            ["uploaderBattery"] = status.Uploader?.Battery,
-            ["utcOffset"] = status.UtcOffset,
-            // 24-hex ObjectId so AAPS's isObjectId() passes; resolved back via GetByIdAsync.
-            ["identifier"] = MongoObjectId.Coerce(status.Id),
-            ["srvModified"] = status.SrvModified,
-            ["srvCreated"] = status.SrvCreated,
-        };
-
-        // Only include optional complex fields if they have values (Nightscout omits nulls)
-        if (status.OpenAps != null)
-            dto["openaps"] = status.OpenAps;
-        if (status.Pump != null)
-            dto["pump"] = status.Pump;
-        if (status.Uploader != null)
-            dto["uploader"] = status.Uploader;
-        if (status.Loop != null)
-            dto["loop"] = status.Loop;
-        if (status.IsValid != null)
-            dto["isValid"] = status.IsValid;
-
-        return dto;
-    }
+    internal static JsonObject ToDocument(DeviceStatus status) => ToV3Document(status, status.Id);
 }

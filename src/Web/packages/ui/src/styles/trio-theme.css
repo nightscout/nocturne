@@ -124,6 +124,7 @@
 }
 
 /* Dark mode - applied when both .trio-theme and .dark are on document */
+@media not print {
 :root.trio-theme.dark,
 .trio-theme .dark {
   /* Prediction bias: a prediction that ran high or low, as the Loop Analysis heatmap tints it. */
@@ -173,4 +174,5 @@
   --percentile-outer: oklch(0.28 0.05 250);
   --percentile-inner: oklch(0.38 0.10 250);
   --percentile-median: oklch(0.75 0.15 250);
+}
 }

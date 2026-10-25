@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
 using Npgsql;
 using Xunit;
@@ -319,5 +320,64 @@ public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task A_history_clamped_bot_marks_the_deliveries_of_an_open_alert_however_old()
+    {
+        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
+        var (excursionId, openInstanceId) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
+
+        var threeDaysAgo = DateTime.UtcNow.AddDays(-3);
+        var delivered = Guid.CreateVersion7();
+        var failed = Guid.CreateVersion7();
+        var ofAnAlertResolvedTwoDaysAgo = Guid.CreateVersion7();
+        await using (var db = Fixture.CreateDbContext(_tenantId))
+        {
+            var resolved = new AlertInstanceEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = _tenantId,
+                AlertExcursionId = excursionId,
+                TriggeredAt = DateTime.UtcNow.AddDays(-4),
+                ResolvedAt = DateTime.UtcNow.AddDays(-2),
+                Status = "resolved",
+            };
+            db.AlertInstances.Add(resolved);
+            AlertDeliveryEntity Pending(Guid id, Guid instanceId) => new()
+            {
+                Id = id,
+                TenantId = _tenantId,
+                AlertInstanceId = instanceId,
+                ChannelType = ChannelType.DiscordDm,
+                Destination = "discord-user",
+                Status = "pending",
+                CreatedAt = threeDaysAgo,
+            };
+            db.AlertDeliveries.AddRange(
+                Pending(delivered, openInstanceId),
+                Pending(failed, openInstanceId),
+                Pending(ofAnAlertResolvedTwoDaysAgo, resolved.Id));
+            await db.SaveChangesAsync();
+        }
+
+        using var bot = await CreateHistoryClampedClientAsync("Clamped Bot", _tenantId);
+        (await bot.PostAsJsonAsync($"/api/v4/alerts/deliveries/{delivered}/delivered", new { platformMessageId = "msg-1" }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await bot.PostAsJsonAsync($"/api/v4/alerts/deliveries/{failed}/failed", new { error = "rate limited" }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await bot.PostAsJsonAsync($"/api/v4/alerts/deliveries/{ofAnAlertResolvedTwoDaysAgo}/delivered", new { platformMessageId = "msg-2" }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        await using var check = Fixture.CreateDbContext(_tenantId);
+        var rows = await check.AlertDeliveries.AsNoTracking()
+            .Where(d => d.Id == delivered || d.Id == failed || d.Id == ofAnAlertResolvedTwoDaysAgo)
+            .ToDictionaryAsync(d => d.Id);
+        rows[delivered].Status.Should().Be("delivered");
+        rows[delivered].PlatformMessageId.Should().Be("msg-1");
+        rows[failed].Status.Should().Be("failed");
+        rows[failed].RetryCount.Should().Be(1);
+        rows[ofAnAlertResolvedTwoDaysAgo].Status.Should().Be("pending",
+            "a delivery of an alert resolved before the window is outside what a clamped caller reads");
     }
 }

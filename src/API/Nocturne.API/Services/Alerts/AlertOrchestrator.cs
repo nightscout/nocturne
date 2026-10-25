@@ -3,7 +3,6 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
-using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Alerts.Native;
 
@@ -19,8 +18,7 @@ namespace Nocturne.API.Services.Alerts;
 /// (root condition truth, excursion transition, auto-resolve) and applies the side effects:
 /// instance creation, engine-level DND suppression, delivery dispatch to the rule's flat
 /// channel list, info auto-ack, and close handling. The engine owns evaluation-state
-/// persistence (sustained timers, tracker state, excursion rows); which engine runs
-/// (managed C# evaluators, Rust over FFI, or shadow) is selected by <c>Alerts:Engine</c>.
+/// persistence (sustained timers, tracker state, excursion rows).
 /// Errors from individual rule evaluations are caught and logged without aborting the rest of
 /// the evaluation pass. A rule whose stored condition tree cannot be evaluated fails the same way
 /// on every pass, so that is logged once per version of the condition. Delayed escalation is a
@@ -61,6 +59,11 @@ internal sealed class AlertOrchestrator(
         var tenantId = tenantAccessor.TenantId;
         if (tenantId == Guid.Empty || rules.Count == 0) return;
 
+        // Before the filter below, which drops a rule whose alert_state names no enabled rule:
+        // a malformed alert_state names none, and its rule is reported here or nowhere.
+        foreach (var rule in rules)
+            ReportConditionIssues(rule, tenantId);
+
         // Drop chained rules whose alert_state references resolve to disabled/deleted parents.
         var evaluable = RuleReferenceResolver.FilterEvaluable(rules, logger, enabledRuleIds);
         if (evaluable.Count == 0) return;
@@ -71,20 +74,13 @@ internal sealed class AlertOrchestrator(
 
         foreach (var rule in evaluable)
         {
-            ReportConditionIssues(rule, tenantId);
             try
             {
                 await EvaluateRuleAsync(rule, enriched, tenantId, ct);
             }
-            catch (Exception ex) when (ex is ConditionTreeFaultException
-                                       or RustAlertEngineException { IsConditionRejection: true })
+            catch (RustAlertEngineException ex) when (ex.IsConditionRejection)
             {
-                if (conditionLog.FirstFor(rule.Id, rule.ConditionType, rule.ConditionParams))
-                {
-                    logger.LogWarning(ex,
-                        "Condition tree of alert rule {AlertRuleId} cannot be evaluated; the rule is skipped until it is edited",
-                        rule.Id);
-                }
+                // The rule is skipped; ReportConditionIssues has logged why.
             }
             catch (Exception ex)
             {
@@ -95,22 +91,18 @@ internal sealed class AlertOrchestrator(
     }
 
     /// <summary>
-    /// Logs, once per version of a rule's condition, what a save of it would reject. A stored
-    /// rule keeps evaluating such a tree, where an unknown kind reads false and a missing operand
-    /// reads as its default, so the rule can go on never firing with nothing else to say so. A
-    /// tree that fails evaluation is left to the per-rule catch, which reports it. A failure of
-    /// the check itself is logged and never keeps the rule from evaluating.
+    /// Logs, once per version of a rule's condition, every problem that keeps one of its trees
+    /// from being evaluated (docs/alerts/engine-semantics.md §1.4): a body skips the rule, an
+    /// auto-resolve tree never resolves, and smart-snooze conditions clear the snooze. A failure
+    /// of the check itself is logged and never keeps the rule from evaluating.
     /// </summary>
     private void ReportConditionIssues(AlertRuleSnapshot rule, Guid tenantId)
     {
         IReadOnlyList<RustValidationIssue> issues;
         try
         {
-            if (!conditionLog.FirstIssueCheckFor(rule.Id, rule.ConditionType, rule.ConditionParams)
-                || ConditionTreeFaults.InRule(rule.ConditionType, rule.ConditionParams) is not null)
-            {
+            if (!conditionLog.FirstIssueCheckFor(rule.Id, rule.ConditionType, rule.ConditionParams))
                 return;
-            }
 
             issues = conditionValidator.Validate(
                 rule.ConditionType, rule.ConditionParams, rule.AutoResolveEnabled,
@@ -126,7 +118,7 @@ internal sealed class AlertOrchestrator(
             return;
 
         logger.LogWarning(
-            "Alert rule {AlertRuleId} for tenant {TenantId} evaluates conditions a save would reject, so it may not fire as written: {Issues}",
+            "Alert rule {AlertRuleId} for tenant {TenantId} has conditions that cannot be evaluated until it is edited: {Issues}",
             rule.Id,
             tenantId,
             string.Join("; ", issues.Select(i => $"{i.Scope} {i.Path}: {i.Reason}{(i.Field is null ? "" : $" ({i.Field})")}")));

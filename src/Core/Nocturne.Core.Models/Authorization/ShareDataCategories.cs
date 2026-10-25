@@ -49,6 +49,17 @@ public static class ShareDataCategories
                 "uploader_snapshots",
                 "aps_snapshots",
             },
+            [Scope.AlertsRead] = new[]
+            {
+                // What /alerts/active reads: the open excursion, its instances, and the rule for its
+                // name and severity. Rule channels stay behind DenyNoAccountViewer in the API, and
+                // mutes, deliveries, DND windows and sounds stay hidden.
+                "alert_excursions",
+                "alert_instances",
+                "alert_rules",
+                // A share records and reads back its own "seen"; the API filters it to the caller.
+                "alert_excursion_receipts",
+            },
             [Scope.HeartRateRead] = new[] { "heart_rates" },
             [Scope.StepCountRead] = new[] { "step_counts" },
             [Scope.FoodRead] = new[]
@@ -89,7 +100,22 @@ public static class ShareDataCategories
             ["heart_rates"] = "timestamp",
             ["step_counts"] = "timestamp",
             ["foods"] = null,
+            ["alert_rules"] = null,
+            ["alert_excursion_receipts"] = "seen_at",
             ["connector_food_entries"] = "consumed_at",
+        };
+
+    /// <summary>
+    /// End column per governed table of spans, clamped by overlap like
+    /// <see cref="HiddenSpanEndColumns"/> rather than by a recency column: an alert still open stays in
+    /// front of a share without full history, and of a clamped member, however long ago it started.
+    /// A governed table is in exactly one of this and <see cref="RecencyColumns"/>.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> GovernedSpanEndColumns =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["alert_excursions"] = "ended_at",
+            ["alert_instances"] = "resolved_at",
         };
 
     /// <summary>
@@ -97,7 +123,7 @@ public static class ShareDataCategories
     /// rows a history-clamped member still reads only the last 24 hours of. <c>notes</c> holds the
     /// Note and Announcement treatments the legacy treatment reads serve;
     /// <c>compression_low_suggestions</c> holds glucose-derived regions (nadir, drop rate) of past
-    /// nights.
+    /// nights. A <c>discrepancy_details</c> row is recorded with its analysis, so the two clamp together.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> HiddenRecencyColumns =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -108,6 +134,8 @@ public static class ShareDataCategories
             ["lab_hba1c_results"] = "measured_at",
             ["system_events"] = "mills",
             ["device_clock_observations"] = "observed_at",
+            ["discrepancy_analyses"] = "analysis_timestamp",
+            ["discrepancy_details"] = "recorded_at",
         };
 
     /// <summary>
@@ -127,8 +155,8 @@ public static class ShareDataCategories
     /// legacy treatment reads serve.
     /// </summary>
     /// <remarks>
-    /// The same rule keeps an open alert (<c>alert_instances</c> unresolved, <c>alert_excursions</c>
-    /// not ended), an active tracker (<c>tracker_instances</c> not completed) and a notification still
+    /// The same rule, with <see cref="GovernedSpanEndColumns"/> for the alert tables, keeps an open
+    /// alert, an active tracker (<c>tracker_instances</c> not completed) and a notification still
     /// in its recipient's inbox (<c>in_app_notifications</c> not archived, within
     /// <see cref="HiddenOpenSpanBounds"/>) in front of a clamped member, and keeps a sleep session that
     /// ended inside the window whole however early it began. A row that never ends and has no bound
@@ -142,8 +170,6 @@ public static class ShareDataCategories
             ["state_spans"] = "end_timestamp",
             ["profile_activations"] = "end_timestamp",
             ["sleep_sessions"] = "end_time",
-            ["alert_excursions"] = "ended_at",
-            ["alert_instances"] = "resolved_at",
             ["tracker_instances"] = "completed_at",
             ["in_app_notifications"] = "archived_at",
         };
@@ -168,7 +194,9 @@ public static class ShareDataCategories
     /// while the clamp shows the parent: by the parent's column in <see cref="RecencyColumns"/> or
     /// <see cref="HiddenSpanEndColumns"/>. A <c>treatment_foods</c> line is part of its carb intake and
     /// follows an edit to the intake's time with no copy to keep in step; the stages and samples of a
-    /// sleep session stay with the session, so a night shown is shown whole.
+    /// sleep session stay with the session, so a night shown is shown whole. A mute or a delivery of an
+    /// open alert stays visible however old it is: clamped by its own time, a mute would lapse and the
+    /// member would be paged again, and a pending delivery would drop out of the bot's queue.
     /// </summary>
     /// <remarks>
     /// The policy tests the clamp before the <c>EXISTS</c>, so only a clamped reader runs it, as one
@@ -181,6 +209,8 @@ public static class ShareDataCategories
             ["treatment_foods"] = new("carb_intakes", "carb_intake_id"),
             ["sleep_stages"] = new("sleep_sessions", "sleep_session_id"),
             ["sleep_biometric_samples"] = new("sleep_sessions", "sleep_session_id"),
+            ["alert_excursion_mutes"] = new("alert_excursions", "alert_excursion_id"),
+            ["alert_deliveries"] = new("alert_instances", "alert_instance_id"),
         };
 
     private static readonly IReadOnlyDictionary<string, string> TableToScope = BuildTableToScope();
@@ -210,7 +240,9 @@ public static class ShareDataCategories
     /// Returns the end column a span table is clamped by overlap on, or <c>null</c> when the table is
     /// not a clamped span table. See <see cref="HiddenSpanEndColumns"/>.
     /// </summary>
-    public static string? SpanEndColumnFor(string table) => HiddenSpanEndColumns.GetValueOrDefault(table);
+    public static string? SpanEndColumnFor(string table) =>
+        GovernedSpanEndColumns.TryGetValue(table, out var column) ? column
+        : HiddenSpanEndColumns.GetValueOrDefault(table);
 
     /// <summary>
     /// Returns the parent a table is clamped through, or <c>null</c> when it is not. See
@@ -261,14 +293,24 @@ public static class ShareDataCategories
                     || HiddenParentRecency.ContainsKey(table))
                 {
                     throw new InvalidOperationException(
-                        $"Governed table '{table}' is also in {nameof(HiddenRecencyColumns)}, {nameof(HiddenSpanEndColumns)} or {nameof(HiddenParentRecency)}; declare it in {nameof(RecencyColumns)} only.");
+                        $"Governed table '{table}' is also in {nameof(HiddenRecencyColumns)}, {nameof(HiddenSpanEndColumns)} or {nameof(HiddenParentRecency)}; declare it in {nameof(RecencyColumns)} or {nameof(GovernedSpanEndColumns)} only.");
                 }
-                if (!RecencyColumns.ContainsKey(table))
+                if (RecencyColumns.ContainsKey(table) == GovernedSpanEndColumns.ContainsKey(table))
                 {
                     throw new InvalidOperationException(
-                        $"Governed table '{table}' has no entry in {nameof(RecencyColumns)}. " +
-                        "Declare its recency column, or an explicit null to exempt it from the share 24-hour clamp.");
+                        $"Governed table '{table}' needs exactly one entry in {nameof(RecencyColumns)} or " +
+                        $"{nameof(GovernedSpanEndColumns)}. Declare its recency column, its span end column, " +
+                        "or an explicit null recency to exempt it from the share 24-hour clamp.");
                 }
+            }
+        }
+
+        foreach (var table in GovernedSpanEndColumns.Keys)
+        {
+            if (!map.ContainsKey(table))
+            {
+                throw new InvalidOperationException(
+                    $"'{table}' is in {nameof(GovernedSpanEndColumns)} but no scope governs it; use {nameof(HiddenSpanEndColumns)}.");
             }
         }
 
@@ -280,7 +322,7 @@ public static class ShareDataCategories
                     $"Table '{child}' is clamped through its parent, so it cannot also have a clamp column of its own.");
             }
             var parentHasTimestamp = RecencyColumns.GetValueOrDefault(parent.Table) is not null
-                || HiddenSpanEndColumns.ContainsKey(parent.Table);
+                || SpanEndColumnFor(parent.Table) is not null;
             if (!parentHasTimestamp || UnixMillisRecencyTables.Contains(parent.Table))
             {
                 throw new InvalidOperationException(

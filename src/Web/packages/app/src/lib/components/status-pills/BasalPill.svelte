@@ -21,14 +21,14 @@
 
     // Current basal info
     items.push({
-      label: "Current Basal",
+      label: "Current basal",
       value: data.display,
     });
 
     // Active profile
     if (data.activeProfile) {
       items.push({
-        label: "Active Profile",
+        label: "Active profile",
         value: data.activeProfile,
       });
     }
@@ -45,30 +45,30 @@
             : "";
 
       items.push({
-        label: "Active Temp Basal",
+        label: "Active temp basal",
         value: tempText,
       });
 
       if (data.tempBasal.startTime) {
         items.push({
-          label: "Active Temp Basal Start",
+          label: "Active temp basal start",
           value: formatMediumDateTime(data.tempBasal.startTime),
         });
       }
 
       items.push({
-        label: "Active Temp Basal Duration",
+        label: "Active temp basal duration",
         value: `${data.tempBasal.duration} mins`,
       });
 
       items.push({
-        label: "Active Temp Basal Remaining",
+        label: "Active temp basal remaining",
         value: `${data.tempBasal.remaining} mins`,
       });
 
       // Show scheduled basal for reference
       items.push({
-        label: "Basal Profile Value",
+        label: "Basal profile value",
         value: `${data.scheduledBasal.toFixed(3)} U`,
       });
     }

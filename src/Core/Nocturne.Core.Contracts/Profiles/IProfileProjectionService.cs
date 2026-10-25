@@ -38,7 +38,7 @@ public interface IProfileProjectionService
     /// <summary>
     /// A page of the stored profile documents, each carrying every one of its stores: newest first
     /// when <paramref name="descending"/> is <c>true</c>, otherwise oldest first, the page cut from
-    /// that order. Profile-switch snapshots are not documents and are left out.
+    /// that order.
     /// </summary>
     /// <param name="count">Maximum number of documents to return.</param>
     /// <param name="skip">Number of documents to skip.</param>

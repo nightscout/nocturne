@@ -4,7 +4,7 @@
    * drawn as full-height confidence-coloured annotation bands and hypo nadirs marked. Used both as
    * a compact strip row and, in `detailed` mode, as the expanded zoom view (points + hour axis).
    */
-  import { Chart, Svg, Spline } from "layerchart";
+  import { Chart, Svg, Circle, Line, Rect, Spline } from "layerchart";
   import { scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3-shape";
   import { ClusterConfidence } from "$lib/api";
@@ -61,20 +61,20 @@
         {@const texture = confidenceKey(band.cluster.confidence)}
         {@const xPx = context.xScale(band.xStart)}
         <!-- Printed textures go opaque; the print opacity keeps the trace legible over a high band. -->
-        <rect
+        <Rect
           x={xPx}
           y={0}
           width={Math.max(1, context.xScale(band.xEnd) - xPx)}
           height={context.height}
           fill="var(--{texture})"
-          fill-opacity={bandOpacity(band.cluster.confidence)}
+          fillOpacity={bandOpacity(band.cluster.confidence)}
           class="{patternClass(texture)} print:opacity-60"
         />
       {/each}
 
       <!-- Low/high reference lines -->
       {#each [thresholds.low, thresholds.high] as level (level)}
-        <line
+        <Line
           x1={0}
           x2={context.width}
           y1={context.yScale(level)}
@@ -91,7 +91,7 @@
 
       {#if detailed}
         {#each bucket.points as p, i (i)}
-          <circle cx={context.xScale(p.x)} cy={context.yScale(p.y)} r={1.4} class="fill-foreground/60" />
+          <Circle cx={context.xScale(p.x)} cy={context.yScale(p.y)} r={1.4} class="fill-foreground/60" />
         {/each}
         {#each hourTicks as tick (tick)}
           <text

@@ -46,7 +46,7 @@
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Wrench class="h-5 w-5" />
-        Data Maintenance
+        Data maintenance
       </CardTitle>
       <CardDescription>
         Administrative tools for managing your data
@@ -64,7 +64,7 @@
             <Link2 class="h-5 w-5 text-primary" />
           </div>
           <div class="flex-1">
-            <h4 class="font-medium">Deduplicate Records</h4>
+            <h4 class="font-medium">Deduplicate records</h4>
             <p class="text-sm text-muted-foreground mt-1">
               Link records from multiple data sources that represent the same
               underlying event. This improves data quality when the same glucose
@@ -78,10 +78,10 @@
             >
               {#if isDeduplicating}
                 <Loader2 class="h-4 w-4 animate-spin" />
-                Deduplication Running...
+                Deduplication running...
               {:else}
                 <Link2 class="h-4 w-4" />
-                Run Deduplication
+                Run deduplication
               {/if}
             </Button>
           </div>
@@ -96,7 +96,7 @@
             <Sparkles class="h-5 w-5 text-primary" />
           </div>
           <div class="flex-1">
-            <h4 class="font-medium">Remove Demo Data</h4>
+            <h4 class="font-medium">Remove demo data</h4>
             <p class="text-sm text-muted-foreground mt-1">
               Delete the sample readings and treatments that were generated to
               show you around. Your own data is not affected.
@@ -108,7 +108,7 @@
               onclick={() => (showDemoDataDialog = true)}
             >
               <Sparkles class="h-4 w-4" />
-              Remove Demo Data
+              Remove demo data
             </Button>
           </div>
         </div>
@@ -125,7 +125,7 @@
             <RefreshCw class="h-5 w-5 text-primary" />
           </div>
           <div class="min-w-0 flex-1">
-            <h4 class="font-medium">Reset Connector Cursors</h4>
+            <h4 class="font-medium">Reset connector cursors</h4>
             <p class="text-sm text-muted-foreground mt-1">
               Re-sync a connector from a chosen point.
             </p>

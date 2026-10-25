@@ -2,6 +2,7 @@
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import Clock from "@lucide/svelte/icons/clock";
   import { Button } from "$lib/components/ui/button";
+  import { AlarmTriggerType } from "$lib/api";
   import { bg } from "$lib/utils/formatting";
   import type { AlarmProfileConfiguration } from "$lib/types/alarm-profile";
 
@@ -50,15 +51,15 @@
       </div>
 
       <div class="text-6xl font-black tracking-tighter">
-        {profile.alarmType === "StaleData"
+        {profile.alarmType === AlarmTriggerType.StaleData
           ? `${profile.threshold}m`
           : bg(profile.threshold)}
       </div>
 
       <div class="text-lg font-medium opacity-80">
-        {profile.alarmType === "StaleData"
-          ? "No Data Received"
-          : "Glucose Alert"}
+        {profile.alarmType === AlarmTriggerType.StaleData
+          ? "No data received"
+          : "Glucose alert"}
       </div>
 
       {#if showEmergencyButton}
@@ -69,7 +70,7 @@
             onclick={onEmergencyClick}
           >
             <AlertCircle />
-            Emergency Contacts
+            Emergency contacts
           </Button>
         </div>
       {/if}
@@ -100,7 +101,7 @@
       size="xl"
       onclick={onDismiss}
     >
-      Dismiss Alarm
+      Dismiss alarm
     </Button>
   </div>
 </div>

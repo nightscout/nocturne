@@ -68,6 +68,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Complete services overview including active data sources, connectors, and uploader apps</returns>
     [HttpGet]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ServicesOverview), 200)]
     [ProducesResponseType(500)]
@@ -104,6 +105,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of active data sources with their status</returns>
     [HttpGet("data-sources")]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<DataSourceInfo>), 200)]
     [ProducesResponseType(500)]
@@ -132,6 +134,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Data source information if found</returns>
     [HttpGet("data-sources/{id}")]
+    [RequireScope(Scope.DevicesRead)]
     [RemoteQuery]
     [ProducesResponseType(typeof(DataSourceInfo), 200)]
     [ProducesResponseType(404)]
@@ -164,6 +167,7 @@ public class ServicesController : ControllerBase
     /// </summary>
     /// <returns>List of available connectors</returns>
     [HttpGet("connectors")]
+    [RequireScope(Scope.TenantSettings)]
     [RemoteQuery]
     [ProducesResponseType(typeof(List<AvailableConnector>), 200)]
     public async Task<ActionResult<List<AvailableConnector>>> GetAvailableConnectors(
@@ -362,6 +366,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Data summary with counts by type</returns>
     [HttpGet("connectors/{id}/data-summary")]
+    [RequireScope(Scope.TenantSettings)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorDataSummary), 200)]
     [ProducesResponseType(500)]
@@ -404,6 +409,7 @@ public class ServicesController : ControllerBase
     [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "GetStatus", "GetConnectorDataSummary"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(404)]
+    [ProducesResponseType(409)]
     [ProducesResponseType(500)]
     public async Task<ActionResult<DataSourceDeleteResult>> DeleteConnectorData(
         string id,
@@ -422,6 +428,13 @@ public class ServicesController : ControllerBase
                 if (result.ErrorCode == DataSourceDeleteError.NotFound)
                 {
                     return Problem(detail: $"Connector not found: {id}", statusCode: 404, title: "Not Found");
+                }
+                if (result.ErrorCode == DataSourceDeleteError.SyncRunning)
+                {
+                    return Problem(
+                        detail: "A sync is running for this connector. Wait for it to end, then try again.",
+                        statusCode: 409,
+                        title: "Conflict");
                 }
                 return StatusCode(500, result);
             }
@@ -552,6 +565,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Complete sync status including timestamps for entries, treatments, and connector state</returns>
     [HttpGet("connectors/{id}/sync-status")]
+    [RequireScope(Scope.TenantSettings)]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorSyncStatus), 200)]
     [ProducesResponseType(400)]

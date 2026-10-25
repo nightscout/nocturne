@@ -24,20 +24,21 @@ public static class NightscoutJsonBody
         var options = new JsonOptions();
         options.JsonSerializerOptions.TypeInfoResolver =
             (options.JsonSerializerOptions.TypeInfoResolver ?? new DefaultJsonTypeInfoResolver())
-            .WithAddedModifier(UploaderIdJsonModifier.RemoveBaseIdProperty);
+            .WithAddedModifier(IgnoredBasePropertyModifier.RemoveIgnoredBaseProperties);
         return options;
     }
 
     public static T? ReadObject<T>(JsonElement body) => body.Deserialize<T>(Options);
 
     /// <summary>The documents in an object or an array body, or null for any other body. Null elements are skipped.</summary>
-    public static List<T>? ReadObjects<T>(JsonElement body) where T : class => body.ValueKind switch
+    public static List<T>? ReadObjects<T>(JsonElement body) where T : class =>
+        ReadObjects(body, element => element.Deserialize<T>(Options));
+
+    /// <summary><see cref="ReadObjects{T}(JsonElement)"/> with each document read by <paramref name="read"/>.</summary>
+    public static List<T>? ReadObjects<T>(JsonElement body, Func<JsonElement, T?> read) where T : class => body.ValueKind switch
     {
-        JsonValueKind.Array => body.EnumerateArray()
-            .Select(element => element.Deserialize<T>(Options))
-            .OfType<T>()
-            .ToList(),
-        JsonValueKind.Object => body.Deserialize<T>(Options) is { } single ? [single] : [],
+        JsonValueKind.Array => body.EnumerateArray().Select(read).OfType<T>().ToList(),
+        JsonValueKind.Object => read(body) is { } single ? [single] : [],
         _ => null,
     };
 }

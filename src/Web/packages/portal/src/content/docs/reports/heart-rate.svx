@@ -1,0 +1,65 @@
+---
+title: Heart Rate
+---
+
+<script>
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Heart Rate
+
+The Heart Rate report answers the question "what does my heart rate do through
+the day, and what does my glucose do at the same time?". It shows your heart
+rate through each day, with your glucose on the same row.
+
+<Video id="heart-rate" />
+
+## What it shows
+
+### The key figures
+
+| Figure | What it shows |
+|--------|---------------|
+| **Average** | Your average heart rate in the period, in beats per minute (bpm) |
+| **Resting estimate** | An estimate of your resting heart rate. Only one heart rate reading in ten is lower than this value. |
+| **Min / Max** | Your lowest and highest heart rate in the period |
+| **Readings** | The number of heart rate readings |
+
+### Heart Rate Actogram
+
+The actogram has one row for each day. The newest day is at the top.
+
+- **The small dots** are your heart rate. A higher dot means a faster heart
+  rate.
+- **The line and the larger dots** are your glucose. The colour of each glucose
+  dot shows the range of that reading.
+
+Each row covers 48 hours: the day itself, and then the next day in a paler
+colour. This lets you follow an evening into the night without a break.
+
+Move the pointer over a row to see the heart rate and the glucose at that time.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+The actogram shows 14 days at a time. To compare the same hours one week apart:
+
+1. Find a time with a high heart rate, for example during exercise. Look at the
+   glucose before and after.
+2. Select the down arrow under the rows. The rows move one week back.
+3. Find the same day of the week. Compare the heart rate and the glucose at the
+   same time.
+4. To move one week forward again, select the up arrow above the rows.
+
+You can also use the keyboard. Select the actogram, and then press the up or
+down arrow key to move one day. Hold Shift to move one week, or Alt to move 30
+days.
+
+To change the period, select the date range at the top of the report, select a
+period, and then select **Apply Filters**.
+
+## Good to know
+
+- The figures at the top use only the period you chose. The actogram can also
+  show the days before the period, when you move back.

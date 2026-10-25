@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
@@ -25,6 +25,15 @@ public interface ITrackerAlertRuleSyncService
     /// client configuration, enabled state, DND opt-out, sort order) survive re-syncs.
     /// </summary>
     Task SyncDefinitionAsync(Guid definitionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates the managed alert rules of <paramref name="definitionId"/>, a definition that has
+    /// none yet, on the caller's <paramref name="unit"/> and inside its transaction, so the rules
+    /// commit with the definition. Having no rules, it retires none, so nothing is closed
+    /// before the caller commits.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The definition already has managed rules.</exception>
+    Task CreateRulesAsync(DbUnitOfWork unit, Guid definitionId, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes every managed alert rule owned by <paramref name="definitionId"/>. Called
@@ -67,6 +76,21 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     public async Task SyncDefinitionAsync(Guid definitionId, CancellationToken ct = default)
     {
         await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
+        await SyncAsync(unit, definitionId, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task CreateRulesAsync(DbUnitOfWork unit, Guid definitionId, CancellationToken ct = default)
+    {
+        var tag = ManagedByTag(definitionId);
+        if (await unit.Context.AlertRules.AnyAsync(r => r.ManagedBy == tag, ct))
+            throw new InvalidOperationException($"Tracker definition {definitionId} already has managed rules");
+
+        await SyncAsync(unit, definitionId, ct);
+    }
+
+    private async Task SyncAsync(DbUnitOfWork unit, Guid definitionId, CancellationToken ct)
+    {
         var db = unit.Context;
         var tenantId = db.TenantId;
 
@@ -83,6 +107,11 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         var managedRules = await db.AlertRules
             .Where(r => r.ManagedBy == tag)
             .ToDictionaryAsync(r => r.Id, ct);
+        if (managedRules.Count == 0
+            && definition.NotificationThresholds.Count == 0
+            && definition is not { Category: TrackerCategory.Reservoir, LowReservoirUnits: not null })
+            return;
+
         var recipient = await InAppRecipientOfAsync(db, tenantId, definition, ct);
 
         // The threshold editor replaces the whole threshold list (new row ids), which
@@ -131,8 +160,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         {
             if (minutes is null)
             {
-                // Misconfigured (negative threshold without lifespan) — matches the legacy
-                // evaluator's skip. Leave any previously synced rule in place untouched.
+                // A negative threshold without a lifespan can never fire. Leave any previously
+                // synced rule in place untouched.
                 if (threshold.AlertRuleId is { } existingId) keptRuleIds.Add(existingId);
                 continue;
             }
@@ -178,10 +207,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                     Severity = severity,
                     ManagedBy = tag,
                     IsEnabled = true,
-                    // Quiet-hours opt-out on the threshold maps onto the alert engine's DND
-                    // bypass. Create-time seed only — the rule editor owns it afterwards.
-                    AllowThroughDnd = !threshold.RespectQuietHours,
-                    ClientConfiguration = BuildClientConfiguration(threshold),
+                    ClientConfiguration = "{}",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow,
                 };
@@ -301,7 +327,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         if (definition.Category != TrackerCategory.Reservoir || definition.LowReservoirUnits is not { } units)
             return;
 
-        // Snake_case to match the evaluators' shared JSON options (ReservoirCondition).
+        // Snake_case, the condition models' wire form (ReservoirCondition).
         var conditionParams = JsonSerializer.Serialize(new { @operator = "<", value = units });
         var name = Truncate($"{definition.Name}: below {units} U", 128);
         var severity = MapSeverity(definition.LowReservoirUrgency);
@@ -345,7 +371,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     }
 
     /// <summary>
-    /// Who a synced rule's in-app channel is sent to: the member who owns the tracker definition,
+    /// Who a synced rule's in-app channel is sent to: the member who created the tracker definition,
     /// or the tenant's longest-standing owner when that is not a person who may receive, as for a
     /// definition created through a site token, which belongs to the device account. Empty when
     /// the tenant has neither, which delivery records as failed.
@@ -353,7 +379,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     private static async Task<string> InAppRecipientOfAsync(
         NocturneDbContext db, Guid tenantId, TrackerDefinitionEntity definition, CancellationToken ct)
     {
-        var recipient = await InAppRecipients.ResolveAsync(db, tenantId, definition.UserId, ct)
+        var recipient = await InAppRecipients.ResolveAsync(db, tenantId, definition.CreatedBy, ct)
             ?? await InAppRecipients.EarliestOwnerAsync(db, tenantId, ct);
         return recipient?.ToString() ?? string.Empty;
     }
@@ -415,23 +441,6 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         NotificationUrgency.Warn => AlertRuleSeverity.Warning,
         _ => AlertRuleSeverity.Info,
     };
-
-    /// <summary>
-    /// Seeds the rule's client presentation config from the threshold's legacy audio
-    /// settings. Create-time seed only — the rule editor owns it afterwards.
-    /// </summary>
-    private static string BuildClientConfiguration(TrackerNotificationThresholdEntity threshold)
-    {
-        if (!threshold.AudioEnabled && !threshold.VibrateEnabled)
-            return "{}";
-
-        return JsonSerializer.Serialize(new
-        {
-            audioEnabled = threshold.AudioEnabled,
-            audioSound = threshold.AudioSound,
-            vibrateEnabled = threshold.VibrateEnabled,
-        });
-    }
 
     private static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max];

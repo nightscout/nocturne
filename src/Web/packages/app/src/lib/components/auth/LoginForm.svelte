@@ -93,10 +93,10 @@
   let passkeyError = $state<string | null>(null);
 
   const recovery = useSubmission({
-    fallback: "We couldn't sign you in just now. Please try again.",
+    fallback: "Could not sign you in just now. Try again.",
   });
   const authenticator = useSubmission({
-    fallback: "We couldn't sign you in just now. Please try again.",
+    fallback: "Could not sign you in just now. Try again.",
   });
 
   // Browser support
@@ -127,7 +127,7 @@
   }) {
     if (!result.success) {
       passkeyError =
-        result.error ?? "We couldn't sign you in. Please try again.";
+        result.error ?? "Could not sign you in. Try again.";
       return;
     }
 
@@ -135,7 +135,7 @@
     // no session yet — collect the code and finish there.
     if (result.totpRequired) {
       if (!result.stepUpToken) {
-        passkeyError = "We couldn't sign you in. Please try again.";
+        passkeyError = "Could not sign you in. Try again.";
         return;
       }
       stepUpToken = result.stepUpToken;

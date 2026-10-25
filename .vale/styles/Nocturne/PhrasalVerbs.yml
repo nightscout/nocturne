@@ -1,0 +1,16 @@
+# Rule 9.3: do not build phrasal verbs. One verb, one meaning.
+extends: substitution
+message: "Rule 9.3: use '%s' instead of the phrasal verb '%s'."
+link: .claude/skills/simple-english/SKILL.md
+level: suggestion
+ignorecase: true
+swap:
+  'set up': 'configure, or install'
+  'go down': decrease
+  'goes down': decreases
+  'go up': increase
+  'goes up': increases
+  'turn on': 'start, or enable'
+  'turn off': 'stop, or disable'
+  'carry out': 'do, or perform'
+  'find out': determine

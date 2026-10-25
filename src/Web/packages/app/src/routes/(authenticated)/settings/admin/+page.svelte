@@ -213,7 +213,7 @@
         {#if !oidcConfigManaged}
           <Tabs.Trigger value="identity-providers">
             <Shield class="h-4 w-4" />
-            Identity Providers
+            Identity providers
             {#if oidcProviders.length > 0}
               <Badge variant="secondary" class="ml-1">{oidcProviders.length}</Badge>
             {/if}

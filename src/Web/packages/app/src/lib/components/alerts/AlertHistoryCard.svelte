@@ -12,6 +12,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import Clock from "@lucide/svelte/icons/clock";
+  import { conditionLabel } from "./conditionLabel.svelte";
   import { formatElapsedDuration } from "$lib/utils/duration";
 
   interface Props {
@@ -36,21 +37,6 @@
     }
   }
 
-  function getConditionLabel(conditionType: AlertConditionType | undefined): string {
-    switch (conditionType) {
-      case AlertConditionType.Threshold:
-        return "Threshold";
-      case AlertConditionType.RateOfChange:
-        return "Rate of Change";
-      case AlertConditionType.SignalLoss:
-        return "Signal Loss";
-      case AlertConditionType.Composite:
-        return "Composite";
-      default:
-        return conditionType ?? "Unknown";
-    }
-  }
-
   function formatDate(date: Date | string | undefined): string {
     if (!date) return "-";
     const d = typeof date === "string" ? new Date(date) : date;
@@ -62,7 +48,7 @@
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
       <Clock class="h-5 w-5" />
-      Alert History
+      Alert history
     </CardTitle>
     <CardDescription>
       Past alert excursions and their resolution
@@ -99,7 +85,7 @@
                   <Badge
                     variant={getConditionBadgeVariant(item.conditionType)}
                   >
-                    {getConditionLabel(item.conditionType)}
+                    {conditionLabel(item.conditionType)}
                   </Badge>
                 </td>
                 <td class="py-2 pr-4 text-muted-foreground">

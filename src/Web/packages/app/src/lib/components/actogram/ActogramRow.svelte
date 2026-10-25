@@ -1,6 +1,6 @@
 <script lang="ts" generics="T extends ActogramPoint">
   import type { Snippet } from 'svelte';
-  import { Chart, Svg, Spline, Circle, Tooltip } from 'layerchart';
+  import { Chart, Svg, Spline, Circle, Text, Tooltip } from 'layerchart';
   import { scaleTime } from 'd3-scale';
   import { timeScale } from '$lib/components/charts/scale-guards';
   import { curveMonotoneX } from 'd3';
@@ -12,9 +12,11 @@
   import { dashClass } from '$lib/components/charts/print/chart-print-patterns';
   import {
     MS_PER_HOUR,
-    HOURS_PER_DAY,
     HOURS_PER_ROW,
     findNearestPoint,
+    hasShiftedHourMarks,
+    hourMarksOf,
+    type ActogramDay,
     type ActogramPoint,
     type ActogramRowContext,
     type ActogramTooltipData,
@@ -24,27 +26,29 @@
   } from './actogram';
 
   interface Props {
-    day: Date;
+    day: ActogramDay;
     data: RowDataPoint<T>[];
     bgData: RowDataPoint<GlucosePoint>[];
     thresholds: ChartThresholds | undefined;
     height: number;
     row: Snippet<[ActogramRowContext<T>]>;
-    tooltipValue?: Snippet<[{ point: T; day: Date }]>;
+    tooltipValue?: Snippet<[{ point: T; day: ActogramDay }]>;
   }
 
   let { day, data, bgData, thresholds, height, row, tooltipValue }: Props = $props();
 
-  // X domain: 0–48 hours from day start
-  const xDomainEnd = $derived(new Date(day.getTime() + HOURS_PER_ROW * MS_PER_HOUR));
-  const midpoint = $derived(new Date(day.getTime() + HOURS_PER_DAY * MS_PER_HOUR));
+  // X domain: 0–48 hours from day start; the dimmed half starts where the served day ends.
+  const dayStart = $derived(new Date(day.startMills));
+  const xDomainEnd = $derived(new Date(day.startMills + HOURS_PER_ROW * MS_PER_HOUR));
+  const midpoint = $derived(new Date(day.endMills));
+  const shiftedHourMarks = $derived(hasShiftedHourMarks(day));
 
   // Map RowDataPoints to chart-plottable objects for BG overlay
   const bgChartData = $derived(
     bgData
       .toSorted((a, b) => a.hoursFromStart - b.hoursFromStart)
       .map((d) => ({
-        time: new Date(day.getTime() + d.hoursFromStart * MS_PER_HOUR),
+        time: new Date(day.startMills + d.hoursFromStart * MS_PER_HOUR),
         sgv: d.point.sgv,
         color: d.point.color,
       })),
@@ -57,7 +61,7 @@
   x="time"
   y="sgv"
   xScale={scaleTime()}
-  xDomain={[day, xDomainEnd]}
+  xDomain={[dayStart, xDomainEnd]}
   yDomain={[0, thresholds?.glucoseYMax ?? FALLBACK_GLUCOSE_Y_MAX]}
   padding={{ left: 0, top: 0, bottom: 0, right: 0 }}
   tooltipContext={{ mode: "manual" }}
@@ -119,6 +123,7 @@
 
       <!-- Dimming overlay for the extended (24–48h) half (top layer) -->
       <rect
+        data-testid="actogram-dim-boundary"
         x={context.xScale(midpoint)}
         y={0}
         width={context.xScale(xDomainEnd) - context.xScale(midpoint)}
@@ -126,6 +131,21 @@
         fill="var(--background)"
         opacity={0.6}
       />
+
+      <!-- The shared header sits on an even spacing, so a row a DST change shifted names its own hours. -->
+      {#if shiftedHourMarks}
+        {#each hourMarksOf(day) as mark, index (index)}
+          <Text
+            data-testid="actogram-hour-mark"
+            value="{mark.hour}h"
+            x={context.xScale(new Date(mark.mills))}
+            y={1}
+            textAnchor={index === 0 ? 'start' : 'middle'}
+            verticalAnchor="start"
+            class="fill-muted-foreground text-2xs"
+          />
+        {/each}
+      {/if}
 
       <!-- Interaction overlay for tooltip (topmost layer) -->
       <rect
@@ -140,7 +160,7 @@
           if (!svgRect) return;
           const localX = e.clientX - svgRect.left;
           const time = rowContext.xScale.invert(localX);
-          const hoursFromStart = (time.getTime() - day.getTime()) / MS_PER_HOUR;
+          const hoursFromStart = (time.getTime() - day.startMills) / MS_PER_HOUR;
           const nearestBg = findNearestPoint(bgData, hoursFromStart);
           const nearestData = findNearestPoint(data, hoursFromStart);
           context.tooltip?.show(e, { time, bgPoint: nearestBg, dataPoint: nearestData } satisfies ActogramTooltipData<T>);

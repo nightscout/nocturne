@@ -1,0 +1,80 @@
+---
+title: Data Quality
+---
+
+<script>
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Data Quality
+
+The Data Quality report answers the question "which readings may come from the
+sensor, and not from my glucose?". It finds possible compression lows and
+other sensor problems, and lets you review them.
+
+<Video id="data-quality" />
+
+## What it shows
+
+A compression low is a false low reading. It can occur when you sleep on your
+sensor and the pressure changes the reading.
+
+### Review status
+
+The strip at the top counts the possible compression lows by status:
+
+- **Pending Review**: found, but not reviewed yet.
+- **Accepted**: you marked them as false lows from pressure on the sensor.
+- **Dismissed**: you marked them as real lows.
+
+If some are pending, a card says how many wait for review. Select **Review
+Now** to review them.
+
+### Data Quality Categories
+
+Select a category to open its own page:
+
+- **Compression Lows**: the list of possible compression lows, night by night.
+- **Signal Integrity**: periods where the readings go up and down in a way that
+  a real glucose change is unlikely to cause.
+- **CGM Comparison**: how far apart two sensors read over the same period.
+- **Rejected Uploads**: records that an uploader sent and that Nocturne could
+  not store, with their number.
+
+## How to use it
+
+To scan for compression lows:
+
+1. In the **Run Detection** card, enter the **Start Date**.
+2. Optional: to scan more nights, enter an **End Date**.
+3. Select **Run Detection**. A message shows how many possible compression lows
+   the scan found, and in how many nights.
+4. The new results show under **Pending Review**.
+
+To review a possible compression low:
+
+1. Select **Review Now**, or select **Compression Lows**.
+2. Select a night in the list. The chart shows your glucose for that night, with
+   the period of the possible compression low. The figures show the **Lowest**
+   glucose, the **Drop Rate** and the **Recovery** time.
+3. If necessary, drag the handles on the chart to adjust the period.
+4. Select **Accept** if it is a false low from pressure on the sensor.
+5. Select **Dismiss** if it is a real low.
+
+Each item has a **Confidence** badge: **High**, **Medium** or **Low**. Use the
+status menu above the list to show **All**, **Pending**, **Accepted** or
+**Dismissed** items.
+
+To review more than one item at a time:
+
+1. Select the first item.
+2. Hold Shift and select the last item. All the items between them are
+   selected.
+3. Select **Accept All** or **Dismiss All**.
+
+## Good to know
+
+- **Your reports do not change.** Accepting a compression low is for your own
+  record. Your reports and statistics still include the readings.
+- **No date range.** This report does not use the date range at the top.
+  It shows all the nights that were scanned.

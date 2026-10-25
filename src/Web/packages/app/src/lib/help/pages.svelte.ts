@@ -8,9 +8,9 @@ export function pageArticles(): HelpArticle[] {
       "Dashboard",
       "See recent glucose and the surrounding recorded events.",
       "Readings, treatments, device status, and profiles from your uploaders and connectors.",
-      "Use chart controls on this page. Settings → Appearance controls units and display; Therapy shows personal schedules; Connectors & Apps manages incoming data; Alerts manages notifications.",
+      "Use chart controls on this page. Settings → Appearance controls units and display. Therapy shows personal schedules. Connectors & Apps manages incoming data. Alerts manages notifications.",
       "The same stored records feed the calendar and reports.",
-      "A latest value can become stale if uploads stop. Gaps and missing treatments limit context. The server classifies the current glucose status; report bands, personal targets, and alerts serve different purposes.",
+      "A latest value can become stale if uploads stop. Gaps and missing treatments limit context. The server classifies the current glucose status. Report bands, personal targets, and alerts serve different purposes.",
       ["/reports", "/settings/connectors", "/settings/appearance", "/alerts"]
     ),
     guide(
@@ -18,7 +18,7 @@ export function pageArticles(): HelpArticle[] {
       "Calendar",
       "Explore recorded events and glucose by day.",
       "Stored readings and events with their timestamps.",
-      "Choose dates and the available view controls here. Display format is in Appearance; event records are in Treatments; timezone history is under Patient Record.",
+      "Choose dates and the available view controls here. Display format is in Appearance. Event records are in Treatments. Timezone history is under Patient Record.",
       "The calendar helps you find a day to inspect on the timeline or in reports.",
       "Only recorded events appear. Local dates and timezone changes affect which day an event belongs to.",
       ["/reports/day-in-review", "/reports/treatments", "/settings/timezone"]
@@ -40,26 +40,26 @@ export function pageArticles(): HelpArticle[] {
       "The current tenant's glucose/device data and saved clock configurations.",
       "Create or open a clock configuration here to choose its layout and display options. General units and theme are in Appearance.",
       "Clock faces present the same incoming data in a compact display.",
-      "A clock is not a separate data source. Check freshness if uploads stop; its configured units can differ from your general display preference.",
+      "A clock is not a separate data source. Check freshness if uploads stop. Its configured units can differ from your general display preference.",
       ["/settings/appearance", "/settings/connectors"]
     ),
     guide(
       "/food",
       "Food",
       "Manage food entries and their nutrition information.",
-      "Food catalogue records saved or imported into this tenant.",
-      "Use the page's search, add, and edit controls. Review portion size and carbohydrate units before saving.",
-      "Food information can be used when recording meals and carbohydrate intake.",
-      "A catalogue entry is not a record that you ate it. Portion size and nutrition estimates can be inaccurate; check the original source.",
+      "Food catalog records saved or imported into this tenant.",
+      "Use the page's search, add, and edit controls. Review portion size and carb units before saving.",
+      "Food information can be used when recording meals and carb intake.",
+      "A catalog entry is not a record that you ate it. Portion size and nutrition estimates can be inaccurate. Check the original source.",
       ["/meals", "/reports/treatments"]
     ),
     guide(
       "/meals",
       "Meals",
-      "Review meals and their recorded carbohydrate context.",
+      "Review meals and their recorded carb context.",
       "Recorded meals, food/portion information, and associated treatment records.",
       "Use the page's date, add, and edit controls. Manage reusable foods in Food and treatment records in Treatments.",
-      "Meal timing and carbohydrates provide context beside glucose and insulin records.",
+      "Meal timing and carbs provide context beside glucose and insulin records.",
       "Missing food details do not mean no meal. A nearby glucose change does not establish a meal's effect.",
       ["/food", "/reports/treatments", "/reports/day-in-review"]
     ),
@@ -69,27 +69,27 @@ export function pageArticles(): HelpArticle[] {
       "Estimate supplies to take on a trip.",
       "Your chosen trip details, supply categories, and available packing hints.",
       "Set trip details and review supply estimates here, then open the packing list. Tracker definitions are in Notifications & Trackers.",
-      "The list turns the estimate into items you can check off and customise.",
+      "The list turns the estimate into items you can check off and customize.",
       "This is an estimate. Check your actual supplies, device needs, delays, and a suitable spare amount before travelling.",
       ["/tools/packing/list", "/settings/trackers"]
     ),
     guide(
       "/tools/packing/list",
       "Packing list",
-      "Check off and customise the supplies for your trip.",
+      "Check off and customize the supplies for your trip.",
       "The trip estimate and custom items you add.",
-      "Use the item checkboxes and Custom field here; return to Packing to change trip inputs.",
-      "The checklist helps organise packing; it does not monitor the contents of your bag.",
+      "Use the item checkboxes and Custom field here. Return to Packing to change trip inputs.",
+      "The checklist helps organize packing. It does not monitor the contents of your bag.",
       "Checking an item does not verify that you physically packed it. Review quantities and changes to the trip.",
       ["/tools/packing"]
     ),
     guide(
       "/alerts",
       "Alert Rules",
-      "Choose conditions that should trigger a notification.",
+      "Choose conditions that trigger a notification.",
       "Saved rules evaluated against the data and conditions they reference.",
-      "Create or edit a rule here for its condition, thresholds, timing, and notification actions. Test it in Simulator; review deliveries in History and quiet periods in Do Not Disturb.",
-      "Enabled rules are used by the alert system; they do not change report reference bands.",
+      "Create or edit a rule here for its condition, thresholds, timing, and notification actions. Test it in Simulator. Review deliveries in History and quiet periods in Do Not Disturb.",
+      "Enabled rules are used by the alert system. They do not change report reference bands.",
       "Delivery depends on fresh data, rule conditions, enabled channels, and quiet settings. A rule threshold is separate from a personal target. Test a change before relying on it.",
       ["/alerts/simulator", "/alerts/history", "/alerts/dnd"]
     ),
@@ -99,7 +99,7 @@ export function pageArticles(): HelpArticle[] {
       "Test how an alert rule responds to sample conditions.",
       "The rule and the scenario values chosen for the simulation.",
       "Select the rule and test inputs here. Edit real rules on Alert Rules.",
-      "Results help you inspect rule behaviour before enabling or changing it.",
+      "Results help you inspect rule behavior before enabling or changing it.",
       "Simulation is not a live reading and does not guarantee notification delivery. Check History for actual evaluations and deliveries.",
       ["/alerts", "/alerts/history"]
     ),
@@ -118,7 +118,7 @@ export function pageArticles(): HelpArticle[] {
       "Do Not Disturb",
       "Manage quiet periods for notifications.",
       "The saved quiet schedules and active Do Not Disturb configuration.",
-      "Set the applicable quiet times here. Review each rule's behaviour on Alert Rules.",
+      "Set the applicable quiet times here. Review each rule's behavior on Alert Rules.",
       "Quiet settings affect notification handling, not glucose imports or report calculations.",
       "Check timezone and the rules/channels affected by your choice. Quiet mode does not stop the underlying measurements.",
       ["/alerts", "/alerts/history"]
@@ -148,7 +148,7 @@ export function pageArticles(): HelpArticle[] {
       "Tenants",
       "Choose between the patient workspaces you can access.",
       "Your memberships and each workspace's permitted summary information.",
-      "Select a tenant here or with the tenant selector. Manage sharing inside that tenant; platform administrators use Tenant Management.",
+      "Select a tenant here or with the tenant selector. Manage sharing inside that tenant. Platform administrators use Tenant Management.",
       "The selected tenant determines the records and settings shown throughout the app.",
       "Access to one tenant does not grant access to another. Verify the selected workspace before editing patient records or connections.",
       ["/settings/members", "/settings/admin/tenants"]
@@ -158,7 +158,7 @@ export function pageArticles(): HelpArticle[] {
       "Setup",
       "Follow the guided checklist for a usable Nocturne account and workspace.",
       "Your account, patient configuration, and connected data sources.",
-      "Follow the checklist here; individual settings remain available afterwards in the normal settings pages.",
+      "Follow the checklist here. Individual settings remain available afterwards in the normal settings pages.",
       "Setup connects the basic configuration to the dashboard and reports.",
       "Completing a checklist does not manufacture readings. Verify an actual source import and the selected dates.",
       ["/settings/patient", "/settings/connectors", "/settings/appearance"]

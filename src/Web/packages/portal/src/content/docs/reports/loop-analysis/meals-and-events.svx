@@ -1,0 +1,107 @@
+---
+title: Meals and events
+---
+
+<script>
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Meals and events
+
+This page aligns all the events of one kind at the time that they occurred. Then
+it shows what occurred after them: the change in glucose, glucose, the
+correction of the loop, the insulin above your schedule since the event, and
+insulin and carbs on board. You can compare a maximum of three kinds of event
+(cohorts).
+
+The [Loop Analysis overview](/docs/reports/loop-analysis) tells you about the
+filters, net loop correction and how to read the charts. They are the same on
+all five pages.
+
+<Screenshot id="loop-analysis-event-glucose-change" />
+
+For each cohort, you can select a time of day. For meals, you can also select a
+range of grams. Select the time to show before and after each event. The
+default is 1 hour before and 5 hours after.
+
+<Screenshot id="loop-analysis-meals-events" />
+
+The report uses only events whose full window is before now. The report does
+not use an event until its window is complete.
+
+## The events that you can select
+
+- **Meals**: a carb entry. Entries at the same time count as one meal.
+- **Correction boluses**: a manual bolus that is not paired with a meal. No carb
+  entry is linked to it, and no carbs are logged from 30 minutes before it to 1
+  hour after it. Automatic boluses are not correction boluses.
+- **Unannounced rises**: a rise in glucose that looks like a meal, with no carbs
+  logged. See below.
+- **Sensor starts**, and the start of **exercise**, an **override** or a
+  **temporary target**.
+
+## How the report finds an unannounced rise
+
+The report looks for the pattern that a meal makes:
+
+1. **A stable floor.** Glucose stays stable for 30 minutes or more. It moves
+   20 mg/dL (1.1 mmol/L) or less. The lowest quarter of its readings is at
+   70 mg/dL (3.9 mmol/L) or more.
+2. **A climb.** After the floor, glucose increases by 40 mg/dL (2.2 mmol/L) or
+   more in 45 minutes. If glucose goes back to the floor, the climb starts
+   again.
+3. **Not a sensor error.** The report does not use a climb faster than
+   5 mg/dL (0.3 mmol/L) each minute. It does not use a single jump of
+   30 mg/dL (1.7 mmol/L) or more. It also does not use the shape of a
+   **compression recovery**. In this shape, glucose decreases quickly. Then it
+   increases to the value from before the decrease. This is the shape that you
+   get when you lie on your sensor.
+4. **No carbs logged.** If carbs were logged from 3 hours before the rise to
+   30 minutes after it, or carbs were on board, the report does not count the rise.
+
+A second climb within 2 hours is part of the same rise.
+
+You can also select **Only rises with extra loop insulin**.
+Then the report uses only rises where the loop added half an hour of your usual
+basal or more, and 0.2 U or more, in the 45 minutes after the rise started. This
+removes rises that your loop did not treat as real.
+
+## Rises and falls
+
+<Screenshot id="loop-analysis-event-metrics" />
+
+Each kind of event has a usual direction. After a meal, an unannounced rise or a
+sensor start, the table shows rise figures. After a correction bolus, the start
+of exercise, an override or a temporary target, the table shows fall figures.
+
+For a rise, the table shows the **peak rise**, the **time to peak**, and the
+time until glucose is again within 20 mg/dL (1.1 mmol/L) of the start glucose.
+
+For a fall, the table shows these figures:
+
+- **Drop to window end**: the start glucose minus the glucose at the end of the
+  window. Settings evidence uses the same method over a maximum of 4 hours. The
+  drop does not use the lowest reading, because noise can make the lowest
+  reading too low.
+- **Lowest glucose** and **Time to lowest glucose**.
+- **Drop per unit above schedule**: the drop divided by the net insulin above
+  your schedule. The insulin is for the full window of the event. This includes
+  the time before the event. The table shows this figure only for isolated events with
+  0.5 U or more above the schedule, and with no glucose below 70 mg/dL
+  (3.9 mmol/L).
+- **Went below range**: the number of events with a reading below 70 mg/dL
+  (3.9 mmol/L) after the event.
+
+## Isolated events
+
+An event is **isolated** when no other meal, correction or meal-like rise occurs
+in its window. To use only these events, select **Isolated events only**. If you
+do not select it, the curves after a meal can also include the next snack.
+
+The **observed grams per unit** is the grams of carbs for each unit of insulin
+above your schedule in the window. It is not the same as your carb ratio, which
+counts all of your bolus insulin. The figure shows only for isolated meals. When
+a meal overlaps another event, the insulin in the window was not for that meal
+only. So the grams divided by that insulin gives an incorrect value. The
+figure also needs the delivery and the schedule for 90% of the window or more.
+

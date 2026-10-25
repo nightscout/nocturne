@@ -1,8 +1,11 @@
+using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Clinical.Treatments;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
@@ -56,11 +59,11 @@ public class AlertReplayServiceLeafLogTests
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
 
         var enricherDeps = new SensorContextEnricherDependencies(
+            new IobCobReader(_iobCalculator.Object, _cobCalculator.Object, _bolusRepository.Object,
+                _tempBasalRepository.Object, _carbIntakeRepository.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
             _iobCalculator.Object,
             _cobCalculator.Object,
             _treatmentService.Object,
-            _bolusRepository.Object,
-            _carbIntakeRepository.Object,
             _deviceEventRepository.Object,
             _pumpSnapshotRepository.Object,
             _apsSnapshotRepository.Object,
@@ -89,7 +92,8 @@ public class AlertReplayServiceLeafLogTests
             enricher,
             _tenantAccessor.Object,
             Options.Create(new AlertEvaluationOptions()),
-            new ManagedAlertReplayEngine(NullLogger<ManagedAlertReplayEngine>.Instance));
+            new RustAlertReplayEngine(new AlertEngineErrors(
+                new Nocturne.API.Tests.Services.BackgroundServices.TestMeterFactory(), TimeProvider.System)));
     }
 
     private static AlertRuleSnapshot ThresholdRule(Guid id, string direction, decimal value) =>
@@ -116,7 +120,7 @@ public class AlertReplayServiceLeafLogTests
         Mgdl = mgdl,
     };
 
-    [Fact]
+    [NativeFact]
     public async Task SingleThresholdLeaf_FalseThenTrueThenFalse_RecordsThreeTransitions()
     {
         var ruleId = Guid.NewGuid();
@@ -166,7 +170,7 @@ public class AlertReplayServiceLeafLogTests
         leaf0.Points[2].AtMs.Should().Be(new DateTimeOffset(dayStart.AddMinutes(60)).ToUnixTimeMilliseconds());
     }
 
-    [Fact]
+    [NativeFact]
     public async Task LeafStableAcrossWindow_RecordsExactlyOneBaselineTransition()
     {
         var ruleId = Guid.NewGuid();
@@ -196,7 +200,7 @@ public class AlertReplayServiceLeafLogTests
         leaf0.Points[0].Value.Should().BeFalse();
     }
 
-    [Fact]
+    [NativeFact]
     public async Task MultipleLeavesInComposite_TrackedIndependently()
     {
         var ruleId = Guid.NewGuid();

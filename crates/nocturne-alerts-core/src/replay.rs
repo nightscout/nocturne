@@ -11,7 +11,8 @@ use uuid::Uuid;
 
 use crate::context::{ActiveAlertSnapshot, SensorContext};
 use crate::engine::{Rule, auto_resolve_holds, evaluate_body, format_instant};
-use crate::model::{ConditionKind, Node, Payload, parse_payload_structure};
+use crate::leaf_identity::collect_leaves;
+use crate::model::{Node, Payload};
 use crate::sustained::TimerStore;
 
 /// One replay tick: the instant and the context enriched as of it.
@@ -364,41 +365,19 @@ fn visit(
     true
 }
 
-/// The `alert_state` targets in the rule body, in pre-order. Every payload
-/// property a node carries is walked, whatever its `type`; a body that does
-/// not parse references nothing.
+/// The `alert_state` targets in the rule body, in pre-order; a body that
+/// cannot be evaluated references nothing.
 fn alert_state_references(rule: &Rule) -> Vec<Uuid> {
-    let mut found = Vec::new();
-    if !rule.condition_params.is_null()
-        && let Ok(payload) = parse_payload_structure(rule.condition_type, &rule.condition_params)
-    {
-        collect_references(
-            &Node::from_rule(rule.condition_type, Some(payload)),
-            &mut found,
-        );
-    }
-    found
-}
-
-fn collect_references(node: &Node, found: &mut Vec<Uuid>) {
-    if let Some(Payload::AlertState(p)) = node.payload(ConditionKind::AlertState) {
-        found.push(p.alert_id);
-    }
-    if let Some(Payload::Composite(p)) = node.payload(ConditionKind::Composite) {
-        for child in p.conditions.iter().flatten().flatten() {
-            collect_references(child, found);
-        }
-    }
-    if let Some(Payload::Not(p)) = node.payload(ConditionKind::Not)
-        && let Some(child) = &p.child
-    {
-        collect_references(child, found);
-    }
-    if let Some(Payload::Sustained(p)) = node.payload(ConditionKind::Sustained)
-        && let Some(child) = &p.child
-    {
-        collect_references(child, found);
-    }
+    let Ok(body) = rule.parse_body() else {
+        return Vec::new();
+    };
+    collect_leaves(&body)
+        .into_iter()
+        .filter_map(|leaf| match leaf.payload() {
+            Payload::AlertState(p) => Some(p.alert_id),
+            _ => None,
+        })
+        .collect()
 }
 
 impl ReplayOutcome {

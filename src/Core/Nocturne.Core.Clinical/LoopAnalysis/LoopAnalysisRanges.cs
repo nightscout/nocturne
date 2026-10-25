@@ -1,3 +1,4 @@
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.LoopAnalysis;
 
 namespace Nocturne.Core.Clinical.LoopAnalysis;
@@ -18,7 +19,7 @@ public static class LoopAnalysisRanges
     public static LoopAnalysisResolvedRange Resolve(
         DateOnly startDate, DateOnly endDate, TimeZoneInfo tz, int maxDays, DateTime nowUtc)
     {
-        var nowMills = new DateTimeOffset(nowUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var nowMills = nowUtc.ToMills();
         var today = LocalSlotBinning.LocalDay(nowMills - 1, tz);
         var firstDate = startDate < today ? startDate : today;
         var lastDate = endDate < today ? endDate : today;
@@ -38,11 +39,11 @@ public static class LoopAnalysisRanges
         var days = primary.EndDate.DayNumber - primary.StartDate.DayNumber + 1;
         var previous = Of(primary.StartDate.AddDays(-days), primary.StartDate.AddDays(-1), tz, shortened: false);
         var primaryLastDay = LocalSlotBinning.DayStartMills(primary.EndDate, tz);
-        var primaryTo = new DateTimeOffset(primary.To, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var primaryTo = primary.To.ToMills();
         if (primaryTo < LocalSlotBinning.DayStartMills(primary.EndDate.AddDays(1), tz))
         {
             var partialTo = LocalSlotBinning.DayStartMills(previous.EndDate, tz) + (primaryTo - primaryLastDay);
-            if (partialTo < new DateTimeOffset(previous.To, TimeSpan.Zero).ToUnixTimeMilliseconds())
+            if (partialTo < previous.To.ToMills())
                 previous.To = DateTimeOffset.FromUnixTimeMilliseconds(partialTo).UtcDateTime;
         }
         return previous;
@@ -52,10 +53,10 @@ public static class LoopAnalysisRanges
     public static LoopAnalysisResolvedRange Clamped(DateTime nowUtc, TimeSpan window, TimeZoneInfo tz)
     {
         var from = nowUtc - window;
-        var toMills = new DateTimeOffset(nowUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var toMills = nowUtc.ToMills();
         return new LoopAnalysisResolvedRange
         {
-            StartDate = LocalSlotBinning.LocalDay(new DateTimeOffset(from, TimeSpan.Zero).ToUnixTimeMilliseconds(), tz),
+            StartDate = LocalSlotBinning.LocalDay(from.ToMills(), tz),
             EndDate = LocalSlotBinning.LocalDay(toMills - 1, tz),
             From = from,
             To = nowUtc,

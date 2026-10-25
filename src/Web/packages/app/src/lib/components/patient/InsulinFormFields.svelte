@@ -159,7 +159,7 @@
   <!-- Name and Role Select -->
   <div class="grid gap-4 @sm:grid-cols-2">
     <div class="space-y-2">
-      <Label for="insulin-name">Brand / Name</Label>
+      <Label for="insulin-name">Brand / name</Label>
       <Input
         name="{namePrefix}name"
         id="insulin-name"
@@ -194,7 +194,7 @@
   <!-- DIA, Peak, Concentration -->
   <div class="grid gap-4 @sm:grid-cols-3">
     <div class="space-y-2">
-      <Label for="insulin-dia">Duration of Insulin Action</Label>
+      <Label for="insulin-dia">Duration of insulin action</Label>
       <div class="flex items-center gap-2">
         <Input
           id="insulin-dia"
@@ -244,7 +244,7 @@
     <!-- Start/End Dates -->
     <div class="grid gap-4 @sm:grid-cols-2">
       <div class="space-y-2">
-        <Label for="insulin-start">Start Date</Label>
+        <Label for="insulin-start">Start date</Label>
         <Input
           name="{namePrefix}startDate"
           id="insulin-start"
@@ -253,7 +253,7 @@
         />
       </div>
       <div class="space-y-2">
-        <Label for="insulin-end">End Date</Label>
+        <Label for="insulin-end">End date</Label>
         <Input
           name="{namePrefix}endDate"
           id="insulin-end"

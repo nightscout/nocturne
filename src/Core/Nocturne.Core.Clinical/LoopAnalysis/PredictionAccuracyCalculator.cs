@@ -165,7 +165,7 @@ public static class PredictionAccuracyCalculator
         if (curves.All(c => c is null))
             return null;
 
-        var start = new DateTimeOffset(DateTime.SpecifyKind(point.PredictedStart, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        var start = point.PredictedStart.ToMills();
         return new PredictionSnapshot(start, point.AidAlgorithm, curves);
     }
 

@@ -80,6 +80,17 @@ function enter(...years: number[]) {
 }
 
 describe("year overview page loading", () => {
+  it("colours the heatmaps on the band edges the API served", async () => {
+    requests.metadata.mockResolvedValue({
+      years: [2025],
+      availableDataSources: [],
+      thresholds: { veryLow: 50, low: 63, high: 140, veryHigh: 260 },
+    });
+    render(Harness);
+
+    await expect.element(page.getByTestId("bands-2025")).toHaveTextContent("50,63,140,260");
+  });
+
   it("waits for metadata when Print is clicked before discovery finishes", async () => {
     let discover!: (response: {
       years: number[];
@@ -116,7 +127,7 @@ describe("year overview page loading", () => {
           }),
       },
     });
-    const sources = page.getByRole("button", { name: "All Data Sources" });
+    const sources = page.getByRole("button", { name: "All data sources" });
     await expect.element(sources).not.toBeDisabled();
     await page.getByRole("button", { name: "Prepare print" }).click();
     await vi.waitFor(() => expect(settle).toBeDefined());

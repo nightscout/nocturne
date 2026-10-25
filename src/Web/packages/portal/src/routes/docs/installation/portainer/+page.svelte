@@ -1,15 +1,27 @@
 <script lang="ts">
+    import { ArtworkHero } from "@nocturne/watercolour";
     import { resolve } from "$app/paths";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
     import Callout from "@nocturne/cms/components/Callout.svelte";
+    import { DOCS_HERO } from "$lib/data/docs-artwork";
+
+    const hero = DOCS_HERO["installation/portainer"];
 
     const templateUrl = "https://raw.githubusercontent.com/nightscout/nocturne/main/deploy/portainer/templates.json";
 </script>
 
 <div class="max-w-3xl">
+    <ArtworkHero
+        artwork={hero.artwork}
+        palette={hero.palette}
+        motion="auto"
+        autoplay="once"
+        size={400}
+        wrap={hero.wrap ?? true}
+    />
     <div class="flex items-center gap-4 mb-4">
         <img
             src="/logos/portainer.jpg"
@@ -42,23 +54,23 @@
         a guided form for all configuration values.
     </p>
 
-    <h3 class="text-xl font-semibold mt-6 mb-3">Step 1: Add the template URL</h3>
+    <h3 data-install-step="1" class="text-xl font-semibold mt-6 mb-3">Step 1: Add the template URL</h3>
     <p class="text-muted-foreground mb-4">
         In Portainer, go to <strong class="text-foreground">Settings &rsaquo; App Templates</strong> and
         set the URL to:
     </p>
     <CodeBlock code={templateUrl} class="mb-4" />
     <p class="text-muted-foreground mb-8">
-        Click <strong class="text-foreground">Save settings</strong>.
+        Select <strong class="text-foreground">Save settings</strong>.
     </p>
 
-    <h3 class="text-xl font-semibold mt-6 mb-3">Step 2: Deploy from the template</h3>
+    <h3 data-install-step="2" class="text-xl font-semibold mt-6 mb-3">Step 2: Deploy from the template</h3>
     <ol class="list-decimal list-inside space-y-3 text-muted-foreground mb-8">
         <li>
             Navigate to <strong class="text-foreground">App Templates</strong> in the sidebar.
         </li>
         <li>
-            Find <strong class="text-foreground">Nocturne</strong> in the list and click it.
+            Find <strong class="text-foreground">Nocturne</strong> in the list and select it.
         </li>
         <li>
             Fill in the configuration form. Set a strong password for each PostgreSQL role and a
@@ -69,20 +81,20 @@
             <PasswordGenerator label="password" />
         </li>
         <li>
-            Click <strong class="text-foreground">Deploy the stack</strong>.
+            Select <strong class="text-foreground">Deploy the stack</strong>.
         </li>
     </ol>
 
     <Callout type="info" title="Bot integrations are optional">
         <p>
-            Leave Discord, Telegram, Slack, and WhatsApp fields blank if you don't need them.
-            They can be configured later by updating the stack.
+            If you do not need Discord, Telegram, Slack, or WhatsApp, leave their fields blank.
+            You can configure them later by updating the stack.
         </p>
     </Callout>
 
     <Callout type="warning" title="PostgreSQL host-directory storage">
         <p>
-            Portainer's stack editor and app template use the default named Docker volume;
+            Portainer's stack editor and app template use the default named Docker volume.
             Portainer does not apply Compose override files. To put PostgreSQL data in a host
             directory, deploy the Docker Compose bundle from the command line with both
             <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">docker-compose.yaml</code>
@@ -92,7 +104,7 @@
         </p>
     </Callout>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Option 2: Manual deployment</h2>
+    <h2 data-install-step="manual" class="text-2xl font-bold mt-8 mb-4">Option 2: Manual deployment</h2>
     <p class="text-muted-foreground mb-4">
         If you prefer to configure the stack manually, download
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.yaml</code>
@@ -112,25 +124,24 @@
             into the editor.
         </li>
         <li>
-            Scroll to <strong class="text-foreground">Environment variables</strong>, click
-            <strong class="text-foreground">Advanced mode</strong>, and paste your values from
+            Scroll to <strong class="text-foreground">Environment variables</strong>. Select <strong class="text-foreground">Advanced mode</strong>. Paste your values from
             <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env.example</code>
             in <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">KEY=VALUE</code> format.
         </li>
         <li>
-            Click <strong class="text-foreground">Deploy the stack</strong>.
+            Select <strong class="text-foreground">Deploy the stack</strong>.
         </li>
     </ol>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Verify the installation</h2>
+    <h2 data-install-step="verify" class="text-2xl font-bold mt-8 mb-4">Verify the installation</h2>
     <p class="text-muted-foreground mb-4">
-        In Portainer, navigate to your <strong class="text-foreground">nocturne</strong> stack.
-        All containers should show as <strong class="text-foreground">Running</strong>. Click any
+        In Portainer, go to your <strong class="text-foreground">nocturne</strong> stack.
+        Make sure that all containers show as <strong class="text-foreground">Running</strong>. Select any
         container to view its logs and check for errors.
     </p>
     <p class="text-muted-foreground mb-8">
         Once running, the bundled Caddy proxy obtains Let's Encrypt TLS certificates
-        automatically and serves the stack at
+        automatically. It serves the stack at
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">https://your-domain</code>
         on ports 80 and 443, with no certificate files to manage. Each tenant subdomain
         gets its own certificate on demand the first time it is visited.
@@ -142,28 +153,28 @@
     </p>
     <ol class="list-decimal list-inside space-y-2 text-muted-foreground mb-8">
         <li>Navigate to your <strong class="text-foreground">nocturne</strong> stack</li>
-        <li>Click <strong class="text-foreground">Editor</strong></li>
-        <li>Click <strong class="text-foreground">Update the stack</strong></li>
+        <li>Select <strong class="text-foreground">Editor</strong></li>
+        <li>Select <strong class="text-foreground">Update the stack</strong></li>
         <li>Check <strong class="text-foreground">Re-pull image and redeploy</strong></li>
-        <li>Click <strong class="text-foreground">Update</strong></li>
+        <li>Select <strong class="text-foreground">Update</strong></li>
     </ol>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Restarts and logs</h2>
     <p class="text-muted-foreground mb-8">
         The stack uses the same restart policy and log rotation as the
         <a href={resolve("/docs/installation/docker-compose")} class="text-primary hover:underline">Docker Compose bundle</a>.
-        Portainer stacks do not read override files, so to keep your own logging driver,
+        Portainer stacks do not read override files. To keep your own logging driver,
         edit the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">logging</code>
         section of each service in the stack editor instead.
     </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Connectors</h2>
     <p class="text-muted-foreground mb-8">
-        Data source connectors (Dexcom, LibreLinkUp, Glooko, etc.) are configured through the
-        Nocturne UI after deployment; no compose changes are required.
+        Data source connectors (Dexcom, LibreLinkUp, Glooko, and others) are configured through the
+        Nocturne UI after deployment. No compose changes are required.
     </p>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Next Steps</h2>
+    <h2 data-install-step="next-steps" class="text-2xl font-bold mt-8 mb-4">Next steps</h2>
     <NextSteps />
 
     <SupportNocturne />

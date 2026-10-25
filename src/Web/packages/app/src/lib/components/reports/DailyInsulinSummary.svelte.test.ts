@@ -14,7 +14,7 @@ describe("DailyInsulinSummary", () => {
 	it("renders the Daily Summary heading", async () => {
 		render(DailyInsulinSummary, { treatmentSummary: full_summary });
 
-		await expect.element(page.getByText("Daily Summary")).toBeVisible();
+		await expect.element(page.getByText("Daily summary")).toBeVisible();
 	});
 
 	it("displays bolus insulin", async () => {
@@ -49,6 +49,6 @@ describe("DailyInsulinSummary", () => {
 		});
 
 		// Should show N/A or handle undefined gracefully
-		await expect.element(page.getByText("Daily Summary")).toBeVisible();
+		await expect.element(page.getByText("Daily summary")).toBeVisible();
 	});
 });

@@ -11,8 +11,8 @@ describe("UserMenu", () => {
     const dialog = page.getByTestId("request-membership-dialog");
     expect(dialog.elements()).toHaveLength(0);
 
-    await page.getByRole("button", { name: /Guest User/ }).click();
-    await page.getByRole("menuitem", { name: "Request Membership" }).click();
+    await page.getByRole("button", { name: /Guest user/ }).click();
+    await page.getByRole("menuitem", { name: "Request membership" }).click();
 
     await expect.element(dialog).toBeVisible();
   });

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Analytics;
 using Nocturne.Core.Models.Authorization;
@@ -25,13 +26,16 @@ public class CgmComparisonController : ControllerBase
 
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IPatientDeviceRepository _patientDeviceRepository;
+    private readonly TenantClockResolver _tenantClock;
 
     public CgmComparisonController(
         ISensorGlucoseRepository sensorGlucoseRepository,
-        IPatientDeviceRepository patientDeviceRepository)
+        IPatientDeviceRepository patientDeviceRepository,
+        TenantClockResolver tenantClock)
     {
         _sensorGlucoseRepository = sensorGlucoseRepository;
         _patientDeviceRepository = patientDeviceRepository;
+        _tenantClock = tenantClock;
     }
 
     /// <summary>
@@ -63,7 +67,7 @@ public class CgmComparisonController : ControllerBase
         if (endDate <= startDate)
             return Problem(detail: "endDate must be after startDate.", statusCode: 400, title: "Bad Request");
 
-        if (this.RejectDateSpan(startDate, endDate, V4ReadLimits.MaxAnalyticsSpanDays) is { } overlong)
+        if (await this.RejectAnalyticsSpanAsync(startDate, endDate, _tenantClock, cancellationToken) is { } overlong)
             return overlong;
 
         if (deviceAId == deviceBId)

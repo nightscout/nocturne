@@ -25,6 +25,19 @@ function focusSlider(name: string) {
   return slider;
 }
 
+
+async function iobTickValues(): Promise<number[]> {
+  const panel = () => document.querySelector('[data-testid="loop-analysis-panel-iob"]');
+  await expect.poll(() => panel()?.querySelectorAll("svg text").length ?? 0).toBeGreaterThan(0);
+  return Array.from(panel()!.querySelectorAll("svg text"), (t) => t.textContent?.trim() ?? "")
+    .filter((label) => label !== "")
+    .map(Number)
+    .filter(Number.isFinite);
+}
+
+// Net basal IOB goes below zero while basal is withheld, so the bands can too.
+const negativeIob = { p10: -1.5, p25: -1, p50: -0.5, p75: 0, p90: 0.5, mean: -0.5, n: 14, sparse: false };
+
 describe("EventResponseBody", () => {
   it("stacks every series on the shared axis of minutes from the event", async () => {
     render(EventResponseBody, { props: { response: eventResponse() } });
@@ -88,15 +101,15 @@ describe("EventResponseBody", () => {
   it("compares each cohort's figures side by side, with how many came back and why grams per unit is missing", async () => {
     render(EventResponseBody, { props: { response: eventResponse({ comparison: true }) } });
 
-    await expect.element(page.getByText("The charts show the comparison range as dashed outlines in the colour of each cohort.")).toBeVisible();
+    await expect.element(page.getByText("The charts show the comparison range as dashed outlines in the color of each cohort.")).toBeVisible();
     await expect.element(page.getByRole("rowheader", { name: "Observed grams per unit" })).toBeVisible();
     await expect.element(page.getByText("9.5 g/U").first()).toBeVisible();
     await expect.element(page.getByText(/Compared 9.5 g\/U/).first()).toBeVisible();
     await expect.element(page.getByText("8 of 12 events returned to within 25 mg/dL of the start glucose")).toBeVisible();
     const note = page.getByText(/grams per unit comes only from a meal/);
-    await expect.element(note).toHaveTextContent(/2 meals had another event in their window;\s*3 had too little of their basal recorded;\s*1 had no insulin above schedule/);
+    await expect.element(note).toHaveTextContent(/2 meals had another event in their window,\s*3 had too little of their basal recorded,\s*1 had no insulin above schedule/);
 
-    const links = page.getByRole("link", { name: /in Day in Review/ }).elements();
+    const links = page.getByRole("link", { name: /in Day in review/ }).elements();
     expect(links).toHaveLength(3);
     expect(links[0].getAttribute("href")).toBe("/reports/day-in-review?date=2026-10-10&time=07:30");
   });
@@ -116,7 +129,7 @@ describe("EventResponseBody", () => {
     await expect.element(page.getByRole("columnheader", { name: "Peak rise" })).toBeVisible();
     await expect.element(page.getByRole("columnheader", { name: "Drop to window end" })).toBeVisible();
     await expect.element(page.getByRole("columnheader", { name: "Below range" })).toBeVisible();
-    const rows = page.getByRole("row", { name: /in Day in Review/ });
+    const rows = page.getByRole("row", { name: /in Day in review/ });
     await expect.element(rows.filter({ hasText: "Unannounced rise" })).toHaveTextContent(/\+95 mg\/dL.*–/);
     await expect.element(rows.filter({ hasText: "Correction bolus" }).first()).toHaveTextContent(/90 mg\/dL.*45 mg\/dL\/U\s*No/);
     await expect.element(rows.filter({ hasText: "Correction bolus" }).last()).toHaveTextContent(/150 mg\/dL.*75 mg\/dL\/U\s*Yes/);
@@ -136,7 +149,7 @@ describe("EventResponseBody", () => {
     render(EventResponseBody, { props: { response: eventResponse() } });
 
     await page.getByRole("button", { name: "Peak rise" }).click();
-    const firstRow = () => page.getByRole("link", { name: /in Day in Review/ }).elements()[0].getAttribute("href");
+    const firstRow = () => page.getByRole("link", { name: /in Day in review/ }).elements()[0].getAttribute("href");
     expect(firstRow()).toContain("2026-10-12");
     await expect.element(page.getByRole("columnheader", { name: "Peak rise" })).toHaveAttribute("aria-sort", "descending");
     await page.getByRole("button", { name: "Peak rise" }).click();
@@ -149,7 +162,7 @@ describe("EventResponseBody", () => {
     await expect.element(page.getByRole("slider", { name: "Glucose", exact: true })).toBeVisible();
     expect(page.getByRole("slider", { name: "Insulin on board" }).elements()).toHaveLength(0);
     await expect.element(page.getByText("Hidden: your access does not include this data").first()).toBeVisible();
-    expect(page.getByRole("link", { name: /in Day in Review/ }).elements()).toHaveLength(0);
+    expect(page.getByRole("link", { name: /in Day in review/ }).elements()).toHaveLength(0);
     expect(page.getByRole("rowheader", { name: "Observed grams per unit" }).elements()).toHaveLength(0);
     expect(page.getByText(/grams per unit comes only/).elements()).toHaveLength(0);
     await expect.element(page.getByRole("rowheader", { name: "Peak rise" })).toBeVisible();
@@ -210,5 +223,13 @@ describe("EventResponseBody", () => {
     await expect
       .element(page.getByTestId("loop-analysis-event-window"))
       .toHaveTextContent(/60 minutes before to\s+5 hours after each event\.\s+Isolated events only\./);
+  });
+
+  it("extends the IOB axis below zero to the lowest band", async () => {
+    const response = eventResponse();
+    for (const cohort of response.primary!.cohorts!) for (const slot of cohort.slots!) slot.iob = { ...negativeIob };
+    render(EventResponseBody, { props: { response } });
+
+    expect(Math.min(...(await iobTickValues()))).toBeLessThanOrEqual(-1.5);
   });
 });

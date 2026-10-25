@@ -56,7 +56,7 @@
 
   const reportsResource = contextResource(
     () => getTreatmentsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Treatments", dateParams: reportsParams }
+    { errorTitle: "Error loading treatments", dateParams: reportsParams }
   );
 
   const allRows = $derived(
@@ -98,7 +98,7 @@
         search: debouncedSearch.current || undefined,
       });
     },
-    { errorTitle: "Error Loading Treatments" }
+    { errorTitle: "Error loading treatments" }
   );
 
   function refreshData() {
@@ -306,11 +306,11 @@
       case "carbs":
         return record.data.carbs
           ? `${formatCarbDisplay(record.data.carbs)}g`
-          : "Carb Intake";
+          : "Carb intake";
       case "bgCheck":
         return record.data.mgdl
           ? `${bg(record.data.mgdl)} ${bgLabel()}`
-          : "BG Check";
+          : "BG check";
       case "note":
         return record.data.text
           ? record.data.text.length > 50
@@ -318,7 +318,7 @@
             : record.data.text
           : "Note";
       case "deviceEvent":
-        return record.data.eventType ?? "Device Event";
+        return record.data.eventType ?? "Device event";
       case "basalInjection":
         return record.data.units
           ? `${record.data.units}U basal`
@@ -326,14 +326,6 @@
     }
   }
 </script>
-
-<svelte:head>
-  <title>Treatment Log - Nocturne</title>
-  <meta
-    name="description"
-    content="View and manage your diabetes treatments, insulin doses, and carb entries"
-  />
-</svelte:head>
 
 {#if reportsResource.current}
 <div class="@container space-y-6">
@@ -410,7 +402,7 @@
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button {...props} size="sm">
                   <Plus class="mr-1 h-4 w-4" />
-                  Add Treatment
+                  Add treatment
                 </Button>
               {/snippet}
             </DropdownMenu.Trigger>
@@ -589,7 +581,7 @@
   >
     <Card.Root class="w-full max-w-lg">
       <Card.Header>
-        <Card.Title>Delete {rowsToDelete.length} Records</Card.Title>
+        <Card.Title>Delete {rowsToDelete.length} records</Card.Title>
         <Card.Description>
           Are you sure you want to delete {rowsToDelete.length} selected record{rowsToDelete.length !==
           1
@@ -600,7 +592,7 @@
 
       <Card.Content>
         <Alert.Root>
-          <Alert.Title>Selected Records</Alert.Title>
+          <Alert.Title>Selected records</Alert.Title>
           <Alert.Description>
             <div class="max-h-48 space-y-2 overflow-y-auto text-sm">
               {#each rowsToDelete.slice(0, 5) as row (`${row.kind}-${row.data.id}`)}

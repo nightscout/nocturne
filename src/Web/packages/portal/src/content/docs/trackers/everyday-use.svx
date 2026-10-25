@@ -35,6 +35,11 @@ asks for:
 A duration tracker with notification steps also shows a preview of when each
 step will fire, worked out from the start time you chose.
 
+If you set an earlier start time on a duration tracker, a step whose time is
+already past when you start the tracker does not send an alert for that run.
+The pill still shows the step. Each step that comes after it sends its alert at
+the usual time.
+
 An event tracker asks for **Scheduled For** instead: the date and time of the
 appointment or refill it counts down to.
 
@@ -141,6 +146,13 @@ rule uses (see
 Acknowledging it marks it as seen, the same as any other alert. That covers the
 steps the tracker has already reached. The next step on the ladder will still
 notify you when its time comes.
+
+On a duration tracker, a step does not fire for a run if its time was already
+past when that run was recorded, for example when you start the tracker with an
+earlier start time. Event trackers always send their steps. If you book an
+appointment two hours ahead, its "24 hours before" step fires at once. If you
+enter an event tracker for a time that is already past, it sends its steps at
+once.
 
 To make every reminder for a tracker stop, complete the tracker. A tracker that
 is not running has nothing to remind you about.

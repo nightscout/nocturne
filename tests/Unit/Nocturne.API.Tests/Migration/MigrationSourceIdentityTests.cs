@@ -4,7 +4,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services;
+using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -13,6 +15,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.API.Tests.TestDoubles;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -29,14 +32,27 @@ public class MigrationSourceIdentityTests
     private readonly TenantRunGuard _runGuard = new();
 
     private (MigrationJobService Service, ServiceProvider Provider) CreateService(
-        INotificationV1Service? notifications = null)
+        List<Guid>? notifiedTenants = null,
+        params Guid[] activeTenants)
     {
         var dbName = $"migration-sources-{Guid.NewGuid():N}";
         var provider = new ServiceCollection()
             .AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(dbName))
             .AddDataServices()
-            .AddSingleton(notifications ?? new Mock<INotificationV1Service>().Object)
+            .AddScoped<ITenantAccessor, HttpContextTenantAccessor>()
+            .AddActiveTenantSnapshot()
+            .AddScoped<INotificationV1Service>(sp => RecordingNotifications(
+                sp.GetRequiredService<ITenantAccessor>(), notifiedTenants ?? []))
             .BuildServiceProvider();
+
+        if (activeTenants.Length > 0)
+        {
+            using var seedScope = provider.CreateScope();
+            using var seed = seedScope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext();
+            foreach (var id in activeTenants)
+                seed.Tenants.Add(new TenantEntity { Id = id, Slug = $"t{id:N}", DisplayName = "Tenant", IsActive = true });
+            seed.SaveChanges();
+        }
 
         var service = new MigrationJobService(
             NullLogger<MigrationJobService>.Instance,
@@ -65,6 +81,7 @@ public class MigrationSourceIdentityTests
 
     private static MigrationStartupService Startup(IServiceProvider provider) => new(
         provider,
+        provider.GetRequiredService<ActiveTenantSnapshot>(),
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["MIGRATION_MODE"] = "Api",
@@ -172,52 +189,78 @@ public class MigrationSourceIdentityTests
     [InlineData(false)]
     public async Task The_startup_check_matches_a_completed_run_under_either_identifier(bool legacy)
     {
-        var notifications = new Mock<INotificationV1Service>();
-        var (_, provider) = CreateService(notifications.Object);
+        var migrated = Guid.NewGuid();
+        var pending = Guid.NewGuid();
+        var notified = new List<Guid>();
+        var (_, provider) = CreateService(notified, migrated, pending);
         await using var owned = provider;
-        var tenantId = Guid.NewGuid();
 
-        await using (var seedScope = provider.CreateAsyncScope())
-        {
-            await using var seed = await seedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
-            var source = new MigrationSourceEntity
-            {
-                Id = Guid.CreateVersion7(),
-                TenantId = tenantId,
-                SourceIdentifier = legacy ? MigrationJob.LegacyApiSourceIdentifier(TokenUrl) : CleanUrl,
-                CreatedAt = DateTime.UtcNow,
-            };
-            seed.MigrationSources.Add(source);
-            seed.MigrationRuns.Add(new MigrationRunEntity
-            {
-                Id = Guid.CreateVersion7(),
-                SourceId = source.Id,
-                TenantId = tenantId,
-                State = nameof(MigrationJobState.Completed),
-                CreatedAt = DateTime.UtcNow,
-            });
-            await seed.SaveChangesAsync();
-        }
+        await SeedCompletedRunAsync(provider, migrated, legacy ? MigrationJob.LegacyApiSourceIdentifier(TokenUrl) : CleanUrl);
 
         await Startup(provider).StartAsync(CancellationToken.None);
 
-        notifications.Verify(
-            n => n.AddAdminNotificationAsync(It.IsAny<AdminNotification>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        notified.Should().Equal([pending], "only the tenant with no completed run is prompted to migrate");
     }
 
     [Fact]
     public async Task The_startup_check_notifies_when_no_run_completed_for_the_source()
     {
-        var notifications = new Mock<INotificationV1Service>();
-        var (_, provider) = CreateService(notifications.Object);
+        var tenantId = Guid.NewGuid();
+        var notified = new List<Guid>();
+        var (_, provider) = CreateService(notified, tenantId);
         await using var owned = provider;
 
         await Startup(provider).StartAsync(CancellationToken.None);
 
-        notifications.Verify(
-            n => n.AddAdminNotificationAsync(It.IsAny<AdminNotification>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+        notified.Should().Equal([tenantId]);
+    }
+
+    [Fact]
+    public async Task A_run_completed_for_another_source_does_not_clear_the_notice()
+    {
+        var tenantId = Guid.NewGuid();
+        var notified = new List<Guid>();
+        var (_, provider) = CreateService(notified, tenantId);
+        await using var owned = provider;
+
+        await SeedCompletedRunAsync(provider, tenantId, "https://other.invalid");
+
+        await Startup(provider).StartAsync(CancellationToken.None);
+
+        notified.Should().Equal([tenantId]);
+    }
+
+    private static async Task SeedCompletedRunAsync(IServiceProvider provider, Guid tenantId, string sourceIdentifier)
+    {
+        await using var seedScope = provider.CreateAsyncScope();
+        await using var seed = await seedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateForTenantAsync(tenantId);
+        var source = new MigrationSourceEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            SourceIdentifier = sourceIdentifier,
+            CreatedAt = DateTime.UtcNow,
+        };
+        seed.MigrationSources.Add(source);
+        seed.MigrationRuns.Add(new MigrationRunEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SourceId = source.Id,
+            TenantId = tenantId,
+            State = nameof(MigrationJobState.Completed),
+            CreatedAt = DateTime.UtcNow,
+        });
+        await seed.SaveChangesAsync();
+    }
+
+    private static INotificationV1Service RecordingNotifications(ITenantAccessor tenant, List<Guid> notified)
+    {
+        var notifications = new Mock<INotificationV1Service>();
+        notifications
+            .Setup(n => n.AddAdminNotificationAsync(It.IsAny<AdminNotification>(), It.IsAny<CancellationToken>()))
+            .Callback(() => notified.Add(tenant.TenantId))
+            .ReturnsAsync(new NotificationAckResponse());
+        return notifications.Object;
     }
 
     [Fact]

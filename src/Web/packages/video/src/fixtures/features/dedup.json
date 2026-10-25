@@ -1,0 +1,278 @@
+{
+ "route": "/settings/data-quality",
+ "params": {},
+ "capturedAt": 1792833008628,
+ "entries": [
+  {
+   "type": "sgv",
+   "mills": 1792832700000,
+   "sgv": 140,
+   "direction": "SingleUp",
+   "delta": 9.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792832400000,
+   "sgv": 130,
+   "direction": "SingleUp",
+   "delta": 7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792832100000,
+   "sgv": 123,
+   "direction": "SingleUp",
+   "delta": 5.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792831800000,
+   "sgv": 118,
+   "direction": "Flat",
+   "delta": 0.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792831500000,
+   "sgv": 117,
+   "direction": "Flat",
+   "delta": 1.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792831200000,
+   "sgv": 116,
+   "direction": "Flat",
+   "delta": -1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830900000,
+   "sgv": 117,
+   "direction": "Flat",
+   "delta": 0.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830600000,
+   "sgv": 116,
+   "direction": "Flat",
+   "delta": -0.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830300000,
+   "sgv": 116,
+   "direction": "Flat",
+   "delta": -0.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792830000000,
+   "sgv": 117,
+   "direction": "Flat",
+   "delta": 0.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829700000,
+   "sgv": 116,
+   "direction": "Flat",
+   "delta": 1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829400000,
+   "sgv": 115,
+   "direction": "Flat",
+   "delta": 1.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792829100000,
+   "sgv": 114,
+   "direction": "Flat",
+   "delta": 1.7
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828800000,
+   "sgv": 112,
+   "direction": "Flat",
+   "delta": 0.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828500000,
+   "sgv": 112,
+   "direction": "Flat",
+   "delta": -0.5
+  },
+  {
+   "type": "sgv",
+   "mills": 1792828200000,
+   "sgv": 112,
+   "direction": "Flat",
+   "delta": 0.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827900000,
+   "sgv": 111,
+   "direction": "Flat",
+   "delta": 0
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827600000,
+   "sgv": 111,
+   "direction": "Flat",
+   "delta": -0.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827300000,
+   "sgv": 112,
+   "direction": "Flat",
+   "delta": -0.9
+  },
+  {
+   "type": "sgv",
+   "mills": 1792827000000,
+   "sgv": 113,
+   "direction": "Flat",
+   "delta": 1.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826700000,
+   "sgv": 111,
+   "direction": "Flat",
+   "delta": 1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826400000,
+   "sgv": 110,
+   "direction": "Flat",
+   "delta": 1.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826340000
+  },
+  {
+   "type": "sgv",
+   "mills": 1792826100000,
+   "sgv": 109,
+   "direction": "Flat",
+   "delta": 0.8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825800000,
+   "sgv": 108,
+   "direction": "Flat",
+   "delta": -0.4
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825500000,
+   "sgv": 109,
+   "direction": "FortyFiveUp",
+   "delta": 4.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792825200000,
+   "sgv": 105,
+   "direction": "FortyFiveUp",
+   "delta": 3.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824900000,
+   "sgv": 102,
+   "direction": "SingleUp",
+   "delta": 6.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824600000,
+   "sgv": 95,
+   "direction": "SingleUp",
+   "delta": 8
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824300000,
+   "sgv": 87,
+   "direction": "SingleUp",
+   "delta": 9.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792824000000,
+   "sgv": 78,
+   "direction": "DoubleUp",
+   "delta": 11.3
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823700000,
+   "sgv": 67,
+   "direction": "SingleUp",
+   "delta": 9.6
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823400000,
+   "sgv": 57,
+   "direction": "Flat",
+   "delta": -1.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792823100000,
+   "sgv": 58,
+   "direction": "FortyFiveDown",
+   "delta": -4.2
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822800000,
+   "sgv": 62,
+   "direction": "FortyFiveDown",
+   "delta": -3.1
+  },
+  {
+   "type": "sgv",
+   "mills": 1792822500000,
+   "sgv": 65,
+   "direction": "FortyFiveDown",
+   "delta": -4.9
+  }
+ ],
+ "results": {
+  "getActiveAlerts": "[[]]",
+  "getUiSettings": "[{\"devices\":1,\"algorithm\":8,\"features\":22,\"notifications\":42,\"services\":55,\"dataQuality\":129},{\"connectedDevices\":2,\"autoConnect\":3,\"showRawData\":4,\"uploadEnabled\":3,\"cgmConfiguration\":5},[],true,false,{\"dataSourcePriority\":6,\"sensorWarmupHours\":7},\"cgm\",2,{\"prediction\":9,\"autosens\":12,\"carbAbsorption\":15,\"loop\":17,\"safetyLimits\":20},{\"enabled\":3,\"minutes\":10,\"model\":11},30,\"ar2\",{\"enabled\":3,\"min\":13,\"max\":14},0.7,1.2,{\"defaultMinutes\":10,\"minRateGramsPerHour\":16},4,{\"enabled\":4,\"mode\":18,\"maxBasalRate\":16,\"maxBolus\":19,\"smbEnabled\":4,\"uamEnabled\":4},\"open\",10,{\"maxIOB\":19,\"maxDailyBasalMultiplier\":21},3,{\"display\":23,\"widgets\":27,\"plugins\":37,\"battery\":38,\"trackerPills\":40},{\"nightMode\":4,\"theme\":24,\"timeFormat\":25,\"units\":26,\"showRawBG\":4,\"focusHours\":21},\"system\",\"12\",\"mg/dl\",[28,31,33,35],{\"id\":29,\"enabled\":3,\"placement\":30},\"GlucoseChart\",\"Main\",{\"id\":32,\"enabled\":3,\"placement\":30},\"Predictions\",{\"id\":34,\"enabled\":3,\"placement\":30},\"DailyStats\",{\"id\":36,\"enabled\":3,\"placement\":30},\"Treatments\",{},{\"warnThreshold\":10,\"urgentThreshold\":39,\"enableAlerts\":3,\"recentMinutes\":10,\"showVoltage\":4,\"showStatistics\":3},20,{\"enabled\":3,\"visibility\":41},\"always\",{\"alarmConfiguration\":43},{\"version\":44,\"enabled\":3,\"soundEnabled\":3,\"vibrationEnabled\":3,\"globalVolume\":45,\"profiles\":46,\"customSounds\":47,\"emergencyContacts\":48,\"channels\":49},1,80,[],[],[],{\"push\":50,\"email\":52,\"sms\":53,\"pushover\":54},{\"enabled\":3,\"minPriority\":51},\"Normal\",{\"enabled\":4,\"minPriority\":51},{\"enabled\":4,\"minPriority\":51},null,{\"connectedServices\":56,\"availableServices\":57,\"syncSettings\":128},[],[58,64,68,72,77,83,87,92,96,100,105,110,114,119,123],{\"id\":59,\"name\":60,\"type\":61,\"description\":62,\"icon\":63},\"GoogleHealth\",\"Google Health\",\"sync\",\"Import health and fitness data from Google Health\",\"google-health\",{\"id\":65,\"name\":65,\"type\":6,\"description\":66,\"icon\":67},\"Eversense\",\"Connect to Eversense Now\",\"eversense\",{\"id\":69,\"name\":69,\"type\":61,\"description\":70,\"icon\":71},\"Nightscout\",\"Sync glucose, treatment, device status, and profile data from a Nightscout instance\",\"nightscout\",{\"id\":73,\"name\":74,\"type\":61,\"description\":75,\"icon\":76},\"NocturneRemote\",\"Nocturne Remote\",\"Import data from a remote Nocturne instance\",\"nocturne\",{\"id\":78,\"name\":79,\"type\":80,\"description\":81,\"icon\":82},\"CareLink\",\"Medtronic CareLink\",\"pump\",\"Connect to Medtronic CareLink\",\"carelink\",{\"id\":84,\"name\":84,\"type\":6,\"description\":85,\"icon\":86},\"Dexcom\",\"Connect to Dexcom Share or Clarity\",\"dexcom\",{\"id\":88,\"name\":89,\"type\":6,\"description\":90,\"icon\":91},\"LibreLinkUp\",\"FreeStyle Libre\",\"Connect to LibreView for CGM data\",\"libre\",{\"id\":93,\"name\":93,\"type\":61,\"description\":94,\"icon\":95},\"Glooko\",\"Import data from Glooko platform\",\"glooko\",{\"id\":97,\"name\":97,\"type\":61,\"description\":98,\"icon\":99},\"Gluroo\",\"Sync glucose, treatment, and profile data from Gluroo Global Connect\",\"gluroo\",{\"id\":101,\"name\":102,\"type\":61,\"description\":103,\"icon\":104},\"HomeAssistant\",\"Home Assistant\",\"Connect via the Home Assistant integration (HACS)\",\"home-assistant\",{\"id\":106,\"name\":106,\"type\":107,\"description\":108,\"icon\":109},\"MyFitnessPal\",\"nutrition\",\"Sync food diary entries from MyFitnessPal for meal matching\",\"myfitnesspal\",{\"id\":111,\"name\":111,\"type\":80,\"description\":112,\"icon\":113},\"MyLife\",\"Connect to MyLife for pump data\",\"mylife\",{\"id\":115,\"name\":116,\"type\":80,\"description\":117,\"icon\":118},\"Tandem\",\"Tandem Source\",\"Import t:slim X2 / Mobi pump data (boluses, basal, CGM, alarms, profiles) from Tandem Source\",\"tandem\",{\"id\":120,\"name\":120,\"type\":61,\"description\":121,\"icon\":122},\"Tidepool\",\"Sync glucose, treatment, and profile data from Tidepool\",\"tidepool\",{\"id\":124,\"name\":125,\"type\":6,\"description\":126,\"icon\":127},\"Twiist\",\"Twiist Insight\",\"Connect to Twiist Insight (Omnipod 5 / Tidepool Loop) via the follower API\",\"twiist\",{\"autoSync\":3,\"syncOnAppOpen\":3,\"backgroundRefresh\":3},{\"sleepSchedule\":130,\"compressionLowDetection\":133},{\"bedtimeHour\":131,\"wakeTimeHour\":132,\"timezone\":54},23,7,{\"enabled\":3,\"excludeFromStatistics\":3}]",
+  "getMyTenants": "[[1],{\"id\":2,\"slug\":3,\"displayName\":4,\"isActive\":5,\"sysCreatedAt\":6},\"01a16d2c-3738-706b-9859-03c81372ff18\",\"films-1792832976677\",\"Sample\",true,\"2026-10-24T09:09:36.697101Z\"]",
+  "getAll": "[[]]",
+  "getSummary": "[{\"current\":1,\"history\":9,\"iob\":10,\"cob\":11,\"trackers\":12,\"alarm\":4,\"predictions\":4,\"serverMills\":47},{\"sgv\":2,\"direction\":3,\"trendRate\":4,\"delta\":5,\"mills\":6,\"noise\":7,\"status\":8},140,\"SingleUp\",null,9.5,1792832700000,0,\"InRange\",[],0.12,48,[13,24,29,38],{\"id\":14,\"definitionId\":15,\"name\":16,\"icon\":17,\"category\":18,\"mode\":19,\"ageHours\":20,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":22,\"percentElapsed\":23},\"01a16d2c-7b2f-7d65-a182-bdf8b7c1279b\",\"01a16d2c-7abd-742f-a61d-8fc48aa98ad5\",\"Infusion Site\",\"syringe\",\"Cannula\",\"Duration\",13,\"Info\",72,18,{\"id\":25,\"definitionId\":26,\"name\":27,\"icon\":28,\"category\":27,\"mode\":19,\"ageHours\":20,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":22,\"percentElapsed\":23},\"01a16d2c-7bac-79d2-96d2-6f2b962aeca1\",\"01a16d2c-7b37-7a75-a1b4-974cbd11f857\",\"Reservoir\",\"cylinder\",{\"id\":30,\"definitionId\":31,\"name\":32,\"icon\":33,\"category\":34,\"mode\":19,\"ageHours\":35,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":36,\"percentElapsed\":37},\"01a16d2c-7ab8-7029-8a00-73d7027938f7\",\"01a16d2c-7a92-7c81-b4c0-b7c84575d8c0\",\"CGM Sensor\",\"radio\",\"Sensor\",227,240,95,{\"id\":39,\"definitionId\":40,\"name\":41,\"icon\":42,\"category\":43,\"mode\":19,\"ageHours\":44,\"hoursUntilEvent\":4,\"urgency\":21,\"lifespanHours\":45,\"percentElapsed\":46},\"01a16d2c-7bbf-7495-a5e3-f2e1cfe375ac\",\"01a16d2c-7bb1-7d20-a7ab-6b13257b32e3\",\"Pump Battery\",\"battery\",\"Battery\",264.6,504,53,1792833009945]",
+  "getSessionInfo": "[{\"isAuthenticated\":1,\"subjectId\":2,\"name\":3,\"email\":4,\"avatarUrl\":4,\"roles\":5,\"permissions\":7,\"expiresAt\":8},true,\"01a16d2c-3756-79fc-88a7-8f3b39f713c7\",\"dev\",null,[6],\"Owner\",[],\"2026-10-24T09:24:54+00:00\"]"
+ },
+ "phases": [
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  },
+  {
+   "results": {}
+  }
+ ]
+}

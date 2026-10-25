@@ -161,6 +161,12 @@ const asLinkedMember = (excursionId: string | null) => ({
   acknowledgedBy: "Sam Tester",
 });
 
+const ago = (minutes: number) =>
+  new Intl.RelativeTimeFormat(new Intl.DateTimeFormat().resolvedOptions().locale, {
+    style: "narrow",
+    numeric: "auto",
+  }).format(-minutes, "minute");
+
 describe("ack_alert action", () => {
   let handler: (event: ActionEvent) => Promise<void>;
 
@@ -492,8 +498,8 @@ describe("/alerts command", () => {
       ctx.alertsBySlug.get("work-clinic")!.getActiveAlerts,
     ).toHaveBeenCalledOnce();
     expect(cardFields(post.mock.calls[0]?.[0])).toEqual([
-      "Urgent low: Firing, started 3 min ago",
-      "High: Firing, started 3 min ago",
+      `Urgent low: Firing, started ${ago(3)}`,
+      `High: Firing, started ${ago(3)}`,
     ]);
   });
 

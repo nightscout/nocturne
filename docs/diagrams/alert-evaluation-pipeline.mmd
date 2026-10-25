@@ -5,9 +5,9 @@ flowchart TD
         direction TB
         Orchestrator["<b>AlertOrchestrator</b><br/>Loads enabled rules for tenant"]
         Filter["<b>RuleReferenceResolver</b><br/>FilterEvaluable: drops chained rules<br/>whose alert_state parent is disabled"]
-        Enricher["<b>ISensorContextEnricher</b><br/>Lazy: walks rule trees, fetches only<br/>IOB/COB/predictions/active-alerts/<br/>looping (loop staleness, pump/uploader/<br/>temp-basal/override/sensitivity) actually<br/>consulted this pass.<br/>HasEver* flags suppress cold-start firing.<br/>Pump-suspension projection nulled when<br/>latest pump snapshot is itself stale.<br/>EnrichAsOfAsync threads asOf for replay."]
+        Enricher["<b>ISensorContextEnricher</b><br/>Lazy: reads rule leaves from the engine (describe), fetches only<br/>IOB/COB/predictions/active-alerts/<br/>looping (loop staleness, pump/uploader/<br/>temp-basal/override/sensitivity) actually<br/>consulted this pass.<br/>HasEver* flags suppress cold-start firing.<br/>Pump-suspension projection nulled when<br/>latest pump snapshot is itself stale.<br/>EnrichAsOfAsync threads asOf for replay."]
         Loop["For each surviving rule"]
-        Eval["<b>ConditionEvaluatorRegistry</b><br/>EvaluateNodeAsync(node, context)<br/>Single dispatch entrypoint shared by<br/>composite/not/sustained recursion"]
+        Eval["<b>IAlertEvaluationEngine</b><br/>EvaluateRuleAsync(rule, context)<br/>Rust engine over FFI (nocturne_alerts):<br/>root, leaves, sustained timers, tracker decision"]
         Tracker["<b>IExcursionTracker</b><br/>ProcessEvaluationAsync(ruleId, met)<br/>State machine: idle → confirming →<br/>active → hysteresis → idle"]
         Branch{"Transition?"}
 
@@ -38,7 +38,7 @@ flowchart TD
     subgraph autoresolve ["Auto-resolve (per-reading)"]
         direction TB
         AutoCheck{"AutoResolveEnabled<br/>+ active excursion?"}
-        AutoEval["<b>registry.EvaluateNodeAsync</b><br/>(AutoResolveParams, context)<br/>CurrentPath = 'auto_resolve'<br/>so sustained timers don't collide"]
+        AutoEval["<b>engine: evaluate_node</b><br/>(AutoResolveParams, context)<br/>path root 'auto_resolve'<br/>so sustained timers don't collide"]
         ForceClose["<b>tracker.ForceCloseAsync</b><br/>(ruleId, AutoResolve)"]
 
         AutoCheck -->|yes, eval params| AutoEval
@@ -54,7 +54,7 @@ flowchart TD
         Resolution["<b>IExcursionResolutionHandler</b><br/>HandleClosedAsync(transition, tenantId)<br/><i>single seam used by per-reading,<br/>auto-resolve, and sweep</i>"]
         Stamp["repository.ResolveInstancesForExcursionAsync<br/>stamps resolution_reason from CloseReason<br/>(hysteresis | auto | manual | rule-disabled)"]
         Expire["repository.ExpirePendingDeliveriesAsync"]
-        BroadcastResolved["broadcastService<br/>BroadcastAlertEventAsync('alert_resolved')"]
+        BroadcastResolved["broadcastService<br/>BroadcastAlertResolvedAsync"]
         ArchiveInApp["For each InApp recipient:<br/>notificationService.ArchiveBySourceAsync<br/>(ConditionMet)"]
 
         Resolution --> Stamp --> Expire --> BroadcastResolved --> ArchiveInApp

@@ -3,6 +3,7 @@ import {
   UNKNOWN_DIRECTION_GLYPH,
   canonicalDirection,
 } from "@nocturne/ui/glucose";
+import { relativeAge } from "@nocturne/ui/relative-time";
 
 // Plain-text arrows rather than the web app's Unicode glyphs: chat platforms render these
 // legibly everywhere. Directions with no arrow fall through to UNKNOWN_DIRECTION_GLYPH.
@@ -27,8 +28,9 @@ export function trendArrow(direction: string): string {
   return TREND_ARROWS[canonicalDirection(direction)] ?? UNKNOWN_DIRECTION_GLYPH;
 }
 
-export function timeAgo(dateMs: number): string {
-  const minutes = Math.round((Date.now() - dateMs) / 60000);
-  if (minutes < 1) return "just now";
-  return `${minutes} min ago`;
+export function timeAgo(
+  dateMs: number,
+  locale: string = new Intl.DateTimeFormat().resolvedOptions().locale,
+): string {
+  return relativeAge(dateMs, locale);
 }

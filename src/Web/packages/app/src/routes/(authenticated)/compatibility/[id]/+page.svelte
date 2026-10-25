@@ -20,15 +20,15 @@
   function getDiscrepancyTypeDisplay(type: number | undefined) {
     if (type === undefined) return "Unknown";
     const types = [
-      "Status Code",
+      "Status code",
       "Header",
-      "Content Type",
+      "Content type",
       "Body",
-      "JSON Structure",
-      "String Value",
-      "Numeric Value",
+      "JSON structure",
+      "String value",
+      "Numeric value",
       "Timestamp",
-      "Array Length",
+      "Array length",
       "Performance",
     ];
     return types[type] || "Unknown";
@@ -52,7 +52,7 @@
     <Button variant="secondary" onclick={() => goto(resolve("/compatibility"))}>
       ← Back
     </Button>
-    <h1 class="text-3xl font-bold">Request Analysis Detail</h1>
+    <h1 class="text-3xl font-bold">Request analysis detail</h1>
   </div>
 
   <!-- Overview Card -->
@@ -68,7 +68,7 @@
         <p class="text-sm">{formatDateTimeCompact(analysis.analysisTimestamp)}</p>
       </div>
       <div>
-        <p class="text-sm text-muted-foreground">Overall Match</p>
+        <p class="text-sm text-muted-foreground">Overall match</p>
         <span
           class="inline-block px-3 py-1 text-sm font-semibold rounded-full {matchType.class}"
         >
@@ -76,11 +76,11 @@
         </span>
       </div>
       <div>
-        <p class="text-sm text-muted-foreground">Request Method</p>
+        <p class="text-sm text-muted-foreground">Request method</p>
         <p class="font-mono font-semibold">{analysis.requestMethod}</p>
       </div>
       <div class="@lg:col-span-2">
-        <p class="text-sm text-muted-foreground">Request Path</p>
+        <p class="text-sm text-muted-foreground">Request path</p>
         <p class="font-mono text-sm break-all">{analysis.requestPath}</p>
       </div>
     </div>
@@ -90,7 +90,7 @@
   <div class="grid grid-cols-1 @lg:grid-cols-2 gap-6">
     <!-- Status Codes -->
     <div class="bg-card rounded-lg shadow p-6">
-      <h2 class="text-xl font-semibold mb-4">Status Codes</h2>
+      <h2 class="text-xl font-semibold mb-4">Status codes</h2>
       <div class="space-y-3">
         <div class="flex justify-between items-center">
           <span class="text-muted-foreground">Nightscout</span>
@@ -127,7 +127,7 @@
 
     <!-- Response Times -->
     <div class="bg-card rounded-lg shadow p-6">
-      <h2 class="text-xl font-semibold mb-4">Response Times</h2>
+      <h2 class="text-xl font-semibold mb-4">Response times</h2>
       <div class="space-y-3">
         <div class="flex justify-between items-center">
           <span class="text-muted-foreground">Nightscout</span>
@@ -142,7 +142,7 @@
           </span>
         </div>
         <div class="flex justify-between items-center">
-          <span class="text-muted-foreground">Total Processing</span>
+          <span class="text-muted-foreground">Total processing</span>
           <span class="font-mono font-semibold">
             {formatElapsedMs(analysis.totalProcessingTimeMs || 0)}
           </span>
@@ -165,11 +165,11 @@
   <!-- Selection Details -->
   {#if analysis.selectedResponseTarget}
     <div class="bg-card rounded-lg shadow p-6">
-      <h2 class="text-xl font-semibold mb-4">Response Selection</h2>
+      <h2 class="text-xl font-semibold mb-4">Response selection</h2>
       <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
         <div>
           <p class="text-sm text-muted-foreground">
-            Selected Target
+            Selected target
           </p>
           <p class="font-semibold">{analysis.selectedResponseTarget}</p>
         </div>
@@ -226,7 +226,7 @@
                 <div class="grid grid-cols-1 @lg:grid-cols-2 gap-2 mt-2">
                   <div>
                     <p class="text-xs text-muted-foreground">
-                      Nightscout Value
+                      Nightscout value
                     </p>
                     <p
                       class="font-mono text-sm bg-muted p-2 rounded break-all"
@@ -236,7 +236,7 @@
                   </div>
                   <div>
                     <p class="text-xs text-muted-foreground">
-                      Nocturne Value
+                      Nocturne value
                     </p>
                     <p
                       class="font-mono text-sm bg-muted p-2 rounded break-all"
@@ -281,7 +281,7 @@
                 <div class="grid grid-cols-1 @lg:grid-cols-2 gap-2 mt-2">
                   <div>
                     <p class="text-xs text-muted-foreground">
-                      Nightscout Value
+                      Nightscout value
                     </p>
                     <p
                       class="font-mono text-sm bg-muted p-2 rounded break-all"
@@ -291,7 +291,7 @@
                   </div>
                   <div>
                     <p class="text-xs text-muted-foreground">
-                      Nocturne Value
+                      Nocturne value
                     </p>
                     <p
                       class="font-mono text-sm bg-muted p-2 rounded break-all"
@@ -336,7 +336,7 @@
                 <div class="grid grid-cols-1 @lg:grid-cols-2 gap-2 mt-2">
                   <div>
                     <p class="text-xs text-muted-foreground">
-                      Nightscout Value
+                      Nightscout value
                     </p>
                     <p
                       class="font-mono text-sm bg-muted p-2 rounded break-all"
@@ -346,7 +346,7 @@
                   </div>
                   <div>
                     <p class="text-xs text-muted-foreground">
-                      Nocturne Value
+                      Nocturne value
                     </p>
                     <p
                       class="font-mono text-sm bg-muted p-2 rounded break-all"
@@ -365,7 +365,7 @@
     <div class="bg-card rounded-lg shadow p-6">
       <h2 class="text-xl font-semibold mb-4">Discrepancies</h2>
       <p class="text-muted-foreground">
-        No discrepancies found. The responses match perfectly!
+        No discrepancies found. The responses match.
       </p>
     </div>
   {/if}

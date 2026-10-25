@@ -49,15 +49,15 @@ function createDefaultProps(
 }
 
 describe("ChartLegend", () => {
-	it("always shows 'In Range' indicator", async () => {
+	it("always shows 'In range' indicator", async () => {
 		render(ChartLegend, createDefaultProps());
 
 		await expect
-			.element(page.getByText("In Range"))
+			.element(page.getByText("In range"))
 			.toBeVisible();
 	});
 
-	it("shows 'Very High' when glucose data has values above veryHighThreshold", async () => {
+	it("shows 'Very high' when glucose data has values above veryHighThreshold", async () => {
 		render(
 			ChartLegend,
 			createDefaultProps({
@@ -66,11 +66,11 @@ describe("ChartLegend", () => {
 		);
 
 		await expect
-			.element(page.getByText("Very High"))
+			.element(page.getByText("Very high"))
 			.toBeVisible();
 	});
 
-	it("does not show 'Very High' when no values exceed veryHighThreshold", async () => {
+	it("does not show 'Very high' when no values exceed veryHighThreshold", async () => {
 		render(
 			ChartLegend,
 			createDefaultProps({
@@ -79,7 +79,7 @@ describe("ChartLegend", () => {
 		);
 
 		await expect
-			.element(page.getByText("Very High"))
+			.element(page.getByText("Very high"))
 			.not.toBeInTheDocument();
 	});
 

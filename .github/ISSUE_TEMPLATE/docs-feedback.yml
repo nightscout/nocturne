@@ -1,0 +1,25 @@
+name: Docs feedback
+description: A page of the documentation did not answer your question, or is wrong.
+title: "Docs: "
+labels: ["documentation"]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: The address of the docs page. The "Was this helpful?" link fills this in.
+      placeholder: https://getnocturne.dev/docs/...
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What was missing or wrong?
+      description: What you were trying to do, and where the page stopped helping.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: If you were installing, where (for example Docker Compose on a Raspberry Pi, Portainer, Oracle Cloud).

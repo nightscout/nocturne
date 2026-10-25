@@ -1,4 +1,4 @@
-import { TrackerRealtimeAction, type InAppNotificationDto } from "$lib/api/generated/nocturne-api-client";
+import { SyncPhase, TrackerRealtimeAction, type InAppNotificationDto } from "$lib/api/generated/nocturne-api-client";
 import { isOneOf, isRecord, nonEmptyString } from "$lib/utils/type-guards";
 import { isoNow } from "$lib/utils/now";
 import { toIsoString } from "$lib/utils/api-date";
@@ -10,6 +10,7 @@ import type {
   StorageEvent,
   SyncMessageType,
   SyncProgressEvent,
+  TrackerDefinitionUpdateEvent,
   TrackerUpdateEvent,
 } from "./types";
 
@@ -130,11 +131,13 @@ export function parseTrackerUpdate(data: unknown): TrackerUpdateEvent | null {
   };
 }
 
-const SYNC_PHASES = [
-  "Syncing",
-  "Completed",
-  "Failed",
-] as const satisfies readonly SyncProgressEvent["phase"][];
+/** A definition event names the definition that was created, changed or deleted. */
+export function parseTrackerDefinitionUpdate(data: unknown): TrackerDefinitionUpdateEvent | null {
+  const definitionId = nonEmptyString(fieldsOf(data).definitionId);
+  return definitionId === undefined ? null : { definitionId };
+}
+
+const SYNC_PHASES: readonly SyncPhase[] = Object.values(SyncPhase);
 
 const SYNC_MESSAGE_TYPES = [
   "Authenticating",

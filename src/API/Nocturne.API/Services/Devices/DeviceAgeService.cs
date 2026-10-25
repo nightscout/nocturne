@@ -114,7 +114,7 @@ public class DeviceAgeService : IDeviceAgeService
         var days = age / 24;
         var hours = age % 24;
         var minFractions = (int)((totalHours - age) * 60);
-        var treatmentDate = new DateTimeOffset(deviceEvent.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var treatmentDate = deviceEvent.Timestamp.ToMills();
 
         var level = CalculateLevel(age, prefs);
 

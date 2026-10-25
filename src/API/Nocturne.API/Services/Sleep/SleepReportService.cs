@@ -1,5 +1,7 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Clinical.Sleep;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Glucose;
@@ -191,8 +193,13 @@ public class SleepReportService : ISleepReportService
         DateTime from,
         DateTime to,
         SleepSource? source = null,
+        TimeZoneInfo? zone = null,
         CancellationToken ct = default)
     {
+        var localDays = zone is { } tenantZone
+            ? LocalSlotBinning.LocalDays(from, to, tenantZone)
+            : LocalSlotBinning.UtcDays(from, to);
+        var days = localDays.Select(d => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)).ToList();
         var allSessions = await _sessions.GetSessionsAsync(
             from:              from,
             to:                to,
@@ -203,12 +210,13 @@ public class SleepReportService : ISleepReportService
             descending:        false,
             cancellationToken: ct);
 
-        var daysInRange = (int)(to.Date - from.Date).TotalDays + 1;
+        var daysInRange = days.Count;
         var referenceRanges = await ResolveReferenceRangesAsync(ct);
 
         if (!allSessions.Any())
             return new SleepTrendsReport
             {
+                Days = days,
                 Summary = SleepReportCalculator.ComputeTrendsSummary([], daysInRange, referenceRanges),
             };
 
@@ -234,11 +242,14 @@ public class SleepReportService : ISleepReportService
             })
             .ToList();
         var summary = SleepReportCalculator.ComputeTrendsSummary(nights, daysInRange, referenceRanges);
-        var weeks   = SleepReportCalculator.ComputeWeekSummaries(
-            nights, from, to, await ResolveFirstDayOfWeekAsync(ct));
+        var weeks   = localDays.Count == 0
+            ? []
+            : SleepReportCalculator.ComputeWeekSummaries(
+                nights, localDays[0], localDays[^1], await ResolveFirstDayOfWeekAsync(ct));
 
         return new SleepTrendsReport
         {
+            Days    = days,
             Nights  = nights,
             Weeks   = weeks,
             Summary = summary,

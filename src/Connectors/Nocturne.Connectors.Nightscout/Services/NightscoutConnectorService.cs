@@ -995,13 +995,13 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
         if (from.HasValue)
         {
-            var fromMs = new DateTimeOffset(from.Value, TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var fromMs = from.Value.ToMills();
             url += $"&find[date][$gte]={fromMs}";
         }
 
         if (to.HasValue)
         {
-            var toMs = new DateTimeOffset(to.Value, TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var toMs = to.Value.ToMills();
             url += $"&find[date][$lte]={toMs}";
         }
 

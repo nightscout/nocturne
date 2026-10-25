@@ -8,8 +8,7 @@
   import BatteryMedium from "@lucide/svelte/icons/battery-medium";
   import BatteryWarning from "@lucide/svelte/icons/battery-warning";
   import { onMount } from "svelte";
-  import { timeAgo } from "$lib/utils";
-  import { time } from "$lib/utils/formatting";
+  import { relativeAge, time } from "$lib/utils/formatting";
   import { Now } from "$lib/hooks/now.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
@@ -24,10 +23,10 @@
   const realtimeStore = getRealtimeStore();
   const displayLastUpdated = $derived(lastUpdated ?? realtimeStore.lastUpdated);
 
-  // `timeAgo` reads the clock once, so the age has to be re-derived on a tick
+  // `relativeAge` reads the clock once, so the age has to be re-derived on a tick
   // or it stays at whatever it said when the widget first rendered.
   const now = new Now();
-  const age = $derived(timeAgo(displayLastUpdated, undefined, examples?.now ?? now.current));
+  const age = $derived(relativeAge(displayLastUpdated, { now: examples?.now ?? now.current, fallback: "Unknown" }));
 
   // Awaiting a remote query in the template reads the hydration cache during
   // hydration and throws hydratable_missing_but_required; creating the query in
@@ -59,7 +58,7 @@
 </script>
 
 {#if !batteryStatusPromise}
-  <WidgetCard title="Last Updated">
+  <WidgetCard title="Last updated">
     <div class="text-2xl font-bold">
       {age}
     </div>
@@ -69,7 +68,7 @@
   </WidgetCard>
 {:else}
 {#await batteryStatusPromise}
-  <WidgetCard title="Last Updated">
+  <WidgetCard title="Last updated">
     <div class="text-2xl font-bold">
       {age}
     </div>
@@ -80,7 +79,7 @@
 {:then currentStatus}
   {@const hasDevices =
     currentStatus && Object.keys(currentStatus.devices ?? {}).length > 0}
-  <WidgetCard title="Last Updated">
+  <WidgetCard title="Last updated">
     <div class="text-2xl font-bold">
       {age}
     </div>
@@ -115,7 +114,7 @@
     {/if}
   </WidgetCard>
 {:catch}
-  <WidgetCard title="Last Updated">
+  <WidgetCard title="Last updated">
     <div class="text-2xl font-bold">
       {age}
     </div>

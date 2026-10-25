@@ -60,7 +60,7 @@ describe("ConnectorConfigForm", () => {
 			},
 		});
 
-		await expect.element(page.getByText("Sync Glucose")).toBeVisible();
+		await expect.element(page.getByText("Sync glucose")).toBeVisible();
 		const toggle = page.getByRole("switch");
 		await expect.element(toggle).toBeVisible();
 	});
@@ -151,5 +151,50 @@ describe("ConnectorConfigForm", () => {
 		// The toggle button is an outline button with Eye icon next to the input
 		const toggleButton = page.getByRole("button").first();
 		await expect.element(toggleButton).toBeVisible();
+	});
+
+	it("marks every field type whose running value comes from the environment", async () => {
+		const envSchema = {
+			type: "object",
+			properties: {
+				syncGlucose: { type: "boolean", default: false },
+				region: { type: "string", enum: ["EU", "US"], default: "EU" },
+				pollingInterval: { type: "integer", default: 300 },
+				serverUrl: { type: "string", default: "" },
+			},
+			secrets: [],
+		};
+
+		render(ConnectorConfigForm, {
+			props: {
+				schema: envSchema,
+				configuration: {},
+				effectiveConfig: {
+					syncGlucose: true,
+					region: "US",
+					pollingInterval: 600,
+					serverUrl: "https://env.example",
+				},
+				onSave: vi.fn(),
+			},
+		});
+
+		await expect.element(page.getByText("From env").first()).toBeVisible();
+		expect(page.getByText("From env").elements()).toHaveLength(4);
+		await expect.element(page.getByRole("textbox").first()).toHaveValue("https://env.example");
+	});
+
+	it("does not mark a field whose environment value matches the default", async () => {
+		render(ConnectorConfigForm, {
+			props: {
+				schema: { type: "object", properties: { serverUrl: { type: "string", default: "https://same.example" } }, secrets: [] },
+				configuration: {},
+				effectiveConfig: { serverUrl: "https://same.example" },
+				onSave: vi.fn(),
+			},
+		});
+
+		await expect.element(page.getByRole("textbox").first()).toHaveValue("https://same.example");
+		expect(page.getByText("From env").elements()).toHaveLength(0);
 	});
 });

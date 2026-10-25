@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
@@ -54,6 +55,9 @@ public class AlertAcknowledgeEndpointTests
             });
     }
 
+    private AlertReceiptService Receipts =>
+        new(_contextFactoryMock.Object);
+
     private AlertsController CreateController()
     {
         var controller = new AlertsController(
@@ -92,6 +96,39 @@ public class AlertAcknowledgeEndpointTests
     // ---- AcknowledgeExcursion ----
 
     [Fact]
+    public async Task AcknowledgeAll_RecordsThatTheMemberSawEachOpenAlarm()
+    {
+        var first = await SeedExcursionAsync();
+        var second = await SeedExcursionAsync();
+
+        await CreateController().Acknowledge(new AcknowledgeRequest(), Receipts, CancellationToken.None);
+
+        await using var db = new NocturneDbContext(_options) { TenantId = _tenantId };
+        (await db.AlertExcursionReceipts.Select(r => r.AlertExcursionId).ToListAsync())
+            .Should().BeEquivalentTo([first, second]);
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_RecordsThatTheMemberSawIt()
+    {
+        var excursionId = await SeedExcursionAsync();
+        _acknowledgementServiceMock
+            .Setup(s => s.AcknowledgeExcursionAsync(
+                _tenantId, excursionId, It.IsAny<string>(), It.IsAny<AlertAcknowledgementAuthority>(),
+                true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AlertAcknowledgementOutcome.Muted);
+
+        await CreateController().AcknowledgeExcursion(
+            excursionId, new AcknowledgeRequest(), Receipts, CancellationToken.None);
+
+        await using var db = new NocturneDbContext(_options) { TenantId = _tenantId };
+        var receipt = await db.AlertExcursionReceipts.SingleAsync();
+        receipt.AlertExcursionId.Should().Be(excursionId);
+        receipt.ActorKind.Should().Be(AlertReceiptActorKind.Member);
+        receipt.ActorId.Should().Be(_subjectId);
+    }
+
+    [Fact]
     public async Task AcknowledgeExcursion_ExistingExcursion_PassesCallerAuthorityAndReturnsOutcome()
     {
         var excursionId = await SeedExcursionAsync();
@@ -103,7 +140,7 @@ public class AlertAcknowledgeEndpointTests
             .ReturnsAsync(AlertAcknowledgementOutcome.Muted);
 
         var result = await controller.AcknowledgeExcursion(
-            excursionId, new AcknowledgeRequest(), CancellationToken.None);
+            excursionId, new AcknowledgeRequest(), Receipts, CancellationToken.None);
 
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         ok.Value.Should().BeOfType<AcknowledgeExcursionResponse>()
@@ -127,7 +164,7 @@ public class AlertAcknowledgeEndpointTests
         var controller = CreateController();
 
         await controller.AcknowledgeExcursion(
-            excursionId, new AcknowledgeRequest { AcknowledgedBy = "user:bob" }, CancellationToken.None);
+            excursionId, new AcknowledgeRequest { AcknowledgedBy = "user:bob" }, Receipts, CancellationToken.None);
 
         _acknowledgementServiceMock.Verify(
             s => s.AcknowledgeExcursionAsync(
@@ -142,7 +179,7 @@ public class AlertAcknowledgeEndpointTests
         var excursionId = await SeedExcursionAsync();
         var controller = CreateController();
 
-        await controller.AcknowledgeExcursion(excursionId, new AcknowledgeRequest(), CancellationToken.None);
+        await controller.AcknowledgeExcursion(excursionId, new AcknowledgeRequest(), Receipts, CancellationToken.None);
 
         _acknowledgementServiceMock.Verify(
             s => s.AcknowledgeExcursionAsync(
@@ -159,7 +196,7 @@ public class AlertAcknowledgeEndpointTests
         var request = new AcknowledgeRequest { AcknowledgedBy = "user:bob" };
 
         // Act
-        var result = await controller.AcknowledgeExcursion(Guid.NewGuid(), request, CancellationToken.None);
+        var result = await controller.AcknowledgeExcursion(Guid.NewGuid(), request, Receipts, CancellationToken.None);
 
         // Assert
         result.Result.Should().BeOfType<NotFoundResult>();
@@ -180,7 +217,7 @@ public class AlertAcknowledgeEndpointTests
         var request = new AcknowledgeRequest { AcknowledgedBy = "user:bob" };
 
         // Act
-        var result = await controller.AcknowledgeExcursion(excursionId, request, CancellationToken.None);
+        var result = await controller.AcknowledgeExcursion(excursionId, request, Receipts, CancellationToken.None);
 
         // Assert
         result.Result.Should().BeOfType<NotFoundResult>();
@@ -201,7 +238,7 @@ public class AlertAcknowledgeEndpointTests
         var request = new AcknowledgeRequest { AcknowledgedBy = "user:bob" };
 
         // Act
-        var result = await controller.Acknowledge(request, CancellationToken.None);
+        var result = await controller.Acknowledge(request, Receipts, CancellationToken.None);
 
         // Assert
         result.Should().BeOfType<NoContentResult>();

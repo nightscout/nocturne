@@ -17,7 +17,7 @@
 
 use serde_json::Value;
 
-use crate::enums::{CmpOp, EnumValue, GlucoseBucket, RateDirection, ThresholdDirection};
+use crate::enums::{CmpOp, GlucoseBucket, RateDirection, ThresholdDirection};
 use crate::model::{ConditionKind, Container, Node, Payload, parse_payload};
 
 /// A rule's low/high classification.
@@ -48,10 +48,10 @@ impl ScopeClass {
 #[must_use]
 pub fn classify(condition_type: &str, condition_params: &Value) -> ScopeClass {
     let mut acc = Acc::default();
-    if let Some(kind) = ConditionKind::resolve(condition_type)
+    if let Some(kind) = ConditionKind::from_wire(condition_type)
         && let Ok(payload) = parse_payload(kind, condition_params)
     {
-        walk(&Node::from_rule(kind, Some(payload)), false, &mut acc);
+        walk(&Node::from(payload), false, &mut acc);
     }
     acc.resolve()
 }
@@ -92,45 +92,45 @@ impl Acc {
 fn walk(node: &Node, under_not: bool, acc: &mut Acc) {
     if let Some(container) = node.container() {
         let under_not = under_not || matches!(container, Container::Not(_));
-        for child in container.children().flatten() {
+        for child in container.children() {
             walk(child, under_not, acc);
         }
         return;
     }
-    match node.dispatch().as_deref() {
-        Some(Payload::Threshold(p)) => acc.mark(
-            p.direction.value.map(|d| match d {
+    match node.payload() {
+        Payload::Threshold(p) => acc.mark(
+            Some(match p.direction {
                 ThresholdDirection::Below => Side::Low,
                 ThresholdDirection::Above => Side::High,
             }),
             under_not,
         ),
-        Some(Payload::RateOfChange(p)) => acc.mark(
-            p.direction.value.map(|d| match d {
+        Payload::RateOfChange(p) => acc.mark(
+            Some(match p.direction {
                 RateDirection::Falling => Side::Low,
                 RateDirection::Rising => Side::High,
             }),
             under_not,
         ),
-        Some(Payload::Predicted(p)) => acc.mark(
-            match p.operator.value {
-                Some(CmpOp::Lt | CmpOp::Le) => Some(Side::Low),
-                Some(CmpOp::Gt | CmpOp::Ge) => Some(Side::High),
-                Some(CmpOp::Eq) | None => None,
+        Payload::Predicted(p) => acc.mark(
+            match p.operator {
+                CmpOp::Lt | CmpOp::Le => Some(Side::Low),
+                CmpOp::Gt | CmpOp::Ge => Some(Side::High),
+                CmpOp::Eq => None,
             },
             under_not,
         ),
-        Some(Payload::GlucoseBucket(p)) => {
-            for bucket in p.buckets.iter().flatten() {
-                acc.mark(bucket_side(*bucket), under_not);
+        Payload::GlucoseBucket(p) => {
+            for &bucket in &p.buckets {
+                acc.mark(bucket_side(bucket), under_not);
             }
         }
         _ => {}
     }
 }
 
-fn bucket_side(bucket: EnumValue<GlucoseBucket>) -> Option<Side> {
-    match bucket.known()? {
+fn bucket_side(bucket: GlucoseBucket) -> Option<Side> {
+    match bucket {
         GlucoseBucket::VeryLow | GlucoseBucket::Low => Some(Side::Low),
         GlucoseBucket::High | GlucoseBucket::VeryHigh => Some(Side::High),
         GlucoseBucket::TightRange | GlucoseBucket::InRange => None,
@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn glucose_bucket_low_side_is_low() {
         assert_eq!(
-            class("glucose_bucket", json!({"buckets":[0,1]})),
+            class("glucose_bucket", json!({"buckets":["very_low","low"]})),
             ScopeClass::Low
         );
     }
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn glucose_bucket_high_side_is_high() {
         assert_eq!(
-            class("glucose_bucket", json!({"buckets":[4,5]})),
+            class("glucose_bucket", json!({"buckets":["high","very_high"]})),
             ScopeClass::High
         );
     }
@@ -234,7 +234,10 @@ mod tests {
     #[test]
     fn glucose_bucket_spanning_both_is_composite() {
         assert_eq!(
-            class("glucose_bucket", json!({"buckets":[0,5]})),
+            class(
+                "glucose_bucket",
+                json!({"buckets":["very_low","very_high"]})
+            ),
             ScopeClass::Composite
         );
     }
@@ -302,7 +305,7 @@ mod tests {
 
     #[test]
     fn sustained_passes_through_to_child_direction() {
-        let params = json!({ "child": threshold("below") });
+        let params = json!({ "minutes": 15, "child": threshold("below") });
         assert_eq!(class("sustained", params), ScopeClass::Low);
     }
 
@@ -311,7 +314,7 @@ mod tests {
         // sustained nested inside a composite still passes its child's direction up.
         let params = json!({
             "operator": "and",
-            "conditions": [{ "type": "sustained", "sustained": { "child": threshold("below") } }]
+            "conditions": [{ "type": "sustained", "sustained": { "minutes": 15, "child": threshold("below") } }]
         });
         assert_eq!(class("composite", params), ScopeClass::Low);
     }

@@ -1,0 +1,56 @@
+# Rule 1.14: one spelling for every word. Nocturne writes American English, the
+# spelling of the Nightscout API names (color, behavior) that the UI sits beside.
+#
+# Only unambiguous pairs live here. The -ise family is a separate rule, because
+# a generic "-ise" pattern also matches advise, exercise, precise, and rise.
+#
+# Deliberately absent: "programme" (a program is correct either way here) and
+# "licence", which is not a word the UI uses.
+extends: substitution
+message: "Rule 1.14: use American spelling, '%s' not '%s'."
+link: .claude/skills/simple-english/SKILL.md
+level: error
+ignorecase: true
+swap:
+  analyse: analyze
+  analysed: analyzed
+  analysing: analyzing
+  analyser: analyzer
+  behaviour: behavior
+  behaviours: behaviors
+  behavioural: behavioral
+  cancelled: canceled
+  cancelling: canceling
+  catalogue: catalog
+  catalogues: catalogs
+  centre: center
+  centred: centered
+  centres: centers
+  colour: color
+  coloured: colored
+  colours: colors
+  defence: defense
+  favour: favor
+  favourite: favorite
+  favourites: favorites
+  fibre: fiber
+  grey: gray
+  labelled: labeled
+  labelling: labeling
+  litre: liter
+  litres: liters
+  metre: meter
+  metres: meters
+  modelled: modeled
+  modelling: modeling
+  practise: practice
+  travelled: traveled
+  enrol: enroll
+  enrolment: enrollment
+  judgement: judgment
+  ageing: aging
+  dialogue: dialog
+  haemoglobin: hemoglobin
+  oestrogen: estrogen
+  paediatric: pediatric
+  diarrhoea: diarrhea

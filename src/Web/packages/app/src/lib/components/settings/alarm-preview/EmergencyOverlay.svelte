@@ -28,14 +28,14 @@
       >
         <AlertCircle class="h-12 w-12" />
         <h1 class="text-4xl font-black uppercase tracking-wider">
-          Emergency Contacts
+          Emergency contacts
         </h1>
         <AlertCircle class="h-12 w-12" />
       </div>
 
       <p class="text-2xl font-medium leading-relaxed max-w-xl mx-auto">
         {profile.visual.emergencyInstructions ||
-          "Please contact one of the following people immediately."}
+          "Contact one of the following people immediately."}
       </p>
     </div>
 
@@ -48,7 +48,7 @@
             <span
               class="text-xs font-bold uppercase tracking-wider text-muted-foreground"
             >
-              Contact Name
+              Contact name
             </span>
             <p class="text-2xl font-bold">{contact.name}</p>
           </div>
@@ -82,7 +82,7 @@
     </div>
 
     <Button variant="ghost" size="lg" class="mt-8" onclick={onClose}>
-      Close Emergency View
+      Close emergency view
     </Button>
   </div>
 </div>

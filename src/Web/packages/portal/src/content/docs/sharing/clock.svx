@@ -39,6 +39,15 @@ number and trend.
 When you're happy with it, use the **Copy link** button in the editor's toolbar to
 get its address.
 
+## Alarms on a clock
+
+In the clock's display settings, **Show firing alerts** puts a band across the
+top of the clock while an alarm is firing, with the rule's name and severity.
+**Let viewers mark alerts as seen** adds a **Seen** button to that band. Pressing
+it records that the alarm was seen at this clock, under the clock's name. It
+doesn't acknowledge or silence anything. Anyone holding the clock's link can
+press it, so it tells you the alarm was seen at that screen, not who saw it.
+
 ## The link
 
 That link is **public**: anyone you give it to can open it with no login, on any

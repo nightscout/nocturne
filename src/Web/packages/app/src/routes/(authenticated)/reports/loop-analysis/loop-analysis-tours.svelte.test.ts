@@ -120,10 +120,8 @@ async function walkInPlace(ctx: CoachMarkContext): Promise<string[]> {
 }
 
 describe("Loop Analysis tours", () => {
-  // An overlay holds a history entry until it closes; let the previous test's go first.
-  beforeEach(async () => {
+  beforeEach(() => {
     served.clear();
-    await vi.waitFor(() => expect(history.state?.__coachMark).not.toBe(true), { timeout: 5_000 });
   });
 
   it.each(LOOP_ANALYSIS_PAGES)("tours %s on a first visit, after the pages and filters", async (name) => {

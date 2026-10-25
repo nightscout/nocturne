@@ -7,7 +7,7 @@
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
-    minutesAgo,
+    relativeAge,
   } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
@@ -44,9 +44,11 @@
   // glucose value.
   const isLoading = $derived(rawCurrentBG <= 0);
   const statusText = $derived(
-    isDisconnected ? "Connection Error" : minutesAgo(lastUpdated, now)
+    isDisconnected
+      ? "Connection error"
+      : relativeAge(lastUpdated, { now, fallback: "Unknown" })
   );
-  const statusTooltip = $derived(`Last reading: ${minutesAgo(lastUpdated, now)}`);
+  const statusTooltip = $derived(`Last reading: ${relativeAge(lastUpdated, { now, fallback: "Unknown" })}`);
 
   // Handle scroll events
   function handleScroll() {

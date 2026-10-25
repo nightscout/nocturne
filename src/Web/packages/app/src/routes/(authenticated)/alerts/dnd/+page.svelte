@@ -124,7 +124,7 @@
 </script>
 
 <svelte:head>
-  <title>Do Not Disturb · Alerts · Nocturne</title>
+  <title>Do not disturb · Alerts · Nocturne</title>
 </svelte:head>
 
 {#snippet heading()}
@@ -139,7 +139,7 @@
   </Button>
   <div>
     <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
-      <BellOff class="h-5 w-5" /> Do Not Disturb
+      <BellOff class="h-5 w-5" /> Do not disturb
     </h1>
     <p class="text-sm text-muted-foreground">
       Suppress non-critical alerts. Critical-severity rules and rules opted in via "Allow through DND" still fire.
@@ -189,7 +189,7 @@
       </CardHeader>
       <CardContent class="space-y-4">
         <div class="flex items-center justify-between">
-          <Label for="dnd-manual">Do Not Disturb is currently</Label>
+          <Label for="dnd-manual">Do not disturb is currently</Label>
           <Switch
             id="dnd-manual"
             checked={dndManualActive}
@@ -267,9 +267,9 @@
         <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
           <ShieldAlert class="h-6 w-6 text-destructive" />
         </div>
-        <h2 class="text-lg font-semibold">Access Denied</h2>
+        <h2 class="text-lg font-semibold">Access denied</h2>
         <p class="mt-2 max-w-sm text-sm text-muted-foreground">
-          You do not have permission to change Do Not Disturb. Contact your
+          You do not have permission to change Do not disturb. Contact your
           tenant administrator for access.
         </p>
       </CardContent>

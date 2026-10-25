@@ -8,7 +8,7 @@ namespace Nocturne.Core.Contracts.Alerts;
 /// excursion tracking, escalation, and delivery as needed.
 /// </summary>
 /// <seealso cref="IExcursionTracker"/>
-/// <seealso cref="IConditionEvaluator"/>
+/// <seealso cref="IAlertEvaluationEngine"/>
 /// <seealso cref="IAlertDeliveryService"/>
 public interface IAlertOrchestrator
 {

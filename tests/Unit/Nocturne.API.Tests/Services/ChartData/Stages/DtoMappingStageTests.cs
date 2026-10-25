@@ -163,6 +163,32 @@ public class DtoMappingStageTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_DrawsExactlyTheDrawnActivityCategories()
+    {
+        var start = DateTimeOffset.FromUnixTimeMilliseconds(StartTime).UtcDateTime;
+        var stateSpans = Enum.GetValues<StateSpanCategory>().ToDictionary(
+            category => category,
+            category => (IEnumerable<StateSpan>)
+            [
+                new StateSpan
+                {
+                    Id = $"span-{category}",
+                    Category = category,
+                    State = "On",
+                    StartTimestamp = start,
+                    EndTimestamp = start.AddHours(1),
+                },
+            ]);
+
+        var result = await _stage.ExecuteAsync(
+            new ChartDataContext { StartTime = StartTime, EndTime = EndTime, StateSpans = stateSpans },
+            CancellationToken.None);
+
+        result.ActivitySpans.Select(s => s.Category)
+            .Should().BeEquivalentTo(StateSpanCategories.DrawnActivities);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_SleepSessions_MapToSleepKindNotExercise()
     {
         // Arrange

@@ -5,6 +5,7 @@ import type {
   TrackerInstanceDto,
   TrackerRealtimeAction,
   InAppNotificationDto,
+  SyncPhase,
 } from '$lib/api/generated/nocturne-api-client';
 
 // Re-export API client types for convenience
@@ -85,6 +86,10 @@ export interface TrackerUpdateEvent {
   instance: TrackerInstanceDto;
 }
 
+export interface TrackerDefinitionUpdateEvent {
+  definitionId: string;
+}
+
 export interface NotificationUpdateEvent {
   action: 'created' | 'archived' | 'updated';
   notification: InAppNotificationDto;
@@ -101,7 +106,7 @@ export type SyncMessageType =
 export interface SyncProgressEvent {
   connectorId: string;
   connectorName: string;
-  phase: "Syncing" | "Completed" | "Failed";
+  phase: SyncPhase;
   errorMessage: string | null;
   timestamp: string;
   messageType: SyncMessageType | null;
@@ -141,6 +146,7 @@ export interface WebSocketEventHandlers {
 
   // Tracker events
   trackerUpdate: (event: TrackerUpdateEvent) => void;
+  trackerDefinitionUpdate: (event: TrackerDefinitionUpdateEvent) => void;
 
   // In-app notification events
   notificationCreated: (notification: InAppNotificationDto) => void;

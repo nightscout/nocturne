@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -35,6 +37,10 @@ public class HiddenTableHistoryClampTests(RlsCompletenessFixture fx)
         "tracker_instances",
         "treatment_foods",
         "device_clock_observations",
+        "alert_excursion_mutes",
+        "alert_deliveries",
+        "discrepancy_analyses",
+        "discrepancy_details",
     ];
 
     [Theory]
@@ -108,11 +114,46 @@ public class HiddenTableHistoryClampTests(RlsCompletenessFixture fx)
     {
         foreach (var table in TableNames)
         {
-            ShareDataCategories.GoverningScopeFor(table).Should().BeNull();
+            // The alert spans are shared under alerts.read, which EveryCategory leaves out, and
+            // clamped for members by overlap exactly like the hidden spans.
+            if (!ShareDataCategories.GovernedSpanEndColumns.ContainsKey(table))
+                ShareDataCategories.GoverningScopeFor(table).Should().BeNull();
             (ShareDataCategories.RecencyColumnFor(table) ?? ShareDataCategories.SpanEndColumnFor(table)
                 ?? ShareDataCategories.ParentRecencyFor(table)?.Table).Should().NotBeNull(table);
         }
     }
+
+    [Fact]
+    public async Task ClampedMember_CatchesUpTheFailedDeliveriesOfAnOpenAlertAndMarksThemDelivered()
+    {
+        var (tenant, _) = await SeedAsync();
+
+        await using var conn = await fx.OpenAppConnectionAsync();
+        await SetReaderAsync(conn, tenant, isShare: false, historyClamped: "true");
+        await using var db = new NocturneDbContext(
+            new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(conn).Options) { TenantId = tenant };
+
+        var failed = await db.AlertDeliveries
+            .Include(d => d.AlertInstance)
+                .ThenInclude(i => i!.AlertExcursion)
+            .Where(d => d.ChannelType == ChannelType.HomeAssistant
+                        && d.Destination == HomeAssistantInstance
+                        && d.Status == "failed"
+                        && d.AlertInstance != null
+                        && d.AlertInstance.AlertExcursion != null
+                        && d.AlertInstance.AlertExcursion.EndedAt == null)
+            .ToListAsync();
+
+        var delivery = failed.Should().ContainSingle("the failed delivery of the alert open for three days").Subject;
+        delivery.Status = "delivered";
+        delivery.DeliveredAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        (await db.AlertDeliveries.AsNoTracking().Where(d => d.Status == "delivered").Select(d => d.Id).ToListAsync())
+            .Should().Contain(delivery.Id);
+    }
+
+    private const string HomeAssistantInstance = "ha-instance";
 
     private sealed record Row(Guid Id, bool VisibleWhenClamped);
 
@@ -200,30 +241,67 @@ public class HiddenTableHistoryClampTests(RlsCompletenessFixture fx)
         {
             Id = Track("alert_excursions", true), AlertRuleId = rule.Id, StartedAt = now.AddDays(-3),
         };
-        db.AlertExcursions.AddRange(
-            openSinceThreeDays,
-            new AlertExcursionEntity
-            {
-                Id = Track("alert_excursions", false), AlertRuleId = rule.Id,
-                StartedAt = now.AddDays(-4), EndedAt = now.AddDays(-2),
-            },
-            new AlertExcursionEntity
-            {
-                Id = Track("alert_excursions", true), AlertRuleId = rule.Id,
-                StartedAt = now.AddHours(-30), EndedAt = now.AddHours(-1),
-            });
-        db.AlertInstances.AddRange(
-            new AlertInstanceEntity { Id = Track("alert_instances", true), AlertExcursionId = openSinceThreeDays.Id, TriggeredAt = now.AddDays(-3) },
-            new AlertInstanceEntity
-            {
-                Id = Track("alert_instances", false), AlertExcursionId = openSinceThreeDays.Id,
-                TriggeredAt = now.AddDays(-4), ResolvedAt = now.AddDays(-2), Status = "resolved",
-            },
-            new AlertInstanceEntity
-            {
-                Id = Track("alert_instances", true), AlertExcursionId = openSinceThreeDays.Id,
-                TriggeredAt = now.AddHours(-30), ResolvedAt = now.AddHours(-1), Status = "resolved",
-            });
+        var endedTwoDaysAgo = new AlertExcursionEntity
+        {
+            Id = Track("alert_excursions", false), AlertRuleId = rule.Id,
+            StartedAt = now.AddDays(-4), EndedAt = now.AddDays(-2),
+        };
+        var endedAnHourAgo = new AlertExcursionEntity
+        {
+            Id = Track("alert_excursions", true), AlertRuleId = rule.Id,
+            StartedAt = now.AddHours(-30), EndedAt = now.AddHours(-1),
+        };
+        db.AlertExcursions.AddRange(openSinceThreeDays, endedTwoDaysAgo, endedAnHourAgo);
+        var openInstance = new AlertInstanceEntity
+        {
+            Id = Track("alert_instances", true), AlertExcursionId = openSinceThreeDays.Id, TriggeredAt = now.AddDays(-3),
+        };
+        var resolvedTwoDaysAgo = new AlertInstanceEntity
+        {
+            Id = Track("alert_instances", false), AlertExcursionId = openSinceThreeDays.Id,
+            TriggeredAt = now.AddDays(-4), ResolvedAt = now.AddDays(-2), Status = "resolved",
+        };
+        var resolvedAnHourAgo = new AlertInstanceEntity
+        {
+            Id = Track("alert_instances", true), AlertExcursionId = openSinceThreeDays.Id,
+            TriggeredAt = now.AddHours(-30), ResolvedAt = now.AddHours(-1), Status = "resolved",
+        };
+        db.AlertInstances.AddRange(openInstance, resolvedTwoDaysAgo, resolvedAnHourAgo);
+
+        var member = new SubjectEntity { Id = Guid.CreateVersion7(), Name = $"hidden-clamp-{tenant:N}" };
+        db.Subjects.Add(member);
+        db.AlertExcursionMutes.AddRange(
+            new AlertExcursionMuteEntity { Id = Track("alert_excursion_mutes", true), SubjectId = member.Id, AlertExcursionId = openSinceThreeDays.Id, CreatedAt = now.AddDays(-3) },
+            new AlertExcursionMuteEntity { Id = Track("alert_excursion_mutes", false), SubjectId = member.Id, AlertExcursionId = endedTwoDaysAgo.Id, CreatedAt = now.AddDays(-4) },
+            new AlertExcursionMuteEntity { Id = Track("alert_excursion_mutes", true), SubjectId = member.Id, AlertExcursionId = endedAnHourAgo.Id, CreatedAt = now.AddHours(-30) });
+
+        AlertDeliveryEntity Delivery(AlertInstanceEntity instance, bool visibleWhenClamped, string status) => new()
+        {
+            Id = Track("alert_deliveries", visibleWhenClamped), AlertInstanceId = instance.Id,
+            ChannelType = ChannelType.HomeAssistant, Destination = HomeAssistantInstance,
+            Payload = "{}", Status = status, CreatedAt = instance.TriggeredAt,
+        };
+        db.AlertDeliveries.AddRange(
+            Delivery(openInstance, true, "pending"),
+            Delivery(openInstance, true, "failed"),
+            Delivery(resolvedTwoDaysAgo, false, "pending"),
+            Delivery(resolvedAnHourAgo, true, "delivered"));
+
+        DiscrepancyAnalysisEntity Analysis(DateTime at, bool visibleWhenClamped) => new()
+        {
+            Id = Track("discrepancy_analyses", visibleWhenClamped), TraceId = "trace", AnalysisTimestamp = at,
+            RequestMethod = "GET", RequestPath = "/api/v1/entries", OverallMatch = ResponseMatchType.MinorDifferences,
+            Discrepancies =
+            [
+                new DiscrepancyDetailEntity
+                {
+                    Id = Track("discrepancy_details", visibleWhenClamped), DiscrepancyType = DiscrepancyType.NumericValue,
+                    Severity = DiscrepancySeverity.Minor, Field = "sgv", NightscoutValue = "120", NocturneValue = "121",
+                    Description = "differs", RecordedAt = at,
+                },
+            ],
+        };
+        db.DiscrepancyAnalyses.AddRange(Analysis(now.AddHours(-1), true), Analysis(now.AddDays(-3), false));
 
         db.SystemEvents.AddRange(
             new SystemEventEntity { Id = Track("system_events", true), EventType = "Info", Category = "Pump", Mills = Mills(now.AddHours(-1)) },
@@ -244,18 +322,18 @@ public class HiddenTableHistoryClampTests(RlsCompletenessFixture fx)
                 CreatedAt = now.AddDays(-4), IsArchived = true, ArchivedAt = now.AddHours(-1),
             });
 
-        var definition = new TrackerDefinitionEntity { Id = Guid.CreateVersion7(), UserId = "member", Name = "site" };
+        var definition = new TrackerDefinitionEntity { Id = Guid.CreateVersion7(), CreatedBy = "member", Name = "site" };
         db.TrackerDefinitions.Add(definition);
         db.TrackerInstances.AddRange(
-            new TrackerInstanceEntity { Id = Track("tracker_instances", true), UserId = "member", DefinitionId = definition.Id, StartedAt = now.AddDays(-10) },
+            new TrackerInstanceEntity { Id = Track("tracker_instances", true), CreatedBy = "member", DefinitionId = definition.Id, StartedAt = now.AddDays(-10) },
             new TrackerInstanceEntity
             {
-                Id = Track("tracker_instances", false), UserId = "member", DefinitionId = definition.Id,
+                Id = Track("tracker_instances", false), CreatedBy = "member", DefinitionId = definition.Id,
                 StartedAt = now.AddDays(-5), CompletedAt = now.AddDays(-2),
             },
             new TrackerInstanceEntity
             {
-                Id = Track("tracker_instances", true), UserId = "member", DefinitionId = definition.Id,
+                Id = Track("tracker_instances", true), CreatedBy = "member", DefinitionId = definition.Id,
                 StartedAt = now.AddDays(-3), CompletedAt = now.AddHours(-1),
             });
 

@@ -1,5 +1,4 @@
-using System.Text.Json;
-using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 
@@ -18,16 +17,16 @@ namespace Nocturne.API.Services.Alerts;
 /// reference no longer resolves into the surviving set.
 ///
 /// Cycle detection (<c>alertId</c> equals the rule's own id) is enforced at write time by
-/// <c>AlertReferenceService</c>; here we treat such a self-reference as evaluable, leaving the
-/// runtime <c>AlertStateEvaluator</c> to handle it via the live snapshot it already has access to.
+/// <c>AlertReferenceService</c>; here a self-reference counts as evaluable, and the engine's
+/// <c>alert_state</c> leaf reads it from the active-alert snapshot.
 /// </remarks>
 public static class RuleReferenceResolver
 {
     /// <summary>
     /// Returns the subset of <paramref name="rules"/> that have no <c>alert_state</c> references
     /// to rule ids outside <paramref name="enabledIds"/>, which defaults to the ids of
-    /// <paramref name="rules"/>. Order is preserved. A rule whose tree cannot be walked is kept,
-    /// so the engine's per-rule skip handles it rather than this pass failing.
+    /// <paramref name="rules"/>. Order is preserved. A rule whose tree the engine cannot describe
+    /// is kept, so the engine's per-rule skip handles it rather than this pass failing.
     /// </summary>
     public static IReadOnlyList<AlertRuleSnapshot> FilterEvaluable(
         IReadOnlyList<AlertRuleSnapshot> rules, ILogger? logger = null, IReadOnlySet<Guid>? enabledIds = null)
@@ -55,63 +54,7 @@ public static class RuleReferenceResolver
         return keep;
     }
 
-    private static bool AllReferencesResolve(AlertRuleSnapshot rule, IReadOnlySet<Guid> enabledIds)
-    {
-        switch (rule.ConditionType)
-        {
-            case AlertConditionType.AlertState:
-                {
-                    var c = TryDeserialize<AlertStateCondition>(rule.ConditionParams);
-                    return c is null || c.AlertId == rule.Id || enabledIds.Contains(c.AlertId);
-                }
-            case AlertConditionType.Composite:
-                {
-                    var composite = TryDeserialize<CompositeCondition>(rule.ConditionParams);
-                    if (composite is null) return true;
-                    foreach (var child in composite.Conditions ?? [])
-                        if (!NodeReferencesResolve(child, rule.Id, enabledIds)) return false;
-                    return true;
-                }
-            case AlertConditionType.Not:
-                {
-                    var not = TryDeserialize<NotCondition>(rule.ConditionParams);
-                    return not is null || NodeReferencesResolve(not.Child, rule.Id, enabledIds);
-                }
-            case AlertConditionType.Sustained:
-                {
-                    var sustained = TryDeserialize<SustainedCondition>(rule.ConditionParams);
-                    return sustained is null || NodeReferencesResolve(sustained.Child, rule.Id, enabledIds);
-                }
-            default:
-                return true;
-        }
-    }
-
-    private static bool NodeReferencesResolve(ConditionNode? node, Guid ownerRuleId, IReadOnlySet<Guid> enabledIds)
-    {
-        var unresolved = ConditionPath.Walk<UnresolvedMarker>(node, (visited, _) =>
-        {
-            if (string.Equals(visited.Type, "alert_state", StringComparison.OrdinalIgnoreCase) &&
-                visited.AlertState is { } state &&
-                state.AlertId != ownerRuleId &&
-                !enabledIds.Contains(state.AlertId))
-            {
-                return UnresolvedMarker.Instance;
-            }
-            return null;
-        });
-
-        return unresolved is null;
-    }
-
-    private static T? TryDeserialize<T>(string json) where T : class
-    {
-        try { return JsonSerializer.Deserialize<T>(json, EvaluatorJson.Options); }
-        catch (JsonException) { return null; }
-    }
-
-    private sealed class UnresolvedMarker
-    {
-        public static readonly UnresolvedMarker Instance = new();
-    }
+    private static bool AllReferencesResolve(AlertRuleSnapshot rule, IReadOnlySet<Guid> enabledIds) =>
+        RuleTrees.AlertStateTargets(RuleTrees.Leaves(rule, includeAutoResolve: false))
+            .All(target => target == rule.Id || enabledIds.Contains(target));
 }

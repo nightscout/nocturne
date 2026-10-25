@@ -61,7 +61,7 @@
 
   // Bolus dialog state
   let showBolusDialog = $state(false);
-  let bolusMeal = $state<MealEvent | null>(null);
+  let bolusMealCarbId = $state<string | null>(null);
 
   // Unlink food confirmation state
   let showUnlinkConfirm = $state(false);
@@ -77,6 +77,9 @@
 
   const mealsQuery = $derived(getMeals(queryParams));
   const meals = $derived<MealEvent[]>(mealsQuery.current ?? []);
+  const bolusMeal = $derived(
+    meals.find((m) => m.carbIntakes?.[0]?.id === bolusMealCarbId) ?? null
+  );
 
   // Query for suggested meal matches using the endpoint. `now` keeps the
   // unfiltered default on today's date for a page left open past midnight, and
@@ -227,7 +230,7 @@
   }
 
   function openBolusDialog(meal: MealEvent) {
-    bolusMeal = meal;
+    bolusMealCarbId = meal.carbIntakes?.[0]?.id ?? null;
     showBolusDialog = true;
   }
 
@@ -302,16 +305,15 @@
 
   async function handleQuickAccept(match: SuggestedMealMatch) {
     try {
+      // Awaited so the row's pending state covers the refresh too, not just the
+      // command; otherwise the row is clickable again before it disappears.
       await acceptMatch({
         foodEntryId: match.foodEntryId!,
         carbIntakeId: match.carbIntakeId!,
         carbs: match.carbs ?? 0,
         timeOffsetMinutes: 0,
-      });
+      }).updates(getMealMatchingSuggestions, getMeals);
       toast.success("Meal match accepted");
-      // Awaited so the row's pending state covers the refresh too, not just the
-      // command; otherwise the row is clickable again before it disappears.
-      await Promise.all([mealsQuery.refresh(), suggestionsQuery.refresh()]);
     } catch (err) {
       console.error("Failed to accept match:", err);
       toast.error(describeSubmitError(err, "Failed to accept match"));
@@ -320,9 +322,10 @@
 
   async function handleDismiss(match: SuggestedMealMatch) {
     try {
-      await dismissMatch({ foodEntryId: match.foodEntryId! });
+      await dismissMatch({ foodEntryId: match.foodEntryId! }).updates(
+        getMealMatchingSuggestions
+      );
       toast.success("Match dismissed");
-      await suggestionsQuery.refresh();
     } catch (err) {
       console.error("Failed to dismiss match:", err);
       toast.error(describeSubmitError(err, "Failed to dismiss match"));
@@ -352,7 +355,7 @@
       <Calendar class="h-4 w-4" />
       <span>Meals</span>
     </div>
-    <h1 class="text-3xl font-bold">Meal Attribution</h1>
+    <h1 class="text-3xl font-bold">Meal attribution</h1>
     <p class="text-muted-foreground">
       Pair carb intakes with foods when you want more detail.
     </p>
@@ -433,7 +436,7 @@
   bind:open={showBolusDialog}
   onOpenChange={(value) => {
     showBolusDialog = value;
-    if (!value) bolusMeal = null;
+    if (!value) bolusMealCarbId = null;
   }}
   meal={bolusMeal}
   onSave={() => mealsQuery.refresh()}

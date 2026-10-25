@@ -38,11 +38,11 @@ async function attemptDeleteConfiguration() {
   });
 
   await page
-    .getByRole("button", { name: "Delete Config", exact: true })
+    .getByRole("button", { name: "Delete config", exact: true })
     .click();
   await page.getByRole("textbox").fill("DELETE CONFIGURATION");
   await page
-    .getByRole("button", { name: "Delete Configuration", exact: true })
+    .getByRole("button", { name: "Delete configuration", exact: true })
     .click();
 }
 
@@ -57,9 +57,9 @@ async function attemptDeleteData() {
     },
   });
 
-  await page.getByRole("button", { name: "Delete Data", exact: true }).click();
+  await page.getByRole("button", { name: "Delete data", exact: true }).click();
   await page.getByRole("textbox").fill("DELETE DATA");
-  await page.getByRole("button", { name: "Delete All Data" }).click();
+  await page.getByRole("button", { name: "Delete all data" }).click();
 }
 
 describe("ConnectorDangerZone", () => {
@@ -89,10 +89,10 @@ describe("ConnectorDangerZone", () => {
       },
     });
 
-    await page.getByRole("button", { name: "Delete Data", exact: true }).click();
+    await page.getByRole("button", { name: "Delete data", exact: true }).click();
     await page.getByRole("checkbox", { name: /Allow re-import/ }).click();
     await page.getByRole("textbox").fill("DELETE DATA");
-    await page.getByRole("button", { name: "Delete and Allow Re-import" }).click();
+    await page.getByRole("button", { name: "Delete and allow re-import" }).click();
 
     await expect.poll(() => deleteDataArgs).toEqual([
       { id: "dexcom", allowReimport: true },
@@ -114,11 +114,11 @@ describe("ConnectorDangerZone", () => {
 
     expect(
       page
-        .getByRole("button", { name: "Delete Config", exact: true })
+        .getByRole("button", { name: "Delete config", exact: true })
         .elements()
     ).toHaveLength(0);
     expect(
-      page.getByRole("button", { name: "Delete Data", exact: true }).elements()
+      page.getByRole("button", { name: "Delete data", exact: true }).elements()
     ).toHaveLength(0);
   });
 
@@ -140,11 +140,11 @@ describe("ConnectorDangerZone", () => {
 
     expect(
       page
-        .getByRole("button", { name: "Delete Config", exact: true })
+        .getByRole("button", { name: "Delete config", exact: true })
         .elements()
     ).toHaveLength(0);
     expect(
-      page.getByRole("button", { name: "Delete Data", exact: true }).elements()
+      page.getByRole("button", { name: "Delete data", exact: true }).elements()
     ).toHaveLength(0);
   });
 
@@ -160,10 +160,10 @@ describe("ConnectorDangerZone", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Delete Config", exact: true }))
+      .element(page.getByRole("button", { name: "Delete config", exact: true }))
       .toBeVisible();
     await expect
-      .element(page.getByRole("button", { name: "Delete Data", exact: true }))
+      .element(page.getByRole("button", { name: "Delete data", exact: true }))
       .toBeVisible();
   });
 
@@ -181,7 +181,7 @@ describe("ConnectorDangerZone", () => {
     });
 
     await expect
-      .element(page.getByRole("button", { name: "Delete Config", exact: true }))
+      .element(page.getByRole("button", { name: "Delete config", exact: true }))
       .toBeVisible();
   });
 

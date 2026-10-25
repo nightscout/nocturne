@@ -196,6 +196,9 @@ export async function setupBridge(
     }
   };
 
+  socketIOServer.currentAlarm = async (tenantSlug) =>
+    (await registry.get(tenantSlug)?.currentAlarm()) ?? null;
+
   // Discover tenants in the background so a slow or temporarily-unavailable API
   // doesn't prevent the Socket.IO server from accepting browser connections.
   logger.info(`Bridge tenant discovery starting (baseDomain: ${baseDomain})`);

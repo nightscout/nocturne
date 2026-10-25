@@ -6,6 +6,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
+  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
   import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import {
@@ -21,8 +22,10 @@
   const VISIBLE_DAYS = 14;
   const print = new PrintMode();
 
-  const report = useActogramReport("Error Loading Heart Rate Report");
+  const report = useActogramReport("Error loading heart rate report");
   const { params: reportsParams, resource: actogramResource } = report;
+
+  const noZoneReason = $derived(actogramResource.current?.timeZoneUnavailableReason);
 
   // HR data as ActogramPoints
   const hrPoints = $derived(
@@ -66,14 +69,6 @@
   const bpmMax = $derived(Math.min(220, maxBpm + 10));
 </script>
 
-<svelte:head>
-  <title>Heart Rate - Nocturne Reports</title>
-  <meta
-    name="description"
-    content="Heart rate actogram with glucose overlay"
-  />
-</svelte:head>
-
 <div class="@container space-y-6">
   <div class="print:hidden">
     <p class="text-muted-foreground">
@@ -85,16 +80,22 @@
     figures={[
       { label: "Average", value: String(avgBpm), unit: "bpm" },
       { label: "Resting estimate", value: String(restingBpm), unit: "bpm" },
-      { label: "Min / Max", value: `${minBpm} / ${maxBpm}`, unit: "bpm" },
+      { label: "Min / max", value: `${minBpm} / ${maxBpm}`, unit: "bpm" },
       { label: "Readings", value: formatNumber(selectedRates.length) },
     ]}
   />
+
+  {#if noZoneReason}
+    <p class="text-sm text-muted-foreground">
+      <TimeZoneNote reason={noZoneReason}>The rows use UTC days.</TimeZoneNote>
+    </p>
+  {/if}
 
   <Card class="print:break-inside-auto!">
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <HeartPulse class="h-5 w-5 text-heart-rate" />
-        Heart Rate Actogram
+        Heart rate actogram
       </CardTitle>
     </CardHeader>
     <CardContent class="w-full overflow-x-auto print:overflow-visible">
@@ -119,7 +120,7 @@
       >
         {#snippet tooltipValue({ point })}
           {@const bpm = typeof point.bpm === "number" ? point.bpm : 0}
-          <span class="text-muted-foreground">Heart Rate</span>
+          <span class="text-muted-foreground">Heart rate</span>
           <span class="ml-auto font-medium tabular-nums">{bpm} bpm</span>
         {/snippet}
         {#snippet row(ctx: ActogramRowContext)}
@@ -127,7 +128,7 @@
             {@const bpm = typeof point.bpm === "number" ? point.bpm : 0}
             {@const yNorm = (bpm - bpmMin) / (bpmMax - bpmMin)}
             {@const y = ctx.height - yNorm * ctx.height}
-            {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
+            {@const x = ctx.xScale(new Date(ctx.day.startMills + hoursFromStart * MS_PER_HOUR))}
             <circle
               cx={x}
               cy={y}

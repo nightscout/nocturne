@@ -68,7 +68,6 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
             Mock.Of<ITreatmentFoodService>(),
             Mock.Of<IDeviceService>(),
             Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<IProfileDecomposer>(),
             Mock.Of<IActiveProfileResolver>(),
             Mock.Of<IPatientInsulinRepository>(),
             TempBasalTestDeps.Unscheduled(),

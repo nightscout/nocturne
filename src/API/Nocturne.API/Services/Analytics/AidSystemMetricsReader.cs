@@ -1,5 +1,6 @@
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Clinical.Devices;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -59,7 +60,7 @@ public sealed class AidSystemMetricsReader(
         var devices = await patientDeviceRepository.GetByDateRangeAsync(start, end, ct: ct);
 
         var apsTask = apsSnapshotRepository.GetLoopCyclesAsync(start, end, ct);
-        var basalTask = tempBasalRepository.GetAsync(start, end, null, null, int.MaxValue, descending: false, ct: ct);
+        var basalTask = tempBasalRepository.GetAsync(StatisticsService.TempBasalReadStart(start), end, null, null, int.MaxValue, descending: false, ct: ct);
         var eventTask = deviceEventRepository.GetAsync(start, end, null, null, int.MaxValue, descending: false, ct: ct);
         var glucoseTask = sensorGlucoseRepository.GetForAnalyticsAsync(start, end, null, null, int.MaxValue, descending: false, ct: ct);
 

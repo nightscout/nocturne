@@ -66,7 +66,10 @@ public static class HttpClientExtensions
                 .ConfigurePrimaryHttpMessageHandler(() =>
                     new SocketsHttpHandler
                     {
-                        AutomaticDecompression = DecompressionMethods.All,
+                        // No Brotli. The runtime bundles google/brotli 1.1.0, whose decoder has an
+                        // out-of-bounds write on crafted input (CVE-2026-111497). A member can point
+                        // a tenant-URL connector at a server that serves such input.
+                        AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
                         ConnectTimeout = effectiveConnectTimeout,
                         PooledConnectionLifetime = effectiveTimeout,
                         // The handler — and therefore an automatic CookieContainer — is shared by

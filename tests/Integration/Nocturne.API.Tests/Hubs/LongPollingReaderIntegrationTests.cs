@@ -73,17 +73,8 @@ public class LongPollingReaderIntegrationTests(ApiIntegrationTestFixture fixture
     {
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
-        var (subjectId, token) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(
+        var (_, token) = await AuthTestHelpers.SeedHistoryClampedSubjectAsync(
             conn, Fixture.TenantId, "Clamped Follower");
-
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT set_config('app.current_tenant_id', @tenant, false);
-            UPDATE oauth_grants SET limit_to_24_hours = true WHERE subject_id = @subject;
-            """;
-        cmd.Parameters.AddWithValue("tenant", Fixture.TenantId.ToString());
-        cmd.Parameters.AddWithValue("subject", subjectId);
-        await cmd.ExecuteNonQueryAsync();
         return token;
     }
 

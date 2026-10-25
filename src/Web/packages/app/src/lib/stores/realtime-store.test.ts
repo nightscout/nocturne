@@ -6,6 +6,9 @@ const api = vi.hoisted(() => ({
   emptyPage: vi.fn(),
   getProfileSummary: vi.fn(),
   emptyList: vi.fn(),
+  getTrackerDefinitions: vi.fn(() => Promise.resolve([] as unknown[])),
+  getActiveTrackerInstances: vi.fn(() => Promise.resolve([] as unknown[])),
+  getLegacyFallbacks: vi.fn(() => Promise.resolve({ fallbacks: [], covered: [] } as unknown)),
 }));
 
 vi.mock("$lib/api/browser-clients", () => ({
@@ -18,8 +21,12 @@ vi.mock("$lib/api/browser-clients", () => ({
   noteClient: () => ({ getAll: api.emptyPage }),
   deviceEventClient: () => ({ getAll: api.emptyPage }),
   profileClient: () => ({ getProfileSummary: api.getProfileSummary }),
-  trackersClient: () => ({ getDefinitions: api.emptyList, getActiveInstances: api.emptyList }),
+  trackersClient: () => ({
+    getDefinitions: api.getTrackerDefinitions,
+    getActiveInstances: api.getActiveTrackerInstances,
+  }),
   notificationsClient: () => ({ getNotifications: api.emptyList }),
+  trackerLegacyFallbacksClient: () => ({ getLegacyFallbacks: api.getLegacyFallbacks }),
 }));
 
 vi.mock("svelte-sonner", () => ({
@@ -38,14 +45,26 @@ import {
   loadInitialGlucose,
   sensorGlucoseToEntry,
 } from "./realtime-store.svelte";
+import { GLUCOSE_WINDOW_HOURS, initialReadWindows } from "./initial-reads";
 import type {
   ConnectionInfo,
   StorageEvent,
   SyncProgressEvent,
+  TrackerDefinitionUpdateEvent,
   TrackerUpdateEvent,
   WebSocketConnectionStatus,
 } from "$lib/websocket/types";
-import { TrackerRealtimeAction, type SensorGlucose, type TrackerInstanceDto } from "$lib/api";
+import {
+  SyncPhase,
+  LegacyConsumableKind,
+  TrackerRealtimeAction,
+  type LegacyCoverageDto,
+  type LegacyFallbackDto,
+  type LegacyFallbacksDto,
+  type SensorGlucose,
+  type TrackerDefinitionDto,
+  type TrackerInstanceDto,
+} from "$lib/api";
 
 /** The realtime/backfill entry points, which the class keeps private. */
 interface StoreInternals {
@@ -54,6 +73,8 @@ interface StoreInternals {
   handleDelete(event: StorageEvent): void;
   performBackfillIfNeeded(force?: boolean): Promise<void>;
   handleDataUpdate(event: { data: unknown[] }): void;
+  backfillCursor: number;
+  lastEventReceived: number;
   handleVisibilityChange: (() => void) | null;
   websocketClient: {
     connectionStatus: WebSocketConnectionStatus;
@@ -66,6 +87,7 @@ interface StoreInternals {
       connect_error?: (error: Error) => void;
       syncProgress?: (event: SyncProgressEvent) => void;
       trackerUpdate?: (event: TrackerUpdateEvent) => void;
+      trackerDefinitionUpdate?: (event: TrackerDefinitionUpdateEvent) => void;
     };
   };
 }
@@ -79,12 +101,16 @@ type TestStore = StoreInternals &
     | "chartThresholds"
     | "entries"
     | "boluses"
+    | "notes"
     | "currentEntry"
     | "bgDelta"
     | "previousBG"
     | "direction"
     | "syncProgressByConnector"
     | "trackerInstances"
+    | "trackerDefinitions"
+    | "legacyFallbacks"
+    | "legacyCoverage"
     | "apsSnapshots"
     | "carbIntakes"
     | "treatmentRevision"
@@ -92,6 +118,7 @@ type TestStore = StoreInternals &
     | "isReady"
     | "currentReadingLoaded"
     | "destroy"
+    | "refreshTrackers"
     | "initialize"
   >;
 
@@ -106,6 +133,18 @@ function makeStore(url = ""): TestStore {
     pingInterval: 0,
   });
   return store as unknown as TestStore;
+}
+
+function fallback(kind: LegacyConsumableKind, ageHours: number): LegacyFallbackDto {
+  return { kind, ageHours };
+}
+
+function read(fallbacks: LegacyFallbackDto[], covered: LegacyCoverageDto[] = []): LegacyFallbacksDto {
+  return { fallbacks, covered };
+}
+
+function internals(store: TestStore): { readLegacyFallbacks(): Promise<void> } {
+  return store as unknown as { readLegacyFallbacks(): Promise<void> };
 }
 
 function deviceStatus(id: string): StorageEvent {
@@ -868,26 +907,26 @@ describe("RealtimeStore sync progress", () => {
   it("holds an in-progress sync on screen indefinitely", () => {
     const store = makeStore();
 
-    emit(store, syncEvent("glooko", "Syncing", "FetchingData"));
+    emit(store, syncEvent("glooko", SyncPhase.Syncing, "FetchingData"));
     vi.advanceTimersByTime(60_000);
 
-    expect(store.syncProgressByConnector.glooko?.phase).toBe("Syncing");
+    expect(store.syncProgressByConnector.glooko?.phase).toBe(SyncPhase.Syncing);
 
     store.destroy();
   });
 
-  it.each(["Completed", "Failed"] as const)(
+  it.each([SyncPhase.Completed, SyncPhase.Failed] as const)(
     "clears a %s sync after the linger window",
     (phase) => {
       const store = makeStore();
 
-      emit(store, syncEvent("glooko", "Syncing", "FetchingData"));
+      emit(store, syncEvent("glooko", SyncPhase.Syncing, "FetchingData"));
       emit(
         store,
         syncEvent(
           "glooko",
           phase,
-          phase === "Completed" ? "SyncComplete" : "SyncFailed"
+          phase === SyncPhase.Completed ? "SyncComplete" : "SyncFailed"
         )
       );
 
@@ -905,12 +944,12 @@ describe("RealtimeStore sync progress", () => {
   it("keeps a new run that started inside the previous run's linger window", () => {
     const store = makeStore();
 
-    emit(store, syncEvent("glooko", "Completed", "SyncComplete"));
+    emit(store, syncEvent("glooko", SyncPhase.Completed, "SyncComplete"));
     vi.advanceTimersByTime(1_000);
-    emit(store, syncEvent("glooko", "Syncing", "FetchingData"));
+    emit(store, syncEvent("glooko", SyncPhase.Syncing, "FetchingData"));
     vi.advanceTimersByTime(1_000);
 
-    expect(store.syncProgressByConnector.glooko?.phase).toBe("Syncing");
+    expect(store.syncProgressByConnector.glooko?.phase).toBe(SyncPhase.Syncing);
 
     store.destroy();
   });
@@ -918,12 +957,12 @@ describe("RealtimeStore sync progress", () => {
   it("clears only the connector that finished", () => {
     const store = makeStore();
 
-    emit(store, syncEvent("glooko", "Syncing", "FetchingData"));
-    emit(store, syncEvent("dexcom", "Completed", "SyncComplete"));
+    emit(store, syncEvent("glooko", SyncPhase.Syncing, "FetchingData"));
+    emit(store, syncEvent("dexcom", SyncPhase.Completed, "SyncComplete"));
     vi.advanceTimersByTime(2_000);
 
     expect(store.syncProgressByConnector.dexcom).toBeUndefined();
-    expect(store.syncProgressByConnector.glooko?.phase).toBe("Syncing");
+    expect(store.syncProgressByConnector.glooko?.phase).toBe(SyncPhase.Syncing);
 
     store.destroy();
   });
@@ -1017,6 +1056,381 @@ describe("RealtimeStore tracker updates", () => {
   });
 });
 
+describe("RealtimeStore tracker definition updates", () => {
+  const definition = (id: string, name = id): TrackerDefinitionDto => ({ id, name });
+  const instance = (id: string, definitionId: string, definitionName = definitionId): TrackerInstanceDto => ({
+    id,
+    definitionId,
+    definitionName,
+  });
+
+  beforeEach(() => {
+    api.getLegacyFallbacks.mockResolvedValue(read([]));
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function emit(store: TestStore, definitionId: string): void {
+    store.websocketClient.eventHandlers.trackerDefinitionUpdate?.({ definitionId });
+  }
+
+  async function settled(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  it("carries a renamed definition onto its running instance", async () => {
+    const store = makeStore();
+    store.trackerDefinitions = [definition("site", "Site")];
+    store.trackerInstances = [instance("run", "site", "Site")];
+    api.getTrackerDefinitions.mockResolvedValue([definition("site", "Pod")]);
+    api.getActiveTrackerInstances.mockResolvedValue([instance("run", "site", "Pod")]);
+
+    emit(store, "site");
+    await settled();
+
+    expect(store.trackerDefinitions.map((d) => d.name)).toEqual(["Pod"]);
+    expect(store.trackerInstances.map((i) => i.definitionName)).toEqual(["Pod"]);
+
+    store.destroy();
+  });
+
+  it("clears the last running instance when it was completed elsewhere", async () => {
+    const store = makeStore();
+    store.trackerDefinitions = [definition("site")];
+    store.trackerInstances = [instance("run", "site")];
+    api.getTrackerDefinitions.mockResolvedValue([definition("site")]);
+    api.getActiveTrackerInstances.mockResolvedValue([]);
+
+    emit(store, "site");
+    await settled();
+
+    expect(store.trackerInstances).toEqual([]);
+
+    store.destroy();
+  });
+
+  it("clears the definitions and instances when the last definition is deleted", async () => {
+    const store = makeStore();
+    store.trackerDefinitions = [definition("site")];
+    store.trackerInstances = [instance("run", "site")];
+    api.getTrackerDefinitions.mockResolvedValue([]);
+    api.getActiveTrackerInstances.mockResolvedValue([]);
+
+    emit(store, "site");
+    await settled();
+
+    expect(store.trackerDefinitions).toEqual([]);
+    expect(store.trackerInstances).toEqual([]);
+
+    store.destroy();
+  });
+
+  it("keeps only the latest read when two overlap", async () => {
+    const store = makeStore();
+    let resolveFirst: (value: TrackerDefinitionDto[]) => void = () => {};
+    api.getTrackerDefinitions
+      .mockReturnValueOnce(new Promise<TrackerDefinitionDto[]>((resolve) => (resolveFirst = resolve)))
+      .mockResolvedValueOnce([definition("sensor")]);
+    api.getActiveTrackerInstances.mockResolvedValue([]);
+
+    emit(store, "site");
+    emit(store, "sensor");
+    await settled();
+    resolveFirst([definition("site")]);
+    await settled();
+
+    expect(store.trackerDefinitions.map((d) => d.id)).toEqual(["sensor"]);
+
+    store.destroy();
+  });
+
+  it("keeps the definitions and instances when the read fails", async () => {
+    const store = makeStore();
+    store.trackerDefinitions = [definition("site")];
+    store.trackerInstances = [instance("run", "site")];
+    api.getTrackerDefinitions.mockRejectedValue(new Error("offline"));
+    api.getActiveTrackerInstances.mockResolvedValue([]);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    emit(store, "site");
+    await settled();
+
+    expect(store.trackerDefinitions.map((d) => d.id)).toEqual(["site"]);
+    expect(store.trackerInstances.map((i) => i.id)).toEqual(["run"]);
+
+    store.destroy();
+  });
+
+  it("applies an earlier read when a later one fails", async () => {
+    const store = makeStore();
+    let resolveFirst: (value: TrackerDefinitionDto[]) => void = () => {};
+    api.getTrackerDefinitions
+      .mockReturnValueOnce(new Promise<TrackerDefinitionDto[]>((resolve) => (resolveFirst = resolve)))
+      .mockRejectedValueOnce(new Error("offline"));
+    api.getActiveTrackerInstances.mockResolvedValue([]);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    emit(store, "site");
+    emit(store, "sensor");
+    await settled();
+    resolveFirst([definition("site")]);
+    await settled();
+
+    expect(store.trackerDefinitions.map((d) => d.id)).toEqual(["site"]);
+
+    store.destroy();
+  });
+
+  it("reads again when a run completes while a read is in flight", async () => {
+    const store = makeStore();
+    store.trackerDefinitions = [definition("site")];
+    store.trackerInstances = [instance("run", "site")];
+    let resolveStale: (value: TrackerInstanceDto[]) => void = () => {};
+    api.getTrackerDefinitions.mockResolvedValue([definition("site")]);
+    api.getActiveTrackerInstances
+      .mockReturnValueOnce(new Promise<TrackerInstanceDto[]>((resolve) => (resolveStale = resolve)))
+      .mockResolvedValueOnce([]);
+
+    const refreshing = store.refreshTrackers();
+    await settled();
+    store.websocketClient.eventHandlers.trackerUpdate?.({
+      action: TrackerRealtimeAction.Complete,
+      instance: instance("run", "site"),
+    });
+    resolveStale([instance("run", "site")]);
+    await refreshing;
+
+    expect(store.trackerInstances).toEqual([]);
+    expect(api.getActiveTrackerInstances).toHaveBeenCalledTimes(2);
+
+    store.destroy();
+  });
+
+  it("reads again when a run starts while a read is in flight", async () => {
+    const store = makeStore();
+    store.trackerDefinitions = [definition("site")];
+    let resolveStale: (value: TrackerInstanceDto[]) => void = () => {};
+    api.getTrackerDefinitions.mockResolvedValue([definition("site")]);
+    api.getActiveTrackerInstances
+      .mockReturnValueOnce(new Promise<TrackerInstanceDto[]>((resolve) => (resolveStale = resolve)))
+      .mockResolvedValueOnce([instance("run", "site")]);
+
+    const refreshing = store.refreshTrackers();
+    await settled();
+    store.websocketClient.eventHandlers.trackerUpdate?.({
+      action: TrackerRealtimeAction.Create,
+      instance: instance("run", "site"),
+    });
+    resolveStale([]);
+    await refreshing;
+
+    expect(store.trackerInstances.map((i) => i.id)).toEqual(["run"]);
+    expect(api.getActiveTrackerInstances).toHaveBeenCalledTimes(2);
+
+    store.destroy();
+  });
+
+  it("swaps a converted fallback for the tracker it became", async () => {
+    const store = makeStore();
+    store.legacyFallbacks = [fallback(LegacyConsumableKind.Site, 50)];
+    api.getTrackerDefinitions.mockResolvedValue([definition("site")]);
+    api.getActiveTrackerInstances.mockResolvedValue([instance("run", "site")]);
+    api.getLegacyFallbacks.mockResolvedValue(
+      read([], [{ kind: LegacyConsumableKind.Site, definitionIds: ["site"] }])
+    );
+
+    emit(store, "site");
+    await settled();
+
+    expect(store.legacyFallbacks).toEqual([]);
+    expect(store.legacyCoverage).toEqual([{ kind: LegacyConsumableKind.Site, definitionIds: ["site"] }]);
+    expect(store.trackerInstances.map((i) => i.id)).toEqual(["run"]);
+
+    store.destroy();
+  });
+
+  it("keeps the definitions and instances when only the fallback read fails", async () => {
+    const store = makeStore();
+    store.legacyFallbacks = [fallback(LegacyConsumableKind.Site, 50)];
+    api.getTrackerDefinitions.mockResolvedValue([definition("site", "Pod")]);
+    api.getActiveTrackerInstances.mockResolvedValue([instance("run", "site", "Pod")]);
+    api.getLegacyFallbacks.mockRejectedValue(new Error("offline"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    emit(store, "site");
+    await settled();
+
+    expect(store.trackerDefinitions.map((d) => d.name)).toEqual(["Pod"]);
+    expect(store.trackerInstances.map((i) => i.id)).toEqual(["run"]);
+    expect(store.legacyFallbacks.map((f) => f.ageHours)).toEqual([50]);
+
+    store.destroy();
+  });
+
+  it("keeps a fallback read that started later than the definition update's", async () => {
+    const store = makeStore();
+    let resolveCombined: (value: LegacyFallbacksDto) => void = () => {};
+    api.getLegacyFallbacks
+      .mockReturnValueOnce(new Promise<LegacyFallbacksDto>((resolve) => (resolveCombined = resolve)))
+      .mockResolvedValueOnce(read([fallback(LegacyConsumableKind.Sensor, 2)]));
+
+    emit(store, "site");
+    void internals(store).readLegacyFallbacks();
+    await settled();
+    resolveCombined(read([fallback(LegacyConsumableKind.Sensor, 200)]));
+    await settled();
+
+    expect(store.legacyFallbacks.map((f) => f.ageHours)).toEqual([2]);
+
+    store.destroy();
+  });
+
+  it("applies the definition update's fallbacks when a later fallback read failed", async () => {
+    const store = makeStore();
+    let resolveCombined: (value: LegacyFallbacksDto) => void = () => {};
+    api.getLegacyFallbacks
+      .mockReturnValueOnce(new Promise<LegacyFallbacksDto>((resolve) => (resolveCombined = resolve)))
+      .mockRejectedValueOnce(new Error("offline"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    emit(store, "site");
+    void internals(store).readLegacyFallbacks();
+    await settled();
+    resolveCombined(read([], [{ kind: LegacyConsumableKind.Site, definitionIds: ["site"] }]));
+    await settled();
+
+    expect(store.legacyFallbacks).toEqual([]);
+    expect(store.legacyCoverage.map((c) => c.kind)).toEqual([LegacyConsumableKind.Site]);
+
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore legacy fallbacks", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  const deviceEvent = (id: string): StorageEvent => ({
+    colName: "care",
+    recordType: "deviceEvent",
+    doc: { id, mills: Date.now(), eventType: "SiteChange" },
+  });
+
+  it("re-reads the fallbacks once after a burst of device events", async () => {
+    const store = makeStore();
+    store.legacyFallbacks = [fallback(LegacyConsumableKind.Site, 70)];
+    api.getLegacyFallbacks.mockResolvedValue(read([fallback(LegacyConsumableKind.Site, 0)]));
+
+    store.handleCreate(deviceEvent("d1"));
+    store.handleCreate(deviceEvent("d2"));
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(api.getLegacyFallbacks).toHaveBeenCalledTimes(1);
+    expect(store.legacyFallbacks.map((f) => f.ageHours)).toEqual([0]);
+
+    store.destroy();
+  });
+
+  it("keeps the fallbacks when the read fails", async () => {
+    const store = makeStore();
+    store.legacyFallbacks = [fallback(LegacyConsumableKind.Site, 70)];
+    api.getLegacyFallbacks.mockRejectedValue(new Error("offline"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    store.handleCreate(deviceEvent("d1"));
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(store.legacyFallbacks.map((f) => f.ageHours)).toEqual([70]);
+
+    store.destroy();
+  });
+
+  it("drops a pending fallback re-read on destroy", async () => {
+    const store = makeStore();
+
+    store.handleCreate(deviceEvent("d1"));
+    store.destroy();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(api.getLegacyFallbacks).not.toHaveBeenCalled();
+  });
+
+  it("re-reads the fallbacks at once when a run of a new definition starts", async () => {
+    const store = makeStore();
+    store.legacyFallbacks = [fallback(LegacyConsumableKind.Site, 70)];
+    api.getLegacyFallbacks.mockResolvedValue(read([]));
+
+    store.websocketClient.eventHandlers.trackerUpdate?.({
+      action: TrackerRealtimeAction.Create,
+      instance: { id: "run", definitionId: "site", definitionName: "Infusion Site" },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.legacyFallbacks).toEqual([]);
+
+    store.destroy();
+  });
+
+  it("leaves a restarted run of a known definition to the device event's re-read", async () => {
+    const store = makeStore();
+    store.trackerDefinitions = [{ id: "site", name: "Infusion Site" }];
+
+    store.websocketClient.eventHandlers.trackerUpdate?.({
+      action: TrackerRealtimeAction.Create,
+      instance: { id: "run", definitionId: "site", definitionName: "Infusion Site" },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(api.getLegacyFallbacks).not.toHaveBeenCalled();
+
+    store.destroy();
+  });
+
+  it("re-reads the trackers and fallbacks on a reconnection, not on the first connect", async () => {
+    const store = makeStore();
+    api.emptyPage.mockResolvedValue({ data: [] });
+    api.getCurrentTherapyState.mockResolvedValue({ reservoir: null });
+    api.apsGetAll.mockResolvedValue({ data: [] });
+    const info: ConnectionInfo = { clientId: "socket", serverTime: "", version: "" };
+
+    store.websocketClient.eventHandlers.connect?.(info);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.getTrackerDefinitions).not.toHaveBeenCalled();
+
+    api.getTrackerDefinitions.mockResolvedValue([{ id: "site", name: "Site" }]);
+    api.getLegacyFallbacks.mockResolvedValue(read([fallback(LegacyConsumableKind.Sensor, 3)]));
+    store.websocketClient.eventHandlers.connect?.(info);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.trackerDefinitions.map((d) => d.id)).toEqual(["site"]);
+    expect(store.legacyFallbacks.map((f) => f.kind)).toEqual([LegacyConsumableKind.Sensor]);
+
+    store.destroy();
+  });
+
+  it("does not re-read the trackers on a backfill alone", async () => {
+    const store = makeStore();
+    api.emptyPage.mockResolvedValue({ data: [] });
+    api.getCurrentTherapyState.mockResolvedValue({ reservoir: null });
+    api.apsGetAll.mockResolvedValue({ data: [] });
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(api.getTrackerDefinitions).not.toHaveBeenCalled();
+    expect(api.getLegacyFallbacks).not.toHaveBeenCalled();
+
+    store.destroy();
+  });
+});
+
 describe("RealtimeStore merging", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -1057,6 +1471,206 @@ describe("RealtimeStore merging", () => {
     await store.performBackfillIfNeeded(true);
 
     expect(store.boluses.map((bolus) => bolus.id)).toEqual(["b2", "b1"]);
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore backfill cursor", () => {
+  const NOW = Date.parse("2026-10-20T12:00:00Z");
+  const MINUTE = 60_000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    api.getCurrentTherapyState.mockResolvedValue({ reservoir: null });
+    api.apsGetAll.mockResolvedValue({ data: [] });
+    api.emptyPage.mockResolvedValue({ data: [] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  /** A store whose cursor and liveness clock sit `minutes` in the past, then 1 minute passes. */
+  function idleStore(minutes: number): TestStore {
+    const store = makeStore();
+    store.backfillCursor = NOW - minutes * MINUTE;
+    store.lastEventReceived = NOW - minutes * MINUTE;
+    vi.setSystemTime(NOW + MINUTE);
+    return store;
+  }
+
+  /** The `from` the first range query of the last backfill was given. */
+  const queriedFrom = () => Date.parse(api.emptyPage.mock.calls[0][0]);
+
+  it.each([
+    ["legacy treatments create", { colName: "treatments", doc: { _id: "t1", mills: NOW } }],
+    ["unheld tempBasal create", { colName: "care", recordType: "tempBasal", doc: { id: "tb", mills: NOW } }],
+    ["unheld sensorGlucose create", { colName: "glucose", recordType: "sensorGlucose", doc: { id: "s", mills: NOW } }],
+  ] as [string, StorageEvent][])("keeps the cursor still but the store live on a %s", (_name, event) => {
+    const store = idleStore(10);
+    const cursor = store.backfillCursor;
+
+    store.handleCreate(event);
+
+    expect(store.backfillCursor).toBe(cursor);
+    expect(store.lastEventReceived).toBe(Date.now());
+    store.destroy();
+  });
+
+  it("moves the cursor when a bolus is merged", () => {
+    const store = idleStore(10);
+
+    store.handleCreate({ colName: "care", recordType: "bolus", doc: { id: "b1", insulin: 1, mills: NOW } });
+
+    expect(store.backfillCursor).toBe(Date.now());
+    store.destroy();
+  });
+
+  it("keeps the cursor still for a bolus outside the store's window", () => {
+    const store = idleStore(10);
+    const cursor = store.backfillCursor;
+
+    store.handleCreate({ colName: "care", recordType: "bolus", doc: { id: "old", insulin: 1, mills: NOW - 48 * 60 * MINUTE } });
+
+    expect(store.backfillCursor).toBe(cursor);
+    store.destroy();
+  });
+
+  it("moves the cursor when a device status is merged, and not for one already held", () => {
+    const store = idleStore(10);
+    const status = { colName: "devicestatus", doc: { _id: "d1", mills: NOW, pump: {} } };
+
+    store.handleCreate(status);
+    const merged = store.backfillCursor;
+    vi.setSystemTime(NOW + 5 * MINUTE);
+    store.handleCreate(status);
+
+    expect(merged).toBe(NOW + MINUTE);
+    expect(store.backfillCursor).toBe(merged);
+    store.destroy();
+  });
+
+  it("moves the cursor when a live data update adds a reading", () => {
+    const store = idleStore(10);
+
+    store.handleDataUpdate({ data: [{ _id: "e1", type: "sgv", sgv: 100, mills: NOW }] });
+
+    expect(store.backfillCursor).toBe(Date.now());
+    store.destroy();
+  });
+
+  it("skips an unforced backfill after an event that merged nothing, since the store is live", async () => {
+    const store = idleStore(10);
+
+    store.handleCreate({ colName: "treatments", doc: { _id: "t1", mills: NOW } });
+    await store.performBackfillIfNeeded();
+
+    expect(api.emptyPage).not.toHaveBeenCalled();
+    store.destroy();
+  });
+
+  it("fetches a treatment stamped just before an unrelated event", async () => {
+    const store = idleStore(30);
+    store.entries = [{ _id: "e0", type: "sgv", sgv: 100, mills: NOW - 30 * MINUTE }];
+    const eventAt = Date.now();
+    store.handleCreate({ colName: "treatments", doc: { _id: "t1", mills: eventAt } });
+    const missed = { id: "b-missed", mills: eventAt - 5_000 };
+    api.emptyPage.mockImplementation(async (from: string, _to: string, limit: number) => ({
+      data: limit === 500 && missed.mills >= Date.parse(from) ? [missed] : [],
+    }));
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(store.boluses.map((bolus) => bolus.id)).toEqual(["b-missed"]);
+    expect(queriedFrom()).toBeLessThan(missed.mills);
+    store.destroy();
+  });
+
+  it("starts a margin before the cursor", async () => {
+    const store = idleStore(10);
+    store.entries = [{ _id: "e0", type: "sgv", sgv: 100, mills: NOW }];
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(queriedFrom()).toBe(NOW - 10 * MINUTE - 2 * MINUTE);
+    store.destroy();
+  });
+
+  it("starts from the newest held record when it is older than the cursor", async () => {
+    const store = idleStore(10);
+    store.notes = [{ id: "n1", mills: NOW - 40 * MINUTE }] as typeof store.notes;
+    store.boluses = [{ id: "b1", mills: NOW - 20 * MINUTE }] as typeof store.boluses;
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(queriedFrom()).toBe(NOW - 20 * MINUTE - 2 * MINUTE);
+    store.destroy();
+  });
+
+  it("backfills an empty store from the 24 hour floor", async () => {
+    const store = idleStore(10);
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(queriedFrom()).toBe(Date.now() - 24 * 60 * MINUTE);
+    store.destroy();
+  });
+
+  it("moves the cursor when an update merges an unheld bolus", () => {
+    const store = idleStore(10);
+
+    store.handleUpdate({ colName: "care", recordType: "bolus", doc: { id: "b1", insulin: 1, mills: NOW } });
+
+    expect(store.boluses.map((bolus) => bolus.id)).toEqual(["b1"]);
+    expect(store.backfillCursor).toBe(Date.now());
+    store.destroy();
+  });
+
+  it("moves the cursor when an apsSnapshot is created", () => {
+    const store = idleStore(10);
+
+    store.handleCreate({ colName: "device", recordType: "apsSnapshot", doc: { id: "a1", iob: 1, mills: NOW } });
+
+    expect(store.apsSnapshots).toHaveLength(1);
+    expect(store.backfillCursor).toBe(Date.now());
+    store.destroy();
+  });
+
+  it("moves the cursor when the batched entry creates flush", () => {
+    const store = idleStore(10);
+    const cursor = store.backfillCursor;
+
+    store.handleCreate({ colName: "entries", doc: { _id: "e1", type: "sgv", sgv: 100, mills: NOW } });
+    expect(store.backfillCursor).toBe(cursor);
+    vi.advanceTimersByTime(1_000);
+
+    expect(store.entries).toHaveLength(1);
+    expect(store.backfillCursor).toBeGreaterThan(cursor);
+    store.destroy();
+  });
+
+  it("never starts before the 24 hour floor", async () => {
+    const store = idleStore(60 * 48);
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(queriedFrom()).toBe(Date.now() - 24 * 60 * MINUTE);
+    store.destroy();
+  });
+
+  it("sets the cursor to the instant the backfill began, not to when it ended", async () => {
+    const store = idleStore(10);
+    const began = Date.now();
+    api.emptyPage.mockImplementation(async () => {
+      vi.setSystemTime(began + 30_000);
+      return { data: [] };
+    });
+
+    await store.performBackfillIfNeeded(true);
+
+    expect(store.backfillCursor).toBe(began);
     store.destroy();
   });
 });
@@ -1296,6 +1910,25 @@ describe("loadInitialGlucose", () => {
     expect(entries).toHaveLength(RECENT_READINGS);
   });
 
+  it("covers the sidebar sparkline's whole window, which draws from the store alone", async () => {
+    const NOW = Date.parse("2026-10-10T12:00:00.000Z");
+    const { glucoseFrom } = initialReadWindows(NOW);
+    const FIVE_MINUTES = 5 * 60_000;
+    const window = Array.from({ length: GLUCOSE_WINDOW_HOURS * 12 + 1 }, (_, i) => ({
+      id: `r${i}`,
+      mills: NOW - i * FIVE_MINUTES,
+      mgdl: 100 + i,
+    }));
+    const getAll = vi.fn(async (from?: string) => ({
+      data: window.filter((r) => r.mills >= Date.parse(from ?? "0")),
+    }));
+
+    const entries = await loadInitialGlucose(clientWith(getAll as never), glucoseFrom);
+
+    expect(Math.min(...entries.map((e) => e.mills ?? 0))).toBe(NOW - GLUCOSE_WINDOW_HOURS * 3_600_000);
+    expect(entries).toHaveLength(window.length);
+  });
+
   it("tops up a window holding a single reading so the delta has a previous reading", async () => {
     const getAll = vi
       .fn()
@@ -1319,7 +1952,7 @@ describe("loadInitialGlucose", () => {
     expect(entries.map((e) => e.sgv).sort()).toEqual([118, 120, 122, 125, 130]);
   });
 
-  it("falls back to the newest readings when the window is empty", async () => {
+  it("falls back to the newest readings when the window is empty, so a tenant with only old readings has a current one", async () => {
     const getAll = vi.fn().mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce(readings(140));
 
     const entries = await loadInitialGlucose(clientWith(getAll), FROM);

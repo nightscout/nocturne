@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Services.Analytics;
+using Nocturne.Core.Clinical.LoopAnalysis;
 
 namespace Nocturne.API.Controllers.V4.Base;
 
@@ -63,13 +65,18 @@ public static class V4ReadLimits
     public const int MaxDateSpanDays = 366;
 
     /// <summary>
-    /// Maximum span, in days, of a CGM comparison or sleep trends window.
+    /// Maximum local calendar days a CGM comparison or sleep trends window may cover.
     /// </summary>
     /// <remarks>
-    /// Both routes held a 90-day contract before the shared ceiling existed, and their callers send
-    /// the picker range unpadded, so the widest preset fits exactly.
+    /// Counted in the tenant's zone, from the day of <c>from</c> through the day of <c>to</c>
+    /// inclusive, by <see cref="RejectAnalyticsSpanAsync"/>. A range of exactly this many days ends
+    /// on the last millisecond of its final day, which is what the report pages send; ending on the
+    /// midnight after it counts one day more. Loop Analysis trims to this many days instead of
+    /// refusing, in <c>LoopAnalysisRanges</c>.
     /// </remarks>
     public const int MaxAnalyticsSpanDays = 90;
+
+    private const int ZoneLookupMarginDays = 2;
 
     /// <summary>
     /// Maximum span, in days, of an actogram window.
@@ -134,6 +141,55 @@ public static class V4ReadLimits
         (double)toMills - fromMills > (double)maxDays * TimeSpan.MillisecondsPerDay
             ? DateSpanProblem(controller, maxDays)
             : null;
+
+    /// <summary>
+    /// Rejects a CGM comparison or sleep trends range that covers more than
+    /// <see cref="MaxAnalyticsSpanDays"/> days in the tenant's zone.
+    /// </summary>
+    /// <remarks>
+    /// The zone is looked up only when the span in UTC is within <see cref="ZoneLookupMarginDays"/>
+    /// of the cap, because outside that band no zone offset can change the answer. A tenant with no
+    /// zone, and a share, which is never given one, count UTC days: the CGM comparison client cuts
+    /// its days in UTC when the patient has no zone.
+    /// </remarks>
+    /// <returns>The error response to return, or <c>null</c> when the range is usable.</returns>
+    public static async Task<ObjectResult?> RejectAnalyticsSpanAsync(
+        this ControllerBase controller, DateTime? from, DateTime? to, TenantClockResolver tenantClock, CancellationToken ct)
+    {
+        if (from is not { } start || to is not { } end)
+            return null;
+
+        var spanDays = (end - start).TotalDays;
+        if (spanDays < MaxAnalyticsSpanDays - ZoneLookupMarginDays)
+            return null;
+        if (spanDays > MaxAnalyticsSpanDays + ZoneLookupMarginDays)
+            return DateSpanProblem(controller, MaxAnalyticsSpanDays);
+
+        var (zone, _) = await tenantClock.ResolveAsync(ct);
+        return controller.RejectLocalDaySpan(start, end, zone ?? TimeZoneInfo.Utc, MaxAnalyticsSpanDays);
+    }
+
+    /// <summary>
+    /// Rejects a range read that covers more than <paramref name="maxDays"/> calendar days in
+    /// <paramref name="zone"/>, counting the day of <paramref name="from"/> through the day of
+    /// <paramref name="to"/> inclusive.
+    /// </summary>
+    /// <remarks>
+    /// Bounds are read as UTC instants, which is what a query-bound <see cref="DateTime"/> with no
+    /// offset is taken to be elsewhere in V4.
+    /// </remarks>
+    /// <returns>The error response to return, or <c>null</c> when the range is usable.</returns>
+    public static ObjectResult? RejectLocalDaySpan(
+        this ControllerBase controller, DateTime? from, DateTime? to, TimeZoneInfo zone, int maxDays)
+    {
+        if (from is not { } start || to is not { } end)
+            return null;
+
+        var (firstDay, lastDay) = LocalSlotBinning.LocalDaySpan(start, end, zone);
+        return lastDay.DayNumber - firstDay.DayNumber + 1 > maxDays
+            ? DateSpanProblem(controller, maxDays)
+            : null;
+    }
 
     private static ObjectResult DateSpanProblem(ControllerBase controller, int maxDays) =>
         controller.Problem(detail: $"Date range must not exceed {maxDays} days.", statusCode: 400, title: "Bad Request");

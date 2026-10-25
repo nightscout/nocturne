@@ -28,14 +28,17 @@ export const setSetupTenantSlug = command(z.string(), async (slug) => {
 /**
  * Mark onboarding as complete, bypassing the per-step checks.
  * Sets the nocturne-setup-complete cookie so the root layout stops redirecting.
+ * `completed` says whether the server recorded it: the cookie lets this browser into the app
+ * either way, but only a recorded completion turns /setup into the hub.
  */
 export const markSetupComplete = command(z.void(), async () => {
   const event = getRequestEvent();
 
+  let completed = true;
   try {
     await event.locals.apiClient.passkey.completeOnboarding();
   } catch {
-    // Non-fatal: cookie still works for this browser session
+    completed = false;
   }
 
   event.cookies.set(COOKIE_NAME, "true", {
@@ -49,5 +52,5 @@ export const markSetupComplete = command(z.void(), async () => {
   // Clean up the setup tenant slug cookie — no longer needed
   event.cookies.delete(SETUP_TENANT_COOKIE, { path: "/" });
 
-  return { success: true };
+  return { success: true, completed };
 });

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.Core.Models;
@@ -321,12 +322,28 @@ public class ClockSettings
     public string TimeFormat { get; set; } = "12";
 
     /// <summary>
+    /// Whether the face shows an alarm that is firing. Off by default: the clock link is a
+    /// glucose-only capability until its owner turns this on.
+    /// </summary>
+    [JsonPropertyName("showAlerts")]
+    public bool ShowAlerts { get; set; }
+
+    /// <summary>
+    /// Whether whoever is at the clock can record that they saw a firing alarm. The receipt names
+    /// the face, not a person: anyone holding the clock link can press it. Needs
+    /// <see cref="ShowAlerts"/>.
+    /// </summary>
+    [JsonPropertyName("allowMarkSeen")]
+    public bool AllowMarkSeen { get; set; }
+
+    /// <summary>
     /// Validates against the <see cref="UserDisplayPreferences"/> vocabulary. A face saved before
     /// these settings existed deserialises to the defaults, so only an explicit value can fail.
     /// </summary>
     public string? Validate() =>
         UserDisplayPreferences.Check("settings.glucoseUnits", GlucoseUnits ?? "null", UserDisplayPreferences.AllowedGlucoseUnits)
-        ?? UserDisplayPreferences.Check("settings.timeFormat", TimeFormat ?? "null", UserDisplayPreferences.AllowedTimeFormats);
+        ?? UserDisplayPreferences.Check("settings.timeFormat", TimeFormat ?? "null", UserDisplayPreferences.AllowedTimeFormats)
+        ?? (AllowMarkSeen && !ShowAlerts ? "settings.allowMarkSeen: requires showAlerts" : null);
 }
 
 public class CreateClockFaceRequest
@@ -398,4 +415,32 @@ public class ClockGlucoseDto
 
     /// <summary>Origin data source identifier (used to surface demo data), or null.</summary>
     public string? DataSource { get; set; }
+}
+
+/// <summary>
+/// An alarm that is firing, as a clock face with <see cref="ClockSettings.ShowAlerts"/> shows it:
+/// what fired and since when, and nothing of who acknowledged it or how it is delivered.
+/// </summary>
+public class ClockAlertDto
+{
+    /// <summary>The excursion that is firing.</summary>
+    public Guid Id { get; set; }
+
+    /// <summary>The name of the rule that fired.</summary>
+    public string RuleName { get; set; } = string.Empty;
+
+    public AlertRuleSeverity Severity { get; set; }
+
+    public AlertConditionType ConditionType { get; set; }
+
+    public DateTime StartedAt { get; set; }
+
+    /// <summary>Whether someone has acknowledged it for everyone.</summary>
+    public bool Acknowledged { get; set; }
+
+    /// <summary>Whether this clock face has recorded that it was seen.</summary>
+    public bool SeenHere { get; set; }
+
+    /// <summary>When the latest snooze on it lapses, or null when it is not snoozed.</summary>
+    public DateTime? SnoozedUntil { get; set; }
 }

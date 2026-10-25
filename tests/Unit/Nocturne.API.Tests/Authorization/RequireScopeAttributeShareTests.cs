@@ -84,11 +84,10 @@ public class RequireScopeAttributeShareTests
 
     [Theory]
     [InlineData(Scope.TherapyRead)]
-    [InlineData(Scope.AlertsRead)]
     [InlineData(Scope.SleepRead)]
     public void AnonymousShare_IsDeniedCategoriesOutsideTheShareSet(string requiredScope)
     {
-        // therapy/alerts/sleep are not shareable categories, and the share RLS policies already
+        // therapy and sleep are not shareable categories, and the share RLS policies already
         // hide those tables from a share, so denial here matches what the data layer does.
         var context = Context(isAuthenticated: false, FullShareScopes());
 

@@ -1,0 +1,99 @@
+---
+title: Insulin Dosing Profile
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Video from '$lib/components/docs/Video.svelte';
+</script>
+
+# Insulin Dosing Profile
+
+The Insulin Dosing Profile (IDP) answers the question "how do my insulin and my
+glucose look together?". It puts your insulin use, your glucose and your pump
+settings on one page, ready for a clinic visit.
+
+<Video id="idp" />
+
+## What it shows
+
+### The key figures
+
+The strip at the top shows your **Avg Total Daily Dose**, your **Average**
+glucose, your **eHbA1c** and your **CV**. The CV target on the page is 33% or
+less.
+
+### Insulin Summary
+
+- A bar that splits your daily insulin into basal and bolus, in units per day
+  and as a percentage.
+- **Avg Delivered Basal** and **Avg Scheduled Basal**, in units per day. If the
+  two are different, your loop or your temp basals changed the basal from your
+  schedule.
+- **Boluses/Day**, **Avg Bolus Size**, **Meal Boluses/Day** and **Correction
+  Boluses/Day**.
+
+### Glucose Metrics
+
+A bar shows how your time divides across five ranges: very low, low, in range
+(70-180 mg/dL), high and very high.
+
+### AID System Use
+
+This card shows the devices and how much you used your automated insulin
+delivery (AID) system:
+
+- **CGM** and **Pump**: the names of your devices.
+- **CGM Active** and **AID Active**: the part of the period that each one was
+  active.
+- **Target**: the target range from your profile.
+- **Site Changes**: the number of site changes in the period.
+
+### Glycemic Risk Index
+
+The Glycemic Risk Index (GRI) puts the risk of lows and highs into one score,
+from 0 to 100. A lower score means less risk.
+
+The dot shows where your lows and highs put you. The horizontal axis is the part
+of the risk that comes from lows. The vertical axis is the part that comes from
+highs. The shaded zones run from A (0-20) to E (81-100). The panel next to the
+chart shows your score and its zone.
+
+### Glucose Pattern
+
+This card has three charts, one under the other:
+
+- **The glucose pattern**: your median glucose and percentile bands over 24
+  hours. It is the same chart as the [AGP](/docs/reports/agp).
+- **Scheduled Basal Rate**: the basal rate in your profile at each hour.
+- **User-Initiated Boluses Per Day**: how many boluses you give at each hour,
+  on an average day.
+
+Under the charts, the report shows the schedules from your profile.
+
+The app shows glucose values in mmol/L if you chose mmol/L.
+
+## How to use it
+
+Before a clinic visit, set the period that your care team asks for:
+
+1. At the top of the report, select the date range.
+2. Select a period, for example **30 Days**.
+3. Select **Apply Filters**. The whole report loads again for that period.
+4. Select **Print** to print the report.
+
+## Good to know
+
+- The IDP is available only to signed-in members. A public share link does not
+  show it.
+- If the period has too few days with readings, a badge under the figures shows
+  how many days the report uses.
+- **Scheduled Basal Rate** shows the first basal schedule in your profile.
+
+<Callout type="warning" title="Talk to your care team first">
+
+  This report is made to help your care team review your insulin doses. Do not
+  change your doses or pump settings because of this report alone. Discuss
+  changes with your diabetes care team.
+
+</Callout>

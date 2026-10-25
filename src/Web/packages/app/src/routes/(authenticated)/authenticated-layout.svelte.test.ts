@@ -48,11 +48,8 @@ import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "$lib/constants/she
 
 const BASE = new Date("2026-09-21T12:00:00Z").getTime();
 
-const warning = () => page.getByText("Session Expiring");
-
 // A tenantless host keeps the tenant-scoped surfaces (alerts, membership
-// requests, the backup sign-in prompt) unmounted, leaving the shell and the
-// session-expiry watcher, which is not tenant-scoped.
+// requests, the backup sign-in prompt) unmounted, leaving only the shell.
 type LayoutData = ComponentProps<typeof AuthenticatedLayoutHarness>["data"];
 
 function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
@@ -63,6 +60,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     isShareHost: false,
     canViewRealtimeData: false,
     showBackupSignInPrompt: false,
+    tenantTargets: [],
     isDemo: false,
     isGuestSession: false,
     isPlatformAdmin: false,
@@ -76,6 +74,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     effectivePermissions: [],
     limitTo24Hours: false,
     refusedAsDemoSubject: false,
+    onboardingComplete: true,
     displayPreferences: [],
     displayLanguage: "en",
     serverPreferences: null,
@@ -116,13 +115,7 @@ describe("authenticated layout", () => {
     vi.restoreAllMocks();
   });
 
-  it("mounts the session expiry warning for a signed-in user", async () => {
-    render(AuthenticatedLayoutHarness, { props: { data: layoutData() } });
-
-    await expect.element(warning()).toBeVisible();
-  });
-
-  it("leaves a guest session to its own countdown", async () => {
+  it("shows a guest session its own countdown", async () => {
     render(AuthenticatedLayoutHarness, {
       props: {
         data: layoutData({
@@ -133,7 +126,6 @@ describe("authenticated layout", () => {
     });
 
     await expect.element(page.getByText("Guest access")).toBeVisible();
-    await expect.element(warning()).not.toBeInTheDocument();
   });
 
   it.each([

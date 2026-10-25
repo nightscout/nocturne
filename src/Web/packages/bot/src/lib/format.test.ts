@@ -9,23 +9,24 @@ describe("formatGlucose", () => {
 });
 
 describe("timeAgo", () => {
+  const locale = new Intl.DateTimeFormat().resolvedOptions().locale;
+  const narrow = new Intl.RelativeTimeFormat(locale, { style: "narrow", numeric: "auto" });
   const agoBy = (ms: number) => timeAgo(Date.now() - ms);
 
-  it("says just now under half a minute, singular at one minute", () => {
-    expect(agoBy(0)).toBe("just now");
-    expect(agoBy(29_000)).toBe("just now");
-    expect(agoBy(31_000)).toBe("1 min ago");
-    expect(agoBy(60_000)).toBe("1 min ago");
-    expect(agoBy(89_000)).toBe("1 min ago");
+  it("words the age in the instance locale, in whole minutes", () => {
+    expect(agoBy(5 * 60_000 + 30_000)).toBe(narrow.format(-5, "minute"));
+    expect(agoBy(3 * 3_600_000)).toBe(narrow.format(-3, "hour"));
   });
 
-  it("counts whole minutes above that", () => {
-    expect(agoBy(91_000)).toBe("2 min ago");
-    expect(agoBy(12 * 60_000)).toBe("12 min ago");
+  it("words the age in the locale it is given", () => {
+    const at = Date.now() - 5 * 60_000;
+    const de = new Intl.RelativeTimeFormat("de", { style: "narrow", numeric: "auto" });
+    expect(timeAgo(at, "de")).toBe(de.format(-5, "minute"));
+    expect(timeAgo(at, "de")).not.toBe(timeAgo(at, "en"));
   });
 
   it("does not report a future timestamp as elapsed", () => {
-    expect(timeAgo(Date.now() + 60_000)).toBe("just now");
+    expect(timeAgo(Date.now() + 60_000)).toBe(narrow.format(0, "second"));
   });
 });
 

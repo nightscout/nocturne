@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.Alerts.Corpus;
 using Nocturne.API.Multitenancy;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Alerts;
@@ -25,7 +25,7 @@ namespace Nocturne.API.Tests.Services.Alerts;
 
 /// <summary>
 /// Rules driven only by <see cref="AlertSweepService"/> ticks, through the real orchestrator and
-/// each evaluation engine over in-memory tracker state.
+/// evaluation engine over in-memory tracker state.
 /// </summary>
 [Trait("Category", "Unit")]
 public class AlertSweepServiceWallClockTests
@@ -36,18 +36,10 @@ public class AlertSweepServiceWallClockTests
 
     private const string SignalLoss15 = """{"timeout_minutes": 15}""";
 
-    [Fact]
-    public Task Managed_engine_opens_dispatches_once_and_closes_on_resume() =>
-        RunOutageAsync(useRustEngine: false);
-
     [NativeFact]
-    public Task Rust_backed_engine_opens_dispatches_once_and_closes_on_resume() =>
-        RunOutageAsync(useRustEngine: true);
-
-    [Fact]
     public async Task Tenant_with_no_reading_history_does_not_fire()
     {
-        var fixture = new Fixture(useRustEngine: false, AlertConditionType.SignalLoss, SignalLoss15)
+        var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15)
         {
             LastReadingAt = null,
         };
@@ -58,15 +50,7 @@ public class AlertSweepServiceWallClockTests
         fixture.InstancesCreated.Should().Be(0);
     }
 
-    [Fact]
-    public Task Managed_engine_fires_signal_loss_nested_in_a_night_window() =>
-        RunNightOutageAsync(useRustEngine: false);
-
     [NativeFact]
-    public Task Rust_backed_engine_fires_signal_loss_nested_in_a_night_window() =>
-        RunNightOutageAsync(useRustEngine: true);
-
-    [Fact]
     public async Task Reading_driven_leaves_keep_the_verdict_of_the_last_reading()
     {
         // Opened by a low reading. The sweep re-judges that same reading, so it must not feed
@@ -77,7 +61,7 @@ public class AlertSweepServiceWallClockTests
               {"type": "signal_loss", "signal_loss": {"timeout_minutes": 15}}
             ]}
             """;
-        var fixture = new Fixture(useRustEngine: false, AlertConditionType.Composite, lowOrLoss)
+        var fixture = new Fixture(AlertConditionType.Composite, lowOrLoss)
         {
             LastReadingAt = T0,
             LatestMgdl = 60,
@@ -92,7 +76,7 @@ public class AlertSweepServiceWallClockTests
         fixture.Closed.Should().BeEmpty();
     }
 
-    [Fact]
+    [NativeFact]
     public async Task Rule_without_a_wall_clock_leaf_is_not_evaluated()
     {
         const string nightLow = """
@@ -101,7 +85,7 @@ public class AlertSweepServiceWallClockTests
               {"type": "time_of_day", "time_of_day": {"from": "22:00", "to": "06:00", "timezone": null}}
             ]}
             """;
-        var fixture = new Fixture(useRustEngine: false, AlertConditionType.Composite, nightLow)
+        var fixture = new Fixture(AlertConditionType.Composite, nightLow)
         {
             LastReadingAt = T0,
             LatestMgdl = 60,
@@ -113,25 +97,10 @@ public class AlertSweepServiceWallClockTests
         (await fixture.TrackerRepo.GetTrackerStateAsync(RuleId)).Should().BeNull();
     }
 
-    [Fact]
-    public Task Managed_engine_escalates_a_child_of_a_reading_driven_parent() =>
-        RunEscalationAsync(useRustEngine: false);
-
     [NativeFact]
-    public Task Rust_backed_engine_escalates_a_child_of_a_reading_driven_parent() =>
-        RunEscalationAsync(useRustEngine: true);
-
-    [Fact]
-    public Task Managed_engine_measures_signal_loss_from_the_last_usable_reading() =>
-        RunErrorReadingOutageAsync(useRustEngine: false);
-
-    [NativeFact]
-    public Task Rust_backed_engine_measures_signal_loss_from_the_last_usable_reading() =>
-        RunErrorReadingOutageAsync(useRustEngine: true);
-
-    private static async Task RunErrorReadingOutageAsync(bool useRustEngine)
+    public async Task Measures_signal_loss_from_the_last_usable_reading()
     {
-        var fixture = new Fixture(useRustEngine, AlertConditionType.SignalLoss, SignalLoss15);
+        var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15);
         fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 110 });
         for (var minutes = 5; minutes <= 20; minutes += 5)
             fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddMinutes(minutes), Mgdl = 0 });
@@ -144,10 +113,10 @@ public class AlertSweepServiceWallClockTests
         fixture.InstancesCreated.Should().Be(1, "error readings are not signal: the last usable one is 20 minutes old");
     }
 
-    [Fact]
+    [NativeFact]
     public async Task The_lookback_for_a_usable_reading_runs_once_per_newest_reading()
     {
-        var fixture = new Fixture(useRustEngine: false, AlertConditionType.SignalLoss, SignalLoss15);
+        var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15);
         fixture.Readings.Add(new SensorGlucose { Timestamp = T0, Mgdl = 110 });
         fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddMinutes(5), Mgdl = 0 });
         fixture.LastReadingAt = T0.AddMinutes(5);
@@ -165,10 +134,10 @@ public class AlertSweepServiceWallClockTests
         fixture.InstancesCreated.Should().Be(1, "the last usable reading is still the one at T0");
     }
 
-    [Fact]
+    [NativeFact]
     public async Task An_outage_with_no_usable_reading_in_the_lookback_still_fires()
     {
-        var fixture = new Fixture(useRustEngine: false, AlertConditionType.SignalLoss, SignalLoss15);
+        var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15);
         for (var minutes = 0; minutes <= 60; minutes += 5)
             fixture.Readings.Add(new SensorGlucose { Timestamp = T0.AddMinutes(minutes), Mgdl = 0 });
         fixture.LastReadingAt = T0.AddMinutes(60);
@@ -178,15 +147,35 @@ public class AlertSweepServiceWallClockTests
         fixture.InstancesCreated.Should().Be(1);
     }
 
-    [Fact]
-    public Task Managed_engine_reports_an_unevaluable_tree_once() =>
-        RunUnevaluableAsync(useRustEngine: false);
-
+    /// <summary>
+    /// A reading-driven body is swept once an enabled auto-resolve tree holds a wall-clock kind
+    /// (docs/alerts/engine-semantics.md §5.1), and the sweep's kept verdict follows the edit.
+    /// </summary>
     [NativeFact]
-    public Task Rust_backed_engine_reports_an_unevaluable_tree_once() =>
-        RunUnevaluableAsync(useRustEngine: true);
+    public async Task A_wall_clock_auto_resolve_tree_puts_the_rule_on_the_sweep_once_enabled()
+    {
+        var fixture = new Fixture(AlertConditionType.Threshold, """{"direction": "below", "value": 70}""")
+        {
+            LastReadingAt = T0,
+            LatestMgdl = 50,
+        };
+        const string stale = """{"type": "staleness", "staleness": {"operator": ">", "value": 20}}""";
+        fixture.Rules[0] = fixture.Rules[0] with { AutoResolveEnabled = false, AutoResolveParams = stale };
 
-    private static async Task RunUnevaluableAsync(bool useRustEngine)
+        await fixture.SweepAt(T0.AddMinutes(1));
+        fixture.InstancesCreated.Should().Be(0, "a threshold rule is evaluated per reading only");
+
+        fixture.Rules[0] = fixture.Rules[0] with { AutoResolveEnabled = true };
+        await fixture.SweepAt(T0.AddMinutes(2));
+        fixture.InstancesCreated.Should().Be(1);
+    }
+
+    /// <summary>
+    /// The engine reads a body it cannot evaluate as its root kind alone, so a wall-clock leaf
+    /// inside it does not put the rule on the sweep; the per-reading pass reports the fault.
+    /// </summary>
+    [NativeFact]
+    public async Task An_unevaluable_tree_is_not_swept()
     {
         const string lossAndBroken = """
             {"operator": "and", "conditions": [
@@ -194,7 +183,7 @@ public class AlertSweepServiceWallClockTests
               {"type": "composite"}
             ]}
             """;
-        var fixture = new Fixture(useRustEngine, AlertConditionType.Composite, lossAndBroken)
+        var fixture = new Fixture(AlertConditionType.Composite, lossAndBroken)
         {
             LastReadingAt = T0,
         };
@@ -203,11 +192,11 @@ public class AlertSweepServiceWallClockTests
         await fixture.SweepAt(T0.AddMinutes(2));
         await fixture.SweepAt(T0.AddMinutes(3));
 
-        fixture.OrchestratorLogger.Entries.Should().ContainSingle(e => e.Level >= LogLevel.Warning)
-            .Which.Message.Should().Contain("cannot be evaluated");
+        fixture.OrchestratorLogger.Entries.Should().BeEmpty();
+        fixture.InstancesCreated.Should().Be(0);
     }
 
-    [Fact]
+    [NativeFact]
     public async Task An_unwalkable_tree_is_reported_once_per_version()
     {
         var unwalkable = new AlertRule
@@ -217,7 +206,7 @@ public class AlertSweepServiceWallClockTests
             ConditionType = AlertConditionType.Composite,
             ConditionParams = null!,
         };
-        var fixture = new Fixture(useRustEngine: false, AlertConditionType.SignalLoss, SignalLoss15, unwalkable)
+        var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15, unwalkable)
         {
             LastReadingAt = T0,
         };
@@ -229,7 +218,8 @@ public class AlertSweepServiceWallClockTests
         fixture.Logger.Warnings.Should().ContainSingle(w => w.Contains(unwalkable.Id.ToString()));
     }
 
-    private static async Task RunEscalationAsync(bool useRustEngine)
+    [NativeFact]
+    public async Task Escalates_a_child_of_a_reading_driven_parent()
     {
         // The parent is not wall-clock, so the sweep evaluates only the child; the child's
         // reference must still resolve against every enabled rule of the tenant.
@@ -243,7 +233,7 @@ public class AlertSweepServiceWallClockTests
             ConfirmationReadings = 1,
         };
         var fixture = new Fixture(
-            useRustEngine, AlertConditionType.AlertState,
+            AlertConditionType.AlertState,
             $$"""{"alert_id": "{{parentId}}", "state": "unacknowledged", "for_minutes": 15}""",
             parent)
         {
@@ -262,9 +252,10 @@ public class AlertSweepServiceWallClockTests
             "the reading-driven parent is not the sweep's to evaluate");
     }
 
-    private static async Task RunOutageAsync(bool useRustEngine)
+    [NativeFact]
+    public async Task Signal_loss_opens_dispatches_once_and_closes_on_resume()
     {
-        var fixture = new Fixture(useRustEngine, AlertConditionType.SignalLoss, SignalLoss15)
+        var fixture = new Fixture(AlertConditionType.SignalLoss, SignalLoss15)
         {
             LastReadingAt = T0,
         };
@@ -294,7 +285,8 @@ public class AlertSweepServiceWallClockTests
         fixture.Dispatches.Should().Be(1);
     }
 
-    private static async Task RunNightOutageAsync(bool useRustEngine)
+    [NativeFact]
+    public async Task Fires_signal_loss_nested_in_a_night_window()
     {
         const string nightLoss = """
             {"operator": "and", "conditions": [
@@ -302,7 +294,7 @@ public class AlertSweepServiceWallClockTests
               {"type": "time_of_day", "time_of_day": {"from": "22:00", "to": "06:00", "timezone": null}}
             ]}
             """;
-        var fixture = new Fixture(useRustEngine, AlertConditionType.Composite, nightLoss)
+        var fixture = new Fixture(AlertConditionType.Composite, nightLoss)
         {
             LastReadingAt = T0.AddHours(9),
             LatestMgdl = 110,
@@ -336,6 +328,9 @@ public class AlertSweepServiceWallClockTests
         public List<ExcursionTransition> Closed { get; } = [];
         public Dictionary<Guid, ActiveAlertSnapshot> ActiveAlerts { get; } = [];
 
+        /// <summary>The enabled rules each sweep reads; replace one to edit it between sweeps.</summary>
+        public List<AlertRuleSnapshot> Rules { get; }
+
         /// <summary>The canonical stream; when empty, one reading at <see cref="LastReadingAt"/>.</summary>
         public List<SensorGlucose> Readings { get; } = [];
 
@@ -348,7 +343,7 @@ public class AlertSweepServiceWallClockTests
         }
 
         public Fixture(
-            bool useRustEngine, AlertConditionType conditionType, string conditionParams,
+            AlertConditionType conditionType, string conditionParams,
             params AlertRule[] otherRules)
         {
             var rule = new AlertRule
@@ -371,30 +366,19 @@ public class AlertSweepServiceWallClockTests
                 .Prepend(snapshot)
                 .ToList();
 
+            Rules = snapshots;
             TrackerRepo = new InMemoryTrackerRepository([rule, .. otherRules]);
-            var timerStore = new RecordingTimerStore();
 
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddSingleton<TimeProvider>(Time);
 
-            IAlertEvaluationEngine engine;
-            if (useRustEngine)
-            {
-                engine = EngineTestHarness.BuildRustEngine(Time, timerStore, TrackerRepo);
-            }
-            else
-            {
-                var (managed, provider) = EngineTestHarness.BuildManagedEngine(Time, timerStore, TrackerRepo);
-                engine = managed;
-                services.AddSingleton(provider);
-            }
-            services.AddSingleton(engine);
+            services.AddSingleton<IAlertEvaluationEngine>(EngineTestHarness.BuildRustEngine(Time, TrackerRepo));
 
             var repository = new Mock<IAlertRepository>();
             repository
                 .Setup(x => x.GetAllEnabledRulesAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(snapshots);
+                .ReturnsAsync(() => Rules.ToList());
             repository
                 .Setup(x => x.GetTenantAlertContextAsync(Tenant, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() => new TenantAlertContext(Tenant, "subject", "slug", "Slug", true, LastReadingAt));

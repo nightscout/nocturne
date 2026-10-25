@@ -8,17 +8,20 @@
   import HelpPageView from "$lib/components/help/HelpPageView.svelte";
   import { Input } from "$lib/components/ui/input";
   createHelpContext();
+  import type { TenantSwitcherTarget } from "$lib/utils/tenant-host";
 
   const {
     user = null,
     isGuestSession = false,
     currentSlug = null,
     baseDomain = null,
+    tenantTargets = [],
   }: {
     user?: AuthUser | null;
     isGuestSession?: boolean;
     currentSlug?: string | null;
     baseDomain?: string | null;
+    tenantTargets?: TenantSwitcherTarget[];
   } = $props();
 
   // The glucose widget reads the store from context. Never initialized, so no socket opens.
@@ -33,7 +36,7 @@
 </script>
 
 <Sidebar.Provider>
-  <AppSidebar {user} {isGuestSession} {currentSlug} {baseDomain} />
+  <AppSidebar {user} {isGuestSession} {currentSlug} {baseDomain} {tenantTargets} />
   <Sidebar.Inset>
     <MobileHeader />
     <main>

@@ -1,0 +1,8 @@
+# See Tone.yml. A full stop carries the same fact.
+extends: existence
+message: "Do not end UI copy with an exclamation mark. Use a full stop."
+link: .claude/skills/simple-english/SKILL.md
+level: error
+nonword: true
+tokens:
+  - '[A-Za-z0-9)]!(?:\s|$)'

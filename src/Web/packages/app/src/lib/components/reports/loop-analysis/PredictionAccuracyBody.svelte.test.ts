@@ -195,7 +195,7 @@ describe("PredictionAccuracyBody", () => {
     });
 
     await expect.element(page.getByText("This report needs a time zone")).toBeVisible();
-    expect(page.getByText("Predictions analysed").elements()).toHaveLength(0);
+    expect(page.getByText("Predictions analyzed").elements()).toHaveLength(0);
   });
 
   it("says a clamped viewer sees only the last 24 hours", async () => {

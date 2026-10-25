@@ -49,15 +49,17 @@ const response = await fetch(
 const { client_id } = await response.json();
 ```
 
-Registration is **idempotent per tenant**: if your `software_id` is already registered
-on that Nocturne instance, you'll get the existing `client_id` back. Store the `client_id`;
-you'll need it for every authorization request.
+Every registration creates a new client, even for the same `software_id`, so each install of
+your app has its own `client_id` and the user can revoke it on its own. Store the `client_id`
+with the tokens; you'll need it for every authorization request and every refresh. Register
+again only when you start a fresh sign-in. A client that has not been used to sign in within
+24 hours is removed.
 
 <Callout type="info" title="Well-known apps">
 
-  Popular diabetes apps (Trio, xDrip+, Loop, AAPS) are pre-registered on every Nocturne
-  instance. Calling register with their <code>software_id</code> returns the existing
-  <code>client_id</code> without creating a duplicate.
+  Popular diabetes apps (Trio, xDrip+, Loop, AAPS) are listed in Nocturne's known-app
+  directory. A registration with their <code>software_id</code> and the redirect URIs the
+  directory lists gets their name and logo on the consent screen.
 
 </Callout>
 
