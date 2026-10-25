@@ -35,7 +35,7 @@ describe("Google Health instance settings", () => {
       .element(page.getByLabelText("Client secret"))
       .toHaveAttribute("type", "password");
     await expect
-      .element(page.getByText("Google publishing and verification"))
+      .element(page.getByText("The callback URL ends in /api/v4/google-health/oauth/callback."))
       .toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Save", exact: true }))
