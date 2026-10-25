@@ -496,7 +496,7 @@
                 size="xs"
                 class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-xs">â†’</span>
+              <span class="text-muted-foreground text-xs">→</span>
               <Input
                 type="number"
                 inputmode="decimal"
@@ -580,7 +580,7 @@
                 size="xs"
                 class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-xs">â†’</span>
+              <span class="text-muted-foreground text-xs">→</span>
               <Input
                 type="number"
                 min={0}
@@ -613,7 +613,7 @@
                 size="xs"
                 class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-xs">â†’</span>
+              <span class="text-muted-foreground text-xs">→</span>
               <Input
                 type="number"
                 min={0}

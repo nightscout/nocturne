@@ -83,7 +83,7 @@
     },
     {
       title: "Difference",
-      text: "Nocturne uses the delta supplied with the newest sensor reading, or subtracts the previous sensor reading if no delta is supplied. Plus means the value increased; minus means it decreased. Compare the reading times: the interval may be longer than five minutes.",
+      text: "Nocturne uses the delta supplied with the newest sensor reading, or subtracts the previous sensor reading if no delta is supplied. Plus means the value increased. Minus means it decreased. Compare the reading times: the interval may be longer than five minutes.",
     },
     {
       title: "Reading age",
@@ -148,7 +148,7 @@
       direction: GlucoseTrend.Flat,
       age: 15,
       label: "Older measurement",
-      text: "The last measurement is older than the shared freshness limit. Its tile becomes neutral and the active arrow is hidden; the old measurement still exists.",
+      text: "The last measurement is older than the shared freshness limit. Its tile becomes neutral and the active arrow is hidden. The old measurement still exists.",
     },
     {
       value: 106,
@@ -344,7 +344,7 @@
             {#if isTopWidgetId(topic.id)}
               {#await loadTopWidget(topic.id)}
                 <p class="p-5 text-sm text-muted-foreground">
-                  Loading exampleÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦
+                  Loading example…
                 </p>
               {:then Widget}<Widget />{:catch}<p class="p-5 text-sm">
                   Reload to load this example.
@@ -381,7 +381,7 @@
             90-day button shows a daily average over the longer rolling window. {scenario ===
             0
               ? "Auto contributes 4 U to the 42 U total."
-              : "Auto is absent because this example has no algorithm bolus insulin; the total is 38 U."}
+              : "Auto is absent because this example has no algorithm bolus insulin. The total is 38 U."}
           </p>{/if}
       {/if}
     {/each}

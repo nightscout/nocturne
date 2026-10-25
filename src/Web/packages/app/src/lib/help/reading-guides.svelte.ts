@@ -27,7 +27,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Read the timeline",
-          "Line points are glucose samples; recorded treatments provide timing context.",
+          "Line points are glucose samples. Recorded treatments provide timing context.",
         ],
         [
           "Choose your display",
@@ -130,7 +130,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Compare carefully",
-          "The glucose estimate and laboratory measurement use different inputs; inspect data coverage too.",
+          "The glucose estimate and laboratory measurement use different inputs. Inspect data coverage too.",
         ],
       ]
     ),
@@ -162,7 +162,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Follow samples",
-          "The line connects recorded points; a gap does not contain additional measurements.",
+          "The line connects recorded points. A gap does not contain additional measurements.",
         ],
         [
           "Inspect context",
@@ -284,7 +284,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Choose two devices",
-          "Device is compared with your selected Reference; both need readings in the chosen period.",
+          "Device is compared with your selected Reference. Both need readings in the chosen period.",
         ],
         [
           "Set Match within",
@@ -292,7 +292,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Read the diagonal",
-          "Points near equal values indicate closer agreement; only paired samples enter this view.",
+          "Points near equal values indicate closer agreement. Only paired samples enter this view.",
         ],
       ]
     ),
@@ -310,7 +310,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Accept or dismiss",
-          "Accept applies the correction; dismiss rejects the suggestion. Detection settings are separate.",
+          "Accept applies the correction. Dismiss rejects the suggestion. Detection settings are separate.",
         ],
       ]
     ),
@@ -346,7 +346,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Remember sampling",
-          "Google Health imports minute averages; brief peaks and gaps can differ from your watch's display.",
+          "Google Health imports minute averages. Brief peaks and gaps can differ from your watch's display.",
         ],
       ]
     ),
@@ -396,7 +396,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Check its fields",
-          "Inspect event type, time, insulin/carbohydrate units, and source before editing.",
+          "Inspect event type, time, insulin/carb units, and source before editing.",
         ],
         [
           "Save deliberately",
@@ -410,7 +410,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Separate rate and amount",
-          "A basal rate describes delivery per hour; a delivered total describes accumulated insulin.",
+          "A basal rate describes delivery per hour. A delivered total describes accumulated insulin.",
         ],
         [
           "Compare schedule and records",
@@ -468,7 +468,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Separate planned and delivered",
-          "Scheduled basal comes from the profile; actual delivery needs imported insulin records.",
+          "Scheduled basal comes from the profile. Actual delivery needs imported insulin records.",
         ],
         [
           "Check individual panels",
@@ -504,11 +504,11 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Read a day",
-          "A daily summary condenses its available readings; inspect a day for more detail.",
+          "A daily summary condenses its available readings. Inspect a day for more detail.",
         ],
         [
           "Manage reminders elsewhere",
-          "Tracker starts/completions affect due events; edit definitions in Notifications & Trackers.",
+          "Tracker starts/completions affect due events. Edit definitions in Notifications & Trackers.",
         ],
       ]
     ),
@@ -544,7 +544,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Check freshness",
-          "The clock displays incoming records; its appearance does not improve stale uploads.",
+          "The clock displays incoming records. Its appearance does not improve stale uploads.",
         ],
       ]
     ),
@@ -558,7 +558,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Check portion and nutrition",
-          "Carbohydrate values describe a portion; verify both the amount and its unit.",
+          "Carb values describe a portion. Verify both the amount and its unit.",
         ],
         [
           "Use it in a meal",
@@ -576,11 +576,11 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Review a suggested match",
-          "Inspect the meal and carbohydrate event before accepting a proposed attribution.",
+          "Inspect the meal and carb event before accepting a proposed attribution.",
         ],
         [
           "Adjust the link",
-          "Add, edit, or remove the food association; this is distinct from deleting the glucose trace.",
+          "Add, edit, or remove the food association. This is distinct from deleting the glucose trace.",
         ],
       ]
     ),
@@ -616,7 +616,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Check items physically",
-          "A tick records your check; it does not verify the contents of your bag.",
+          "A tick records your check. It does not verify the contents of your bag.",
         ],
       ]
     ),
@@ -634,7 +634,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Inspect actual fires",
-          "History records evaluations/delivery; acknowledging an alert is different from disabling its rule.",
+          "History records evaluations/delivery. Acknowledging an alert is different from disabling its rule.",
         ],
       ]
     ),
@@ -648,7 +648,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Choose a replay window",
-          "Replay evaluates against a chosen historical scenario; it is not a new measurement.",
+          "Replay evaluates against a chosen historical scenario. It is not a new measurement.",
         ],
         [
           "Review the result",
@@ -688,7 +688,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Check exceptions",
-          "Rules allowed through Do Not Disturb can still notify; verify the patient's timezone.",
+          "Rules allowed through Do Not Disturb can still notify. Verify the patient's timezone.",
         ],
       ]
     ),
@@ -742,7 +742,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Manage access separately",
-          "Sharing & Privacy controls tenant membership; platform administration controls tenant configuration.",
+          "Sharing & Privacy controls tenant membership. Platform administration controls tenant configuration.",
         ],
       ]
     ),
@@ -810,7 +810,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Save changed details",
-          "Weight is recorded into its history when changed; timezone changes take effect from saving.",
+          "Weight is recorded into its history when changed. Timezone changes take effect from saving.",
         ],
         [
           "Manage related history",
@@ -832,7 +832,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Know where it is saved",
-          "Documentation preferences are browser-local; account display preferences have their own persistence.",
+          "Documentation preferences are browser-local. Account display preferences have their own persistence.",
         ],
       ]
     ),
@@ -846,7 +846,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Read time segments",
-          "Basal, sensitivity, carbohydrate ratio, and target can change by time of day.",
+          "Basal, sensitivity, carb ratio, and target can change by time of day.",
         ],
         [
           "Correct the origin",
@@ -868,7 +868,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Separate cleanup",
-          "Maintenance and accepting suggestions can change records; merely changing detection settings is a different action.",
+          "Maintenance and accepting suggestions can change records. Merely changing detection settings is a different action.",
         ],
       ]
     ),
@@ -878,7 +878,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Define what is tracked",
-          "Definitions set the duration/reminders; presets reuse starting information.",
+          "Definitions set the duration/reminders. Presets reuse starting information.",
         ],
         [
           "Start an instance",
@@ -886,7 +886,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Complete the event",
-          "Completion creates history; editing a definition is not the same as completing an instance.",
+          "Completion creates history. Editing a definition is not the same as completing an instance.",
         ],
       ]
     ),
@@ -897,7 +897,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ["Inspect sessions", "Find browsers signed in to your account."],
         [
           "Revoke unwanted access",
-          "That session must authenticate again; stored patient records remain.",
+          "That session must authenticate again. Stored patient records remain.",
         ],
         [
           "Use the right list",
@@ -937,7 +937,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Review share links",
-          "Anyone possessing a usable guest link receives its configured access; revoke links you no longer intend to share.",
+          "Anyone possessing a usable guest link receives its configured access. Revoke links you no longer intend to share.",
         ],
       ]
     ),
@@ -973,7 +973,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Submit a contribution",
-          "Contributor details and reviewer notes accompany your translation; interface language is selected in Appearance.",
+          "Contributor details and reviewer notes accompany your translation. Interface language is selected in Appearance.",
         ],
       ]
     ),
@@ -991,7 +991,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Manage imports separately",
-          "Selecting Weight in Google Health controls imports; editing a history entry is a different operation.",
+          "Selecting Weight in Google Health controls imports. Editing a history entry is a different operation.",
         ],
       ]
     ),

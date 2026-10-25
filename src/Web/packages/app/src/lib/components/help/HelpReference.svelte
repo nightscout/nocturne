@@ -55,8 +55,8 @@
                 </span>
               </Table.Cell><Table.Cell class="font-mono whitespace-nowrap">
                 {#if band.lower !== undefined}{bg(band.lower)}
-                  {band.lowerInclusive ? "â‰¤" : "<"}{/if} x {#if band.upper !== undefined}{band.upperInclusive
-                    ? "â‰¤"
+                  {band.lowerInclusive ? "≤" : "<"}{/if} x {#if band.upper !== undefined}{band.upperInclusive
+                    ? "≤"
                     : "<"}
                   {bg(band.upper)}{/if}
               </Table.Cell>
@@ -82,7 +82,7 @@
         </p>{/if}
       <figure class="space-y-3 rounded-lg bg-muted/30 p-4">
         <figcaption class="text-sm font-medium">
-          Example â€” invented readings, using the real report chart
+          Example: invented readings, using the real report chart
         </figcaption>
         <TIRStackedChart
           percentages={{
@@ -125,7 +125,7 @@
         <div>
           <dt class="font-medium">History-days configuration bounds</dt>
           <dd>
-            {facts.googleHealthMinimumHistoryDays}â€“{facts.googleHealthMaximumHistoryDays}
+            {facts.googleHealthMinimumHistoryDays}–{facts.googleHealthMaximumHistoryDays}
             days. An explicit Import data from date uses a separate date setting.
           </dd>
         </div>
@@ -169,7 +169,7 @@
       </Table.Root>
       <figure class="space-y-3 rounded-lg bg-muted/30 p-4">
         <figcaption class="text-sm font-medium">
-          Example connection states â€” no personal data
+          Example connection states: no personal data
         </figcaption>
         <DataSourceRow
           name="Google Health"
@@ -181,7 +181,7 @@
           name="Google Health"
           icon={undefined}
           status="syncing"
-          statusMessage="Import is running; check historical progress"
+          statusMessage="Import is running. Check historical progress"
         />
         <p class="text-sm text-muted-foreground">
           These use the same status-row component as Connectors & Apps. A
@@ -199,7 +199,7 @@
     </Button>
   {:else}
     <p class="text-sm text-muted-foreground" role="status">
-      Loading current reference valuesâ€¦
+      Loading current reference values…
     </p>
   {/if}
 </section>
