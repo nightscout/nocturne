@@ -16,6 +16,7 @@ const {
   glucoseUnits,
   a1cName,
   a1cUnits,
+  carbRatioFormat,
   timeFormat,
   colorTheme,
   glucoseRangePalette,
@@ -39,6 +40,7 @@ describe("appearance-store preference sync", () => {
       glucoseUnits: "mg/dl",
       a1cName: "HbA1c",
       a1cUnits: "percent",
+      carbRatioFormat: "1:x",
       timeFormat: "12",
       colorTheme: "nocturne",
       glucoseRangePalette: "theme",
@@ -122,6 +124,16 @@ describe("appearance-store preference sync", () => {
       a1cName: "A1c",
       a1cUnits: "mmol/mol",
     });
+  });
+
+  it("syncs the carb ratio format, keeps it across partial updates and ignores an unknown one", () => {
+    applyPreferences({ carbRatioFormat: "U/10g" });
+    applyPreferences({ glucoseUnits: "mmol" });
+    expect(carbRatioFormat.current).toBe("U/10g");
+    expect(collectPreferences().carbRatioFormat).toBe("U/10g");
+
+    applyPreferences({ carbRatioFormat: "U/g" });
+    expect(carbRatioFormat.current).toBe("U/10g");
   });
 
   it("applyPreferences ignores null/undefined input", () => {

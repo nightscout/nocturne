@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatInsulinToCarbRatio } from "$lib/utils/formatting";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Badge } from "$lib/components/ui/badge";
   import { Item } from "$lib/components/ui/item";
@@ -248,8 +249,8 @@
           {/if}
 
           {#if bolusCalc.carbRatio != null}
-            <span class="text-muted-foreground">Carb ratio</span>
-            <span class="font-medium">1:{bolusCalc.carbRatio}</span>
+            <span class="text-muted-foreground">ICR</span>
+            <span class="font-medium">{formatInsulinToCarbRatio(bolusCalc.carbRatio)}</span>
           {/if}
 
           {#if bolusCalc.insulinRecommendation != null}

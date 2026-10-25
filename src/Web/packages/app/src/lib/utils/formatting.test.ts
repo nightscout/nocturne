@@ -23,6 +23,7 @@ vi.mock("runed", () => ({
 }));
 vi.mock("$lib/stores/appearance-store.svelte", () => ({
 	glucoseUnits: { current: "mg/dl" },
+	carbRatioFormat: { current: "1:x" },
 	timeFormat: { current: "12" },
 	regionFormat: { current: "" },
 	preferredLanguage: { current: "en" },
@@ -48,6 +49,7 @@ const {
 	formatDayTime,
 	formatFileSize,
 	formatInsulinToCarbRatio,
+	writesUnitsPerTenGrams,
 	formatNumber,
 	formatNumericDate,
 	formatMediumDateRange,
@@ -677,13 +679,42 @@ describe("prefersHour12", () => {
 
 describe("formatInsulinToCarbRatio", () => {
 	it("writes grams per unit as 1:x with one decimal", () => {
-		expect(formatInsulinToCarbRatio(10)).toBe("1:10.0");
-		expect(formatInsulinToCarbRatio(12.34)).toBe("1:12.3");
+		expect(formatInsulinToCarbRatio(10, "1:x")).toBe("1:10.0");
+		expect(formatInsulinToCarbRatio(12.34, "1:x")).toBe("1:12.3");
+	});
+
+	it("writes grams per unit as g/U", () => {
+		expect(formatInsulinToCarbRatio(9.8, "g/U")).toBe("9.8 g/U");
+	});
+
+	it("writes units for ten grams with two decimals", () => {
+		expect(formatInsulinToCarbRatio(8, "U/10g")).toBe("1.25 U/10 g");
+		expect(formatInsulinToCarbRatio(11.5, "U/10g")).toBe("0.87 U/10 g");
+	});
+
+	it("writes a dash for a ratio that is not positive", () => {
+		expect(formatInsulinToCarbRatio(0, "U/10g")).toBe("–");
 	});
 
 	it("writes a dash when there is no ratio", () => {
 		expect(formatInsulinToCarbRatio(null)).toBe("–");
 		expect(formatInsulinToCarbRatio(undefined)).toBe("–");
+	});
+
+	it("uses the chosen format when none is given", () => {
+		expect(formatInsulinToCarbRatio(10)).toBe("1:10.0");
+	});
+});
+
+describe("writesUnitsPerTenGrams", () => {
+	it("is true only for units per 10 g", () => {
+		expect(writesUnitsPerTenGrams("U/10g")).toBe(true);
+		expect(writesUnitsPerTenGrams("g/U")).toBe(false);
+		expect(writesUnitsPerTenGrams("1:x")).toBe(false);
+	});
+
+	it("follows the chosen format when none is given", () => {
+		expect(writesUnitsPerTenGrams()).toBe(false);
 	});
 });
 

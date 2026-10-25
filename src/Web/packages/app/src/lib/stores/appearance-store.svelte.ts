@@ -69,6 +69,10 @@ const TIME_FORMATS = ["12", "24"] as const;
 const A1C_NAMES = ["HbA1c", "A1c"] as const;
 // @wc-ignore
 const A1C_UNITS = ["percent", "mmol/mol"] as const;
+// @wc-ignore
+export const CARB_RATIO_FORMATS = ["1:x", "g/U", "U/10g"] as const;
+
+export type CarbRatioFormat = (typeof CARB_RATIO_FORMATS)[number];
 
 /** Time format preference */
 export type TimeFormat = (typeof TIME_FORMATS)[number];
@@ -443,6 +447,11 @@ export const timeFormat = new SyncedPref<TimeFormat>(
   "12",
   (p) => p.timeFormat,
   oneOfPref(TIME_FORMATS)
+);
+
+// @wc-ignore
+export const carbRatioFormat = new SyncedPref<CarbRatioFormat>(
+  "nocturne-carb-ratio-format", "1:x", (p) => p.carbRatioFormat, oneOfPref(CARB_RATIO_FORMATS)
 );
 
 /**
@@ -857,6 +866,7 @@ export function collectPreferences(): UserDisplayPreferences {
     glucoseUnits: glucoseUnits.stored,
     a1cName: a1cName.stored,
     a1cUnits: a1cUnits.stored,
+    carbRatioFormat: carbRatioFormat.stored,
     timeFormat: timeFormat.stored,
     regionFormat: regionFormat.stored,
     energyUnit: energyUnit.stored ?? undefined,

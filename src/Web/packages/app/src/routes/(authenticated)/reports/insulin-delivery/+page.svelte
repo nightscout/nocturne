@@ -3,6 +3,8 @@
     formatInsulinToCarbRatio,
     formatNumber,
     formatNumericDate,
+    unitsPerTenGrams,
+    writesUnitsPerTenGrams,
   } from "$lib/utils/formatting";
   import {
     Card,
@@ -300,7 +302,14 @@
         <strong>{(insulinStats.tdd ?? 0).toFixed(1)}U/day</strong>
         can be compared to this reference.
       </p>
-      {#if insulinStats.icRatio != null}
+      {#if insulinStats.icRatio != null && writesUnitsPerTenGrams()}
+        <p>
+          <strong>ICR check:</strong>
+          Your insulin-to-carb ratio of {formatInsulinToCarbRatio(insulinStats.icRatio)}
+          means you use about {unitsPerTenGrams(insulinStats.icRatio).toFixed(2)} units of insulin
+          for every 10 grams of carbs.
+        </p>
+      {:else if insulinStats.icRatio != null}
         <p>
           <strong>ICR check:</strong>
           Your insulin-to-carb ratio of {formatInsulinToCarbRatio(insulinStats.icRatio)}

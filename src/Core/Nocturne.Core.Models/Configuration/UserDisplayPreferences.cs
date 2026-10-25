@@ -69,6 +69,7 @@ public class UserDisplayPreferences
     internal static readonly HashSet<string> AllowedTimeFormats = new(StringComparer.Ordinal) { "12", "24" };
     private static readonly HashSet<string> AllowedA1cNames = new(StringComparer.Ordinal) { "HbA1c", "A1c" };
     private static readonly HashSet<string> AllowedA1cUnits = new(StringComparer.Ordinal) { "percent", "mmol/mol" };
+    private static readonly HashSet<string> AllowedCarbRatioFormats = new(StringComparer.Ordinal) { "1:x", "g/U", "U/10g" };
 
     /// <summary>
     /// Regional formats offered to the user. Empty string means "follow the display language".
@@ -100,6 +101,7 @@ public class UserDisplayPreferences
             Check("glucoseUnits", GlucoseUnits, AllowedGlucoseUnits)
             ?? Check("a1cName", A1cName, AllowedA1cNames)
             ?? Check("a1cUnits", A1cUnits, AllowedA1cUnits)
+            ?? Check("carbRatioFormat", CarbRatioFormat, AllowedCarbRatioFormats)
             ?? Check("timeFormat", TimeFormat, AllowedTimeFormats)
             ?? Check("regionFormat", RegionFormat, AllowedRegionFormats)
             ?? Check("energyUnit", EnergyUnit, EnergyUnits.Allowed)
@@ -176,6 +178,7 @@ public class UserDisplayPreferences
         GlucoseUnits = incoming.GlucoseUnits ?? GlucoseUnits;
         A1cName = incoming.A1cName ?? A1cName;
         A1cUnits = incoming.A1cUnits ?? A1cUnits;
+        CarbRatioFormat = incoming.CarbRatioFormat ?? CarbRatioFormat;
         TimeFormat = incoming.TimeFormat ?? TimeFormat;
         RegionFormat = incoming.RegionFormat ?? RegionFormat;
         EnergyUnit = incoming.EnergyUnit ?? EnergyUnit;
@@ -234,6 +237,7 @@ public class UserDisplayPreferences
         GlucoseUnits = GlucoseUnits,
         A1cName = A1cName,
         A1cUnits = A1cUnits,
+        CarbRatioFormat = CarbRatioFormat,
         TimeFormat = TimeFormat,
         RegionFormat = RegionFormat,
         EnergyUnit = EnergyUnit,
@@ -251,6 +255,14 @@ public class UserDisplayPreferences
 
     public string? A1cName { get; set; }
     public string? A1cUnits { get; set; }
+
+    /// <summary>
+    /// How insulin-to-carb ratios are written: "1:x" (grams covered by one unit), "g/U", or "U/10g"
+    /// (units for ten grams). Ratios are stored and served in grams per unit; this only changes the
+    /// display. Null means "1:x".
+    /// </summary>
+    [JsonPropertyName("carbRatioFormat")]
+    public string? CarbRatioFormat { get; set; }
 
     /// <summary>Time format: "12" or "24".</summary>
     [JsonPropertyName("timeFormat")]

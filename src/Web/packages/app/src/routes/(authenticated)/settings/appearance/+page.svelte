@@ -44,6 +44,7 @@
   import DashboardRailConfigurator from "$lib/components/settings/DashboardRailConfigurator.svelte";
   import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
+  import CarbRatioFormatSelect from "$lib/components/settings/CarbRatioFormatSelect.svelte";
   import { updateLanguagePreference } from "$api/user-preferences.remote";
   import {
     getPreference,
@@ -607,6 +608,9 @@
               </SelectContent>
             </Select>
           </div>
+
+          <CarbRatioFormatSelect />
+          <div class="hidden @sm:block" aria-hidden="true"></div>
 
           <div class="space-y-2">
             <Label>Time format</Label>

@@ -117,6 +117,7 @@ public sealed class TenantAppearanceControllerTests
             GlucoseUnits = "mmol",
             A1cName = "A1c",
             A1cUnits = "mmol/mol",
+            CarbRatioFormat = "U/10g",
             TimeFormat = "24",
             RegionFormat = "en-GB",
             EnergyUnit = "kJ",
@@ -135,7 +136,7 @@ public sealed class TenantAppearanceControllerTests
         var disclosed = everythingSet.ToPresentationOnly();
 
         SetPropertyNames(disclosed).Should().BeEquivalentTo(
-            "GlucoseUnits", "A1cName", "A1cUnits", "TimeFormat", "RegionFormat", "EnergyUnit", "EffectiveEnergyUnit",
+            "GlucoseUnits", "A1cName", "A1cUnits", "CarbRatioFormat", "TimeFormat", "RegionFormat", "EnergyUnit", "EffectiveEnergyUnit",
             "ColorTheme", "GlucoseRangePalette", "CalendarShowTirPercent", "Prediction", "Chart", "YearOverviewColors");
 
         // Both are carried whole rather than field by field, so the projection cannot withhold a

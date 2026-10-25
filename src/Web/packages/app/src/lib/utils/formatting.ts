@@ -10,9 +10,11 @@
 
 import {
   glucoseUnits,
+  carbRatioFormat,
   timeFormat,
   regionFormat,
   preferredLanguage,
+  type CarbRatioFormat,
   type GlucoseUnits,
 } from "$lib/stores/appearance-store.svelte";
 import {
@@ -562,9 +564,31 @@ export function formatCarbDisplay(carbs: number | undefined): string {
   return carbs.toFixed(0);
 }
 
-/** Formats an insulin-to-carb ratio, grams per unit, as `1:x.x`, or "–" when there is none. */
-export function formatInsulinToCarbRatio(gramsPerUnit: number | null | undefined): string {
-  return gramsPerUnit == null ? "–" : `1:${gramsPerUnit.toFixed(1)}`;
+export function formatInsulinToCarbRatio(
+  gramsPerUnit: number | null | undefined,
+  format: CarbRatioFormat = carbRatioFormat.current
+): string {
+  if (gramsPerUnit == null || !(gramsPerUnit > 0)) return "–";
+  switch (format) {
+    case "g/U":
+      return `${gramsPerUnit.toFixed(1)} g/U`;
+    case "U/10g":
+      return `${unitsPerTenGrams(gramsPerUnit).toFixed(2)} U/10 g`;
+    default:
+      return `1:${gramsPerUnit.toFixed(1)}`;
+  }
+}
+
+export function unitsPerTenGrams(gramsPerUnit: number): number {
+  return 10 / gramsPerUnit;
+}
+
+/**
+ * Kept out of the templates: the catalogue would translate the format's literal there, and the
+ * comparison would then fail in other locales.
+ */
+export function writesUnitsPerTenGrams(format: CarbRatioFormat = carbRatioFormat.current): boolean {
+  return format === "U/10g";
 }
 
 /**
