@@ -67,30 +67,37 @@ afterwards.
 
 ### 2. Give Nocturne the client
 
-Set these in your `.env` and restart Nocturne:
+Open **Settings → Admin → Integrations → Google Health** as an instance administrator.
+Enter the **Client ID** (ending in `.apps.googleusercontent.com`) and **Client secret**.
+Copy the displayed **Callback URL** into the authorized redirect URIs in Google Cloud.
+The suggested address comes from `BASE_DOMAIN`. Override it only if your public callback
+address differs, or enter it yourself when no base domain is configured.
 
-| Variable | Value |
-|----------|-------|
-| `GOOGLE_HEALTH_CLIENT_ID` | The client ID, ending in `.apps.googleusercontent.com`. |
-| `GOOGLE_HEALTH_CLIENT_SECRET` | The client secret. |
-| `GOOGLE_HEALTH_REDIRECT_URI` | Optional. Only needed when Nocturne cannot work the address out from `BASE_DOMAIN`, for example when `BASE_DOMAIN` is unset. It must end in `/api/v4/google-health/oauth/callback` and match the URI you registered exactly. |
+Enable Google Health and save. Changes apply to new requests and sync jobs without a restart.
+Blank client ID and secret fields preserve the stored values; the secret is encrypted on the
+server and never returned to the browser. Ordinary users and tenant administrators cannot
+manage these instance settings. The former Google Health environment variables are no longer
+used: enter the existing client in Admin after upgrading to keep existing connections working.
 
-The **Connect Google Health** button appears for everyone on the server once the client ID and
-secret are set and Nocturne has a redirect URI, from `BASE_DOMAIN` or the variable.
+The **Connect Google Health** button appears for everyone once the enabled client configuration
+is complete. Each user still authorizes their own Google account and controls consent in Google.
+Disabling or removing the instance configuration stops connections and sync; imported data is kept.
 
 ### 3. Who can connect
 
 Google limits what an unverified app can do, and these limits apply to your client:
 
 - While the consent screen's publishing status is **Testing**, only the Google accounts you add
-  as test users can connect, and Google expires their access after **7 days**. Each person then
+  as test users can connect, and Google expires their refresh tokens after **7 days**. Each person then
   has to connect again.
-- An app that is in production but not verified can be used by at most **100 users**.
+- Publishing to **Production** removes the testing-specific seven-day expiry. This is separate
+  from verification. An unverified app still shows a warning and can be used by at most **100 users**.
+  Refresh tokens can still expire or be revoked for other reasons.
 - Serving more than 100 users requires Google's verification, which for health data includes a
   **third-party security assessment**.
 
-For a server shared by family or a few friends, publishing to production and staying under 100
-users is usually enough.
+Google Cloud setup remains necessary. Publishing does not guarantee verification or permanent
+access; check Google's requirements for your deployment.
 
 <Callout type="warning" title="Changing the client">
 

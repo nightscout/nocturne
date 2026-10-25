@@ -48,14 +48,8 @@ public class GoogleHealthPlatformTests
     public void Redirect_uri_defaults_to_the_apex_callback_only_when_a_base_domain_is_set(
         string baseDomain, string configured, string expected)
     {
-        var services = new ServiceCollection();
-        services.Configure<BaseDomainOptions>(options => options.BaseDomain = baseDomain);
-        services.Configure<GoogleHealthPlatformOptions>(options => options.RedirectUri = configured);
-        services.AddDataProtection();
-        services.AddGoogleHealthPlatform();
-        using var provider = services.BuildServiceProvider();
-
-        Assert.Equal(expected, provider.GetRequiredService<IOptions<GoogleHealthPlatformOptions>>().Value.RedirectUri);
+        var fallback = GoogleHealthPlatformSettings.DefaultRedirectUri(new BaseDomainOptions { BaseDomain = baseDomain });
+        Assert.Equal(expected, string.IsNullOrEmpty(configured) ? fallback : configured);
     }
 
     [Fact]

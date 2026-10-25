@@ -1733,7 +1733,7 @@ public class GoogleHealthTests : IDisposable
         IGoogleHealthGrantHolders? holders = null,
         TimeProvider? time = null)
     {
-        var platformOptions = Microsoft.Extensions.Options.Options.Create(platform ?? Platform());
+        var platformOptions = new FixedGoogleHealthPlatformSettings(platform ?? Platform());
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(value => value.IsResolved).Returns(true);
         tenant.SetupGet(value => value.TenantId).Returns(tenantId);
@@ -1878,7 +1878,7 @@ public class GoogleHealthTests : IDisposable
                     Configurations,
                     NullLogger<ConnectorConfigurationLoader<GoogleHealthConnectorConfiguration>>.Instance,
                     TimeProvider.System),
-                Microsoft.Extensions.Options.Options.Create(Platform()));
+                new FixedGoogleHealthPlatformSettings(Platform()));
         }
 
         public IConnectorConfigurationService Configurations { get; }

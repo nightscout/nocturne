@@ -157,7 +157,8 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         var accessor = new Mock<ITenantAccessor>();
         accessor.SetupGet(value => value.IsResolved).Returns(true);
         accessor.SetupGet(value => value.TenantId).Returns(tenant);
-        var platform = Options.Create(new GoogleHealthPlatformOptions
+        var platform = new Mock<IGoogleHealthPlatformSettings>();
+        platform.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new GoogleHealthPlatformOptions
         {
             ClientId = "synthetic.apps.googleusercontent.com",
             ClientSecret = "synthetic-secret",
@@ -167,8 +168,8 @@ public sealed class GoogleHealthGrantHoldersTests(GoogleHealthPostgresFixture fi
         disposables.Add(http);
         var oauth = new GoogleHealthAuthTokenProvider(http, new ConnectorTokenCache(),
             new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
-            accessor.Object, platform, NullLogger<GoogleHealthAuthTokenProvider>.Instance);
-        return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor.Object, platform,
+            accessor.Object, platform.Object, NullLogger<GoogleHealthAuthTokenProvider>.Instance);
+        return new GoogleHealthSessionStore(SecretsOf(tenant), oauth, holders, accessor.Object, platform.Object,
             NullLogger<GoogleHealthSessionStore>.Instance);
     }
 
