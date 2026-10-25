@@ -4,8 +4,8 @@ import { describe, it, expect, vi } from "vitest";
 import BasalBolusRatioChart from "./BasalBolusRatioChart.svelte";
 
 // layerchart's BarChart throws under vitest-browser-svelte (as AreaChart does in the AGP test),
-// and its marks, axis and tooltip need a live chart. The stubs render the chart's snippets
-// against a fixed 0–60 U insulin scale and print what each part receives.
+// and its marks, axis and tooltip need a live chart. The stubs render the chart's snippets and
+// print what each part receives.
 vi.mock("layerchart", async (importOriginal) => {
   const Part = (await import("./ChartPartStub.test.svelte")).default;
   return {
@@ -38,11 +38,13 @@ describe("BasalBolusRatioChart", () => {
   it("draws the carbs on a right-hand axis from zero, scaled to the insulin axis", async () => {
     render(BasalBolusRatioChart, {
       props: {
-        data: { dailyData: [day("Oct 1", 20, 15, 180), day("Oct 2", 21, 12.5, 150)] },
+        data: { dailyData: [day("Oct 1", 30, 30, 180), day("Oct 2", 21, 12.5, 150)] },
       },
     });
 
-    // 180 g is already a round top for the carbs axis, so it lands on the stub's 60 U.
+    // The insulin axis is set from the daily totals, not read back from the chart: 60 U is already
+    // a round top. So is 180 g for the carbs axis, so it lands on 60 U.
+    await expect.element(page.getByTestId("bar-chart")).toHaveAttribute("data-y-domain", "0,60");
     await expect.element(page.getByTestId("axis")).toHaveTextContent("Carbs (g) 180");
     await expect.element(page.getByTestId("mark").first()).toHaveTextContent("60,50");
     await expect.element(page.getByTestId("bar-chart")).toHaveAttribute("data-padding-right", "50");
