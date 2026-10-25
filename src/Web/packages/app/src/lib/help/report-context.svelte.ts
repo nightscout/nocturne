@@ -12,7 +12,7 @@ export function reportContext(): Record<
     },
     "/reports/executive-summary": {
       source:
-        "Glucose readings in the selected period are summarised into headline measures and reliability information.",
+        "Glucose readings in the selected period are summarized into headline measures and reliability information.",
       controls:
         "Choose the date range above the report. Appearance controls glucose units; choose a detailed report to investigate a headline.",
       related: ["/reports/agp", "/reports/glucose-distribution"],
@@ -42,7 +42,7 @@ export function reportContext(): Record<
       source:
         "Daily and monthly summaries are built from the stored data types and sources selected on this page.",
       controls:
-        "Use the source and data-type filters. The legend controls metric, colour palette, and focus range. These view filters do not change imported records.",
+        "Use the source and data-type filters. The legend controls metric, color palette, and focus range. These view filters do not change imported records.",
       related: ["/reports/day-in-review", "/reports/data-quality"],
     },
     "/reports/readings": {
@@ -89,7 +89,7 @@ export function reportContext(): Record<
     },
     "/reports/insulin-delivery": {
       source:
-        "Recorded basal and bolus delivery is summarised by day and hour.",
+        "Recorded basal and bolus delivery is summarized by day and hour.",
       controls:
         "Choose the report period. Inspect treatment records in Treatments, schedules in Therapy, and delivery imports in Connectors & Apps.",
       related: ["/reports/treatments", "/reports/basal-analysis"],

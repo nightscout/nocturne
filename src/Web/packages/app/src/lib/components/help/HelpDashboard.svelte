@@ -74,12 +74,12 @@
   let focusedDetail = $state<number | null>(null);
   const glucoseDetails = $derived([
     {
-      title: "Value and colour",
-      text: "The value is the newest sensor measurement. Its colour uses the server status for that same reading. Enabled glucose threshold alert rules can affect this classification. Report bands and your personal therapy target are separate; use the central Glucose ranges reference below.",
+      title: "Value and color",
+      text: "The value is the newest sensor measurement. Its color uses the server status for that same reading. Enabled glucose threshold alert rules can affect this classification. Report bands and your personal therapy target are separate. Use the central Glucose ranges reference below.",
     },
     {
       title: "Trend arrow",
-      text: "The source must supply a recognised direction with the sensor reading. Rising, falling and steady arrows describe that reported trend. An empty or unknown direction does not become a measured trend. The active arrow is hidden when the reading is stale.",
+      text: "The source must supply a recognized direction with the sensor reading. Rising, falling and steady arrows describe that reported trend. An empty or unknown direction does not become a measured trend. The active arrow is hidden when the reading is stale.",
     },
     {
       title: "Difference",
@@ -130,7 +130,7 @@
       direction: GlucoseTrend.SingleDown,
       age: 1,
       label: "Very low",
-      text: "The server classifies this example urgent low. The same shared theme supplies its tile colour.",
+      text: "The server classifies this example urgent low. The same shared theme supplies its tile color.",
     },
     {
       value: 280,
@@ -139,7 +139,7 @@
       direction: GlucoseTrend.DoubleUp,
       age: 1,
       label: "Very high",
-      text: "The source supplies a double rising direction. The server classification determines the very-high tile colour.",
+      text: "The source supplies a double rising direction. The server classification determines the very-high tile color.",
     },
     {
       value: 106,
@@ -344,7 +344,7 @@
             {#if isTopWidgetId(topic.id)}
               {#await loadTopWidget(topic.id)}
                 <p class="p-5 text-sm text-muted-foreground">
-                  Loading example…
+                  Loading exampleÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦
                 </p>
               {:then Widget}<Widget />{:catch}<p class="p-5 text-sm">
                   Reload to load this example.

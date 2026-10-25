@@ -496,7 +496,7 @@
                 size="xs"
                 class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-xs">→</span>
+              <span class="text-muted-foreground text-xs">â†’</span>
               <Input
                 type="number"
                 inputmode="decimal"
@@ -551,7 +551,7 @@
               size="xs"
               aria-pressed={invert}
               disabled={!usesCustomPalette}
-              title={usesCustomPalette ? undefined : "Theme colors are fixed; pick a palette to invert"}
+              title={usesCustomPalette ? undefined : "Theme colors are fixed. Pick a palette to invert"}
               onclick={() => onInvertChange?.(!invert)}
             >Invert</Button>
             <Button variant="outline" size="xs" aria-label={resetLabel} onclick={reset}>Reset</Button>
@@ -580,7 +580,7 @@
                 size="xs"
                 class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-xs">→</span>
+              <span class="text-muted-foreground text-xs">â†’</span>
               <Input
                 type="number"
                 min={0}
@@ -613,7 +613,7 @@
                 size="xs"
                 class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-xs">→</span>
+              <span class="text-muted-foreground text-xs">â†’</span>
               <Input
                 type="number"
                 min={0}

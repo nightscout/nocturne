@@ -54,7 +54,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Choose dates",
-          "The overview summarises the selected period; detailed reports may have their own filters.",
+          "The overview summarizes the selected period. Detailed reports may have their own filters.",
         ],
         [
           "Open the detail",
@@ -140,11 +140,11 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Read one cell",
-          "Each day cell summarises that day's available data for the chosen metric.",
+          "Each day cell summarizes that day's available data for the chosen metric.",
         ],
         [
           "Change the view",
-          "Use source/type filters and the legend's metric, colour palette, and focus controls.",
+          "Use source/type filters and the legend's metric, color palette, and focus controls.",
         ],
         [
           "Inspect a period",
@@ -194,7 +194,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Compare the same weekday",
-          "Each weekday curve summarises readings from that part of the selected period.",
+          "Each weekday curve summarizes readings from that part of the selected period.",
         ],
         [
           "Look for timing",
@@ -202,7 +202,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Check coverage",
-          "Sparse weekdays can differ simply because fewer readings were available.",
+          "Sparse weekdays can differ because fewer readings were available.",
         ],
       ]
     ),
@@ -234,7 +234,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Read the composition",
-          "The coloured parts show how those readings are distributed between ranges.",
+          "The colored parts show how those readings are distributed between ranges.",
         ],
         [
           "Inspect the timing",
@@ -256,7 +256,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Review before cleanup",
-          "Detection is a prompt to inspect records, not proof they should be removed.",
+          "Detection is a prompt to inspect records, not proof they need removal.",
         ],
       ]
     ),
@@ -320,7 +320,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Read daily totals",
-          "A day total summarises imported step-count records for that date.",
+          "A day total summarizes imported step-count records for that date.",
         ],
         [
           "Read the timing",
@@ -446,7 +446,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Locate the change",
-          "The comparison is centred on a recorded infusion-site change.",
+          "The comparison is centered on a recorded infusion-site change.",
         ],
         [
           "Read before and after",
@@ -554,7 +554,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Find a food",
-          "Search or filter the catalogue before adding a duplicate entry.",
+          "Search or filter the catalog before adding a duplicate entry.",
         ],
         [
           "Check portion and nutrition",
@@ -562,7 +562,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Use it in a meal",
-          "A catalogue entry becomes meal context only when linked to recorded intake.",
+          "A catalog entry becomes meal context only when linked to recorded intake.",
         ],
       ]
     ),
@@ -626,7 +626,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Choose a rule",
-          "Enable or edit the conditions that should produce an alert.",
+          "Enable or edit the conditions that produce an alert.",
         ],
         [
           "Choose delivery",
@@ -644,7 +644,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Select a rule",
-          "Choose the rule whose behaviour you want to inspect.",
+          "Choose the rule whose behavior you want to inspect.",
         ],
         [
           "Choose a replay window",
@@ -901,7 +901,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Use the right list",
-          "Uploader devices, authorised apps, and API tokens are managed in Connectors & Apps.",
+          "Uploader devices, authorized apps, and API tokens are managed in Connectors & Apps.",
         ],
       ]
     ),
@@ -911,7 +911,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Choose the data source",
-          "A server connector reads a provider; an uploader pushes records; authorised apps and tokens grant API access.",
+          "A server connector reads a provider. An uploader pushes records. Authorized apps and tokens grant API access.",
         ],
         [
           "Finish its setup",
@@ -965,7 +965,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Choose a language",
-          "Inspect the entries available for that catalogue.",
+          "Inspect the entries available for that catalog.",
         ],
         [
           "Preserve placeholders",
@@ -987,7 +987,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Add the right units",
-          "Enter kilograms and the actual recording time, not simply today's date for an older measurement.",
+          "Enter kilograms and the actual recording time, not today's date for an older measurement.",
         ],
         [
           "Manage imports separately",
@@ -1077,7 +1077,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Choose a lower bound",
-          "Use the earliest date that should be read again.",
+          "Use the earliest date to read again.",
         ],
         [
           "Monitor the job",
@@ -1099,7 +1099,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
         ],
         [
           "Revoke when needed",
-          "Removing a link stops that authorisation; it does not remove messages already sent.",
+          "Removing a link stops that authorization. It does not remove messages already sent.",
         ],
       ]
     ),

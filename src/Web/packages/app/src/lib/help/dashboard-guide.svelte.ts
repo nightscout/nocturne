@@ -74,7 +74,7 @@ export function dashboardTopics(): DashboardTopic[] {
     [WidgetId.Trackers]: {
       title: "Trackers",
       meaning:
-        "Shows up to four active trackers. The age is measured from their start time. Colours reflect the configured tracker schedule and reached urgency, not glucose ranges.",
+        "Shows up to four active trackers. The age is measured from their start time. Colors reflect the configured tracker schedule and reached urgency, not glucose ranges.",
       source:
         "Tracker definitions, active runs and their server-provided schedules.",
       settings: ["/settings/appearance", "/settings/trackers"],
@@ -86,7 +86,7 @@ export function dashboardTopics(): DashboardTopic[] {
     [WidgetId.TirChart]: {
       title: "Time in Range",
       meaning:
-        "The coloured bar divides recorded glucose into report bands. The large percentage is in range. Below and Above combine their two respective bands. The comparison is a percentage-point difference from the 90-day result. Use the period button to switch between the last 24 hours and 90 days.",
+        "The colored bar divides recorded glucose into report bands. The large percentage is in range. Below and Above combine their two respective bands. The comparison is a percentage-point difference from the 90-day result. Use the period button to switch between the last 24 hours and 90 days.",
       source:
         "Server glucose statistics and the shared report bands. The reading count shows how much recorded data supports the result.",
       settings: [
@@ -102,7 +102,7 @@ export function dashboardTopics(): DashboardTopic[] {
     [WidgetId.DailySummary]: {
       title: "Today's Summary",
       meaning:
-        "Summarises loaded readings since local midnight: average, minimum, maximum, time in range and variability. CV expresses variation relative to the average. This widget currently labels CV below 33% Stable, above 50% Variable, and the values between them Moderate. These are summary labels, not trend arrows.",
+        "Summarizes loaded readings since local midnight: average, minimum, maximum, time in range and variability. CV expresses variation relative to the average. This widget currently labels CV below 33% Stable, above 50% Variable, and the values between them Moderate. These are summary labels, not trend arrows.",
       source:
         "Readings currently loaded in the browser. Its day starts at browser-local midnight; incomplete loaded history can make this differ from a full server report.",
       settings: [
@@ -148,7 +148,7 @@ export function dashboardTopics(): DashboardTopic[] {
       id: "glucose",
       title: "Current glucose",
       meaning:
-        "The large value is the newest sensor measurement in your selected units. Its colour comes from the server's status for that reading. The trend comes from the direction supplied with the reading; a change number alone does not create an arrow.",
+        "The large value is the newest sensor measurement in your selected units. Its color comes from the server's status for that reading. The trend comes from the direction supplied with the reading. A change number alone does not create an arrow.",
       source:
         "The newest sensor reading, its supplied direction and the server's matching status. The difference uses a supplied delta or the previous sensor reading.",
       settings: [
@@ -160,7 +160,7 @@ export function dashboardTopics(): DashboardTopic[] {
       availability:
         "A sensor source supplies measurements and, when supported, trend directions. Unknown directions cannot be displayed as a known trend. A stale reading loses its active trend presentation.",
       check:
-        "X minutes is time since the measurement timestamp, not time since opening the page or the last connector sync. If the reading is old, check the source and connector. Colours, chart bands, therapy targets and alert thresholds are explained centrally in Glucose ranges.",
+        "X minutes is time since the measurement timestamp, not time since opening the page or the last connector sync. If the reading is old, check the source and connector. Colors, chart bands, therapy targets and alert thresholds are explained centrally in Glucose ranges.",
     },
     ...TOP_WIDGET_IDS.map((id) => ({ id, ...top[id] })),
     {
@@ -233,8 +233,8 @@ export function chartTopics(): DashboardTopic[] {
     ],
     [
       "ranges",
-      "Colours and target areas",
-      "Colours identify the shared glucose bands. Threshold lines and personal target overlays provide different context. See Glucose ranges for boundary definitions instead of repeating them on every page.",
+      "Colors and target areas",
+      "Colors identify the shared glucose bands. Threshold lines and personal target overlays provide different context. See Glucose ranges for boundary definitions instead of repeating them on every page.",
       "Chart thresholds and the therapy profile in force.",
     ],
     [

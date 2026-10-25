@@ -55,8 +55,8 @@
                 </span>
               </Table.Cell><Table.Cell class="font-mono whitespace-nowrap">
                 {#if band.lower !== undefined}{bg(band.lower)}
-                  {band.lowerInclusive ? "≤" : "<"}{/if} x {#if band.upper !== undefined}{band.upperInclusive
-                    ? "≤"
+                  {band.lowerInclusive ? "â‰¤" : "<"}{/if} x {#if band.upper !== undefined}{band.upperInclusive
+                    ? "â‰¤"
                     : "<"}
                   {bg(band.upper)}{/if}
               </Table.Cell>
@@ -82,7 +82,7 @@
         </p>{/if}
       <figure class="space-y-3 rounded-lg bg-muted/30 p-4">
         <figcaption class="text-sm font-medium">
-          Example — invented readings, using the real report chart
+          Example â€” invented readings, using the real report chart
         </figcaption>
         <TIRStackedChart
           percentages={{
@@ -125,7 +125,7 @@
         <div>
           <dt class="font-medium">History-days configuration bounds</dt>
           <dd>
-            {facts.googleHealthMinimumHistoryDays}–{facts.googleHealthMaximumHistoryDays}
+            {facts.googleHealthMinimumHistoryDays}â€“{facts.googleHealthMaximumHistoryDays}
             days. An explicit Import data from date uses a separate date setting.
           </dd>
         </div>
@@ -169,13 +169,13 @@
       </Table.Root>
       <figure class="space-y-3 rounded-lg bg-muted/30 p-4">
         <figcaption class="text-sm font-medium">
-          Example connection states — no personal data
+          Example connection states â€” no personal data
         </figcaption>
         <DataSourceRow
           name="Google Health"
           icon={undefined}
           status="configured"
-          statusMessage="Connected; choose and save the import selection"
+          statusMessage="Connected. Choose and save the import selection"
         />
         <DataSourceRow
           name="Google Health"
@@ -199,7 +199,7 @@
     </Button>
   {:else}
     <p class="text-sm text-muted-foreground" role="status">
-      Loading current reference values…
+      Loading current reference valuesâ€¦
     </p>
   {/if}
 </section>
