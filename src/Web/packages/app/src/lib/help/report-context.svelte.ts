@@ -7,7 +7,7 @@ export function reportContext(): Record<
       source:
         "Stored glucose readings feed the overview's range summary and typical-day preview.",
       controls:
-        "Use the date selector above the overview, then open a report card. Appearance changes display units; Connectors & Apps manages incoming records.",
+        "Use the date selector above the overview, then open a report card. Appearance changes display units. Connectors & Apps manages incoming records.",
       related: ["/reports/agp", "/reports/day-in-review"],
     },
     "/reports/executive-summary": {
@@ -49,7 +49,7 @@ export function reportContext(): Record<
       source:
         "The glucose chart uses recorded samples and available treatment/device tracks in the chosen interval.",
       controls:
-        "Choose dates and visible chart tracks on this page. Appearance changes units; Connectors & Apps manages the records being displayed.",
+        "Choose dates and visible chart tracks on this page. Appearance changes units. Connectors & Apps manages the records being displayed.",
       related: ["/reports/day-in-review", "/reports/treatments"],
     },
     "/reports/day-in-review": {
@@ -77,14 +77,14 @@ export function reportContext(): Record<
       source:
         "Glucose samples are grouped into local-hour buckets across the selected days.",
       controls:
-        "Choose the date range above the report. The hourly summaries and table describe that selection; Appearance controls glucose units and time format.",
+        "Choose the date range above the report. The hourly summaries and table describe that selection. Appearance controls glucose units and time format.",
       related: ["/reports/readings", "/reports/agp"],
     },
     "/reports/basal-analysis": {
       source:
         "Imported basal delivery, temporary basal events, and available therapy schedules provide rate and duration context.",
       controls:
-        "Choose the report period. Therapy shows the imported schedule; Connectors & Apps manages its source. This report does not edit pump settings.",
+        "Choose the report period. Therapy shows the imported schedule. Connectors & Apps manages its source. This report does not edit pump settings.",
       related: ["/reports/insulin-delivery", "/settings/profile"],
     },
     "/reports/insulin-delivery": {
@@ -105,7 +105,7 @@ export function reportContext(): Record<
       source:
         "Glucose statistics, recorded insulin delivery, and imported schedules provide the separate panels of the integrated profile.",
       controls:
-        "Choose the report period. Therapy provides the profile and scheduled targets; Connectors & Apps manages actual incoming delivery records.",
+        "Choose the report period. Therapy provides the profile and scheduled targets. Connectors & Apps manages actual incoming delivery records.",
       related: ["/reports/agp", "/reports/insulin-delivery"],
     },
   };

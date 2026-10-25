@@ -8,7 +8,7 @@ export function pageArticles(): HelpArticle[] {
       "Dashboard",
       "See recent glucose and the surrounding recorded events.",
       "Readings, treatments, device status, and profiles from your uploaders and connectors.",
-      "Use chart controls on this page. Settings → Appearance controls units and display; Therapy shows personal schedules; Connectors & Apps manages incoming data; Alerts manages notifications.",
+      "Use chart controls on this page. Settings → Appearance controls units and display. Therapy shows personal schedules. Connectors & Apps manages incoming data. Alerts manages notifications.",
       "The same stored records feed the calendar and reports.",
       "A latest value can become stale if uploads stop. Gaps and missing treatments limit context. The server classifies the current glucose status. Report bands, personal targets, and alerts serve different purposes.",
       ["/reports", "/settings/connectors", "/settings/appearance", "/alerts"]

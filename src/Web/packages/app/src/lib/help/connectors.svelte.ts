@@ -32,7 +32,7 @@ export function connectorArticles(): HelpArticle[] {
     },
     {
       title: "Bring data from other apps into Google Health (optional)",
-      text: "On Android use Health Connect, Google's on-device data-sharing service. Let your source app write the desired records and let Google Health read them. In Google Health open Connections → Partner apps → Sync your favorite health apps → Set up. Review the data, history, and background permissions, then check that records appear in Google Health. Garmin needs its watch to sync to Garmin Connect first; Google Health does not connect directly to the watch. Google also documents Samsung Galaxy, Xiaomi/Mi Fitness, Oura, Whoop, Strava, and MyFitnessPal connections. On iPhone the route is generally Apple Health. Available types differ by app: a direct Strava connection exports Google Health activities to Strava. Importing Strava activities uses Health Connect or Apple Health instead. Google Health supports more types than this Nocturne connector, so check the importable-type table below.",
+      text: "On Android use Health Connect, Google's on-device data-sharing service. Let your source app write the desired records and let Google Health read them. In Google Health open Connections → Partner apps → Sync your favorite health apps → Set up. Review the data, history, and background permissions, then check that records appear in Google Health. Garmin needs its watch to sync to Garmin Connect first. Google Health does not connect directly to the watch. Google also documents Samsung Galaxy, Xiaomi/Mi Fitness, Oura, Whoop, Strava, and MyFitnessPal connections. On iPhone the route is generally Apple Health. Available types differ by app: a direct Strava connection exports Google Health activities to Strava. Importing Strava activities uses Health Connect or Apple Health instead. Google Health supports more types than this Nocturne connector, so check the importable-type table below.",
       links: [
         {
           title: "Install or open Health Connect",
@@ -88,7 +88,7 @@ export function connectorArticles(): HelpArticle[] {
     },
     {
       title: "Review the inventory and start an import",
-      text: "In the available-data table, Found means records exist at the source, not that Nocturne imported them. Select supported types and choose Save selection and import. Save import settings only saves; Refresh inventory only checks availability. Not scanned needs a refreshed inventory; No permission needs the relevant consent; No destination yet is unsupported. Leaving the page does not cancel the server import.",
+      text: "In the available-data table, Found means records exist at the source, not that Nocturne imported them. Select supported types and choose Save selection and import. Save import settings only saves. Refresh inventory only checks availability. Not scanned needs a refreshed inventory. No permission needs the relevant consent. No destination yet is unsupported. Leaving the page does not cancel the server import.",
     },
     {
       title: "Confirm the result in your reports",

@@ -167,7 +167,7 @@ export function dashboardTopics(): DashboardTopic[] {
       id: "pills",
       title: "Status pills",
       meaning:
-        "IOB is estimated insulin still active; COB is estimated carbs still being absorbed. Basal is a rate, not a delivered daily total. Loop describes the latest algorithm status. Reservoir is the pump's reported remaining insulin. Tracker pills describe active tracker runs.",
+        "IOB is estimated insulin still active. COB is estimated carbs still being absorbed. Basal is a rate, not a delivered daily total. Loop describes the latest algorithm status. Reservoir is the pump's reported remaining insulin. Tracker pills describe active tracker runs.",
       source:
         "Device or algorithm snapshots, pump reservoir reports and tracker records. These values cannot be reconstructed from glucose alone.",
       settings: [

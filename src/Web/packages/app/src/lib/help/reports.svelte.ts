@@ -218,7 +218,7 @@ export function reportArticles(): HelpArticle[] {
       "Treatments",
       "Browse, search, add, or edit diabetes events.",
       "Uploaded, imported, and manually saved insulin, carb, notes, and device events.",
-      "Use category tabs and Search here. Add/edit and bulk deletion require write permission. Settings â†’ Therapy shows schedules; Connectors & Apps manages sources.",
+      "Use category tabs and Search here. Add/edit and bulk deletion require write permission. Settings â†’ Therapy shows schedules. Connectors & Apps manages sources.",
       "Events appear on glucose timelines and feed insulin and carb analysis.",
       "Event time, units, and type matter. Deletion changes later analysis. A source can recreate records on import unless the applicable deletion protection prevents it.",
       ["/settings/profile", "/settings/connectors", "/reports/insulin-delivery"]

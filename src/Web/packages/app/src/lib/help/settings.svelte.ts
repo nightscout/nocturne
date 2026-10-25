@@ -45,7 +45,7 @@ export function settingsArticles(): HelpArticle[] {
       "Your saved display preferences and browser-local documentation preferences.",
       "Set theme, language, glucose units, dates, and times here. Help visibility, layout, transparency, and blur are here and in help's Display options.",
       "Display settings format charts and values. They do not change the underlying stored glucose units or readings.",
-      "Open and close help with the book next to Nocturne, the close button, or Escape. Your original page and inputs stay in place. Navigation drawer and Replace page use the existing menu for help; Right drawer uses a panel; Side by side keeps the page usable on wide screens. Hidden help can always be enabled here. Documentation appearance is saved in this browser.",
+      "Open and close help with the book next to Nocturne, the close button, or Escape. Your original page and inputs stay in place. Navigation drawer and Replace page use the existing menu for help. Right drawer uses a panel. Side by side keeps the page usable on wide screens. Hidden help can always be enabled here. Documentation appearance is saved in this browser.",
       []
     ),
     guide(

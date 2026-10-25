@@ -770,7 +770,7 @@ export function readingGuides(): Record<string, ReadingGuide> {
       [
         [
           "Choose the scope",
-          "Account belongs to you; Patient Record and connectors belong to the selected tenant.",
+          "Account belongs to you. Patient Record and connectors belong to the selected tenant.",
         ],
         [
           "Open a category",
