@@ -77,6 +77,20 @@ public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDevi
     public int? Rssi { get; set; }
 
     /// <summary>
+    /// The sensor's verdict on the reading (enum stored as string). Null when not reported.
+    /// </summary>
+    [Column("quality")]
+    [MaxLength(16)]
+    public string? Quality { get; set; }
+
+    /// <summary>
+    /// The vendor's raw state behind <see cref="Quality"/>. Null when not reported.
+    /// </summary>
+    [Column("sensor_status")]
+    [MaxLength(64)]
+    public string? SensorStatus { get; set; }
+
+    /// <summary>
     /// Whether this reading is smoothed or unsmoothed (enum stored as string). Null when unknown.
     /// </summary>
     [Column("glucose_processing")]

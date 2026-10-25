@@ -8631,9 +8631,19 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("patient_device_id");
 
+                    b.Property<string>("Quality")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("quality");
+
                     b.Property<int?>("Rssi")
                         .HasColumnType("integer")
                         .HasColumnName("rssi");
+
+                    b.Property<string>("SensorStatus")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sensor_status");
 
                     b.Property<double?>("SmoothedMgdl")
                         .HasColumnType("double precision")
