@@ -10,10 +10,11 @@ public sealed class GoogleHealthPlatformSettings(
 {
     public const string Category = "google-health";
 
-    private Task<GoogleHealthPlatformOptions>? snapshot;
+    private GoogleHealthPlatformOptions? snapshot;
 
-    public Task<GoogleHealthPlatformOptions> GetAsync(CancellationToken ct = default) =>
-        snapshot ??= LoadAsync(ct);
+    // Only a completed read is kept: a cancelled first caller must not fail every later read in the scope.
+    public async Task<GoogleHealthPlatformOptions> GetAsync(CancellationToken ct = default) =>
+        snapshot ??= await LoadAsync(ct);
 
     private async Task<GoogleHealthPlatformOptions> LoadAsync(CancellationToken ct)
     {
