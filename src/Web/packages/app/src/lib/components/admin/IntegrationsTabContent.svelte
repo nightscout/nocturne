@@ -147,13 +147,6 @@
         </CardHeader>
         <CardContent>
           <div class="space-y-4">
-            {#if category === "google-health"}
-              <p class="text-sm text-muted-foreground">
-                One OAuth client for this instance. Each user connects their own Google account.
-                Copy the callback URL into Google Cloud. Changes apply without a restart. If you
-                replace the client ID, users must connect again. Imported data stays.
-              </p>
-            {/if}
             {#if category === "telegram" && !(platform.configuredFields ?? []).includes("webhookSecretToken")}
               <Alert.Root>
                 <TriangleAlert class="h-4 w-4" />
@@ -191,20 +184,8 @@
             {/each}
             {#if category === "google-health"}
               <p id="google-health-callback-help" class="text-xs text-muted-foreground">
-                Use the exact public callback URL, ending in /api/v4/google-health/oauth/callback.
-                Override it only when the suggested URL differs from your public address.
+                The callback URL ends in /api/v4/google-health/oauth/callback.
               </p>
-              <details class="text-sm text-muted-foreground">
-                <summary class="cursor-pointer">Google publishing and verification</summary>
-                <p class="mt-2">
-                  Testing limits access to test users and expires refresh tokens after seven days.
-                  Publishing to Production removes that testing expiry. An unverified app still
-                  shows a warning and has a 100-user limit. Verification is a separate review.
-                  For more than 100 users, Google requires a third-party security assessment. Tokens
-                  can still expire or be revoked. Each user controls consent in their Google
-                  account.
-                </p>
-              </details>
             {/if}
           </div>
         </CardContent>
