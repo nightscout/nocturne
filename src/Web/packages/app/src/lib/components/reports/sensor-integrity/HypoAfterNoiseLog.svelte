@@ -3,10 +3,10 @@
    * Table of hypoglycemia events that followed a flagged window, with the insulin dosed during the
    * window. Factual log — it links a detection to a subsequent low, it does not assert causation.
    */
-  import * as Table from "$lib/components/ui/table";
+  import * as Table from "#lib/components/ui/table/index.js";
   import Moon from "@lucide/svelte/icons/moon";
-  import type { SensorIntegrityHypoEvent } from "$lib/api";
-  import { bg, bgLabel, formatDateTimeCompact } from "$lib/utils/formatting";
+  import type { SensorIntegrityHypoEvent } from "#lib/api/index.js";
+  import { bg, bgLabel, formatDateTimeCompact } from "#lib/utils/formatting.js";
   import ConfidenceBadge from "./ConfidenceBadge.svelte";
 
   interface Props {

@@ -1,4 +1,4 @@
-import type { DailySummaryDay } from "$lib/api";
+import type { DailySummaryDay } from "#lib/api/index.js";
 
 /** One day cell of the year-overview heatmap, as the page derives it. */
 export interface YearCalendarDatum {

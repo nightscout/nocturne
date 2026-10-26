@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { YearSummaryResponse } from "$api/generated/nocturne-api-client";
+import type { YearSummaryResponse } from "#lib/api/generated/nocturne-api-client.js";
 import { YearLoader } from "./year-loader";
 
 function deferred<T>() {

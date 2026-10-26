@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SiteChangeImpactAnalysis } from "$lib/api";
+  import type { SiteChangeImpactAnalysis } from "#lib/api/index.js";
   import SiteChangeImpactChart from "./SiteChangeImpactChart.svelte";
 
   let { analysis, width }: { analysis: SiteChangeImpactAnalysis; width: number } = $props();

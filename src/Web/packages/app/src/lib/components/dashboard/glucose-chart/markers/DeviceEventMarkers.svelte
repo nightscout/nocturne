@@ -3,7 +3,7 @@
   import { getChartContext } from "layerchart";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import DeviceEventMarker from "./DeviceEventMarker.svelte";
-  import { markerKey } from "$lib/utils/chart-data-merge";
+  import { markerKey } from "#lib/utils/chart-data-merge.js";
 
   interface Props {
     onMarkerClick?: (treatmentId: string) => void;

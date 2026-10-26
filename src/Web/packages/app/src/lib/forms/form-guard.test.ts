@@ -13,10 +13,9 @@ vi.mock("runed", () => ({
   },
 }));
 
-import { beforeNavigate } from "$app/navigation";
+import { beforeNavigate, type BeforeNavigate } from "$app/navigation";
 import { z } from "zod";
 import type { Mock } from "vitest";
-import type { BeforeNavigate } from "@sveltejs/kit";
 import { FormGuard, type GuardedForm } from "./form-guard.svelte";
 import { FOLLOW_UP_ERROR, GENERIC_SUBMIT_ERROR } from "./submit-error";
 

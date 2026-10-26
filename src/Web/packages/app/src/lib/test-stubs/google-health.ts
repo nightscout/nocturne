@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { GoogleHealthStatus } from "$lib/api";
+import type { GoogleHealthStatus } from "#lib/api/index.js";
 import { effectAwareQuery } from "./effect-aware-query.svelte";
 
 export const googleHealthMocks = {

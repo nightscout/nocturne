@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as Select from "$lib/components/ui/select";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import Play from "@lucide/svelte/icons/play";
   import Pause from "@lucide/svelte/icons/pause";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
-  import { AlertReplayEventKind, type AlertRuleSeverity } from "$api-clients";
+  import { AlertReplayEventKind, type AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
   import { severityVar } from "./severity";
-  import { formatDateTimeCompact } from "$lib/utils/formatting";
+  import { formatDateTimeCompact } from "#lib/utils/formatting.js";
 
   interface EventTick {
     tMs: number;

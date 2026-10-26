@@ -2,13 +2,13 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
-import { formatLocale } from "$lib/utils/formatting";
-import { GuestLinkStatus, type GuestLinkInfo } from "$api-clients";
+import { formatLocale } from "#lib/utils/formatting.js";
+import { GuestLinkStatus, type GuestLinkInfo } from "#lib/api/generated/nocturne-api-client.js";
 import {
   remoteCommand,
   remoteQuery,
   updatedBy,
-} from "$lib/test-stubs/remote-resource";
+} from "#lib/test-stubs/remote-resource.js";
 
 let createImpl: (request?: { scopes?: string[] }) => Promise<unknown>;
 let revokeImpl: () => Promise<unknown>;
@@ -19,7 +19,7 @@ vi.mock("$app/state", () => ({
   page: { data: { effectivePermissions: ["*"] } },
 }));
 
-vi.mock("$api/generated/guestLinks.generated.remote", () => ({
+vi.mock("#lib/api/generated/guestLinks.generated.remote.js", () => ({
   getGuestLinks: () => remoteQuery(() => links),
   getGuestLinkScopeOptions: () =>
     remoteQuery(() => ({
@@ -38,7 +38,7 @@ import {
   createGuestLink,
   revokeGuestLink,
   dismissGuestLink,
-} from "$api/generated/guestLinks.generated.remote";
+} from "#lib/api/generated/guestLinks.generated.remote.js";
 import GuestLinksSection from "./GuestLinksSection.svelte";
 
 const FALLBACK = "Failed to create guest link. Try again.";

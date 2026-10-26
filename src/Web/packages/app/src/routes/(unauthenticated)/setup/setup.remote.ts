@@ -1,8 +1,8 @@
 import { command, getRequestEvent } from "$app/server";
 import { z } from "zod";
-import { SETUP_TENANT_COOKIE } from "$lib/server/request-host";
-export { validateSlug as validateSetupSlug } from "$lib/api/generated/myTenants.generated.remote";
-export { createTenant as setupTenant, ownerOptions as setupOwnerOptions, ownerComplete as setupOwnerComplete, ownerOidc as setupOwnerOidc, validateUsername as validateSetupUsername } from "$lib/api/generated/setups.generated.remote";
+import { SETUP_TENANT_COOKIE } from "#lib/server/request-host.js";
+export { validateSlug as validateSetupSlug } from "#lib/api/generated/myTenants.generated.remote.js";
+export { createTenant as setupTenant, ownerOptions as setupOwnerOptions, ownerComplete as setupOwnerComplete, ownerOidc as setupOwnerOidc, validateUsername as validateSetupUsername } from "#lib/api/generated/setups.generated.remote.js";
 
 const COOKIE_NAME = "nocturne-setup-complete";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days

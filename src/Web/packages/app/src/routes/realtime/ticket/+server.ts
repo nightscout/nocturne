@@ -1,18 +1,18 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-import { env } from "$env/dynamic/private";
+import { INSTANCE_KEY } from "$app/env/private";
 import {
   REALTIME_ADMISSION_PATH,
   readRealtimeGrant,
   signHandshakeTicket,
 } from "@nocturne/bridge/ticket";
-import type { RealtimeAdmission } from "$lib/api";
+import type { RealtimeAdmission } from "#lib/api/index.js";
 import {
   getApiBaseUrl,
   createServerHttpClient,
-} from "$lib/server/api-client-factory";
-import { getEffectiveHost, getOriginalProto } from "$lib/server/request-host";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+} from "#lib/server/api-client-factory.js";
+import { getEffectiveHost, getOriginalProto } from "#lib/server/request-host.js";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
 
 /**
  * Mints a short-lived ticket that authorizes a Socket.IO handshake to the
@@ -35,7 +35,7 @@ import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
  * surfacing a connection error).
  */
 export const GET: RequestHandler = async (event) => {
-  const secret = env.INSTANCE_KEY;
+  const secret = INSTANCE_KEY;
   const apiBaseUrl = getApiBaseUrl();
   const effectiveHost = getEffectiveHost(event.request, event.cookies);
 

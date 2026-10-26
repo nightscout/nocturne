@@ -8,7 +8,7 @@ import { flushSync } from "svelte";
 const create = vi.fn().mockResolvedValue({});
 let bodyWeightsCurrent: unknown[] | undefined;
 
-vi.mock("$api/generated/bodyWeights.generated.remote", () => ({
+vi.mock("#lib/api/generated/bodyWeights.generated.remote.js", () => ({
   getBodyWeights: () => ({
     get current() {
       return bodyWeightsCurrent;
@@ -16,13 +16,13 @@ vi.mock("$api/generated/bodyWeights.generated.remote", () => ({
   }),
   create: (...args: unknown[]) => create(...args),
 }));
-vi.mock("$api/generated/patientRecords.generated.remote", () => ({}));
-vi.mock("$api/generated/insulinCatalogs.generated.remote", () => ({
+vi.mock("#lib/api/generated/patientRecords.generated.remote.js", () => ({}));
+vi.mock("#lib/api/generated/insulinCatalogs.generated.remote.js", () => ({
   getCatalog: () => ({ current: undefined }),
 }));
 
 import { z } from "zod";
-import { FormGuard } from "$lib/forms/form-guard.svelte";
+import { FormGuard } from "#lib/forms/form-guard.svelte.js";
 import { WeightState } from "./state.svelte";
 
 /**

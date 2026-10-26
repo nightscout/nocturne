@@ -11,7 +11,7 @@ const api = vi.hoisted(() => ({
   getLegacyFallbacks: vi.fn(() => Promise.resolve({ fallbacks: [], covered: [] } as unknown)),
 }));
 
-vi.mock("$lib/api/browser-clients", () => ({
+vi.mock("#lib/api/browser-clients.js", () => ({
   currentTherapyStateClient: () => ({ getCurrentTherapyState: api.getCurrentTherapyState }),
   apsSnapshotClient: () => ({ getAll: api.apsGetAll }),
   sensorGlucoseClient: () => ({ getAll: api.emptyPage }),
@@ -53,7 +53,7 @@ import type {
   TrackerDefinitionUpdateEvent,
   TrackerUpdateEvent,
   WebSocketConnectionStatus,
-} from "$lib/websocket/types";
+} from "#lib/websocket/types.js";
 import {
   SyncPhase,
   LegacyConsumableKind,
@@ -65,7 +65,7 @@ import {
   type SensorGlucose,
   type TrackerDefinitionDto,
   type TrackerInstanceDto,
-} from "$lib/api";
+} from "#lib/api/index.js";
 
 /** The realtime/backfill entry points, which the class keeps private. */
 interface StoreInternals {

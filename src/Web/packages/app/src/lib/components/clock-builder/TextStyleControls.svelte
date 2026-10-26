@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Label } from "$lib/components/ui/label";
-  import { Input } from "$lib/components/ui/input";
-  import { Slider } from "$lib/components/ui/slider";
-  import * as Select from "$lib/components/ui/select";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Slider } from "#lib/components/ui/slider/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
   import {
@@ -15,8 +15,8 @@
     FONT_OPTIONS,
     FONT_WEIGHT_OPTIONS,
     type InternalElement,
-  } from "$lib/clock-builder";
-  import type { ClockElement } from "$lib/api";
+  } from "#lib/clock-builder/index.js";
+  import type { ClockElement } from "#lib/api/index.js";
 
   interface Props {
     element: InternalElement;

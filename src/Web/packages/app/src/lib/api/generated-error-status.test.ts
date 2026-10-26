@@ -12,7 +12,7 @@ import {
 } from "../forms/submit-error";
 import { remoteErrorMessage } from "./remote-error";
 import { parseErrorBody, parseIssues } from "./error-body";
-import { TotpSetupFailure, type ReferencingRulesResponse } from "$api-clients";
+import { TotpSetupFailure, type ReferencingRulesResponse } from "#lib/api/generated/nocturne-api-client.js";
 import {
   describeTotpSetupError,
   describeTotpSetupStartError,
@@ -230,7 +230,7 @@ describe("the status a generated remote function lets through", () => {
   });
 
   it("recovers the reason from a body NSwag left unparsed", async () => {
-    // The reason exists only as raw text on `response`; see `$lib/api/error-body`.
+    // The reason exists only as raw text on `response`; see `#lib/api/error-body.js`.
     const crossed = await crossTheBoundary(
       nswagApiException(
         409,
@@ -296,7 +296,10 @@ async function queryAnswerTo401(isShareHost: boolean): Promise<unknown> {
 
   const event = {
     locals: { isShareHost },
-    url: new URL("https://abc123.share.example.test/dashboard?range=24h"),
+    // SvelteKit throws here inside a query.
+    get url(): never {
+      throw new Error("a query cannot read event.url");
+    },
   };
 
   try {
@@ -322,7 +325,7 @@ describe("a generated query refused as unauthenticated", () => {
     expect(isRedirect(answer)).toBe(true);
     expect(answer).toMatchObject({
       status: 302,
-      location: "/auth/login?returnUrl=%2Fdashboard%3Frange%3D24h",
+      location: "/auth/login",
     });
   });
 });
@@ -514,7 +517,7 @@ describe("a rejected rule save that carries issues", () => {
   });
 
   it("forwards issues recovered from a body NSwag left unparsed", async () => {
-    // The issues exist only in the raw text on `response`; see `$lib/api/error-body`.
+    // The issues exist only in the raw text on `response`; see `#lib/api/error-body.js`.
     const crossed = await crossTheBoundary(
       nswagApiException(
         409,

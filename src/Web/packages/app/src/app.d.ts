@@ -1,7 +1,7 @@
 // See https://svelte.dev/docs/kit/types#app
 // for information about these interfaces
-import { ApiClient, RustValidationIssue, UserDisplayPreferences } from "$lib/api";
-import type { LastSignIn } from "$lib/components/auth/last-sign-in";
+import { ApiClient, RustValidationIssue, UserDisplayPreferences } from "#lib/api/index.js";
+import type { LastSignIn } from "#lib/components/auth/last-sign-in.js";
 
 
 export interface ServerSettings {

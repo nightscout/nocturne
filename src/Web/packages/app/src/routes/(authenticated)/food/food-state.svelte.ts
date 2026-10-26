@@ -1,10 +1,10 @@
 import { toast } from 'svelte-sonner';
 import { SvelteSet } from 'svelte/reactivity';
-import { distinct } from '$lib/utils/collections';
-import type { Food } from '$api';
+import { distinct } from '#lib/utils/collections.js';
+import type { Food } from '#lib/api/index.js';
 import type { SortMode } from './types.js';
-import { foodCategoryMap } from '$lib/components/food/food-constants';
-import { giFromInt, type GiLevel } from '$lib/components/food/gi';
+import { foodCategoryMap } from '#lib/components/food/food-constants.js';
+import { giFromInt, type GiLevel } from '#lib/components/food/gi.js';
 import {
   getFoods,
   createFood as createFoodRemote,
@@ -13,10 +13,10 @@ import {
   addFavorite as addFavoriteRemote,
   removeFavorite as removeFavoriteRemote,
   getFoodAttributionCount,
-} from '$api/generated/foods.generated.remote';
+} from '#lib/api/generated/foods.generated.remote.js';
 import { deleteFood as deleteFoodRemote } from './data.remote';
-import { describeSubmitError } from '$lib/forms/submit-error';
-import { remoteErrorMessage } from '$lib/api/remote-error';
+import { describeSubmitError } from '#lib/forms/submit-error.js';
+import { remoteErrorMessage } from '#lib/api/remote-error.js';
 
 export class FoodState {
   foods = $state<Food[]>([]);

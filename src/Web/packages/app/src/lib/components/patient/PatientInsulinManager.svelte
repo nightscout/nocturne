@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { labelFor } from "$lib/components/ui/enum-value";
-  import { formatMediumDate } from "$lib/utils/formatting";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Card from "$lib/components/ui/card";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
+  import { formatMediumDate } from "#lib/utils/formatting.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Plus from "@lucide/svelte/icons/plus";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -17,14 +17,14 @@
     type InsulinFormulation,
     InsulinCategory,
     InsulinRole,
-  } from "$api";
+  } from "#lib/api/index.js";
   import {
     insulinCategoryLabels,
     insulinRoleLabels,
   } from "./labels";
   import { InsulinListState } from "./state.svelte";
-  import { EmptyState } from "$lib/components/shared";
-  import { syringeArtwork } from "$lib/watercolour-icons";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { syringeArtwork } from "#lib/watercolour-icons.js";
   import InsulinFormFields from "./InsulinFormFields.svelte";
 
   interface Props {

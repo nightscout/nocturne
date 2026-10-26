@@ -1,26 +1,26 @@
 <script lang="ts">
-  import { ConnectorConfigCategory } from "$lib/constants/connector-config-categories";
+  import { ConnectorConfigCategory } from "#lib/constants/connector-config-categories.js";
   import { SvelteSet } from "svelte/reactivity";
-  import { Label } from "$lib/components/ui/label";
-  import { Input } from "$lib/components/ui/input";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Button } from "$lib/components/ui/button";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
+  } from "#lib/components/ui/select/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Collapsible from "$lib/components/ui/collapsible";
+  } from "#lib/components/ui/card/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import Eye from "@lucide/svelte/icons/eye";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -32,8 +32,8 @@
   import type {
     JsonSchema,
     JsonSchemaProperty,
-  } from "$lib/utils/connector-json-schema";
-  import { getPropertyMeta } from "$lib/config/connectorPropertyMeta";
+  } from "#lib/utils/connector-json-schema.js";
+  import { getPropertyMeta } from "#lib/config/connectorPropertyMeta.js";
 
   interface Props {
     schema: JsonSchema;

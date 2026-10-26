@@ -1,24 +1,24 @@
 <script lang="ts">
-  import { a1cLabel, formatA1c } from "$lib/utils/a1c-formatting";
+  import { a1cLabel, formatA1c } from "#lib/utils/a1c-formatting.js";
   import { PieChart, Text } from "layerchart";
-  import * as Card from "$lib/components/ui/card";
-  import * as Table from "$lib/components/ui/table";
-  import { EmptyState } from "$lib/components/shared";
-  import { Button } from "$lib/components/ui/button";
-  import { getReportsAnalysis } from "$api/reports.remote";
-  import HourlyGlucoseDistributionChart from "$lib/components/reports/HourlyGlucoseDistributionChart.svelte";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { getReportsAnalysis } from "#lib/api/reports.remote.js";
+  import HourlyGlucoseDistributionChart from "#lib/components/reports/HourlyGlucoseDistributionChart.svelte";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
   import {
     CHART_TEXTURES,
     patternClass,
     type GlucoseRange,
-  } from "$lib/components/charts/print/chart-print-patterns";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, bgLabel, formatShortDate } from "$lib/utils/formatting";
+  } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { bg, bgLabel, formatShortDate } from "#lib/utils/formatting.js";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
 

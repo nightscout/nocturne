@@ -1,9 +1,9 @@
 <script lang="ts">
   import Info from "@lucide/svelte/icons/info";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Tooltip from "$lib/components/ui/tooltip";
-  import { cn } from "$lib/utils";
-  import type { StatisticReliability, TimeZoneUnavailableReason } from "$lib/api";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import { cn } from "#lib/utils/index.js";
+  import type { StatisticReliability, TimeZoneUnavailableReason } from "#lib/api/index.js";
   import TimeZoneNote from "./TimeZoneNote.svelte";
   import { timeZoneReasonCopy } from "./time-zone-reasons.svelte";
 

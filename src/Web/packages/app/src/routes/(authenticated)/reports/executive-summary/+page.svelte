@@ -5,17 +5,17 @@
     a1cUnitLabel,
     formatA1cValue,
     formatA1c,
-  } from "$lib/utils/a1c-formatting";
+  } from "#lib/utils/a1c-formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
-  import { Progress } from "$lib/components/ui/progress";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
+  import { Progress } from "#lib/components/ui/progress/index.js";
   import Gauge from "@lucide/svelte/icons/gauge";
   import Target from "@lucide/svelte/icons/target";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
@@ -26,16 +26,16 @@
   import BarChart3 from "@lucide/svelte/icons/chart-column";
   import Calendar from "@lucide/svelte/icons/calendar";
   import BookOpen from "@lucide/svelte/icons/book-open";
-  import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
-  import { TargetStatus } from "$api/generated/nocturne-api-client";
-  import { getReportsData } from "$api/reports.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber } from "$lib/utils/formatting";
-  import { formatMinutesDuration } from "$lib/utils/duration";
+  import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
+  import ClinicalInsights from "#lib/components/reports/ClinicalInsights.svelte";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
+  import { TargetStatus } from "#lib/api/generated/nocturne-api-client.js";
+  import { getReportsData } from "#lib/api/reports.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber } from "#lib/utils/formatting.js";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
 
   // Format a nullable mg/dL value in the user's preferred units, or em dash if absent.
   const bgOr = (mgdl: number | undefined | null) =>

@@ -1,4 +1,4 @@
-import { getShellSession } from "$lib/api/shell-session.remote";
+import { getShellSession } from "#lib/api/shell-session.remote.js";
 
 export type ShellSession = Awaited<ReturnType<typeof getShellSession>>;
 

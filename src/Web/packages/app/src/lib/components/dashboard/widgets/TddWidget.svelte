@@ -3,10 +3,10 @@
   import WidgetCard from "./WidgetCard.svelte";
   import WidgetStatSkeleton from "./WidgetStatSkeleton.svelte";
   import { PieChart } from "layerchart";
-  import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
-  import { Button } from "$lib/components/ui/button";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { getMultiPeriodStatistics } from "#lib/api/generated/statistics.generated.remote.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
   // Toggle between the last 24 hours and the 90-day average
   let showAverage = $state(false);

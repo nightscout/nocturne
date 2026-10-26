@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ApiClient } from "$lib/api";
-import { AlertAcknowledgementOutcome } from "$api-clients";
+import type { ApiClient } from "#lib/api/index.js";
+import { AlertAcknowledgementOutcome } from "#lib/api/generated/nocturne-api-client.js";
 
-vi.mock("$lib/server/api-client-factory", () => ({
+vi.mock("#lib/server/api-client-factory.js", () => ({
   createServerApiClient: vi.fn(),
   getApiBaseUrl: vi.fn(),
 }));
-vi.mock("$lib/server/instance-key", () => ({ getHashedInstanceKey: vi.fn() }));
+vi.mock("#lib/server/instance-key.js", () => ({ getHashedInstanceKey: vi.fn() }));
 
 const { buildBotApiClient } = await import("./api-client");
 

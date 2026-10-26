@@ -1,9 +1,9 @@
 <script lang="ts">
-  import TrackerCategoryIcon from "$lib/components/icons/TrackerCategoryIcon.svelte";
-  import TrendArrow from "$lib/components/clock/TrendArrow.svelte";
-  import type { ClockSettings, TrackerDefinitionDto } from "$lib/api";
-  import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
-  import { renderClockElementValue } from "$lib/components/clock/element-value";
+  import TrackerCategoryIcon from "#lib/components/icons/TrackerCategoryIcon.svelte";
+  import TrendArrow from "#lib/components/clock/TrendArrow.svelte";
+  import type { ClockSettings, TrackerDefinitionDto } from "#lib/api/index.js";
+  import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
+  import { renderClockElementValue } from "#lib/components/clock/element-value.js";
   import {
     elementInfo,
     elementSize,
@@ -14,7 +14,7 @@
     getFontWeightClass,
     buildStyleString,
     getTrackerDefinition,
-  } from "$lib/clock-builder";
+  } from "#lib/clock-builder/index.js";
 
   interface Props {
     element: InternalElement;

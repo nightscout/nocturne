@@ -1,24 +1,24 @@
 <script lang="ts">
   import WidgetCard from "./WidgetCard.svelte";
   import { trackUnwashedFill } from "../glucose-tile-wash-state.svelte";
-  import { stillArtwork } from "$lib/watercolour-deferral.svelte";
-  import { GlucoseValueIndicator } from "$lib/components/shared";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
-  import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
-  import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
-  import { getDirectionInfo } from "$lib/utils";
+  import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
+  import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
+  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
+  import { getDirectionInfo } from "#lib/utils/index.js";
   import {
     formatGlucoseDelta,
     formatGlucoseValue,
     getUnitLabel,
     relativeAge,
     time,
-  } from "$lib/utils/formatting";
-  import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
+  } from "#lib/utils/formatting.js";
+  import { getCurrentBatteryStatus } from "#lib/api/generated/batteries.generated.remote.js";
   import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
   import History from "@lucide/svelte/icons/history";
   import BatteryCharging from "@lucide/svelte/icons/battery-charging";
   import BatteryFull from "@lucide/svelte/icons/battery-full";

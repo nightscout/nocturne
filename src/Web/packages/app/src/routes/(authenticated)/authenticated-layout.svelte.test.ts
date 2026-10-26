@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import type { ComponentProps } from "svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let expiresAt: string | undefined;
 
@@ -13,7 +13,7 @@ const navigation = vi.hoisted(() => ({
 
 const shell = vi.hoisted(() => ({ probe: vi.fn() }));
 
-vi.mock("$lib/api/shell-session.remote", () => ({
+vi.mock("#lib/api/shell-session.remote.js", () => ({
   getShellSession: () => ({ run: shell.probe }),
 }));
 
@@ -22,7 +22,7 @@ vi.mock("$app/navigation", async (importOriginal) => ({
   ...navigation,
 }));
 
-vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
+vi.mock("#routes/(unauthenticated)/auth/auth.remote.js", () => ({
   getSessionInfo: () =>
     remoteQuery(() => ({
       isAuthenticated: true,
@@ -40,14 +40,14 @@ import AuthenticatedLayoutHarness from "./AuthenticatedLayoutHarness.test.svelte
 import SettingsLayout from "./settings/+layout.svelte";
 import InitOrderProbe, { probe } from "./InitOrderProbe.test.svelte";
 import NavigationProbe, { navigationProbe } from "./NavigationProbe.test.svelte";
-import type { ShellSession } from "$lib/utils/shell-session";
-import { AuthStore } from "$lib/stores/auth-store.svelte";
-import { RealtimeStore } from "$lib/stores/realtime-store.svelte";
+import type { ShellSession } from "#lib/utils/shell-session.js";
+import { AuthStore } from "#lib/stores/auth-store.svelte.js";
+import { RealtimeStore } from "#lib/stores/realtime-store.svelte.js";
 import ToolsLayout from "./tools/+layout.svelte";
 import { EngineHost } from "water-ui";
-import { illustrations } from "$lib/stores/illustrations.svelte";
+import { illustrations } from "#lib/stores/illustrations.svelte.js";
 import * as appState from "$app/state";
-import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "$lib/constants/shell-data";
+import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "#lib/constants/shell-data.js";
 
 const BASE = new Date("2026-09-21T12:00:00Z").getTime();
 

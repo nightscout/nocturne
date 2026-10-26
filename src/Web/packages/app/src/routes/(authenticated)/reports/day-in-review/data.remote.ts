@@ -5,10 +5,10 @@
 import { z } from 'zod';
 import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { getAll as getApsSnapshots } from '$api/generated/apsSnapshots.generated.remote';
-import { getInsulinDeliveryStatistics } from '$api/generated/statistics.generated.remote';
-import { getPatientTimeZone } from '$api/report-range';
-import { getLocalDayBoundariesUtc } from '$lib/utils/timezone';
+import { getAll as getApsSnapshots } from '#lib/api/generated/apsSnapshots.generated.remote.js';
+import { getInsulinDeliveryStatistics } from '#lib/api/generated/statistics.generated.remote.js';
+import { getPatientTimeZone } from '#lib/api/report-range.js';
+import { getLocalDayBoundariesUtc } from '#lib/utils/timezone.js';
 
 /**
  * Get day-in-review data for a specific date

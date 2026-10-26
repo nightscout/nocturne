@@ -1,14 +1,14 @@
 import { render } from "vitest-browser-svelte";
-import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ExtendedGlucoseAnalytics,
   InsulinDeliveryStatistics,
   PersonalRangeTimeInRange,
-} from "$api/generated/nocturne-api-client";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import { TimeZoneUnavailableReason } from "$lib/api";
+} from "#lib/api/generated/nocturne-api-client.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 
 type Extras = {
   insulinDelivery?: InsulinDeliveryStatistics;
@@ -23,7 +23,7 @@ let extrasA: Extras;
 let extrasB: Extras;
 let zoneReason: TimeZoneUnavailableReason | undefined;
 
-vi.mock("$api/reports.remote", () => ({
+vi.mock("#lib/api/reports.remote.js", () => ({
   getReportsAnalysis: (input: { from: string }) =>
     remoteQuery(() =>
       input.from === "2026-09-01"
@@ -49,8 +49,8 @@ vi.mock("runed/kit", () => ({
   }),
 }));
 
-vi.mock("$lib/components/reports/TIRStackedChart.svelte", () =>
-  import("$lib/test-stubs/Empty.test-stub.svelte")
+vi.mock("#lib/components/reports/TIRStackedChart.svelte", () =>
+  import("#lib/test-stubs/Empty.test-stub.svelte")
 );
 
 import ComparisonReport from "./ComparisonReport.svelte";

@@ -1,18 +1,18 @@
 <script lang="ts">
-  import type { DeviceEventType } from "$lib/api";
-  import * as Command from "$lib/components/ui/command";
-  import * as Popover from "$lib/components/ui/popover";
-  import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
-  import { Textarea } from "$lib/components/ui/textarea";
+  import type { DeviceEventType } from "#lib/api/index.js";
+  import * as Command from "#lib/components/ui/command/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import Check from "@lucide/svelte/icons/check";
   import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
   import Smartphone from "@lucide/svelte/icons/smartphone";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils/index.js";
   import {
     DEVICE_EVENT_TYPES,
     getDeviceEventTypeLabel,
-  } from "$lib/constants/device-event-types";
+  } from "#lib/constants/device-event-types.js";
 
   interface Props {
     form: {

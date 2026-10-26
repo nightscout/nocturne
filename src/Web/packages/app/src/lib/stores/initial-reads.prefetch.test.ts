@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // The preference stores read the DOM at import, so the browser flag is raised only for the test.
 const env = vi.hoisted(() => ({ browser: false }));
 
-vi.mock("$app/environment", () => ({
+vi.mock("$app/env", () => ({
   get browser() {
     return env.browser;
   },
@@ -17,7 +17,7 @@ vi.mock("svelte-sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
 }));
 
-import { resetBrowserClients } from "$lib/api/browser-clients";
+import { resetBrowserClients } from "#lib/api/browser-clients.js";
 import { RECENT_READINGS, RealtimeStore } from "./realtime-store.svelte";
 import type { InitialReads } from "./initial-reads";
 

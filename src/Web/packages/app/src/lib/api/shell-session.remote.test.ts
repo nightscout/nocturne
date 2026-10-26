@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { errorStatus } from "$lib/forms/submit-error";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 let locals: Record<string, unknown>;
 

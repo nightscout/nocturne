@@ -1,7 +1,7 @@
 <script lang="ts" generics="TData">
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import Columns3 from "@lucide/svelte/icons/columns-3";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { Table } from "@tanstack/table-core";

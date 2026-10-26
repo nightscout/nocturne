@@ -1,10 +1,10 @@
 <script lang="ts">
   import WidgetCard from "./WidgetCard.svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { EmptyState } from "$lib/components/shared";
-  import { DashboardVisibility, NotificationUrgency } from "$lib/api";
-  import { reachedUrgency } from "$lib/components/trackers/schedule";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { DashboardVisibility, NotificationUrgency } from "#lib/api/index.js";
+  import { reachedUrgency } from "#lib/components/trackers/schedule.js";
 
   const realtimeStore = getRealtimeStore();
 

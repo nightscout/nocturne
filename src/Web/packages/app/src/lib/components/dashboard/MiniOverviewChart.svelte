@@ -12,9 +12,9 @@
   import { scaleTime, scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
-  import { Button } from "$lib/components/ui/button";
-  import { time, formatDateTimeCompact } from "$lib/utils/formatting";
-  import type { GlucoseThresholds } from "$lib/utils/chart-colors";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { time, formatDateTimeCompact } from "#lib/utils/formatting.js";
+  import type { GlucoseThresholds } from "#lib/utils/chart-colors.js";
   import {
     lineStopsFor,
     fillStopsFor,

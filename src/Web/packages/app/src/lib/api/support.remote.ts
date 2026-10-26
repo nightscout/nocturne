@@ -1,12 +1,12 @@
 import { getRequestEvent, form } from "$app/server";
 import { error, redirect } from "@sveltejs/kit";
-import { errorStatus } from "$lib/forms/submit-error";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 export {
   getFallbackUrl,
   getSupportConfig,
   getSupportDiagnostics,
-} from "$api/generated/supports.generated.remote";
+} from "#lib/api/generated/supports.generated.remote.js";
 
 /**
  * Shape of the issue form submission. Field names match the `name` attributes

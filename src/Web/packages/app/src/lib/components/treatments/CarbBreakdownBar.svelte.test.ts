@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TreatmentFood } from "$lib/api";
+import type { TreatmentFood } from "#lib/api/index.js";
 import CarbBreakdownBar from "./CarbBreakdownBar.svelte";
 
 const food = (id: string, carbs: number) => ({ id, foodName: id, carbs }) as unknown as TreatmentFood;

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { ChartClipPath, Group, Rect, getChartContext } from "layerchart";
-  import { PumpModeIcon, ActivityCategoryIcon } from "$lib/components/icons";
+  import { PumpModeIcon, ActivityCategoryIcon } from "#lib/components/icons/index.js";
   import { getGlucoseChartContext, markerInk } from "../chart-context.svelte";
   import TrackLabel from "./TrackLabel.svelte";
-  import { markerKey } from "$lib/utils/chart-data-merge";
+  import { markerKey } from "#lib/utils/chart-data-merge.js";
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();

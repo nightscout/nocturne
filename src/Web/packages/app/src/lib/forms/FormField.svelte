@@ -15,8 +15,8 @@
 
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { Label, type LabelVariant } from "$lib/components/ui/label";
-  import { cn } from "$lib/utils";
+  import { Label, type LabelVariant } from "#lib/components/ui/label/index.js";
+  import { cn } from "#lib/utils/index.js";
   import { fieldMessages, type FieldIssues } from "./field-messages";
 
   interface Props {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import prefetchScript from "$lib/stores/initial-reads.prefetch.js?raw";
+  import prefetchScript from "#lib/stores/initial-reads.prefetch.js?raw";
 
   let { enabled }: { enabled: boolean } = $props();
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { FormActions } from "$lib/forms";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { FormActions } from "#lib/forms/index.js";
   import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import Cpu from "@lucide/svelte/icons/cpu";
   import Syringe from "@lucide/svelte/icons/syringe";
@@ -8,8 +8,8 @@
     PatientClinicalForm,
     PatientDeviceManager,
     PatientInsulinManager,
-  } from "$lib/components/patient";
-  import type { ClinicalState } from "$lib/components/patient";
+  } from "#lib/components/patient/index.js";
+  import type { ClinicalState } from "#lib/components/patient/index.js";
 
   let clinicalState = $state<ClinicalState | undefined>(undefined);
 

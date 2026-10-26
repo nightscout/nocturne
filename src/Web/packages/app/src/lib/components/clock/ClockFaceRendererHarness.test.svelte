@@ -1,12 +1,12 @@
 <script lang="ts">
   // Mounts the live renderer with a source in context, the way the public clock
   // route does (plus a realtime store when charts are on), so the assertions cover the renderer the anonymous viewer gets.
-  import type { ClockFaceConfig } from "$lib/api";
+  import type { ClockFaceConfig } from "#lib/api/index.js";
   import {
     createRealtimeStore,
     setClockGlucoseSource,
     type ClockGlucoseSource,
-  } from "$lib/stores/realtime-store.svelte";
+  } from "#lib/stores/realtime-store.svelte.js";
   import ClockFaceRenderer from "./ClockFaceRenderer.svelte";
 
   interface Props {

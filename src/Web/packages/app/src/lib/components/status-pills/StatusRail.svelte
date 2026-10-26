@@ -1,11 +1,11 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { browser } from "$app/environment";
-  import { RailItemId, type LegacyConsumableKind, type TrackerCategory } from "$lib/api";
-  import { hiddenLegacyFallbacks } from "$lib/stores/appearance-store.svelte";
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { cn } from "$lib/utils";
+  import { browser } from "$app/env";
+  import { RailItemId, type LegacyConsumableKind, type TrackerCategory } from "#lib/api/index.js";
+  import { hiddenLegacyFallbacks } from "#lib/stores/appearance-store.svelte.js";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { cn } from "#lib/utils/index.js";
   import COBPill from "./COBPill.svelte";
   import BasalPill from "./BasalPill.svelte";
   import IOBPill from "./IOBPill.svelte";
@@ -60,7 +60,7 @@
   );
 
   const conversionDialog = lazyComponent(
-    () => import("$lib/components/trackers/CreateTrackersFromLegacyDialog.svelte")
+    () => import("#lib/components/trackers/CreateTrackersFromLegacyDialog.svelte")
   );
   let conversionKind = $state<LegacyConsumableKind | undefined>();
 

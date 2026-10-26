@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { remoteForm, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteForm, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 // Mock the generated remote functions before importing the component. DeviceListState reads
 // getDevices()/getDiscoveredSources() as reactive queries (`.current`) and calls reorderDevices()
@@ -15,7 +15,7 @@ const { reorderDevices, deleteDevice } = vi.hoisted(() => ({
 let devicesCurrent: unknown[] = [];
 let discoveredCurrent: unknown[] = [];
 
-vi.mock("$api/generated/patientRecords.generated.remote", () => ({
+vi.mock("#lib/api/generated/patientRecords.generated.remote.js", () => ({
   getDevices: () => remoteQuery(() => devicesCurrent),
   getDiscoveredSources: () => remoteQuery(() => discoveredCurrent),
   createDevice: remoteForm(),
@@ -26,7 +26,7 @@ vi.mock("$api/generated/patientRecords.generated.remote", () => ({
 
 let catalogCurrent: unknown[] = [];
 
-vi.mock("$api/generated/deviceCatalogs.generated.remote", () => ({
+vi.mock("#lib/api/generated/deviceCatalogs.generated.remote.js", () => ({
   getCatalog: () => remoteQuery(() => catalogCurrent),
 }));
 

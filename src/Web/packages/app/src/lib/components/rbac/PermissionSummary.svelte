@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { scopeCategories } from "$lib/constants/scope-labels.svelte";
+  import { scopeCategories } from "#lib/constants/scope-labels.svelte.js";
 
   interface SummaryEntry {
     name: string;

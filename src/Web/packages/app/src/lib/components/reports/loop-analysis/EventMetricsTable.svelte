@@ -1,8 +1,8 @@
 <!-- Each figure's spread across each cohort's events, cohorts side by side, the comparison beside each. -->
 <script lang="ts">
-  import { EventResponseKind, type EventCohortDefinition, type EventCohortResult } from "$lib/api";
-  import { plural } from "$lib/utils/plural";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import { EventResponseKind, type EventCohortDefinition, type EventCohortResult } from "#lib/api/index.js";
+  import { plural } from "#lib/utils/plural.js";
+  import { bg, bgLabel } from "#lib/utils/formatting.js";
   import CohortDot from "./CohortDot.svelte";
   import { cohortLabel, formatMetric, metricDefinitions } from "./event-labels.svelte";
 

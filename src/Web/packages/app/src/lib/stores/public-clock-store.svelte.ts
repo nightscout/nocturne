@@ -5,9 +5,9 @@
 // endpoint keyed by the clock UUID. It exposes the same surface a clock face renders
 // (ClockGlucoseSource) so ClockFaceRenderer works unchanged for logged-out viewers.
 
-import { clockFaceAlertsClient, clockFacesClient } from "$lib/api/browser-clients";
-import type { ClockAlertDto, ClockGlucoseDto } from "$lib/api";
-import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
+import { clockFaceAlertsClient, clockFacesClient } from "#lib/api/browser-clients.js";
+import type { ClockAlertDto, ClockGlucoseDto } from "#lib/api/index.js";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
 import {
   glucoseDelta,
   type ClockGlucoseSource,

@@ -1,7 +1,7 @@
 /**
  * Food page remote functions.
  *
- * Most operations use the generated functions from $api/generated/foods.generated.remote
+ * Most operations use the generated functions from #lib/api/generated/foods.generated.remote
  * directly. This file only exists for the deleteFood override (generated codegen has a
  * parameter issue) and any page-specific server functions.
  */

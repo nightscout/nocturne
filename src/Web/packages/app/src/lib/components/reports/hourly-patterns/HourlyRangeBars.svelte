@@ -5,8 +5,8 @@
 -->
 <script lang="ts">
   import { BarChart } from "layerchart";
-  import type { GlycemicThresholds, HourlyPattern } from "$lib/api";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import type { GlycemicThresholds, HourlyPattern } from "#lib/api/index.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
   import { hourlyBandSeries } from "../hourly-bands";
   import { hourSpan, hourStart } from "./hour-labels";
 

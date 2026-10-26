@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { Bolus, CarbIntake } from "$lib/api";
+import type { Bolus, CarbIntake } from "#lib/api/index.js";
 
 const boluses: Bolus[] = [
   { id: "b-pump", insulin: 4, mills: 1_000, device: "pump-a" },
@@ -32,8 +32,8 @@ vi.mock("$app/server", () => ({
   form: (_schema: unknown, fn: unknown) => fn,
 }));
 
-vi.mock("$api/report-range", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("$api/report-range")>()),
+vi.mock("#lib/api/report-range.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#lib/api/report-range.js")>()),
   resolveReportRange: () =>
     Promise.resolve({
       startDate: "2026-01-01T00:00:00.000Z",

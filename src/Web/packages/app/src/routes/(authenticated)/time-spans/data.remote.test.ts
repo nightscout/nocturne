@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { BasalDeliveryOrigin, StateSpanCategory } from "$lib/api";
+import { BasalDeliveryOrigin, StateSpanCategory } from "#lib/api/index.js";
 
 const day = new Date(2026, 0, 10, 8).getTime();
 const hour = 3_600_000;

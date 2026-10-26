@@ -4,13 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const reducedMotion = vi.hoisted(() => ({ value: false }));
 vi.mock("water-ui", async () => ({
-  Artwork: (await import("$lib/test-stubs/Artwork.test-stub.svelte")).default,
+  Artwork: (await import("#lib/test-stubs/Artwork.test-stub.svelte")).default,
   hostSurface: () => "light",
   watchSurface: () => () => {},
   prefersReducedMotion: () => reducedMotion.value,
 }));
 
-import { fakePlayer } from "$lib/test-stubs/Artwork.test-stub.svelte";
+import { fakePlayer } from "#lib/test-stubs/Artwork.test-stub.svelte";
 import HubPainting from "./HubPainting.svelte";
 
 const artwork = () => page.getByTestId("artwork");

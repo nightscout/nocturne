@@ -1,5 +1,7 @@
 import { defineConfig, loadEnv, searchForWorkspaceRoot } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
+import adapter from "@sveltejs/adapter-node";
+import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import commonjs from "vite-plugin-commonjs";
 import lingo from 'vite-plugin-lingo';
 import tailwindcss from "@tailwindcss/vite";
@@ -74,7 +76,13 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       tailwindcss(),
-      sveltekit(),
+      sveltekit({
+        preprocess: vitePreprocess(),
+        compilerOptions: { experimental: { async: true } },
+        adapter: adapter({ out: "build", precompress: true }),
+        experimental: { remoteFunctions: true },
+        tracing: { server: true },
+      }),
       commonjs(),
     lingo({
       route: '/_translations',  // Route where editor UI is served

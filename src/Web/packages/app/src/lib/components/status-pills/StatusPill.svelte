@@ -1,8 +1,8 @@
 <script lang="ts">
-  import * as Popover from "$lib/components/ui/popover";
-  import { Button } from "$lib/components/ui/button";
-  import type { AlertLevel, PillInfoItem } from "$lib/types/status-pills";
-  import { cn } from "$lib/utils";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import type { AlertLevel, PillInfoItem } from "#lib/types/status-pills.js";
+  import { cn } from "#lib/utils/index.js";
   import PlusCircle from "@lucide/svelte/icons/circle-plus";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import History from "@lucide/svelte/icons/history";

@@ -7,8 +7,8 @@ import type {
   TrackerDefinitionDto,
   TrackerInstanceDto,
   TrackerPresetDto,
-} from "$api";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
+} from "#lib/api/index.js";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const definitions: TrackerDefinitionDto[] = [
   { id: "pod", name: "Pod" },
@@ -31,7 +31,7 @@ const server = vi.hoisted(() => ({
   deleteAnswer: (): Promise<unknown> => Promise.resolve(),
 }));
 
-vi.mock("$api/generated/trackers.generated.remote", () => ({
+vi.mock("#lib/api/generated/trackers.generated.remote.js", () => ({
   getDefinitions: () => remoteQuery(() => definitions),
   getActiveInstances: () => remoteQuery(() => active),
   getInstanceHistory: () => remoteQuery(() => history),

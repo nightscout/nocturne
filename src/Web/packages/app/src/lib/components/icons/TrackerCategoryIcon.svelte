@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { TrackerCategory } from "$api";
+  import { TrackerCategory } from "#lib/api/index.js";
   import SensorIcon from "./SensorIcon.svelte";
   import CannulaIcon from "./CannulaIcon.svelte";
   import BatteryIcon from "./BatteryIcon.svelte";

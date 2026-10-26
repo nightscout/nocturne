@@ -1,4 +1,4 @@
-import { scopeCategories, type ScopeCategory, type ScopeCategoryGroup } from "$lib/constants/scope-labels.svelte";
+import { scopeCategories, type ScopeCategory, type ScopeCategoryGroup } from "#lib/constants/scope-labels.svelte.js";
 
 export interface AccessLevel {
   value: string;

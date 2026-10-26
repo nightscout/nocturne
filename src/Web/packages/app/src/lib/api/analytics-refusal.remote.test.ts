@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { errorStatus } from "$lib/forms/submit-error";
+import { errorStatus } from "#lib/forms/submit-error.js";
 import { remoteErrorMessage } from "./remote-error";
 
 let upstream: () => Promise<unknown>;
@@ -19,7 +19,7 @@ vi.mock("$app/server", () => ({
   query: (schemaOrFn: unknown, fn?: unknown) => fn ?? schemaOrFn,
 }));
 
-vi.mock("$lib/server/patient-timezone", () => ({
+vi.mock("#lib/server/patient-timezone.js", () => ({
   resolvePatientTimeZone: async () => "UTC",
   readable: async (read: () => Promise<unknown>) => read(),
 }));

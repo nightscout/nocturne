@@ -2,7 +2,7 @@
  * Remote functions for Time Spans page data
  * Fetches all state span categories for visualization
  */
-import { randomUUID } from "$lib/utils";
+import { randomUUID } from "#lib/utils/index.js";
 import { getRequestEvent, query } from "$app/server";
 import { z } from "zod";
 import {
@@ -10,9 +10,9 @@ import {
   type StateSpan,
   type ProfileActivationDto,
   type BasalDeliverySpanDto,
-} from "$lib/api";
-import { profileActivationLabel } from "$lib/utils/profile-activation-label";
-import { readable } from "$lib/server/patient-timezone";
+} from "#lib/api/index.js";
+import { profileActivationLabel } from "#lib/utils/profile-activation-label.js";
+import { readable } from "#lib/server/patient-timezone.js";
 
 /**
  * Input schema for time spans data queries - supports date range

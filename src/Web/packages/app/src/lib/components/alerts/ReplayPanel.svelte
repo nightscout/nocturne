@@ -7,10 +7,10 @@
     today,
   } from "@internationalized/date";
   import { timeDay } from "d3-time";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import GlucoseCalendarPicker from "./GlucoseCalendarPicker.svelte";
-  import * as Popover from "$lib/components/ui/popover";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Info from "@lucide/svelte/icons/info";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
@@ -19,19 +19,19 @@
   import {
     replay,
     replayDryRun,
-  } from "$api/generated/alertReplays.generated.remote";
-  import { getRules } from "$api/generated/alertRules.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  } from "#lib/api/generated/alertReplays.generated.remote.js";
+  import { getRules } from "#lib/api/generated/alertRules.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import type {
     AlertReplayResult,
     AlertRuleResponse,
     ReplayRuleDefinition,
-  } from "$api-clients";
+  } from "#lib/api/generated/nocturne-api-client.js";
   import { formatRange } from "./alertTime.svelte";
-  import { formatMediumDate } from "$lib/utils/formatting";
-  import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
+  import { formatMediumDate } from "#lib/utils/formatting.js";
+  import { createChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js";
   import ReplayView from "./ReplayView.svelte";
-  import { openDayInReview } from "$lib/components/dashboard/glucose-chart/day-in-review";
+  import { openDayInReview } from "#lib/components/dashboard/glucose-chart/day-in-review.js";
   import type { ConditionNode } from "./types";
 
   interface Props {

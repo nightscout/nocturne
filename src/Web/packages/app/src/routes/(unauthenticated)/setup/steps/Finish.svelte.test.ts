@@ -3,8 +3,8 @@ import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
 import Finish, { type ImportResult, type SourceResult } from "./Finish.svelte";
-import { PatientRelationship } from "$api";
-import { patientVoice, type PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+import { PatientRelationship } from "#lib/api/index.js";
+import { patientVoice, type PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
 const noop = () => {};
 

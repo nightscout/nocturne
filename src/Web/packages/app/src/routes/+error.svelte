@@ -4,7 +4,7 @@
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
 
   import { page } from "$app/state";
 </script>

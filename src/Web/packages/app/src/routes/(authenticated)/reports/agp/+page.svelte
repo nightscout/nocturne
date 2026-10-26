@@ -3,30 +3,30 @@
     a1cLabel,
     a1cUnitLabel,
     formatA1cValue,
-  } from "$lib/utils/a1c-formatting";
+  } from "#lib/utils/a1c-formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import BarChart3 from "@lucide/svelte/icons/chart-column";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Target from "@lucide/svelte/icons/target";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
-  import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
-  import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import { getReportsData } from "$api/reports.remote";
-  import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber, formatNumericDate } from "$lib/utils/formatting";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { AmbulatoryGlucoseProfile } from "#lib/components/ambulatory-glucose-profile/index.js";
+  import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import { getReportsData } from "#lib/api/reports.remote.js";
+  import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber, formatNumericDate } from "#lib/utils/formatting.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is the standard AGP report period

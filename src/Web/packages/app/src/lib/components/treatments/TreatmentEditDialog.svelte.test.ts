@@ -1,22 +1,22 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { remoteForm, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteForm, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let insulinsCurrent: unknown[] = [];
 let catalogCurrent: unknown[] = [];
 
-vi.mock("$api/generated/patientRecords.generated.remote", () => ({
+vi.mock("#lib/api/generated/patientRecords.generated.remote.js", () => ({
   getInsulins: () => remoteQuery(() => insulinsCurrent),
   createInsulin: remoteForm(),
 }));
 
-vi.mock("$api/generated/insulinCatalogs.generated.remote", () => ({
+vi.mock("#lib/api/generated/insulinCatalogs.generated.remote.js", () => ({
   getCatalog: () => remoteQuery(() => catalogCurrent),
 }));
 
 import TreatmentEditDialog from "./TreatmentEditDialog.svelte";
-import type { EntryRecord } from "$lib/constants/entry-categories";
+import type { EntryRecord } from "#lib/constants/entry-categories.js";
 
 function renderDialog(record: EntryRecord | null, onSave = vi.fn()) {
   render(TreatmentEditDialog, {

@@ -3,15 +3,15 @@
  *
  * A report's "day" is the patient's day, so the day boundaries are computed on
  * the patient's calendar rather than the container's — see
- * `$lib/server/patient-timezone`. The window is inclusive: it runs from midnight
+ * `#lib/server/patient-timezone.js`. The window is inclusive: it runs from midnight
  * opening `from` to the last millisecond of `to`, both read in that timezone.
  */
 import { z } from "zod";
 import { error } from "@sveltejs/kit";
 import { getRequestEvent } from "$app/server";
-import { getLocalDayBoundariesUtc } from "$lib/utils/timezone";
-import { dayCount, daysBetween, resolveDayRange } from "$lib/utils/date-range";
-import { resolvePatientTimeZone } from "$lib/server/patient-timezone";
+import { getLocalDayBoundariesUtc } from "#lib/utils/timezone.js";
+import { dayCount, daysBetween, resolveDayRange } from "#lib/utils/date-range.js";
+import { resolvePatientTimeZone } from "#lib/server/patient-timezone.js";
 
 /**
  * Input schema for date range queries. Uses nullish() to accept both null and
@@ -41,7 +41,7 @@ export interface ReportRange {
 
 /**
  * The patient's configured IANA timezone, or null when no source names one. See
- * `$lib/server/patient-timezone` for where it comes from and what null means.
+ * `#lib/server/patient-timezone.js` for where it comes from and what null means.
  */
 export async function getPatientTimeZone(): Promise<string | null> {
   return resolvePatientTimeZone(getRequestEvent().locals);

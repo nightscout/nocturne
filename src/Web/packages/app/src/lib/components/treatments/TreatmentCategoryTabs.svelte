@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Tabs from "$lib/components/ui/tabs";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import type {
     EntryCategoryId,
-  } from "$lib/constants/entry-categories";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
+  } from "#lib/constants/entry-categories.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Utensils from "@lucide/svelte/icons/utensils";
   import Droplet from "@lucide/svelte/icons/droplet";

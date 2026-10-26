@@ -1,18 +1,18 @@
 <script lang="ts">
-  import { isRecord } from "$lib/utils/type-guards";
-  import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent, BasalInjection } from "$lib/api";
-  import { BolusType, GlucoseType, GlucoseUnit, DeviceEventType } from "$lib/api";
-  import type { EntryRecord, EntryCategoryId } from "$lib/constants/entry-categories";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as Sheet from "$lib/components/ui/sheet";
-  import { IsMobile } from "$lib/hooks/is-mobile.svelte";
-  import { useDialogHistory } from "$lib/hooks/dialog-history.svelte";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import { isRecord } from "#lib/utils/type-guards.js";
+  import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent, BasalInjection } from "#lib/api/index.js";
+  import { BolusType, GlucoseType, GlucoseUnit, DeviceEventType } from "#lib/api/index.js";
+  import type { EntryRecord, EntryCategoryId } from "#lib/constants/entry-categories.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as Sheet from "#lib/components/ui/sheet/index.js";
+  import { IsMobile } from "#lib/hooks/is-mobile.svelte.js";
+  import { useDialogHistory } from "#lib/hooks/dialog-history.svelte.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import BolusSection from "./BolusSection.svelte";
   import CarbIntakeSection, { type PendingFood } from "./CarbIntakeSection.svelte";
   import BGCheckSection from "./BGCheckSection.svelte";
@@ -27,41 +27,41 @@
   import Droplet from "@lucide/svelte/icons/droplet";
   import FileText from "@lucide/svelte/icons/file-text";
   import Smartphone from "@lucide/svelte/icons/smartphone";
-  import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
+  import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
   import { toast } from "svelte-sonner";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { useToastSubmission } from "$lib/forms";
+  import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { useToastSubmission } from "#lib/forms/index.js";
   import {
     create as createBolusForm,
     update as updateBolusForm,
     remove as deleteBolus,
-  } from "$api/generated/bolus.generated.remote";
+  } from "#lib/api/generated/bolus.generated.remote.js";
   import {
     createCarbIntake as createCarbIntakeForm,
     updateCarbIntake as updateCarbIntakeForm,
     deleteCarbIntake,
     addCarbIntakeFood,
-  } from "$api/generated/nutritions.generated.remote";
+  } from "#lib/api/generated/nutritions.generated.remote.js";
   import {
     create as createBGCheckForm,
     update as updateBGCheckForm,
     remove as deleteBGCheck,
-  } from "$api/generated/bgChecks.generated.remote";
+  } from "#lib/api/generated/bgChecks.generated.remote.js";
   import {
     create as createNoteForm,
     update as updateNoteForm,
     remove as deleteNote,
-  } from "$api/generated/notes.generated.remote";
+  } from "#lib/api/generated/notes.generated.remote.js";
   import {
     create as createDeviceEventForm,
     update as updateDeviceEventForm,
     remove as deleteDeviceEvent,
-  } from "$api/generated/deviceEvents.generated.remote";
+  } from "#lib/api/generated/deviceEvents.generated.remote.js";
   import {
     create as createBasalInjectionForm,
     update as updateBasalInjectionForm,
     remove as deleteBasalInjection,
-  } from "$api/generated/basalInjections.generated.remote";
+  } from "#lib/api/generated/basalInjections.generated.remote.js";
 
   const realtimeStore = tryGetRealtimeStore();
 

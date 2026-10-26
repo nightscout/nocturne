@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Food } from "$api";
+  import type { Food } from "#lib/api/index.js";
   import type { Snippet } from "svelte";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import {
@@ -7,18 +7,18 @@
     energyToDisplayUnits,
     type EnergyUnit,
   } from "@nocturne/ui/energy";
-  import { getEnergyUnit } from "$lib/stores/appearance-store.svelte";
+  import { getEnergyUnit } from "#lib/stores/appearance-store.svelte.js";
   import GiIcon from "./GiIcon.svelte";
   import GiLabel from "./GiLabel.svelte";
   import CategorySubcategoryCombobox from "./CategorySubcategoryCombobox.svelte";
   import { giFromInt, giToInt, isGiLevel, type GiLevel } from "./gi";
   import { FOOD_UNITS, type FoodCategoryMap } from "./food-constants";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import * as InputGroup from "$lib/components/ui/input-group";
-  import { Label } from "$lib/components/ui/label";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
-  import * as Collapsible from "$lib/components/ui/collapsible";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
 
   interface Props {
     draft: Food;

@@ -6,7 +6,7 @@ const surfaceWatch = vi.hoisted(() => ({
   onchange: undefined as ((surface: "light" | "dark") => void) | undefined,
 }));
 vi.mock("water-ui", async () => ({
-  Artwork: (await import("$lib/test-stubs/Artwork.test-stub.svelte")).default,
+  Artwork: (await import("#lib/test-stubs/Artwork.test-stub.svelte")).default,
   hostSurface: () => "light",
   watchSurface: (onchange: (surface: "light" | "dark") => void) => {
     surfaceWatch.onchange = onchange;
@@ -14,7 +14,7 @@ vi.mock("water-ui", async () => ({
   },
 }));
 
-import { fakePlayer } from "$lib/test-stubs/Artwork.test-stub.svelte";
+import { fakePlayer } from "#lib/test-stubs/Artwork.test-stub.svelte";
 import StepArtwork from "./StepArtwork.svelte";
 
 const artwork = () => page.getByTestId("artwork");

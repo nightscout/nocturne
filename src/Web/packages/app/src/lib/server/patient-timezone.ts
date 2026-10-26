@@ -11,9 +11,9 @@
  * Null means no source names one, and the caller chooses what to do about it.
  */
 import type { RequestEvent } from "@sveltejs/kit";
-import type { ApiClient } from "$lib/api";
-import { isTimeZone } from "$lib/utils/date-range";
-import { errorStatus } from "$lib/forms/submit-error";
+import type { ApiClient } from "#lib/api/index.js";
+import { isTimeZone } from "#lib/utils/date-range.js";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 /**
  * Read `fetch`, treating a refusal as "not named here" and nothing else.

@@ -8,12 +8,12 @@
  */
 import { getRequestEvent, query, command } from "$app/server";
 import { error, redirect } from "@sveltejs/kit";
-import type { UISettingsConfiguration } from "$lib/api/generated/nocturne-api-client";
+import type { UISettingsConfiguration } from "#lib/api/generated/nocturne-api-client.js";
 import {
   DataQualitySettingsSchema,
   FeatureSettingsSchema,
-} from "$lib/api/generated/schemas";
-import { errorStatus } from "$lib/forms/submit-error";
+} from "#lib/api/generated/schemas.js";
+import { errorStatus } from "#lib/forms/submit-error.js";
 import { SETTINGS_LOAD_FAILED } from "./ui-settings-messages";
 
 export const getUiSettings = query(async () => {
@@ -25,13 +25,8 @@ export const getUiSettings = query(async () => {
     // Same 401 handling as a generated query: the settings pages are behind the
     // authenticated layout, so an expired session has to reach the login route.
     if (errorStatus(err) === 401) {
-      const { url } = getRequestEvent();
       if (locals.isShareHost) throw error(401, "Unauthorized");
-
-      throw redirect(
-        302,
-        `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`
-      );
+      throw redirect(302, "/auth/login");
     }
 
     console.error("Error loading UI settings:", err);

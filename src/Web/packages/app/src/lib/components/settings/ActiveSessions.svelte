@@ -1,9 +1,9 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Badge } from "$lib/components/ui/badge";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Monitor from "@lucide/svelte/icons/monitor";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -11,14 +11,14 @@
   import Clock from "@lucide/svelte/icons/clock";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import LogOut from "@lucide/svelte/icons/log-out";
-  import { EmptyState } from "$lib/components/shared";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     list,
     revoke,
     revokeOthers,
-  } from "$lib/api/generated/sessions.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  } from "#lib/api/generated/sessions.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   type SessionInfo = {
     sessionId?: string;

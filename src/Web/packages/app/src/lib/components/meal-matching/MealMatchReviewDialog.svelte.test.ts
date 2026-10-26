@@ -1,16 +1,16 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
-import type { SuggestedMealMatch } from "$lib/api";
-import { updatedBy } from "$lib/test-stubs/remote-resource";
+import type { SuggestedMealMatch } from "#lib/api/index.js";
+import { updatedBy } from "#lib/test-stubs/remote-resource.js";
 
 const remote = vi.hoisted(() => ({
   getSuggestions: Symbol("getSuggestions"),
   getMeals: Symbol("getMeals"),
 }));
 
-vi.mock("$api/generated/mealMatchings.generated.remote", async () => {
-  const { remoteCommand, remoteQuery } = await import("$lib/test-stubs/remote-resource");
+vi.mock("#lib/api/generated/mealMatchings.generated.remote.js", async () => {
+  const { remoteCommand, remoteQuery } = await import("#lib/test-stubs/remote-resource.js");
   return {
     getFoodEntry: () => remoteQuery(() => undefined),
     getSuggestions: remote.getSuggestions,
@@ -19,13 +19,13 @@ vi.mock("$api/generated/mealMatchings.generated.remote", async () => {
   };
 });
 
-vi.mock("$api/generated/nutritions.generated.remote", () => ({
+vi.mock("#lib/api/generated/nutritions.generated.remote.js", () => ({
   getMeals: remote.getMeals,
 }));
 
 vi.mock("svelte-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
+import { acceptMatch, dismissMatch } from "#lib/api/generated/mealMatchings.generated.remote.js";
 import MealMatchReviewDialog from "./MealMatchReviewDialog.svelte";
 
 const match: SuggestedMealMatch = {

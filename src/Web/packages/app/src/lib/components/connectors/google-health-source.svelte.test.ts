@@ -7,38 +7,38 @@ import {
   GoogleHealthConnectionState,
   type GoogleHealthStatus,
   type ServicesOverview,
-} from "$lib/api";
+} from "#lib/api/index.js";
 
 import GoogleHealthSourceRow from "./GoogleHealthSourceRow.svelte";
 import ServerConnectorsCard from "./ServerConnectorsCard.svelte";
-import ConnectorsPage from "$routes/(authenticated)/settings/connectors/+page.svelte";
+import ConnectorsPage from "#routes/(authenticated)/settings/connectors/+page.svelte";
 
 const overviewMocks = vi.hoisted(() => ({
   services: vi.fn(),
   google: vi.fn(),
 }));
-vi.mock("$api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   getServicesOverview: overviewMocks.services,
   getConnectorCapabilities: () => ({ current: null }),
   triggerConnectorSync: vi.fn(),
 }));
-vi.mock("$api/generated/googleHealths.generated.remote", () => ({
+vi.mock("#lib/api/generated/googleHealths.generated.remote.js", () => ({
   getGoogleHealth: overviewMocks.google,
 }));
-vi.mock("$api/generated/connectorStatus.generated.remote", () => ({
+vi.mock("#lib/api/generated/connectorStatus.generated.remote.js", () => ({
   getStatus: () => ({ current: [] }),
 }));
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
+vi.mock("#lib/stores/realtime-store.svelte.js", () => ({
   getRealtimeStore: () => ({ syncProgressByConnector: {} }),
 }));
 vi.mock("@nocturne/coach", () => ({ coachmark: () => () => {} }));
-vi.mock("$lib/components/settings/ConnectedApps.svelte", () => ({
+vi.mock("#lib/components/settings/ConnectedApps.svelte", () => ({
   default: () => {},
 }));
-vi.mock("$lib/components/settings/ClientDevices.svelte", () => ({
+vi.mock("#lib/components/settings/ClientDevices.svelte", () => ({
   default: () => {},
 }));
-vi.mock("$lib/components/settings/ApiTokens.svelte", () => ({
+vi.mock("#lib/components/settings/ApiTokens.svelte", () => ({
   default: () => {},
 }));
 vi.mock("./UploaderSetupDialog.svelte", () => ({ default: () => {} }));

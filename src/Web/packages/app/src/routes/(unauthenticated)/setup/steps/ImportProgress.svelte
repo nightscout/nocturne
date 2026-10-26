@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatNumber } from "$lib/utils/formatting";
+  import { formatNumber } from "#lib/utils/formatting.js";
   import Database from "@lucide/svelte/icons/database";
   import Upload from "@lucide/svelte/icons/upload";
   import Users from "@lucide/svelte/icons/users";
@@ -8,13 +8,13 @@
   import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import * as migrationRemote from "$api/generated/migrations.generated.remote";
-  import { MigrationJobState } from "$api";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import * as migrationRemote from "#lib/api/generated/migrations.generated.remote.js";
+  import { MigrationJobState } from "#lib/api/index.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { findSessionJob } from "../migration-session";
-  import { SkippedRecordsNote } from "$lib/components/shared";
+  import { SkippedRecordsNote } from "#lib/components/shared/index.js";
   import type { ImportResult } from "./Finish.svelte";
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
   let {
     jobId,

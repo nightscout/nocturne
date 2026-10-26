@@ -5,23 +5,23 @@
    * calendar day across the full selected range (gaps for days with no
    * recorded night), plus a compact stage-composition reference panel.
    */
-  import { formatShortDate, formatWeekdayLabel } from "$lib/utils/formatting";
+  import { formatShortDate, formatWeekdayLabel } from "#lib/utils/formatting.js";
   import { Chart, Svg, Axis, Rect, Tooltip } from "layerchart";
   import { scaleBand, scaleLinear } from "d3-scale";
-  import { bandScale } from "$lib/components/charts/scale-guards";
+  import { bandScale } from "#lib/components/charts/scale-guards.js";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { SLEEP_COMPOSITION_SEGMENTS, laneTexture } from "$lib/utils/sleep-stages";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import { localDayStart } from "$lib/utils/timezone";
-  import { indexBy } from "$lib/utils/collections";
-  import { formatMinutesDuration } from "$lib/utils/duration";
+  import { SLEEP_COMPOSITION_SEGMENTS, laneTexture } from "#lib/utils/sleep-stages.js";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import { localDayStart } from "#lib/utils/timezone.js";
+  import { indexBy } from "#lib/utils/collections.js";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
   import {
     SleepScoreSource,
     type SleepNightSummary,
     type SleepStageReferenceRangeSet,
-  } from "$lib/api";
+  } from "#lib/api/index.js";
 
   interface Props {
     /** Nights already filtered to the selected date range / source. */

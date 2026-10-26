@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { ConnectorState, ConnectorReachability } from "$lib/constants/connector-states";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
-  import * as Tooltip from "$lib/components/ui/tooltip";
-  import { getDataTypeLabel } from "$lib/utils/data-type-labels";
-  import { triggerConnectorSync } from "$api/generated/services.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
+  import { ConnectorState, ConnectorReachability } from "#lib/constants/connector-states.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
+  import { triggerConnectorSync } from "#lib/api/generated/services.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import { page } from "$app/state";
   import Cloud from "@lucide/svelte/icons/cloud";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -25,14 +25,14 @@
     SyncDataType,
     type ConnectorCapabilities,
     type SyncResult,
-  } from "$lib/api/generated/nocturne-api-client";
-  import type { SyncRequestInput } from "$lib/api/generated/schemas";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import type { SyncRequestInput } from "#lib/api/generated/schemas.js";
   import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
   import {
     formatNumber,
     relativeAge,
-  } from "$lib/utils/formatting";
-  import { SkippedRecordsNote } from "$lib/components/shared";
+  } from "#lib/utils/formatting.js";
+  import { SkippedRecordsNote } from "#lib/components/shared/index.js";
 
   interface Props {
     open: boolean;

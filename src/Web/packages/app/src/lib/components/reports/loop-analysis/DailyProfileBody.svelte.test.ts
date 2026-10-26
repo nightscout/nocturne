@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { TimeZoneUnavailableReason } from "$lib/api";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 import DailyProfileBody from "./DailyProfileBody.svelte";
 import { profileResponse } from "./daily-profile.test-fixtures";
 

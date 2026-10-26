@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import { resolve } from "$app/paths";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import { ConfirmationBackground, DropGroup } from "water-ui";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { getSetupHub } from "$api/generated/setupHubs.generated.remote";
-  import { getPatientRelationship } from "$api/generated/tenantSettings.generated.remote";
-  import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
-  import { hubPaintingStop, HUB_PAINTING_STOPS } from "$lib/setup-hub/items.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { getSetupHub } from "#lib/api/generated/setupHubs.generated.remote.js";
+  import { getPatientRelationship } from "#lib/api/generated/tenantSettings.generated.remote.js";
+  import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+  import { hubPaintingStop, HUB_PAINTING_STOPS } from "#lib/setup-hub/items.svelte.js";
   import SetupChrome from "../SetupChrome.svelte";
   import HubPainting from "./HubPainting.svelte";
   import HubItemRow from "./HubItemRow.svelte";

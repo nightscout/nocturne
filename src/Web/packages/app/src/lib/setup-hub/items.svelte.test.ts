@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SetupHubItemKey } from "$api";
+import { SetupHubItemKey } from "#lib/api/index.js";
 import {
   HUB_PAINTING_STOPS,
   setupHubItems,

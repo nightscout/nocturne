@@ -1,6 +1,6 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
 
   let { children } = $props();

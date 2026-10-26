@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("$app/environment", () => ({ browser: true, building: false, dev: false }));
+vi.mock("$app/env", () => ({ browser: true, building: false, dev: false }));
 
 const registerPreferenceCookieDomain = vi.fn();
 const registerPreferencesWriteThrough = vi.fn();
@@ -9,7 +9,7 @@ const showTenantDefaultUnits = vi.fn();
 const applyTenantPresentation = vi.fn();
 const presentOwnerPreferences = vi.fn();
 
-vi.mock("$lib/stores/appearance-store.svelte", () => ({
+vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
   registerPreferenceCookieDomain: (...args: unknown[]) =>
     registerPreferenceCookieDomain(...args),
   registerPreferencesWriteThrough: (...args: unknown[]) =>
@@ -23,7 +23,7 @@ vi.mock("$lib/stores/appearance-store.svelte", () => ({
   setLanguage: vi.fn(),
 }));
 
-vi.mock("$lib/api/user-preferences.remote", () => ({ updateDisplayPreferences: vi.fn() }));
+vi.mock("#lib/api/user-preferences.remote.js", () => ({ updateDisplayPreferences: vi.fn() }));
 
 // The real loaders read catalogs that only a wuchale build compiles.
 vi.mock("wuchale/load-utils", () => ({ loadLocale: vi.fn() }));

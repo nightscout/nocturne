@@ -3,8 +3,8 @@ import { page, userEvent } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushSync } from "svelte";
 import { page as pageState } from "$app/state";
-import { AlertRuleSeverity, type ActiveExcursionResponse } from "$api-clients";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { AlertRuleSeverity, type ActiveExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let activeAlerts = $state<ActiveExcursionResponse[]>([]);
 const calls = vi.hoisted(() => ({
@@ -15,7 +15,7 @@ const calls = vi.hoisted(() => ({
 	stops: 0,
 }));
 
-vi.mock("$api/generated/alerts.generated.remote", () => ({
+vi.mock("#lib/api/generated/alerts.generated.remote.js", () => ({
 	getActiveAlerts: () => remoteQuery(() => activeAlerts),
 	acknowledgeExcursion: (arg: unknown) => {
 		calls.acks.push(arg);
@@ -31,7 +31,7 @@ vi.mock("$api/generated/alerts.generated.remote", () => ({
 	},
 }));
 
-vi.mock("$lib/audio/alarm-sounds", () => ({
+vi.mock("#lib/audio/alarm-sounds.js", () => ({
 	playAlarmSound: (id: string) => {
 		calls.sounds.push(id);
 		return Promise.resolve();

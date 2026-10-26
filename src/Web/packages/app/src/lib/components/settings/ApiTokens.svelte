@@ -1,13 +1,13 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { EmptyState } from "$lib/components/shared";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import TokenScopeSelector from "./TokenScopeSelector.svelte";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Plus from "@lucide/svelte/icons/plus";
@@ -17,16 +17,16 @@
   import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     list as listGrants,
     create as createGrant,
     revoke as revokeGrant,
-  } from "$lib/api/generated/directGrants.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import type { DirectGrantDto } from "$api";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  } from "#lib/api/generated/directGrants.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import type { DirectGrantDto } from "#lib/api/index.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
   // ============================================================================
   // Props

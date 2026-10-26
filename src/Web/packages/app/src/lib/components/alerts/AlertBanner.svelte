@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import Check from "@lucide/svelte/icons/check";
-  import { formatDateTimeCompact, relativeAge, time, toDate } from "$lib/utils/formatting";
+  import { formatDateTimeCompact, relativeAge, time, toDate } from "#lib/utils/formatting.js";
   import { severity } from "./severity";
   import { severityLabel } from "./severityLabel.svelte";
   import { seenBy } from "./receipts";

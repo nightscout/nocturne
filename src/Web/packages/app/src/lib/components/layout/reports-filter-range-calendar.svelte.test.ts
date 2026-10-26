@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import { RangeCalendar } from "$lib/components/ui/range-calendar";
+import { RangeCalendar } from "#lib/components/ui/range-calendar/index.js";
 
 // The reports filter and the shared date-range-picker render a RangeCalendar
 // with a selected range. When the app and bits-ui resolve different copies of

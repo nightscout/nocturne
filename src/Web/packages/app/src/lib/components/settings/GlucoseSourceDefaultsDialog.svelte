@@ -1,18 +1,18 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { EmptyState } from "$lib/components/shared";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
+  } from "#lib/components/ui/select/index.js";
   import GripVertical from "@lucide/svelte/icons/grip-vertical";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { GlucoseProcessing, type GlucoseProcessingSourceDefault } from "$api";
+  import { GlucoseProcessing, type GlucoseProcessingSourceDefault } from "#lib/api/index.js";
 
   interface Props {
     open: boolean;

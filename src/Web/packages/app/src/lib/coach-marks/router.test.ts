@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("$app/state", () => import("$lib/test-stubs/app-state"));
-vi.mock("$app/navigation", () => import("$lib/test-stubs/app-navigation"));
+vi.mock("$app/state", () => import("#lib/test-stubs/app-state.js"));
+vi.mock("$app/navigation", () => import("#lib/test-stubs/app-navigation.js"));
 
-import { page } from "$lib/test-stubs/app-state";
+import { page } from "#lib/test-stubs/app-state.js";
 import { createCoachRouter } from "./router";
 
 beforeEach(() => {

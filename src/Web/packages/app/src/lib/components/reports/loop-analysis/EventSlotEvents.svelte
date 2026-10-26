@@ -1,12 +1,11 @@
-<!-- The events behind one picked slot, read from each event's coverage bitmap, each linking to Day in Review. -->
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import type { EventCohortDefinition, EventResponseEvent } from "$lib/api";
-  import { Button } from "$lib/components/ui/button";
+  import type { EventCohortDefinition, EventResponseEvent } from "#lib/api/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import X from "@lucide/svelte/icons/x";
   import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
-  import { formatWeekdayDate, time } from "$lib/utils/formatting";
-  import { startOfDay } from "$lib/utils/date-range";
+  import { formatWeekdayDate, time } from "#lib/utils/formatting.js";
+  import { startOfDay } from "#lib/utils/date-range.js";
   import { atMinute, isEscape } from "./daily-profile-view";
   import { clockToMinute } from "./event-response-filter";
   import { eventsAtSlot } from "./event-response-view";
@@ -29,8 +28,8 @@
   const behind = $derived(eventsAtSlot(events, slot));
   const groups = $derived(
     cohorts.map((cohort, index) => ({
-      cohort,
-      index,
+    cohort,
+    index,
       events: behind.filter((e) => e.cohorts?.includes(cohort.cohort ?? 0)),
     }))
   );
@@ -53,7 +52,8 @@
   const localTime = (clock: string | undefined) => time(atMinute(clockToMinute(clock ?? "") ?? 0));
 </script>
 
-<svelte:window {onkeydown} />
+<!-- The events behind one picked slot, read from each event's coverage bitmap, each linking to Day in Review. -->
+<svelte:window onkeydown={onkeydown}></svelte:window>
 
 <section bind:this={section} class="space-y-3 rounded-lg border bg-card p-4" aria-labelledby="slot-events-heading">
   <div class="flex items-start justify-between gap-2">
@@ -85,7 +85,7 @@
           {#each group.events as event (`${event.at}-${event.anchor}`)}
             <li>
               <a
-                href={resolve(`/reports/day-in-review?date=${event.date}&time=${event.time}`)}
+                href={resolve(`reports/day-in-review?date=${event.date}&time=${event.time}`)}
                 class="flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted/50"
               >
                 <span class="min-w-40 font-medium">

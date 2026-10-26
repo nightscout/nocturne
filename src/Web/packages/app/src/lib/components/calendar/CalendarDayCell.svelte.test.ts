@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect } from "vitest";
-import type { PunchCardDay } from "$api";
+import type { PunchCardDay } from "#lib/api/index.js";
 import CalendarDayCellHarness from "./CalendarDayCellHarness.test.svelte";
 
 const noop = () => {};

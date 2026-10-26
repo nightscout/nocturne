@@ -2,16 +2,16 @@ import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("$api/chart-data.remote", () => ({
-  getChartData: vi.fn(async () => (await import("$lib/utils/chart-data-transform")).transformChartData({})),
+vi.mock("#lib/api/chart-data.remote.js", () => ({
+  getChartData: vi.fn(async () => (await import("#lib/utils/chart-data-transform.js")).transformChartData({})),
 }));
-vi.mock("$api/predictions.remote", () => ({
+vi.mock("#lib/api/predictions.remote.js", () => ({
   getPredictions: vi.fn(async () => null),
   getPredictionStatus: vi.fn(async () => ({ available: false })),
 }));
 
-import { MealPeriod } from "$lib/api";
-import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { MealPeriod } from "#lib/api/index.js";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import Harness from "./DeferredPlotHarness.test.svelte";
 
 describe("GlucoseChartCard inspection dialogs", () => {

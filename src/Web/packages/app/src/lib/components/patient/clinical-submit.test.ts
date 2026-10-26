@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formCoerce } from "$api/generated/form-utils.generated";
-import { PatientRecordSchema } from "$api/generated/schemas";
+import { formCoerce } from "#lib/api/generated/form-utils.generated.js";
+import { PatientRecordSchema } from "#lib/api/generated/schemas.js";
 
 // The clinical form posts an unset select as "", which the C# enum would reject.
 describe("saving the clinical form", () => {

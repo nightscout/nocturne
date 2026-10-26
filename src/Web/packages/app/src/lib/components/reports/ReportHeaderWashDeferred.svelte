@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { deferredArtwork } from "$lib/watercolour-deferral.svelte";
+  import { deferredArtwork } from "#lib/watercolour-deferral.svelte.js";
 
   interface Props {
     /** Seeds the wash, so each report keeps its own. */
@@ -10,7 +10,7 @@
   let { name, class: className }: Props = $props();
 
   // The wash boots the engine as it mounts; the header reads the same without it.
-  const wash = deferredArtwork(() => import("$lib/watercolour/report-header-wash"));
+  const wash = deferredArtwork(() => import("#lib/watercolour/report-header-wash.js"));
 </script>
 
 {#if wash.component}

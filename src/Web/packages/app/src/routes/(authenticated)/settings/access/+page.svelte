@@ -1,12 +1,12 @@
 <script lang="ts">
   import KeyRound from "@lucide/svelte/icons/key-round";
-  import ActiveSessions from "$lib/components/settings/ActiveSessions.svelte";
-  import ApiReference from "$lib/components/settings/ApiReference.svelte";
-  import SettingsLinkCard from "$lib/components/settings/SettingsLinkCard.svelte";
+  import ActiveSessions from "#lib/components/settings/ActiveSessions.svelte";
+  import ApiReference from "#lib/components/settings/ApiReference.svelte";
+  import SettingsLinkCard from "#lib/components/settings/SettingsLinkCard.svelte";
   import {
     connectorsLink,
     sharingLink,
-  } from "$lib/components/settings/settings-links";
+  } from "#lib/components/settings/settings-links.js";
 
   // Connected apps and guest links are granted and revoked on the pages below, and were rendered
   // here as well. One home each keeps this page from claiming to own a section it cannot change.

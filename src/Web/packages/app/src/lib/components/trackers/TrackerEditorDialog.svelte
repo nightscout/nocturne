@@ -1,16 +1,16 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import * as Select from "$lib/components/ui/select";
-  import { DurationInput } from "$lib/components/ui/duration-input";
-  import { TrackerNotificationEditor, type TrackerNotification } from "$lib/components/trackers";
-  import EventTypeCombobox from "$lib/components/treatments/EventTypeCombobox.svelte";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { DurationInput } from "#lib/components/ui/duration-input/index.js";
+  import { TrackerNotificationEditor, type TrackerNotification } from "#lib/components/trackers/index.js";
+  import EventTypeCombobox from "#lib/components/treatments/EventTypeCombobox.svelte";
   import { Artwork } from "water-ui";
-  import { batteryArtwork } from "$lib/watercolour-icons";
-  import * as trackersRemote from "$api/generated/trackers.generated.remote";
+  import { batteryArtwork } from "#lib/watercolour-icons.js";
+  import * as trackersRemote from "#lib/api/generated/trackers.generated.remote.js";
   import { tick } from "svelte";
   import {
     TrackerCategory,
@@ -19,7 +19,7 @@
     NotificationUrgency,
     PumpCapability,
     type TrackerDefinitionDto,
-  } from "$api";
+  } from "#lib/api/index.js";
 
   const createRemote = trackersRemote.createDefinition;
   const updateRemote = trackersRemote.updateDefinition;

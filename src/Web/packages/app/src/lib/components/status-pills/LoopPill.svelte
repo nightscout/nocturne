@@ -1,11 +1,11 @@
 <script lang="ts">
   import StatusPill from "./StatusPill.svelte";
-  import { bg, bgLabel, formatLocale, relativeAge } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatLocale, relativeAge } from "#lib/utils/formatting.js";
   import type {
     LoopPillData,
     PillInfoItem,
     AlertLevel,
-  } from "$lib/types/status-pills";
+  } from "#lib/types/status-pills.js";
 
   interface LoopPillProps {
     data: LoopPillData | null;

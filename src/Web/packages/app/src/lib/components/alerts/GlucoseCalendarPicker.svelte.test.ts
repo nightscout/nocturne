@@ -1,12 +1,12 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TimeZoneUnavailableReason } from "$lib/api";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const punchCard = vi.hoisted(() => ({ response: undefined as unknown }));
 
-vi.mock("$api/generated/statistics.generated.remote", () => ({
+vi.mock("#lib/api/generated/statistics.generated.remote.js", () => ({
   getPunchCardData: () => remoteQuery(() => punchCard.response),
 }));
 

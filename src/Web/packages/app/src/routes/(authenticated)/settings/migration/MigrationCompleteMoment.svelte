@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Artwork, type ArtworkPlayer } from "water-ui";
-  import { databaseArtwork } from "$lib/watercolour-icons";
+  import { databaseArtwork } from "#lib/watercolour-icons.js";
 
   let stored = $state(false);
 

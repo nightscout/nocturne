@@ -2,11 +2,11 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import Shield from "@lucide/svelte/icons/shield";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -17,15 +17,15 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Globe from "@lucide/svelte/icons/globe";
   import { consentForm, getClientInfo } from "../oauth.remote";
-  import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
-  import DeletionDisclosure from "$lib/components/auth/DeletionDisclosure.svelte";
+  import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import DeletionDisclosure from "#lib/components/auth/DeletionDisclosure.svelte";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
     if (!page.data.isAuthenticated) {
       const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
-      goto(resolve(`/auth/login?returnUrl=${returnUrl}`), { replaceState: true });
+      goto(resolve(`auth/login?returnUrl=${returnUrl}`), { replaceState: true });
     }
   });
 

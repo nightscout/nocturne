@@ -1,28 +1,28 @@
 <script lang="ts">
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
-  import * as Popover from "$lib/components/ui/popover";
-  import { Button } from "$lib/components/ui/button";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Bell from "@lucide/svelte/icons/bell";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import { cn } from "$lib/utils";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { cn } from "#lib/utils/index.js";
+  import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import { goto } from "$app/navigation";
   import { toast } from "svelte-sonner";
-  import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
+  import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
   import { resolve } from "$app/paths";
   import {
     executeAction,
     markAsRead,
     markAllAsRead,
-  } from "$api/generated/notifications.generated.remote";
+  } from "#lib/api/generated/notifications.generated.remote.js";
   import CheckCheck from "@lucide/svelte/icons/check-check";
   import {
     NotificationUrgency,
     type InAppNotificationDto,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { EmptyState } from "$lib/components/shared";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import NotificationItem from "./NotificationItem.svelte";
-  import DndPanel from "$lib/components/alerts/DndPanel.svelte";
+  import DndPanel from "#lib/components/alerts/DndPanel.svelte";
 
   // Get the realtime store for reactive notification data
   const realtimeStore = tryGetRealtimeStore();
@@ -30,11 +30,11 @@
   // State
   let isOpen = $state(false);
   const mealMatchReviewDialog = lazyComponent(
-    () => import("$lib/components/meal-matching/MealMatchReviewDialog.svelte"),
+    () => import("#lib/components/meal-matching/MealMatchReviewDialog.svelte"),
   );
   let reviewNotification = $state<InAppNotificationDto | null>(null);
   const releaseNotesDialog = lazyComponent(
-    () => import("$lib/components/notifications/ReleaseNotesDialog.svelte"),
+    () => import("#lib/components/notifications/ReleaseNotesDialog.svelte"),
   );
   let releaseNotification = $state<InAppNotificationDto | null>(null);
 
@@ -47,7 +47,7 @@
       [NotificationUrgency.Info]: 3,
     };
 
-    return [...(realtimeStore?.inAppNotifications ?? [])].sort((a, b) => {
+    return [...realtimeStore?.inAppNotifications ?? []].sort((a, b) => {
       // First sort by urgency
       const urgencyA = urgencyOrder[a.urgency ?? NotificationUrgency.Info] ?? 3;
       const urgencyB = urgencyOrder[b.urgency ?? NotificationUrgency.Info] ?? 3;
@@ -104,7 +104,7 @@
       actionId === "review"
     ) {
       markRead(notification.id);
-      goto(resolve("/reports/data-quality/compression-lows"));
+      goto(resolve('reports/data-quality/compression-lows'));
       return;
     }
 
@@ -119,7 +119,7 @@
 
     if (notification.type === "data.rejected_uploads" && actionId === "review") {
       markRead(notification.id);
-      goto(resolve("/reports/data-quality/rejected-uploads"));
+      goto(resolve('reports/data-quality/rejected-uploads'));
       return;
     }
 
@@ -206,7 +206,7 @@
           {/if}
           {#if sortedNotifications.length > 0}
             <a
-              href={resolve("/settings/trackers")}
+              href={resolve('settings/trackers')}
               class="text-xs text-muted-foreground hover:underline"
             >
               Manage
@@ -215,7 +215,7 @@
         </div>
       </div>
 
-      <DndPanel onNavigate={() => (isOpen = false)} />
+      <DndPanel onNavigate={() => isOpen = false} />
 
       {#if totalCount === 0}
         <EmptyState
@@ -225,7 +225,7 @@
         >
           {#snippet action()}
             <a
-              href={resolve("/settings/trackers")}
+              href={resolve('settings/trackers')}
               class="text-xs text-primary hover:underline"
             >
               Configure trackers
@@ -236,7 +236,7 @@
         <div class="max-h-[350px] overflow-y-auto">
           {#each sortedNotifications as notification (notification.id)}
             <NotificationItem
-              {notification}
+              notification={notification}
               onAction={(actionId) => handleAction(notification, actionId)}
             />
           {/each}
@@ -245,9 +245,9 @@
 
       <div class="border-t p-2">
         <a
-          href={resolve("/notifications")}
+          href={resolve('notifications')}
           class="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-          onclick={() => (isOpen = false)}
+          onclick={() => isOpen = false}
         >
           <span>View all notifications</span>
           <ChevronRight class="h-4 w-4" />

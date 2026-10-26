@@ -1,11 +1,11 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import KeyRound from "@lucide/svelte/icons/key-round";
-  import { FormError, FormField, useSubmission } from "$lib/forms";
-  import { activateGuestCode } from "$lib/api/guest.remote";
+  import { FormError, FormField, useSubmission } from "#lib/forms/index.js";
+  import { activateGuestCode } from "#lib/api/guest.remote.js";
 
   let {
     initialCode = "",

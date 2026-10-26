@@ -1,9 +1,9 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { getOriginalProto } from '$lib/server/request-host';
-import { resolveSingleTenantLanding } from '$lib/utils/tenant-host';
-import { classifyRequestHost } from '$lib/server/tenantless-host';
-import { transformChartData, type TransformedChartData } from '$lib/utils/chart-data-transform';
+import { getOriginalProto } from '#lib/server/request-host.js';
+import { resolveSingleTenantLanding } from '#lib/utils/tenant-host.js';
+import { classifyRequestHost } from '#lib/server/tenantless-host.js';
+import { transformChartData, type TransformedChartData } from '#lib/utils/chart-data-transform.js';
 
 // Hours of data for initial fast load (most recent)
 const INITIAL_HOURS = 6;
@@ -40,7 +40,7 @@ export const load: PageServerLoad = async ({ locals, request, parent }) => {
 			getOriginalProto(request) + ':',
 			dashboardSlugs
 		);
-		if (landing) throw redirect(303, landing);
+		if (landing) throw redirect(303, landing, { external: true });
 
 		return { initialChartData: null };
 	}

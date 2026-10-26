@@ -1,21 +1,21 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import type { SetupHubStatus } from "$api";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import type { SetupHubStatus } from "#lib/api/index.js";
 
 vi.mock("water-ui", async () => ({
-  Artwork: (await import("$lib/test-stubs/Artwork.test-stub.svelte")).default,
-  DropSurface: (await import("$lib/test-stubs/DropSurface.test-stub.svelte")).default,
-  DropGroup: (await import("$lib/test-stubs/Passthrough.test-stub.svelte")).default,
-  ConfirmationBackground: (await import("$lib/test-stubs/Empty.test-stub.svelte")).default,
+  Artwork: (await import("#lib/test-stubs/Artwork.test-stub.svelte")).default,
+  DropSurface: (await import("#lib/test-stubs/DropSurface.test-stub.svelte")).default,
+  DropGroup: (await import("#lib/test-stubs/Passthrough.test-stub.svelte")).default,
+  ConfirmationBackground: (await import("#lib/test-stubs/Empty.test-stub.svelte")).default,
   hostSurface: () => "light",
   watchSurface: () => () => {},
   prefersReducedMotion: () => false,
 }));
 
 const hub = vi.hoisted(() => ({ status: undefined as unknown }));
-vi.mock("$api/generated/setupHubs.generated.remote", () => ({
+vi.mock("#lib/api/generated/setupHubs.generated.remote.js", () => ({
   getSetupHub: () => remoteQuery(() => hub.status),
 }));
 
@@ -23,19 +23,19 @@ const tenant = vi.hoisted(() => ({
   relationship: {} as { relationship?: string; patientName?: string },
   setUnits: vi.fn(),
 }));
-vi.mock("$api/generated/tenantSettings.generated.remote", () => ({
+vi.mock("#lib/api/generated/tenantSettings.generated.remote.js", () => ({
   getPatientRelationship: () => remoteQuery(() => tenant.relationship),
   setPatientRelationship: vi.fn(),
   getUnitsAndTimezone: () =>
     remoteQuery(() => ({ glucoseUnits: "mmol", timezone: "Pacific/Auckland" })),
   setUnitsAndTimezone: tenant.setUnits,
 }));
-vi.mock("$lib/stores/appearance-store.svelte", async (importOriginal) => ({
+vi.mock("#lib/stores/appearance-store.svelte.js", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   applyPreferences: vi.fn(),
 }));
 
-import { SetupHubItemKey, SetupHubItemState } from "$api";
+import { SetupHubItemKey, SetupHubItemState } from "#lib/api/index.js";
 import SetupHub from "./SetupHub.svelte";
 
 const KEYS = Object.values(SetupHubItemKey);
@@ -85,7 +85,7 @@ describe("SetupHub", () => {
   });
 
   it("paints one stop per resolved item", async () => {
-    const { fakePlayer } = await import("$lib/test-stubs/Artwork.test-stub.svelte");
+    const { fakePlayer } = await import("#lib/test-stubs/Artwork.test-stub.svelte");
     fakePlayer.seeks = [];
     hub.status = hubWith(4);
     render(SetupHub);
@@ -114,7 +114,7 @@ describe("SetupHub", () => {
   });
 
   it("paints the last stage, then washes, then collapses, when it was last seen unfinished", async () => {
-    const { fakePlayer } = await import("$lib/test-stubs/Artwork.test-stub.svelte");
+    const { fakePlayer } = await import("#lib/test-stubs/Artwork.test-stub.svelte");
     Object.assign(fakePlayer.state, { mode: "live", motion: "full", progress: 0, playing: false });
     sessionStorage.setItem("nocturne.setup-hub.stop", "5");
     hub.status = hubWith(6);

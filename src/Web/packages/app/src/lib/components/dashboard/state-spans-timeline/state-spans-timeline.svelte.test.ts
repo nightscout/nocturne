@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect, vi } from "vitest";
-import { BasalDeliveryOrigin, type BasalDeliverySpanDto } from "$lib/api";
+import { BasalDeliveryOrigin, type BasalDeliverySpanDto } from "#lib/api/index.js";
 import StateSpansTimeline from "./state-spans-timeline.svelte";
 
 const from = new Date("2026-01-01T00:00:00Z");

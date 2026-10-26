@@ -1,15 +1,15 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const replayFailure: { error: unknown } = vi.hoisted(() => ({ error: null }));
 
-vi.mock("$api/generated/alertReplays.generated.remote", () => ({
+vi.mock("#lib/api/generated/alertReplays.generated.remote.js", () => ({
   replay: () => Promise.reject(replayFailure.error),
   replayDryRun: () => Promise.reject(replayFailure.error),
 }));
-vi.mock("$api/generated/alertRules.generated.remote", () => ({
+vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => []),
 }));
 

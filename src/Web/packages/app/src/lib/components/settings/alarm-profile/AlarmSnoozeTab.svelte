@@ -1,18 +1,18 @@
 <script lang="ts">
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
+  } from "#lib/components/ui/select/index.js";
   import Timer from "@lucide/svelte/icons/timer";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
-  import type { AlarmProfileConfiguration } from "$lib/types/alarm-profile";
+  import type { AlarmProfileConfiguration } from "#lib/types/alarm-profile.js";
 
   interface Props {
     profile: AlarmProfileConfiguration;

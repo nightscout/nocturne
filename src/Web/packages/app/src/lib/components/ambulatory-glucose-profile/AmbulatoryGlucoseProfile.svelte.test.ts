@@ -2,15 +2,15 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import AmbulatoryGlucoseProfile from "./AmbulatoryGlucoseProfile.svelte";
-import type { AveragedStats } from "$lib/api";
-import type { ChartThresholdsDto } from "$lib/api/generated/nocturne-api-client";
+import type { AveragedStats } from "#lib/api/index.js";
+import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
 
 const realtime = vi.hoisted(() => ({
 	chartThresholds: null as ChartThresholdsDto | null,
 }));
 
-vi.mock("$lib/stores/realtime-store.svelte", async () => {
-	const { resolveChartThresholds } = await import("$lib/constants/glucose-thresholds");
+vi.mock("#lib/stores/realtime-store.svelte.js", async () => {
+	const { resolveChartThresholds } = await import("#lib/constants/glucose-thresholds.js");
 	return {
 		tenantChartThresholds: () => ({
 			get current() {

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { labelFor } from "$lib/components/ui/enum-value";
-  import { Label } from "$lib/components/ui/label";
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import * as Select from "$lib/components/ui/select";
-  import { type InsulinFormulation } from "$api";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { type InsulinFormulation } from "#lib/api/index.js";
   import {
     insulinCategoryLabels,
     insulinCategoryDescriptions,

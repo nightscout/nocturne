@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { page } from "$app/state";
-  import { AuthErrorCode } from "$api-clients";
+  import { AuthErrorCode } from "#lib/api/generated/nocturne-api-client.js";
 
   // Get error details from URL params
   const rawError = $derived(page.url.searchParams.get("error") || AuthErrorCode.ServerError);

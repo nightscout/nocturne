@@ -2,7 +2,7 @@ import {
 	GLUCOSE_SPECTRUM_ANCHORS,
 	getGlucoseColorContinuous,
 	type GlucoseThresholds
-} from '$lib/utils/chart-colors';
+} from '#lib/utils/chart-colors.js';
 
 export type GradientStop = [offset: number, color: string];
 

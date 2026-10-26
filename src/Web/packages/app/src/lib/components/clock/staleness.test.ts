@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import type { RegionFormat } from "$lib/stores/appearance-store.svelte";
+import type { RegionFormat } from "#lib/stores/appearance-store.svelte.js";
 
-vi.mock("$app/environment", () => ({ browser: false }));
+vi.mock("$app/env", () => ({ browser: false }));
 vi.mock("mode-watcher", () => ({}));
 vi.mock("runed", () => ({
   PersistedState: class {
@@ -11,7 +11,7 @@ vi.mock("runed", () => ({
     }
   },
 }));
-vi.mock("$lib/stores/appearance-store.svelte", () => ({
+vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
   glucoseUnits: { current: "mg/dl" },
   timeFormat: { current: "12" },
   regionFormat: { current: "" },
@@ -24,7 +24,7 @@ const {
   readingAgeMinutes,
   readingAgePhrase,
 } = await import("./staleness");
-const store = await import("$lib/stores/appearance-store.svelte");
+const store = await import("#lib/stores/appearance-store.svelte.js");
 
 const narrow = (locale: string) =>
   new Intl.RelativeTimeFormat(locale, { style: "narrow", numeric: "auto" });

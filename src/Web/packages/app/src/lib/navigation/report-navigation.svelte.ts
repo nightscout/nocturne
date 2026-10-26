@@ -1,4 +1,4 @@
-import { a1cLabel } from "$lib/utils/a1c-formatting";
+import { a1cLabel } from "#lib/utils/a1c-formatting.js";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type IconComponent = any;
 import Activity from "@lucide/svelte/icons/activity";
@@ -24,8 +24,8 @@ import Syringe from "@lucide/svelte/icons/syringe";
 import Utensils from "@lucide/svelte/icons/utensils";
 import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
 import Target from "@lucide/svelte/icons/target";
-import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
-import { satisfiesAllScopes } from "$lib/authorization/scopes";
+import SiteChangeIcon from "#lib/components/icons/SiteChangeIcon.svelte";
+import { satisfiesAllScopes } from "#lib/authorization/scopes.js";
 
 export interface ReportItem {
   /** Title for the reports overview page */

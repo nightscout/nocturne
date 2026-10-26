@@ -1,21 +1,21 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import { Button } from "$lib/components/ui/button";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import * as Table from "$lib/components/ui/table";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import {
     getRejectedUploads,
     clearRejectedUploads,
-  } from "$api/generated/rejectedUploads.generated.remote";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { formatDateTime, formatNumber } from "$lib/utils/formatting";
+  } from "#lib/api/generated/rejectedUploads.generated.remote.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { formatDateTime, formatNumber } from "#lib/utils/formatting.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Download from "@lucide/svelte/icons/download";
   import FileWarning from "@lucide/svelte/icons/file-warning";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import type { RejectedUpload } from "$lib/api";
+  import type { RejectedUpload } from "#lib/api/index.js";
 
   const pageSize = 25;
   let offset = $state(0);
@@ -93,7 +93,7 @@
 
 <div class="@container space-y-6">
   <a
-    href={resolve("/reports/data-quality")}
+    href={resolve('reports/data-quality')}
     class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
   >
     <ArrowLeft class="size-4" aria-hidden="true" />
@@ -121,7 +121,11 @@
           <Download class="mr-2 size-4" aria-hidden="true" />
           Export this page
         </Button>
-        <Button variant="outline" onclick={() => (showClearConfirm = true)}>
+
+        <Button
+          variant="outline"
+          onclick={() => showClearConfirm = true}
+        >
           <Trash2 class="mr-2 size-4" aria-hidden="true" />
           Clear this page
         </Button>
@@ -183,7 +187,7 @@
             variant="outline"
             size="sm"
             disabled={!hasPrevious}
-            onclick={() => (offset = Math.max(0, offset - pageSize))}
+            onclick={() => offset = Math.max(0, offset - pageSize)}
           >
             <ChevronLeft class="mr-1 size-4" aria-hidden="true" />
             Newer
@@ -192,7 +196,7 @@
             variant="outline"
             size="sm"
             disabled={!hasNext}
-            onclick={() => (offset += pageSize)}
+            onclick={() => offset += pageSize}
           >
             Older
             <ChevronRight class="ml-1 size-4" aria-hidden="true" />

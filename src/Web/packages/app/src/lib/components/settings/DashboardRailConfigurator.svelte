@@ -6,20 +6,20 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { Switch } from "$lib/components/ui/switch";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
   import {
     type LegacyConsumableKind,
     RailItemId,
     type DashboardRailPreference,
-  } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/nocturne-api-client.js";
   import {
     RAIL_ITEM_IDS,
     isRailItemHidden,
     railOrder,
-  } from "$lib/components/status-pills/rail";
+  } from "#lib/components/status-pills/rail.js";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Eye from "@lucide/svelte/icons/eye";
@@ -27,7 +27,7 @@
   import Pill from "@lucide/svelte/icons/pill";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { DragReorder, moveItem } from "./drag-reorder.svelte";
-  import { legacyKindLabelWithNightscoutName } from "$lib/components/trackers/legacy-kind-label.svelte";
+  import { legacyKindLabelWithNightscoutName } from "#lib/components/trackers/legacy-kind-label.svelte.js";
 
   interface Props {
     /** The user's arrangement of the rail; an empty object is the default. */

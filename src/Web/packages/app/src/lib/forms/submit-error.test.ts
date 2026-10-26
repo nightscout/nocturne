@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { transformWithEsbuild } from "vite";
 import { error } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
-import { parseErrorBody } from "$lib/api/error-body";
+import { parseErrorBody } from "#lib/api/error-body.js";
 import {
   describeRemoteError,
   describeSubmitError,
@@ -13,7 +13,7 @@ import {
   PERMISSION_GATED_MUTATION,
   RATE_LIMITED_ERROR,
 } from "./submit-error";
-import { remoteErrorMessage } from "$lib/api/remote-error";
+import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
 /**
  * What a 403 looks like by the time a page sees it: the thrown value put
@@ -26,7 +26,7 @@ import { remoteErrorMessage } from "$lib/api/remote-error";
 type ForbidArm = (
   err: unknown,
   error: typeof import("@sveltejs/kit").error,
-  parseErrorBody: typeof import("$lib/api/error-body").parseErrorBody
+  parseErrorBody: typeof import("#lib/api/error-body.js").parseErrorBody
 ) => never;
 
 function compileArm(source: string): ForbidArm {
@@ -193,7 +193,7 @@ describe("describeSubmitError", () => {
   });
 
   it("shows a refusal the server worded on a status the operation never declared", async () => {
-    // The reason exists only as raw text on `response`; see `$lib/api/error-body`.
+    // The reason exists only as raw text on `response`; see `#lib/api/error-body.js`.
     const crossed = await crossThe403Arm(
       nswagApiException(
         403,

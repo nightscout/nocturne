@@ -2,13 +2,13 @@
   import "../app.css";
   import { onMount } from "svelte";
   import { ModeWatcher } from "mode-watcher";
-  import { illustrations } from "$lib/stores/illustrations.svelte";
-  import NavigationProgress from "$lib/components/ui/NavigationProgress.svelte";
-  import { Toaster } from "$lib/components/ui/sonner";
-  import * as alarmState from "$lib/stores/alarm-state.svelte";
-  import { setPreferencesContext } from "$lib/stores/appearance-store.svelte";
-  import AlarmActiveView from "$lib/components/settings/alarm-preview/AlarmActiveView.svelte";
-  import EmergencyOverlay from "$lib/components/settings/alarm-preview/EmergencyOverlay.svelte";
+  import { illustrations } from "#lib/stores/illustrations.svelte.js";
+  import NavigationProgress from "#lib/components/ui/NavigationProgress.svelte";
+  import { Toaster } from "#lib/components/ui/sonner/index.js";
+  import * as alarmState from "#lib/stores/alarm-state.svelte.js";
+  import { setPreferencesContext } from "#lib/stores/appearance-store.svelte.js";
+  import AlarmActiveView from "#lib/components/settings/alarm-preview/AlarmActiveView.svelte";
+  import EmergencyOverlay from "#lib/components/settings/alarm-preview/EmergencyOverlay.svelte";
 
   const activeAlarm = $derived(alarmState.getActiveAlarm());
   const alarmIsFlashing = $derived(alarmState.getIsFlashing());

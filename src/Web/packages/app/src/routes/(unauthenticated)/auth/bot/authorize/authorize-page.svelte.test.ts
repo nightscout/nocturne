@@ -10,7 +10,7 @@ vi.mock("../bot.remote", () => ({
   buildTenantRedirectUrl: vi.fn(),
 }));
 
-vi.mock("$lib/api/generated/chatIdentities.generated.remote", () => ({
+vi.mock("#lib/api/generated/chatIdentities.generated.remote.js", () => ({
   getPending: () => ({ current: { platform: "discord" }, error: undefined }),
   claimLink: claim_link,
 }));

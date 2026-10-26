@@ -1,6 +1,6 @@
-import { convertToDisplayUnits } from "$lib/utils/formatting";
-import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
-import type { AveragedStats } from "$lib/api";
+import { convertToDisplayUnits } from "#lib/utils/formatting.js";
+import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import type { AveragedStats } from "#lib/api/index.js";
 
 /** Format an hour (0-23) as a time string */
 export function formatHour(hour: number, is24Hour: boolean): string {

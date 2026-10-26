@@ -9,7 +9,7 @@ import {
   type EventResponseReport,
   type EventResponseSlot,
   type LoopAnalysisAggregate,
-} from "$lib/api";
+} from "#lib/api/index.js";
 
 const aggregate = (p50: number, n: number, sparse = false): LoopAnalysisAggregate => ({
   p10: p50 - 2,

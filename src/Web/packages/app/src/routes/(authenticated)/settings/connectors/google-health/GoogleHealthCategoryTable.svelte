@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { GoogleHealthCategory } from "$lib/api";
-  import { Checkbox } from "$lib/components/ui/checkbox";
+  import type { GoogleHealthCategory } from "#lib/api/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import {
     categoryLabel,
     dataTypeLabel,

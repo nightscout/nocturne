@@ -1,4 +1,4 @@
-import type { UploaderApp } from '$lib/api/generated/nocturne-api-client';
+import type { UploaderApp } from '#lib/api/generated/nocturne-api-client.js';
 
 interface UploaderLabel {
 	name: string;

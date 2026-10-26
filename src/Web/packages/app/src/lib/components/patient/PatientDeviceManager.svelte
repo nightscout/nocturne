@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { labelFor } from "$lib/components/ui/enum-value";
-  import { formatMediumDate } from "$lib/utils/formatting";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Card from "$lib/components/ui/card";
-  import * as Select from "$lib/components/ui/select";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Textarea } from "$lib/components/ui/textarea";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
+  import { formatMediumDate } from "#lib/utils/formatting.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import Cpu from "@lucide/svelte/icons/cpu";
   import Activity from "@lucide/svelte/icons/activity";
   import Droplets from "@lucide/svelte/icons/droplets";
@@ -30,13 +30,13 @@
     type DeviceCatalogEntry,
     DeviceCategory,
     AidAlgorithm,
-  } from "$api";
+  } from "#lib/api/index.js";
   import {
     deviceCategoryLabels,
     aidAlgorithmLabels,
   } from "./labels";
   import { DeviceListState } from "./state.svelte";
-  import { EmptyState } from "$lib/components/shared";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import DeviceNameCombobox from "./DeviceNameCombobox.svelte";
   import { trackerNote } from "./device-catalog";
 

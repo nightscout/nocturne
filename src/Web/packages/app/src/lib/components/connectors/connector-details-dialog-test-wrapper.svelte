@@ -1,7 +1,7 @@
 <script lang="ts">
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import ConnectorDetailsDialog from "./ConnectorDetailsDialog.svelte";
-  import type { ConnectorCapabilities } from "$lib/api/generated/nocturne-api-client";
+  import type { ConnectorCapabilities } from "#lib/api/generated/nocturne-api-client.js";
   import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
 
   interface Props {

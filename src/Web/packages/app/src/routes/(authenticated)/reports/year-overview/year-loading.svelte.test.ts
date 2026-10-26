@@ -4,14 +4,14 @@ import { page } from "vitest/browser";
 import type {
   DailySummaryResponse,
   GriTimelineResponse,
-} from "$api/generated/nocturne-api-client";
+} from "#lib/api/generated/nocturne-api-client.js";
 
 const requests = vi.hoisted(() => ({
   metadata: vi.fn(),
   daily: vi.fn(),
   gri: vi.fn(),
 }));
-vi.mock("$api/generated/dataOverviews.generated.remote", () => ({
+vi.mock("#lib/api/generated/dataOverviews.generated.remote.js", () => ({
   getAvailableYears: () => ({
     run: () => requests.metadata(),
   }),
@@ -26,24 +26,24 @@ vi.mock("$api/generated/dataOverviews.generated.remote", () => ({
   }),
 }));
 vi.mock(
-  "$lib/components/reports/year-overview/YearHeatmap.svelte",
+  "#lib/components/reports/year-overview/YearHeatmap.svelte",
   async () => ({
     default: (
-      await import("$lib/components/reports/year-overview/YearHeatmap.test-stub.svelte")
+      await import("#lib/components/reports/year-overview/YearHeatmap.test-stub.svelte")
     ).default,
   })
 );
 vi.mock(
-  "$lib/components/reports/year-overview/HeatmapLegend.svelte",
+  "#lib/components/reports/year-overview/HeatmapLegend.svelte",
   async () => ({
     default: (
-      await import("$lib/components/reports/year-overview/Empty.test-stub.svelte")
+      await import("#lib/components/reports/year-overview/Empty.test-stub.svelte")
     ).default,
   })
 );
-vi.mock("$lib/components/reports/GlycemicRiskIndexChart.svelte", async () => ({
+vi.mock("#lib/components/reports/GlycemicRiskIndexChart.svelte", async () => ({
   default: (
-    await import("$lib/components/reports/year-overview/Empty.test-stub.svelte")
+    await import("#lib/components/reports/year-overview/Empty.test-stub.svelte")
   ).default,
 }));
 

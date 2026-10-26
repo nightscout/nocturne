@@ -11,7 +11,7 @@
     getAuthState,
     getOidcProviders,
     setAuthCookies,
-  } from "$routes/(unauthenticated)/auth/auth.remote";
+  } from "#routes/(unauthenticated)/auth/auth.remote.js";
   import {
     setupOwnerOptions,
     setupOwnerComplete,
@@ -23,15 +23,15 @@
     FormError,
     FormField,
     useAvailability,
-  } from "$lib/forms";
+  } from "#lib/forms/index.js";
   import {
     describePasskeyError,
     parseCeremonyOptions,
-  } from "$lib/components/auth/passkey-errors";
-  import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
-  import OidcProviderButtons from "$lib/components/auth/OidcProviderButtons.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  } from "#lib/components/auth/passkey-errors.js";
+  import RecoveryCodes from "#lib/components/auth/RecoveryCodes.svelte";
+  import OidcProviderButtons from "#lib/components/auth/OidcProviderButtons.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
 
   let {
     onComplete,

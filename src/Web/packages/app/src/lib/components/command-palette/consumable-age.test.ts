@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LegacyConsumableKind, type TrackerInstanceDto } from "$api";
+import { LegacyConsumableKind, type TrackerInstanceDto } from "#lib/api/index.js";
 import { consumableAgeHours } from "./consumable-age";
 
 const NOW = Date.UTC(2026, 9, 25, 12, 0, 0);

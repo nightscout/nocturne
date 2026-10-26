@@ -1,9 +1,9 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import { GlucoseStatus } from "$lib/api/generated/nocturne-api-client";
-import { releaseWatercolour, resetWatercolour } from "$lib/test-stubs/watercolour-deferral.svelte";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { releaseWatercolour, resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
 
 const now = Date.UTC(2026, 5, 14, 9, 30, 0);
 
@@ -12,22 +12,22 @@ const mocked = vi.hoisted(() => ({
   summary: undefined as unknown,
 }));
 
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
+vi.mock("#lib/stores/realtime-store.svelte.js", () => ({
   getRealtimeStore: () => mocked.store,
 }));
 
 const battery = vi.hoisted(() => ({ status: undefined as unknown }));
 
-vi.mock("$api/generated/batteries.generated.remote", () => ({
+vi.mock("#lib/api/generated/batteries.generated.remote.js", () => ({
   getCurrentBatteryStatus: () => Promise.resolve(battery.status),
 }));
 
-vi.mock("$api/generated/summaries.generated.remote", () => ({
+vi.mock("#lib/api/generated/summaries.generated.remote.js", () => ({
   getSummary: () => remoteQuery(() => mocked.summary),
 }));
 
 vi.mock("water-ui", async (importOriginal) => {
-  const fake = await import("$lib/test-stubs/Watercolour.test-stub.svelte");
+  const fake = await import("#lib/test-stubs/Watercolour.test-stub.svelte");
   return {
     ...(await importOriginal<typeof import("water-ui")>()),
     Artwork: fake.default,
@@ -36,7 +36,7 @@ vi.mock("water-ui", async (importOriginal) => {
   };
 });
 
-vi.mock("$lib/watercolour-deferral.svelte", () => import("$lib/test-stubs/watercolour-deferral.svelte"));
+vi.mock("#lib/watercolour-deferral.svelte.js", () => import("#lib/test-stubs/watercolour-deferral.svelte.js"));
 
 const store = $state({
   currentBG: 123,
@@ -54,8 +54,8 @@ mocked.store = store;
 const summary = $state<{ current?: { mills: number; status: GlucoseStatus } }>({});
 mocked.summary = summary;
 
-import { setGlucoseUnits } from "$lib/stores/appearance-store.svelte";
-import { illustrations } from "$lib/stores/illustrations.svelte";
+import { setGlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import { illustrations } from "#lib/stores/illustrations.svelte.js";
 import CurrentGlucoseWidget from "./CurrentGlucoseWidget.svelte";
 
 const tile = () => page.getByTestId("current-glucose-tile");

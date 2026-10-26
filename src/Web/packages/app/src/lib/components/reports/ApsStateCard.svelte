@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { ApsSnapshot } from "$lib/api";
-  import * as Card from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatClock, formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
+  import type { ApsSnapshot } from "#lib/api/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { formatClock, formatGlucoseValue, getUnitLabel } from "#lib/utils/formatting.js";
   import Brain from "@lucide/svelte/icons/brain";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Apple from "@lucide/svelte/icons/apple";

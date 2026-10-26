@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const getGlucose = vi.fn();
 const getClockAlerts = vi.fn();
-vi.mock("$lib/api/browser-clients", () => ({
+vi.mock("#lib/api/browser-clients.js", () => ({
   clockFacesClient: () => ({ getGlucose }),
   clockFaceAlertsClient: () => ({ getClockAlerts }),
 }));

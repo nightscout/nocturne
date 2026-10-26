@@ -5,9 +5,9 @@
  */
 import { query } from "$app/server";
 import { z } from "zod";
-import { getActogram } from "$api/generated/actograms.generated.remote";
-import { getGlucoseColor } from "$lib/utils/chart-colors";
-import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
+import { getActogram } from "#lib/api/generated/actograms.generated.remote.js";
+import { getGlucoseColor } from "#lib/utils/chart-colors.js";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
 
 const actogramSchema = z.object({
   from: z.number(),

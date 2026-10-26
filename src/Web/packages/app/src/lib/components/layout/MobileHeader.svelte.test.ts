@@ -15,7 +15,7 @@ const store = vi.hoisted(() => {
   };
 });
 
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
+vi.mock("#lib/stores/realtime-store.svelte.js", () => ({
   getRealtimeStore: () => store,
   tryGetRealtimeStore: () => store,
 }));

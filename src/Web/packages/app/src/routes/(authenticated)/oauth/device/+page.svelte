@@ -2,10 +2,10 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Shield from "@lucide/svelte/icons/shield";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -21,15 +21,15 @@
   import {
     getOAuthScopeDescription,
     isSensitiveDeviceScope,
-  } from "$lib/constants/oauth-scopes";
-  import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
-  import DeletionDisclosure from "$lib/components/auth/DeletionDisclosure.svelte";
+  } from "#lib/constants/oauth-scopes.js";
+  import DeviceAppClaimNotice from "#lib/components/auth/DeviceAppClaimNotice.svelte";
+  import DeletionDisclosure from "#lib/components/auth/DeletionDisclosure.svelte";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
     if (!page.data.isAuthenticated) {
       const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
-      goto(resolve(`/auth/login?returnUrl=${returnUrl}`), { replaceState: true });
+      goto(resolve(`auth/login?returnUrl=${returnUrl}`), { replaceState: true });
     }
   });
 
@@ -52,22 +52,15 @@
   );
 
   // Check for approval/denial results
-  const approved = $derived(
-    approveDeviceForm.result &&
-      "success" in approveDeviceForm.result &&
-      approveDeviceForm.result.success
-  );
-  const denied = $derived(
-    denyDeviceForm.result &&
-      "denied" in denyDeviceForm.result &&
-      denyDeviceForm.result.denied
-  );
+  const approved = $derived(approveDeviceForm.result && "success" in approveDeviceForm.result && approveDeviceForm.result.success);
+
+  const denied = $derived(denyDeviceForm.result && "denied" in denyDeviceForm.result && denyDeviceForm.result.denied);
 
   // Collect all form-level issues
   const allIssues = $derived([
-    ...(lookupDeviceForm.fields.allIssues() ?? []),
-    ...(approveDeviceForm.fields.allIssues() ?? []),
-    ...(denyDeviceForm.fields.allIssues() ?? []),
+    ...lookupDeviceForm.fields.allIssues() ?? [],
+    ...approveDeviceForm.fields.allIssues() ?? [],
+    ...denyDeviceForm.fields.allIssues() ?? []
   ]);
 
   const scopes = $derived(

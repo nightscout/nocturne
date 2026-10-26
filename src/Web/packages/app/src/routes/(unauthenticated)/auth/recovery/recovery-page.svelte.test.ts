@@ -28,7 +28,7 @@ vi.mock("$app/navigation", async (importOriginal) => ({
   ...navigation,
 }));
 
-vi.mock("$lib/api/generated/passkeys.generated.remote", () => ({
+vi.mock("#lib/api/generated/passkeys.generated.remote.js", () => ({
   recoveryModeRedeem: (request: { code: string }) => state.redeem(request),
 }));
 

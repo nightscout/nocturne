@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { Artwork, ConfirmationBackground, type IconArtworkSource } from "water-ui";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils/index.js";
 
   /**
    * Confirms that something the user did has taken effect. The wash plays once

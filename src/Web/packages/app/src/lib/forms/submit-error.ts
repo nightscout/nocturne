@@ -1,6 +1,6 @@
-import type { RustValidationIssue } from "$api-clients";
-import { parseIssues } from "$lib/api/error-body";
-import { recordApiFailure } from "$lib/support/api-failure-log";
+import type { RustValidationIssue } from "#lib/api/generated/nocturne-api-client.js";
+import { parseIssues } from "#lib/api/error-body.js";
+import { recordApiFailure } from "#lib/support/api-failure-log.js";
 
 /** Fallback shown when a submission fails for a reason we can't safely surface. */
 export const GENERIC_SUBMIT_ERROR =
@@ -122,7 +122,7 @@ function serverWrittenReason(err: unknown): string | undefined {
  * Which one a call site wants follows from the operation, not from the sentence
  * it passes: `describeSubmitError` is the writing half, for a command, form or
  * any other mutation, where a person is mid-task; `remoteErrorMessage`
- * (`$lib/api/remote-error`) is the reading half, for a query whose rejection is
+ * (`#lib/api/remote-error.js`) is the reading half, for a query whose rejection is
  * rendered in place of the data it was going to show.
  *
  * The fallback sentence is the usual tell — a mutation's names the action the

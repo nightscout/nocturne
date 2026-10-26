@@ -1,5 +1,5 @@
 /**
- * Stands in for `$lib/utils` in the rendering tests.
+ * Stands in for `#lib/utils/index.js` in the rendering tests.
  *
  * The real barrel re-exports formatting, which reads the appearance store,
  * which names the widget ids from the generated API client — a .NET build

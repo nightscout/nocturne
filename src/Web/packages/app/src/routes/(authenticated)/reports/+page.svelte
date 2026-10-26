@@ -3,33 +3,33 @@
     a1cLabel,
     a1cUnitLabel,
     formatA1cValue,
-  } from "$lib/utils/a1c-formatting";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/utils/a1c-formatting.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Gauge from "@lucide/svelte/icons/gauge";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import BarChart3 from "@lucide/svelte/icons/chart-column";
   import Calendar from "@lucide/svelte/icons/calendar";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "$lib/components/ui/card";
-  import { EmptyState } from "$lib/components/shared";
+  import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "#lib/components/ui/card/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import { page } from "$app/state";
   import {
     reportsOverviewScopes,
     visibleReportCategories,
-  } from "$lib/navigation/report-navigation.svelte";
-  import { satisfiesAllScopes } from "$lib/authorization/scopes";
-  import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
-  import { getReportsData } from "$api/reports.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatGlucoseRange, formatGlucoseValue, formatLocale, formatNumber, formatShortDate, getUnitLabel } from "$lib/utils/formatting";
-  import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  } from "#lib/navigation/report-navigation.svelte.js";
+  import { satisfiesAllScopes } from "#lib/authorization/scopes.js";
+  import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import { AmbulatoryGlucoseProfile } from "#lib/components/ambulatory-glucose-profile/index.js";
+  import { getReportsData } from "#lib/api/reports.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { formatGlucoseRange, formatGlucoseValue, formatLocale, formatNumber, formatShortDate, getUnitLabel } from "#lib/utils/formatting.js";
+  import ReportsSkeleton from "#lib/components/reports/ReportsSkeleton.svelte";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is standard for reports overview

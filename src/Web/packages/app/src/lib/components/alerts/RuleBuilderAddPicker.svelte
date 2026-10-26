@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import Brackets from "@lucide/svelte/icons/brackets";
   import Droplet from "@lucide/svelte/icons/droplet";

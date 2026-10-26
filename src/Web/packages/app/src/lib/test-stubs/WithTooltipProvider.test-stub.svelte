@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
 
   // The app layout supplies the tooltip provider; this stands in for it around the component under test.
   // The component's props type is unknown here, so any is the only type its props satisfy.

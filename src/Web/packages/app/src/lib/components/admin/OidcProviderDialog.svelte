@@ -1,19 +1,19 @@
 <script lang="ts">
-  import { enumValue } from "$lib/components/ui/enum-value";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as Alert from "$lib/components/ui/alert";
-  import * as Select from "$lib/components/ui/select";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { enumValue } from "#lib/components/ui/enum-value.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Check from "@lucide/svelte/icons/check";
   import Globe from "@lucide/svelte/icons/globe";
-  import { OidcProviderType } from "$api";
-  import type { OidcProviderResponse, OidcProviderTestResult, TenantRoleDto } from "$api";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { OidcProviderType } from "#lib/api/index.js";
+  import type { OidcProviderResponse, OidcProviderTestResult, TenantRoleDto } from "#lib/api/index.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   const OIDC_SCOPES = "openid profile email";
 
@@ -147,7 +147,7 @@
     testingProvider = true;
     testResult = null;
     try {
-      const { testUnsaved } = await import("$lib/api/generated/oidcProviderAdmins.generated.remote");
+      const { testUnsaved } = await import("#lib/api/generated/oidcProviderAdmins.generated.remote.js");
       testResult = await testUnsaved({
         issuerUrl: providerIssuerUrl,
         clientId: providerClientId,

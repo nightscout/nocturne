@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
   import type { DateRange } from "bits-ui";
   import { queryParam } from "sveltekit-search-params";
 
-  import { RangeCalendar } from "$lib/components/ui/range-calendar";
-  import { formatLocale, formatMediumDateRange } from "$lib/utils/formatting";
-  import * as Popover from "$lib/components/ui/popover/index.js";
+  import { RangeCalendar } from "#lib/components/ui/range-calendar/index.js";
+  import { formatLocale, formatMediumDateRange } from "#lib/utils/formatting.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
 
   interface Props {

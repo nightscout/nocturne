@@ -1,12 +1,12 @@
 import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
-import { checkOnboarding } from "$lib/server/onboarding-check";
-import { getRequestStatus } from "$lib/server/request-status";
-import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
-import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
-import { toIsoString } from "$lib/utils/api-date";
-import { toTenantSwitcherTargets, type TenantSwitcherTarget } from "$lib/utils/tenant-host";
-import { autoLoginEndpoint, autoLoginRedirect } from "$lib/server/auto-login";
+import { checkOnboarding } from "#lib/server/onboarding-check.js";
+import { getRequestStatus } from "#lib/server/request-status.js";
+import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+import { SHARE_UNAVAILABLE_PATH } from "#lib/share-host.js";
+import { toIsoString } from "#lib/utils/api-date.js";
+import { toTenantSwitcherTargets, type TenantSwitcherTarget } from "#lib/utils/tenant-host.js";
+import { autoLoginEndpoint, autoLoginRedirect } from "#lib/server/auto-login.js";
 
 /** Permissions that grant read access to glucose data (mirrors API's CanRead + OAuth scopes). */
 const GLUCOSE_READ_PERMISSIONS = [

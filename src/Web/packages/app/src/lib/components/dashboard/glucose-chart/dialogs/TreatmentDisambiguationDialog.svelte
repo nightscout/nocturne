@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { EntryRecord } from "$lib/constants/entry-categories";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
-  import { Button } from "$lib/components/ui/button";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { time } from "$lib/utils/formatting";
-  import { entrySummary } from "$lib/utils/entry-summary";
+  import type { EntryRecord } from "#lib/constants/entry-categories.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { time } from "#lib/utils/formatting.js";
+  import { entrySummary } from "#lib/utils/entry-summary.js";
 
   interface Props {
     open: boolean;

@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { untrack } from "svelte";
-import { glucoseUnits, type GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { glucoseUnits, type GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import type { SeriesFinders } from "./chart-data-view.svelte";
 import { createPointInspection, type PointInspection } from "./point-inspection.svelte";
 

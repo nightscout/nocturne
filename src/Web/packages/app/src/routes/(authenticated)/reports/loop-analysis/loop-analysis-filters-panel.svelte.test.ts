@@ -2,8 +2,8 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import { ALL_SCOPES, profileResponse } from "$lib/components/reports/loop-analysis/daily-profile.test-fixtures";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { ALL_SCOPES, profileResponse } from "#lib/components/reports/loop-analysis/daily-profile.test-fixtures.js";
 import Harness from "./FiltersPanelHarness.test.svelte";
 
 /** The browser history as SvelteKit's goto leaves it: a push adds an entry, a replace swaps the last. */
@@ -11,7 +11,7 @@ const nav = vi.hoisted(() => ({ history: [] as string[], fetched: [] as unknown[
 
 vi.mock("$app/state", async () => {
   const stub = await vi.importActual<typeof import("$app/state")>("$app/state");
-  const { reactiveFields } = await import("$lib/test-stubs/reactive-fields.svelte");
+  const { reactiveFields } = await import("#lib/test-stubs/reactive-fields.svelte.js");
   return { ...stub, page: reactiveFields({ ...stub.page }) };
 });
 
@@ -30,7 +30,7 @@ vi.mock("$app/navigation", async () => {
   };
 });
 
-vi.mock("$api/generated/loopAnalysis.generated.remote", () => ({
+vi.mock("#lib/api/generated/loopAnalysis.generated.remote.js", () => ({
   getEnvelope: () => remoteQuery(() => profileResponse()),
   getDailyProfile: (input: unknown) => {
     nav.fetched.push(input);
@@ -38,7 +38,7 @@ vi.mock("$api/generated/loopAnalysis.generated.remote", () => ({
   },
 }));
 
-vi.mock("$lib/hooks/resource-context.svelte", () => ({
+vi.mock("#lib/hooks/resource-context.svelte.js", () => ({
   contextResource: <T>(create: () => { current: T | undefined }) => ({
     get current() {
       return create().current;

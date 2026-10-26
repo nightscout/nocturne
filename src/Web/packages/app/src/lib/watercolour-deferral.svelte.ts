@@ -1,8 +1,8 @@
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { WARM_IDLE_TIMEOUT_MS } from "water-ui";
-import { watercolourDue } from "$lib/stores/illustrations.svelte";
-import { lazyComponent, type AnyComponent } from "$lib/utils/lazy-component.svelte";
-import { whenIdle } from "$lib/utils/when-idle";
+import { watercolourDue } from "#lib/stores/illustrations.svelte.js";
+import { lazyComponent, type AnyComponent } from "#lib/utils/lazy-component.svelte.js";
+import { whenIdle } from "#lib/utils/when-idle.js";
 
 /** Counted from navigation start. */
 export const WATERCOLOUR_DEFER_MS = 5000;

@@ -10,15 +10,15 @@ import type {
   DeviceEventType,
   GlucoseType,
   Note,
-} from "$lib/api";
-import type { EntryRecord } from "$lib/constants/entry-categories";
+} from "#lib/api/index.js";
+import type { EntryRecord } from "#lib/constants/entry-categories.js";
 
 // `entry-summary.ts` reaches `formatting.ts`, which imports the appearance store
 // and the Svelte runtime behind it. Stub the store so Vite never resolves it;
 // none of the amount formatters read a preference.
-vi.mock("$app/environment", () => ({ browser: false }));
+vi.mock("$app/env", () => ({ browser: false }));
 vi.mock("mode-watcher", () => ({}));
-vi.mock("$lib/stores/appearance-store.svelte", () => ({
+vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
   glucoseUnits: { current: "mg/dl" },
   timeFormat: { current: "12" },
   regionFormat: { current: "" },
@@ -43,7 +43,7 @@ const basalInjection = (data: BasalInjection): EntryRecord => ({
 });
 
 // String enums from the generated client, spelled out rather than imported by
-// value, so the `$lib/api` import stays type-only and this suite runs before the
+// value, so the `#lib/api/index.js` import stays type-only and this suite runs before the
 // NSwag client has been generated.
 const enums = {
   normalBolus: "Normal",

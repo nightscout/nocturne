@@ -1,21 +1,21 @@
 <script lang="ts">
   import { Chart, Svg, Axis, Circle, Path, Rect, Tooltip } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
-  import { timeScale } from "$lib/components/charts/scale-guards";
-  import { getActogramData } from "$api/actogram.remote";
-  import { getBasalSeries } from "$api/generated/chartDatas.generated.remote";
-  import { bg, bgLabel, formatLocale, toDate } from "$lib/utils/formatting";
-  import { resolveChartColor } from "$lib/utils/chart-colors";
-  import { FALLBACK_GLUCOSE_Y_MAX } from "$lib/constants/glucose-thresholds";
+  import { timeScale } from "#lib/components/charts/scale-guards.js";
+  import { getActogramData } from "#lib/api/actogram.remote.js";
+  import { getBasalSeries } from "#lib/api/generated/chartDatas.generated.remote.js";
+  import { bg, bgLabel, formatLocale, toDate } from "#lib/utils/formatting.js";
+  import { resolveChartColor } from "#lib/utils/chart-colors.js";
+  import { FALLBACK_GLUCOSE_Y_MAX } from "#lib/constants/glucose-thresholds.js";
   import {
     laneForStage,
     HYPNOGRAM_LANE_ORDER,
     HYPNOGRAM_LANE_LABELS,
     laneTexture,
-  } from "$lib/utils/sleep-stages";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import { BasalDeliveryOrigin } from "$lib/api";
-  import type { SleepStageInterval, SleepDawnPhenomenon } from "$lib/api";
+  } from "#lib/utils/sleep-stages.js";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { BasalDeliveryOrigin } from "#lib/api/index.js";
+  import type { SleepStageInterval, SleepDawnPhenomenon } from "#lib/api/index.js";
 
   interface Props {
     stages: SleepStageInterval[] | undefined;

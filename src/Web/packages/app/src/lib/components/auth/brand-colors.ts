@@ -1,4 +1,4 @@
-import type { OidcProviderInfo } from "$lib/api/generated/nocturne-api-client";
+import type { OidcProviderInfo } from "#lib/api/generated/nocturne-api-client.js";
 
 /**
  * A provider's button colours for `<Button variant="brand">`, or undefined when the API

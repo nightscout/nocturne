@@ -6,7 +6,7 @@
     onboardingSection,
     settingsSections,
     type SettingsLink,
-  } from "$lib/components/settings/settings-links";
+  } from "#lib/components/settings/settings-links.js";
   import type { PageData } from "./$types";
 
   const { data }: { data: PageData } = $props();

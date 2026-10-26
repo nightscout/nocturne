@@ -15,8 +15,8 @@
     isCustomSound,
     getCustomSound,
     type PreviewState,
-  } from "$lib/audio/alarm-sounds";
-  import type { AlarmAudioSettings } from "$lib/types/alarm-profile";
+  } from "#lib/audio/alarm-sounds.js";
+  import type { AlarmAudioSettings } from "#lib/types/alarm-profile.js";
 
   interface Props {
     audioSettings: AlarmAudioSettings;

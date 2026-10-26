@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ComponentProps } from "svelte";
-  import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import Page from "./+page.svelte";
 
   const {

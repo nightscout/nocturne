@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { GlucoseChartCard } from "$lib/components/dashboard/glucose-chart";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { useResourceContext } from "$lib/hooks/resource-context.svelte";
+  import { GlucoseChartCard } from "#lib/components/dashboard/glucose-chart/index.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { useResourceContext } from "#lib/hooks/resource-context.svelte.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 7 days for day-by-day readings view

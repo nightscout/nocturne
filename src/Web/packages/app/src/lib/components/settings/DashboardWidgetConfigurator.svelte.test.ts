@@ -4,8 +4,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   WidgetId,
   WidgetPlacement,
-} from "$lib/api/generated/nocturne-api-client";
-import type { TopWidgetId } from "$lib/components/dashboard/widget-registry";
+} from "#lib/api/generated/nocturne-api-client.js";
+import type { TopWidgetId } from "#lib/components/dashboard/widget-registry.js";
 
 const top = (id: string, name: string, renderable = true) => ({
   id,
@@ -43,7 +43,7 @@ const CATALOGUE = [
 let current: { definitions: unknown[] } | undefined;
 let error: unknown;
 
-vi.mock("$api/generated/metadatas.generated.remote", () => ({
+vi.mock("#lib/api/generated/metadatas.generated.remote.js", () => ({
   getWidgetDefinitions: () => ({
     get current() {
       return current;

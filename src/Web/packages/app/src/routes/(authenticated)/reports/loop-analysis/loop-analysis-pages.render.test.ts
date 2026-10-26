@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "svelte/server";
 import type { Component } from "svelte";
 import { page as pageState } from "$app/state";
-import { ALL_SCOPES } from "$lib/components/reports/loop-analysis/daily-profile.test-fixtures";
+import { ALL_SCOPES } from "#lib/components/reports/loop-analysis/daily-profile.test-fixtures.js";
 
 const calls = vi.hoisted(() => ({ fetched: [] as string[] }));
 
-vi.mock("$api/generated/loopAnalysis.generated.remote", () => {
+vi.mock("#lib/api/generated/loopAnalysis.generated.remote.js", () => {
   const remote = (name: string) => () => {
     calls.fetched.push(name);
     return { loading: true, error: null, current: undefined, refresh: () => {} };
@@ -22,32 +22,32 @@ vi.mock("$api/generated/loopAnalysis.generated.remote", () => {
 });
 
 // The pages' charts are not rendered without data, and their chart library does not load in node.
-vi.mock("$lib/components/reports/loop-analysis/DailyProfileBody.svelte", async () => ({
-  default: (await import("$lib/test-stubs/Empty.test-stub.svelte")).default,
+vi.mock("#lib/components/reports/loop-analysis/DailyProfileBody.svelte", async () => ({
+  default: (await import("#lib/test-stubs/Empty.test-stub.svelte")).default,
 }));
-vi.mock("$lib/components/reports/loop-analysis/EventResponseBody.svelte", async () => ({
-  default: (await import("$lib/test-stubs/Empty.test-stub.svelte")).default,
+vi.mock("#lib/components/reports/loop-analysis/EventResponseBody.svelte", async () => ({
+  default: (await import("#lib/test-stubs/Empty.test-stub.svelte")).default,
 }));
-vi.mock("$lib/components/reports/loop-analysis/EventCohortBuilder.svelte", async () => ({
-  default: (await import("$lib/test-stubs/Empty.test-stub.svelte")).default,
+vi.mock("#lib/components/reports/loop-analysis/EventCohortBuilder.svelte", async () => ({
+  default: (await import("#lib/test-stubs/Empty.test-stub.svelte")).default,
 }));
-vi.mock("$lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte", async () => ({
-  default: (await import("$lib/test-stubs/Empty.test-stub.svelte")).default,
+vi.mock("#lib/components/reports/loop-analysis/PredictionAccuracyBody.svelte", async () => ({
+  default: (await import("#lib/test-stubs/Empty.test-stub.svelte")).default,
 }));
-vi.mock("$lib/components/reports/loop-analysis/LoopHealthBody.svelte", async () => ({
-  default: (await import("$lib/test-stubs/Empty.test-stub.svelte")).default,
+vi.mock("#lib/components/reports/loop-analysis/LoopHealthBody.svelte", async () => ({
+  default: (await import("#lib/test-stubs/Empty.test-stub.svelte")).default,
 }));
-vi.mock("$lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte", async () => ({
-  default: (await import("$lib/test-stubs/Empty.test-stub.svelte")).default,
+vi.mock("#lib/components/reports/loop-analysis/SettingsEvidenceBody.svelte", async () => ({
+  default: (await import("#lib/test-stubs/Empty.test-stub.svelte")).default,
 }));
 
-vi.mock("$app/paths", () => ({ resolve: (path: string) => path }));
+vi.mock("$app/paths", () => import("#lib/test-stubs/app-paths.js"));
 
-vi.mock("$lib/hooks/date-params.svelte", () => ({
+vi.mock("#lib/hooks/date-params.svelte.js", () => ({
   requireDateParamsContext: () => ({ fromDay: "2026-10-09", toDay: "2026-10-22" }),
 }));
 
-vi.mock("$lib/hooks/resource-context.svelte", () => ({
+vi.mock("#lib/hooks/resource-context.svelte.js", () => ({
   contextResource: <T>(create: () => { current: T | undefined }) => {
     const query = create();
     return { current: query.current, stale: false, error: null };

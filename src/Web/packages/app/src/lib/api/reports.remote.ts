@@ -4,12 +4,12 @@
  */
 import { z } from "zod";
 import { getRequestEvent, query } from "$app/server";
-import { ClusterConfidence, SleepSource } from "$lib/api";
+import { ClusterConfidence, SleepSource } from "#lib/api/index.js";
 import { fetchAllGlucose } from "./glucose-pagination";
 import { DateRangeSchema, resolvePatientToday, resolveReportRange } from "./report-range";
-import { readable } from "$lib/server/patient-timezone";
-import { compare } from "$api/generated/cgmComparisons.generated.remote";
-import { getTrends } from "$api/generated/sleepReports.generated.remote";
+import { readable } from "#lib/server/patient-timezone.js";
+import { compare } from "#lib/api/generated/cgmComparisons.generated.remote.js";
+import { getTrends } from "#lib/api/generated/sleepReports.generated.remote.js";
 
 export type { DateRangeInput } from "./report-range";
 

@@ -1,14 +1,14 @@
 <script lang="ts">
   import type { GlucoseTileVariant } from "@nocturne/ui/glucose";
   import { unwashed, washSeeds, type PriorFill } from "./glucose-tile-wash-state.svelte";
-  import { washInterior } from '$lib/watercolour-wash';
+  import { washInterior } from '#lib/watercolour-wash.js';
   import { prefersReducedMotion } from "svelte/motion";
   import { Artwork } from "water-ui";
-  import { illustrations } from "$lib/stores/illustrations.svelte";
+  import { illustrations } from "#lib/stores/illustrations.svelte.js";
   import GlucoseTileBloom from "./GlucoseTileBloom.svelte";
   import type { PlayerState } from "water-ui";
   import { untrack } from "svelte";
-  import { deferredWatercolour } from "$lib/watercolour-deferral.svelte";
+  import { deferredWatercolour } from "#lib/watercolour-deferral.svelte.js";
 
   interface Props {
     mills: number | undefined;

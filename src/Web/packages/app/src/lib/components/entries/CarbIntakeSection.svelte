@@ -1,15 +1,15 @@
 <script lang="ts">
-  import type { CarbIntake, CarbIntakeFoodRequest } from "$lib/api";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
+  import type { CarbIntake, CarbIntakeFoodRequest } from "#lib/api/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Apple from "@lucide/svelte/icons/apple";
   import X from "@lucide/svelte/icons/x";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import FoodBreakdown from "./FoodBreakdown.svelte";
-  import { TreatmentFoodSelectorDialog } from "$lib/components/treatments";
+  import { TreatmentFoodSelectorDialog } from "#lib/components/treatments/index.js";
 
   export interface PendingFood {
     request: CarbIntakeFoodRequest;

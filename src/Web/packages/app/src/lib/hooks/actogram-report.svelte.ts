@@ -1,6 +1,6 @@
-import { getActogramData } from "$api/actogram.remote";
-import { ACTOGRAM_PADDING_DAYS } from "$lib/components/actogram";
-import { MS_PER_DAY } from "$lib/components/actogram/actogram";
+import { getActogramData } from "#lib/api/actogram.remote.js";
+import { ACTOGRAM_PADDING_DAYS } from "#lib/components/actogram/index.js";
+import { MS_PER_DAY } from "#lib/components/actogram/actogram.js";
 import { requireDateParamsContext } from "./date-params.svelte";
 import { contextResource } from "./resource-context.svelte";
 

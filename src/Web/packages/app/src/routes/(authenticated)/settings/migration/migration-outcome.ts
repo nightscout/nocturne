@@ -1,4 +1,4 @@
-import { MigrationJobState, type MigrationJobInfo } from "$api";
+import { MigrationJobState, type MigrationJobInfo } from "#lib/api/index.js";
 
 /**
  * Whether a finished run earns the completion moment. A Completed run whose

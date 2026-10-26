@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { formatMediumDateTime, formatNumber } from "$lib/utils/formatting";
+  import { formatMediumDateTime, formatNumber } from "#lib/utils/formatting.js";
 	import {
 		Card,
 		CardContent,
 		CardDescription,
 		CardHeader,
 		CardTitle,
-	} from '$lib/components/ui/card';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import { Separator } from '$lib/components/ui/separator';
+	} from '#lib/components/ui/card/index.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Separator } from '#lib/components/ui/separator/index.js';
 	import ArrowRightLeft from '@lucide/svelte/icons/arrow-right-left';
 	import Activity from '@lucide/svelte/icons/activity';
 	import AlertCircle from '@lucide/svelte/icons/circle-alert';
@@ -20,12 +20,12 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Clock from '@lucide/svelte/icons/clock';
 	import BarChart3 from '@lucide/svelte/icons/chart-column';
-	import { EmptyState } from '$lib/components/shared';
-	import { databaseArtwork } from '$lib/watercolour-icons';
+	import { EmptyState } from '#lib/components/shared/index.js';
+	import { databaseArtwork } from '#lib/watercolour-icons.js';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { getTransitionStatus } from '$api/generated/nightscoutTransitions.generated.remote';
-	import type { NightscoutTransitionStatus } from '$api';
+	import { getTransitionStatus } from '#lib/api/generated/nightscoutTransitions.generated.remote.js';
+	import type { NightscoutTransitionStatus } from '#lib/api/index.js';
 
 	const statusQuery = getTransitionStatus();
 	const status = $derived<NightscoutTransitionStatus | null>(
@@ -326,8 +326,11 @@
 				{#if status.recommendation?.status === 'safe'}
 					<Separator />
 					<div>
-						<Button variant="outline" onclick={() => goto(resolve('/settings/connectors'))}>
-							Go to connector settings
+						<Button
+							variant="outline"
+							onclick={() => goto(resolve('settings/connectors'))}
+						>
+							Go to connector settings 
 							<ArrowRightLeft class="h-4 w-4 ml-2" />
 						</Button>
 					</div>

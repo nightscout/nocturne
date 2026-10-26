@@ -1,24 +1,24 @@
 <script lang="ts">
-  import * as Tabs from "$lib/components/ui/tabs";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     Card,
     CardContent,
     CardFooter,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Alert from "$lib/components/ui/alert";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import Bot from "@lucide/svelte/icons/bot";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { toast } from "svelte-sonner";
-  import type { PlatformSettingsSummary } from "$api";
-  import { errorMessage } from "$lib/forms/submit-error";
+  import type { PlatformSettingsSummary } from "#lib/api/index.js";
+  import { errorMessage } from "#lib/forms/submit-error.js";
 
   const DISPLAY_NAMES: Record<string, string> = {
     discord: "Discord",

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ActiveProfileSchedules } from "$lib/api/generated/nocturne-api-client";
+  import type { ActiveProfileSchedules } from "#lib/api/generated/nocturne-api-client.js";
 
   interface Props {
     profile: ActiveProfileSchedules;

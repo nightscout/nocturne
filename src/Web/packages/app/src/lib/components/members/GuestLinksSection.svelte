@@ -1,22 +1,22 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { formatDayTime, relativeTime } from "$lib/utils/formatting";
+  import type { RemoteCommand } from '$app/server';
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { formatDayTime, relativeTime } from "#lib/utils/formatting.js";
   import { page } from "$app/state";
-  import type { RemoteCommand } from "@sveltejs/kit";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
-  import { toggled } from "$lib/utils/collections";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { toggled } from "#lib/utils/collections.js";
   import { categoriesIn, formatList } from "./data-categories";
-  import { EmptyState } from "$lib/components/shared";
-  import UserAvatar from "$lib/components/account/UserAvatar.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import UserAvatar from "#lib/components/account/UserAvatar.svelte";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
-  import CopyButton from "$lib/components/members/CopyButton.svelte";
+  import CopyButton from "#lib/components/members/CopyButton.svelte";
   import { Artwork } from "water-ui";
   import Clock from "@lucide/svelte/icons/clock";
   import X from "@lucide/svelte/icons/x";
@@ -30,13 +30,13 @@
     createGuestLink,
     revokeGuestLink,
     dismissGuestLink,
-  } from "$api/generated/guestLinks.generated.remote";
+  } from "#lib/api/generated/guestLinks.generated.remote.js";
   import {
     type GuestLinkInfo,
     GuestLinkStatus,
-  } from "$api/generated/nocturne-api-client";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
-  import { describeSubmitError, FormError } from "$lib/forms";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { describeSubmitError, FormError } from "#lib/forms/index.js";
 
   let { onCreated }: { onCreated?: () => void } = $props();
 
@@ -129,17 +129,11 @@
   }
 
   function isTerminal(link: GuestLinkInfo): boolean {
-    return (
-      link.status === GuestLinkStatus.Revoked ||
-      link.status === GuestLinkStatus.Expired
-    );
+    return link.status === GuestLinkStatus.Revoked || link.status === GuestLinkStatus.Expired;
   }
 
   function canRevoke(link: GuestLinkInfo): boolean {
-    return (
-      link.status === GuestLinkStatus.Pending ||
-      link.status === GuestLinkStatus.Active
-    );
+    return link.status === GuestLinkStatus.Pending || link.status === GuestLinkStatus.Active;
   }
 
   /** The backend may report http behind a reverse proxy; use the browser's origin */
@@ -267,7 +261,7 @@
         <Button
           variant="outline"
           size="sm"
-          onclick={() => (showCreateForm = true)}
+          onclick={() => showCreateForm = true}
         >
           <Link class="mr-1.5 h-3.5 w-3.5" />
           Create guest link
@@ -384,10 +378,7 @@
                         </div>
                         <Switch
                           checked={on}
-                          onCheckedChange={() =>
-                            (pickedScopes = [
-                              ...toggled(new Set(chosenScopes), cat.scope),
-                            ])}
+                          onCheckedChange={() => pickedScopes = [...toggled(new Set(chosenScopes), cat.scope)]}
                           aria-label={cat.name}
                         />
                       </label>
@@ -481,7 +472,7 @@
                     {/if}
                   </div>
                 </div>
-                {#if link.status === GuestLinkStatus.Active || (isTerminal(link) && !link.dismissedAt)}
+                {#if link.status === GuestLinkStatus.Active || isTerminal(link) && !link.dismissedAt}
                   <Button
                     variant="ghost-muted"
                     size="sm"
@@ -529,11 +520,8 @@
         <Button
           variant="ghost-muted"
           size="xs"
-          onclick={() => (showDismissed = !showDismissed)}
-        >
-          {showDismissed ? "Hide" : "Show"}
-          {dismissedCount} dismissed
-        </Button>
+          onclick={() => showDismissed = !showDismissed}
+        >{showDismissed ? "Hide" : "Show"} {dismissedCount} dismissed</Button>
       {/if}
     {/if}
   </div>

@@ -9,7 +9,7 @@ const saved = vi.hoisted(() => ({ result: true }));
 vi.mock("svelte-sonner", () => ({
   toast: { success: vi.fn(), error: toastError },
 }));
-vi.mock("$api/generated/bolus.generated.remote", () => {
+vi.mock("#lib/api/generated/bolus.generated.remote.js", () => {
   // The component spreads enhance()'s return onto its form; a submit handler here runs
   // the callback it was given, as kit's form does after a successful round trip.
   const form = () => ({
@@ -25,11 +25,11 @@ vi.mock("$api/generated/bolus.generated.remote", () => {
   });
   return { create: form(), update: form(), remove: removeBolus };
 });
-vi.mock("$api/generated/patientRecords.generated.remote", () => ({
+vi.mock("#lib/api/generated/patientRecords.generated.remote.js", () => ({
   getInsulins: () => ({ current: [] }),
 }));
 
-import type { RealtimeStore } from "$lib/stores/realtime-store.svelte";
+import type { RealtimeStore } from "#lib/stores/realtime-store.svelte.js";
 import Wrapper from "./meal-bolus-dialog-test-wrapper.svelte";
 
 function mount(meal: { correlationId?: string; boluses?: { id: string; mills: number; insulin: number }[] } = { correlationId: "c1" }) {

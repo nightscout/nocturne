@@ -1,14 +1,14 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { TimeZoneUnavailableReason } from "$lib/api";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 import { describe, expect, it, vi } from "vitest";
-import { servedDays } from "$lib/test-stubs/actogram-days";
+import { servedDays } from "#lib/test-stubs/actogram-days.js";
 
 const CHATHAM_MINUTES = 13 * 60 + 45;
 
 const hoisted = vi.hoisted(() => ({ trends: {} as Record<string, unknown> }));
 
-vi.mock("$lib/hooks/actogram-report.svelte", () => ({
+vi.mock("#lib/hooks/actogram-report.svelte.js", () => ({
   useActogramReport: () => ({
     params: {
       dateRangeMillis: { from: 0, to: 0 },
@@ -20,8 +20,8 @@ vi.mock("$lib/hooks/actogram-report.svelte", () => ({
     rangeDayCount: 3,
   }),
 }));
-vi.mock("$api/reports.remote", () => ({ getSleepTrends: vi.fn() }));
-vi.mock("$lib/hooks/resource-context.svelte", () => ({
+vi.mock("#lib/api/reports.remote.js", () => ({ getSleepTrends: vi.fn() }));
+vi.mock("#lib/hooks/resource-context.svelte.js", () => ({
   contextResource: () => ({
     get current() {
       return hoisted.trends;

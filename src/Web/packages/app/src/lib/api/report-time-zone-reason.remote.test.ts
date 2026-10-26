@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { TimeZoneUnavailableReason } from "$lib/api";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 
 const getRangeAnalytics = vi.fn(async () => ({
   analysis: {},
@@ -29,7 +29,7 @@ vi.mock("$app/server", () => ({
   query: (schemaOrFn: unknown, fn?: unknown) => fn ?? schemaOrFn,
 }));
 
-vi.mock("$lib/server/patient-timezone", () => ({
+vi.mock("#lib/server/patient-timezone.js", () => ({
   resolvePatientTimeZone: async () => "UTC",
   readable: async (read: () => Promise<unknown>) => read(),
 }));

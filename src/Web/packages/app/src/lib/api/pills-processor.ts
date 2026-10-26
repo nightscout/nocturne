@@ -16,8 +16,8 @@ import type {
 	LoopPillData,
 	AlertLevel,
 	StatusPillsConfig
-} from '$lib/types/status-pills';
-import type { Bolus, CarbIntake, ApsSnapshot, ProfileSummary } from '$lib/api';
+} from '#lib/types/status-pills.js';
+import type { Bolus, CarbIntake, ApsSnapshot, ProfileSummary } from '#lib/api/index.js';
 
 /**
  * DeviceStatus represents device state data from Loop, OpenAPS, or pump systems
@@ -50,7 +50,7 @@ export interface DeviceStatus {
 
 
 // Re-export the default config
-export { DEFAULT_PILLS_CONFIG } from '$lib/types/status-pills';
+export { DEFAULT_PILLS_CONFIG } from '#lib/types/status-pills.js';
 
 /**
  * Strongly typed interfaces for OpenAPS nested data structures.

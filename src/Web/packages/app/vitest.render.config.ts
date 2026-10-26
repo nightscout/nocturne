@@ -28,7 +28,7 @@ export default defineConfig({
       },
       { find: /^\$api\//, replacement: fileURLToPath(new URL("./src/lib/api/", import.meta.url)) },
       { find: /^\$lib\//, replacement: fileURLToPath(new URL("./src/lib/", import.meta.url)) },
-      { find: "$lib", replacement: fileURLToPath(new URL("./src/lib", import.meta.url)) },
+      { find: "#lib", replacement: fileURLToPath(new URL("./src/lib", import.meta.url)) },
       {
         find: "$app/environment",
         replacement: fileURLToPath(

@@ -22,7 +22,7 @@
  * field of the preferences blob.
  */
 
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { getContext, setContext } from "svelte";
 import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";

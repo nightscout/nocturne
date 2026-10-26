@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { toast } from "svelte-sonner";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Plus from "@lucide/svelte/icons/plus";
@@ -11,18 +11,18 @@
     type TreatmentFood,
     type TreatmentFoodBreakdown,
     type CarbIntakeFoodRequest,
-  } from "$lib/api";
+  } from "#lib/api/index.js";
   import {
     addCarbIntakeFood,
     getCarbIntakeFoods as getCarbIntakeFoodBreakdown,
     deleteCarbIntakeFood,
-  } from "$api/generated/nutritions.generated.remote";
+  } from "#lib/api/generated/nutritions.generated.remote.js";
   import {
     TreatmentFoodSelectorDialog,
     TreatmentFoodEntryEditDialog,
     CarbBreakdownBar,
     FoodEntryDetails,
-  } from "$lib/components/treatments";
+  } from "#lib/components/treatments/index.js";
 
   interface Props {
     carbIntakeId?: string;

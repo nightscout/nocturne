@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Toggle } from "$lib/components/ui/toggle";
+  import { Toggle } from "#lib/components/ui/toggle/index.js";
 
   interface Props {
     activeDays: number[] | undefined;

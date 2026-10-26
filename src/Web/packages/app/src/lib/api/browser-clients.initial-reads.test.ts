@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("$app/environment", () => ({ browser: true, dev: false, building: false, version: "test" }));
+vi.mock("$app/env", () => ({ browser: true, dev: false, building: false, version: "test" }));
 
 import { notificationsClient, resetBrowserClients } from "./browser-clients";
-import type { InitialReads } from "$lib/stores/initial-reads";
+import type { InitialReads } from "#lib/stores/initial-reads.js";
 
 const URL = "/api/v4/notifications";
 

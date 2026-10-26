@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { UploaderPlatform, type UploaderApp, type DataSourceInfo } from "$api-clients";
+import { UploaderPlatform, type UploaderApp, type DataSourceInfo } from "#lib/api/generated/nocturne-api-client.js";
 
 const mocks = vi.hoisted(() => ({
   sources: [] as unknown[],
@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   deviceApprove: vi.fn(),
 }));
 
-vi.mock("$api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   getActiveDataSources: () => ({
     get current() {
       return mocks.sources;
@@ -19,15 +19,15 @@ vi.mock("$api/generated/services.generated.remote", () => ({
   }),
 }));
 
-vi.mock("$lib/api/generated/directGrants.generated.remote", () => ({
+vi.mock("#lib/api/generated/directGrants.generated.remote.js", () => ({
   create: (...args: unknown[]) => mocks.createGrant(...args),
 }));
 
-vi.mock("$routes/(authenticated)/oauth/oauth.remote", () => ({
+vi.mock("#routes/(authenticated)/oauth/oauth.remote.js", () => ({
   getDeviceInfo: (args: unknown) => ({ run: () => mocks.lookup(args) }),
 }));
 
-vi.mock("$api/generated/oAuths.generated.remote", () => ({
+vi.mock("#lib/api/generated/oAuths.generated.remote.js", () => ({
   deviceApprove: (...args: unknown[]) => mocks.deviceApprove(...args),
 }));
 

@@ -3,7 +3,7 @@ import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { page } from "$app/state";
 import ConnectorsPage from "./+page.svelte";
-import { GoogleHealthConnectionState } from "$lib/api";
+import { GoogleHealthConnectionState } from "#lib/api/index.js";
 
 const mocks = vi.hoisted(() => ({
   googleHealth: vi.fn(),
@@ -13,21 +13,21 @@ const mocks = vi.hoisted(() => ({
   overview: vi.fn(),
 }));
 
-vi.mock("$api/generated/googleHealths.generated.remote", () => ({
+vi.mock("#lib/api/generated/googleHealths.generated.remote.js", () => ({
   getGoogleHealth: mocks.googleHealth,
 }));
-vi.mock("$api/generated/connectorStatus.generated.remote", () => ({
+vi.mock("#lib/api/generated/connectorStatus.generated.remote.js", () => ({
   getStatus: () => ({ current: [], refresh: mocks.refreshStatuses }),
 }));
-vi.mock("$api/generated/services.generated.remote", async (importOriginal) => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", async (importOriginal) => ({
   ...(await importOriginal<
-    typeof import("$api/generated/services.generated.remote")
+    typeof import("#lib/api/generated/services.generated.remote.js")
   >()),
   getServicesOverview: mocks.overview,
   getConnectorCapabilities: () => ({ current: null }),
   triggerConnectorSync: vi.fn(),
 }));
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
+vi.mock("#lib/stores/realtime-store.svelte.js", () => ({
   getRealtimeStore: () => ({ syncProgressByConnector: {} }),
 }));
 

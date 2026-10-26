@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { formatNumber, formatNumericDate } from "$lib/utils/formatting";
+  import { formatNumber, formatNumericDate } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Info from "@lucide/svelte/icons/info";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
@@ -16,15 +16,15 @@
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
   import Clock from "@lucide/svelte/icons/clock";
   import Gauge from "@lucide/svelte/icons/gauge";
-  import BasalRatePercentileChart from "$lib/components/reports/BasalRatePercentileChart.svelte";
-  import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
-  import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
+  import BasalRatePercentileChart from "#lib/components/reports/BasalRatePercentileChart.svelte";
+  import InsulinDeliveryChart from "#lib/components/reports/InsulinDeliveryChart.svelte";
+  import ReportsSkeleton from "#lib/components/reports/ReportsSkeleton.svelte";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import {
     getBasalAnalysis,
     getHourlyInsulinDelivery,
-  } from "$api/generated/statistics.generated.remote";
+  } from "#lib/api/generated/statistics.generated.remote.js";
 
   interface Props {
     analysisDates: { startDate: string; endDate: string };

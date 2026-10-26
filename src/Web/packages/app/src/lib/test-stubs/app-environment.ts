@@ -1,5 +1,5 @@
 /**
- * Stub for $app/environment in browser test environment.
+ * Stub for $app/env in browser test environment.
  * In browser tests, `browser` is true and `dev`/`building` are false.
  */
 export const browser = true;

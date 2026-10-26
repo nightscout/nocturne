@@ -1,19 +1,19 @@
 <script lang="ts">
   import { Key } from "@nocturne/ui/keys";
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
-  import type { EntryRecord } from "$lib/constants/entry-categories";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
+  import type { EntryRecord } from "#lib/constants/entry-categories.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { EmptyState } from "$lib/components/shared";
-  import { time } from "$lib/utils/formatting";
-  import { entryDetails, entryLabel } from "$lib/utils/entry-summary";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { time } from "#lib/utils/formatting.js";
+  import { entryDetails, entryLabel } from "#lib/utils/entry-summary.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
 
   interface ComponentProps {
     entries?: EntryRecord[];
@@ -38,7 +38,7 @@
   let selectedEntry = $state<EntryRecord | null>(null);
   let correlatedRecords = $state<EntryRecord[]>([]);
   const entryEditDialog = lazyComponent(
-    () => import("$lib/components/entries/EntryEditDialog.svelte"),
+    () => import("#lib/components/entries/EntryEditDialog.svelte"),
   );
 
   function handleEntryClick(entry: EntryRecord) {

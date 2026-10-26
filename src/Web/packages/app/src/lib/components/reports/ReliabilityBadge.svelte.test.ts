@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { TimeZoneUnavailableReason } from "$lib/api";
-import WithTooltipProvider from "$lib/test-stubs/WithTooltipProvider.test-stub.svelte";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
+import WithTooltipProvider from "#lib/test-stubs/WithTooltipProvider.test-stub.svelte";
 import ReliabilityBadge from "./ReliabilityBadge.svelte";
 
 const reliability = { meetsReliabilityCriteria: false, daysOfData: 3, recommendedMinimumDays: 14 };

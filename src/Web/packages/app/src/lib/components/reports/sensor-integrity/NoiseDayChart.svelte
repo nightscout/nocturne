@@ -7,10 +7,10 @@
   import { Chart, Svg, Circle, Line, Rect, Spline } from "layerchart";
   import { scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3-shape";
-  import { ClusterConfidence } from "$lib/api";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import { ClusterConfidence } from "#lib/api/index.js";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
   import type { DayBucket } from "./buckets";
-  import { tenantChartThresholds } from "$lib/stores/realtime-store.svelte";
+  import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
   import { confidenceKey } from "./format";
   import HypoMarker from "./HypoMarker.svelte";
 

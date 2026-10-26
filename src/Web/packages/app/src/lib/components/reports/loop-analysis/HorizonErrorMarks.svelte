@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
   import { Line, Rect, getChartContext } from "layerchart";
-  import type { PredictionHorizonAccuracy } from "$lib/api";
+  import type { PredictionHorizonAccuracy } from "#lib/api/index.js";
 
   interface Props {
     /** Every horizon on the axis, in order; only their minutes and settings flags are read. */

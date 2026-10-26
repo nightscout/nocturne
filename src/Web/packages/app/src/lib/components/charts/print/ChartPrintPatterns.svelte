@@ -5,7 +5,7 @@
   a `url(#id)` paint server defined inside a `display:none` subtree while printing.
 -->
 <script lang="ts">
-	import { chartAlwaysShowPatterns } from "$lib/stores/appearance-store.svelte";
+	import { chartAlwaysShowPatterns } from "#lib/stores/appearance-store.svelte.js";
 	import { patternTiles, textureStylesheet } from "./chart-print-patterns";
 	import { PrintMode } from "./print-mode.svelte";
 

@@ -15,7 +15,7 @@
 </script>
 
 <script lang="ts">
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils/index.js";
   import TextureSwatch from "./TextureSwatch.svelte";
 
   interface Props {

@@ -5,9 +5,9 @@ import {
   GoogleHealthTypeState,
   type GoogleHealthDataTypeStatus,
   type GoogleHealthStatus,
-} from "$lib/api";
-import { plural } from "$lib/utils/plural";
-import { isGoogleHealthErrorCode, type GoogleHealthErrorCode } from "$lib/connectors/google-health-error-codes";
+} from "#lib/api/index.js";
+import { plural } from "#lib/utils/plural.js";
+import { isGoogleHealthErrorCode, type GoogleHealthErrorCode } from "#lib/connectors/google-health-error-codes.js";
 
 const errorMessages: Record<GoogleHealthErrorCode, string> = {
   configure_first: "Connect Google Health first.",

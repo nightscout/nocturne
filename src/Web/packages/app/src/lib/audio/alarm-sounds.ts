@@ -1,4 +1,4 @@
-import { randomUUID } from "$lib/utils";
+import { randomUUID } from "#lib/utils/index.js";
 
 /**
  * Alarm Sound Generator and Player

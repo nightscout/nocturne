@@ -1,8 +1,8 @@
 <script lang="ts">
   import { createAttachmentKey } from "svelte/attachments";
   import { z } from "zod";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import FormField from "./FormField.svelte";
   import { FormGuard, type GuardedForm } from "./form-guard.svelte";
 

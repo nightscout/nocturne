@@ -3,15 +3,15 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushSync } from "svelte";
 import { page as pageState } from "$app/state";
-import { AlertConditionType, AlertReceiptActorKind, type ActiveExcursionResponse } from "$api-clients";
-import { formatDateTimeCompact } from "$lib/utils/formatting";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { AlertConditionType, AlertReceiptActorKind, type ActiveExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
+import { formatDateTimeCompact } from "#lib/utils/formatting.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let activeAlerts = $state<ActiveExcursionResponse[]>([]);
 const seenCalls: { ids: unknown[] } = vi.hoisted(() => ({ ids: [] }));
 const snoozes: { calls: unknown[] } = vi.hoisted(() => ({ calls: [] }));
 
-vi.mock("$api/generated/alerts.generated.remote", () => ({
+vi.mock("#lib/api/generated/alerts.generated.remote.js", () => ({
 	getActiveAlerts: () => remoteQuery(() => activeAlerts),
 	acknowledgeExcursion: () => ({ updates: () => Promise.resolve() }),
 	snoozeInstance: (arg: unknown) => {

@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { remoteForm, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteForm, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const { deleteInsulin } = vi.hoisted(() => ({
   deleteInsulin: vi.fn().mockResolvedValue(undefined),
@@ -10,14 +10,14 @@ const { deleteInsulin } = vi.hoisted(() => ({
 let insulinsCurrent: unknown[] = [];
 let catalogCurrent: unknown[] = [];
 
-vi.mock("$api/generated/patientRecords.generated.remote", () => ({
+vi.mock("#lib/api/generated/patientRecords.generated.remote.js", () => ({
   getInsulins: () => remoteQuery(() => insulinsCurrent),
   createInsulin: remoteForm(),
   updateInsulin: remoteForm(),
   deleteInsulin: (...args: unknown[]) => deleteInsulin(...args),
 }));
 
-vi.mock("$api/generated/insulinCatalogs.generated.remote", () => ({
+vi.mock("#lib/api/generated/insulinCatalogs.generated.remote.js", () => ({
   getCatalog: () => remoteQuery(() => catalogCurrent),
 }));
 

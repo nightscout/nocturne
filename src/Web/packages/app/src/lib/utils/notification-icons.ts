@@ -26,7 +26,7 @@ import BatteryWarning from "@lucide/svelte/icons/battery-warning";
 import CloudOff from "@lucide/svelte/icons/cloud-off";
 import AlertCircle from "@lucide/svelte/icons/circle-alert";
 import CheckCircle from "@lucide/svelte/icons/circle-check-big";
-import { NotificationCategory } from "$lib/api/generated/nocturne-api-client";
+import { NotificationCategory } from "#lib/api/generated/nocturne-api-client.js";
 import type { Component } from "svelte";
 
 const ICON_MAP: Record<string, Component> = {

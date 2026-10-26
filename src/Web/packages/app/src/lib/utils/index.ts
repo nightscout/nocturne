@@ -8,7 +8,7 @@ import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
 import { canonicalDirection } from "@nocturne/ui/glucose";
 import {
   Direction,
-} from "$api-clients";
+} from "#lib/api/generated/nocturne-api-client.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SvelteComponent = any;

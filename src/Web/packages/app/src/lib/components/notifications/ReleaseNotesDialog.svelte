@@ -1,15 +1,15 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { getReleaseStatus } from "$api/generated/releases.generated.remote";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
+  import { getReleaseStatus } from "#lib/api/generated/releases.generated.remote.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
   import {
     AutoUpdateMode,
     type InAppNotificationDto,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { formatLongDate } from "$lib/utils/formatting";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { formatLongDate } from "#lib/utils/formatting.js";
   import InstallTiming from "./InstallTiming.svelte";
 
   interface Props {

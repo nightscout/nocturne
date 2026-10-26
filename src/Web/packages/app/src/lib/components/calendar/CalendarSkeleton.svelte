@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import * as Card from "$lib/components/ui/card";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
 </script>
 
 <div class="@container flex flex-col h-full">

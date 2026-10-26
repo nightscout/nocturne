@@ -1,6 +1,6 @@
-import { DayOfWeek, LoopAnalysisComparison } from "$lib/api";
-import type { getDailyProfile } from "$api/generated/loopAnalysis.generated.remote";
-import { isDayString } from "$lib/utils/date-range";
+import { DayOfWeek, LoopAnalysisComparison } from "#lib/api/index.js";
+import type { getDailyProfile } from "#lib/api/generated/loopAnalysis.generated.remote.js";
+import { isDayString } from "#lib/utils/date-range.js";
 
 type DailyProfileQuery = Parameters<typeof getDailyProfile>[0];
 

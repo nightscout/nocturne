@@ -1,4 +1,4 @@
-import type { SyncProgressEvent } from "$lib/websocket/types";
+import type { SyncProgressEvent } from "#lib/websocket/types.js";
 
 /**
  * Tracks which connector runs have already been accounted for after finishing.

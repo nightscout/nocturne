@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { GlucoseProcessing } from "$lib/api";
-  import { a1cLabel } from "$lib/utils/a1c-formatting";
-  import { time } from "$lib/utils/formatting";
+  import { GlucoseProcessing } from "#lib/api/index.js";
+  import { a1cLabel } from "#lib/utils/a1c-formatting.js";
+  import { time } from "#lib/utils/formatting.js";
   import {
     getColorTheme,
     setColorTheme,
     glucoseRangePalette,
     setGlucoseRangePalette,
     type ColorTheme,
-  } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/stores/appearance-store.svelte.js";
   import {
     glucoseUnits,
     energyUnit,
@@ -36,27 +36,27 @@
     type AreaMode,
     type ColorScheme,
     type RegionFormat,
-  } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/stores/appearance-store.svelte.js";
   import { ENERGY_UNITS } from "@nocturne/ui/energy";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import TitleFaviconSettings from "$lib/components/settings/TitleFaviconSettings.svelte";
-  import DashboardWidgetConfigurator from "$lib/components/settings/DashboardWidgetConfigurator.svelte";
-  import DashboardRailConfigurator from "$lib/components/settings/DashboardRailConfigurator.svelte";
-  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
-  import LanguageSelector from "$lib/components/LanguageSelector.svelte";
-  import CarbRatioFormatSelect from "$lib/components/settings/CarbRatioFormatSelect.svelte";
-  import { updateLanguagePreference } from "$api/user-preferences.remote";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import TitleFaviconSettings from "#lib/components/settings/TitleFaviconSettings.svelte";
+  import DashboardWidgetConfigurator from "#lib/components/settings/DashboardWidgetConfigurator.svelte";
+  import DashboardRailConfigurator from "#lib/components/settings/DashboardRailConfigurator.svelte";
+  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
+  import LanguageSelector from "#lib/components/LanguageSelector.svelte";
+  import CarbRatioFormatSelect from "#lib/components/settings/CarbRatioFormatSelect.svelte";
+  import { updateLanguagePreference } from "#lib/api/user-preferences.remote.js";
   import {
     getPreference,
     setPreference,
     getSourceDefaults,
     setSourceDefaults,
-  } from "$api/generated/glucoseProcessingSettings.generated.remote";
-  import GlucoseSourceDefaultsDialog from "$lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
-  import type { FeatureSettings } from "$lib/api/generated/nocturne-api-client";
-  import { getUiSettings, saveFeatureSettings } from "$api/ui-settings.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { SETTINGS_LOAD_FAILED } from "$lib/api/ui-settings-messages";
+  } from "#lib/api/generated/glucoseProcessingSettings.generated.remote.js";
+  import GlucoseSourceDefaultsDialog from "#lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
+  import type { FeatureSettings } from "#lib/api/generated/nocturne-api-client.js";
+  import { getUiSettings, saveFeatureSettings } from "#lib/api/ui-settings.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { SETTINGS_LOAD_FAILED } from "#lib/api/ui-settings-messages.js";
   import { toast } from "svelte-sonner";
   import {
     Card,
@@ -64,21 +64,21 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Slider } from "$lib/components/ui/slider";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as RadioGroup from "$lib/components/ui/radio-group";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Slider } from "#lib/components/ui/slider/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
   import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
-  import { Label as FormLabel } from "$lib/components/ui/label";
+  } from "#lib/components/ui/select/index.js";
+  import { Label as FormLabel } from "#lib/components/ui/label/index.js";
   import Activity from "@lucide/svelte/icons/activity";
   import Palette from "@lucide/svelte/icons/palette";
   import Sun from "@lucide/svelte/icons/sun";
@@ -91,16 +91,16 @@
   import Timer from "@lucide/svelte/icons/timer";
   import Eye from "@lucide/svelte/icons/eye";
   import Paintbrush from "@lucide/svelte/icons/paintbrush";
-  import { illustrations } from "$lib/stores/illustrations.svelte";
+  import { illustrations } from "#lib/stores/illustrations.svelte.js";
   import { PRESENTATIONS } from "water-ui";
-  import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
-  import { browser } from "$app/environment";
+  import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
+  import { browser } from "$app/env";
   import { resolve } from "$app/paths";
-  import { WidgetId } from "$lib/api/generated/nocturne-api-client";
+  import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   const realtimeStore = getRealtimeStore();
 
@@ -1004,18 +1004,18 @@
     <div {@attach coachmark({ ...coachFor("tracker-intro.rail") })}>
       <DashboardRailConfigurator
         value={dashboardRail.current}
-        {trackerPillsEnabled}
-        onchange={(preference) => (dashboardRail.current = preference)}
+        trackerPillsEnabled={trackerPillsEnabled}
+        onchange={(preference) => dashboardRail.current = preference}
         hiddenLegacyFallbacks={hiddenLegacyFallbacks.current}
-        onhiddenlegacyfallbackschange={(kinds) => (hiddenLegacyFallbacks.current = kinds)}
+        onhiddenlegacyfallbackschange={(kinds) => hiddenLegacyFallbacks.current = kinds}
       />
     </div>
 
 
     {#if !tenantless}
-    <!-- Glucose Processing -->
-    <Card>
-      <CardHeader>
+      <!-- Glucose Processing -->
+      <Card>
+        <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Activity class="h-5 w-5" />
           Glucose processing
@@ -1023,78 +1023,81 @@
         <CardDescription>
           Choose how glucose values are displayed when both smoothed and unsmoothed readings are available
         </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        <div class="grid gap-4 @sm:grid-cols-2">
-          <div class="space-y-2">
-            <Label>Display preference</Label>
-            <Select
-              type="single"
-              value={glucoseProcessingPreference ?? "default"}
-              onValueChange={async (value) => {
-                const newValue = value === "default" ? null : value;
-                glucoseProcessingPreference = newValue;
-                await setPreference({ preferredGlucoseProcessing: newValue });
-              }}
-            >
-              <SelectTrigger>
-                <span>
-                  {#if glucoseProcessingPreference === GlucoseProcessing.Smoothed}
-                    Smoothed
-                  {:else if glucoseProcessingPreference === GlucoseProcessing.Unsmoothed}
-                    Unsmoothed
-                  {:else}
-                    Default
-                  {/if}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">Default</SelectItem>
-                <SelectItem value={GlucoseProcessing.Smoothed}>Smoothed</SelectItem>
-                <SelectItem value={GlucoseProcessing.Unsmoothed}>Unsmoothed</SelectItem>
-              </SelectContent>
-            </Select>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div class="grid gap-4 @sm:grid-cols-2">
+            <div class="space-y-2">
+              <Label>Display preference</Label>
+              <Select
+                type="single"
+                value={glucoseProcessingPreference ?? "default"}
+                onValueChange={async (value) => {
+                  const newValue = value === "default" ? null : value;
+                  glucoseProcessingPreference = newValue;
+                  await setPreference({ preferredGlucoseProcessing: newValue });
+                }}
+              >
+                <SelectTrigger>
+                  <span>
+                    {#if glucoseProcessingPreference === GlucoseProcessing.Smoothed}
+                      Smoothed
+                    {:else if glucoseProcessingPreference === GlucoseProcessing.Unsmoothed}
+                      Unsmoothed
+                    {:else}
+                      Default
+                    {/if}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default</SelectItem>
+                  <SelectItem value={GlucoseProcessing.Smoothed}>Smoothed</SelectItem>
+                  <SelectItem value={GlucoseProcessing.Unsmoothed}>Unsmoothed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
-        <p class="text-xs text-muted-foreground">
+          <p class="text-xs text-muted-foreground">
           This only affects values where both smoothed and unsmoothed readings are present.
           "Default" uses the value as reported by the data source.
-        </p>
+          </p>
 
-        <Separator />
+          <Separator />
 
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="space-y-0.5">
-            <Label>Client upload source defaults</Label>
-            <p class="text-sm text-muted-foreground">
-              {#if sourceDefaults.length === 0}
-                No source rules configured. All uploads use the default processing.
-              {:else}
-                {sourceDefaults.length} rule{sourceDefaults.length === 1 ? '' : 's'} configured
-              {/if}
-            </p>
+            <div class="space-y-0.5">
+              <Label>Client upload source defaults</Label>
+              <p class="text-sm text-muted-foreground">
+                {#if sourceDefaults.length === 0}
+                  No source rules configured. All uploads use the default processing.
+                {:else}
+                  {sourceDefaults.length} rule{sourceDefaults.length === 1 ? '' : 's'} configured
+                {/if}
+              </p>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onclick={() => sourceDefaultsDialogOpen = true}
+            >Configure</Button>
           </div>
-          <Button variant="outline" size="sm" onclick={() => (sourceDefaultsDialogOpen = true)}>
-            Configure
-          </Button>
-        </div>
 
-        <GlucoseSourceDefaultsDialog
-          bind:open={sourceDefaultsDialogOpen}
-          rules={sourceDefaults}
-          onSave={async (rules) => {
-            sourceDefaults = rules;
-            sourceDefaultsDialogOpen = false;
-            await setSourceDefaults({ rules });
-          }}
-          onCancel={() => (sourceDefaultsDialogOpen = false)}
-        />
-      </CardContent>
-    </Card>
+          <GlucoseSourceDefaultsDialog
+            bind:open={sourceDefaultsDialogOpen}
+            rules={sourceDefaults}
+            onSave={async (rules) => {
+              sourceDefaults = rules;
+              sourceDefaultsDialogOpen = false;
+              await setSourceDefaults({ rules });
+            }}
+            onCancel={() => sourceDefaultsDialogOpen = false}
+          />
+        </CardContent>
+      </Card>
 
-    <!-- Tracker Pills -->
-    <Card>
-      <CardHeader>
+      <!-- Tracker Pills -->
+      <Card>
+        <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Timer class="h-5 w-5" />
           Tracker pills
@@ -1102,33 +1105,35 @@
         <CardDescription>
           Show active tracker ages on the dashboard
         </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-6">
-        <div class="flex items-center justify-between">
-          <div class="space-y-0.5">
-            <Label>Show tracker pills</Label>
+        </CardHeader>
+        <CardContent class="space-y-6">
+          <div class="flex items-center justify-between">
+            <div class="space-y-0.5">
+              <Label>Show tracker pills</Label>
             <p class="text-sm text-muted-foreground">
               Display active tracker ages (such as sensor and pump site) on homepage
             </p>
             <p class="text-sm text-muted-foreground">
               When this is off, tracker pills do not show for any user.
             </p>
-          </div>
-          <Switch
-            checked={trackerPillsEnabled}
+            </div>
+            <Switch
+              checked={trackerPillsEnabled}
             onCheckedChange={(checked: boolean) =>
               saveFeatures({ trackerPills: { enabled: checked } })}
-          />
-        </div>
+            />
+          </div>
 
-        <p class="text-xs text-muted-foreground">
-          Each tracker's dashboard visibility is configured in
-          <a href={resolve("/settings/trackers")} class="text-primary hover:underline">
-            Settings → Trackers
-          </a>
-        </p>
-      </CardContent>
-    </Card>
+          <p class="text-xs text-muted-foreground">
+            Each tracker's dashboard visibility is configured in 
+
+            <a
+              href={resolve('settings/trackers')}
+              class="text-primary hover:underline"
+            >Settings → Trackers</a>
+          </p>
+        </CardContent>
+      </Card>
     {/if}
 
     <!-- Browser Tab Settings (Favicon) -->

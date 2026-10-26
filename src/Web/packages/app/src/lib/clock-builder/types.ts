@@ -5,7 +5,7 @@
  * for the clock face builder UI.
  */
 
-import type { ClockElement, ClockSettings } from "$lib/api";
+import type { ClockElement, ClockSettings } from "#lib/api/index.js";
 
 // Element type for the clock face builder
 export type ClockElementType =

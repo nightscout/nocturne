@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MigrationJobState, MigrationMode } from "$api";
-import type { MigrationJobInfo } from "$api";
+import { MigrationJobState, MigrationMode } from "#lib/api/index.js";
+import type { MigrationJobInfo } from "#lib/api/index.js";
 
 let history: MigrationJobInfo[] = [];
 const startSpy = vi.fn();
 
 // The factory is hoisted above every declaration in this file, so it may only read `history`
 // and `startSpy` lazily, from inside the functions it returns.
-vi.mock("$api/generated/migrations.generated.remote", () => ({
+vi.mock("#lib/api/generated/migrations.generated.remote.js", () => ({
   getHistory: () => ({ run: () => Promise.resolve(history) }),
   startFromConnector: (connectorName: string) => startSpy(connectorName),
 }));

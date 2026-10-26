@@ -2,14 +2,14 @@
   import type { Snippet } from 'svelte';
   import { Chart, Svg, Spline, Circle, Text, Tooltip } from 'layerchart';
   import { scaleTime } from 'd3-scale';
-  import { timeScale } from '$lib/components/charts/scale-guards';
+  import { timeScale } from '#lib/components/charts/scale-guards.js';
   import { curveMonotoneX } from 'd3';
   import {
     FALLBACK_GLUCOSE_Y_MAX,
     type ChartThresholds,
-  } from '$lib/constants/glucose-thresholds';
-  import { bg, bgLabel, time } from '$lib/utils/formatting';
-  import { dashClass } from '$lib/components/charts/print/chart-print-patterns';
+  } from '#lib/constants/glucose-thresholds.js';
+  import { bg, bgLabel, time } from '#lib/utils/formatting.js';
+  import { dashClass } from '#lib/components/charts/print/chart-print-patterns.js';
   import {
     MS_PER_HOUR,
     HOURS_PER_ROW,

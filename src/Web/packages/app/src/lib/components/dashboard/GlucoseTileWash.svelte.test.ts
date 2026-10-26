@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { engine } from "$lib/test-stubs/Watercolour.test-stub.svelte";
-import { illustrations } from "$lib/stores/illustrations.svelte";
-import { releaseWatercolour, resetWatercolour } from "$lib/test-stubs/watercolour-deferral.svelte";
+import { engine } from "#lib/test-stubs/Watercolour.test-stub.svelte";
+import { illustrations } from "#lib/stores/illustrations.svelte.js";
+import { releaseWatercolour, resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
 import GlucoseTileWashHarness from "./GlucoseTileWashHarness.test.svelte";
 
-vi.mock("$lib/watercolour-deferral.svelte", () => import("$lib/test-stubs/watercolour-deferral.svelte"));
+vi.mock("#lib/watercolour-deferral.svelte.js", () => import("#lib/test-stubs/watercolour-deferral.svelte.js"));
 
 vi.mock("water-ui", async (importOriginal) => {
-  const fake = await import("$lib/test-stubs/Watercolour.test-stub.svelte");
+  const fake = await import("#lib/test-stubs/Watercolour.test-stub.svelte");
   return {
     ...(await importOriginal<typeof import("water-ui")>()),
     Artwork: fake.default,

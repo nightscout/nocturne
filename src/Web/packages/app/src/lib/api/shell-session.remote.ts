@@ -1,7 +1,7 @@
 import { query, getRequestEvent } from "$app/server";
 import { error } from "@sveltejs/kit";
-import { isApiOutage } from "$lib/server/api-outage";
-import { readPermissions } from "$lib/server/resolve-permissions";
+import { isApiOutage } from "#lib/server/api-outage.js";
+import { readPermissions } from "#lib/server/resolve-permissions.js";
 
 /**
  * The session facts the authenticated shell was rendered from, read through the same request

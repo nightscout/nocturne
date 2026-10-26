@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCustomSounds } from "$lib/audio/alarm-sounds";
+import { getCustomSounds } from "#lib/audio/alarm-sounds.js";
 import CustomSoundUpload from "./CustomSoundUpload.svelte";
 
 /** The playability probe's own load timeout in alarm-sounds.ts. */

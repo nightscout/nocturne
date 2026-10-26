@@ -1,19 +1,19 @@
 import { command, getRequestEvent, query } from "$app/server";
 import { error } from "@sveltejs/kit";
 import { z } from "zod";
-import { buildScopedBotApiClient } from "$lib/server/bot/api-client";
+import { buildScopedBotApiClient } from "#lib/server/bot/api-client.js";
 import {
 	DISCORD_LINK_COOKIE,
 	verifyDiscordLinkClaim,
 	type DiscordLinkClaim,
-} from "$lib/server/bot/oauth-state";
-import { extractTenantSlug } from "$lib/server/request-host";
-import { errorStatus } from "$lib/forms/submit-error";
+} from "#lib/server/bot/oauth-state.js";
+import { extractTenantSlug, getOriginalHost } from "#lib/server/request-host.js";
+import { errorStatus } from "#lib/forms/submit-error.js";
 
 function claimForThisRequest(claim: string): DiscordLinkClaim | null {
-	const { locals, url, cookies } = getRequestEvent();
+	const { locals, request, cookies } = getRequestEvent();
 	const subjectId = locals.isAuthenticated ? locals.user?.subjectId : undefined;
-	const slug = extractTenantSlug(url.host, process.env.BASE_DOMAIN);
+	const slug = extractTenantSlug(getOriginalHost(request), process.env.BASE_DOMAIN);
 	const nonce = cookies.get(DISCORD_LINK_COOKIE);
 	if (!subjectId || !slug || !nonce) return null;
 	return verifyDiscordLinkClaim(claim, { slug, subjectId, nonce });

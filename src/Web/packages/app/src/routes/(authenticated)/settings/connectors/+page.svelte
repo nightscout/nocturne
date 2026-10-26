@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { SyncPhase } from "$lib/api";
-  import { getStatus as getConnectorStatuses } from "$api/generated/connectorStatus.generated.remote";
-  import { getGoogleHealth } from "$api/generated/googleHealths.generated.remote";
+  import { SyncPhase } from "#lib/api/index.js";
+  import { getStatus as getConnectorStatuses } from "#lib/api/generated/connectorStatus.generated.remote.js";
+  import { getGoogleHealth } from "#lib/api/generated/googleHealths.generated.remote.js";
   import {
     getServicesOverview,
     getConnectorCapabilities,
     triggerConnectorSync,
-  } from "$api/generated/services.generated.remote";
+  } from "#lib/api/generated/services.generated.remote.js";
   import type {
     ServicesOverview,
     UploaderApp,
@@ -14,7 +14,7 @@
     ConnectorStatusDto,
     ConnectorCapabilities,
     SyncResult,
-  } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/nocturne-api-client.js";
 
   import {
     Card,
@@ -22,10 +22,10 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
 
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
@@ -35,27 +35,27 @@
   import Copy from "@lucide/svelte/icons/copy";
   import Check from "@lucide/svelte/icons/check";
   import KeyRound from "@lucide/svelte/icons/key-round";
-  import { EmptyState } from "$lib/components/shared";
-  import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
-  import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
-  import GoogleHealthSourceRow from "$lib/components/connectors/GoogleHealthSourceRow.svelte";
-  import type { DataSourceStatus } from "$lib/components/settings/DataSourceRow.svelte";
-  import ConnectedApps from "$lib/components/settings/ConnectedApps.svelte";
-  import ClientDevices from "$lib/components/settings/ClientDevices.svelte";
-  import ApiTokens from "$lib/components/settings/ApiTokens.svelte";
-  import UploaderSetupDialog from "$lib/components/connectors/UploaderSetupDialog.svelte";
-  import ConnectorDetailsDialog from "$lib/components/connectors/ConnectorDetailsDialog.svelte";
-  import ManualSyncDialog from "$lib/components/connectors/ManualSyncDialog.svelte";
-  import UploaderAppsCard from "$lib/components/connectors/UploaderAppsCard.svelte";
-  import ServerConnectorsCard, { type ConnectorStatusWithDescription } from "$lib/components/connectors/ServerConnectorsCard.svelte";
-  import DataSourceManageDialog from "$lib/components/connectors/DataSourceManageDialog.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import SettingsPageSkeleton from "#lib/components/settings/SettingsPageSkeleton.svelte";
+  import DataSourceRow from "#lib/components/settings/DataSourceRow.svelte";
+  import GoogleHealthSourceRow from "#lib/components/connectors/GoogleHealthSourceRow.svelte";
+  import type { DataSourceStatus } from "#lib/components/settings/DataSourceRow.svelte";
+  import ConnectedApps from "#lib/components/settings/ConnectedApps.svelte";
+  import ClientDevices from "#lib/components/settings/ClientDevices.svelte";
+  import ApiTokens from "#lib/components/settings/ApiTokens.svelte";
+  import UploaderSetupDialog from "#lib/components/connectors/UploaderSetupDialog.svelte";
+  import ConnectorDetailsDialog from "#lib/components/connectors/ConnectorDetailsDialog.svelte";
+  import ManualSyncDialog from "#lib/components/connectors/ManualSyncDialog.svelte";
+  import UploaderAppsCard from "#lib/components/connectors/UploaderAppsCard.svelte";
+  import ServerConnectorsCard, { type ConnectorStatusWithDescription } from "#lib/components/connectors/ServerConnectorsCard.svelte";
+  import DataSourceManageDialog from "#lib/components/connectors/DataSourceManageDialog.svelte";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { toast } from "svelte-sonner";
-  import { getUploaderName } from "$lib/utils/uploader-labels";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import { getUploaderName } from "#lib/utils/uploader-labels.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
   import { createTerminalRunTracker } from "./terminal-run-tracker";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import { page } from "$app/state";
 
   // Queries — fire on the server during SSR; results land in cache for hydration.

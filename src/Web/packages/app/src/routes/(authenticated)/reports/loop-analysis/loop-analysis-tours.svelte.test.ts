@@ -4,34 +4,34 @@ import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { Component } from "svelte";
 import type { CoachMarkContext, MarkState } from "@nocturne/coach";
 import { page as pageState } from "$app/state";
-import { coachCopy, tourReplayLabel } from "$lib/coach-marks/copy.svelte";
-import { loopAnalysisTour, sequences } from "$lib/coach-marks/sequences";
-import { ALL_SCOPES, profileResponse } from "$lib/components/reports/loop-analysis/daily-profile.test-fixtures";
-import { eventResponse } from "$lib/components/reports/loop-analysis/event-response.test-fixtures";
-import { predictionResponse } from "$lib/components/reports/loop-analysis/prediction-accuracy.test-fixtures";
-import { loopHealthResponse } from "$lib/components/reports/loop-analysis/loop-health.test-fixtures";
+import { coachCopy, tourReplayLabel } from "#lib/coach-marks/copy.svelte.js";
+import { loopAnalysisTour, sequences } from "#lib/coach-marks/sequences.js";
+import { ALL_SCOPES, profileResponse } from "#lib/components/reports/loop-analysis/daily-profile.test-fixtures.js";
+import { eventResponse } from "#lib/components/reports/loop-analysis/event-response.test-fixtures.js";
+import { predictionResponse } from "#lib/components/reports/loop-analysis/prediction-accuracy.test-fixtures.js";
+import { loopHealthResponse } from "#lib/components/reports/loop-analysis/loop-health.test-fixtures.js";
 import {
   settingsEvidenceResponse,
   WITHHELD_SETTINGS_EVIDENCE,
-} from "$lib/components/reports/loop-analysis/settings-evidence.test-fixtures";
-import { LoopAnalysisSeries, SettingsEvidenceWithheldReason } from "$lib/api";
+} from "#lib/components/reports/loop-analysis/settings-evidence.test-fixtures.js";
+import { LoopAnalysisSeries, SettingsEvidenceWithheldReason } from "#lib/api/index.js";
 import {
   LOOP_ANALYSIS_PAGES,
   type LoopAnalysisPage,
-} from "$lib/components/reports/loop-analysis/loop-analysis-pages.svelte";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+} from "#lib/components/reports/loop-analysis/loop-analysis-pages.svelte.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import Harness from "./LoopAnalysisTourHarness.test.svelte";
 
 vi.mock("$app/state", async () => {
   const stub = await vi.importActual<typeof import("$app/state")>("$app/state");
-  const { reactiveFields } = await import("$lib/test-stubs/reactive-fields.svelte");
+  const { reactiveFields } = await import("#lib/test-stubs/reactive-fields.svelte.js");
   return { ...stub, page: reactiveFields({ ...stub.page }) };
 });
 
 /** A test's own response for a page, served in place of the full one. */
 const served = vi.hoisted(() => new Map<string, () => unknown>());
 
-vi.mock("$api/generated/loopAnalysis.generated.remote", () => ({
+vi.mock("#lib/api/generated/loopAnalysis.generated.remote.js", () => ({
   getEnvelope: () => remoteQuery(() => ({ ...profileResponse(), profileNames: ["Default"] })),
   getDailyProfile: () => remoteQuery(served.get("daily-profile") ?? profileResponse),
   getEventResponse: () => remoteQuery(served.get("meals-and-events") ?? eventResponse),
@@ -42,11 +42,11 @@ vi.mock("$api/generated/loopAnalysis.generated.remote", () => ({
 
 vi.mock("$app/navigation", () => ({ goto: () => Promise.resolve() }));
 
-vi.mock("$lib/hooks/date-params.svelte", () => ({
+vi.mock("#lib/hooks/date-params.svelte.js", () => ({
   requireDateParamsContext: () => ({ fromDay: "2026-10-09", toDay: "2026-10-22" }),
 }));
 
-vi.mock("$lib/hooks/resource-context.svelte", () => ({
+vi.mock("#lib/hooks/resource-context.svelte.js", () => ({
   contextResource: <T>(create: () => { current: T | undefined }) => ({
     get current() {
       return create().current;

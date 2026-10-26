@@ -1,18 +1,18 @@
 <script lang="ts">
-  import * as Tabs from "$lib/components/ui/tabs";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import Play from "@lucide/svelte/icons/play";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { EmptyState } from "$lib/components/shared";
-  import type { TrackerDefinitionDto, TrackerPresetDto } from "$api";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import type { TrackerDefinitionDto, TrackerPresetDto } from "#lib/api/index.js";
 
   interface Props {
     definitions: TrackerDefinitionDto[];

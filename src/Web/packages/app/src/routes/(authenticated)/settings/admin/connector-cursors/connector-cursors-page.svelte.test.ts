@@ -5,11 +5,11 @@ import { beforeEach, describe, it, expect, vi } from "vitest";
 let tenantsImpl: () => Promise<unknown>;
 let connectorsResult: unknown = null;
 
-vi.mock("$api/generated/tenants.generated.remote", () => ({
+vi.mock("#lib/api/generated/tenants.generated.remote.js", () => ({
   getAll: () => ({ run: () => tenantsImpl() }),
 }));
 
-vi.mock("$api/generated/connectorAdmins.generated.remote", () => ({
+vi.mock("#lib/api/generated/connectorAdmins.generated.remote.js", () => ({
   getTenantConnectors: () => ({ run: () => Promise.resolve(connectorsResult) }),
   resetTenantCursors: () => Promise.resolve({ jobId: "reset-job" }),
   getResetJobStatus: () => ({

@@ -8,7 +8,7 @@ import {
   type LoopHealthRange,
   type LoopHealthResponse,
   type LoopHealthShare,
-} from "$lib/api";
+} from "#lib/api/index.js";
 import { ALL_SCOPES, unavailableFor } from "./daily-profile.test-fixtures";
 
 const R = LoopHealthUnknownReason;

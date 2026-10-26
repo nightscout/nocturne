@@ -1,7 +1,7 @@
 <script lang="ts">
   import Printer from "@lucide/svelte/icons/printer";
-  import { Button } from "$lib/components/ui/button";
-  import { PaintedMoment } from "$lib/forms";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { PaintedMoment } from "#lib/forms/index.js";
 
   interface Props {
     /** Runs the print flow; resolves true once the print dialog has closed. */

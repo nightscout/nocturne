@@ -11,13 +11,13 @@
     MAX_CUSTOM_SOUND_SIZE_MB,
     type CustomAlarmSound,
     type CustomSoundRejection,
-  } from "$lib/audio/alarm-sounds";
-  import { formatFileSize } from "$lib/utils/formatting";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { EmptyState } from "$lib/components/shared";
-  import { soundArtwork } from "$lib/watercolour-icons";
+  } from "#lib/audio/alarm-sounds.js";
+  import { formatFileSize } from "#lib/utils/formatting.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { soundArtwork } from "#lib/watercolour-icons.js";
   import {
     Dialog,
     DialogContent,
@@ -26,7 +26,7 @@
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-  } from "$lib/components/ui/dialog";
+  } from "#lib/components/ui/dialog/index.js";
   import Upload from "@lucide/svelte/icons/upload";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Play from "@lucide/svelte/icons/play";

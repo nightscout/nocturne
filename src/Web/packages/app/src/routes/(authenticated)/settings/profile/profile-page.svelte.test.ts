@@ -22,7 +22,7 @@ const deleted: string[] = [];
 
 // Hoisted above every declaration in this file, so the factory may only reach out to the
 // lazily-read bindings above it.
-vi.mock("$api/generated/profiles.generated.remote", () => ({
+vi.mock("#lib/api/generated/profiles.generated.remote.js", () => ({
   getProfileSummary: () => ({
     current: {
       therapySettings,

@@ -9,8 +9,8 @@
     BasalPillData,
     LoopPillData,
     StatusPillsConfig,
-  } from "$lib/types/status-pills";
-  import { cn } from "$lib/utils";
+  } from "#lib/types/status-pills.js";
+  import { cn } from "#lib/utils/index.js";
 
   interface StatusPillBarProps {
     /** IOB data */

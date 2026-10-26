@@ -2,7 +2,7 @@ import type {
   DailySummaryResponse,
   GriTimelineResponse,
   YearSummaryResponse,
-} from "$api/generated/nocturne-api-client";
+} from "#lib/api/generated/nocturne-api-client.js";
 
 type Requests = {
   summary: (year: number, sources: string[]) => Promise<YearSummaryResponse>;

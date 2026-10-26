@@ -1,5 +1,5 @@
-import { randomUUID } from "$lib/utils";
-import { AlarmTriggerType } from "$lib/api";
+import { randomUUID } from "#lib/utils/index.js";
+import { AlarmTriggerType } from "#lib/api/index.js";
 
 /**
  * xDrip+-inspired Alarm Profile Types

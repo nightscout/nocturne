@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { distinct } from "$lib/utils/collections";
-  import * as Select from "$lib/components/ui/select";
+  import { distinct } from "#lib/utils/collections.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import {
     permissionGroups,
     type PermissionCategory,

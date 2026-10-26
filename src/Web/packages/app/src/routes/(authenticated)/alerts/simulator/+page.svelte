@@ -1,18 +1,18 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { getRules } from "$api/generated/alertRules.generated.remote";
-  import { Button } from "$lib/components/ui/button";
+  import { getRules } from "#lib/api/generated/alertRules.generated.remote.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
     CardDescription,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import PlayCircle from "@lucide/svelte/icons/circle-play";
-  import ReplayPanel from "$lib/components/alerts/ReplayPanel.svelte";
+  import ReplayPanel from "#lib/components/alerts/ReplayPanel.svelte";
 
   const rulesQuery = getRules();
 </script>
@@ -27,7 +27,7 @@
       type="button"
       variant="ghost"
       size="icon"
-      onclick={() => goto(resolve("/alerts"))}
+      onclick={() => goto(resolve('alerts'))}
       aria-label="Back to alerts"
     >
       <ArrowLeft class="h-4 w-4" />

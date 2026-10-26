@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { formatCarbDisplay, formatLocale } from "$lib/utils/formatting";
+  import { formatCarbDisplay, formatLocale } from "#lib/utils/formatting.js";
   import StatusPill from "./StatusPill.svelte";
   import type {
     COBPillData,
     PillInfoItem,
     AlertLevel,
-  } from "$lib/types/status-pills";
+  } from "#lib/types/status-pills.js";
 
   interface COBPillProps {
     data: COBPillData | null;

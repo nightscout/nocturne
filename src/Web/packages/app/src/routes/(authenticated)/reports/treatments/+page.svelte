@@ -8,7 +8,7 @@
     TreatmentEditDialog,
     TreatmentCategoryTabs,
     TreatmentStatsCard,
-  } from "$lib/components/treatments";
+  } from "#lib/components/treatments/index.js";
   import {
     mergeEntryRecords,
     countEntryRecords,
@@ -18,15 +18,15 @@
     type EntryCategoryId,
     type EntryRecord,
     ENTRY_CATEGORIES,
-  } from "$lib/constants/entry-categories";
+  } from "#lib/constants/entry-categories.js";
 
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Card from "$lib/components/ui/card";
-  import * as Alert from "$lib/components/ui/alert";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import X from "@lucide/svelte/icons/x";
   import Plus from "@lucide/svelte/icons/plus";
@@ -35,10 +35,10 @@
   import Droplet from "@lucide/svelte/icons/droplet";
   import FileText from "@lucide/svelte/icons/file-text";
   import Smartphone from "@lucide/svelte/icons/smartphone";
-  import { bg, bgLabel, formatCarbDisplay, formatDateTimeCompact, formatInsulinDisplay, formatNumber, formatNumericDate } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatCarbDisplay, formatDateTimeCompact, formatInsulinDisplay, formatNumber, formatNumericDate } from "#lib/utils/formatting.js";
   import { toast } from "svelte-sonner";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
 
   // Import remote function forms and commands
   import {
@@ -49,7 +49,7 @@
     createEntry,
   } from "./data.remote";
   import { toCreateEntryInput, toUpdateEntryInput } from "./entry-request";
-  import { getStats as getTreatmentLogStats } from "$lib/api/generated/treatmentLogs.generated.remote";
+  import { getStats as getTreatmentLogStats } from "#lib/api/generated/treatmentLogs.generated.remote.js";
 
   // Get shared date params from context (set by reports layout)
   const reportsParams = requireDateParamsContext(7);

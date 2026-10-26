@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 
-vi.mock("$api/chart-data.remote", () => ({
+vi.mock("#lib/api/chart-data.remote.js", () => ({
   getChartData: vi.fn(() => {
     const result = Promise.resolve(served) as Promise<typeof served> & {
       run: () => Promise<typeof served>;
@@ -13,7 +13,7 @@ vi.mock("$api/chart-data.remote", () => ({
 // The store registers its handlers on the client; capturing them lets a test deliver a
 // socket event the way the bridge would.
 const socketHandlers = vi.hoisted(() => ({}) as Record<string, (event: unknown) => void>);
-vi.mock("$lib/websocket/websocket-client.svelte", () => ({
+vi.mock("#lib/websocket/websocket-client.svelte.js", () => ({
   WebSocketClient: class {
     on(event: string, handler: (event: unknown) => void) {
       socketHandlers[event] = handler;
@@ -23,18 +23,18 @@ vi.mock("$lib/websocket/websocket-client.svelte", () => ({
     disconnect() {}
   },
 }));
-vi.mock("$api/predictions.remote", () => ({
+vi.mock("#lib/api/predictions.remote.js", () => ({
   getPredictions: vi.fn(async () => null),
   getPredictionStatus: vi.fn(async () => ({ available: false })),
 }));
 
 import { error } from "@sveltejs/kit";
 import { flushSync } from "svelte";
-import type { RealtimeStore } from "$lib/stores/realtime-store.svelte";
-import { getChartData } from "$api/chart-data.remote";
-import { getPredictions, getPredictionStatus } from "$api/predictions.remote";
-import { transformChartData } from "$lib/utils/chart-data-transform";
-import type { Entry } from "$lib/websocket/types";
+import type { RealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+import { getChartData } from "#lib/api/chart-data.remote.js";
+import { getPredictions, getPredictionStatus } from "#lib/api/predictions.remote.js";
+import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import type { Entry } from "#lib/websocket/types.js";
 import Harness from "./chart-data-engine-harness.test.svelte";
 import type {
   ChartDataEngine,

@@ -14,10 +14,10 @@ import { z } from "zod";
 import { query, command, form, getRequestEvent } from "$app/server";
 import { invalid, redirect } from "@sveltejs/kit";
 
-import type { OidcProviderInfo } from "$lib/api/generated/nocturne-api-client";
-import { clearAuthCookies } from "$lib/config/auth-cookies";
-import { errorStatus, RATE_LIMITED_ERROR } from "$lib/forms/submit-error";
-import { safeReturnUrl } from "$lib/server/return-url";
+import type { OidcProviderInfo } from "#lib/api/generated/nocturne-api-client.js";
+import { clearAuthCookies } from "#lib/config/auth-cookies.js";
+import { errorStatus, RATE_LIMITED_ERROR } from "#lib/forms/submit-error.js";
+import { safeReturnUrl } from "#lib/server/return-url.js";
 import { classifyRecoveryError, type RecoveryFailure } from "./recovery-error";
 
 const RECOVERY_FAILURE_MESSAGES: Record<RecoveryFailure, string> = {

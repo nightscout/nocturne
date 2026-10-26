@@ -1,11 +1,11 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { WidgetId } from "$lib/api/generated/nocturne-api-client";
-import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
-import { GlucoseStatus } from "$lib/api/generated/nocturne-api-client";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import { resetWatercolour } from "$lib/test-stubs/watercolour-deferral.svelte";
+import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
+import { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
 
 const { now, store, settings } = vi.hoisted(() => {
   const now = Date.UTC(2026, 5, 14, 9, 30, 0);
@@ -32,25 +32,25 @@ const { now, store, settings } = vi.hoisted(() => {
   };
 });
 
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
+vi.mock("#lib/stores/realtime-store.svelte.js", () => ({
   getRealtimeStore: () => store,
   tryGetRealtimeStore: () => store,
 }));
 
-vi.mock("$api/ui-settings.remote", () => ({
+vi.mock("#lib/api/ui-settings.remote.js", () => ({
   getUiSettings: () => remoteQuery(() => settings),
 }));
 
 const summary = vi.hoisted(() => ({ current: undefined as { mills: number; status: string } | undefined }));
 
-vi.mock("$api/generated/summaries.generated.remote", () => ({
+vi.mock("#lib/api/generated/summaries.generated.remote.js", () => ({
   getSummary: () => remoteQuery(() => ({ current: summary.current })),
 }));
 
-vi.mock("$lib/watercolour-deferral.svelte", () => import("$lib/test-stubs/watercolour-deferral.svelte"));
+vi.mock("#lib/watercolour-deferral.svelte.js", () => import("#lib/test-stubs/watercolour-deferral.svelte.js"));
 
 vi.mock("water-ui", async (importOriginal) => {
-  const fake = await import("$lib/test-stubs/Watercolour.test-stub.svelte");
+  const fake = await import("#lib/test-stubs/Watercolour.test-stub.svelte");
   return {
     ...(await importOriginal<typeof import("water-ui")>()),
     Artwork: fake.default,

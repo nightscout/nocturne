@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { MigrationJobState, type MigrationJobInfo } from "$api";
+import { MigrationJobState, type MigrationJobInfo } from "#lib/api/index.js";
 import { completedCleanly } from "./migration-outcome";
 
 const job = (overrides: Partial<MigrationJobInfo>) =>

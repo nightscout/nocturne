@@ -1,16 +1,16 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { Button } from "$lib/components/ui/button";
-  import { cn } from "$lib/utils";
-  import { relativeAge } from "$lib/utils/formatting";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { cn } from "#lib/utils/index.js";
+  import { relativeAge } from "#lib/utils/formatting.js";
   import {
     type InAppNotificationDto,
     NotificationUrgency,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { resolveNotificationIcon } from "$lib/utils/notification-icons";
-  import { resolveNotificationLabel } from "$lib/utils/notification-labels";
-  import InstallTiming from "$lib/components/notifications/InstallTiming.svelte";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { resolveNotificationIcon } from "#lib/utils/notification-icons.js";
+  import { resolveNotificationLabel } from "#lib/utils/notification-labels.js";
+  import InstallTiming from "#lib/components/notifications/InstallTiming.svelte";
 
   interface Props {
     notification: InAppNotificationDto;

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { render } from "svelte/server";
-import Harness from "$lib/test-fixtures/A1cPreferencesProbe.svelte";
+import Harness from "#lib/test-fixtures/A1cPreferencesProbe.svelte";
 import { loadLocales, runWithLocale } from "wuchale/load-utils/server";
 import * as main from "../../../../../locales/main.loader.server.svelte.js";
 import supportedLocales from "../../../../../supportedLocales.json";

@@ -1,5 +1,5 @@
 import locales from '../../../../supportedLocales.json'
-import { browser } from '$app/environment'
+import { browser } from '$app/env'
 import { loadLocale } from 'wuchale/load-utils'
 import {
     preferredLanguage,
@@ -12,8 +12,8 @@ import {
     applyTenantPresentation,
     setLanguage,
     type SupportedLocale,
-} from '$lib/stores/appearance-store.svelte'
-import { updateDisplayPreferences } from '$lib/api/user-preferences.remote'
+} from '#lib/stores/appearance-store.svelte.js'
+import { updateDisplayPreferences } from '#lib/api/user-preferences.remote.js'
 // so that the loaders are registered, only here, not required in nested ones (below)
 import '../../../../locales/main.loader.svelte.js'
 import '../../../../locales/js.loader.js'

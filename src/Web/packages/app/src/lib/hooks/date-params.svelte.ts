@@ -22,7 +22,7 @@ import {
   resolveDayRange,
   startOfDay,
   type DayRangeStrings,
-} from "$lib/utils/date-range";
+} from "#lib/utils/date-range.js";
 
 /**
  * Zod schema for reports URL parameters.

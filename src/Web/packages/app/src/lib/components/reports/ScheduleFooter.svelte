@@ -2,7 +2,7 @@
   import type {
     ActiveProfileSchedules,
     ScheduleChangeInfo,
-  } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/nocturne-api-client.js";
   import History from "@lucide/svelte/icons/history";
   import ActiveProfileHeading from "./ActiveProfileHeading.svelte";
   import { hourStart } from "./hourly-patterns/hour-labels";
@@ -12,7 +12,7 @@
     formatNumericDate,
     time,
     timeStringToSeconds,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
 
   interface Props {
     profiles: ActiveProfileSchedules[];

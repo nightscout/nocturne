@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { Key } from '@nocturne/ui/keys';
-	import type { Food } from '$api';
+	import type { Food } from '#lib/api/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
 	import X from '@lucide/svelte/icons/x';
-	import { DEFAULT_PORTION, DEFAULT_GI, FoodFields } from '$lib/components/food';
-	import { Button } from '$lib/components/ui/button';
-	import { PaintedMoment, SubmitButton, toastSaved } from '$lib/forms';
+	import { DEFAULT_PORTION, DEFAULT_GI, FoodFields } from '#lib/components/food/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { PaintedMoment, SubmitButton, toastSaved } from '#lib/forms/index.js';
 	import { getFoodState } from './food-context.js';
 
 	interface Props {

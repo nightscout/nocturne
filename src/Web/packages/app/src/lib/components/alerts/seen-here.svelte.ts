@@ -1,5 +1,5 @@
 import { SvelteSet } from "svelte/reactivity";
-import type { ActiveExcursionResponse } from "$api-clients";
+import type { ActiveExcursionResponse } from "#lib/api/generated/nocturne-api-client.js";
 
 const STORAGE_KEY = "nocturne:alerts-seen-here";
 /** Excursion ids are unique, so the oldest can go once an alarm is long closed. */

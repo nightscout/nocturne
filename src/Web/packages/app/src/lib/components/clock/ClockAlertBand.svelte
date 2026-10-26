@@ -3,11 +3,11 @@
   import BellOff from "@lucide/svelte/icons/bell-off";
   import Check from "@lucide/svelte/icons/check";
   import Eye from "@lucide/svelte/icons/eye";
-  import { Button } from "$lib/components/ui/button";
-  import type { ClockAlertDto } from "$lib/api";
-  import { severity } from "$lib/components/alerts/severity";
-  import { severityLabel } from "$lib/components/alerts/severityLabel.svelte";
-  import { formatDateTimeCompact, relativeAge, toDate } from "$lib/utils/formatting";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import type { ClockAlertDto } from "#lib/api/index.js";
+  import { severity } from "#lib/components/alerts/severity.js";
+  import { severityLabel } from "#lib/components/alerts/severityLabel.svelte.js";
+  import { formatDateTimeCompact, relativeAge, toDate } from "#lib/utils/formatting.js";
 
   interface Props {
     alerts: ClockAlertDto[];

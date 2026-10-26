@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { StateSpanCategory, ChartSpanKind } from "$lib/api";
+  import { StateSpanCategory, ChartSpanKind } from "#lib/api/index.js";
   import ExerciseModeIcon from "./ExerciseModeIcon.svelte";
   import SleepModeIcon from "./SleepModeIcon.svelte";
   import ThermometerIcon from "@lucide/svelte/icons/thermometer";

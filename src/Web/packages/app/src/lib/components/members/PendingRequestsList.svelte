@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import UserAvatar from "$lib/components/account/UserAvatar.svelte";
-  import * as Card from "$lib/components/ui/card";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import UserAvatar from "#lib/components/account/UserAvatar.svelte";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import UserPlus from "@lucide/svelte/icons/user-plus";
   import Check from "@lucide/svelte/icons/check";
   import X from "@lucide/svelte/icons/x";
@@ -13,8 +13,8 @@
   import type {
     MembershipRequestDto,
     TenantRoleDto,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { relativeAge } from "$lib/utils/formatting";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { relativeAge } from "#lib/utils/formatting.js";
 
   interface Props {
     requests: MembershipRequestDto[];

@@ -7,7 +7,7 @@ let create_impl: () => Promise<unknown>;
 let create_args: unknown[];
 let status_current: unknown;
 
-vi.mock("$api/generated/profileActivations.generated.remote", () => ({
+vi.mock("#lib/api/generated/profileActivations.generated.remote.js", () => ({
   createActivation: (args: unknown) => {
     create_args.push(args);
     return create_impl();

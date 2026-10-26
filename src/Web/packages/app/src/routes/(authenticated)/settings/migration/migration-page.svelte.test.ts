@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MigrationJobState, MigrationMode } from "$api";
-import type { MigrationJobInfo } from "$api";
+import { MigrationJobState, MigrationMode } from "#lib/api/index.js";
+import type { MigrationJobInfo } from "#lib/api/index.js";
 
 let history: MigrationJobInfo[] = [];
 /** What a status poll answers; the history it leaves behind stands in for the server's. */
@@ -20,7 +20,7 @@ const remote = vi.hoisted(() => ({
 
 // The factory is hoisted above every declaration in this file, so anything it evaluates eagerly
 // has to be built inside it; only the lazy `history` read may reach out.
-vi.mock("$api/generated/migrations.generated.remote", () => {
+vi.mock("#lib/api/generated/migrations.generated.remote.js", () => {
   const inertForm = { enhance: () => ({}), pending: 0, result: undefined };
 
   return {

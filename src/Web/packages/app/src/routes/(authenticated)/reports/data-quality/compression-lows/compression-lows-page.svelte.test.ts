@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import { remoteCommand, remoteQuery, updatedBy } from "$lib/test-stubs/remote-resource";
+import { remoteCommand, remoteQuery, updatedBy } from "#lib/test-stubs/remote-resource.js";
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 
@@ -32,7 +32,7 @@ const suggestionsQuery = remoteQuery(() => [suggestion]);
 
 let reviewImpl: (arg: unknown) => Promise<unknown>;
 
-vi.mock("$api/generated/compressionLows.generated.remote", () => ({
+vi.mock("#lib/api/generated/compressionLows.generated.remote.js", () => ({
   getSuggestions: () => suggestionsQuery,
   getSuggestion: () => remoteQuery(() => detail),
   reviewSuggestions: remoteCommand((arg) => reviewImpl(arg)),
@@ -41,7 +41,7 @@ vi.mock("$api/generated/compressionLows.generated.remote", () => ({
 
 vi.mock("svelte-sonner", () => ({ toast: { error: toastError } }));
 
-import { reviewSuggestions } from "$api/generated/compressionLows.generated.remote";
+import { reviewSuggestions } from "#lib/api/generated/compressionLows.generated.remote.js";
 import CompressionLowsPage from "./+page.svelte";
 
 const detailLoaded = () => page.getByText("Recovery (min)");

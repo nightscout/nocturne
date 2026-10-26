@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from "vitest";
 
 let breakdownImpl: () => Promise<unknown>;
 
-vi.mock("$api/generated/nutritions.generated.remote", () => ({
+vi.mock("#lib/api/generated/nutritions.generated.remote.js", () => ({
   getCarbIntakeFoods: () => ({ run: () => breakdownImpl() }),
   addCarbIntakeFood: () => Promise.resolve({}),
   deleteCarbIntakeFood: () => Promise.resolve({}),

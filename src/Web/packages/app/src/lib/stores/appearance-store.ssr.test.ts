@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render } from "svelte/server";
-import type { UserDisplayPreferences } from "$lib/api";
+import type { UserDisplayPreferences } from "#lib/api/index.js";
 import Harness from "./appearance-ssr-harness.svelte";
 import {
   glucoseUnits,

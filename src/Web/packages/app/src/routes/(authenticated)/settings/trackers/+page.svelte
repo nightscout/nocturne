@@ -1,31 +1,31 @@
 <script lang="ts">
-  import { formatAge } from "$lib/components/trackers/age.svelte";
-  import { formatDayTime } from "$lib/utils/formatting";
+  import { formatAge } from "#lib/components/trackers/age.svelte.js";
+  import { formatDayTime } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Tabs from "$lib/components/ui/tabs";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
-  import { Textarea } from "$lib/components/ui/textarea";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     TrackerCompletionDialog,
     TrackerStartDialog,
     ReservoirReportDialog,
     type TrackerNotification,
-  } from "$lib/components/trackers";
-  import { reachedUrgency } from "$lib/components/trackers/schedule";
-  import ActiveTrackersTab from "$lib/components/trackers/ActiveTrackersTab.svelte";
-  import TrackerHistoryTab from "$lib/components/trackers/TrackerHistoryTab.svelte";
-  import TrackerDefinitionsTab from "$lib/components/trackers/TrackerDefinitionsTab.svelte";
-  import TrackerPresetsTab from "$lib/components/trackers/TrackerPresetsTab.svelte";
-  import TrackerEditorDialog from "$lib/components/trackers/TrackerEditorDialog.svelte";
+  } from "#lib/components/trackers/index.js";
+  import { reachedUrgency } from "#lib/components/trackers/schedule.js";
+  import ActiveTrackersTab from "#lib/components/trackers/ActiveTrackersTab.svelte";
+  import TrackerHistoryTab from "#lib/components/trackers/TrackerHistoryTab.svelte";
+  import TrackerDefinitionsTab from "#lib/components/trackers/TrackerDefinitionsTab.svelte";
+  import TrackerPresetsTab from "#lib/components/trackers/TrackerPresetsTab.svelte";
+  import TrackerEditorDialog from "#lib/components/trackers/TrackerEditorDialog.svelte";
   import Timer from "@lucide/svelte/icons/timer";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import History from "@lucide/svelte/icons/history";
@@ -36,12 +36,12 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import * as trackersRemote from "$api/generated/trackers.generated.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import * as trackersRemote from "#lib/api/generated/trackers.generated.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { toast } from "svelte-sonner";
   import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
   import {
     NotificationUrgency,
     TrackerCategory,
@@ -53,7 +53,7 @@
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     type TrackerPresetDto,
-  } from "$api";
+  } from "#lib/api/index.js";
 
   // Auth state from the server-resolved session. This route sits behind the
   // authenticated + settings layout guards, so page.data.user is populated for
@@ -259,7 +259,7 @@
   function requireAuth(): boolean {
     if (!isAuthenticated) {
       const returnUrl = encodeURIComponent(window.location.pathname);
-      goto(resolve(`/auth/login?returnUrl=${returnUrl}`));
+      goto(resolve(`auth/login?returnUrl=${returnUrl}`));
       return false;
     }
     return true;
@@ -311,9 +311,9 @@
     formMode = def.mode ?? TrackerMode.Duration;
     formStartEventType = def.startEventType ?? undefined;
     formCompletionEventType = def.completionEventType ?? undefined;
-    formTriggerEventTypes = [...(def.triggerEventTypes ?? [])];
-    formEndEventTypes = [...(def.endEventTypes ?? [])];
-    formCovers = [...(def.covers ?? [])];
+    formTriggerEventTypes = [...def.triggerEventTypes ?? []];
+    formEndEventTypes = [...def.endEventTypes ?? []];
+    formCovers = [...def.covers ?? []];
     formTriggerNotesContains = def.triggerNotesContains ?? "";
     isDefinitionDialogOpen = true;
   }
@@ -469,12 +469,12 @@
       </Card>
     {/snippet}
 
-    {void (await Promise.all([
+    {void await Promise.all([
       definitionsQuery,
       activeInstancesQuery,
       historyInstancesQuery,
-      presetsQuery,
-    ]))}
+      presetsQuery
+    ])} 
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
       <Tabs.List variant="wrap">
@@ -502,46 +502,46 @@
       </Tabs.List>
 
       <!-- Active Instances Tab -->
-            <ActiveTrackersTab
-        {definitions}
-        {activeInstances}
-        {openStartDialog}
-        {openCompleteDialog}
-        {openReservoirReportDialog}
-        {openDeleteInstanceDialog}
-        {getInstanceLevel}
-        {getTimeRemaining}
-        {getLevelStyle}
-        {formatAge}
-        {formatDate}
+      <ActiveTrackersTab
+        definitions={definitions}
+        activeInstances={activeInstances}
+        openStartDialog={openStartDialog}
+        openCompleteDialog={openCompleteDialog}
+        openReservoirReportDialog={openReservoirReportDialog}
+        openDeleteInstanceDialog={openDeleteInstanceDialog}
+        getInstanceLevel={getInstanceLevel}
+        getTimeRemaining={getTimeRemaining}
+        getLevelStyle={getLevelStyle}
+        formatAge={formatAge}
+        formatDate={formatDate}
       />
 
       <!-- History Tab -->
-            <TrackerHistoryTab
-        {historyInstances}
-        {completionReasonLabels}
-        {formatAge}
-        {formatDate}
+      <TrackerHistoryTab
+        historyInstances={historyInstances}
+        completionReasonLabels={completionReasonLabels}
+        formatAge={formatAge}
+        formatDate={formatDate}
       />
 
       <!-- Definitions Tab -->
-            <TrackerDefinitionsTab
-        {definitions}
-        {categoryLabels}
-        {categoryColors}
-        {openNewDefinition}
-        {openStartDialog}
-        {openEditDefinition}
-        {openDeleteDefinitionDialog}
+      <TrackerDefinitionsTab
+        definitions={definitions}
+        categoryLabels={categoryLabels}
+        categoryColors={categoryColors}
+        openNewDefinition={openNewDefinition}
+        openStartDialog={openStartDialog}
+        openEditDefinition={openEditDefinition}
+        openDeleteDefinitionDialog={openDeleteDefinitionDialog}
       />
 
       <!-- Presets Tab -->
-            <TrackerPresetsTab
-        {definitions}
-        {presets}
-        {openNewPreset}
-        {applyPresetHandler}
-        {openDeletePresetDialog}
+      <TrackerPresetsTab
+        definitions={definitions}
+        presets={presets}
+        openNewPreset={openNewPreset}
+        applyPresetHandler={applyPresetHandler}
+        openDeletePresetDialog={openDeletePresetDialog}
       />
     </Tabs.Root>
   </svelte:boundary>
@@ -553,8 +553,8 @@
 <!-- Tracker Editor Dialog -->
 <TrackerEditorDialog
   bind:open={isDefinitionDialogOpen}
-  {isNewDefinition}
-  {editingDefinition}
+  isNewDefinition={isNewDefinition}
+  editingDefinition={editingDefinition}
   bind:formName
   bind:formDescription
   bind:formCategory
@@ -572,7 +572,7 @@
   bind:formEndEventTypes
   bind:formCovers
   bind:formTriggerNotesContains
-  {categoryLabels}
+  categoryLabels={categoryLabels}
 />
 
 <!-- Start Instance Dialog -->
@@ -580,8 +580,8 @@
   bind:open={isStartDialogOpen}
   definition={startDefinition}
   history={historyInstances}
-  onClose={() => (startDefinition = null)}
-  onStart={() => (startDefinition = null)}
+  onClose={() => startDefinition = null}
+  onStart={() => startDefinition = null}
 />
 
 <!-- Complete Instance Dialog -->
@@ -683,9 +683,11 @@
       </div>
     </div>
     <Dialog.Footer>
-      <Button variant="outline" onclick={() => (isPresetDialogOpen = false)}>
-        Cancel
-      </Button>
+      <Button
+        variant="outline"
+        onclick={() => isPresetDialogOpen = false}
+      >Cancel</Button>
+
       <Button
         onclick={savePreset}
         disabled={!formPresetName || !formPresetDefinitionId}

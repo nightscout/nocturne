@@ -5,13 +5,13 @@ import { toast } from "svelte-sonner";
 import {
   NotificationUrgency,
   type InAppNotificationDto,
-} from "$lib/api/generated/nocturne-api-client";
+} from "#lib/api/generated/nocturne-api-client.js";
 
 const server = vi.hoisted(() => ({
   answer: (): Promise<unknown> => Promise.resolve(),
 }));
 
-vi.mock("$api/generated/notifications.generated.remote", () => ({
+vi.mock("#lib/api/generated/notifications.generated.remote.js", () => ({
   executeAction: () => server.answer(),
   markAsRead: () => server.answer(),
   markAllAsRead: () => server.answer(),

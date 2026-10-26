@@ -5,8 +5,8 @@ import Plug from "@lucide/svelte/icons/plug";
 import Settings from "@lucide/svelte/icons/settings";
 import Smartphone from "@lucide/svelte/icons/smartphone";
 import Sparkles from "@lucide/svelte/icons/sparkles";
-import { ConnectorState } from "$lib/constants/connector-states";
-import type { DataSourceStatus } from "$lib/components/settings/DataSourceRow.svelte";
+import { ConnectorState } from "#lib/constants/connector-states.js";
+import type { DataSourceStatus } from "#lib/components/settings/DataSourceRow.svelte";
 
 /** Minimal connector status shape needed for display mapping */
 interface ConnectorDisplayStatus {

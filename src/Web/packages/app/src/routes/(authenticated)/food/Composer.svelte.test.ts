@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
-import type { Food } from "$api";
+import type { Food } from "#lib/api/index.js";
 import Harness from "./Composer.test-harness.svelte";
 
 async function fillDraft() {

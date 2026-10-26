@@ -2,11 +2,11 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { createRawSnippet } from "svelte";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import type { ConnectorStatusDto } from "#lib/api/generated/nocturne-api-client.js";
 import FirstReadingChartArea from "./FirstReadingChartArea.svelte";
 import CoachHarness from "./FirstReadingCoachHarness.test.svelte";
-import { releaseWatercolour, resetWatercolour } from "$lib/test-stubs/watercolour-deferral.svelte";
+import { releaseWatercolour, resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
 
 const state = vi.hoisted(() => {
   const connectors: ConnectorStatusDto[] = [];
@@ -18,9 +18,9 @@ vi.mock("water-ui", async (importOriginal) => ({
   prefersReducedMotion: () => state.reducedMotion,
 }));
 
-vi.mock("$lib/watercolour-deferral.svelte", () => import("$lib/test-stubs/watercolour-deferral.svelte"));
+vi.mock("#lib/watercolour-deferral.svelte.js", () => import("#lib/test-stubs/watercolour-deferral.svelte.js"));
 
-vi.mock("$api/generated/connectorStatus.generated.remote", () => ({
+vi.mock("#lib/api/generated/connectorStatus.generated.remote.js", () => ({
   getStatus: () => remoteQuery(() => state.connectors),
 }));
 

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import type { SupplyItemConfig } from "./packing-config";
 
   interface Props {

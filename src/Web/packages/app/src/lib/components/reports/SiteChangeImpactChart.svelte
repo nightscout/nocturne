@@ -1,13 +1,13 @@
 <script lang="ts">
   import { AreaChart, Rule } from "layerchart";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import { EmptyState } from "$lib/components/shared";
-  import { bg, bgValue, bgLabel, bgRange } from "$lib/utils/formatting";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { bg, bgValue, bgLabel, bgRange } from "#lib/utils/formatting.js";
   import type {
     SiteChangeImpactAnalysis,
     SiteChangeImpactDataPoint,
-  } from "$lib/api";
+  } from "#lib/api/index.js";
 
   type CheckedImpactFields = Required<
     Pick<

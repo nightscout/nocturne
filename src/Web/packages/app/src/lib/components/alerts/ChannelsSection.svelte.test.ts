@@ -2,12 +2,12 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushSync } from "svelte";
-import { AlertRuleSeverity, ChannelStatus, ChannelType } from "$api-clients";
+import { AlertRuleSeverity, ChannelStatus, ChannelType } from "#lib/api/generated/nocturne-api-client.js";
 import type {
 	ChannelStatusResponse,
 	DeviceCapabilityCatalog,
 	InAppRecipientResponse,
-} from "$api-clients";
+} from "#lib/api/generated/nocturne-api-client.js";
 import type { ChannelDef } from "./types";
 import { page as pageState } from "$app/state";
 
@@ -25,7 +25,7 @@ let catalogError: Error | undefined;
 let statusCurrent: ChannelStatusResponse | undefined;
 let statusError: Error | undefined;
 
-vi.mock("$api/generated/linkedPlatforms.generated.remote", () => ({
+vi.mock("#lib/api/generated/linkedPlatforms.generated.remote.js", () => ({
 	getLinkedPlatforms: () => ({
 		get current() {
 			return { platforms: [] };
@@ -33,7 +33,7 @@ vi.mock("$api/generated/linkedPlatforms.generated.remote", () => ({
 	}),
 }));
 
-vi.mock("$api/generated/systems.generated.remote", () => ({
+vi.mock("#lib/api/generated/systems.generated.remote.js", () => ({
 	getChannelStatuses: () => ({
 		get current() {
 			return statusCurrent;
@@ -44,7 +44,7 @@ vi.mock("$api/generated/systems.generated.remote", () => ({
 	}),
 }));
 
-vi.mock("$api/generated/clientDevices.generated.remote", () => ({
+vi.mock("#lib/api/generated/clientDevices.generated.remote.js", () => ({
 	getCapabilityCatalog: () => ({
 		get current() {
 			return catalogCurrent;
@@ -62,7 +62,7 @@ const getInAppRecipients = vi.fn(() => ({
 	},
 }));
 
-vi.mock("$api/generated/alertRules.generated.remote", () => ({
+vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
 	getInAppRecipients: () => getInAppRecipients(),
 }));
 

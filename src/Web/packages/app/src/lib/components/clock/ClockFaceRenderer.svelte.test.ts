@@ -1,11 +1,11 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect, vi } from "vitest";
-import type { ClockFaceConfig } from "$lib/api";
-import type { ClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
-import { TRACKER_SHOW_OPTIONS } from "$lib/clock-builder";
-import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-import { formatLocale } from "$lib/utils/formatting";
-import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
+import type { ClockFaceConfig } from "#lib/api/index.js";
+import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
+import { TRACKER_SHOW_OPTIONS } from "#lib/clock-builder/index.js";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import { formatLocale } from "#lib/utils/formatting.js";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
 import Harness from "./ClockFaceRendererHarness.test.svelte";
 
 const WHITE = "rgb(255, 255, 255)";

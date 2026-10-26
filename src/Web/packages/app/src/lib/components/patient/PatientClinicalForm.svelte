@@ -1,10 +1,10 @@
 <script lang="ts">
   import Scale from "@lucide/svelte/icons/scale";
-  import { labelFor } from "$lib/components/ui/enum-value";
-  import { Input } from "$lib/components/ui/input";
-  import * as Select from "$lib/components/ui/select";
-  import { FormField } from "$lib/forms";
-  import { DiabetesType } from "$api";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { FormField } from "#lib/forms/index.js";
+  import { DiabetesType } from "#lib/api/index.js";
   import { diabetesTypeLabels, biologicalSexLabels } from "./labels";
   import { ClinicalState } from "./state.svelte";
   import TimezoneCombobox from "./TimezoneCombobox.svelte";

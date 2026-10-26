@@ -1,51 +1,51 @@
 <script lang="ts">
 	import { timeDay } from "d3-time";
-	import { withAll } from "$lib/utils/collections";
+	import { withAll } from "#lib/utils/collections.js";
 	import { page } from '$app/state';
-	import { satisfiesScope } from '$lib/authorization/scopes';
+	import { satisfiesScope } from '#lib/authorization/scopes.js';
 	import { toast } from 'svelte-sonner';
-	import { permissionGatedMutationError } from '$lib/forms';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
-	import { Badge } from '$lib/components/ui/badge';
-	import * as Table from '$lib/components/ui/table';
-	import { setReportPrintMeta } from '$lib/components/reports/print/report-print.svelte';
-	import { startOfDay, toDayString } from '$lib/utils/date-range';
+	import { permissionGatedMutationError } from '#lib/forms/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Card, CardContent, CardHeader, CardTitle } from '#lib/components/ui/card/index.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import * as Table from '#lib/components/ui/table/index.js';
+	import { setReportPrintMeta } from '#lib/components/reports/print/report-print.svelte.js';
+	import { startOfDay, toDayString } from '#lib/utils/date-range.js';
 	import {
 		Select,
 		SelectContent,
 		SelectItem,
 		SelectTrigger
-	} from '$lib/components/ui/select';
+	} from '#lib/components/ui/select/index.js';
 	import {
 		getSuggestions as getCompressionLowSuggestions,
 		getSuggestion as getCompressionLowSuggestion,
 		reviewSuggestions as reviewCompressionLows,
 		triggerDetection as triggerCompressionLowDetection
-	} from '$api/generated/compressionLows.generated.remote';
-	import { contextResource } from '$lib/hooks/resource-context.svelte';
-	import { createChartDataEngine } from '$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte';
-	import GlucoseChartShell from '$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte';
-	import GlucoseTrack from '$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte';
-	import BasalTrack from '$lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte';
-	import IobCobTrack from '$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte';
-	import ThresholdRules from '$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte';
-	import ChartTooltip from '$lib/components/dashboard/glucose-chart/ChartTooltip.svelte';
-	import { openDayInReview } from '$lib/components/dashboard/glucose-chart/day-in-review';
+	} from '#lib/api/generated/compressionLows.generated.remote.js';
+	import { contextResource } from '#lib/hooks/resource-context.svelte.js';
+	import { createChartDataEngine } from '#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js';
+	import GlucoseChartShell from '#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte';
+	import GlucoseTrack from '#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte';
+	import BasalTrack from '#lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte';
+	import IobCobTrack from '#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte';
+	import ThresholdRules from '#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte';
+	import ChartTooltip from '#lib/components/dashboard/glucose-chart/ChartTooltip.svelte';
+	import { openDayInReview } from '#lib/components/dashboard/glucose-chart/day-in-review.js';
 	import Check from '@lucide/svelte/icons/check';
 	import X from '@lucide/svelte/icons/x';
 	import Clock from '@lucide/svelte/icons/clock';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import { EmptyState } from '$lib/components/shared';
-	import { bg, bgLabel, formatShortDate, time } from "$lib/utils/formatting";
+	import { EmptyState } from '#lib/components/shared/index.js';
+	import { bg, bgLabel, formatShortDate, time } from "#lib/utils/formatting.js";
 	import {
 		CompressionLowBatchAction,
 		CompressionLowStatus,
 		type CompressionLowSuggestion
-	} from '$lib/api';
+	} from '#lib/api/index.js';
 
 	// Accepting, dismissing, deleting and re-running detection all write state
 	// spans and suggestion rows, so the server gates them on glucose.readwrite.

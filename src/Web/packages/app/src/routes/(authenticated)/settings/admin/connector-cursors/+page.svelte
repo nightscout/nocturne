@@ -1,22 +1,22 @@
 <script lang="ts">
   import Database from "@lucide/svelte/icons/database";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
-  import * as Alert from "$lib/components/ui/alert";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -24,20 +24,20 @@
   import XCircle from "@lucide/svelte/icons/circle-x";
   import Plug from "@lucide/svelte/icons/plug";
   import Building2 from "@lucide/svelte/icons/building-2";
-  import * as tenantRemote from "$api/generated/tenants.generated.remote";
+  import * as tenantRemote from "#lib/api/generated/tenants.generated.remote.js";
   import {
     getTenantConnectors,
     resetTenantCursors,
     getResetJobStatus,
     cancelResetJob,
-  } from "$api/generated/connectorAdmins.generated.remote";
+  } from "#lib/api/generated/connectorAdmins.generated.remote.js";
   import {
     ConnectorResetConnectorState,
     ConnectorResetJobState,
     type TenantDto,
     type TenantConnectorsDto,
     type ConnectorResetJobStatus,
-  } from "$api";
+  } from "#lib/api/index.js";
 
   // Tenant list (platform admin)
   let tenants = $state<TenantDto[]>([]);

@@ -4,8 +4,8 @@ import {
   type EventResponseDefinition,
   type EventResponseLimits,
   type EventUnavailableAnchor,
-} from "$lib/api";
-import type { getEventResponse } from "$api/generated/loopAnalysis.generated.remote";
+} from "#lib/api/index.js";
+import type { getEventResponse } from "#lib/api/generated/loopAnalysis.generated.remote.js";
 
 type EventResponseQuery = Parameters<typeof getEventResponse>[0];
 

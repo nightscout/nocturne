@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { DeviceEventType } from "$lib/api";
-  import { NightscoutEventType } from "$lib/constants/nightscout-event-types";
+  import { DeviceEventType } from "#lib/api/index.js";
+  import { NightscoutEventType } from "#lib/constants/nightscout-event-types.js";
   import SensorIcon from "./SensorIcon.svelte";
   import SiteChangeIcon from "./SiteChangeIcon.svelte";
   import ReservoirIcon from "./ReservoirIcon.svelte";

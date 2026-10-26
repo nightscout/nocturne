@@ -1,27 +1,27 @@
 <script lang="ts">
   import { page } from "$app/state";
 
-  import * as Sidebar from "$lib/components/ui/sidebar";
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import * as Select from "$lib/components/ui/select";
+  import * as Sidebar from "#lib/components/ui/sidebar/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import SidebarGlucoseWidget from "./SidebarGlucoseWidget.svelte";
   import SidebarNotifications from "./SidebarNotifications.svelte";
-  import SidebarDndToggle from "$lib/components/alerts/SidebarDndToggle.svelte";
-  import SetupOpenCount from "$lib/components/setup-hub/SetupOpenCount.svelte";
+  import SidebarDndToggle from "#lib/components/alerts/SidebarDndToggle.svelte";
+  import SetupOpenCount from "#lib/components/setup-hub/SetupOpenCount.svelte";
   import UserMenu from "./UserMenu.svelte";
-  import LanguageSelector from "$lib/components/LanguageSelector.svelte";
-  import { updateLanguagePreference } from "$api/user-preferences.remote";
-  import { hasLanguagePreference } from "$lib/stores/appearance-store.svelte";
+  import LanguageSelector from "#lib/components/LanguageSelector.svelte";
+  import { updateLanguagePreference } from "#lib/api/user-preferences.remote.js";
+  import { hasLanguagePreference } from "#lib/stores/appearance-store.svelte.js";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Shield from "@lucide/svelte/icons/shield";
   import Eye from "@lucide/svelte/icons/eye";
-  import { stillArtwork } from "$lib/watercolour-deferral.svelte";
-  import { buildAppNavigation, type NavItem, type NavLink } from "$lib/navigation/app-navigation.svelte";
+  import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
+  import { buildAppNavigation, type NavItem, type NavLink } from "#lib/navigation/app-navigation.svelte.js";
   import {
     goToTenant,
     type TenantSwitcherTarget,
-  } from "$lib/utils/tenant-host";
-  import type { AuthUser } from "$lib/stores/auth-store.svelte";
+  } from "#lib/utils/tenant-host.js";
+  import type { AuthUser } from "#lib/stores/auth-store.svelte.js";
 
   interface Props {
     /** Current authenticated user (passed from layout data) */
@@ -56,7 +56,7 @@
   const sidebar = Sidebar.useSidebar();
 
   // Absolutely positioned over the item, so the menu lays out the same before it arrives.
-  const selectionEdge = stillArtwork(() => import("$lib/watercolour/selection-edge"));
+  const selectionEdge = stillArtwork(() => import("#lib/watercolour/selection-edge.js"));
 
   // Defer localStorage check to after hydration so SSR and client initial render
   // both produce the same DOM (avoids hydration mismatch from conditional rendering).

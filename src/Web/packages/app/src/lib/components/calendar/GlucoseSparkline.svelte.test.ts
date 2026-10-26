@@ -1,18 +1,18 @@
 import { render } from "vitest-browser-svelte";
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import type { ChartThresholdsDto } from "$lib/api/generated/nocturne-api-client";
+import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
 import {
 	FALLBACK_GLUCOSE_THRESHOLDS,
 	FALLBACK_GLUCOSE_Y_MAX,
-} from "$lib/constants/glucose-thresholds";
+} from "#lib/constants/glucose-thresholds.js";
 import Harness from "./GlucoseSparklineHarness.test.svelte";
 
 const realtime = vi.hoisted(() => ({
 	chartThresholds: null as ChartThresholdsDto | null,
 }));
 
-vi.mock("$lib/stores/realtime-store.svelte", async () => {
-	const { resolveChartThresholds } = await import("$lib/constants/glucose-thresholds");
+vi.mock("#lib/stores/realtime-store.svelte.js", async () => {
+	const { resolveChartThresholds } = await import("#lib/constants/glucose-thresholds.js");
 	return {
 		tenantChartThresholds: () => ({
 			get current() {

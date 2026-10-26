@@ -3,29 +3,29 @@
   import {
     Card,
     CardContent,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Tabs from "$lib/components/ui/tabs";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import Shield from "@lucide/svelte/icons/shield";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Bot from "@lucide/svelte/icons/bot";
-  import * as rolesRemote from "$lib/api/generated/roles.generated.remote";
-  import * as oidcRemote from "$lib/api/generated/oidcProviderAdmins.generated.remote";
-  import * as platformSettingsRemote from "$lib/api/generated/platformSettings.generated.remote";
-  import IntegrationsTabContent from "$lib/components/admin/IntegrationsTabContent.svelte";
-  import OidcProvidersTabContent from "$lib/components/admin/OidcProvidersTabContent.svelte";
-  import OidcProviderDialog from "$lib/components/admin/OidcProviderDialog.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { withLockoutOverride } from "$lib/components/admin/lockout-override";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import * as rolesRemote from "#lib/api/generated/roles.generated.remote.js";
+  import * as oidcRemote from "#lib/api/generated/oidcProviderAdmins.generated.remote.js";
+  import * as platformSettingsRemote from "#lib/api/generated/platformSettings.generated.remote.js";
+  import IntegrationsTabContent from "#lib/components/admin/IntegrationsTabContent.svelte";
+  import OidcProvidersTabContent from "#lib/components/admin/OidcProvidersTabContent.svelte";
+  import OidcProviderDialog from "#lib/components/admin/OidcProviderDialog.svelte";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { withLockoutOverride } from "#lib/components/admin/lockout-override.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import type {
     TenantRoleDto,
     OidcProviderResponse,
     PlatformSettingsSummary,
     CreateOidcProviderRequest,
-  } from "$api";
+  } from "#lib/api/index.js";
 
   // State
   let activeTab = $state("identity-providers");

@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
-  } from "$lib/utils/formatting";
-  import { getDirectionInfo } from "$lib/utils";
-  import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
-  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
-  import { getGlucoseStatusClass } from "$lib/utils/glucose-status";
+  } from "#lib/utils/formatting.js";
+  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
+  import { getGlucoseStatusClass } from "#lib/utils/glucose-status.js";
 
   const realtimeStore = getRealtimeStore();
 

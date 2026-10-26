@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { enumValue } from "$lib/components/ui/enum-value";
-  import type { DeviceEvent } from "$lib/api";
-  import { DeviceEventType } from "$lib/api";
-  import { Label } from "$lib/components/ui/label";
-  import { Button } from "$lib/components/ui/button";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import * as Select from "$lib/components/ui/select";
+  import { enumValue } from "#lib/components/ui/enum-value.js";
+  import type { DeviceEvent } from "#lib/api/index.js";
+  import { DeviceEventType } from "#lib/api/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import X from "@lucide/svelte/icons/x";
 

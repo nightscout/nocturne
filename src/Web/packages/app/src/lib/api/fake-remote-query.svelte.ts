@@ -13,7 +13,7 @@
  * `$effect.pre` a no-op rather than a throw, so a Node test always reads as
  * tracking and cannot exercise the rule at all.
  *
- * @see $lib/api/retain-query.svelte for the registration lifetime this implies.
+ * @see #lib/api/retain-query.svelte for the registration lifetime this implies.
  */
 
 /** SvelteKit's own tracking probe: `$effect.pre` throws outside a reactive context. */

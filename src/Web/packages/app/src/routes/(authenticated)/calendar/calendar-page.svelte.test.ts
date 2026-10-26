@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 // The page opens on the current month, so the data is dated in it.
 const now = new Date();
@@ -30,11 +30,11 @@ const punchCard = {
   ],
 };
 
-vi.mock("$api/generated/statistics.generated.remote", () => ({
+vi.mock("#lib/api/generated/statistics.generated.remote.js", () => ({
   getPunchCardData: () => remoteQuery(() => punchCard),
 }));
 
-vi.mock("$api/generated/trackers.generated.remote", () => ({
+vi.mock("#lib/api/generated/trackers.generated.remote.js", () => ({
   getDefinitions: () => remoteQuery(() => []),
   getActiveInstances: () => remoteQuery(() => []),
   getInstanceHistory: () => remoteQuery(() => []),

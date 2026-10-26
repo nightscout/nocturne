@@ -1,19 +1,19 @@
 <script lang="ts">
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import Info from "@lucide/svelte/icons/info";
-  import * as Alert from "$lib/components/ui/alert";
-  import * as RadioGroup from "$lib/components/ui/radio-group";
-  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
-  import { FormError, FormField } from "$lib/forms";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
+  import TimezoneCombobox from "#lib/components/patient/TimezoneCombobox.svelte";
+  import { FormError, FormField } from "#lib/forms/index.js";
   import {
     formatGlucoseRange,
     formatGlucoseValue,
     getUnitLabel,
     isGlucoseUnits,
     type GlucoseUnits,
-  } from "$lib/utils/formatting";
-  import type { NightscoutDisplaySettings } from "$api";
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  } from "#lib/utils/formatting.js";
+  import type { NightscoutDisplaySettings } from "#lib/api/index.js";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
   interface Props {
     units: GlucoseUnits | undefined;

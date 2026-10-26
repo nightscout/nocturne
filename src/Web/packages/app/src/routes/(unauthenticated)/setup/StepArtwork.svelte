@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { ArtworkId, IconArtworkSource, PaletteId } from "water-ui";
-  import { databaseArtwork, fingerprintArtwork } from "$lib/watercolour-icons";
+  import { databaseArtwork, fingerprintArtwork } from "#lib/watercolour-icons.js";
 
   type StepArtSource =
     | { artwork: ArtworkId; icon?: undefined; palette: PaletteId }

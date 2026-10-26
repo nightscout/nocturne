@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { TenantAlertSettingsResponse } from "$api-clients";
+import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
 
 // The panel reads DND state through the generated remote functions; `update`
 // is swapped per test so a rejection can stand in for the server's 403.
@@ -16,7 +16,7 @@ let settings: TenantAlertSettingsResponse = idle;
 
 let updateImpl: () => Promise<TenantAlertSettingsResponse>;
 
-vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
+vi.mock("#lib/api/generated/tenantAlertSettings.generated.remote.js", () => ({
   get: () => ({ run: () => Promise.resolve(settings) }),
   update: () => updateImpl(),
 }));

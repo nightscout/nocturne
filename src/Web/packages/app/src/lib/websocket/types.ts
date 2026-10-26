@@ -6,7 +6,7 @@ import type {
   TrackerRealtimeAction,
   InAppNotificationDto,
   SyncPhase,
-} from '$lib/api/generated/nocturne-api-client';
+} from '#lib/api/generated/nocturne-api-client.js';
 
 // Re-export API client types for convenience
 export type { Entry, Treatment };

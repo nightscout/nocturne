@@ -1,30 +1,30 @@
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
+  import { formatLocale } from "#lib/utils/formatting.js";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
   import {
     get as getDnd,
     update as updateDnd,
-  } from "$api/generated/tenantAlertSettings.generated.remote";
-  import type { TenantAlertSettingsResponse } from "$api-clients";
-  import { describeSubmitError } from "$lib/forms";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  } from "#lib/api/generated/tenantAlertSettings.generated.remote.js";
+  import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import { describeSubmitError } from "#lib/forms/index.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import Bell from "@lucide/svelte/icons/bell";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { Item } from "$lib/components/ui/item";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
   import {
     isDndInEffect,
     isDndManualActive,
     isDndScheduleActiveNow,
     isDndScheduleConfigured,
   } from "./dnd";
-  import { refreshOnReturn } from "$lib/utils/refresh-on-return.svelte";
+  import { refreshOnReturn } from "#lib/utils/refresh-on-return.svelte.js";
 
   interface Props {
     /** Called after navigating away (e.g. to close a parent popover). */
@@ -158,7 +158,7 @@
         <DropdownMenu.Item
           onSelect={() => {
             onNavigate?.();
-            goto(resolve("/alerts/dnd"));
+            goto(resolve('alerts/dnd'));
           }}
         >
           <SettingsIcon class="h-3.5 w-3.5" /> Configure…

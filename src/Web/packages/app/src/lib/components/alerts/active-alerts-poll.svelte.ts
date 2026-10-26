@@ -1,5 +1,5 @@
-import { getActiveAlerts } from "$api/generated/alerts.generated.remote";
-import { pollWhileVisible } from "$lib/utils/poll-while-visible.svelte";
+import { getActiveAlerts } from "#lib/api/generated/alerts.generated.remote.js";
+import { pollWhileVisible } from "#lib/utils/poll-while-visible.svelte.js";
 
 /** How often to re-read the active-alert surface while the tab is visible. */
 const POLL_MS = 10_000;

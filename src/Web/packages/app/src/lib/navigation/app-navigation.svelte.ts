@@ -37,9 +37,9 @@ import Users from "@lucide/svelte/icons/users";
 import KeyRound from "@lucide/svelte/icons/key-round";
 import PlayCircle from "@lucide/svelte/icons/circle-play";
 import HistoryIcon from "@lucide/svelte/icons/history";
-import { satisfiesScope } from "$lib/authorization/scopes";
-import { getSidebarReportItems } from "$lib/navigation/report-navigation.svelte";
-import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
+import { satisfiesScope } from "#lib/authorization/scopes.js";
+import { getSidebarReportItems } from "#lib/navigation/report-navigation.svelte.js";
+import { filterTenantlessNav } from "#lib/navigation/tenantless-navigation.js";
 
 /** Stable identity of a top-level sidebar entry, independent of its translated title. */
 export type NavItemId =

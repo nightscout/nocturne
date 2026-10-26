@@ -1,7 +1,7 @@
 <!-- A slot's spread as the tooltip reads it: percentiles, mean and n, with the comparison beside it. -->
 <script lang="ts">
-  import type { LoopAnalysisAggregate } from "$lib/api";
-  import { plural } from "$lib/utils/plural";
+  import type { LoopAnalysisAggregate } from "#lib/api/index.js";
+  import { plural } from "#lib/utils/plural.js";
 
   interface Props {
     label?: string | null;

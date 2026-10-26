@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach } from "vitest";
 import { flushSync } from "svelte";
 import CarbRatioFormatSelect from "./CarbRatioFormatSelect.svelte";
-import { carbRatioFormat } from "$lib/stores/appearance-store.svelte";
+import { carbRatioFormat } from "#lib/stores/appearance-store.svelte.js";
 
 describe("CarbRatioFormatSelect", () => {
   beforeEach(() => {

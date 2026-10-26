@@ -3,12 +3,12 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { DataSourceInfo } from "$api-clients";
+import type { DataSourceInfo } from "#lib/api/generated/nocturne-api-client.js";
 
 let deleteImpl: () => Promise<unknown>;
 let deleteArgs: unknown[];
 
-vi.mock("$api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   deleteDataSourceData: (args: unknown) => {
     deleteArgs.push(args);
     return deleteImpl();

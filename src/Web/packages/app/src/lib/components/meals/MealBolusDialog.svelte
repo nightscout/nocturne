@@ -3,21 +3,21 @@
     formatClock,
     formatInsulinDisplay,
     formatLocale,
-  } from "$lib/utils/formatting";
-  import type { MealEvent, Bolus, BolusType, PatientInsulin } from "$lib/api";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import BolusFormFields from "$lib/components/treatments/edit-dialog/BolusFormFields.svelte";
-  import * as patientRemote from "$api/generated/patientRecords.generated.remote";
+  } from "#lib/utils/formatting.js";
+  import type { MealEvent, Bolus, BolusType, PatientInsulin } from "#lib/api/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import BolusFormFields from "#lib/components/treatments/edit-dialog/BolusFormFields.svelte";
+  import * as patientRemote from "#lib/api/generated/patientRecords.generated.remote.js";
   import {
     create as createBolusForm,
     update as updateBolusForm,
     remove as removeBolus,
-  } from "$api/generated/bolus.generated.remote";
+  } from "#lib/api/generated/bolus.generated.remote.js";
   import { toast } from "svelte-sonner";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { useToastSubmission } from "$lib/forms";
+  import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { useToastSubmission } from "#lib/forms/index.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Plus from "@lucide/svelte/icons/plus";
   import Pencil from "@lucide/svelte/icons/pencil";

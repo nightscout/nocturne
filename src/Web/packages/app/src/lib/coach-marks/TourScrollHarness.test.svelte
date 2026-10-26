@@ -9,7 +9,7 @@
   } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
   import { coachLabels } from "./copy.svelte";
-  import Probe from "$routes/(authenticated)/reports/loop-analysis/CoachContextProbe.test.svelte";
+  import Probe from "#routes/(authenticated)/reports/loop-analysis/CoachContextProbe.test.svelte";
 
   type Layout =
     /** One tour, from the top mark to the far mark. */

@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RequestEvent } from "@sveltejs/kit";
 // @ts-expect-error SvelteKit publishes no types for this entry point.
 import * as kitInternal from "@sveltejs/kit/internal/server";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { clearSessionCache } from "$lib/server/session-cache";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
+import { clearSessionCache } from "#lib/server/session-cache.js";
 
 // The real loaders read catalogs that only a wuchale build compiles.
 vi.mock("wuchale/load-utils/server", () => ({
@@ -21,8 +21,7 @@ vi.mock("../../../locales/js.loader.server.js", () => ({
   loadCatalog: () => ({}),
 }));
 vi.mock("../../../locales/data.js", () => ({ locales: ["en"] }));
-vi.mock("$env/dynamic/public", () => ({ env: {} }));
-vi.mock("$lib/stores/appearance-store.svelte", () => ({
+vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
   LANGUAGE_COOKIE_NAME: "nocturne-language",
 }));
 
@@ -30,7 +29,7 @@ const getSession = vi.fn();
 const getStatus = vi.fn();
 
 // Every API client the hooks build (session, status probe, per-request) answers from these.
-vi.mock("$lib/server/api-client-factory", () => ({
+vi.mock("#lib/server/api-client-factory.js", () => ({
   getApiBaseUrl: () => "http://api.test",
   createServerApiClient: () => ({
     oidc: { getSession: () => getSession() },
@@ -42,7 +41,7 @@ const { handle } = await import("./hooks.server");
 /** Sets up the request store SvelteKit's server wraps `handle` in, which sequence() reads. */
 const withRequestStore = (kitInternal as { with_request_store: <T>(store: unknown, fn: () => T) => T })
   .with_request_store;
-const { getRequestStatus } = await import("$lib/server/request-status");
+const { getRequestStatus } = await import("#lib/server/request-status.js");
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

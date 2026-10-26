@@ -3,11 +3,11 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const profiles = vi.hoisted(() => ({ create: vi.fn() }));
-vi.mock("$api/generated/profiles.generated.remote", () => ({
+vi.mock("#lib/api/generated/profiles.generated.remote.js", () => ({
   createTargetRangeSchedule: profiles.create,
 }));
 
-import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import TargetRangeCard from "./TargetRangeCard.svelte";
 
 const schedule = { profileName: "Default", entries: [{ time: "00:00", low: 90, high: 144 }] };

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { formatInsulinDisplay, formatLocale } from "$lib/utils/formatting";
+  import { formatInsulinDisplay, formatLocale } from "#lib/utils/formatting.js";
   import StatusPill from "./StatusPill.svelte";
   import type {
     IOBPillData,
     PillInfoItem,
     AlertLevel,
-  } from "$lib/types/status-pills";
+  } from "#lib/types/status-pills.js";
 
   interface IOBPillProps {
     data: IOBPillData | null;

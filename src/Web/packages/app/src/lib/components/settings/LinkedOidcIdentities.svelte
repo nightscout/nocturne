@@ -1,8 +1,8 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import * as Card from "$lib/components/ui/card";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { invalidateAll } from "$app/navigation";
   import Link2 from "@lucide/svelte/icons/link-2";
   import Plus from "@lucide/svelte/icons/plus";
@@ -10,16 +10,16 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Clock from "@lucide/svelte/icons/clock";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import { EmptyState } from "$lib/components/shared";
-  import { fingerprintArtwork } from "$lib/watercolour-icons";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { fingerprintArtwork } from "#lib/watercolour-icons.js";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     getLinkedIdentities,
     unlinkIdentity,
-  } from "$lib/api/generated/oidcs.generated.remote";
-  import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
-  import { isRecord } from "$lib/utils/type-guards";
-  import { getProvidersInfo } from "$routes/(unauthenticated)/auth/auth.remote";
+  } from "#lib/api/generated/oidcs.generated.remote.js";
+  import { describeSubmitError, errorStatus } from "#lib/forms/submit-error.js";
+  import { isRecord } from "#lib/utils/type-guards.js";
+  import { getProvidersInfo } from "#routes/(unauthenticated)/auth/auth.remote.js";
 
   interface Props {
     primaryAuthFactorCount: number;

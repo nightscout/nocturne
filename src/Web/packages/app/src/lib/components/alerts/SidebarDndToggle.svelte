@@ -1,13 +1,13 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
   import {
     get as getDnd,
     update as updateDnd,
-  } from "$api/generated/tenantAlertSettings.generated.remote";
-  import type { TenantAlertSettingsResponse } from "$api-clients";
-  import { Switch } from "$lib/components/ui/switch";
+  } from "#lib/api/generated/tenantAlertSettings.generated.remote.js";
+  import type { TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
   import Bell from "@lucide/svelte/icons/bell";
   import BellOff from "@lucide/svelte/icons/bell-off";
   import {
@@ -16,7 +16,7 @@
     isDndScheduleActiveNow,
     isDndScheduleConfigured,
   } from "./dnd";
-  import { refreshOnReturn } from "$lib/utils/refresh-on-return.svelte";
+  import { refreshOnReturn } from "#lib/utils/refresh-on-return.svelte.js";
 
   interface Props {
     /** Whether the toggle is on screen. The settings are read the first time it is. */

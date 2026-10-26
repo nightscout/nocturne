@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, type Snippet } from "svelte";
-  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
+  import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
 
   let {
     children,

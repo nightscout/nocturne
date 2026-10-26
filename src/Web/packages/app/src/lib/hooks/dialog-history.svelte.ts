@@ -1,5 +1,5 @@
 import { pushState, replaceState } from "$app/navigation";
-import { withSearchParam } from "$lib/utils/url";
+import { withSearchParam } from "#lib/utils/url.js";
 import { page } from "$app/state";
 
 /**

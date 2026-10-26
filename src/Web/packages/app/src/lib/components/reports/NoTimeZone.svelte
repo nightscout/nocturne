@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { TimeZoneUnavailableReason } from "$lib/api";
+  import { TimeZoneUnavailableReason } from "#lib/api/index.js";
   import Globe from "@lucide/svelte/icons/globe";
   import { timeZoneReasonCopy } from "./time-zone-reasons.svelte";
 

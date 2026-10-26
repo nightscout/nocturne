@@ -1,5 +1,5 @@
 import type { SequenceConfig } from "@nocturne/coach";
-import type { LoopAnalysisPage } from "$lib/components/reports/loop-analysis/loop-analysis-pages.svelte";
+import type { LoopAnalysisPage } from "#lib/components/reports/loop-analysis/loop-analysis-pages.svelte.js";
 
 /** Set by the authenticated layout once the tenant has finished the onboarding core. */
 export const ONBOARDING_CORE_GATE = "onboarding-core";

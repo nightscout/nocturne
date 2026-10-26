@@ -5,14 +5,14 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import GithubIcon from "$lib/components/icons/GithubIcon.svelte";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import GithubIcon from "#lib/components/icons/GithubIcon.svelte";
   import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
   import MessageCircle from "@lucide/svelte/icons/message-circle";
   import FileText from "@lucide/svelte/icons/file-text";
@@ -31,16 +31,16 @@
   import CreditCard from "@lucide/svelte/icons/credit-card";
   import GraduationCap from "@lucide/svelte/icons/graduation-cap";
   import { DropGroup, DropSurface } from "water-ui";
-  import { getServicesOverview } from "$api/generated/services.generated.remote";
-  import { getStatus } from "$api/generated/status.generated.remote";
-  import { getSupportConfig } from "$lib/api/support.remote";
-  import { formatDateTime } from "$lib/utils/formatting";
-  import IssueCreatorDialog from "$lib/components/support/IssueCreatorDialog.svelte";
+  import { getServicesOverview } from "#lib/api/generated/services.generated.remote.js";
+  import { getStatus } from "#lib/api/generated/status.generated.remote.js";
+  import { getSupportConfig } from "#lib/api/support.remote.js";
+  import { formatDateTime } from "#lib/utils/formatting.js";
+  import IssueCreatorDialog from "#lib/components/support/IssueCreatorDialog.svelte";
   import { getCoachMarkContext } from "@nocturne/coach";
   import { toast } from "svelte-sonner";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { docsUrl } from "$lib/docs-url";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { docsUrl } from "#lib/docs-url.js";
   import {
     buildDiagnosticReport,
     readDiagnosticDevice,

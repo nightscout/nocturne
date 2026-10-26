@@ -20,7 +20,7 @@ const { goto, store, NOW } = vi.hoisted(() => {
 
 vi.mock("$app/navigation", () => ({ goto }));
 
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
+vi.mock("#lib/stores/realtime-store.svelte.js", () => ({
   getRealtimeStore: () => store,
 }));
 

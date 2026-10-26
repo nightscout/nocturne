@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { BasalDeliveryOrigin } from "$lib/api";
+import { BasalDeliveryOrigin } from "#lib/api/index.js";
 import { isBasalAdjusted } from "./basal-presentation";
 
 describe("isBasalAdjusted", () => {

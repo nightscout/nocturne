@@ -1,20 +1,20 @@
 <script lang="ts">
-  import { formatDayTime } from "$lib/utils/formatting";
-  import type { AlertHistoryResponse } from "$api-clients";
-  import { AlertConditionType } from "$api-clients";
+  import { formatDayTime } from "#lib/utils/formatting.js";
+  import type { AlertHistoryResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import { AlertConditionType } from "#lib/api/generated/nocturne-api-client.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Clock from "@lucide/svelte/icons/clock";
   import { conditionLabel } from "./conditionLabel.svelte";
-  import { EmptyState } from "$lib/components/shared";
-  import { formatElapsedDuration } from "$lib/utils/duration";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { formatElapsedDuration } from "#lib/utils/duration.js";
 
   interface Props {
     history: AlertHistoryResponse | null;

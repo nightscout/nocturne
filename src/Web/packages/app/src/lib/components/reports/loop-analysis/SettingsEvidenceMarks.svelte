@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
   import { Circle, Line, Path, getChartContext } from "layerchart";
-  import { SettingsEvidenceConfidence, type SettingsEvidenceFigure } from "$lib/api";
+  import { SettingsEvidenceConfidence, type SettingsEvidenceFigure } from "#lib/api/index.js";
   import { blockSpan, matchingBlock } from "./settings-evidence-view";
 
   interface Props {

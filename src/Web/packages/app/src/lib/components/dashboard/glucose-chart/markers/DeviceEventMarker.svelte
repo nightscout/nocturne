@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { DeviceEventIcon } from "$lib/components/icons";
-  import type { DeviceEventType } from "$lib/api";
+  import { DeviceEventIcon } from "#lib/components/icons/index.js";
+  import type { DeviceEventType } from "#lib/api/index.js";
   import { getGlucoseChartContext, markerInk } from "../chart-context.svelte";
 
   interface Props {

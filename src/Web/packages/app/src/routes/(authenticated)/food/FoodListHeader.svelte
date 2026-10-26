@@ -1,9 +1,9 @@
 <script lang="ts">
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import type { SortMode } from './types';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import { FOOD_COLUMNS } from './food-columns';
-	import { getEnergyUnit } from '$lib/stores/appearance-store.svelte';
+	import { getEnergyUnit } from '#lib/stores/appearance-store.svelte.js';
 
 	interface Props {
 		sort: SortMode;

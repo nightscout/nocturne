@@ -1,23 +1,23 @@
 import { untrack } from "svelte";
-import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-import { getChartData } from "$api/chart-data.remote";
-import { remoteErrorMessage } from "$lib/api/remote-error";
-import { PREDICTIONS_UNAVAILABLE } from "$lib/api/predictions-messages";
+import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+import { getChartData } from "#lib/api/chart-data.remote.js";
+import { remoteErrorMessage } from "#lib/api/remote-error.js";
+import { PREDICTIONS_UNAVAILABLE } from "#lib/api/predictions-messages.js";
 import {
   getPredictions,
   getPredictionStatus,
   type PredictionData,
-} from "$api/predictions.remote";
+} from "#lib/api/predictions.remote.js";
 import {
   predictionMinutes,
   predictionEnabled,
   glucoseChartLookback,
   GLUCOSE_CHART_FETCH_HOURS,
-} from "$lib/stores/appearance-store.svelte";
-import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
-import { mergeChartData, replaceWindow } from "$lib/utils/chart-data-merge";
-import type { TransformedChartData } from "$lib/utils/chart-data-transform";
-import { stableBy } from "$lib/utils/stable-by";
+} from "#lib/stores/appearance-store.svelte.js";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import { mergeChartData, replaceWindow } from "#lib/utils/chart-data-merge.js";
+import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+import { stableBy } from "#lib/utils/stable-by.js";
 import { mergeRealtimeGlucose } from "./merge-glucose";
 import {
   createChartDataView,

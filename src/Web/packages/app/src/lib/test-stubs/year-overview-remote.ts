@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { DailySummaryDay } from "$api/generated/nocturne-api-client";
+import type { DailySummaryDay } from "#lib/api/generated/nocturne-api-client.js";
 import { effectAwareQuery } from "./effect-aware-query.svelte";
 
 export const yearOverviewMocks = {

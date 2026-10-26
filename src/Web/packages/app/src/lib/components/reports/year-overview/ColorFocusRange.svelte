@@ -4,9 +4,9 @@
   import ArrowLeftRight from "@lucide/svelte/icons/arrow-left-right";
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { cssColorToHex } from "$lib/utils/css-color";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { cssColorToHex } from "#lib/utils/css-color.js";
   import ColorSwatchInput from "./ColorSwatchInput.svelte";
   import {
     convertToDisplayUnits,
@@ -14,7 +14,7 @@
     formatGlucoseValue,
     getUnitLabel,
     type GlucoseUnits,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
   import {
     addColorBoundary,
     insertSliderSteps,
@@ -26,7 +26,7 @@
     type ColorEnds,
     type ColorFocusRange,
     type MetricScale,
-  } from "$lib/utils/metric-color-focus";
+  } from "#lib/utils/metric-color-focus.js";
 
   let {
     metricLabel,

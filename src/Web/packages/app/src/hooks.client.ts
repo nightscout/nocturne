@@ -1,4 +1,4 @@
-import type { ClientInit, HandleClientError } from "@sveltejs/kit";
+import type { ClientInit, HandleClientError } from "@sveltejs/kit/hooks";
 
 const PRELOAD_RELOAD_KEY = "nocturne:preload-error-reload";
 const PRELOAD_RELOAD_WINDOW_MS = 10_000;
@@ -21,7 +21,10 @@ export const init: ClientInit = () => {
   });
 };
 
-export const handleError: HandleClientError = ({ error }) => {
+export const handleError: HandleClientError = ({ kind, error }) => {
+  // Expected errors keep their own status and message, and are not reported.
+  if (kind !== "unknown") return;
+
   const errorId = crypto.randomUUID();
 
   const message =

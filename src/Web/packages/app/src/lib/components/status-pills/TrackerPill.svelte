@@ -1,20 +1,20 @@
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
-  import * as Popover from "$lib/components/ui/popover";
-  import { Button } from "$lib/components/ui/button";
-  import type { TrackerInstanceDto, TrackerDefinitionDto } from "$lib/api";
-  import { TrackerCategory } from "$lib/api";
-  import { cn } from "$lib/utils";
+  import { formatLocale } from "#lib/utils/formatting.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import type { TrackerInstanceDto, TrackerDefinitionDto } from "#lib/api/index.js";
+  import { TrackerCategory } from "#lib/api/index.js";
+  import { cn } from "#lib/utils/index.js";
   import Check from "@lucide/svelte/icons/check";
   import Clock from "@lucide/svelte/icons/clock";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-  import { TrackerCategoryIcon } from "$lib/components/icons";
-  import { reachedUrgency } from "$lib/components/trackers/schedule";
+  import { TrackerCategoryIcon } from "#lib/components/icons/index.js";
+  import { reachedUrgency } from "#lib/components/trackers/schedule.js";
   import {
     ageHoursSince,
     formatAge,
     formatLifespan,
-  } from "$lib/components/trackers/age.svelte";
+  } from "#lib/components/trackers/age.svelte.js";
   import {
     PROGRESS_FILL,
     VALUE_TONE,

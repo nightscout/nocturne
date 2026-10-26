@@ -1,4 +1,4 @@
-import type { Entry, Treatment } from "$lib/api";
+import type { Entry, Treatment } from "#lib/api/index.js";
 
 // Local type definition for device status
 export interface DeviceStatus {

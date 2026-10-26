@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
-import { TimeZoneUnavailableReason } from "$lib/api";
-import { servedDay, servedDays } from "$lib/test-stubs/actogram-days";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
+import { servedDay, servedDays } from "#lib/test-stubs/actogram-days.js";
 
 const CHATHAM_MINUTES = 13 * 60 + 45;
 const utcDay = servedDay("2025-01-10");
@@ -12,7 +12,7 @@ const hoisted = vi.hoisted(() => ({
   days: [] as unknown[],
 }));
 
-vi.mock("$lib/hooks/actogram-report.svelte", () => ({
+vi.mock("#lib/hooks/actogram-report.svelte.js", () => ({
   useActogramReport: () => ({
     params: {
       dateRangeMillis: { from: 0, to: 0 },

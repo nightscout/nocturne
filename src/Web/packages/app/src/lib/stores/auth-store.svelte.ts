@@ -10,19 +10,19 @@
  */
 
 import { getContext, setContext } from "svelte";
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { resolve } from "$app/paths";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { toDate } from "$lib/utils/formatting";
-import { toIsoString } from "$lib/utils/api-date";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
+import { toDate } from "#lib/utils/formatting.js";
+import { toIsoString } from "#lib/utils/api-date.js";
 import {
   getSessionInfo,
   refreshSession as refreshSessionRemote,
   logoutSession as logoutSessionRemote,
 } from "../../routes/(unauthenticated)/auth/auth.remote";
-import { remoteErrorMessage } from "$lib/api/remote-error";
-import { whenIdle } from "$lib/utils/when-idle";
+import { remoteErrorMessage } from "#lib/api/remote-error.js";
+import { whenIdle } from "#lib/utils/when-idle.js";
 
 const AUTH_STORE_KEY = "nocturne:app:auth-store";
 

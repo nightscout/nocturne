@@ -1,5 +1,5 @@
-import type { Treatment, Bolus, CarbIntake } from "$lib/api";
-import { NightscoutEventType } from "$lib/constants/nightscout-event-types";
+import type { Treatment, Bolus, CarbIntake } from "#lib/api/index.js";
+import { NightscoutEventType } from "#lib/constants/nightscout-event-types.js";
 
 /**
  * Treatment category definitions for UI organization

@@ -1,6 +1,6 @@
-import type { InAppNotificationDto } from "$lib/api";
-import { createSystemNotification } from "$lib/audio/alarm-sounds";
-import { WebSocketClient } from "$lib/websocket/websocket-client.svelte";
+import type { InAppNotificationDto } from "#lib/api/index.js";
+import { createSystemNotification } from "#lib/audio/alarm-sounds.js";
+import { WebSocketClient } from "#lib/websocket/websocket-client.svelte.js";
 
 /** The in-app notification type an alert delivered to this person's own account carries. */
 const ALERT_FIRING = "alert.firing";

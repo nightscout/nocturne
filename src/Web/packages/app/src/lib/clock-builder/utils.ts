@@ -5,13 +5,13 @@
  * and other utilities used by the clock face builder.
  */
 
-import type { ClockElement, ClockSettings, TrackerDefinitionDto } from "$lib/api";
+import type { ClockElement, ClockSettings, TrackerDefinitionDto } from "#lib/api/index.js";
 import {
   TEXT_ELEMENT_TYPES,
   elementInfo,
   type InternalElement,
 } from "./types";
-import { getGlucoseColor, type GlucoseThresholds } from "$lib/utils/chart-colors";
+import { getGlucoseColor, type GlucoseThresholds } from "#lib/utils/chart-colors.js";
 
 export const DEFAULT_ELEMENT_COLOR = "#ffffff";
 

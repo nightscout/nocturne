@@ -1,4 +1,4 @@
-import { describeRemoteError, READ_SURFACE } from "$lib/forms/submit-error";
+import { describeRemoteError, READ_SURFACE } from "#lib/forms/submit-error.js";
 
 /**
  * Message to show for a rejected remote function call on a reading surface —
@@ -6,7 +6,7 @@ import { describeRemoteError, READ_SURFACE } from "$lib/forms/submit-error";
  * show. A mutation takes `describeSubmitError` even where its fallback names a
  * permission.
  *
- * @see {@link import("$lib/forms/submit-error").RemoteErrorPolicy} for how the
+ * @see {@link import("#lib/forms/submit-error.js").RemoteErrorPolicy} for how the
  * two halves differ and which one a call site wants.
  */
 export function remoteErrorMessage(err: unknown, fallback: string): string {

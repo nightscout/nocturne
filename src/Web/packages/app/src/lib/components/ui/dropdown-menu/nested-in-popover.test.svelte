@@ -1,6 +1,6 @@
 <script lang="ts">
-  import * as Popover from "$lib/components/ui/popover";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
 
   interface Props {
     onselect: () => void;

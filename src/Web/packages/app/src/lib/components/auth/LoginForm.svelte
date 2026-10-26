@@ -1,9 +1,9 @@
 <script lang="ts">
   import { untrack, type ComponentProps } from "svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import * as InputGroup from "$lib/components/ui/input-group";
-  import { Label } from "$lib/components/ui/label";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
@@ -11,20 +11,20 @@
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
-  import * as InputOTP from "$lib/components/ui/input-otp";
-  import { FormError, FormField, useSubmission } from "$lib/forms";
+  import * as InputOTP from "#lib/components/ui/input-otp/index.js";
+  import { FormError, FormField, useSubmission } from "#lib/forms/index.js";
   import { WebAuthnAbortService } from "@simplewebauthn/browser";
   import {
     getOidcProviders,
     setAuthCookies,
     signInWithAuthenticator,
     signInWithRecoveryCode,
-  } from "$routes/(unauthenticated)/auth/auth.remote";
+  } from "#routes/(unauthenticated)/auth/auth.remote.js";
   import {
     discoverableLoginOptions,
     loginOptions,
     loginComplete,
-  } from "$lib/api/generated/passkeys.generated.remote";
+  } from "#lib/api/generated/passkeys.generated.remote.js";
   import { goto, invalidateAll } from "$app/navigation";
   import { page } from "$app/state";
   import { describePasskeyError } from "./passkey-errors";

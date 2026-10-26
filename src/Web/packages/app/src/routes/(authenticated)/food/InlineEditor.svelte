@@ -1,10 +1,10 @@
 <script lang="ts">
-	import type { Food } from '$api';
+	import type { Food } from '#lib/api/index.js';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Check from '@lucide/svelte/icons/check';
 	import { getFoodState } from './food-context.js';
-	import { Button } from '$lib/components/ui/button';
-	import { FoodFields } from '$lib/components/food';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { FoodFields } from '#lib/components/food/index.js';
 
 	interface Props {
 		food: Food;

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
-  import type { TreatmentLogCounts, TreatmentSummary } from "$lib/api";
-  import { plural } from "$lib/utils/plural";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
+  import type { TreatmentLogCounts, TreatmentSummary } from "#lib/api/index.js";
+  import { plural } from "#lib/utils/plural.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
 
   interface Props {
     /** Absent when the filtered records hold no boluses or carb intakes. */

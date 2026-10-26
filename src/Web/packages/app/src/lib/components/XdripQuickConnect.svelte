@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import QRCode from "qrcode";
-  import { getActiveDataSources } from "$api/generated/services.generated.remote";
-  import type { DataSourceInfo } from "$lib/api/generated/nocturne-api-client";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
-  import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
+  import { getActiveDataSources } from "#lib/api/generated/services.generated.remote.js";
+  import type { DataSourceInfo } from "#lib/api/generated/nocturne-api-client.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import DeviceAppClaimNotice from "#lib/components/auth/DeviceAppClaimNotice.svelte";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -15,11 +15,11 @@
   import Shield from "@lucide/svelte/icons/shield";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import X from "@lucide/svelte/icons/x";
-  import { buildXdripDeepLink, buildConnectPageUrl } from "$lib/utils/xdrip-links";
-  import { getDeviceInfo } from "$routes/(authenticated)/oauth/oauth.remote";
-  import { deviceApprove } from "$api/generated/oAuths.generated.remote";
-  import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { buildXdripDeepLink, buildConnectPageUrl } from "#lib/utils/xdrip-links.js";
+  import { getDeviceInfo } from "#routes/(authenticated)/oauth/oauth.remote.js";
+  import { deviceApprove } from "#lib/api/generated/oAuths.generated.remote.js";
+  import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   interface Props {
     /** Origin URL of the Nocturne instance (trailing slash tolerated). */

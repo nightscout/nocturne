@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { formatLocale } from "$lib/utils/formatting";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Item } from "$lib/components/ui/item";
+  import { formatLocale } from "#lib/utils/formatting.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Download from "@lucide/svelte/icons/download";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
-  import { EmptyState } from "$lib/components/shared";
-  import type { SyncResult } from "$lib/api/generated/nocturne-api-client";
-  import type { SyncProgressEvent } from "$lib/websocket/types";
-  import { formatSyncMessage } from "$lib/utils/sync-messages";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import type { SyncResult } from "#lib/api/generated/nocturne-api-client.js";
+  import type { SyncProgressEvent } from "#lib/websocket/types.js";
+  import { formatSyncMessage } from "#lib/utils/sync-messages.js";
   import { tick } from "svelte";
 
   interface LogEntry {

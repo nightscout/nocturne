@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("$app/environment", () => ({ browser: false }));
+vi.mock("$app/env", () => ({ browser: false }));
 vi.mock("mode-watcher", () => ({}));
 vi.mock("runed", () => ({
 	PersistedState: class {
@@ -10,7 +10,7 @@ vi.mock("runed", () => ({
 		}
 	},
 }));
-vi.mock("$lib/stores/appearance-store.svelte", () => ({
+vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
 	glucoseUnits: { current: "mg/dl" },
 }));
 

@@ -1,30 +1,30 @@
 <script lang="ts">
     import { Key } from "@nocturne/ui/keys";
     import {page} from "$app/state";
-    import {formatMediumDateRange} from "$lib/utils/formatting";
-    import { Button } from "$lib/components/ui/button";
-    import {ReportsFilterSidebar} from "$lib/components/layout";
-    import ResourceGuard from "$lib/components/reports/ResourceGuard.svelte";
-    import ReportPageSwitcher from "$lib/components/reports/ReportPageSwitcher.svelte";
-    import { loopAnalysisHeaderMark } from "$lib/components/reports/loop-analysis/loop-analysis-tour.svelte";
-    import HistoryLimitNotice from "$lib/components/layout/HistoryLimitNotice.svelte";
-    import ReportPrintHeader from "$lib/components/reports/print/ReportPrintHeader.svelte";
-    import PrintReportButton from "$lib/components/reports/print/PrintReportButton.svelte";
+    import {formatMediumDateRange} from "#lib/utils/formatting.js";
+    import { Button } from "#lib/components/ui/button/index.js";
+    import {ReportsFilterSidebar} from "#lib/components/layout/index.js";
+    import ResourceGuard from "#lib/components/reports/ResourceGuard.svelte";
+    import ReportPageSwitcher from "#lib/components/reports/ReportPageSwitcher.svelte";
+    import { loopAnalysisHeaderMark } from "#lib/components/reports/loop-analysis/loop-analysis-tour.svelte.js";
+    import HistoryLimitNotice from "#lib/components/layout/HistoryLimitNotice.svelte";
+    import ReportPrintHeader from "#lib/components/reports/print/ReportPrintHeader.svelte";
+    import PrintReportButton from "#lib/components/reports/print/PrintReportButton.svelte";
     import {
         createReportPrintContext,
         installPrintFitFallback,
         printReport,
-    } from "$lib/components/reports/print/report-print.svelte";
-    import {reportCategories, reportDescription, reportSubRouteTitle, reportTitle} from "$lib/navigation/report-navigation.svelte";
+    } from "#lib/components/reports/print/report-print.svelte.js";
+    import {reportCategories, reportDescription, reportSubRouteTitle, reportTitle} from "#lib/navigation/report-navigation.svelte.js";
     import Filter from "@lucide/svelte/icons/funnel";
     import Calendar from "@lucide/svelte/icons/calendar";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
-    import ReportHeaderWashDeferred from "$lib/components/reports/ReportHeaderWashDeferred.svelte";
+    import ReportHeaderWashDeferred from "#lib/components/reports/ReportHeaderWashDeferred.svelte";
     import { toast } from "svelte-sonner";
     import { onMount } from "svelte";
-    import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
-    import {createResourceContext} from "$lib/hooks/resource-context.svelte";
-    import {createReportSlots} from "$lib/hooks/report-slots.svelte";
+    import {useDateParams, setDateParamsContext, createSharedRangeUse} from "#lib/hooks/date-params.svelte.js";
+    import {createResourceContext} from "#lib/hooks/resource-context.svelte.js";
+    import {createReportSlots} from "#lib/hooks/report-slots.svelte.js";
 
     let {children} = $props();
 

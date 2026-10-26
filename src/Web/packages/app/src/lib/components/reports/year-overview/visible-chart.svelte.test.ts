@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { PRINT_LAYOUT_CLASS } from "$lib/components/charts/print/print-mode.svelte";
+import { PRINT_LAYOUT_CLASS } from "#lib/components/charts/print/print-mode.svelte.js";
 import Harness from "./VisibleChart.test-harness.svelte";
 
 let intersect = (_visible: boolean) => {};

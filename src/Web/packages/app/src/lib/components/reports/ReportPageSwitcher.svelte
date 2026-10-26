@@ -5,8 +5,8 @@
 -->
 <script lang="ts">
   import { page } from "$app/state";
-  import { reportCategories, visibleReportCategories } from "$lib/navigation/report-navigation.svelte";
-  import { cn } from "$lib/utils";
+  import { reportCategories, visibleReportCategories } from "#lib/navigation/report-navigation.svelte.js";
+  import { cn } from "#lib/utils/index.js";
 
   const family = $derived(
     reportCategories().find((c) => c.pages && c.reports.some((r) => r.href === page.url.pathname))

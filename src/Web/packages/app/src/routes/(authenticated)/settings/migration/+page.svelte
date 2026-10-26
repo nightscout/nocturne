@@ -1,21 +1,21 @@
 <script lang="ts">
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge, type BadgeVariant } from "$lib/components/ui/badge";
-  import * as Tabs from "$lib/components/ui/tabs";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as RadioGroup from "$lib/components/ui/radio-group";
-  import { Progress } from "$lib/components/ui/progress";
-  import * as Alert from "$lib/components/ui/alert";
-  import { SkippedRecordsNote } from "$lib/components/shared";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
+  import { Progress } from "#lib/components/ui/progress/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { SkippedRecordsNote } from "#lib/components/shared/index.js";
   import Import from "@lucide/svelte/icons/import";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -29,11 +29,11 @@
   import Server from "@lucide/svelte/icons/server";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Info from "@lucide/svelte/icons/info";
-  import { EmptyState } from "$lib/components/shared";
-  import { databaseArtwork } from "$lib/watercolour-icons";
-  import * as migrationRemote from "$api/generated/migrations.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { databaseArtwork } from "#lib/watercolour-icons.js";
+  import * as migrationRemote from "#lib/api/generated/migrations.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import MigrationCompleteMoment from "./MigrationCompleteMoment.svelte";
   import { completedCleanly } from "./migration-outcome";
   import {
@@ -43,7 +43,7 @@
     type MigrationSourceDto,
     MigrationJobState,
     MigrationMode,
-  } from "$api";
+  } from "#lib/api/index.js";
 
   // State
   let activeTab = $state("migrate");

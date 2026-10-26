@@ -1,7 +1,7 @@
 import {
   AlertReceiptActorKind,
   type AlertReceiptResponse,
-} from "$api-clients";
+} from "#lib/api/generated/nocturne-api-client.js";
 
 /** How one receipt names who saw the alarm. */
 export function receiptActor(receipt: AlertReceiptResponse): string {

@@ -1,4 +1,4 @@
-import type { Food } from "$lib/api";
+import type { Food } from "#lib/api/index.js";
 
 /** Standard food measurement units */
 export const FOOD_UNITS = ["g", "ml", "pcs", "oz", "serving"] as const;
