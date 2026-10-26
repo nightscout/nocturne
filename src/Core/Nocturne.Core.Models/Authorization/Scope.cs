@@ -531,6 +531,19 @@ public static class Scope
             : [.. normalized.Order(StringComparer.Ordinal)];
     }
 
+    /// <summary>
+    /// The scopes a listing shows for a grant: what the grant authorizes, not what is stored on it.
+    /// A stored row may still hold an alias or an atom it cannot exercise.
+    /// </summary>
+    /// <param name="scopes">The grant's stored scopes.</param>
+    /// <param name="grantType">The grant's type, from <see cref="OAuthGrantTypes"/>.</param>
+    public static List<string> ForDisplay(IEnumerable<string> scopes, string grantType)
+    {
+        return grantType == OAuthGrantTypes.Guest
+            ? [.. NormalizeGuest(scopes).Order(StringComparer.Ordinal)]
+            : NormalizeForStorage(scopes);
+    }
+
     private static IReadOnlySet<string> Normalize(
         IEnumerable<string> requestedScopes, IReadOnlySet<string> recognizedScopes)
     {

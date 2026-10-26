@@ -573,7 +573,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         {
             Id = grant.Id.ToString(),
             Name = grant.Label ?? "Unnamed",
-            Roles = [.. ScopeTranslator.ToPermissions(grant.Scopes)],
+            Roles = [.. ScopeTranslator.ToPermissions(Scope.ForDisplay(grant.Scopes, grant.GrantType))],
             Created = grant.CreatedAt,
             Modified = grant.CreatedAt,
         };

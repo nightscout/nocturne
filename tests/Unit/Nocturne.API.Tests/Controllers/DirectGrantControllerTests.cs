@@ -368,6 +368,32 @@ public class DirectGrantControllerTests : IDisposable
         Assert.Equal("Active", grants[0].Label);
     }
 
+    /// <summary>
+    /// A migrated device token can still hold a tenant-administration atom copied from its role. It
+    /// never authorized anything, so the list must not show it as if it did.
+    /// </summary>
+    [Fact]
+    public async Task List_OmitsStoredScopesAClientCannotHold()
+    {
+        _dbContext.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = _subjectId,
+            GrantType = OAuthGrantTypes.Direct,
+            Scopes = [Scope.MembersManage, Scope.GlucoseRead, Scope.TenantSettings],
+            Label = "Migrated",
+            TokenHash = "migratedhash",
+            CreatedAt = DateTime.UtcNow,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.List();
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var grants = Assert.IsType<List<DirectGrantDto>>(okResult.Value);
+        Assert.Equal([Scope.GlucoseRead], Assert.Single(grants).Scopes);
+    }
+
     [Fact]
     public async Task List_DoesNotReturnTokenValue()
     {

@@ -214,7 +214,10 @@ public class GuestLinkServiceTests : IDisposable
             _dataOwnerId, _creatorId, "Alias", "https://example.com",
             scopes: [Scope.HealthRead], creatorScopes: creator);
 
-        result.Info.Scopes.Should().Contain(Scope.HealthRead);
+        var grant = await _dbContext.OAuthGrants
+            .IgnoreQueryFilters()
+            .FirstAsync(g => g.Id == result.Info.Id);
+        grant.Scopes.Should().Contain(Scope.HealthRead);
     }
 
     [Fact]

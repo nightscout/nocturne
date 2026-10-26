@@ -372,7 +372,7 @@ public class GuestLinkService : IGuestLinkService
             DataOwnerSubjectId = entity.SubjectId,
             CreatedBySubjectId = entity.CreatedBySubjectId ?? entity.SubjectId,
             Label = entity.Label ?? string.Empty,
-            Scopes = entity.Scopes,
+            Scopes = Scope.ForDisplay(entity.Scopes, entity.GrantType),
             CreatedAt = entity.CreatedAt,
             ExpiresAt = entity.ExpiresAt ?? entity.CreatedAt + LinkLifetime,
             ActivatedAt = entity.ActivatedAt,

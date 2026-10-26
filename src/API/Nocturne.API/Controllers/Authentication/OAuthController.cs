@@ -1068,7 +1068,7 @@ public class OAuthController : ControllerBase
         ClientId = info.ClientId,
         ClientDisplayName = info.ClientDisplayName,
         ClientIdentity = info.ClientIdentity,
-        Scopes = info.Scopes,
+        Scopes = Scope.ForDisplay(info.Scopes, info.GrantType),
         Label = info.Label,
         CreatedAt = info.CreatedAt,
         LastUsedAt = info.LastUsedAt,

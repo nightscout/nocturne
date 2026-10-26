@@ -209,7 +209,7 @@ public class DirectGrantService : IDirectGrantService
     public async Task<List<DirectGrantDto>> ListAsync(
         NocturneDbContext dbContext, Guid? subjectId, CancellationToken ct = default)
     {
-        return await dbContext.OAuthGrants
+        var grants = await dbContext.OAuthGrants
             .AsNoTracking()
             .Where(g => (subjectId == null || g.SubjectId == subjectId.Value)
                      && g.GrantType == OAuthGrantTypes.Direct
@@ -228,6 +228,13 @@ public class DirectGrantService : IDirectGrantService
                 LimitTo24Hours = g.LimitTo24Hours,
             })
             .ToListAsync(ct);
+
+        foreach (var grant in grants)
+        {
+            grant.Scopes = Scope.ForDisplay(grant.Scopes, OAuthGrantTypes.Direct);
+        }
+
+        return grants;
     }
 
     /// <inheritdoc />

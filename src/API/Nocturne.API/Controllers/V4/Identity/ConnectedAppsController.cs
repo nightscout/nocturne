@@ -76,7 +76,7 @@ public class ConnectedAppsController : ControllerBase
                 ClientUri = g.ClientUri,
                 LogoUri = g.LogoUri,
                 Identity = g.ClientIdentity,
-                Scopes = g.Scopes,
+                Scopes = Scope.ForDisplay(g.Scopes, g.GrantType),
                 Label = g.Label,
                 CreatedAt = g.CreatedAt,
                 LastUsedAt = g.LastUsedAt,
