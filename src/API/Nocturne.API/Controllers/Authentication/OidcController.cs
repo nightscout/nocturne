@@ -170,7 +170,8 @@ public class OidcController : ControllerBase
         [FromQuery] string? code,
         [FromQuery] string? state,
         [FromQuery] string? error,
-        [FromQuery] string? error_description
+        [FromQuery] string? error_description,
+        [FromQuery(Name = "provider_user")] string? providerUser = null
     )
     {
         // Handle provider errors
@@ -217,7 +218,8 @@ public class OidcController : ControllerBase
             expectedState,
             GetClientIpAddress(),
             Request.Headers.UserAgent,
-            currentTenantId
+            currentTenantId,
+            providerUser
         );
 
         if (result.StepUpToken is { } stepUpToken)
@@ -343,7 +345,8 @@ public class OidcController : ControllerBase
         [FromQuery] string? code,
         [FromQuery] string? state,
         [FromQuery] string? error,
-        [FromQuery] string? error_description)
+        [FromQuery] string? error_description,
+        [FromQuery(Name = "provider_user")] string? providerUser = null)
     {
         var auth = HttpContext.GetAuthContext();
         if (auth == null || !auth.IsAuthenticated || !auth.SubjectId.HasValue)
@@ -377,7 +380,8 @@ public class OidcController : ControllerBase
             code, state, expectedState,
             auth.SubjectId.Value,
             GetClientIpAddress(),
-            Request.Headers.UserAgent);
+            Request.Headers.UserAgent,
+            providerUser);
 
         if (!result.Success)
         {

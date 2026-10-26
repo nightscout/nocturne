@@ -347,7 +347,8 @@ public partial class SetupController : ControllerBase
         [FromQuery] string? state,
         [FromQuery] string? error,
         [FromQuery] string? error_description,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromQuery(Name = "provider_user")] string? providerUser = null)
     {
         if (!string.IsNullOrEmpty(error))
         {
@@ -381,7 +382,8 @@ public partial class SetupController : ControllerBase
         var result = await _oidcAuthService.HandleSetupCallbackAsync(
             code, state, expectedState,
             ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
-            userAgent: Request.Headers.UserAgent.ToString());
+            userAgent: Request.Headers.UserAgent.ToString(),
+            providerUser: providerUser);
 
         if (!result.Success)
         {

@@ -34,6 +34,13 @@ public class SubjectOidcIdentityEntity
     [MaxLength(255), Column("email")]
     public string? Email { get; set; }
 
+    /// <summary>
+    /// The provider's refresh token for this identity, encrypted, kept only for a provider whose
+    /// grant this instance must revoke when the identity goes (Sign in with Apple).
+    /// </summary>
+    [Column("provider_refresh_token")]
+    public byte[]? ProviderRefreshTokenEncrypted { get; set; }
+
     /// <summary>When this OIDC identity was first linked to the subject.</summary>
     [Column("linked_at")]
     public DateTime LinkedAt { get; set; }

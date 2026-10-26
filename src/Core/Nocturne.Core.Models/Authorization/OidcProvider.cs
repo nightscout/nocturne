@@ -21,6 +21,12 @@ public class OidcProvider
     public OAuth2ProviderSettings? OAuth2 { get; set; }
 
     /// <summary>
+    /// The values the client secret is signed with. Required when <see cref="ProviderType"/> is
+    /// <see cref="OidcProviderType.Apple"/>, whose <see cref="ClientSecret"/> is the <c>.p8</c> key.
+    /// </summary>
+    public AppleProviderSettings? Apple { get; set; }
+
+    /// <summary>
     /// Issuer URL. For OIDC this is the discovery base; for OAuth2 it is the stable identity
     /// namespace external identities are keyed by (e.g. <c>https://github.com</c>).
     /// </summary>

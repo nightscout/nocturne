@@ -28,4 +28,11 @@ public enum OidcProviderType
     /// identity is read from the configured userinfo endpoint (no ID token is issued).
     /// </summary>
     OAuth2 = 1,
+
+    /// <summary>
+    /// Sign in with Apple. OpenID Connect, except that the callback is a cross-site form POST, the
+    /// client secret is a JWT signed with the key in <see cref="AppleProviderSettings"/>, and the
+    /// user's name arrives once, beside the code rather than in the ID token.
+    /// </summary>
+    Apple = 2,
 }

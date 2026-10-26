@@ -31,6 +31,12 @@ public class OidcProviderConfig
     public OAuth2ProviderSettings? OAuth2 { get; set; }
 
     /// <summary>
+    /// Team and key IDs for Sign in with Apple. Required when <see cref="ProviderType"/> is
+    /// <see cref="OidcProviderType.Apple"/>; <see cref="ClientSecret"/> then holds the <c>.p8</c> key.
+    /// </summary>
+    public AppleProviderSettings? Apple { get; set; }
+
+    /// <summary>
     /// Issuer URL. OIDC discovery base; for OAuth2 the stable identity namespace (e.g. <c>https://github.com</c>).
     /// </summary>
     public string IssuerUrl { get; set; } = string.Empty;

@@ -63,6 +63,7 @@ guide:
 
 - [Sign in with Google](/docs/authentication/google)
 - [Sign in with GitHub](/docs/authentication/github)
+- [Sign in with Apple](/docs/authentication/apple)
 - [Any other OIDC provider](/docs/authentication/oidc): Okta, Auth0, Keycloak, Authentik,
   Microsoft Entra ID, and anything else that speaks OpenID Connect
 
@@ -123,6 +124,6 @@ code follows the passkey.
 | Method | How to enable |
 |--------|---------------|
 | Passkeys | Always on. Nothing to configure. |
-| Social login | Add a provider; see [Google](/docs/authentication/google), [GitHub](/docs/authentication/github), or [generic OIDC](/docs/authentication/oidc). |
+| Social login | Add a provider; see [Google](/docs/authentication/google), [GitHub](/docs/authentication/github), [Apple](/docs/authentication/apple), or [generic OIDC](/docs/authentication/oidc). |
 | Authenticator app / recovery codes | Always available. Users set these up from their account settings. |
 | Request membership | On by default. Each instance owner can switch it off under **Settings > Sharing & Privacy**. |

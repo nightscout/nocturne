@@ -82,6 +82,7 @@ public class OidcProviderService : IOidcProviderService
                 existing.Name = config.Name;
                 existing.ProviderType = TypeToString(config.ProviderType);
                 existing.OAuth2SettingsJson = SerializeOAuth2(config.OAuth2);
+                existing.AppleSettingsJson = SerializeApple(config.Apple);
                 existing.IssuerUrl = config.IssuerUrl.TrimEnd('/');
                 existing.ClientId = config.ClientId;
                 existing.IsEnabled = config.IsEnabled;
@@ -100,6 +101,7 @@ public class OidcProviderService : IOidcProviderService
                     Name = config.Name,
                     ProviderType = TypeToString(config.ProviderType),
                     OAuth2SettingsJson = SerializeOAuth2(config.OAuth2),
+                    AppleSettingsJson = SerializeApple(config.Apple),
                     IssuerUrl = config.IssuerUrl.TrimEnd('/'),
                     ClientId = config.ClientId,
                     IsEnabled = config.IsEnabled,
@@ -203,6 +205,7 @@ public class OidcProviderService : IOidcProviderService
             Name = provider.Name,
             ProviderType = TypeToString(provider.ProviderType),
             OAuth2SettingsJson = SerializeOAuth2(provider.OAuth2),
+            AppleSettingsJson = SerializeApple(provider.Apple),
             IssuerUrl = provider.IssuerUrl.TrimEnd('/'),
             ClientId = provider.ClientId,
             ClientSecretEncrypted = !string.IsNullOrEmpty(provider.ClientSecret)
@@ -213,6 +216,8 @@ public class OidcProviderService : IOidcProviderService
             DefaultRoles = provider.DefaultRoles,
             IsEnabled = provider.IsEnabled,
             DisplayOrder = provider.DisplayOrder,
+            Icon = provider.Icon,
+            ButtonColor = provider.ButtonColor,
         };
 
         db.OidcProviders.Add(entity);
@@ -233,6 +238,7 @@ public class OidcProviderService : IOidcProviderService
         entity.Name = provider.Name;
         entity.ProviderType = TypeToString(provider.ProviderType);
         entity.OAuth2SettingsJson = SerializeOAuth2(provider.OAuth2);
+        entity.AppleSettingsJson = SerializeApple(provider.Apple);
         entity.IssuerUrl = provider.IssuerUrl.TrimEnd('/');
         entity.ClientId = provider.ClientId;
 
@@ -246,6 +252,8 @@ public class OidcProviderService : IOidcProviderService
         entity.DefaultRoles = provider.DefaultRoles;
         entity.IsEnabled = provider.IsEnabled;
         entity.DisplayOrder = provider.DisplayOrder;
+        entity.Icon = provider.Icon;
+        entity.ButtonColor = provider.ButtonColor;
         entity.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
@@ -510,15 +518,15 @@ public class OidcProviderService : IOidcProviderService
     /// <summary>
     /// Applies the correct default and required scopes for the provider's protocol. OIDC providers
     /// must always request <c>openid</c>; OAuth2 providers use exactly the scopes they are configured
-    /// with and must never have <c>openid</c> forced onto them.
+    /// with and must never have <c>openid</c> forced onto them. Apple has no <c>profile</c> scope:
+    /// it names its own, <c>name</c> and <c>email</c>.
     /// </summary>
-    private static List<string> NormalizeScopes(OidcProviderType type, List<string> scopes)
+    private static List<string> NormalizeScopes(OidcProviderType type, List<string> scopes) => type switch
     {
-        if (type == OidcProviderType.OAuth2)
-            return scopes;
-
-        return scopes.Count > 0 ? EnsureOpenIdScope(scopes) : ["openid", "profile", "email"];
-    }
+        OidcProviderType.OAuth2 => scopes,
+        OidcProviderType.Apple => scopes.Count > 0 ? EnsureOpenIdScope(scopes) : ["openid", "name", "email"],
+        _ => scopes.Count > 0 ? EnsureOpenIdScope(scopes) : ["openid", "profile", "email"],
+    };
 
     /// <summary>Parses the stored provider-type string, defaulting to <see cref="OidcProviderType.Oidc"/>.</summary>
     private static OidcProviderType ParseType(string? value) =>
@@ -563,12 +571,30 @@ public class OidcProviderService : IOidcProviderService
         }
     }
 
+    private static string? SerializeApple(AppleProviderSettings? settings) =>
+        settings is null ? null : JsonSerializer.Serialize(settings);
+
+    private static AppleProviderSettings? DeserializeApple(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<AppleProviderSettings>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     private static OidcProvider MapConfigToModel(OidcProviderConfig config) => new()
     {
         Id = CreateDeterministicGuid(config.IssuerUrl),
         Name = config.Name,
         ProviderType = config.ProviderType,
         OAuth2 = config.OAuth2,
+        Apple = config.Apple,
         IssuerUrl = config.IssuerUrl.TrimEnd('/'),
         ClientId = config.ClientId,
         ClientSecret = config.ClientSecret,
@@ -620,6 +646,7 @@ public class OidcProviderService : IOidcProviderService
             Name = entity.Name,
             ProviderType = ParseType(entity.ProviderType),
             OAuth2 = DeserializeOAuth2(entity.OAuth2SettingsJson),
+            Apple = DeserializeApple(entity.AppleSettingsJson),
             IssuerUrl = entity.IssuerUrl,
             ClientId = entity.ClientId,
             ClientSecret =
@@ -631,6 +658,8 @@ public class OidcProviderService : IOidcProviderService
             DefaultRoles = entity.DefaultRoles,
             IsEnabled = entity.IsEnabled,
             DisplayOrder = entity.DisplayOrder,
+            Icon = entity.Icon,
+            ButtonColor = entity.ButtonColor,
             DiscoveryDocument = discoveryDoc,
             DiscoveryCachedAt = entity.DiscoveryCachedAt,
         };

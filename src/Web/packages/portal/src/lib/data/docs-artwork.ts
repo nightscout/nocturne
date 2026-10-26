@@ -29,6 +29,7 @@ export const DOCS_HERO: Record<string, DocsHero> = {
   'authentication/passkeys': { artwork: 'crescent-moon', palette: 'moonlight' },
   'authentication/google': { artwork: 'magnifying-glass', palette: 'water' },
   'authentication/github': { artwork: 'github-mark', palette: 'slate' },
+  'authentication/apple': { artwork: 'shield', palette: 'slate' },
   'authentication/oidc': { artwork: 'plug', palette: 'slate' },
   'authentication/request-membership': { artwork: 'exclamation-mark', palette: 'ember' },
 

@@ -556,6 +556,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IOidcProviderService, OidcProviderService>();
         services.AddScoped<IOidcAuthService, OidcAuthService>();
+        services.AddScoped<IOidcProviderGrantService, OidcProviderGrantService>();
+        services.AddSingleton<IOidcConfigurationSource, OidcConfigurationSource>();
+        services.AddScoped<AppleNotificationService>();
         services.AddScoped<PlatformAdminBootstrapService>();
 
         // OAuth services
