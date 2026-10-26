@@ -8,7 +8,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import * as Select from "$lib/components/ui/select";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import Plus from "@lucide/svelte/icons/plus";
   import Check from "@lucide/svelte/icons/check";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -49,7 +49,7 @@
 
 <Tabs.Content value="active">
   <Card data-testid="active-trackers">
-    <CardHeader class="flex flex-row items-center justify-between">
+    <CardHeader class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
       <div>
         <CardTitle>Active trackers</CardTitle>
         <CardDescription>
@@ -57,21 +57,23 @@
         </CardDescription>
       </div>
       {#if definitions.length > 0}
-        <Select.Root type="single">
-          <Select.Trigger class="w-[200px]">
-            <Plus class="h-4 w-4 mr-2" />
-            Start tracker
-          </Select.Trigger>
-          <Select.Content>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props }: { props: Record<string, unknown> })}
+              <Button {...props} variant="outline" size="touch" class="w-full @md:w-auto">
+                <Plus class="h-4 w-4 mr-2" />
+                Start tracker
+              </Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end">
             {#each definitions as def (def.id)}
-              <Select.Item
-                value={def.id ?? ""}
-                label={def.name ?? ""}
-                onclick={() => openStartDialog(def)}
-              />
+              <DropdownMenu.Item onclick={() => openStartDialog(def)}>
+                {def.name}
+              </DropdownMenu.Item>
             {/each}
-          </Select.Content>
-        </Select.Root>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
       {/if}
     </CardHeader>
     <CardContent>
@@ -88,14 +90,14 @@
             {@const remaining = getTimeRemaining(instance)}
             <div
               class={cn(
-                "flex items-center justify-between p-4 rounded-lg border",
+                "flex flex-col gap-3 p-4 rounded-lg border @md:flex-row @md:items-center @md:justify-between",
                 getLevelStyle(level)
               )}
             >
-              <div class="flex items-center gap-3">
+              <div class="flex min-w-0 items-center gap-3">
                 <div
                   class={cn(
-                    "text-2xl font-bold tabular-nums",
+                    "shrink-0 text-2xl font-bold tabular-nums @md:shrink",
                     remaining !== undefined && remaining <= 0
                       ? "text-destructive"
                       : remaining !== undefined && remaining < 6
@@ -109,11 +111,9 @@
                     {formatAge(instance.ageHours ?? 0)}
                   {/if}
                 </div>
-                <div>
-                  <div class="font-medium">{instance.definitionName}</div>
-                  <div
-                    class="text-sm text-muted-foreground flex items-center gap-1.5"
-                  >
+                <div class="min-w-0">
+                  <div class="font-medium break-words">{instance.definitionName}</div>
+                  <div class="text-sm text-muted-foreground break-words">
                     {formatAge(instance.ageHours ?? 0)} old · Started {formatDate(
                       instance.startedAt
                     )}
@@ -123,11 +123,12 @@
                   </div>
                 </div>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2 @md:shrink-0 @md:flex-nowrap">
                 {#if definitions.find((d: TrackerDefinitionDto) => d.id === instance.definitionId)?.category === TrackerCategory.Reservoir}
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="touch-sm"
+                    class="flex-1 @md:flex-none"
                     onclick={openReservoirReportDialog}
                   >
                     <Droplet class="h-4 w-4 mr-1" />
@@ -136,7 +137,8 @@
                 {/if}
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="touch-sm"
+                  class="flex-1 @md:flex-none"
                   onclick={() => openCompleteDialog(instance.id!)}
                   data-testid="tracker-complete"
                 >
@@ -145,7 +147,7 @@
                 </Button>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-touch"
                   onclick={() => openDeleteInstanceDialog(instance.id!)}
                 >
                   <Trash2 class="h-4 w-4" />

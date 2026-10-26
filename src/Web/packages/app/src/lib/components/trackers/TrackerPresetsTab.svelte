@@ -33,13 +33,13 @@
 
 <Tabs.Content value="presets">
   <Card>
-    <CardHeader class="flex flex-row items-center justify-between">
+    <CardHeader class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
       <div>
         <CardTitle>Quick presets</CardTitle>
         <CardDescription>One-step tracker activation</CardDescription>
       </div>
       {#if definitions.length > 0}
-        <Button onclick={openNewPreset}>
+        <Button size="touch" class="w-full @md:w-auto" onclick={openNewPreset}>
           <Plus class="h-4 w-4 mr-2" />
           New preset
         </Button>
@@ -64,11 +64,11 @@
         <div class="space-y-3">
           {#each presets as preset (preset.id)}
             <div
-              class="flex items-center justify-between p-4 rounded-lg border"
+              class="flex flex-col gap-3 p-4 rounded-lg border @md:flex-row @md:items-center @md:justify-between"
             >
-              <div class="flex-1">
-                <div class="font-medium">{preset.name}</div>
-                <div class="text-sm text-muted-foreground">
+              <div class="min-w-0 flex-1">
+                <div class="font-medium break-words">{preset.name}</div>
+                <div class="text-sm text-muted-foreground break-words">
                   {preset.definitionName}
                   {#if preset.defaultStartNotes}
                     · {preset.defaultStartNotes}
@@ -78,7 +78,8 @@
               <div class="flex items-center gap-2">
                 <Button
                   variant="default"
-                  size="sm"
+                  size="touch-sm"
+                  class="flex-1 @md:flex-none"
                   onclick={() => applyPresetHandler(preset.id!)}
                 >
                   <Play class="h-4 w-4 mr-1" />
@@ -86,7 +87,7 @@
                 </Button>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-touch"
                   onclick={() => openDeletePresetDialog(preset.id!)}
                   aria-label="Delete {preset.name}"
                 >

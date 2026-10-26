@@ -375,7 +375,7 @@
           tracker is completed and a new one starts at that moment.
         </p>
       </div>
-      <div class="grid grid-cols-2 gap-2">
+      <div class="grid grid-cols-1 gap-2 @sm:grid-cols-2">
         {#each triggerEventTypes as eventType (eventType)}
           <div class="flex items-center gap-2">
             <Checkbox
@@ -575,7 +575,7 @@
 
 <Dialog.Root bind:open>
   <Dialog.Content
-    class="@container max-w-2xl max-h-[90vh] overflow-y-auto"
+    class="@container max-h-[90vh] overflow-y-auto"
     data-testid="tracker-editor"
   >
     <Dialog.Header>

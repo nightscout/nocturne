@@ -41,14 +41,14 @@
 
 <Tabs.Content value="definitions">
   <Card>
-    <CardHeader class="flex flex-row items-center justify-between">
+    <CardHeader class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
       <div>
         <CardTitle>Tracker definitions</CardTitle>
         <CardDescription>
           Reusable tracker templates with notification thresholds
         </CardDescription>
       </div>
-      <Button onclick={openNewDefinition}>
+      <Button size="touch" class="w-full @md:w-auto" onclick={openNewDefinition}>
         <Plus class="h-4 w-4 mr-2" />
         New definition
       </Button>
@@ -66,19 +66,19 @@
           {#each definitions as def (def.id)}
             {@const category = def.category ?? TrackerCategory.Consumable}
             <div
-              class="flex items-center justify-between p-4 rounded-lg border"
+              class="flex flex-col gap-3 p-4 rounded-lg border @md:flex-row @md:items-center @md:justify-between"
             >
-              <div class="flex items-center gap-3">
+              <div class="flex min-w-0 items-center gap-3">
                 <div
                   class={cn(
-                    "p-2 rounded-lg bg-muted",
+                    "shrink-0 p-2 rounded-lg bg-muted",
                     categoryColors[category]
                   )}
                 >
                   <TrackerCategoryIcon {category} class="h-5 w-5" />
                 </div>
-                <div>
-                  <div class="font-medium flex items-center gap-2">
+                <div class="min-w-0">
+                  <div class="font-medium flex flex-wrap items-center gap-2 break-words">
                     {def.name}
                     {#if def.isFavorite}
                       <Badge variant="secondary">★ Favorite</Badge>
@@ -103,7 +103,8 @@
               <div class="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="touch-sm"
+                  class="flex-1 @md:flex-none"
                   onclick={() => openStartDialog(def)}
                 >
                   <Play class="h-4 w-4 mr-1" />
@@ -111,7 +112,7 @@
                 </Button>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-touch"
                   onclick={() => openEditDefinition(def)}
                   aria-label="Edit {def.name}"
                   data-testid="tracker-definition-edit"
@@ -120,7 +121,7 @@
                 </Button>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-touch"
                   onclick={() => openDeleteDefinitionDialog(def.id!)}
                   aria-label="Delete {def.name}"
                 >

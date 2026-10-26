@@ -59,6 +59,10 @@ export const buttonVariants = tv({
       cta: "h-10 rounded-md px-6 text-base has-[>svg]:px-4",
       // Full-screen alarm and emergency actions: a touch target read at a glance.
       xl: "h-14 rounded-md px-8 text-lg font-semibold shadow-lg has-[>svg]:px-6 [&_svg:not([class*='size-'])]:size-5",
+      // A 44px touch target until its container reaches @md, then default, sm or icon.
+      touch: "h-11 px-4 py-2 has-[>svg]:px-3 @md:h-9",
+      "touch-sm": "h-11 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5 @md:h-8",
+      "icon-touch": "size-11 @md:size-9",
       icon: "size-9",
       "icon-xs": "size-7 rounded-md [&_svg:not([class*='size-'])]:size-3",
       "icon-sm": "size-8",

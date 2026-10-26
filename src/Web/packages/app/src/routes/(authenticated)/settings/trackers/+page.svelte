@@ -486,25 +486,25 @@
     ]))}
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
-      <Tabs.List class="grid w-full grid-cols-4">
-        <Tabs.Trigger value="active">
+      <Tabs.List class="grid h-auto w-full grid-cols-2 @xl:h-9 @xl:grid-cols-4">
+        <Tabs.Trigger value="active" class="min-h-11 @xl:min-h-0">
           <Activity class="h-4 w-4" />
           Active
           {#if activeCount > 0}
             <Badge variant="secondary" class="ml-1">{activeCount}</Badge>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger value="history">
+        <Tabs.Trigger value="history" class="min-h-11 @xl:min-h-0">
           <History class="h-4 w-4" />
           History
         </Tabs.Trigger>
         <div class="flex" {@attach coachmark({ ...coachFor("tracker-intro.settings") })}>
-          <Tabs.Trigger value="definitions">
+          <Tabs.Trigger value="definitions" class="min-h-11 @xl:min-h-0">
             <Settings2 class="h-4 w-4" />
             Definitions
           </Tabs.Trigger>
         </div>
-        <Tabs.Trigger value="presets">
+        <Tabs.Trigger value="presets" class="min-h-11 @xl:min-h-0">
           <Bookmark class="h-4 w-4" />
           Presets
         </Tabs.Trigger>
