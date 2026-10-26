@@ -317,19 +317,19 @@ public class OidcAuthServiceAppleTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ClientSecret_VerifiesWithThePublicKey_AndLivesMinutes()
+    public async Task ClientSecret_VerifiesWithThePublicKey_AndLivesMinutes()
     {
         var now = DateTimeOffset.UtcNow;
 
         var secret = AppleClientSecret.Create(AppleProvider(), now);
 
         var publicKey = ECDsa.Create(_key.ExportParameters(includePrivateParameters: false));
-        var result = new JsonWebTokenHandler().ValidateTokenAsync(secret, new TokenValidationParameters
+        var result = await new JsonWebTokenHandler().ValidateTokenAsync(secret, new TokenValidationParameters
         {
             ValidIssuer = "TEAM123456",
             ValidAudience = "https://appleid.apple.com",
             IssuerSigningKey = new ECDsaSecurityKey(publicKey),
-        }).GetAwaiter().GetResult();
+        });
 
         result.IsValid.Should().BeTrue();
         var token = (JsonWebToken)result.SecurityToken;

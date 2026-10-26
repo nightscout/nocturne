@@ -77,7 +77,7 @@ public class AppleNotificationServiceTests : IDisposable
 
     private string Notification(
         string type, string? email = null, string audience = ServicesId, SecurityKey? key = null,
-        bool eventsAsString = true, string sub = AppleSub, DateTime? expires = null)
+        bool eventsAsString = true, string sub = AppleSub, DateTime? expires = null, DateTime? issuedAt = null)
     {
         var events = new Dictionary<string, object> { ["type"] = type, ["sub"] = sub, ["event_time"] = 1700000000000 };
         if (email is not null)
@@ -87,7 +87,7 @@ public class AppleNotificationServiceTests : IDisposable
         {
             Issuer = Issuer,
             Audience = audience,
-            IssuedAt = expires is null ? DateTime.UtcNow : expires.Value.AddMinutes(-5),
+            IssuedAt = issuedAt ?? (expires is null ? DateTime.UtcNow : expires.Value.AddMinutes(-5)),
             Expires = expires,
             Claims = new Dictionary<string, object>
             {
@@ -225,5 +225,17 @@ public class AppleNotificationServiceTests : IDisposable
         (await _service.HandleAsync(Notification("consent-revoked", key: rotated))).Should().BeTrue();
 
         _configurations.Verify(c => c.RequestRefresh(Issuer));
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(-25 * 60)]
+    [InlineData(10)]
+    public async Task ANotificationIssuedOutsideTheWindow_IsRefused(int minutesFromNow)
+    {
+        (await _service.HandleAsync(Notification("consent-revoked", issuedAt: DateTime.UtcNow.AddMinutes(minutesFromNow))))
+            .Should().BeFalse();
+
+        _sessions.VerifyNoOtherCalls();
     }
 }

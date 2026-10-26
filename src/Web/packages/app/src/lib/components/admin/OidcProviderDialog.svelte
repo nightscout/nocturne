@@ -134,6 +134,9 @@
 
   const isOAuth2 = $derived(providerType === OidcProviderType.OAuth2);
   const isApple = $derived(providerType === OidcProviderType.Apple);
+  const appleSettingsMissing = $derived(
+    isApple && (!appleTeamId.trim() || !appleKeyId.trim() || !applePrimaryAppId.trim()),
+  );
 
   const typeLabel = $derived(
     isApple ? "Sign in with Apple" : isOAuth2 ? "OAuth 2.0" : "OpenID Connect",
@@ -237,7 +240,7 @@
           ? {
               teamId: appleTeamId.trim(),
               keyId: appleKeyId.trim(),
-              primaryAppId: applePrimaryAppId.trim() || undefined,
+              primaryAppId: applePrimaryAppId.trim(),
             }
           : undefined,
       };
@@ -342,11 +345,14 @@
         <Alert.Root>
           <Globe class="h-4 w-4" />
           <Alert.Description>
-            <p>In your Apple Developer account, add these to the Services ID:</p>
+            <p>In your Apple Developer account, add these URLs:</p>
             <ul class="list-disc list-inside mt-1">
-              <li>Return URL: <code>{`{your-domain}`}/api/auth/oidc/apple/callback</code></li>
               <li>
-                Server-to-server notification endpoint:
+                On the Services ID, the Return URL:
+                <code>{`{your-domain}`}/api/auth/oidc/apple/callback</code>
+              </li>
+              <li>
+                On the primary App ID, the server-to-server notification endpoint:
                 <code>{`{your-domain}`}/api/auth/oidc/apple/notifications</code>
               </li>
             </ul>
@@ -434,8 +440,8 @@
             placeholder="com.example.app"
           />
           <p class="text-xs text-muted-foreground">
-            The bundle ID of the App ID that has the notification endpoint. Apple can send
-            notifications to this ID. If you do not set it, Nocturne can refuse them.
+            The bundle ID of the App ID that has the notification endpoint. Apple sends
+            notifications to this ID.
           </p>
         </div>
         <div class="space-y-2">
@@ -566,7 +572,7 @@
       <Button variant="outline" onclick={handleCancel}>
         Cancel
       </Button>
-      <Button onclick={handleSave} disabled={providerSaving}>
+      <Button onclick={handleSave} disabled={providerSaving || appleSettingsMissing}>
         {#if providerSaving}
           <Loader2 class="h-4 w-4 animate-spin" />
         {/if}
