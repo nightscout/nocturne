@@ -8,15 +8,18 @@
  * `current`, `error`, `loading` and `ready` alongside `run`, `set`, `refresh`
  * and `withOverride`, and reading any of those getters starts the work, as the
  * framework's does. A command call is a promise carrying `updates()`, behind a
- * wrapper counting `pending` and recording the queries each `updates()` named. `fields.issues()` and `fields.allIssues()` answer
+ * wrapper counting `pending` and recording the queries each `updates()` named;
+ * an override handed to `updates()` is released once the call settles, so a
+ * failed command rolls it back. `fields.issues()` and `fields.allIssues()` answer
  * `undefined`, not `[]`, when there is nothing to report: the framework builds
  * its issue map with `flatten_issues`, which yields `{}` for no issues, so the
  * lookup misses and the `?.map` short-circuits. Callers have to be written
  * against that.
  *
- * Not mirrored: reactivity, per-argument caching, schema validation, and form
- * submission. The getters read a snapshot rather than a signal, so nothing
- * re-renders when a pending resource settles; a test that needs a value on
+ * Not mirrored: reactivity beyond overrides, per-argument caching, schema
+ * validation, and form submission. Adding or releasing an override re-renders
+ * whatever read `current`, but the getters otherwise read a snapshot rather than
+ * a signal, so nothing re-renders when a pending resource settles; a test that needs a value on
  * screen builds the resource with `remoteQuery`, which is settled before the
  * first read and re-reads its source on every access, keeping whatever
  * reactivity that source has.
@@ -26,6 +29,8 @@
  * these resources allow both. Code that only a test exercises can rely on
  * either and still fail in the browser.
  */
+import { createSubscriber } from "svelte/reactivity";
+
 export interface RemoteQueryStub<T> extends PromiseLike<T> {
   readonly current: T | undefined;
   readonly error: unknown;
@@ -54,6 +59,8 @@ export function updatedBy(command: unknown): unknown[][] {
   return (command as RemoteCommandStub<unknown>).updated;
 }
 
+const overrideReleases = new WeakSet<() => void>();
+
 class QueryResource<T> implements RemoteQueryStub<T> {
   #run: () => Promise<T>;
   #read: (() => T) | null = null;
@@ -61,6 +68,13 @@ class QueryResource<T> implements RemoteQueryStub<T> {
   #loading = false;
   #error: unknown = undefined;
   #overrides: ((current: T) => T)[] = [];
+  #overridesChanged: (() => void) | null = null;
+  #subscribe = createSubscriber((update) => {
+    this.#overridesChanged = update;
+    return () => {
+      this.#overridesChanged = null;
+    };
+  });
 
   constructor(run: () => Promise<T>) {
     this.#run = run;
@@ -113,6 +127,7 @@ class QueryResource<T> implements RemoteQueryStub<T> {
   }
 
   get current(): T | undefined {
+    this.#subscribe();
     void this.#start();
     return this.#read ? this.#overridden(this.#read) : undefined;
   }
@@ -176,11 +191,16 @@ class QueryResource<T> implements RemoteQueryStub<T> {
 
   withOverride(update: (current: T) => T): () => void {
     this.#overrides.push(update);
+    this.#overridesChanged?.();
 
-    return () => {
+    const release = () => {
       const index = this.#overrides.indexOf(update);
-      if (index !== -1) this.#overrides.splice(index, 1);
+      if (index === -1) return;
+      this.#overrides.splice(index, 1);
+      this.#overridesChanged?.();
     };
+    overrideReleases.add(release);
+    return release;
   }
 }
 
@@ -232,6 +252,11 @@ export function remoteCommand<T>(
       {
         updates: (...queries: unknown[]) => {
           stub.updated.push(queries);
+          for (const query of queries) {
+            if (overrideReleases.has(query as () => void)) {
+              void call.then(query as () => void, query as () => void);
+            }
+          }
           return call;
         },
       }

@@ -88,6 +88,7 @@
                   variant="ghost"
                   size="icon"
                   onclick={() => openDeletePresetDialog(preset.id!)}
+                  aria-label="Delete {preset.name}"
                 >
                   <Trash2 class="h-4 w-4" />
                 </Button>

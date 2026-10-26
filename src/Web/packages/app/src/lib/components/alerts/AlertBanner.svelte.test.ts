@@ -16,7 +16,7 @@ vi.mock("$api/generated/alerts.generated.remote", () => ({
 	acknowledgeExcursion: () => ({ updates: () => Promise.resolve() }),
 	snoozeInstance: (arg: unknown) => {
 		snoozes.calls.push(arg);
-		return Promise.resolve();
+		return { updates: () => Promise.resolve() };
 	},
 	markSeen: (id: unknown) => {
 		seenCalls.ids.push(id);

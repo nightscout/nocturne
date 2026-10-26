@@ -29,7 +29,10 @@ const suggestionsFixture = (): SuggestedMealMatch[] => [
   },
 ];
 
-const server = { meals: fixture() };
+const server = {
+  meals: fixture(),
+  dismissAnswer: (): Promise<unknown> => Promise.resolve(),
+};
 const shown = $state({ meals: fixture(), suggestions: suggestionsFixture() });
 const mealsResource = remoteQuery(() => shown.meals);
 mealsResource.refresh = () => {
@@ -77,7 +80,7 @@ vi.mock("$api/generated/mealMatchings.generated.remote", () => ({
     shown.suggestions = [];
     return Promise.resolve();
   }),
-  dismissMatch: remoteCommand(() => Promise.resolve()),
+  dismissMatch: remoteCommand(() => server.dismissAnswer()),
 }));
 
 vi.mock("sveltekit-search-params", async () => {
@@ -95,7 +98,6 @@ import { getMeals } from "$api/generated/nutritions.generated.remote";
 import {
   getSuggestions,
   acceptMatch,
-  dismissMatch,
 } from "$api/generated/mealMatchings.generated.remote";
 import MealsPage from "./+page.svelte";
 
@@ -106,7 +108,7 @@ beforeEach(() => {
   shown.suggestions = suggestionsFixture();
   mealsAfterAccept = fixture();
   updatedBy(acceptMatch).length = 0;
-  updatedBy(dismissMatch).length = 0;
+  server.dismissAnswer = () => Promise.resolve();
 });
 
 const accept = () => page.getByRole("button", { name: "Accept" }).click();
@@ -122,14 +124,29 @@ describe("meals page", () => {
     );
   });
 
-  it("refreshes the suggestions the page reads when a match is dismissed", async () => {
+  it("takes a dismissed suggestion off the page before the server answers", async () => {
+    server.dismissAnswer = () => new Promise(() => {});
     render(MealsPage, {});
 
-    await page.getByRole("button", { name: "Dismiss" }).click();
+    const dismiss = page.getByRole("button", { name: "Dismiss" });
+    await expect.element(dismiss).toBeVisible();
+    await dismiss.click();
 
-    await vi.waitFor(() =>
-      expect(updatedBy(dismissMatch)).toEqual([[getSuggestions]])
-    );
+    await vi.waitFor(() => expect(dismiss.elements()).toHaveLength(0));
+  });
+
+  it("puts a dismissed suggestion back when the server refuses", async () => {
+    let refuse!: (err: unknown) => void;
+    server.dismissAnswer = () => new Promise((_, reject) => (refuse = reject));
+    render(MealsPage, {});
+
+    const dismiss = page.getByRole("button", { name: "Dismiss" });
+    await dismiss.click();
+    await vi.waitFor(() => expect(dismiss.elements()).toHaveLength(0));
+
+    refuse(new Error("offline"));
+
+    await expect.element(dismiss).toBeVisible();
   });
 
   it("drops a deleted bolus from the open insulin dialog", async () => {

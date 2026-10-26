@@ -480,7 +480,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [HttpDelete("definitions/{id:guid}")]
     [RequireDeclaredWriteScope]
     [Authorize]
-    [RemoteCommand(Invalidates = ["GetDefinitions"])]
+    [RemoteCommand(Invalidates = ["GetDefinitions", "GetActiveInstances", "GetInstanceHistory", "GetPresets"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DeleteDefinition(Guid id)
     {
@@ -578,7 +578,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [HttpPost("instances")]
     [RequireDeclaredWriteScope]
     [Authorize]
-    [RemoteCommand(Invalidates = ["GetActiveInstances"])]
+    [RemoteCommand(Invalidates = ["GetActiveInstances", "GetInstanceHistory"])]
     [ProducesResponseType(typeof(TrackerInstanceDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<TrackerInstanceDto>> StartInstance(
@@ -793,7 +793,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [HttpPost("presets/{id:guid}/apply")]
     [RequireDeclaredWriteScope]
     [Authorize]
-    [RemoteCommand(Invalidates = ["GetActiveInstances"])]
+    [RemoteCommand(Invalidates = ["GetActiveInstances", "GetInstanceHistory"])]
     [ProducesResponseType(typeof(TrackerInstanceDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<TrackerInstanceDto>> ApplyPreset(

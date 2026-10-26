@@ -57,7 +57,9 @@
     pendingDelete = null;
     if (!entry?._id) return;
     try {
-      await bw.deleteBodyWeight(entry._id).updates(bw.getBodyWeights);
+      await bw.deleteBodyWeight(entry._id).updates(
+        weightsQuery.withOverride((current) => current.filter((e) => e._id !== entry._id))
+      );
     } catch (e) {
       errorMessage = describeSubmitError(e, "Failed to delete entry");
     }

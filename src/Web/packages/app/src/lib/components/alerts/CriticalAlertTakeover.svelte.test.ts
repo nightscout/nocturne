@@ -23,7 +23,7 @@ vi.mock("$api/generated/alerts.generated.remote", () => ({
 	},
 	snoozeInstance: (arg: unknown) => {
 		calls.snoozes.push(arg);
-		return Promise.resolve();
+		return { updates: () => Promise.resolve() };
 	},
 	markSeen: (id: unknown) => {
 		calls.seen.push(id);

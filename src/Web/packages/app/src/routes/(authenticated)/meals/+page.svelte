@@ -337,7 +337,9 @@
   async function handleDismiss(match: SuggestedMealMatch) {
     try {
       await dismissMatch({ foodEntryId: match.foodEntryId! }).updates(
-        getMealMatchingSuggestions
+        suggestionsQuery.withOverride((current) =>
+          current.filter((s) => s.foodEntryId !== match.foodEntryId)
+        )
       );
       toast.success("Match dismissed");
     } catch (err) {

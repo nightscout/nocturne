@@ -33,12 +33,13 @@
   import Bookmark from "@lucide/svelte/icons/bookmark";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Activity from "@lucide/svelte/icons/activity";
-  import { tick } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { toast } from "svelte-sonner";
   import { coachmark } from "@nocturne/coach";
   import { coachFor } from "$lib/coach-marks/copy.svelte";
   import {
@@ -334,16 +335,23 @@
     isDeleteDefinitionDialogOpen = true;
   }
 
+  // Its instances and presets go with it on the server.
   async function confirmDeleteDefinition() {
-    if (!deletingDefinitionId) return;
+    const id = deletingDefinitionId;
+    if (!id) return;
+    isDeleteDefinitionDialogOpen = false;
+    deletingDefinitionId = null;
+    const notOfDefinition = <T extends { definitionId?: string }>(current: T[]) =>
+      current.filter((x) => x.definitionId !== id);
     try {
-      await trackersRemote.deleteDefinition(deletingDefinitionId);
-      await loadData();
-      await tick();
-      isDeleteDefinitionDialogOpen = false;
-      deletingDefinitionId = null;
+      await trackersRemote.deleteDefinition(id).updates(
+        definitionsQuery.withOverride((current) => current.filter((d) => d.id !== id)),
+        activeInstancesQuery.withOverride(notOfDefinition),
+        historyInstancesQuery.withOverride(notOfDefinition),
+        presetsQuery.withOverride(notOfDefinition)
+      );
     } catch (err) {
-      console.error("Failed to delete definition:", err);
+      toast.error(describeSubmitError(err));
     }
   }
 
@@ -358,15 +366,16 @@
   }
 
   async function confirmDeleteInstance() {
-    if (!deletingInstanceId) return;
+    const id = deletingInstanceId;
+    if (!id) return;
+    isDeleteInstanceDialogOpen = false;
+    deletingInstanceId = null;
     try {
-      await trackersRemote.deleteInstance(deletingInstanceId);
-      await loadData();
-      await tick();
-      isDeleteInstanceDialogOpen = false;
-      deletingInstanceId = null;
+      await trackersRemote.deleteInstance(id).updates(
+        activeInstancesQuery.withOverride((current) => current.filter((i) => i.id !== id))
+      );
     } catch (err) {
-      console.error("Failed to delete instance:", err);
+      toast.error(describeSubmitError(err));
     }
   }
 
@@ -375,11 +384,10 @@
     if (!requireAuth()) return;
 
     try {
-      await trackersRemote.applyPreset({ id: presetId });
-      await loadData();
-      await tick();
+      await trackersRemote.applyPreset({ id: presetId })
+        .updates(activeInstancesQuery, historyInstancesQuery);
     } catch (err) {
-      console.error("Failed to apply preset:", err);
+      toast.error(describeSubmitError(err));
     }
   }
 
@@ -402,12 +410,10 @@
         name: formPresetName,
         definitionId: formPresetDefinitionId,
         defaultStartNotes: formPresetDefaultStartNotes || undefined,
-      });
-      await loadData();
-      await tick();
+      }).updates(presetsQuery);
       isPresetDialogOpen = false;
     } catch (err) {
-      console.error("Failed to save preset:", err);
+      toast.error(describeSubmitError(err));
     }
   }
 
@@ -420,15 +426,16 @@
   }
 
   async function confirmDeletePreset() {
-    if (!deletingPresetId) return;
+    const id = deletingPresetId;
+    if (!id) return;
+    isDeletePresetDialogOpen = false;
+    deletingPresetId = null;
     try {
-      await trackersRemote.deletePreset(deletingPresetId);
-      await loadData();
-      await tick();
-      isDeletePresetDialogOpen = false;
-      deletingPresetId = null;
+      await trackersRemote.deletePreset(id).updates(
+        presetsQuery.withOverride((current) => current.filter((p) => p.id !== id))
+      );
     } catch (err) {
-      console.error("Failed to delete preset:", err);
+      toast.error(describeSubmitError(err));
     }
   }
 </script>
@@ -584,10 +591,7 @@
   definition={startDefinition}
   history={historyInstances}
   onClose={() => (startDefinition = null)}
-  onStart={() => {
-    startDefinition = null;
-    loadData();
-  }}
+  onStart={() => (startDefinition = null)}
 />
 
 <!-- Complete Instance Dialog -->
@@ -605,7 +609,6 @@
   onComplete={() => {
     completingInstance = null;
     completingDefinition = null;
-    loadData();
   }}
 />
 

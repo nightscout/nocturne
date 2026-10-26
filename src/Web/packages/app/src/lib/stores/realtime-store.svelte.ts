@@ -197,6 +197,7 @@ export class RealtimeStore {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- batch buffer; the flush commits it to $state as one update
   private pendingEntryCreates = new Map<string, Entry>();
   private entryCreateFlushTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pendingRemovals: Record<string, InAppNotificationDto> = {};
   private static readonly ENTRY_CREATE_BATCH_MS = 100;
 
   /** True once every starting read is applied, not only the current reading ({@link currentReadingLoaded}). */
@@ -995,16 +996,39 @@ export class RealtimeStore {
     }
   }
 
-  /** Optimistically mark every loaded notification read so the badge and styling
-   *  update instantly; the server's notificationUpdated broadcast reconciles other
-   *  clients (and this one). */
-  markAllNotificationsRead(): void {
-    this.inAppNotifications = markedRead(this.inAppNotifications);
+  /** Optimistically marks the notifications `match` accepts read, ahead of the server's
+   *  notificationUpdated broadcast. The returned function undoes it for each one no
+   *  broadcast has replaced since. */
+  markNotificationsRead(match?: (notification: InAppNotificationDto) => boolean): () => void {
+    const before = this.inAppNotifications;
+    const marked = markedRead(before, match);
+    const changed = marked.flatMap((n, i) => (n === before[i] ? [] : [[n, before[i]] as const]));
+    this.inAppNotifications = marked;
+    return () => {
+      this.inAppNotifications = this.inAppNotifications.map(
+        (n) => changed.find(([optimistic]) => optimistic === n)?.[1] ?? n
+      );
+    };
   }
 
-  /** Optimistically mark a single notification read by id. */
-  markNotificationRead(id: string): void {
-    this.inAppNotifications = markedRead(this.inAppNotifications, (n) => n.id === id);
+  /** Optimistically takes a notification off the list, ahead of the server's
+   *  notificationArchived broadcast. Until the removal settles, an update broadcast
+   *  for it does not bring it back. `restore` puts it back unless its archive
+   *  broadcast has arrived since. */
+  removeNotification(id: string): { settle(): void; restore(): void } {
+    const removed = this.inAppNotifications.find((n) => n.id === id);
+    if (removed) this.pendingRemovals[id] = removed;
+    this.inAppNotifications = this.inAppNotifications.filter((n) => n.id !== id);
+    return {
+      settle: () => {
+        delete this.pendingRemovals[id];
+      },
+      restore: () => {
+        const pending = this.pendingRemovals[id];
+        delete this.pendingRemovals[id];
+        if (pending) this.addNotification(pending);
+      },
+    };
   }
 
   /** Handle new in-app notification from SignalR */
@@ -1022,12 +1046,17 @@ export class RealtimeStore {
 
   /** Handle notification archived from SignalR */
   private handleNotificationArchived(notification: InAppNotificationDto): void {
+    if (notification.id) delete this.pendingRemovals[notification.id];
     this.inAppNotifications = this.inAppNotifications.filter((n) => n.id !== notification.id);
     closeAlertNotification(notification);
   }
 
   /** Handle notification updated from SignalR */
   private handleNotificationUpdated(notification: InAppNotificationDto): void {
+    if (notification.id && this.pendingRemovals[notification.id]) {
+      this.pendingRemovals[notification.id] = notification;
+      return;
+    }
     const index = this.inAppNotifications.findIndex((n) => n.id === notification.id);
     if (index !== -1) {
       this.inAppNotifications = [

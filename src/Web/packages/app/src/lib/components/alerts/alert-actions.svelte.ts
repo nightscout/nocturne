@@ -88,10 +88,9 @@ export function createAlertActions() {
 
     snooze(a: ActiveExcursionResponse, minutes: number): Promise<void> {
       const instanceId = a.activeInstances?.[0]?.id ?? "";
-      return run(a.id ?? "", async () => {
-        await snoozeInstance({ instanceId, request: { minutes } });
-        await activeAlerts.refresh();
-      });
+      return run(a.id ?? "", () =>
+        snoozeInstance({ instanceId, request: { minutes } }).updates(activeAlerts)
+      );
     },
 
     seen(id: string): Promise<void> {

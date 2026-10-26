@@ -122,6 +122,7 @@
                   variant="ghost"
                   size="icon"
                   onclick={() => openDeleteDefinitionDialog(def.id!)}
+                  aria-label="Delete {def.name}"
                 >
                   <Trash2 class="h-4 w-4" />
                 </Button>
