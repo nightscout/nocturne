@@ -206,6 +206,21 @@ public abstract class ParityTestBase : IAsyncLifetime
             cancellationToken);
 
     /// <summary>
+    /// Waits until the data store Nightscout serves at <c>/api/v2/ddata/at</c> holds no entries,
+    /// treatments, device statuses or profiles, which is when it has reloaded the cleanup's
+    /// deletions. A test reading Nightscout's in-memory state calls it from
+    /// <see cref="InitializeAsync"/>, so it does not seed on top of the previous test's data.
+    /// Returns on timeout and leaves the assertion to report the difference.
+    /// </summary>
+    protected Task WaitForNightscoutEmptyAsync(CancellationToken cancellationToken = default) =>
+        WaitForNightscoutBodyAsync(
+            "/api/v2/ddata/at",
+            body => body is JsonObject
+                && new[] { "sgvs", "mbgs", "treatments", "devicestatus", "profiles", "sitechangeTreatments" }
+                    .All(key => body[key] is JsonArray { Count: 0 }),
+            cancellationToken: cancellationToken);
+
+    /// <summary>
     /// Waits until <paramref name="ready"/> accepts the body Nightscout serves at
     /// <paramref name="path"/>, for seeded data <see cref="WaitForNightscoutReloadAsync"/> cannot
     /// see in the summary. Returns on timeout and leaves the assertion to report the difference.

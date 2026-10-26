@@ -15,6 +15,12 @@ public class SummaryParityTests : ParityTestBase
     public SummaryParityTests(ParityTestFixture fixture, ITestOutputHelper output)
         : base(fixture, output) { }
 
+    public override async Task InitializeAsync()
+    {
+        await base.InitializeAsync();
+        await WaitForNightscoutEmptyAsync();
+    }
+
     protected override ComparisonOptions GetComparisonOptions()
     {
         // Summary responses contain dynamic timestamps and computed values
@@ -51,7 +57,6 @@ public class SummaryParityTests : ParityTestBase
     [Fact]
     public async Task GetSummary_Empty_ReturnsSameShape()
     {
-        await WaitForNightscoutReloadAsync("/api/v2/summary", sgvs: 0);
         await AssertGetParityAsync("/api/v2/summary");
     }
 

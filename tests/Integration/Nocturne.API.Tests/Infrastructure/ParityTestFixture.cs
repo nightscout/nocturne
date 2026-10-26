@@ -109,6 +109,9 @@ public class ParityTestFixture : IAsyncLifetime
             await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        await ApiIntegrationTestFixture.ClearApiCachesAsync(
+            _sharedState.Services, _sharedState.TenantId, cancellationToken);
+
         // Clean Nightscout (network calls - may have latency)
         await _sharedState.NightscoutContainer.CleanupDataAsync(cancellationToken);
     }
@@ -127,6 +130,8 @@ public class ParityTestFixture : IAsyncLifetime
             ?? throw new InvalidOperationException("V3 client not initialized - JWT token may have failed to fetch");
         public HttpClient NocturneClient { get; private set; } = null!;
         public string SuperuserConnectionString { get; private set; } = string.Empty;
+        public Guid TenantId { get; private set; }
+        public IServiceProvider Services => _nocturneFactory!.Services;
 
         public async Task InitializeAsync()
         {
@@ -233,6 +238,7 @@ public class ParityTestFixture : IAsyncLifetime
             }
 
             var seeded = (await seed.Content.ReadFromJsonAsync<DevSeedTenantResponse>())!;
+            TenantId = seeded.TenantId;
 
             await using var conn = new NpgsqlConnection(SuperuserConnectionString);
             await conn.OpenAsync();

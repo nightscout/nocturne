@@ -332,21 +332,29 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // Every in-memory cache the API holds (tenant resolution by slug, the tenant caches behind
-        // ITenantCache, therapy settings and timezones) is derived from rows just truncated, so it
-        // goes with them: otherwise a test reads what the previous one cached.
-        ((MemoryCache)Services.GetRequiredService<IMemoryCache>()).Clear();
-
-        // Reads cached under the seeded tenant would outlive the rows this cleanup truncated: the
-        // distributed tier is keyed by tenant, and the local tier sits in the same memory cache.
-        using (var scope = Services.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<ITenantCache>().RemoveTenantAsync(TenantId);
+        await ClearApiCachesAsync(Services, TenantId);
 
         await AuthTestHelpers.SeedApiSecretGrantAsync(conn, TenantId, OwnerSubjectId, ApiSecret);
 
         // The shared client starts every test as a client the rate limits have not seen.
         if (ApiClient is not null)
             PresentNewClientAddress(ApiClient);
+    }
+
+    /// <summary>
+    /// Drops every in-memory cache the API holds (tenant resolution by slug, the tenant caches
+    /// behind <see cref="ITenantCache"/>, therapy settings and timezones): each is derived from
+    /// rows a cleanup truncates, so otherwise a test reads what the previous one cached. The
+    /// distributed tier is keyed by tenant and the local tier sits in the same memory cache.
+    /// </summary>
+    internal static async Task ClearApiCachesAsync(
+        IServiceProvider services, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        ((MemoryCache)services.GetRequiredService<IMemoryCache>()).Clear();
+
+        using var scope = services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<ITenantCache>()
+            .RemoveTenantAsync(tenantId, cancellationToken);
     }
 
     /// <summary>The tables <see cref="CleanupDatabaseAsync"/> empties between tests.</summary>
