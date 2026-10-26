@@ -46,6 +46,7 @@
 		CompressionLowStatus,
 		type CompressionLowSuggestion
 	} from '#lib/api/index.js';
+	import { fresh } from "#lib/api/fresh-query.js";
 
 	// Accepting, dismissing, deleting and re-running detection all write state
 	// spans and suggestion rows, so the server gates them on glucose.readwrite.
@@ -125,7 +126,7 @@
 		if (filteredSuggestions.length > 0 && !activeSuggestion) {
 			const first = filteredSuggestions[0];
 			if (first?.id) {
-				// `.run()` rejects during the render/effect flush, so defer out of it.
+				// Deferred so this effect does not track what the load reads.
 				const id = first.id;
 				queueMicrotask(() => loadSuggestionDetail(id));
 			}
@@ -155,7 +156,7 @@
 		if (selectedSuggestions.size === 0) {
 			selectedSuggestions = new Set([id]);
 		}
-		suggestionDetail = await getCompressionLowSuggestion(id).run();
+		suggestionDetail = await fresh(getCompressionLowSuggestion(id));
 		if (suggestionDetail && suggestionDetail.suggestion?.startMills && suggestionDetail.suggestion?.endMills) {
 			brushDomain = [new Date(suggestionDetail.suggestion.startMills), new Date(suggestionDetail.suggestion.endMills)];
 		}

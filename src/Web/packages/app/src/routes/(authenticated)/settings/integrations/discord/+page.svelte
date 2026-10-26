@@ -28,7 +28,7 @@
 	// Auth guard
 	$effect(() => {
 		if (!page.data.isAuthenticated) {
-			goto(resolve(`auth/login?returnUrl=${encodeURIComponent(page.url.pathname)}`), { replaceState: true });
+			goto(resolve(`auth/login?returnUrl=${encodeURIComponent(page.url.pathname)}`), { replace: true });
 		}
 	});
 

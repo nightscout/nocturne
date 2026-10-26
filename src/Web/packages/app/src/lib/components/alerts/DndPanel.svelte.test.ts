@@ -17,11 +17,12 @@ let settings: TenantAlertSettingsResponse = idle;
 let updateImpl: () => Promise<TenantAlertSettingsResponse>;
 
 vi.mock("#lib/api/generated/tenantAlertSettings.generated.remote.js", () => ({
-  get: () => ({ run: () => Promise.resolve(settings) }),
+  get: () => createQueryResource(() => Promise.resolve(settings)),
   update: () => updateImpl(),
 }));
 
 import DndPanel from "./DndPanel.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const dndToggle = () => page.getByRole("button", { name: /Do not disturb/i });
 

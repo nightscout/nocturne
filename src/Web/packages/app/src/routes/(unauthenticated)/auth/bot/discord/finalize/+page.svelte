@@ -13,7 +13,7 @@
 	$effect(() => {
 		if (!page.data.isAuthenticated && claim) {
 			const returnUrl = `/auth/bot/discord/finalize?claim=${encodeURIComponent(claim)}`;
-			goto(resolve(`auth/login?returnUrl=${encodeURIComponent(returnUrl)}`), { replaceState: true });
+			goto(resolve(`auth/login?returnUrl=${encodeURIComponent(returnUrl)}`), { replace: true });
 		}
 	});
 

@@ -5,13 +5,14 @@ import { describe, it, expect, vi } from "vitest";
 let breakdownImpl: () => Promise<unknown>;
 
 vi.mock("#lib/api/generated/nutritions.generated.remote.js", () => ({
-  getCarbIntakeFoods: () => ({ run: () => breakdownImpl() }),
+  getCarbIntakeFoods: () => createQueryResource(() => breakdownImpl()),
   addCarbIntakeFood: () => Promise.resolve({}),
   deleteCarbIntakeFood: () => Promise.resolve({}),
   updateCarbIntakeFood: () => Promise.resolve({}),
 }));
 
 import FoodBreakdown from "./FoodBreakdown.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 function rejection(status: number, message: string) {
   return Promise.reject({ status, body: { message } });

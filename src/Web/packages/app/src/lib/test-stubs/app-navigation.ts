@@ -15,6 +15,10 @@ export function invalidateAll() {
   return Promise.resolve();
 }
 
+export function refreshAll() {
+  return Promise.resolve();
+}
+
 export function beforeNavigate(_callback: unknown) {}
 
 export function afterNavigate(_callback: unknown) {}

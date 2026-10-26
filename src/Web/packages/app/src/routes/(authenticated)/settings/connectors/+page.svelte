@@ -57,6 +57,7 @@
   import { createTerminalRunTracker } from "./terminal-run-tracker";
   import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import { page } from "$app/state";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
   const servicesOverviewQuery = getServicesOverview();
@@ -207,7 +208,7 @@
       return;
     }
     try {
-      selectedConnectorCapabilities = await getConnectorCapabilities(connectorId).run();
+      selectedConnectorCapabilities = await fresh(getConnectorCapabilities(connectorId));
     } catch (e) {
       console.error("Failed to load connector capabilities", e);
       selectedConnectorCapabilities = null;

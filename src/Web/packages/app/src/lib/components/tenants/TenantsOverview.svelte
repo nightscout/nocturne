@@ -15,7 +15,7 @@
 
   const baseDomain = $derived(page.data.baseDomain ?? null);
 
-  // Detached callback: use .refresh(), not a bare await (no reactive context here).
+  // A bare await would answer with the value this page already holds.
   pollWhileVisible(() => overviewQuery.refresh(), POLL_MS);
 </script>
 

@@ -20,9 +20,9 @@ vi.mock("$app/navigation", async () => {
   const { page: state } = await import("$app/state");
   return {
     ...stub,
-    goto: (url: string, options?: { replaceState?: boolean }) => {
-      const next = new URL(url, state.url);
-      if (options?.replaceState) nav.history[nav.history.length - 1] = next.href;
+    goto: (url: string, options?: { replace?: boolean }) => {
+      const next = new URL(url, state.url.href);
+      if (options?.replace) nav.history[nav.history.length - 1] = next.href;
       else nav.history.push(next.href);
       state.url = next as typeof state.url;
       return Promise.resolve();

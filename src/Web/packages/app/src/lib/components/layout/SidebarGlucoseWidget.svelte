@@ -115,7 +115,7 @@
     <div
       class="px-2 border border-sidebar-border hover:border-sidebar-ring rounded"
     >
-      <a href={resolve("/")}>
+      <a href={resolve("")}>
         <GlucoseChartShell
           engine={sidebarEngine}
           legend={sidebarLegend}

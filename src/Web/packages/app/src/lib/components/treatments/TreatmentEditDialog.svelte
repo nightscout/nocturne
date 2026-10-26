@@ -604,6 +604,7 @@
           </div>
           <div class="space-y-4">
             <InsulinFormFields
+              fields={addInsulinForm.fields}
               bind:category={addCategory}
               bind:formulationId={addFormulationId}
               bind:name={addName}
@@ -615,13 +616,19 @@
             />
 
             <!-- Hidden fields for form submission -->
-            <input type="hidden" name="b:isCurrent" value="on" />
-            <input type="hidden" name="n:dia" value={addDia} />
-            <input type="hidden" name="n:peak" value={addPeak} />
-            <input type="hidden" name="curve" value={addCurve} />
-            <input type="hidden" name="n:concentration" value={addConcentration} />
+            <input {...addInsulinForm.fields.isCurrent.as("hidden", true)} />
+            {#if addDia != null}
+              <input {...addInsulinForm.fields.dia.as("hidden", addDia)} />
+            {/if}
+            {#if addPeak != null}
+              <input {...addInsulinForm.fields.peak.as("hidden", addPeak)} />
+            {/if}
+            <input {...addInsulinForm.fields.curve.as("hidden", addCurve)} />
+            {#if addConcentration != null}
+              <input {...addInsulinForm.fields.concentration.as("hidden", addConcentration)} />
+            {/if}
             {#if addFormulationId}
-              <input type="hidden" name="formulationId" value={addFormulationId} />
+              <input {...addInsulinForm.fields.formulationId.as("hidden", addFormulationId)} />
             {/if}
           </div>
 

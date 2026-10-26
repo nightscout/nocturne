@@ -34,7 +34,7 @@
     try {
       const { username } = await recoveryModeRedeem({ code: code.trim() });
 
-      await goto(resolve(`auth/recovery/passkey?${new URLSearchParams({ username: username ?? "" })}`), { replaceState: true });
+      await goto(resolve(`auth/recovery/passkey?${new URLSearchParams({ username: username ?? "" })}`), { replace: true });
     } catch(err) {
       errorMessage = errorStatus(err) === 429
         ? "Too many attempts. Wait a minute, then try again."

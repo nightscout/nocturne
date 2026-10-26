@@ -24,23 +24,21 @@ vi.mock("#lib/api/generated/migrations.generated.remote.js", () => {
   const inertForm = { enhance: () => ({}), pending: 0, result: undefined };
 
   return {
-    getPendingConfig: () => ({ run: () => Promise.resolve({ hasPendingConfig: false }) }),
-    getSources: () => ({ run: () => Promise.resolve([]) }),
-    getHistory: () => ({
-      run: () => {
+    getPendingConfig: () => createQueryResource(() => Promise.resolve({ hasPendingConfig: false })),
+    getSources: () => createQueryResource(() => Promise.resolve([])),
+    getHistory: () =>
+      createQueryResource(() => {
         remote.historyCalls += 1;
         return remote.historyGate ? remote.historyGate.then(() => history) : Promise.resolve(history);
-      },
-    }),
-    getStatus: () => ({
-      run: () => {
+      }),
+    getStatus: () =>
+      createQueryResource(() => {
         remote.statusCalls += 1;
         if (remote.statusError) return Promise.reject(remote.statusError);
         if (!polled) return Promise.resolve(remote.status);
         history = polled.history;
         return Promise.resolve(polled.status);
-      },
-    }),
+      }),
     testConnection: inertForm,
     startMigration: {
       pending: 0,
@@ -57,6 +55,7 @@ vi.mock("#lib/api/generated/migrations.generated.remote.js", () => {
 });
 
 import MigrationPage from "./+page.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const entry = (overrides: Partial<MigrationJobInfo>): MigrationJobInfo =>
   ({

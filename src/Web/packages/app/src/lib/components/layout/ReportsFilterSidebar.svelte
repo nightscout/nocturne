@@ -17,6 +17,7 @@
   import Calendar from "@lucide/svelte/icons/calendar";
   import Filter from "@lucide/svelte/icons/funnel";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import type { ReadonlyURLSearchParams } from "$app/state";
 
   interface Props {
     open?: boolean;
@@ -92,10 +93,10 @@
   }
 
   /** Writes the range and the report's filters in one navigation, so one history entry. */
-  async function write(range: RangeWrite | null, report: (search: URLSearchParams) => URLSearchParams) {
+  async function write(range: RangeWrite | null, report: (search: ReadonlyURLSearchParams) => URLSearchParams) {
     const search = report(range ? withRange(page.url.searchParams, range) : page.url.searchParams);
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- a query on the page on screen
-    await goto(`?${search.toString()}`, { noScroll: true, keepFocus: true });
+    await goto(`?${search.toString()}`, { reset: false });
   }
 
   /**

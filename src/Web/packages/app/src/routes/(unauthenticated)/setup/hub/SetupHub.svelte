@@ -94,7 +94,7 @@
 
 <SetupChrome>
   {#snippet actions()}
-    <Button variant="ghost-muted" size="xs" href={resolve("/")}>Go to dashboard</Button>
+    <Button variant="ghost-muted" size="xs" href={resolve("")}>Go to dashboard</Button>
   {/snippet}
 
   <div class="mx-auto flex w-full max-w-3xl flex-col gap-6">
@@ -166,7 +166,7 @@
     <HubBasics {voice} />
 
     <div class="flex justify-end">
-      <Button variant="outline" href={resolve("/")}>
+      <Button variant="outline" href={resolve("")}>
         Go to dashboard
         <ArrowRight class="h-4 w-4" />
       </Button>

@@ -20,6 +20,7 @@
   import { deviceApprove } from "#lib/api/generated/oAuths.generated.remote.js";
   import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     /** Origin URL of the Nocturne instance (trailing slash tolerated). */
@@ -133,7 +134,7 @@
     deviceLookupError = null;
 
     try {
-      const info = await getDeviceInfo({ userCode: code }).run();
+      const info = await fresh(getDeviceInfo({ userCode: code }));
       if (!info) {
         deviceLookupError = "Invalid or expired device code.";
         return;

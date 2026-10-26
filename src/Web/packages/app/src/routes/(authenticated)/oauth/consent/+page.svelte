@@ -25,7 +25,7 @@
   $effect(() => {
     if (!page.data.isAuthenticated) {
       const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
-      goto(resolve(`auth/login?returnUrl=${returnUrl}`), { replaceState: true });
+      goto(resolve(`auth/login?returnUrl=${returnUrl}`), { replace: true });
     }
   });
 
@@ -298,17 +298,13 @@
             })}
             class="flex-1"
           >
-            <input type="hidden" name="client_id" value={clientId} />
-            <input type="hidden" name="redirect_uri" value={redirectUri} />
-            <input type="hidden" name="scope" value={scope} />
-            <input type="hidden" name="state" value={oauthState} />
-            <input type="hidden" name="code_challenge" value={codeChallenge} />
-            <input type="hidden" name="approved" value="false" />
-            <input
-              type="hidden"
-              name="limit_to_24_hours"
-              value={limitTo24Hours ? "true" : "false"}
-            />
+            <input {...denyForm.fields.client_id.as("hidden", clientId)} />
+            <input {...denyForm.fields.redirect_uri.as("hidden", redirectUri)} />
+            <input {...denyForm.fields.scope.as("hidden", scope)} />
+            <input {...denyForm.fields.state.as("hidden", oauthState)} />
+            <input {...denyForm.fields.code_challenge.as("hidden", codeChallenge)} />
+            <input {...denyForm.fields.approved.as("hidden", "false")} />
+            <input {...denyForm.fields.limit_to_24_hours.as("hidden", limitTo24Hours ? "true" : "false")} />
             <Button
               type="submit"
               variant="outline"
@@ -327,17 +323,13 @@
             })}
             class="flex-1"
           >
-            <input type="hidden" name="client_id" value={clientId} />
-            <input type="hidden" name="redirect_uri" value={redirectUri} />
-            <input type="hidden" name="scope" value={scope} />
-            <input type="hidden" name="state" value={oauthState} />
-            <input type="hidden" name="code_challenge" value={codeChallenge} />
-            <input type="hidden" name="approved" value="true" />
-            <input
-              type="hidden"
-              name="limit_to_24_hours"
-              value={limitTo24Hours ? "true" : "false"}
-            />
+            <input {...approveForm.fields.client_id.as("hidden", clientId)} />
+            <input {...approveForm.fields.redirect_uri.as("hidden", redirectUri)} />
+            <input {...approveForm.fields.scope.as("hidden", scope)} />
+            <input {...approveForm.fields.state.as("hidden", oauthState)} />
+            <input {...approveForm.fields.code_challenge.as("hidden", codeChallenge)} />
+            <input {...approveForm.fields.approved.as("hidden", "true")} />
+            <input {...approveForm.fields.limit_to_24_hours.as("hidden", limitTo24Hours ? "true" : "false")} />
             <Button
               type="submit"
               class="w-full"

@@ -26,9 +26,8 @@
   const navigate = (next: EventResponseState) =>
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- loopAnalysisPath resolves the path
     goto(loopAnalysisPath("meals-and-events", writeEventResponse(next, page.url.searchParams)), {
-      replaceState: true,
-      noScroll: true,
-      keepFocus: true,
+      replace: true,
+      reset: false,
     });
 
   const setEvents = (next: EventResponseState) => {

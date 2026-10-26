@@ -15,6 +15,7 @@
   import { SkippedRecordsNote } from "#lib/components/shared/index.js";
   import type { ImportResult } from "./Finish.svelte";
   import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   let {
     jobId,
@@ -115,7 +116,7 @@
       if (!resolvedJobId) {
         try {
           resolvedJobId = findSessionJob(
-            await migrationRemote.getHistory().run()
+            await fresh(migrationRemote.getHistory())
           );
         } catch (err) {
           error = remoteErrorMessage(err, "Failed to find active migration");
@@ -152,7 +153,7 @@
       // startedAt is set after the first successful poll of a live (non-complete) migration
       while (active) {
         try {
-          const status = await migrationRemote.getStatus(resolvedJobId).run();
+          const status = await fresh(migrationRemote.getStatus(resolvedJobId));
           if (!active) break;
           consecutiveFailures = 0; // a successful poll clears the transient-failure streak
 
@@ -234,7 +235,7 @@
       }
     }
 
-    // `.run()` rejects during the render/effect flush, so defer out of it.
+    // Deferred so this effect does not track what the load reads.
     queueMicrotask(() => {
       if (active) poll();
     });

@@ -26,6 +26,7 @@
     PlatformSettingsSummary,
     CreateOidcProviderRequest,
   } from "#lib/api/index.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // State
   let activeTab = $state("identity-providers");
@@ -62,8 +63,8 @@
     oidcError = null;
     try {
       const [managed, providers] = await Promise.all([
-        oidcRemote.getConfigManaged().run(),
-        oidcRemote.getAll().run(),
+        fresh(oidcRemote.getConfigManaged()),
+        fresh(oidcRemote.getAll()),
       ]);
       oidcConfigManaged = managed?.isConfigManaged ?? false;
       oidcProviders = providers ?? [];
@@ -137,8 +138,8 @@
     error = null;
     try {
       const [rols, platformSettingsList] = await Promise.all([
-        rolesRemote.getRoles().run(),
-        platformSettingsRemote.getAll().run(),
+        fresh(rolesRemote.getRoles()),
+        fresh(platformSettingsRemote.getAll()),
       ]);
       await loadOidcData();
       roles = rols || [];
@@ -151,13 +152,8 @@
     }
   }
 
-  // Initial load. `.run()` rejects when called during the render/effect flush,
-  // so defer the bootstrap to a microtask — onMount's synchronous body still
-  // counts as render.
   onMount(() => {
-    queueMicrotask(() => {
-      loadData();
-    });
+    void loadData();
   });
 
   // ============================================================================
@@ -166,13 +162,13 @@
 
   async function handlePlatformSettingsSave(category: string, enabled: boolean, fields: Record<string, string>) {
     await platformSettingsRemote.upsert({ category, request: { enabled, fields } });
-    const updated = await platformSettingsRemote.getAll().run();
+    const updated = await fresh(platformSettingsRemote.getAll());
     if (updated) platformSettings = updated;
   }
 
   async function handlePlatformSettingsDelete(category: string) {
     await platformSettingsRemote.remove(category);
-    const updated = await platformSettingsRemote.getAll().run();
+    const updated = await fresh(platformSettingsRemote.getAll());
     if (updated) platformSettings = updated;
   }
 </script>

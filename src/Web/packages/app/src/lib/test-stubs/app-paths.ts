@@ -7,7 +7,7 @@
 export function resolve(id: string, params?: Record<string, string>): string {
   if (!id.startsWith("/")) return `/${id}`;
   if (!params) return id;
-  return Object.entries(params).reduce((acc, [key, value]) => acc.replace(`[${key}]`, value), id);
+  return Object.entries(params).reduce<string>((acc, [key, value]) => acc.replace(`[${key}]`, value), id);
 }
 
 export function asset(file: string): string {

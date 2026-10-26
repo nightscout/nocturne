@@ -107,6 +107,7 @@
   });
 
   let mills = $state<number>(Date.now());
+  const timestamp = $derived(new Date(mills).toISOString());
   const deletion = useToastSubmission("Failed to delete entry");
   let carbsPendingFoods = $state<PendingFood[]>([]);
 
@@ -158,30 +159,51 @@
   const activeBolusForm = $derived(
     existingBolusRecord?.data.id ? updateBolusForm : createBolusForm,
   );
+  // An update form takes the record's fields under `request`; a create form takes them flat.
+  const bolusPayload = $derived(
+    existingBolusRecord?.data.id ? updateBolusForm.fields.request : createBolusForm.fields,
+  );
 
   const existingCarbsRecord = $derived(findExistingRecord("carbs"));
   const activeCarbsForm = $derived(
     existingCarbsRecord?.data.id ? updateCarbIntakeForm : createCarbIntakeForm,
+  );
+  const carbsPayload = $derived(
+    existingCarbsRecord?.data.id ? updateCarbIntakeForm.fields.request : createCarbIntakeForm.fields,
   );
 
   const existingBGCheckRecord = $derived(findExistingRecord("bgCheck"));
   const activeBGCheckForm = $derived(
     existingBGCheckRecord?.data.id ? updateBGCheckForm : createBGCheckForm,
   );
+  const bgCheckPayload = $derived(
+    existingBGCheckRecord?.data.id ? updateBGCheckForm.fields.request : createBGCheckForm.fields,
+  );
 
   const existingNoteRecord = $derived(findExistingRecord("note"));
   const activeNoteForm = $derived(
     existingNoteRecord?.data.id ? updateNoteForm : createNoteForm,
+  );
+  const notePayload = $derived(
+    existingNoteRecord?.data.id ? updateNoteForm.fields.request : createNoteForm.fields,
   );
 
   const existingDeviceEventRecord = $derived(findExistingRecord("deviceEvent"));
   const activeDeviceEventForm = $derived(
     existingDeviceEventRecord?.data.id ? updateDeviceEventForm : createDeviceEventForm,
   );
+  const deviceEventPayload = $derived(
+    existingDeviceEventRecord?.data.id ? updateDeviceEventForm.fields.request : createDeviceEventForm.fields,
+  );
 
   const existingBasalInjectionRecord = $derived(findExistingRecord("basalInjection"));
   const activeBasalInjectionForm = $derived(
     existingBasalInjectionRecord?.data.id ? updateBasalInjectionForm : createBasalInjectionForm,
+  );
+  const basalInjectionPayload = $derived(
+    existingBasalInjectionRecord?.data.id
+      ? updateBasalInjectionForm.fields.request
+      : createBasalInjectionForm.fields,
   );
 
   // Aggregate pending state across all forms
@@ -441,28 +463,30 @@
     })}
   >
     {#if existingBolusRecord?.data.id}
-      <input type="hidden" name="id" value={existingBolusRecord.data.id} />
+      <input {...updateBolusForm.fields.id.as("hidden", existingBolusRecord.data.id)} />
     {/if}
-    <input type="hidden" name="n:mills" value={mills} />
+    <input {...bolusPayload.timestamp.as("hidden", timestamp)} />
     {#if correlationId}
-      <input type="hidden" name="correlationId" value={correlationId} />
+      <input {...bolusPayload.correlationId.as("hidden", correlationId)} />
     {/if}
-    <input type="hidden" name="n:insulin" value={sections.bolus?.insulin ?? 0} />
-    <input type="hidden" name="bolusType" value={sections.bolus?.bolusType ?? BolusType.Normal} />
+    <input {...bolusPayload.insulin.as("hidden", sections.bolus?.insulin ?? 0)} />
+    {#if !existingBolusRecord?.data.id}
+      <input {...createBolusForm.fields.bolusType.as("hidden", sections.bolus?.bolusType ?? BolusType.Normal)} />
+    {/if}
     {#if sections.bolus?.duration != null}
-      <input type="hidden" name="n:duration" value={sections.bolus.duration} />
+      <input {...bolusPayload.duration.as("hidden", sections.bolus.duration)} />
     {/if}
     {#if sections.bolus?.programmed != null}
-      <input type="hidden" name="n:programmed" value={sections.bolus.programmed} />
+      <input {...bolusPayload.programmed.as("hidden", sections.bolus.programmed)} />
     {/if}
     {#if sections.bolus?.delivered != null}
-      <input type="hidden" name="n:delivered" value={sections.bolus.delivered} />
+      <input {...bolusPayload.delivered.as("hidden", sections.bolus.delivered)} />
     {/if}
     {#if sections.bolus?.insulinType}
-      <input type="hidden" name="insulinType" value={sections.bolus.insulinType} />
+      <input {...bolusPayload.insulinType.as("hidden", sections.bolus.insulinType)} />
     {/if}
     {#if sections.bolus?.unabsorbed != null}
-      <input type="hidden" name="n:unabsorbed" value={sections.bolus.unabsorbed} />
+      <input {...bolusPayload.unabsorbed.as("hidden", sections.bolus.unabsorbed)} />
     {/if}
   </form>
 {/if}
@@ -495,25 +519,24 @@
     })}
   >
     {#if existingCarbsRecord?.data.id}
-      <input type="hidden" name="id" value={existingCarbsRecord.data.id} />
+      <input {...updateCarbIntakeForm.fields.id.as("hidden", existingCarbsRecord.data.id)} />
     {/if}
-    <input type="hidden" name="n:mills" value={mills} />
+    <input {...carbsPayload.timestamp.as("hidden", timestamp)} />
     {#if correlationId}
-      <input type="hidden" name="correlationId" value={correlationId} />
+      <input {...carbsPayload.correlationId.as("hidden", correlationId)} />
     {/if}
-    <input type="hidden" name="n:carbs" value={sections.carbs?.carbs ?? 0} />
+    <input {...carbsPayload.carbs.as("hidden", sections.carbs?.carbs ?? 0)} />
     {#if sections.carbs?.carbTime != null}
-      <input type="hidden" name="n:carbTime" value={sections.carbs.carbTime} />
+      <input {...carbsPayload.carbTime.as("hidden", sections.carbs.carbTime)} />
     {/if}
     {#if sections.carbs?.absorptionTime != null}
-      <input type="hidden" name="n:absorptionTime" value={sections.carbs.absorptionTime} />
+      <input {...carbsPayload.absorptionTime.as("hidden", sections.carbs.absorptionTime)} />
     {/if}
   </form>
 {/if}
 
 <!-- Hidden BG check form -->
 {#if sections.bgCheck != null}
-  {@const correlationId = activeSectionCount > 1 ? crypto.randomUUID() : undefined}
   <form
     bind:this={bgCheckFormRef}
     class="hidden"
@@ -529,21 +552,17 @@
     })}
   >
     {#if existingBGCheckRecord?.data.id}
-      <input type="hidden" name="id" value={existingBGCheckRecord.data.id} />
+      <input {...updateBGCheckForm.fields.id.as("hidden", existingBGCheckRecord.data.id)} />
     {/if}
-    <input type="hidden" name="n:mills" value={mills} />
-    {#if correlationId}
-      <input type="hidden" name="correlationId" value={correlationId} />
-    {/if}
-    <input type="hidden" name="n:glucose" value={sections.bgCheck?.glucose ?? 0} />
-    <input type="hidden" name="glucoseType" value={sections.bgCheck?.glucoseType ?? GlucoseType.Finger} />
-    <input type="hidden" name="units" value={sections.bgCheck?.units ?? GlucoseUnit.MgDl} />
+    <input {...bgCheckPayload.timestamp.as("hidden", timestamp)} />
+    <input {...bgCheckPayload.glucose.as("hidden", sections.bgCheck?.glucose ?? 0)} />
+    <input {...bgCheckPayload.glucoseType.as("hidden", sections.bgCheck?.glucoseType ?? GlucoseType.Finger)} />
+    <input {...bgCheckPayload.units.as("hidden", sections.bgCheck?.units ?? GlucoseUnit.MgDl)} />
   </form>
 {/if}
 
 <!-- Hidden note form -->
 {#if sections.note != null}
-  {@const correlationId = activeSectionCount > 1 ? crypto.randomUUID() : undefined}
   <form
     bind:this={noteFormRef}
     class="hidden"
@@ -559,20 +578,16 @@
     })}
   >
     {#if existingNoteRecord?.data.id}
-      <input type="hidden" name="id" value={existingNoteRecord.data.id} />
+      <input {...updateNoteForm.fields.id.as("hidden", existingNoteRecord.data.id)} />
     {/if}
-    <input type="hidden" name="n:mills" value={mills} />
-    {#if correlationId}
-      <input type="hidden" name="correlationId" value={correlationId} />
-    {/if}
-    <input type="hidden" name="text" value={sections.note?.text ?? ""} />
-    <input type="hidden" name="isAnnouncement" value={sections.note?.isAnnouncement ?? false} />
+    <input {...notePayload.timestamp.as("hidden", timestamp)} />
+    <input {...notePayload.text.as("hidden", sections.note?.text ?? "")} />
+    <input {...notePayload.isAnnouncement.as("hidden", sections.note?.isAnnouncement ?? false)} />
   </form>
 {/if}
 
 <!-- Hidden device event form -->
 {#if sections.deviceEvent != null}
-  {@const correlationId = activeSectionCount > 1 ? crypto.randomUUID() : undefined}
   <form
     bind:this={deviceEventFormRef}
     class="hidden"
@@ -588,15 +603,12 @@
     })}
   >
     {#if existingDeviceEventRecord?.data.id}
-      <input type="hidden" name="id" value={existingDeviceEventRecord.data.id} />
+      <input {...updateDeviceEventForm.fields.id.as("hidden", existingDeviceEventRecord.data.id)} />
     {/if}
-    <input type="hidden" name="n:mills" value={mills} />
-    {#if correlationId}
-      <input type="hidden" name="correlationId" value={correlationId} />
-    {/if}
-    <input type="hidden" name="eventType" value={sections.deviceEvent?.eventType ?? DeviceEventType.SiteChange} />
+    <input {...deviceEventPayload.timestamp.as("hidden", timestamp)} />
+    <input {...deviceEventPayload.eventType.as("hidden", sections.deviceEvent?.eventType ?? DeviceEventType.SiteChange)} />
     {#if sections.deviceEvent?.notes}
-      <input type="hidden" name="notes" value={sections.deviceEvent.notes} />
+      <input {...deviceEventPayload.notes.as("hidden", sections.deviceEvent.notes)} />
     {/if}
   </form>
 {/if}
@@ -619,22 +631,18 @@
     })}
   >
     {#if existingBasalInjectionRecord?.data.id}
-      <input type="hidden" name="id" value={existingBasalInjectionRecord.data.id} />
+      <input {...updateBasalInjectionForm.fields.id.as("hidden", existingBasalInjectionRecord.data.id)} />
     {/if}
-    <input type="hidden" name="n:mills" value={mills} />
+    <input {...basalInjectionPayload.timestamp.as("hidden", timestamp)} />
     {#if correlationId}
-      <input type="hidden" name="correlationId" value={correlationId} />
+      <input {...basalInjectionPayload.correlationId.as("hidden", correlationId)} />
     {/if}
     {#if sections.basalInjection?.insulinContext?.patientInsulinId}
-      <input
-        type="hidden"
-        name="patientInsulinId"
-        value={sections.basalInjection.insulinContext.patientInsulinId}
-      />
+      <input {...basalInjectionPayload.patientInsulinId.as("hidden", sections.basalInjection.insulinContext.patientInsulinId)} />
     {/if}
-    <input type="hidden" name="n:units" value={sections.basalInjection?.units ?? 0} />
+    <input {...basalInjectionPayload.units.as("hidden", sections.basalInjection?.units ?? 0)} />
     {#if sections.basalInjection?.notes}
-      <input type="hidden" name="notes" value={sections.basalInjection.notes} />
+      <input {...basalInjectionPayload.notes.as("hidden", sections.basalInjection.notes)} />
     {/if}
   </form>
 {/if}

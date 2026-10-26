@@ -145,7 +145,7 @@
           <!-- eslint-disable-next-line no-restricted-syntax -- hidden file input, opened by the avatar -->
           <input
             type="file"
-            name="file"
+            name={uploadAvatar.fields.file.as("file").name}
             accept="image/png,image/jpeg,image/webp"
             class="hidden"
             bind:this={fileInput}

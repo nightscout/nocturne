@@ -219,12 +219,12 @@
     if (createDeviceEventForm.for("tracker-start").result) realtimeStore?.noteTreatmentWrite();
   })}
 >
-  <input type="hidden" name="n:mills" value={deviceEventMills} />
-  <input type="hidden" name="eventType" value={deviceEventEventType} />
+  <input {...createDeviceEventForm.for("tracker-start").fields.timestamp.as("hidden", new Date(deviceEventMills).toISOString())} />
+  <input {...createDeviceEventForm.for("tracker-start").fields.eventType.as("hidden", deviceEventEventType)} />
   {#if deviceEventNotes}
-    <input type="hidden" name="notes" value={deviceEventNotes} />
+    <input {...createDeviceEventForm.for("tracker-start").fields.notes.as("hidden", deviceEventNotes)} />
   {/if}
-  <input type="hidden" name="app" value="Nocturne Tracker" />
+  <input {...createDeviceEventForm.for("tracker-start").fields.app.as("hidden", "Nocturne Tracker")} />
 </form>
 
 <Dialog.Root bind:open>

@@ -38,6 +38,7 @@
     type TenantConnectorsDto,
     type ConnectorResetJobStatus,
   } from "#lib/api/index.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // Tenant list (platform admin)
   let tenants = $state<TenantDto[]>([]);
@@ -83,7 +84,7 @@
     tenantsLoading = true;
     tenantsError = null;
     try {
-      tenants = (await tenantRemote.getAll().run()) ?? [];
+      tenants = (await fresh(tenantRemote.getAll())) ?? [];
     } catch (err) {
       console.error("Failed to load tenants:", err);
       tenantsError = remoteErrorMessage(err, "Failed to load tenants.");
@@ -92,7 +93,7 @@
     }
   }
 
-  // `.run()` rejects during the render/effect flush, so defer the bootstrap out of it.
+  // Deferred so this effect does not track what the load reads.
   $effect(() => {
     queueMicrotask(loadTenants);
   });
@@ -109,8 +110,8 @@
     connectorsLoading = true;
     connectorsError = null;
     try {
-      // One-shot fetch via .run() — re-selecting a tenant re-executes, so health is never stale.
-      connectors = await getTenantConnectors(value).run();
+      // Fetched afresh on each selection, so health is never stale.
+      connectors = await fresh(getTenantConnectors(value));
     } catch (err) {
       console.error("Failed to load connectors:", err);
       connectorsError = remoteErrorMessage(
@@ -136,15 +137,15 @@
     // can reach.
     stopPolling();
     try {
-      // One-shot fetch each tick — .run() re-executes every call, bypassing query memoisation.
-      const status = await getResetJobStatus(activeJobId).run();
+      // Fetched afresh each tick.
+      const status = await fresh(getResetJobStatus(activeJobId));
       jobStatus = status;
 
       if (isTerminal(status.state)) {
         stopPolling();
         // Re-fetch the connector list so the admin sees updated sync timestamps.
         if (selectedTenantId) {
-          connectors = await getTenantConnectors(selectedTenantId).run();
+          connectors = await fresh(getTenantConnectors(selectedTenantId));
         }
         return;
       }

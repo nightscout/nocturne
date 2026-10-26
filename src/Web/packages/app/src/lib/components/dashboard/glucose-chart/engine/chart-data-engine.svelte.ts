@@ -24,6 +24,7 @@ import {
   type ChartDataEngine,
   type PredictionAvailability,
 } from "./chart-data-view.svelte";
+import { fresh } from "#lib/api/fresh-query.js";
 
 export * from "./chart-data-view.svelte";
 
@@ -393,8 +394,7 @@ export function createChartDataEngine(
 
     const seq = ++refreshSeq;
     const { startTime, endTime } = recentWindow();
-    getChartData({ startTime, endTime, intervalMinutes: 5 })
-      .run()
+    fresh(getChartData({ startTime, endTime, intervalMinutes: 5 }))
       .then((recent) => {
         if (seq !== refreshSeq) return;
         const current = untrack(() => serverChartData);

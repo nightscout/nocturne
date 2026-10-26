@@ -44,6 +44,7 @@
     MigrationJobState,
     MigrationMode,
   } from "#lib/api/index.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // State
   let activeTab = $state("migrate");
@@ -92,9 +93,9 @@
     error = null;
     try {
       const [configResult, sourcesResult, historyResult] = await Promise.all([
-        migrationRemote.getPendingConfig().run(),
-        migrationRemote.getSources().run(),
-        migrationRemote.getHistory().run(),
+        fresh(migrationRemote.getPendingConfig()),
+        fresh(migrationRemote.getSources()),
+        fresh(migrationRemote.getHistory()),
       ]);
       if (destroyed) return;
 
@@ -132,7 +133,7 @@
     }
   }
 
-  // Initial load. `.run()` rejects during the render/effect flush, so defer it.
+  // Initial load. Deferred so this effect does not track what the load reads.
   $effect(() => {
     queueMicrotask(loadData);
     return () => {
@@ -149,7 +150,7 @@
     completedJobId = null;
     try {
       while (activePoll === poll) {
-        const status = await migrationRemote.getStatus(jobId).run();
+        const status = await fresh(migrationRemote.getStatus(jobId));
         if (activePoll !== poll) return;
         activeMigration = status;
 
@@ -452,13 +453,13 @@
                   }
                 })}
               >
-                <input type="hidden" name="n:mode" value={mode} />
+                <input {...testConnectionForm.fields.mode.as("hidden", mode)} />
                 {#if mode === MigrationMode.Api}
-                  <input type="hidden" name="nightscoutUrl" value={nightscoutUrl} />
-                  <input type="hidden" name="nightscoutApiSecret" value={nightscoutApiSecret} />
+                  <input {...testConnectionForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  <input {...testConnectionForm.fields.nightscoutApiSecret.as("hidden", nightscoutApiSecret)} />
                 {:else}
-                  <input type="hidden" name="mongoConnectionString" value={mongoConnectionString} />
-                  <input type="hidden" name="mongoDatabaseName" value={mongoDatabaseName} />
+                  <input {...testConnectionForm.fields.mongoConnectionString.as("hidden", mongoConnectionString)} />
+                  <input {...testConnectionForm.fields.mongoDatabaseName.as("hidden", mongoDatabaseName)} />
                 {/if}
                 <Button
                   type="submit"
@@ -488,22 +489,22 @@
                   }
                 })}
               >
-                <input type="hidden" name="n:mode" value={mode} />
+                <input {...startMigrationForm.fields.mode.as("hidden", mode)} />
                 {#if mode === MigrationMode.Api}
-                  <input type="hidden" name="nightscoutUrl" value={nightscoutUrl} />
-                  <input type="hidden" name="nightscoutApiSecret" value={nightscoutApiSecret} />
+                  <input {...startMigrationForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  <input {...startMigrationForm.fields.nightscoutApiSecret.as("hidden", nightscoutApiSecret)} />
                 {:else}
-                  <input type="hidden" name="mongoConnectionString" value={mongoConnectionString} />
-                  <input type="hidden" name="mongoDatabaseName" value={mongoDatabaseName} />
+                  <input {...startMigrationForm.fields.mongoConnectionString.as("hidden", mongoConnectionString)} />
+                  <input {...startMigrationForm.fields.mongoDatabaseName.as("hidden", mongoDatabaseName)} />
                 {/if}
                 {#if dateRangeStart}
-                  <input type="hidden" name="startDate" value={new Date(dateRangeStart).toISOString()} />
+                  <input {...startMigrationForm.fields.startDate.as("hidden", new Date(dateRangeStart).toISOString())} />
                 {/if}
                 {#if dateRangeEnd}
-                  <input type="hidden" name="endDate" value={new Date(dateRangeEnd).toISOString()} />
+                  <input {...startMigrationForm.fields.endDate.as("hidden", new Date(dateRangeEnd).toISOString())} />
                 {/if}
-                <input type="hidden" name="collections[]" value="entries" />
-                <input type="hidden" name="collections[]" value="treatments" />
+                <input {...startMigrationForm.fields.collections[0].as("hidden", "entries")} />
+                <input {...startMigrationForm.fields.collections[1].as("hidden", "treatments")} />
                 <Button
                   type="submit"
                   disabled={!isFormValid ||

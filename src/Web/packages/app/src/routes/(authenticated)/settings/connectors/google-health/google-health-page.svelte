@@ -37,6 +37,7 @@
   } from "./google-health-copy.svelte";
   import GoogleHealthCategoryTable from "./GoogleHealthCategoryTable.svelte";
   import GoogleHealthSyncProgress from "./GoogleHealthSyncProgress.svelte";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   let status = $state<GoogleHealthStatus | null>(null);
   let importFrom = $state(""),
@@ -85,7 +86,7 @@
   }
 
   async function refresh() {
-    status = await getGoogleHealth().run();
+    status = await fresh(getGoogleHealth());
     selected = status.configured ? status.selectedTypes ?? [] : selected;
     historyDays = status.historyDays ?? 7;
     importFrom = day(status.importFrom);
@@ -179,7 +180,7 @@
         if (!busy || localDisconnecting) {
           const wasSyncing = status?.isSyncing;
           const previousImportFrom = status?.importFrom;
-          const next = await getGoogleHealth().run();
+          const next = await fresh(getGoogleHealth());
           if (disposed) return;
           status = next;
           if (wasSyncing && !next.isSyncing && importFrom === day(previousImportFrom))

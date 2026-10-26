@@ -348,7 +348,7 @@
 
   async function handleExitSetup() {
     await markSetupComplete();
-    await goto(resolve("/"), { invalidateAll: true });
+    await goto(resolve(""), { refreshAll: true });
   }
 
   // The core ends on the setup hub, which /setup serves only once the server has recorded the
@@ -361,13 +361,13 @@
       continueFailed = true;
       return;
     }
-    await goto(resolve('setup'), { invalidateAll: true });
+    await goto(resolve('setup'), { refreshAll: true });
   }
 
   async function handleTakeTour() {
     await markSetupComplete();
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the resolved dashboard route plus a ?coach= param
-    await goto(`${resolve("/")}?coach=quick-tour`, { invalidateAll: true });
+    await goto(`${resolve("")}?coach=quick-tour`, { refreshAll: true });
   }
 
   function handleSelectConnector(id: string) {

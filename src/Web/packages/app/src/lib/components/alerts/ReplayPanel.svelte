@@ -33,6 +33,7 @@
   import ReplayView from "./ReplayView.svelte";
   import { openDayInReview } from "#lib/components/dashboard/glucose-chart/day-in-review.js";
   import type { ConditionNode } from "./types";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     /**
@@ -215,10 +216,10 @@
       const range = computeRange();
       const date = !range && selectedDate ? selectedDate.toString() : undefined;
       // Fetched alongside the replay rather than after it; falls back to the seeded
-      // availableRules prop on error. A microtask later, because the effect below calls this
-      // synchronously and `.run()` refuses to run inside an effect.
+      // availableRules prop on error. A microtask later, so the effect below that calls this
+      // does not track the rule query.
       const rulesList = Promise.resolve()
-        .then(() => getRules().run())
+        .then(() => fresh(getRules()))
         .then(
           (fresh) => (fresh && fresh.length > 0 ? fresh : availableRules),
           () => availableRules

@@ -25,6 +25,7 @@
     isDndScheduleConfigured,
   } from "./dnd";
   import { refreshOnReturn } from "#lib/utils/refresh-on-return.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     /** Called after navigating away (e.g. to close a parent popover). */
@@ -51,7 +52,7 @@
   async function load(): Promise<void> {
     const read = ++reads;
     try {
-      const fetched = await getDnd().run();
+      const fetched = await fresh(getDnd());
       if (read === reads) settings = fetched;
     } catch (err) {
       if (read === reads) {
@@ -91,9 +92,8 @@
     }
   }
 
-  // `.run()` rejects during the render flush, so defer the bootstrap to a microtask.
   onMount(() => {
-    if (canSetDnd) queueMicrotask(load);
+    if (canSetDnd) void load();
   });
   refreshOnReturn(() => {
     if (canSetDnd && !loading && !saving) void load();

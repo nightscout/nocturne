@@ -1,6 +1,5 @@
 import { svelteConfig, RAW_COLOR_ALLOW } from "@nocturne/eslint-config";
 
-import noImperativeRemoteQuery from "./tools/eslint/no-imperative-remote-query.js";
 
 // Width stays layout the caller owns; height comes only from a control's size.
 const HEIGHT_CLASSES = ["h-*", "size-*", "min-h-*", "max-h-*"];
@@ -169,7 +168,7 @@ export default [
   },
   {
     // ApiClient constructs every generated sub-client, so one browser-reachable import ships all
-    // of them. Browser code takes the specific clients from $lib/api/browser-clients.
+    // of them. Browser code takes the specific clients from #lib/api/browser-clients.
     files: ["src/**/*.{ts,js,svelte}"],
     ignores: [
       "src/lib/server/**",
@@ -184,26 +183,12 @@ export default [
     rules: {
       "@typescript-eslint/no-restricted-imports": ["error", {
         patterns: [{
-          regex: "^([$]lib/api|[$]api|([.]{1,2}/)+api)(/index)?/?$|(^|/)api-client[.]generated([.]ts)?$",
+          regex: "^(#lib/api|([.]{1,2}/)+api)(/index([.]js)?)?/?$|(^|/)api-client[.]generated([.](ts|js))?$",
           importNames: ["ApiClient"],
           allowTypeImports: true,
-          message: "ApiClient pulls every generated sub-client into the browser bundle. Import the specific client from $lib/api/browser-clients."
+          message: "ApiClient pulls every generated sub-client into the browser bundle. Import the specific client from #lib/api/browser-clients."
         }]
       }]
     }
   },
-  {
-    // Guard against the year-overview/alerts-polling regression class: a remote
-    // query() awaited or `.then()`-chained imperatively (outside a reactive
-    // context) throws "not created in a reactive context ... Use .run()".
-    files: ["**/*.svelte", "**/*.svelte.ts"],
-    plugins: {
-      nocturne: {
-        rules: { "no-imperative-remote-query": noImperativeRemoteQuery }
-      }
-    },
-    rules: {
-      "nocturne/no-imperative-remote-query": "error"
-    }
-  }
 ];

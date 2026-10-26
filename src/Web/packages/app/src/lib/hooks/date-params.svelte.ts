@@ -23,6 +23,7 @@ import {
   startOfDay,
   type DayRangeStrings,
 } from "#lib/utils/date-range.js";
+import type { ReadonlyURLSearchParams } from "$app/state";
 
 /**
  * Zod schema for reports URL parameters.
@@ -48,9 +49,9 @@ export type ReportsParams = z.infer<typeof ReportsParamsSchema>;
 export type RangeWrite = DateRangeInput & { isDefault: boolean };
 
 /** `search` with `write` in it, as the setters would write it, for a navigation that carries more. */
-export function withRange(search: URLSearchParams, write: RangeWrite): URLSearchParams {
+export function withRange(search: ReadonlyURLSearchParams, write: RangeWrite): URLSearchParams {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a value built and returned, never state
-  const next = new URLSearchParams(search);
+  const next = new URLSearchParams(search.toString());
   for (const [name, value] of Object.entries(write)) {
     if (value == null) next.delete(name);
     else next.set(name, String(value));

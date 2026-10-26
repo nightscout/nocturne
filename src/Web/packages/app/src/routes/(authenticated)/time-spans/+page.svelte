@@ -95,11 +95,11 @@
     const newFirst = anchor.add({ days: direction * (direction === -1 ? dayCount : 1) });
     const newLast = newFirst.add({ days: dayCount - 1 });
 
-    goto(resolve(`time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`), { invalidateAll: true });
+    goto(resolve(`time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`), { refreshAll: true });
   }
 
   function goBack() {
-    goto(resolve("/"));
+    goto(resolve(""));
   }
 
   // Format date range for display

@@ -12,18 +12,15 @@ const requests = vi.hoisted(() => ({
   gri: vi.fn(),
 }));
 vi.mock("#lib/api/generated/dataOverviews.generated.remote.js", () => ({
-  getAvailableYears: () => ({
-    run: () => requests.metadata(),
-  }),
-  getYearSummary: (params: { year: number }) => ({
-    run: async () => {
+  getAvailableYears: () => createQueryResource(() => requests.metadata()),
+  getYearSummary: (params: { year: number }) =>
+    createQueryResource(async () => {
       const [dailySummary, griTimeline] = await Promise.all([
         requests.daily(params),
         requests.gri(params),
       ]);
       return { dailySummary, griTimeline };
-    },
-  }),
+    }),
 }));
 vi.mock(
   "#lib/components/reports/year-overview/YearHeatmap.svelte",
@@ -48,6 +45,7 @@ vi.mock("#lib/components/reports/GlycemicRiskIndexChart.svelte", async () => ({
 }));
 
 import Harness from "./YearOverview.test-harness.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 let intersect: IntersectionObserverCallback;
 beforeEach(() => {

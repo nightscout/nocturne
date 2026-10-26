@@ -33,6 +33,7 @@
   import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
   import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { fresh } from "#lib/api/fresh-query.js";
   interface Props {
     app: UploaderApp | null;
     setupResponse: UploaderSetupResponse | null;
@@ -126,7 +127,7 @@
     deviceLookupError = null;
 
     try {
-      const info = await getDeviceInfo({ userCode: code }).run();
+      const info = await fresh(getDeviceInfo({ userCode: code }));
       if (!info) {
         deviceLookupError = "Invalid or expired device code.";
         return;

@@ -40,7 +40,7 @@
   // the user needs to see their recovery codes before navigating away.
   $effect(() => {
     if (isAuthenticated && !registrationComplete) {
-      goto(resolve('setup'), { replaceState: true, invalidateAll: true });
+      goto(resolve('setup'), { replace: true, refreshAll: true });
     }
   });
 
@@ -105,7 +105,7 @@
   }
 
   function handleContinueToSetup() {
-    goto(resolve('setup'), { replaceState: true, invalidateAll: true });
+    goto(resolve('setup'), { replace: true, refreshAll: true });
   }
 </script>
 

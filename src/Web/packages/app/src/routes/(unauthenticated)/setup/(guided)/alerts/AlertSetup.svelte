@@ -37,6 +37,7 @@
   import { listenForAlertNotifications } from "#lib/stores/alert-notifications.svelte.js";
   import { getUnitLabel } from "#lib/utils/formatting.js";
   import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   let { status: initial, voice }: { status: AlertSetupStatus; voice: PatientVoice } = $props();
 
@@ -132,7 +133,7 @@
   /** Follows the test's deliveries until none is still sending, for the troubleshooting list. */
   async function followTest(instanceId: string) {
     for (let i = 0; i < 20; i++) {
-      const current = await getSetupTestAlert(instanceId).run();
+      const current = await fresh(getSetupTestAlert(instanceId));
       if (test?.instanceId !== instanceId) return;
       test = current;
       if (!current.deliveries?.some((d) => d.status === "pending")) return;

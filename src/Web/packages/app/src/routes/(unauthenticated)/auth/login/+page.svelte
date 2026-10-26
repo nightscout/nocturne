@@ -47,7 +47,7 @@
     const currentAuth = authStateQuery.current;
     if (currentAuth?.isAuthenticated && currentAuth?.user) {
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- returnUrl is a caller-supplied same-origin path, not a route; goto() rejects cross-origin URLs
-      goto(returnUrl, { replaceState: true });
+      goto(returnUrl, { replace: true });
     }
   });
 </script>

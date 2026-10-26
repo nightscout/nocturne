@@ -63,7 +63,7 @@
       confirmingDelete = false;
       // The deleted name is still in the query string, which would render as a
       // profile whose settings have vanished.
-      await goto(resolve('settings/profile'), { replaceState: true, noScroll: true });
+      await goto(resolve('settings/profile'), { replace: true, reset: false });
     } catch(err) {
       deleteError = describeSubmitError(err, "We could not delete this profile.");
     } finally {
@@ -250,7 +250,7 @@
                 {@const isExternal = profileTherapy?.isExternallyManaged === true}
                 <a
                   href={resolve(`settings/profile?name=${encodeURIComponent(profileName)}`)}
-                  data-sveltekit-noscroll
+                  data-sveltekit-reset="false"
                   data-sveltekit-replacestate
                   class="flex items-center gap-3 p-3 rounded-lg border text-left transition-colors
                        {isSelected

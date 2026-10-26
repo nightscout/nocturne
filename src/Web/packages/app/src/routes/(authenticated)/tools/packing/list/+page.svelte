@@ -105,10 +105,10 @@
 
   function updateUrl() {
     const encoded = encodeBase64Utf8(JSON.stringify(items));
-    const url = new URL(page.url);
+    const url = new URL(page.url.href);
     url.searchParams.set("d", encodeURIComponent(encoded));
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with one param changed, already resolved
-    goto(url.toString(), { replaceState: true, noScroll: true });
+    goto(url.toString(), { replace: true, reset: false });
   }
 
   function startAdding(category: string) {

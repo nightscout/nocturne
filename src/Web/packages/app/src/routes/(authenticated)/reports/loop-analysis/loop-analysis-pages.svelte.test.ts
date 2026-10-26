@@ -307,7 +307,7 @@ describe("Loop Analysis pages", () => {
     expect(url.pathname).toBe("/reports/loop-analysis/daily-profile");
     expect(url.searchParams.has("excludeOpenLoop")).toBe(false);
     expect(url.searchParams.get("excludeIllness")).toBe("false");
-    expect(options).toMatchObject({ replaceState: true });
+    expect(options).toMatchObject({ replace: true });
   });
 
   it("leaves a URL alone when every filter it sets is usable", async () => {

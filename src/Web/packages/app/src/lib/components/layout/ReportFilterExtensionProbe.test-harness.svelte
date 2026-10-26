@@ -10,11 +10,11 @@
     begin: () => log.push("begin"),
     apply: (search) => {
       log.push("apply");
-      return search;
+      return new URLSearchParams(search.toString());
     },
     reset: (search) => {
       log.push("reset");
-      return search;
+      return new URLSearchParams(search.toString());
     },
   });
 </script>

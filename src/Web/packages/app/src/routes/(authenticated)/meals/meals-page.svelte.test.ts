@@ -83,10 +83,7 @@ vi.mock("#lib/api/generated/mealMatchings.generated.remote.js", () => ({
   dismissMatch: remoteCommand(() => server.dismissAnswer()),
 }));
 
-vi.mock("sveltekit-search-params", async () => {
-  const { writable } = await import("svelte/store");
-  return { queryParam: () => writable(null) };
-});
+vi.mock("sveltekit-search-params", () => ({ queryParameters: () => ({}) }));
 
 vi.mock("svelte-sonner", async (original) => ({
   ...(await original<typeof import("svelte-sonner")>()),

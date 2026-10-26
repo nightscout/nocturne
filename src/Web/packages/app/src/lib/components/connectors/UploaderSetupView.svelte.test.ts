@@ -24,7 +24,7 @@ vi.mock("#lib/api/generated/directGrants.generated.remote.js", () => ({
 }));
 
 vi.mock("#routes/(authenticated)/oauth/oauth.remote.js", () => ({
-  getDeviceInfo: (args: unknown) => ({ run: () => mocks.lookup(args) }),
+  getDeviceInfo: (args: unknown) => createQueryResource(() => mocks.lookup(args)),
 }));
 
 vi.mock("#lib/api/generated/oAuths.generated.remote.js", () => ({
@@ -32,6 +32,7 @@ vi.mock("#lib/api/generated/oAuths.generated.remote.js", () => ({
 }));
 
 import UploaderSetupView from "./UploaderSetupView.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const XDRIP: UploaderApp = { id: "xdrip", platform: UploaderPlatform.Android };
 const AAPS: UploaderApp = { id: "aaps", platform: UploaderPlatform.Android };

@@ -17,6 +17,7 @@
     isDndScheduleConfigured,
   } from "./dnd";
   import { refreshOnReturn } from "#lib/utils/refresh-on-return.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     /** Whether the toggle is on screen. The settings are read the first time it is. */
@@ -47,7 +48,7 @@
         : "Scheduled Do not disturb window configured",
   );
 
-  const href = "/alerts/dnd";
+  const href = "alerts/dnd";
   let isActive = $derived(page.url.pathname.startsWith(href));
 
   let reads = 0;
@@ -55,7 +56,7 @@
   async function load(): Promise<void> {
     const read = ++reads;
     try {
-      const fetched = await getDnd().run();
+      const fetched = await fresh(getDnd());
       if (read === reads) settings = fetched;
     } catch {
       // A sidebar toggle has nowhere to put a sentence; the null state renders as
@@ -93,7 +94,7 @@
   refreshOnReturn(() => {
     if (visible && requested && !saving) void load();
   });
-  // `.run()` rejects during the render flush, so defer the bootstrap to a microtask.
+  // Deferred so this effect does not track what the load reads.
   $effect(() => {
     if (!visible || !canSetDnd || requested) return;
     requested = true;

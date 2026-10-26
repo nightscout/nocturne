@@ -7,14 +7,6 @@ import {
   type FakeQuery,
 } from "#lib/api/fake-remote-query.svelte.js";
 
-/**
- * A remote `query()` can only be awaited when its proxy was built in a tracking
- * context, so a component that reloads its list from a click handler gets a
- * rejection instead of data — the create still succeeds on the server, and the
- * failed reload is what reaches the user. {@link fakeRemoteQuery} reproduces
- * that rule; a bare `Promise` stand-in cannot.
- */
-
 let grants: DirectGrantDto[];
 let listQuery: () => FakeQuery<DirectGrantDto[]>;
 let createImpl: (body?: unknown) => Promise<{ token?: string }>;

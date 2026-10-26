@@ -19,6 +19,7 @@
     DeduplicationJobState,
     type DeduplicationJobStatus,
   } from "#lib/api/generated/nocturne-api-client.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     open: boolean;
@@ -65,7 +66,7 @@
       if (!deduplicationJobId) return;
 
       try {
-        const status = await getDeduplicationJobStatus(deduplicationJobId).run();
+        const status = await fresh(getDeduplicationJobStatus(deduplicationJobId));
         if (status) {
           deduplicationStatus = status;
 

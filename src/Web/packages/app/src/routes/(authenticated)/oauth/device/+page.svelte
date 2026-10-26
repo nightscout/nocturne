@@ -29,7 +29,7 @@
   $effect(() => {
     if (!page.data.isAuthenticated) {
       const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
-      goto(resolve(`auth/login?returnUrl=${returnUrl}`), { replaceState: true });
+      goto(resolve(`auth/login?returnUrl=${returnUrl}`), { replace: true });
     }
   });
 
@@ -196,7 +196,7 @@
             })}
             class="flex-1"
           >
-            <input type="hidden" name="user_code" value={deviceInfo.userCode} />
+            <input {...denyDeviceForm.fields.user_code.as("hidden", deviceInfo.userCode)} />
             <Button
               type="submit"
               variant="outline"
@@ -215,7 +215,7 @@
             })}
             class="flex-1"
           >
-            <input type="hidden" name="user_code" value={deviceInfo.userCode} />
+            <input {...approveDeviceForm.fields.user_code.as("hidden", deviceInfo.userCode)} />
             <Button
               type="submit"
               class="w-full"
@@ -263,7 +263,7 @@
         >
           <Input
             type="text"
-            name="user_code"
+            name={lookupDeviceForm.fields.user_code.as("text").name}
             placeholder="XXXX-YYYY"
             maxlength={9}
             autocomplete="off"

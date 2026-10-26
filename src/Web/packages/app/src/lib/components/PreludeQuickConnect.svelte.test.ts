@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("#routes/(authenticated)/oauth/oauth.remote.js", () => ({
-  getDeviceInfo: (args: unknown) => ({ run: () => mocks.lookup(args) }),
+  getDeviceInfo: (args: unknown) => createQueryResource(() => mocks.lookup(args)),
 }));
 
 vi.mock("#lib/api/generated/oAuths.generated.remote.js", () => ({
@@ -16,6 +16,7 @@ vi.mock("#lib/api/generated/oAuths.generated.remote.js", () => ({
 }));
 
 import PreludeQuickConnect from "./PreludeQuickConnect.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 async function reachConsent() {
   render(PreludeQuickConnect, { props: { instanceUrl: "https://demo.example/" } });

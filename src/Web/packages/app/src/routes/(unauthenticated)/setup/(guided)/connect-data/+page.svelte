@@ -16,6 +16,7 @@
   import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
   import DataSourceSelectionView from "#lib/components/connectors/DataSourceSelectionView.svelte";
   import UploaderSetupView from "#lib/components/connectors/UploaderSetupView.svelte";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   type ViewState = "selection" | "connector" | "uploader";
   let viewState = $state<ViewState>("selection");
@@ -38,7 +39,7 @@
     viewState = "uploader";
 
     try {
-      const result = app.id ? await getUploaderSetup(app.id).run() : null;
+      const result = app.id ? await fresh(getUploaderSetup(app.id)) : null;
       setupResponse = result ?? null;
     } catch {
       // The view renders its own "no setup available" state from a null response,

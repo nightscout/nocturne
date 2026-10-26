@@ -17,6 +17,7 @@ import {
 import { deleteFood as deleteFoodRemote } from './data.remote';
 import { describeSubmitError } from '#lib/forms/submit-error.js';
 import { remoteErrorMessage } from '#lib/api/remote-error.js';
+import { fresh } from "#lib/api/fresh-query.js";
 
 export class FoodState {
   foods = $state<Food[]>([]);
@@ -81,8 +82,8 @@ export class FoodState {
     this.loading = true;
     try {
       const [foods, favs] = await Promise.all([
-        getFoods(undefined).run(),
-        getFavorites(undefined).run(),
+        fresh(getFoods(undefined)),
+        fresh(getFavorites(undefined)),
       ]);
       this.foods = foods ?? [];
       this.favorites = new SvelteSet(
@@ -112,7 +113,7 @@ export class FoodState {
       }
     } catch (err) {
       toast.error(describeSubmitError(err, 'Failed to update favorite'));
-      const favs = await getFavorites(undefined).run();
+      const favs = await fresh(getFavorites(undefined));
       this.favorites = new SvelteSet(
         (favs ?? []).map((f: Food) => f._id).filter((id): id is string => !!id)
       );
@@ -151,7 +152,7 @@ export class FoodState {
 
   async getAttributionCount(foodId: string): Promise<number> {
     try {
-      const result = await getFoodAttributionCount(foodId).run();
+      const result = await fresh(getFoodAttributionCount(foodId));
       return result?.count ?? 0;
     } catch {
       // No copy to lose: the caller renders a count, and 0 reads as "none known".

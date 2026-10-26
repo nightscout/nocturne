@@ -14,16 +14,16 @@ const statusSpy = vi.fn();
 vi.mock("#lib/api/generated/migrations.generated.remote.js", () => ({
   getStatus: (jobId: string) => {
     statusSpy(jobId);
-    return {
-      run: () =>
-        statusUnreachable ? Promise.reject(new Error("unreachable")) : Promise.resolve(status),
-    };
+    return createQueryResource(() =>
+      statusUnreachable ? Promise.reject(new Error("unreachable")) : Promise.resolve(status)
+    );
   },
-  getHistory: () => ({ run: () => Promise.resolve(history) }),
+  getHistory: () => createQueryResource(() => Promise.resolve(history)),
 }));
 
 import ImportProgress from "./ImportProgress.svelte";
 import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const voice = patientVoice({ relationship: PatientRelationship.Self });
 

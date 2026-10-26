@@ -150,6 +150,8 @@
 
   const createForm = $derived(createRemote.for("create"));
   const updateForm = $derived(updateRemote.for(editingDefinition?.id ?? ""));
+  /** The fields a definition is submitted under: the update form nests them under `request`. */
+  type DefinitionFields = typeof createForm.fields | typeof updateForm.fields.request;
 
   function notificationsToApiFormat(notifications: TrackerNotification[]) {
     return notifications
@@ -163,13 +165,13 @@
   }
 </script>
 
-{#snippet definitionFormFields(prefix: string)}
+{#snippet definitionFormFields(fields: DefinitionFields)}
   <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
     <div class="space-y-2">
       <Label for="name">Name</Label>
       <Input
         id="name"
-        name="{prefix}name"
+        name={fields.name.as("text").name}
         bind:value={formName}
         placeholder="e.g., G7 Sensor"
       />
@@ -178,7 +180,7 @@
       <Label for="category">Category</Label>
       <Select.Root
         type="single"
-        name="{prefix}category"
+        name={fields.category.as("select").name}
         bind:value={formCategory}
         onValueChange={changeCategory}
       >
@@ -229,7 +231,7 @@
     <Label for="description">Description (optional)</Label>
     <Input
       id="description"
-      name="{prefix}description"
+      name={fields.description.as("text").name}
       bind:value={formDescription}
       placeholder="Optional description"
     />
@@ -237,7 +239,7 @@
 
   <div class="space-y-2">
     <Label>Tracker mode</Label>
-    <Select.Root type="single" name="{prefix}mode" bind:value={formMode}>
+    <Select.Root type="single" name={fields.mode.as("select").name} bind:value={formMode}>
       <Select.Trigger>
         {#if formMode === TrackerMode.Duration}
           Duration - runs for a time period
@@ -273,11 +275,9 @@
         bind:value={formLifespanHours}
         placeholder="e.g., 10x24 or 10d"
       />
-      <input
-        type="hidden"
-        name="n:{prefix}lifespanHours"
-        value={formLifespanHours ?? ""}
-      />
+      {#if formLifespanHours != null}
+        <input {...fields.lifespanHours.as("hidden", formLifespanHours)} />
+      {/if}
     </div>
   {/if}
 
@@ -307,7 +307,7 @@
     </div>
   {/if}
   {#each postedCovers as capability, i (i)}
-    <input type="hidden" name="{prefix}covers[]" value={capability} />
+    <input {...fields.covers[i].as("hidden", capability)} />
   {/each}
 
   {#if holdsInsulin}
@@ -352,16 +352,10 @@
         </Select.Root>
       </div>
     </div>
-    <input
-      type="hidden"
-      name="n:{prefix}lowReservoirUnits"
-      value={formLowReservoirUnits ?? ""}
-    />
-    <input
-      type="hidden"
-      name="{prefix}lowReservoirUrgency"
-      value={formLowReservoirUrgency}
-    />
+    {#if formLowReservoirUnits != null}
+      <input {...fields.lowReservoirUnits.as("hidden", formLowReservoirUnits)} />
+    {/if}
+    <input {...fields.lowReservoirUrgency.as("hidden", formLowReservoirUrgency)} />
   {/if}
 
   {#if formMode === TrackerMode.Duration}
@@ -430,16 +424,12 @@
   {/if}
 
   {#each postedTriggers as eventType, i (i)}
-    <input type="hidden" name="{prefix}triggerEventTypes[]" value={eventType} />
+    <input {...fields.triggerEventTypes[i].as("hidden", eventType)} />
   {/each}
   {#each postedEnds as eventType, i (i)}
-    <input type="hidden" name="{prefix}endEventTypes[]" value={eventType} />
+    <input {...fields.endEventTypes[i].as("hidden", eventType)} />
   {/each}
-  <input
-    type="hidden"
-    name="{prefix}triggerNotesContains"
-    value={followsEvents ? formTriggerNotesContains : ""}
-  />
+  <input {...fields.triggerNotesContains.as("hidden", followsEvents ? formTriggerNotesContains : "")} />
 
   <TrackerNotificationEditor
     bind:notifications={formNotifications}
@@ -450,50 +440,28 @@
   />
 
   {#each notificationsToApiFormat(formNotifications) as threshold, i (i)}
-    <input
-      type="hidden"
-      name="{prefix}notificationThresholds[{i}].urgency"
-      value={threshold.urgency}
-    />
-    <input
-      type="hidden"
-      name="n:{prefix}notificationThresholds[{i}].hours"
-      value={threshold.hours}
-    />
-    <input
-      type="hidden"
-      name="{prefix}notificationThresholds[{i}].description"
-      value={threshold.description ?? ""}
-    />
-    <input
-      type="hidden"
-      name="n:{prefix}notificationThresholds[{i}].displayOrder"
-      value={threshold.displayOrder ?? i}
-    />
+    <input {...fields.notificationThresholds[i].urgency.as("hidden", threshold.urgency)} />
+    <input {...fields.notificationThresholds[i].hours.as("hidden", threshold.hours)} />
+    <input {...fields.notificationThresholds[i].description.as("hidden", threshold.description ?? "")} />
+    <input {...fields.notificationThresholds[i].displayOrder.as("hidden", threshold.displayOrder ?? i)} />
   {/each}
 
-  <input
-    type="hidden"
-    name="b:{prefix}isFavorite"
-    value={formIsFavorite ? "on" : ""}
-  />
-  <input type="hidden" name="{prefix}icon" value={formIcon} />
-  <input
-    type="hidden"
-    name="{prefix}startEventType"
-    value={formStartEventType ?? ""}
-  />
-  <input
-    type="hidden"
-    name="{prefix}completionEventType"
-    value={formCompletionEventType ?? ""}
-  />
+  {#if formIsFavorite}
+    <input {...fields.isFavorite.as("hidden", true)} />
+  {/if}
+  <input {...fields.icon.as("hidden", formIcon)} />
+  {#if formStartEventType}
+    <input {...fields.startEventType.as("hidden", formStartEventType)} />
+  {/if}
+  {#if formCompletionEventType}
+    <input {...fields.completionEventType.as("hidden", formCompletionEventType)} />
+  {/if}
 
   <div class="space-y-2">
     <Label for="dashboardVisibility">Dashboard visibility</Label>
     <Select.Root
       type="single"
-      name="{prefix}dashboardVisibility"
+      name={fields.dashboardVisibility.as("select").name}
       bind:value={formDashboardVisibility}
     >
       <Select.Trigger>
@@ -593,7 +561,7 @@
         })}
       >
         <div class="space-y-6 py-4">
-          {@render definitionFormFields("")}
+          {@render definitionFormFields(createForm.fields)}
         </div>
 
         <Dialog.Footer>
@@ -622,9 +590,9 @@
           }
         })}
       >
-        <input type="hidden" name="id" value={editingDefinition?.id ?? ""} />
+        <input {...updateForm.fields.id.as("hidden", editingDefinition?.id ?? "")} />
         <div class="space-y-6 py-4">
-          {@render definitionFormFields("request.")}
+          {@render definitionFormFields(updateForm.fields.request)}
         </div>
 
         <Dialog.Footer>

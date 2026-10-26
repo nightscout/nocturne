@@ -14,7 +14,7 @@ const navigation = vi.hoisted(() => ({
 const shell = vi.hoisted(() => ({ probe: vi.fn() }));
 
 vi.mock("#lib/api/shell-session.remote.js", () => ({
-  getShellSession: () => ({ run: shell.probe }),
+  getShellSession: () => createQueryResource(shell.probe),
 }));
 
 vi.mock("$app/navigation", async (importOriginal) => ({
@@ -48,6 +48,7 @@ import { EngineHost } from "water-ui";
 import { illustrations } from "#lib/stores/illustrations.svelte.js";
 import * as appState from "$app/state";
 import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "#lib/constants/shell-data.js";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const BASE = new Date("2026-09-21T12:00:00Z").getTime();
 

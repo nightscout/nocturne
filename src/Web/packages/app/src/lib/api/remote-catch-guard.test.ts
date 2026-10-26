@@ -32,8 +32,8 @@ import { fileURLToPath } from "node:url";
  *   keeps its fixed copy and adds a comment passes, and only review catches
  *   that.
  * - It sees calls to names imported from a `*.generated.remote` module, plus
- *   `.run()` and `.refresh()`. A remote call reached any other way is
- *   invisible.
+ *   `fresh()`, `.run()` and `.refresh()`. A remote call reached any other way
+ *   is invisible.
  */
 const SRC = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -79,7 +79,7 @@ function tryBlockBefore(source: string, catchIndex: number): string {
 }
 
 function callsRemote(block: string, imported: string[]): boolean {
-  if (/\.(run|refresh)\s*\(/.test(block)) return true;
+  if (/\.(run|refresh)\s*\(|\bfresh\s*\(/.test(block)) return true;
   return imported.some((name) => new RegExp(`\\b${name}\\s*[(.]`).test(block));
 }
 
@@ -360,7 +360,7 @@ describe("catches around generated remote calls", () => {
       import { getTenants } from "#lib/api/generated/tenants.generated.remote.js";
       async function load() {
         try {
-          tenants = await getTenants().run();
+          tenants = await fresh(getTenants());
         } catch (err) {
           console.error("Failed to load tenants:", String(err));
           loadError = "Failed to load tenants.";
@@ -378,7 +378,7 @@ describe("catches around generated remote calls", () => {
       import { getAll } from "#lib/api/generated/tenants.generated.remote.js";
       async function load() {
         try {
-          tenants = await getAll().run();
+          tenants = await fresh(getAll());
         } catch (err) {
           console.error("Failed to load tenants:", err);
           loadError = "Failed to load tenants.";
@@ -394,7 +394,7 @@ describe("catches around generated remote calls", () => {
   it("leaves a logged reason that is also shown alone", () => {
     const routed = `
       try {
-        tenants = await getTenants().run();
+        tenants = await fresh(getTenants());
       } catch (err) {
         console.error("Failed to load tenants:", err);
         loadError = remoteErrorMessage(err, "Failed to load tenants.");

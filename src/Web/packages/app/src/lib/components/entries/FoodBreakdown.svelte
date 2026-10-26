@@ -23,6 +23,7 @@
     CarbBreakdownBar,
     FoodEntryDetails,
   } from "#lib/components/treatments/index.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     carbIntakeId?: string;
@@ -45,7 +46,7 @@
       breakdown = null;
       return;
     }
-    // `.run()` rejects during the render/effect flush, so defer out of it.
+    // Deferred so this effect does not track what the load reads.
     const id = carbIntakeId;
     queueMicrotask(() => loadBreakdown(id));
   });
@@ -54,7 +55,7 @@
     isLoading = true;
     loadError = null;
     try {
-      breakdown = await getCarbIntakeFoodBreakdown(id).run();
+      breakdown = await fresh(getCarbIntakeFoodBreakdown(id));
     } catch (err) {
       console.error("Failed to load food breakdown:", err);
       loadError = remoteErrorMessage(err, "Could not load food breakdown.");

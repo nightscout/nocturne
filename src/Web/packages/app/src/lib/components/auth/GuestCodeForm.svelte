@@ -28,7 +28,7 @@
   })}
 >
   <FormError issues={submission.error} focusOnShow />
-  <input type="hidden" name="returnUrl" value={returnUrl} />
+  <input {...activateGuestCode.fields.returnUrl.as("hidden", returnUrl)} />
 
   <FormField
     label="Guest code"
@@ -39,7 +39,7 @@
     {#snippet control(field)}
       <Input
         {...field}
-        name="code"
+        name={activateGuestCode.fields.code.as("text").name}
         bind:value={code}
         placeholder="ABC-DEFG"
         autocomplete="one-time-code"

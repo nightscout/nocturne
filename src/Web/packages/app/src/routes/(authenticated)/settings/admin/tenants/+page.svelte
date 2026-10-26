@@ -41,6 +41,7 @@
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { invalidate } from "$app/navigation";
   import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   const tenantIdQuery = getCurrentTenantId();
   const currentTenantId = $derived(tenantIdQuery.current ?? undefined);
@@ -85,7 +86,7 @@
     loading = true;
     loadError = null;
     try {
-      tenant = await tenantRemote.getById(currentTenantId).run();
+      tenant = await fresh(tenantRemote.getById(currentTenantId));
     } catch (err) {
       loadError = remoteErrorMessage(err, "Failed to load tenant details.");
     } finally {
@@ -94,7 +95,7 @@
   }
 
   $effect(() => {
-    // `.run()` rejects during the render/effect flush, so defer out of it.
+    // Deferred so this effect does not track what the load reads.
     if (currentTenantId) {
       queueMicrotask(loadTenant);
     }

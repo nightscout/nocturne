@@ -62,7 +62,7 @@ describe("AppSidebar", () => {
     // Below the sidebar's mobile breakpoint it renders as a closed sheet and offers nothing.
     await page.viewport(1280, 900);
     pageState.data = {};
-    pageState.url.pathname = "/";
+    (pageState.url as URL).pathname = "/";
     visited.urls = [];
     resetIdle();
     getDnd.mockReset();
@@ -206,7 +206,7 @@ describe("AppSidebar", () => {
 
   it("reads the Do not disturb state straight away on an alerts page", async () => {
     pageState.data = { effectivePermissions: ["*"] };
-    pageState.url.pathname = "/alerts/dnd";
+    (pageState.url as URL).pathname = "/alerts/dnd";
 
     render(Harness, { user: MEMBER });
 
@@ -255,7 +255,7 @@ describe("AppSidebar", () => {
 
     async function renderWith(settings: unknown) {
       pageState.data = { effectivePermissions: ["*"] };
-      pageState.url.pathname = "/alerts/dnd";
+      (pageState.url as URL).pathname = "/alerts/dnd";
       getDnd.mockImplementation(() => remoteQuery(() => settings));
       render(Harness, { user: MEMBER });
       await vi.waitFor(() => expect(getDnd).toHaveBeenCalledOnce());

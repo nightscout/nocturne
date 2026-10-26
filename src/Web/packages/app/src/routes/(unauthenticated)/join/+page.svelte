@@ -159,9 +159,9 @@
   }
 
   function goHome(joined = false) {
-    const home = resolve("/");
+    const home = resolve("");
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved above; the welcome marker only adds a query
-    return goto(joined ? withWelcome(home) : home, { replaceState: true });
+    return goto(joined ? withWelcome(home) : home, { replace: true });
   }
 </script>
 

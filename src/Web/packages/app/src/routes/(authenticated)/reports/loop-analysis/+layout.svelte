@@ -33,9 +33,8 @@
     if (!analysis.current) return;
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- loopAnalysisPath resolves the path
     await goto(loopAnalysisPath(analysis.current, writeLoopAnalysisFilter(next, page.url.searchParams)), {
-      replaceState: true,
-      noScroll: true,
-      keepFocus: true,
+      replace: true,
+      reset: false,
     });
   }
 

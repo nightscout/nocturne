@@ -43,6 +43,7 @@
     patternClass,
     type TextureKey,
   } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   type ChartPoint = {
     date: Date;
@@ -206,15 +207,15 @@
     error = null;
     try {
       const [{ years, timeZoneUnavailableReason }, results] = await Promise.all([
-        getAvailableYears().run(),
-        labResultsApi.getAll().run(),
+        fresh(getAvailableYears()),
+        fresh(labResultsApi.getAll()),
       ]);
       labResults = results ?? [];
       const timelineReasons: (TimeZoneUnavailableReason | undefined)[] = [];
       const pointResults = await Promise.all(
         (years?.length ? years : [new Date().getFullYear()]).map(
           async (year) => {
-            const response = await getEHbA1cTimeline({ year }).run();
+            const response = await fresh(getEHbA1cTimeline({ year }));
             references = response.a1cReferences;
             timelineReasons.push(response.timeZoneUnavailableReason);
             return [year, response.points ?? []] as const;
@@ -305,7 +306,7 @@
         unit: a1cUnits.current,
         note: newLabNote || undefined,
       });
-      labResults = (await labResultsApi.getAll().run()) ?? [];
+      labResults = (await fresh(labResultsApi.getAll())) ?? [];
       newLabDate = "";
       newLabValue = "";
       newLabNote = "";
@@ -322,7 +323,7 @@
     if (!target?.id) return;
     try {
       await labResultsApi.remove(target.id);
-      labResults = (await labResultsApi.getAll().run()) ?? [];
+      labResults = (await fresh(labResultsApi.getAll())) ?? [];
     } catch (err) {
       labResultError = describeSubmitError(err, "Failed to delete lab result");
     }

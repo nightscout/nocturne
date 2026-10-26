@@ -12,7 +12,7 @@ vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
 }));
 
 vi.mock("#routes/(authenticated)/oauth/oauth.remote.js", () => ({
-  getDeviceInfo: (args: unknown) => ({ run: () => mocks.lookup(args) }),
+  getDeviceInfo: (args: unknown) => createQueryResource(() => mocks.lookup(args)),
 }));
 
 vi.mock("#lib/api/generated/oAuths.generated.remote.js", () => ({
@@ -20,6 +20,7 @@ vi.mock("#lib/api/generated/oAuths.generated.remote.js", () => ({
 }));
 
 import XdripQuickConnect from "./XdripQuickConnect.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 describe("XdripQuickConnect", () => {
   beforeEach(() => {

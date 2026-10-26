@@ -8,11 +8,12 @@ const startSpy = vi.fn();
 // The factory is hoisted above every declaration in this file, so it may only read `history`
 // and `startSpy` lazily, from inside the functions it returns.
 vi.mock("#lib/api/generated/migrations.generated.remote.js", () => ({
-  getHistory: () => ({ run: () => Promise.resolve(history) }),
+  getHistory: () => createQueryResource(() => Promise.resolve(history)),
   startFromConnector: (connectorName: string) => startSpy(connectorName),
 }));
 
 import { startOrResumeMigration } from "./migration-session";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const run = (overrides: Partial<MigrationJobInfo>): MigrationJobInfo => ({
   id: "11111111-1111-1111-1111-111111111111",

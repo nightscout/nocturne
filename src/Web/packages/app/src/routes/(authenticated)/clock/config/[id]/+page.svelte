@@ -49,6 +49,7 @@
     DropZone,
     ElementInspector,
   } from "#lib/components/clock-builder/index.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // State
   let config = $state<InternalConfig>({ rows: [], settings: {} });
@@ -331,7 +332,7 @@
 
   async function resetToDefault() {
     try {
-      config = initializeInternalConfig(await getStarterClockFace().run());
+      config = initializeInternalConfig(await fresh(getStarterClockFace()));
     } catch (err) {
       toast.error(remoteErrorMessage(err, "Failed to reset clock face"));
       return;
@@ -344,7 +345,7 @@
   // Load clock face from route param on mount
   $effect(() => {
     if (!browser || !clockFaceId) return;
-    // `.run()` rejects during the render/effect flush, so defer out of it.
+    // Deferred so this effect does not track what the load reads.
     const id = clockFaceId;
     queueMicrotask(() => loadClockFace(id));
   });
@@ -352,7 +353,7 @@
   async function loadClockFace(id: string) {
     loading = true;
     try {
-      const clockFace = await getClockFaceById(id).run();
+      const clockFace = await fresh(getClockFaceById(id));
       clockName = clockFace.name ?? "My clock face";
       if (clockFace.config) {
         config = initializeInternalConfig(clockFace.config);

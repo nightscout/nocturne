@@ -39,6 +39,7 @@
   import { openDayInReview } from "./day-in-review";
 
   import PointInspectionPicker from "./dialogs/PointInspectionPicker.svelte";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     dateRange?: { from: Date | string; to: Date | string };
@@ -125,7 +126,7 @@
       realtimeStore.findEntryByTreatmentId(treatmentId) ?? null;
 
     if (!entry) {
-      const result = await getEntryByTreatmentId({ treatmentId }).run();
+      const result = await fresh(getEntryByTreatmentId({ treatmentId }));
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- generated entry shape bridged to the app EntryRecord union
       entry = result as EntryRecord | null;
     }

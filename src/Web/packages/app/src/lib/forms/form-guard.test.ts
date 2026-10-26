@@ -298,6 +298,7 @@ describe("FormGuard", () => {
           type: "goto",
           from: null,
           to: null,
+          shallow: false,
           willUnload: false,
           complete: Promise.resolve(),
           cancel: cancelSpy,

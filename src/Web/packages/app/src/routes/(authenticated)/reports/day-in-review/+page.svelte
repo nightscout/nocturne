@@ -83,7 +83,7 @@
   function goToDayOffset(days: number) {
     const target = timeDay.offset(currentDate, days);
 
-    goto(resolve(`reports/day-in-review?date=${toDayString(target)}`), { invalidateAll: true, replaceState: true });
+    goto(resolve(`reports/day-in-review?date=${toDayString(target)}`), { refreshAll: true, replace: true });
   }
 
   function goBackToPreviousView() {

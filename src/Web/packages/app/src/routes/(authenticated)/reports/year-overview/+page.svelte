@@ -46,6 +46,7 @@
     setReportPrintPreparation,
   } from "#lib/components/reports/print/report-print.svelte.js";
   import type { TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // =========================================================================
   // State
@@ -357,7 +358,7 @@
     metadataLoading = true;
     metadataRequest = (async () => {
       try {
-        const result = await getAvailableYears().run();
+        const result = await fresh(getAvailableYears());
         if (disposed) return;
         availableYears = result.years ?? [];
         availableDataSources = result.availableDataSources ?? [];
@@ -379,10 +380,10 @@
   const yearLoader = new YearLoader(
     {
       summary: (year, sources) =>
-        getYearSummary({
+        fresh(getYearSummary({
           year,
           dataSources: sources.length ? sources : undefined,
-        }).run(),
+        })),
     },
     {
       daily: (year, result) => {
@@ -550,15 +551,13 @@
   // =========================================================================
 
   onMount(() => {
-    // `.run()` rejects when called during the render/effect flush, so defer the
-    // bootstrap to a microtask — onMount's synchronous body still counts as render.
-    queueMicrotask(async () => {
+    void (async () => {
       await loadMetadata();
       if (disposed) return;
       if (sortedYears.length > 0) {
         loadYearData(sortedYears[0]);
       }
-    });
+    })();
     return () => {
       disposed = true;
       yearLoader.dispose();

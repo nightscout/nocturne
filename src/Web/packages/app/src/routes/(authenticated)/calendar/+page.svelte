@@ -99,7 +99,7 @@
 
   // Navigation functions
   function updateUrl(date: Date) {
-    const url = new URL(page.url);
+    const url = new URL(page.url.href);
     const today = new Date();
     const isCurrentMonth =
       today.getMonth() === date.getMonth() &&
@@ -113,7 +113,7 @@
       url.searchParams.set("month", String(date.getMonth() + 1)); // 1-indexed
     }
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with its month params changed, already resolved
-    goto(url.toString(), { invalidateAll: true });
+    goto(url.toString(), { refreshAll: true });
   }
 
   function previousMonth() {
@@ -313,7 +313,7 @@
     completingDefinition = null;
     completingDefaultDate = null;
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- reloads the current page's URL, already resolved
-    goto(page.url.toString(), { invalidateAll: true });
+    goto(page.url.toString(), { refreshAll: true });
   }
 </script>
 

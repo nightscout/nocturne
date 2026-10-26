@@ -1,11 +1,14 @@
 import { fileURLToPath } from "node:url";
-import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { svelte, vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import { playwright } from "@vitest/browser-playwright";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [svelte(), tailwindcss()],
+  plugins: [
+    svelte({ preprocess: vitePreprocess(), compilerOptions: { experimental: { async: true } } }),
+    tailwindcss(),
+  ],
   resolve: { dedupe: ["svelte", "@internationalized/date", "bits-ui"] },
   // pnpm 11's global links store lives outside the workspace root, so vite's strict fs
   // allow-list blocks serving vitest-browser-svelte to the browser runner.
@@ -39,7 +42,16 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
     },
     alias: {
-      "$app/environment": fileURLToPath(new URL(
+      // Before `$app/env`, which would otherwise match them as a prefix.
+      "$app/env/private": fileURLToPath(new URL(
+        "./src/lib/test-stubs/app-env-vars.ts",
+        import.meta.url
+      )),
+      "$app/env/public": fileURLToPath(new URL(
+        "./src/lib/test-stubs/app-env-vars.ts",
+        import.meta.url
+      )),
+      "$app/env": fileURLToPath(new URL(
         "./src/lib/test-stubs/app-environment.ts",
         import.meta.url
       )),
@@ -63,13 +75,6 @@ export default defineConfig({
         "./src/lib/test-stubs/sveltekit.ts",
         import.meta.url
       )),
-      $lib: fileURLToPath(new URL("./src/lib", import.meta.url)),
-      $api: fileURLToPath(new URL("./src/lib/api/", import.meta.url)),
-      "$api-clients": fileURLToPath(new URL(
-        "./src/lib/api/generated/nocturne-api-client",
-        import.meta.url
-      )),
-      $routes: fileURLToPath(new URL("./src/routes", import.meta.url)),
     },
   },
 });

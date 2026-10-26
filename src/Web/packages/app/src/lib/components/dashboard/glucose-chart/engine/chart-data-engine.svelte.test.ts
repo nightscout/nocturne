@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 vi.mock("#lib/api/chart-data.remote.js", () => ({
   getChartData: vi.fn(() => {
     const result = Promise.resolve(served) as Promise<typeof served> & {
-      run: () => Promise<typeof served>;
+      refresh: () => Promise<void>;
     };
-    result.run = () => Promise.resolve(served);
+    result.refresh = () => result.then(() => undefined);
     return result;
   }),
 }));
@@ -331,8 +331,8 @@ describe("chart data engine — SSR data refresh", () => {
   type Store = RealtimeStore;
 
   function resolving(value: Served) {
-    const result = Promise.resolve(value) as Promise<Served> & { run: () => Promise<Served> };
-    result.run = () => result;
+    const result = Promise.resolve(value) as Promise<Served> & { refresh: () => Promise<void> };
+    result.refresh = () => result.then(() => undefined);
     return result;
   }
 
@@ -453,9 +453,9 @@ describe("chart data engine — SSR data refresh", () => {
     const { engine, store } = await mount();
     let releaseSlow!: (v: Served) => void;
     const slow = new Promise<Served>((r) => (releaseSlow = r)) as Promise<Served> & {
-      run: () => Promise<Served>;
+      refresh: () => Promise<void>;
     };
-    slow.run = () => slow;
+    slow.refresh = () => slow.then(() => undefined);
     vi.mocked(getChartData).mockImplementationOnce((() => slow) as never);
 
     store.boluses = [{ id: "a" }];
@@ -542,9 +542,9 @@ describe("chart data engine — SSR data refresh", () => {
     const { engine, store } = await mount(undefined, undefined, options);
     let releaseSlow!: (v: Served) => void;
     const slow = new Promise<Served>((r) => (releaseSlow = r)) as Promise<Served> & {
-      run: () => Promise<Served>;
+      refresh: () => Promise<void>;
     };
-    slow.run = () => slow;
+    slow.refresh = () => slow.then(() => undefined);
     vi.mocked(getChartData).mockImplementationOnce((() => slow) as never);
     store.noteTreatmentWrite();
     await vi.advanceTimersByTimeAsync(3 * SECOND);

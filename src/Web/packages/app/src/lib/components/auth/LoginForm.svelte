@@ -161,7 +161,7 @@
       onSuccess();
     } else {
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- returnUrl is a caller-supplied same-origin path, not a route; goto() rejects cross-origin URLs
-      await goto(returnUrl, { invalidateAll: true });
+      await goto(returnUrl, { refreshAll: true });
     }
   }
 
@@ -474,7 +474,7 @@
           await recovery.run(submit, onSuccess);
         })}
       >
-        <input type="hidden" name="returnUrl" value={returnUrl} />
+        <input {...signInWithRecoveryCode.fields.returnUrl.as("hidden", returnUrl)} />
 
         <FormError issues={recovery.error} focusOnShow />
 
@@ -491,7 +491,7 @@
               </InputGroup.Addon>
               <InputGroup.Input
                 {...field}
-                name="username"
+                name={signInWithRecoveryCode.fields.username.as("text").name}
                 type="text"
                 placeholder="your-username"
                 autocomplete="username"
@@ -517,7 +517,7 @@
               </InputGroup.Addon>
               <InputGroup.Input
                 {...field}
-                name="code"
+                name={signInWithRecoveryCode.fields.code.as("text").name}
                 type="text"
                 placeholder="XXXX-XXXX"
                 class="font-mono"
@@ -557,8 +557,8 @@
           await authenticator.run(submit, onSuccess);
         })}
       >
-        <input type="hidden" name="returnUrl" value={returnUrl} />
-        <input type="hidden" name="stepUpToken" value={stepUpToken} />
+        <input {...signInWithAuthenticator.fields.returnUrl.as("hidden", returnUrl)} />
+        <input {...signInWithAuthenticator.fields.stepUpToken.as("hidden", stepUpToken)} />
 
         <FormError issues={authenticator.error} focusOnShow />
 
@@ -570,7 +570,7 @@
           <Label for="totp-code-input">Authenticator code</Label>
           <div class="flex justify-center">
             <InputOTP.Root
-              name="code"
+              name={signInWithAuthenticator.fields.code.as("text").name}
               inputId="totp-code-input"
               maxlength={6}
               bind:value={totpCode}

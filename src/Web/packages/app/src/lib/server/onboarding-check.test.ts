@@ -17,6 +17,7 @@ function createCookies(initial: Record<string, string> = {}): {
       store.delete(name);
     },
     serialize: (name, value) => `${name}=${value}`,
+    parse: () => ({ name: "", value: "" }),
   };
   return { cookies, store };
 }
