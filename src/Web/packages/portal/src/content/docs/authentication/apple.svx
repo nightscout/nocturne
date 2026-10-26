@@ -96,8 +96,8 @@ https://your-instance.com/api/auth/oidc/apple/notifications
 
 4. Click **Save**.
 
-Apple can address a notification to the App ID and not to the Services ID. Set **Primary App
-ID** in step 6, so that Nocturne accepts both.
+Apple addresses notifications to the App ID, not to the Services ID. Set **Primary App ID** in
+step 6. If you do not, Nocturne refuses the notifications.
 
 ## 6. Add the provider in Nocturne
 

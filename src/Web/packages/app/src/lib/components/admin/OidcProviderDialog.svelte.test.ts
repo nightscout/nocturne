@@ -199,7 +199,7 @@ describe("OidcProviderDialog", () => {
 				scopes: ["openid", "name", "email"],
 				icon: "apple",
 				buttonColor: "#000000",
-				apple: { teamId: "A1B2C3D4E5", keyId: "F6G7H8I9J0" },
+				apple: { teamId: "A1B2C3D4E5", keyId: "F6G7H8I9J0", primaryAppId: "com.example.app" },
 			});
 
 		it("asks for the Services ID, team, key and private key", async () => {
@@ -233,9 +233,17 @@ describe("OidcProviderDialog", () => {
 			await expect.poll(() => onSave.mock.calls.length).toBe(1);
 			expect(onSave.mock.calls[0][0]).toMatchObject({
 				providerType: OidcProviderType.Apple,
-				apple: { teamId: "A1B2C3D4E5", keyId: "NEWKEY0001", primaryAppId: undefined },
+				apple: { teamId: "A1B2C3D4E5", keyId: "NEWKEY0001", primaryAppId: "com.example.app" },
 				oAuth2: undefined,
 			});
+		});
+
+		it("does not save without the Primary App ID", async () => {
+			render(OidcProviderDialog, default_props({ open: true, editingProvider: apple() }));
+
+			await page.getByLabelText("Primary App ID").fill("");
+
+			await expect.element(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
 		});
 	});
 });

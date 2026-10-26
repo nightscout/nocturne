@@ -15,7 +15,7 @@ namespace Nocturne.API.Services.Auth;
 /// </summary>
 /// <remarks>
 /// Each notification is a JWS Apple signs with the keys it signs ID tokens with. One that fails
-/// the signature, issuer or audience check is refused; one about an identity this instance does not
+/// the signature, issuer, audience or age check is refused; one about an identity this instance does not
 /// hold is accepted and ignored, since Apple sends every event for the app.
 /// <list type="bullet">
 ///   <item><description><c>consent-revoked</c>: the kept refresh token is dropped, being dead now,
@@ -44,6 +44,13 @@ public class AppleNotificationService(
     internal const string EmailDisabled = "email-disabled";
 
     private static readonly TimeSpan ExpiryClockSkew = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// How old an <c>iat</c> may be. Apple's documented payload has no <c>exp</c>, so without this
+    /// a captured notification could be replayed for ever, ending the subject's sessions and
+    /// dropping a refresh token granted later. The samples that do carry an <c>exp</c> give a day.
+    /// </summary>
+    private static readonly TimeSpan MaxNotificationAge = TimeSpan.FromDays(1);
 
     /// <summary>Verifies and acts on one notification payload.</summary>
     /// <returns>Whether the payload was a notification Apple signed for this instance's provider.</returns>
@@ -83,10 +90,20 @@ public class AppleNotificationService(
             return null;
         }
 
+        var now = DateTime.UtcNow;
+
         // Apple's documentation does not promise an exp, so one is checked only when present.
-        if (token.ValidTo != DateTime.MinValue && token.ValidTo.Add(ExpiryClockSkew) < DateTime.UtcNow)
+        if (token.ValidTo != DateTime.MinValue && token.ValidTo.Add(ExpiryClockSkew) < now)
         {
             logger.LogWarning("Refused an expired Apple notification");
+            return null;
+        }
+
+        if (token.IssuedAt == DateTime.MinValue
+            || token.IssuedAt.Add(MaxNotificationAge) < now
+            || token.IssuedAt.Subtract(ExpiryClockSkew) > now)
+        {
+            logger.LogWarning("Refused an Apple notification issued at {IssuedAt}", token.IssuedAt);
             return null;
         }
 
