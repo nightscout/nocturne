@@ -308,6 +308,13 @@ public class OidcAuthService : IOidcAuthService
             return OidcCallbackResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
         }
 
+        // A provider that registers one redirect URI for every flow (Apple) accepts a link or setup
+        // code here, so the state's intent is what keeps the flows apart.
+        if (parsed.StateData!.Intent != "login")
+        {
+            return OidcCallbackResult.Failed("invalid_intent", "State was not issued for a login flow");
+        }
+
         var result = await CompleteLoginAsync(
             parsed.StateData!, parsed.Provider!, parsed.Claims!, currentTenantId, ipAddress, userAgent);
 

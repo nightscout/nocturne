@@ -298,9 +298,9 @@ public class SubjectService : ISubjectService
 
         _logger.LogInformation("Deleted subject {SubjectId}", subjectId);
 
-        await _providerGrants.RevokeAsync(providerGrants);
-
         await _auditService.LogAsync(AuthAuditEventType.SubjectDeleted, subjectId, success: true);
+
+        await _providerGrants.RevokeAsync(providerGrants);
 
         return true;
     }

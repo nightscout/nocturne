@@ -72,7 +72,9 @@ internal static class AppleClientSecret
     /// </summary>
     internal static string NormalizePem(string key)
     {
-        var pem = key.Trim().Replace("\\n", "\n", StringComparison.Ordinal);
+        var pem = key.Trim()
+            .Replace("\\r", "", StringComparison.Ordinal)
+            .Replace("\\n", "\n", StringComparison.Ordinal);
         return pem.Contains("-----BEGIN", StringComparison.Ordinal)
             ? pem
             : $"-----BEGIN PRIVATE KEY-----\n{pem}\n-----END PRIVATE KEY-----";

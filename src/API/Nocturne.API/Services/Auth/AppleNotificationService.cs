@@ -37,8 +37,13 @@ public class AppleNotificationService(
 {
     internal const string ConsentRevoked = "consent-revoked";
     internal const string AccountDeleted = "account-deleted";
+
+    /// <summary>The name older Apple material gives <see cref="AccountDeleted"/>.</summary>
+    internal const string AccountDelete = "account-delete";
     internal const string EmailEnabled = "email-enabled";
     internal const string EmailDisabled = "email-disabled";
+
+    private static readonly TimeSpan ExpiryClockSkew = TimeSpan.FromMinutes(2);
 
     /// <summary>Verifies and acts on one notification payload.</summary>
     /// <returns>Whether the payload was a notification Apple signed for this instance's provider.</returns>
@@ -62,24 +67,26 @@ public class AppleNotificationService(
 
     private async Task<AppleNotification?> ValidateAsync(string payload, OidcProvider provider, CancellationToken ct)
     {
-        var configuration = await configurations.GetAsync(provider.IssuerUrl, ct);
-        var audiences = new[] { provider.ClientId, provider.Apple?.PrimaryAppId }
-            .Where(a => !string.IsNullOrWhiteSpace(a))
-            .Select(a => a!);
+        var result = await ValidateSignedAsync(payload, provider, ct);
 
-        var result = await new JsonWebTokenHandler().ValidateTokenAsync(payload, new TokenValidationParameters
+        // Apple rotates its keys: one it signs with may be newer than the cached set. The manager
+        // rate-limits refreshes, so a forged payload cannot make it fetch on every call.
+        if (result.Exception is SecurityTokenInvalidSignatureException)
         {
-            ValidIssuer = string.IsNullOrEmpty(configuration.Issuer) ? provider.IssuerUrl : configuration.Issuer,
-            ValidAudiences = audiences,
-            IssuerSigningKeys = configuration.SigningKeys,
-            // A notification carries iat and no exp.
-            ValidateLifetime = false,
-            RequireExpirationTime = false,
-        });
+            configurations.RequestRefresh(provider.IssuerUrl);
+            result = await ValidateSignedAsync(payload, provider, ct);
+        }
 
         if (!result.IsValid || result.SecurityToken is not JsonWebToken token)
         {
             logger.LogWarning(result.Exception, "Refused an Apple notification that failed validation");
+            return null;
+        }
+
+        // Apple's documentation does not promise an exp, so one is checked only when present.
+        if (token.ValidTo != DateTime.MinValue && token.ValidTo.Add(ExpiryClockSkew) < DateTime.UtcNow)
+        {
+            logger.LogWarning("Refused an expired Apple notification");
             return null;
         }
 
@@ -88,6 +95,25 @@ public class AppleNotificationService(
             logger.LogWarning("Refused an Apple notification with no readable event");
 
         return notification;
+    }
+
+    private async Task<TokenValidationResult> ValidateSignedAsync(string payload, OidcProvider provider, CancellationToken ct)
+    {
+        var configuration = await configurations.GetAsync(provider.IssuerUrl, ct);
+        var audiences = new[] { provider.ClientId, provider.Apple?.PrimaryAppId }
+            .Where(a => !string.IsNullOrWhiteSpace(a))
+            .Select(a => a!);
+
+        return await new JsonWebTokenHandler().ValidateTokenAsync(payload, new TokenValidationParameters
+        {
+            ValidIssuer = string.IsNullOrEmpty(configuration.Issuer) ? provider.IssuerUrl : configuration.Issuer,
+            ValidAudiences = audiences,
+            IssuerSigningKeys = configuration.SigningKeys,
+            // Checked after the signature, by ValidateAsync: with no exp, the handler reports a
+            // signature failure as expiry, which would hide a rotated key.
+            ValidateLifetime = false,
+            RequireExpirationTime = false,
+        });
     }
 
     /// <summary>
@@ -148,6 +174,7 @@ public class AppleNotificationService(
                 break;
 
             case AccountDeleted:
+            case AccountDelete:
                 db.SubjectOidcIdentities.Remove(identity);
                 await db.SaveChangesAsync(ct);
                 await EndSessionsAsync(identity, notification.Type, AuthAuditEventType.OidcIdentityUnlinked, ct);

@@ -152,6 +152,9 @@
     if (wasApple) {
       if (providerIssuerUrl === APPLE_PRESET.issuerUrl) providerIssuerUrl = "";
       if (providerScopes === APPLE_PRESET.scopes) providerScopes = OIDC_SCOPES;
+      if (providerIcon === APPLE_PRESET.icon) providerIcon = "";
+      if (providerButtonColor === APPLE_PRESET.buttonColor) providerButtonColor = "";
+      if (providerName === "Apple") providerName = "";
     }
     if (value === OidcProviderType.OAuth2 && providerScopes === OIDC_SCOPES) {
       providerScopes = "";
@@ -424,14 +427,15 @@
           </p>
         </div>
         <div class="space-y-2">
-          <Label for="provider-apple-app-id">Primary App ID (optional)</Label>
+          <Label for="provider-apple-app-id">Primary App ID</Label>
           <Input
             id="provider-apple-app-id"
             bind:value={applePrimaryAppId}
             placeholder="com.example.app"
           />
           <p class="text-xs text-muted-foreground">
-            Set this if Apple sends notifications to the App ID and not to the Services ID.
+            The bundle ID of the App ID that has the notification endpoint. Apple can send
+            notifications to this ID. If you do not set it, Nocturne can refuse them.
           </p>
         </div>
         <div class="space-y-2">
