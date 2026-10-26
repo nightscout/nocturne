@@ -1,6 +1,7 @@
 import type { LayoutServerLoad } from "./$types";
 import type { UserDisplayPreferences } from "#lib/api/index.js";
 import { resolvePermissions } from "#lib/server/resolve-permissions.js";
+import { displayPreferenceLayers } from "#lib/server/display-preference-layers.js";
 import { classifyRequestHost, isTenantlessHost } from "#lib/server/tenantless-host.js";
 import { getRequestStatus } from "#lib/server/request-status.js";
 import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
@@ -9,7 +10,6 @@ import { parseLastSignIn } from "#lib/components/auth/last-sign-in.js";
 import {
   LANGUAGE_COOKIE_NAME,
   PREFS_COOKIE_NAME,
-  hasStoredPreferences,
   parsePrefsCookie,
   resolveLanguage,
 } from "#lib/stores/appearance-store.svelte.js";
@@ -79,12 +79,12 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies, depends
   const tenantPreferences = locals.isGuestSession ? tenantPresentation : null;
   const cookiePrefs = locals.isShareHost ? null : parsePrefsCookie(cookies.get(PREFS_COOKIE_NAME));
   const tenantDefault = locals.isAuthenticated ? locals.user?.defaultGlucoseUnits : undefined;
-  const displayPreferences = [
-    hasStoredPreferences(serverPrefs) ? serverPrefs : null,
+  const displayPreferences = displayPreferenceLayers({
+    serverPrefs,
     cookiePrefs,
-    hasStoredPreferences(tenantPreferences) ? tenantPreferences : null,
-    tenantDefault ? { glucoseUnits: tenantDefault } : null,
-  ].filter((prefs) => prefs !== null && prefs !== undefined);
+    tenantPreferences,
+    tenantDefault,
+  });
   const displayLanguage = resolveLanguage(
     locals.isAuthenticated ? locals.user?.preferredLanguage : null,
     cookies.get(LANGUAGE_COOKIE_NAME)

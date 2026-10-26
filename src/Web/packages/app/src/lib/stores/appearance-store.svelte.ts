@@ -320,6 +320,15 @@ class SyncedPref<T> implements SyncedEntry {
     return this._fallback ?? this._value;
   }
 
+  /** The value one request's preference layers give it, highest precedence first, else the default. */
+  resolve(layers: readonly UserDisplayPreferences[]): T {
+    for (const prefs of layers) {
+      const value = this._read(prefs);
+      if (value !== undefined && value !== null) return value;
+    }
+    return this._initial;
+  }
+
   /** What this device holds for the preference: never the default, never a fallback. */
   get stored(): T | undefined {
     return this._held ? this._value : undefined;

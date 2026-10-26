@@ -5,7 +5,7 @@
  * Types must be imported directly from '#lib/api/generated/nocturne-api-client.js'.
  */
 
-import { WidgetId, type WidgetConfig } from "#lib/api/generated/nocturne-api-client.js";
+import { WidgetId, type UISettingsConfiguration, type WidgetConfig } from "#lib/api/generated/nocturne-api-client.js";
 import type { TopWidgetId } from "#lib/components/dashboard/top-widget-ids.js";
 
 import TrendingUp from "@lucide/svelte/icons/trending-up";
@@ -47,4 +47,12 @@ export function isMainSectionEnabled(
   widgetId: WidgetId
 ): boolean {
   return widgets?.find((w) => w.id === widgetId)?.enabled ?? true;
+}
+
+/** Whether the dashboard chart draws forecasts: the section is on and the tenant has not turned them off. */
+export function showsPredictions(settings: UISettingsConfiguration | null | undefined): boolean {
+  return (
+    isMainSectionEnabled(settings?.features?.widgets, WidgetId.Predictions) &&
+    (settings?.algorithm?.prediction?.enabled ?? true)
+  );
 }

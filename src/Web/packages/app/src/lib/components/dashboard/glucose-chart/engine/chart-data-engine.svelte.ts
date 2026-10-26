@@ -46,6 +46,12 @@ export interface ChartDataEngineOptions {
   streamedHistoricalData?: Promise<TransformedChartData | null>;
   externalPredictionData?: PredictionData | null;
   enablePredictions?: boolean;
+  /**
+   * Whether the prediction service can forecast, as the server found when it rendered the page.
+   * The chart starts from it instead of "unknown", so its window does not widen for the forecast
+   * after the first draw; the client's own status check still runs and has the last word.
+   */
+  initialPredictionsAvailable?: boolean | null;
   demoMode?: boolean;
   /**
    * How wide a window the consumer draws, and so how far the realtime merge may
@@ -130,7 +136,13 @@ export function createChartDataEngine(
   let predictionData = $state.raw<PredictionData | null>(null);
   let predictionError = $state<string | null>(null);
   let chartDataError = $state<string | null>(null);
-  let predictionServiceStatus = $state<PredictionAvailability>("unknown");
+  let predictionServiceStatus = $state<PredictionAvailability>(
+    options.initialPredictionsAvailable == null
+      ? "unknown"
+      : options.initialPredictionsAvailable
+        ? "available"
+        : "unavailable"
+  );
   const predictionServiceAvailable = $derived(predictionServiceStatus === "available");
   let processedHistoricalPromise =
     $state<Promise<TransformedChartData | null> | null>(null);

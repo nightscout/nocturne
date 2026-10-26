@@ -1,19 +1,80 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { load } from "./+page.server";
+
+const { renderPlotSnapshot } = vi.hoisted(() => ({ renderPlotSnapshot: vi.fn(() => "<svg></svg>") }));
+vi.mock("#lib/server/plot-snapshot.js", () => ({ renderPlotSnapshot, hasPlotSize: () => true }));
+
+const { load } = await import("./+page.server");
 
 type LoadEvent = Parameters<typeof load>[0];
 
-function runLoad(getDashboardChartData: ReturnType<typeof vi.fn>, isAuthenticated = true) {
+const cookies = { get: () => undefined };
+const getUISettings = vi.fn(async () => ({ features: { display: { focusHours: 6 } } }));
+const getStatus = vi.fn(async () => ({ available: true }));
+const settingsClients = { uiSettings: { getUISettings }, predictions: { getStatus } };
+
+function runLoad(
+  getDashboardChartData: ReturnType<typeof vi.fn>,
+  isAuthenticated = true,
+  isDataRequest = false
+) {
   vi.stubEnv("BASE_DOMAIN", "nocturne.run");
   return load({
-    locals: { apiClient: { chartData: { getDashboardChartData } }, isAuthenticated },
+    locals: {
+      apiClient: { chartData: { getDashboardChartData }, ...settingsClients },
+      isAuthenticated,
+      isShareHost: false,
+    },
     request: new Request("https://sleepy.nocturne.run/", { headers: { host: "sleepy.nocturne.run" } }),
     parent: async () => ({ tenantless: false, baseDomain: "nocturne.run", dashboardSlugs: [] }),
-  } as unknown as LoadEvent) as Promise<{ streamed: { historicalChartData: Promise<unknown> } }>;
+    cookies,
+    isDataRequest,
+  } as unknown as LoadEvent) as Promise<{
+    plotSnapshot: string | null;
+    initialUiSettings: unknown;
+    initialPredictionsAvailable: boolean | null;
+    streamed: { historicalChartData: Promise<unknown> };
+  }>;
 }
 
 describe("dashboard page load", () => {
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    renderPlotSnapshot.mockClear();
+    getUISettings.mockClear();
+    getStatus.mockClear();
+  });
+
+  it("hands a document the tenant's chart settings and draws the snapshot with them", async () => {
+    const data = await runLoad(vi.fn().mockResolvedValue({}));
+
+    expect(data.initialUiSettings).toEqual({ features: { display: { focusHours: 6 } } });
+    expect(data.initialPredictionsAvailable).toBe(true);
+    expect(renderPlotSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ lookbackHours: 6, predictions: true })
+    );
+  });
+
+  it("leaves a client navigation's chart settings to the client's queries", async () => {
+    const data = await runLoad(vi.fn().mockResolvedValue({}), true, true);
+
+    expect(getUISettings).not.toHaveBeenCalled();
+    expect(getStatus).not.toHaveBeenCalled();
+    expect(data.initialUiSettings).toBeNull();
+  });
+
+  it("renders the plot snapshot into a document request", async () => {
+    const data = await runLoad(vi.fn().mockResolvedValue({}));
+
+    expect(data.plotSnapshot).toBe("<svg></svg>");
+    expect(renderPlotSnapshot).toHaveBeenCalledOnce();
+  });
+
+  it("renders no plot snapshot for a client navigation's data request", async () => {
+    const data = await runLoad(vi.fn().mockResolvedValue({}), true, true);
+
+    expect(data.plotSnapshot).toBeNull();
+    expect(renderPlotSnapshot).not.toHaveBeenCalled();
+  });
 
   it("asks only for the reachable tenants when a tenantless host picks a landing", async () => {
     vi.stubEnv("BASE_DOMAIN", "nocturne.run");
@@ -44,9 +105,13 @@ describe("dashboard page load", () => {
     const parent = vi.fn();
 
     await load({
-      locals: { apiClient: { chartData: { getDashboardChartData: vi.fn().mockResolvedValue({}) } }, isAuthenticated: true },
+      locals: {
+        apiClient: { chartData: { getDashboardChartData: vi.fn().mockResolvedValue({}) }, ...settingsClients },
+        isAuthenticated: true,
+      },
       request: new Request("https://sleepy.nocturne.run/", { headers: { host: "sleepy.nocturne.run" } }),
       parent,
+      cookies,
     } as unknown as LoadEvent);
 
     expect(parent).not.toHaveBeenCalled();
