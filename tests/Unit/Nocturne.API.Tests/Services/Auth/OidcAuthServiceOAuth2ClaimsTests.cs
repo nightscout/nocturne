@@ -47,6 +47,7 @@ public class OidcAuthServiceOAuth2ClaimsTests
             new Mock<ITenantRepository>().Object,
             new SignInCompletion(new Mock<ITotpService>().Object, new Mock<ITenantMemberService>().Object,
                 new Mock<ISessionService>().Object, new Mock<ISubjectService>().Object, new Mock<IAuthAuditService>().Object),
+            new NoProviderGrants(),
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),

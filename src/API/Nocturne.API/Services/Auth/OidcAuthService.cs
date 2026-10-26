@@ -37,7 +37,9 @@ public class OidcAuthService : IOidcAuthService
     private readonly ITenantCreationInviteService _tenantCreationInvites;
     private readonly ITenantRepository _tenants;
     private readonly SignInCompletion _signIn;
+    private readonly IOidcProviderGrantService _providerGrants;
     private readonly IDataProtector _stateProtector;
+    private readonly ITimeLimitedDataProtector _providerUserProtector;
     private readonly OidcOptions _options;
     private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<OidcAuthService> _logger;
@@ -56,6 +58,7 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="tenantCreationInvites">Reads the tenant-creation link a tenantless login returns to.</param>
     /// <param name="tenants">Finds the sole tenant a tenantless host serves, for a join link handed out there.</param>
     /// <param name="signIn">Finishes a login once the identity is proved and admitted.</param>
+    /// <param name="providerGrants">Keeps the refresh token of a provider whose grant is revoked when the identity goes.</param>
     /// <param name="dataProtectionProvider">Provider for the protector that authenticates the state parameter.</param>
     /// <param name="options">OIDC session and state configuration options.</param>
     /// <param name="baseDomainOptions">Base domain configuration for building the public redirect URIs.</param>
@@ -72,6 +75,7 @@ public class OidcAuthService : IOidcAuthService
         ITenantCreationInviteService tenantCreationInvites,
         ITenantRepository tenants,
         SignInCompletion signIn,
+        IOidcProviderGrantService providerGrants,
         IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> options,
         IOptions<BaseDomainOptions> baseDomainOptions,
@@ -89,7 +93,11 @@ public class OidcAuthService : IOidcAuthService
         _tenantCreationInvites = tenantCreationInvites;
         _tenants = tenants;
         _signIn = signIn;
+        _providerGrants = providerGrants;
         _stateProtector = dataProtectionProvider.CreateProtector("Nocturne.Oidc.State");
+        _providerUserProtector = dataProtectionProvider
+            .CreateProtector("Nocturne.Oidc.ProviderUser")
+            .ToTimeLimitedDataProtector();
         _options = options.Value;
         _baseDomain = baseDomainOptions.Value;
         _logger = logger;
@@ -160,14 +168,15 @@ public class OidcAuthService : IOidcAuthService
 
         var state = EncodeState(stateData);
 
-        var redirectUri = GetRedirectUri(callbackPath);
         var authUrl = BuildAuthorizationUrl(
             discoveryDoc.AuthorizationEndpoint,
             provider.ClientId,
-            redirectUri,
+            RedirectUriFor(provider, callbackPath),
             provider.Scopes,
             state,
-            stateData.Nonce
+            stateData.Nonce,
+            // Apple sends the code back as a form POST whenever a scope is asked for.
+            responseMode: provider.ProviderType == OidcProviderType.Apple ? "form_post" : null
         );
 
         return new OidcAuthorizationRequest
@@ -187,17 +196,20 @@ public class OidcAuthService : IOidcAuthService
         string? ErrorDescription,
         OidcStateData? StateData,
         OidcProvider? Provider,
-        OidcIdTokenClaims? Claims
+        OidcIdTokenClaims? Claims,
+        string? ProviderRefreshToken
     )
     {
         public static CallbackParseResult Fail(string error, string? desc = null) =>
-            new(false, error, desc, null, null, null);
-        public static CallbackParseResult Ok(OidcStateData s, OidcProvider p, OidcIdTokenClaims c) =>
-            new(true, null, null, s, p, c);
+            new(false, error, desc, null, null, null, null);
+        public static CallbackParseResult Ok(
+            OidcStateData s, OidcProvider p, OidcIdTokenClaims c, string? providerRefreshToken) =>
+            new(true, null, null, s, p, c, providerRefreshToken);
     }
 
     private async Task<CallbackParseResult> ValidateCallbackAndParseIdTokenAsync(
-        string code, string state, string expectedState, string callbackPath = LoginCallbackPath)
+        string code, string state, string expectedState, string callbackPath = LoginCallbackPath,
+        string? providerUser = null)
     {
         if (string.IsNullOrEmpty(state) || state != expectedState)
         {
@@ -241,9 +253,8 @@ public class OidcAuthService : IOidcAuthService
             providerTokens = await ExchangeCodeForTokensAsync(
                 discoveryDoc.TokenEndpoint,
                 code,
-                provider.ClientId,
-                provider.ClientSecret,
-                GetRedirectUri(callbackPath)
+                provider,
+                RedirectUriFor(provider, callbackPath)
             );
         }
         catch (Exception ex)
@@ -279,7 +290,14 @@ public class OidcAuthService : IOidcAuthService
             return CallbackParseResult.Fail("invalid_id_token", ex.Message);
         }
 
-        return CallbackParseResult.Ok(stateData, provider, idTokenClaims);
+        if (provider.ProviderType == OidcProviderType.Apple
+            && string.IsNullOrEmpty(idTokenClaims.Name)
+            && ReadProviderUserName(providerUser, state) is { } name)
+        {
+            idTokenClaims.Name = name;
+        }
+
+        return CallbackParseResult.Ok(stateData, provider, idTokenClaims, providerTokens.RefreshToken);
     }
 
     /// <inheritdoc />
@@ -290,18 +308,26 @@ public class OidcAuthService : IOidcAuthService
         string? ipAddress = null,
         string? userAgent = null,
         Guid? currentTenantId = null,
-        string? trustedDeviceToken = null
+        string? trustedDeviceToken = null,
+        string? providerUser = null
     )
     {
-        var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState);
+        var parsed = await ValidateCallbackAndParseIdTokenAsync(
+            code, state, expectedState, LoginCallbackPath, providerUser);
         if (!parsed.Success)
         {
             return OidcCallbackResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
         }
 
-        return await CompleteLoginAsync(
+        var result = await CompleteLoginAsync(
             parsed.StateData!, parsed.Provider!, parsed.Claims!, currentTenantId, ipAddress, userAgent,
             trustedDeviceToken);
+
+        // Kept whether or not a session was issued: an identity the login found or created has to
+        // have its grant revocable when it goes.
+        await _providerGrants.KeepAsync(parsed.Provider!, parsed.Claims!.Sub, parsed.ProviderRefreshToken);
+
+        return result;
     }
 
     /// <summary>
@@ -751,30 +777,40 @@ public class OidcAuthService : IOidcAuthService
     public async Task<OidcLinkResult> HandleLinkCallbackAsync(
         string code, string state, string expectedState,
         Guid authenticatedSubjectId,
-        string? ipAddress = null, string? userAgent = null)
+        string? ipAddress = null, string? userAgent = null, string? providerUser = null)
     {
-        var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState, LinkCallbackPath);
+        var parsed = await ValidateCallbackAndParseIdTokenAsync(
+            code, state, expectedState, LinkCallbackPath, providerUser);
         if (!parsed.Success)
         {
             return OidcLinkResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
         }
 
-        return await AttachVerifiedIdentityAsync(
-            parsed.StateData!, parsed.Provider!, parsed.Claims!, authenticatedSubjectId, LinkIntent);
+        return await KeepGrantOnLinkAsync(parsed, await AttachVerifiedIdentityAsync(
+            parsed.StateData!, parsed.Provider!, parsed.Claims!, authenticatedSubjectId, LinkIntent));
     }
 
     /// <inheritdoc />
     public async Task<OidcLinkResult> HandleRecoveryLinkCallbackAsync(
-        string code, string state, string expectedState, Guid recoverySubjectId)
+        string code, string state, string expectedState, Guid recoverySubjectId, string? providerUser = null)
     {
-        var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState, LinkCallbackPath);
+        var parsed = await ValidateCallbackAndParseIdTokenAsync(
+            code, state, expectedState, LinkCallbackPath, providerUser);
         if (!parsed.Success)
         {
             return OidcLinkResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
         }
 
-        return await AttachVerifiedIdentityAsync(
-            parsed.StateData!, parsed.Provider!, parsed.Claims!, recoverySubjectId, RecoveryIntent);
+        return await KeepGrantOnLinkAsync(parsed, await AttachVerifiedIdentityAsync(
+            parsed.StateData!, parsed.Provider!, parsed.Claims!, recoverySubjectId, RecoveryIntent));
+    }
+
+    private async Task<OidcLinkResult> KeepGrantOnLinkAsync(CallbackParseResult parsed, OidcLinkResult result)
+    {
+        if (result.Success)
+            await _providerGrants.KeepAsync(parsed.Provider!, parsed.Claims!.Sub, parsed.ProviderRefreshToken);
+
+        return result;
     }
 
     /// <inheritdoc />
@@ -805,13 +841,18 @@ public class OidcAuthService : IOidcAuthService
 
     /// <inheritdoc />
     public async Task<OidcSetupCallbackResult> HandleSetupCallbackAsync(
-        string code, string state, string expectedState, Guid tenantId)
+        string code, string state, string expectedState, Guid tenantId, string? providerUser = null)
     {
-        var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState, SetupCallbackPath);
+        var parsed = await ValidateCallbackAndParseIdTokenAsync(
+            code, state, expectedState, SetupCallbackPath, providerUser);
         if (!parsed.Success)
             return OidcSetupCallbackResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
 
-        return await CompleteSetupAsync(parsed.StateData!, parsed.Provider!, parsed.Claims!, tenantId);
+        var result = await CompleteSetupAsync(parsed.StateData!, parsed.Provider!, parsed.Claims!, tenantId);
+        if (result.Success)
+            await _providerGrants.KeepAsync(parsed.Provider!, parsed.Claims!.Sub, parsed.ProviderRefreshToken);
+
+        return result;
     }
 
     /// <summary>
@@ -942,6 +983,20 @@ public class OidcAuthService : IOidcAuthService
     private const string SetupCallbackPath = "/api/v4/setup/oidc/callback";
 
     /// <summary>
+    /// The one redirect URI an Apple provider registers, for every flow. Apple posts the code
+    /// here as a cross-site form, which <see cref="GetFormPostRelayUrlAsync"/> turns into a GET of
+    /// the flow's own callback.
+    /// </summary>
+    internal const string AppleCallbackPath = "/api/auth/oidc/apple/callback";
+
+    /// <summary>
+    /// The redirect URI <paramref name="provider"/> is sent to and must present again at the token
+    /// endpoint: the flow's callback, or <see cref="AppleCallbackPath"/> for Apple.
+    /// </summary>
+    private string RedirectUriFor(OidcProvider provider, string callbackPath) =>
+        GetRedirectUri(provider.ProviderType == OidcProviderType.Apple ? AppleCallbackPath : callbackPath);
+
+    /// <summary>
     /// Builds the absolute redirect URI by combining the deployment's public origin
     /// (derived from <c>BASE_DOMAIN</c>) with the specified callback path.
     /// </summary>
@@ -966,6 +1021,7 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="scopes">The requested OAuth scopes.</param>
     /// <param name="state">URL-safe state token for CSRF protection.</param>
     /// <param name="nonce">Replay-prevention nonce embedded in the ID token.</param>
+    /// <param name="responseMode">The <c>response_mode</c>, or null for the provider's default (query).</param>
     /// <returns>The fully assembled authorization URL string.</returns>
     private static string BuildAuthorizationUrl(
         string authorizationEndpoint,
@@ -973,7 +1029,8 @@ public class OidcAuthService : IOidcAuthService
         string redirectUri,
         IEnumerable<string> scopes,
         string state,
-        string? nonce
+        string? nonce,
+        string? responseMode = null
     )
     {
         var url = new UriBuilder(authorizationEndpoint);
@@ -985,6 +1042,11 @@ public class OidcAuthService : IOidcAuthService
         query["scope"] = string.Join(" ", scopes);
         query["state"] = state;
 
+        if (!string.IsNullOrEmpty(responseMode))
+        {
+            query["response_mode"] = responseMode;
+        }
+
         if (!string.IsNullOrEmpty(nonce))
         {
             query["nonce"] = nonce;
@@ -995,43 +1057,45 @@ public class OidcAuthService : IOidcAuthService
     }
 
     /// <summary>
-    /// Exchanges an authorisation code for provider tokens at the token endpoint.
-    /// Uses HTTP Basic authentication when a <paramref name="clientSecret"/> is provided (confidential client).
+    /// Exchanges an authorisation code for provider tokens at the token endpoint. A confidential
+    /// client authenticates with HTTP Basic, except Apple, which accepts only a signed client secret
+    /// in the form body (<see cref="AppleClientSecret"/>).
     /// </summary>
     /// <param name="tokenEndpoint">The provider's token endpoint URL.</param>
     /// <param name="code">The authorisation code from the callback.</param>
-    /// <param name="clientId">The registered OAuth client identifier.</param>
-    /// <param name="clientSecret">Optional client secret for confidential clients.</param>
+    /// <param name="provider">The provider whose client credentials are presented.</param>
     /// <param name="redirectUri">The redirect URI that was used in the authorisation request.</param>
     /// <returns>The <see cref="OidcProviderTokenResponse"/> containing ID and access tokens.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the provider returns a non-success status code.</exception>
     private async Task<OidcProviderTokenResponse> ExchangeCodeForTokensAsync(
         string tokenEndpoint,
         string code,
-        string clientId,
-        string? clientSecret,
+        OidcProvider provider,
         string redirectUri
     )
     {
         var httpClient = _httpClientFactory.CreateClient("OidcProvider");
+        var clientId = provider.ClientId;
+        var clientSecret = provider.ClientSecret;
 
         // GitHub's token endpoint returns form-encoded by default; request JSON so the same
         // deserializer handles every provider. Standards-compliant OIDC providers already return JSON.
         httpClient.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/json"));
 
-        var content = new FormUrlEncodedContent(
-            new Dictionary<string, string>
-            {
-                ["grant_type"] = "authorization_code",
-                ["code"] = code,
-                ["client_id"] = clientId,
-                ["redirect_uri"] = redirectUri,
-            }
-        );
+        var form = new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code,
+            ["client_id"] = clientId,
+            ["redirect_uri"] = redirectUri,
+        };
 
-        // Add client secret if provided (confidential client)
-        if (!string.IsNullOrEmpty(clientSecret))
+        if (provider.ProviderType == OidcProviderType.Apple)
+        {
+            form["client_secret"] = AppleClientSecret.Create(provider, DateTimeOffset.UtcNow);
+        }
+        else if (!string.IsNullOrEmpty(clientSecret))
         {
             var credentials = Convert.ToBase64String(
                 Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}")
@@ -1042,6 +1106,7 @@ public class OidcAuthService : IOidcAuthService
             );
         }
 
+        using var content = new FormUrlEncodedContent(form);
         var response = await httpClient.PostAsync(tokenEndpoint, content);
         var responseBody = await response.Content.ReadAsStringAsync();
 
@@ -1356,6 +1421,112 @@ public class OidcAuthService : IOidcAuthService
             return null;
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The GET carries what the POST did, so the flow's callback runs unchanged: the state cookie,
+    /// SameSite=Lax, comes with a top-level GET where it does not come with a cross-site POST, and
+    /// the apex relay reads the state from the query. Only the name is taken from Apple's
+    /// <c>user</c> field, the email being in the ID token; it travels protected and bound to this
+    /// state, so it stays out of logs and cannot be replayed onto another sign-in.
+    /// </remarks>
+    public async Task<string?> GetFormPostRelayUrlAsync(string state, string? code, string? error, string? user)
+    {
+        OidcStateData stateData;
+        try
+        {
+            stateData = DecodeState(state);
+        }
+        catch (Exception ex) when (ex is CryptographicException or JsonException or InvalidOperationException)
+        {
+            _logger.LogWarning(ex, "Rejected a form-post callback whose state failed to decode");
+            return null;
+        }
+
+        var provider = await _providerService.GetProviderByIdAsync(stateData.ProviderId);
+        if (provider is not { ProviderType: OidcProviderType.Apple })
+            return null;
+
+        var callbackPath = stateData.Intent switch
+        {
+            "link" => LinkCallbackPath,
+            "setup" => SetupCallbackPath,
+            _ => LoginCallbackPath,
+        };
+
+        var query = new Microsoft.AspNetCore.Http.Extensions.QueryBuilder { { "state", state } };
+        if (!string.IsNullOrEmpty(code))
+            query.Add("code", code);
+        if (!string.IsNullOrEmpty(error))
+            query.Add("error", error);
+        if (ReadAppleUserName(user) is { } name)
+            query.Add("provider_user", _providerUserProtector.Protect(
+                JsonSerializer.Serialize(new ProviderUser(state, name)), stateData.ExpiresAt));
+
+        return callbackPath + query.ToQueryString();
+    }
+
+    /// <summary>The longest name taken from a provider's <c>user</c> field.</summary>
+    private const int MaxProviderUserNameLength = 100;
+
+    /// <summary>
+    /// The full name in Apple's <c>user</c> form field, <c>{"name":{"firstName","lastName"}}</c>,
+    /// with control characters dropped and whitespace collapsed; null when it names no one. The
+    /// field is unsigned, sent by the browser, so it is read as nothing more than a display name.
+    /// </summary>
+    internal static string? ReadAppleUserName(string? userJson)
+    {
+        if (string.IsNullOrWhiteSpace(userJson))
+            return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(userJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || !doc.RootElement.TryGetProperty("name", out var nameElement)
+                || nameElement.ValueKind != JsonValueKind.Object)
+                return null;
+
+            var parts = new[] { "firstName", "lastName" }
+                .Select(p => GetStringProperty(nameElement, p))
+                .Where(p => !string.IsNullOrWhiteSpace(p));
+
+            var printable = new string(string.Join(' ', parts).Select(c => char.IsControl(c) ? ' ' : c).ToArray());
+            var cleaned = string.Join(' ', printable.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+            if (cleaned.Length == 0)
+                return null;
+
+            return cleaned.Length > MaxProviderUserNameLength ? cleaned[..MaxProviderUserNameLength].TrimEnd() : cleaned;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The name a form-post relay carried, when it was bound to <paramref name="state"/> and has not
+    /// expired.
+    /// </summary>
+    private string? ReadProviderUserName(string? providerUser, string state)
+    {
+        if (string.IsNullOrEmpty(providerUser))
+            return null;
+
+        try
+        {
+            var payload = JsonSerializer.Deserialize<ProviderUser>(_providerUserProtector.Unprotect(providerUser));
+            return payload?.State == state ? payload.Name : null;
+        }
+        catch (Exception ex) when (ex is CryptographicException or JsonException)
+        {
+            _logger.LogDebug(ex, "Ignored a provider user that failed to decode");
+            return null;
+        }
+    }
+
+    private sealed record ProviderUser(string State, string Name);
 
     /// <summary>
     /// Extracts a short human-readable device description from a user-agent string.

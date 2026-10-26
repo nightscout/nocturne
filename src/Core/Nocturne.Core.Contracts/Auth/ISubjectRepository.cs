@@ -348,6 +348,32 @@ public interface ISubjectRepository
     Task<bool> TouchOidcIdentityAsync(Guid identityId, DateTime now, string? email, CancellationToken ct);
 
     /// <summary>
+    /// Records the address the provider now asserts for identity <paramref name="identityId"/>,
+    /// outside a sign-in. False when there is no such identity.
+    /// </summary>
+    Task<bool> SetOidcIdentityEmailAsync(Guid identityId, string email, CancellationToken ct);
+
+    /// <summary>
+    /// Keeps <paramref name="tokenEncrypted"/> as the provider refresh token of the identity
+    /// <paramref name="oidcSubjectId"/> at <paramref name="issuer"/>, replacing an earlier one;
+    /// null drops it. False when no such identity is linked.
+    /// </summary>
+    Task<bool> SetProviderRefreshTokenAsync(string oidcSubjectId, string issuer, byte[]? tokenEncrypted, CancellationToken ct);
+
+    /// <summary>
+    /// The provider refresh tokens kept on the subject's identities, or only on
+    /// <paramref name="identityId"/> when it is given.
+    /// </summary>
+    Task<IReadOnlyList<KeptProviderRefreshToken>> GetProviderRefreshTokensAsync(Guid subjectId, Guid? identityId, CancellationToken ct);
+
+    /// <summary>
+    /// Removes identity <paramref name="identityId"/> whatever factors its subject is left with,
+    /// for an identity the provider says can never sign in again. A removal the subject asks for
+    /// goes through <see cref="TryRemoveFactorAsync"/>. False when there is no such identity.
+    /// </summary>
+    Task<bool> RemoveDeadOidcIdentityAsync(Guid identityId, CancellationToken ct);
+
+    /// <summary>
     /// How many primary sign-in factors the subject holds: passkeys plus OIDC identities whose
     /// provider exists and is enabled.
     /// </summary>

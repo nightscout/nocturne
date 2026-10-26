@@ -134,6 +134,7 @@ public class SubjectDeletionTests : IDisposable
             new SubjectRepository(dbContext.AsFactory(), AccountLinkRoutes.Off),
             new TenantMembershipRepository(dbContext.AsFactory(), AccountLinkRoutes.Off),
             new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            new NoProviderGrants(),
             audit,
             TimeProvider.System,
             NullLogger<SubjectDeletion>.Instance);

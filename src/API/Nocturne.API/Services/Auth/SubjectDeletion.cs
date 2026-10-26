@@ -18,6 +18,7 @@ public sealed class SubjectDeletion(
     ISubjectRepository subjects,
     ITenantMembershipRepository members,
     GrantRevocationService grantRevocation,
+    IOidcProviderGrantService providerGrants,
     IAuthAuditService audit,
     TimeProvider time,
     ILogger<SubjectDeletion> logger) : ISubjectDeletion
@@ -47,11 +48,14 @@ public sealed class SubjectDeletion(
             ? (await members.RemoveMembershipsOfSubjectAsync(subjectId, ct)).TenantsLeftWithoutOwner
             : [];
 
+        var heldGrants = await providerGrants.CaptureAsync(subjectId, ct: ct);
+
         var change = await subjects.DeleteAsync(subjectId, ct);
         if (change is SubjectChange.Changed)
         {
             logger.LogInformation("Deleted subject {SubjectId}", subjectId);
             await audit.LogAsync(AuthAuditEventType.SubjectDeleted, subjectId, success: true);
+            await providerGrants.RevokeAsync(heldGrants);
         }
 
         return new SubjectDeletionOutcome(change, leftWithoutOwner);

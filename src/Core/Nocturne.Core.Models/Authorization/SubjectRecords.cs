@@ -195,3 +195,6 @@ public sealed record NewSubjectOidcIdentity(
 
 /// <summary>An OIDC identity with the subject it links to.</summary>
 public sealed record OidcIdentityMatch(SubjectOidcIdentity Identity, SubjectRecord Subject);
+
+/// <summary>The refresh token a provider issued for a linked identity, as stored: ciphertext.</summary>
+public sealed record KeptProviderRefreshToken(Guid ProviderId, byte[] TokenEncrypted);

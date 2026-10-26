@@ -25,7 +25,7 @@ public class OidcProviderEntity : IEntityTimestamped
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
-    /// Authentication protocol this provider speaks, stored lower-case ("oidc" or "oauth2").
+    /// Authentication protocol this provider speaks, stored lower-case ("oidc", "oauth2" or "apple").
     /// "oidc" resolves endpoints via the discovery document and identity via the ID token;
     /// "oauth2" uses the endpoints and claim mappings in <see cref="OAuth2SettingsJson"/>.
     /// </summary>
@@ -40,6 +40,13 @@ public class OidcProviderEntity : IEntityTimestamped
     /// </summary>
     [Column("oauth2_settings", TypeName = "jsonb")]
     public string? OAuth2SettingsJson { get; set; }
+
+    /// <summary>
+    /// Team and key IDs of a Sign in with Apple provider (JSON), null for any other type.
+    /// Serialized <see cref="Nocturne.Core.Models.Authorization.AppleProviderSettings"/>.
+    /// </summary>
+    [Column("apple_settings", TypeName = "jsonb")]
+    public string? AppleSettingsJson { get; set; }
 
     /// <summary>
     /// OIDC issuer URL (e.g., "https://auth.example.com/realms/nocturne")
