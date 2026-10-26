@@ -1,4 +1,6 @@
 import { beforeNavigate } from "$app/navigation";
+import { flushSync } from "svelte";
+import { SvelteSet } from "svelte/reactivity";
 import { Debounced } from "runed";
 import type { z, ZodIssue } from "zod";
 import { deepEqual } from "./deep-equal";
@@ -30,10 +32,12 @@ export interface FormGuardOptions<T extends Record<string, unknown>> {
 
 export class FormGuard<T extends Record<string, unknown>> {
   #options: FormGuardOptions<T>;
-  #snapshot: T | null = $state(null);
+  #snapshot: T | null = $state.raw(null);
   #issues: ZodIssue[] = $state([]);
   #touched: boolean = $state(false);
   #submitted: boolean = $state(false);
+  #blurred = new SvelteSet<string>();
+  #edited = new SvelteSet<string>();
   #submission: Submission;
   #debounced: Debounced<boolean>;
 
@@ -93,6 +97,7 @@ export class FormGuard<T extends Record<string, unknown>> {
     return this.#snapshot;
   }
 
+  /** Every issue the schema reports, shown or not. `valid` reads this. */
   get issues(): ZodIssue[] {
     return this.#issues;
   }
@@ -101,8 +106,18 @@ export class FormGuard<T extends Record<string, unknown>> {
     return this.#issues.length === 0;
   }
 
+  /** True once a submit has been attempted and until the form saves or resets. */
   get submitted(): boolean {
     return this.#submitted;
+  }
+
+  /** The issues to show: a field's once it was edited and left, all of them once a submit was attempted. */
+  get visibleIssues(): ZodIssue[] {
+    if (this.#submitted) return this.#issues;
+    return this.#issues.filter(
+      (issue) =>
+        typeof issue.path[0] === "string" && this.#blurred.has(issue.path[0]),
+    );
   }
 
   /**
@@ -133,12 +148,42 @@ export class FormGuard<T extends Record<string, unknown>> {
     void this.#debounced.current;
   }
 
+  /** The issues for one field that are due to show: see {@link visibleIssues}. */
   issuesFor(field: string): ZodIssue[] {
-    return this.#issues.filter((issue) => issue.path[0] === field);
+    return this.visibleIssues.filter((issue) => issue.path[0] === field);
   }
+
+  /** The props a guarded `FormField` takes: its key, and the issues due to show. */
+  field(path: string): { name: string; issues: ZodIssue[] } {
+    return { name: path, issues: this.issuesFor(path) };
+  }
+
+  #clearVisibility(): void {
+    this.#submitted = false;
+    this.#blurred.clear();
+    this.#edited.clear();
+  }
+
+  #fieldOf(event: Event): string | undefined {
+    if (!(event.target instanceof Element)) return undefined;
+    return event.target.closest<HTMLElement>("[data-field]")?.dataset.field;
+  }
+
+  #editField = (event: Event): void => {
+    const field = this.#fieldOf(event);
+    if (field != null) this.#edited.add(field);
+  };
+
+  #leaveField = (event: FocusEvent): void => {
+    const field = this.#fieldOf(event);
+    if (field == null || this.#snapshot == null) return;
+    const changed = !deepEqual(this.#options.values()[field], this.#snapshot[field]);
+    if (changed || this.#edited.has(field)) this.#blurred.add(field);
+  };
 
   reset(): void {
     this.#touched = false;
+    this.#clearVisibility();
     this.#issues = [];
     this.#submission.clear();
     if (this.#snapshot != null && this.#options.onreset) {
@@ -164,11 +209,13 @@ export class FormGuard<T extends Record<string, unknown>> {
       submit: () => Promise<boolean>;
     }) => Promise<void | boolean>,
   ) {
-    return this.#options.form.enhance(
+    const enhanced = this.#options.form.enhance(
       async (helpers: { submit: () => Promise<boolean> }) => {
         this.#submission.clear();
+        this.#submitted = true;
 
         if (!this.validate()) {
+          flushSync();
           this.focusInvalid();
           return;
         }
@@ -178,7 +225,7 @@ export class FormGuard<T extends Record<string, unknown>> {
           if (updated != null) {
             this.#snapshot = structuredClone(updated);
           }
-          this.#submitted = true;
+          this.#clearVisibility();
           this.#touched = false;
           this.#issues = [];
           return callback?.(helpers);
@@ -190,5 +237,10 @@ export class FormGuard<T extends Record<string, unknown>> {
         if (!succeeded && this.#submission.error == null) this.focusInvalid();
       },
     );
+    return {
+      ...enhanced,
+      oninput: this.#editField,
+      onfocusout: this.#leaveField,
+    };
   }
 }

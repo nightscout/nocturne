@@ -53,7 +53,7 @@
     <FormField
       label="Diabetes type"
       id="diabetes-type"
-      issues={clinical.guard.issuesFor("diabetesType")}
+      {...clinical.guard.field("diabetesType")}
     >
       {#snippet control(field)}
         <Select.Root type="single" name="diabetesType" bind:value={clinical.diabetesType}>
@@ -162,7 +162,7 @@
       label="Timezone"
       id="timezone"
       class="@sm:col-span-2"
-      issues={clinical.guard.issuesFor("timezone")}
+      {...clinical.guard.field("timezone")}
     >
       {#snippet control(field)}
         <input type="hidden" name="timezone" value={clinical.timezone} />
