@@ -47,6 +47,13 @@ class Program
             true
         );
 
+        // First-boot setup page and DuckDNS updater for the one-click cloud images, both behind
+        // Compose profiles. See SelfHostSetup.
+        var enableSelfHostSetup = builder.Configuration.GetValue(
+            "Aspire:OptionalServices:SelfHostSetup:Enabled",
+            false
+        );
+
         var compose = builder.AddDockerComposeEnvironment("compose");
         if (!includeDashboard)
         {
@@ -920,6 +927,11 @@ class Program
                 var port = isWorktree ? 0 : hasExplicitDomain ? 443 : 1612;
                 MkcertHelper.WarnIfDomainUnresolvable(customDomain, port);
             }
+        }
+
+        if (builder.ExecutionContext.IsPublishMode && enableSelfHostSetup)
+        {
+            builder.AddSelfHostSetup();
         }
 
         // ------------------------------------------------------------------

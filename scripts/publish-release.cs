@@ -1,7 +1,7 @@
 // scripts/publish-release.cs
 //
-// Generates the production Docker Compose bundle and commits the results to
-// deploy/ and docs/diagrams/ before tagging a release.
+// Generates the production Docker Compose bundles (including the one-click VM bundle) and
+// commits the results to deploy/ and docs/diagrams/ before tagging a release.
 //
 // Usage:
 //   dotnet run scripts/publish-release.cs
@@ -36,14 +36,16 @@ try
         ["NOCTURNE_DB_PERSISTENCE"] = "persistent",
     };
 
-    var exitCode = RunProcess("aspire", [
+    int Publish(string outputPath, Dictionary<string, string> environment) => RunProcess("aspire", [
         "publish",
         "--project", appHostDir,
         "--publisher", "docker-compose",
-        "--output-path", tempDir,
+        "--output-path", outputPath,
         "--no-build",
         "--non-interactive"
-    ], aspireEnv);
+    ], environment);
+
+    var exitCode = Publish(tempDir, aspireEnv);
 
     if (exitCode != 0)
     {
@@ -81,16 +83,7 @@ try
         return 1;
     }
 
-    // Parse via JsonNode rather than reflection-based Deserialize: file-based
-    // apps run with reflection serialization disabled, which would throw.
-    var envMetadata = JsonNode.Parse(File.ReadAllText(envMetadataPath))!
-        .AsArray()
-        .Select(n => new EnvVarMeta(
-            (string)n!["name"]!,
-            (string)n["label"]!,
-            (string?)n["description"],
-            (string?)n["default"]))
-        .ToArray();
+    var envMetadata = ReadEnvMetadata(envMetadataPath);
 
     var groups = ParseAspireEnv(Path.Combine(tempDir, ".env"), envMetadata);
     var envExample = GenerateEnvExample(groups, envMetadata);
@@ -118,6 +111,33 @@ try
     File.WriteAllText(Path.Combine(deployPortainerDir, "templates.json"), GeneratePortainerTemplate(groups, envMetadata));
     Console.WriteLine("[publish-release] Updated deploy/portainer/");
 
+    // deploy/vm/bundle/ — what the one-click cloud images run: the same stack plus the
+    // first-boot setup page and DuckDNS updater (see SelfHostSetup in the AppHost). The image's
+    // first-boot script fills every variable named in generated-secrets with a fresh secret.
+    Console.WriteLine("[publish-release] Generating one-click VM bundle...");
+    var vmTempDir = Path.Combine(tempDir, "vm");
+    var vmEnv = new Dictionary<string, string>(aspireEnv)
+    {
+        ["Aspire__OptionalServices__SelfHostSetup__Enabled"] = "true",
+    };
+    if (Publish(vmTempDir, vmEnv) != 0)
+    {
+        Console.Error.WriteLine("[publish-release] ERROR: aspire publish failed for the VM bundle");
+        return 1;
+    }
+
+    var vmEnvMetadata = ReadEnvMetadata(Path.Combine(vmTempDir, "env-metadata.json"));
+    var vmBundleDir = Path.Combine(repoRoot, "deploy", "vm", "bundle");
+    Directory.CreateDirectory(vmBundleDir);
+    File.Copy(Path.Combine(vmTempDir, "docker-compose.yaml"), Path.Combine(vmBundleDir, "docker-compose.yaml"), overwrite: true);
+    File.WriteAllText(
+        Path.Combine(vmBundleDir, ".env.example"),
+        GenerateEnvExample(ParseAspireEnv(Path.Combine(vmTempDir, ".env"), vmEnvMetadata), vmEnvMetadata));
+    File.WriteAllText(
+        Path.Combine(vmBundleDir, "generated-secrets"),
+        string.Join('\n', ReleaseSecrets.Names) + '\n');
+    Console.WriteLine("[publish-release] Updated deploy/vm/bundle/");
+
     // docs/diagrams/ — Mermaid architecture diagrams produced by MermaidDiagramPublisher.
     var diagramsDir = Path.Combine(repoRoot, "docs", "diagrams");
     Directory.CreateDirectory(diagramsDir);
@@ -138,16 +158,21 @@ finally
 
 // ── env parsing ───────────────────────────────────────────────────────────────
 
+// Parse via JsonNode rather than reflection-based Deserialize: file-based
+// apps run with reflection serialization disabled, which would throw.
+static EnvVarMeta[] ReadEnvMetadata(string path) =>
+    JsonNode.Parse(File.ReadAllText(path))!
+        .AsArray()
+        .Select(n => new EnvVarMeta(
+            (string)n!["name"]!,
+            (string)n["label"]!,
+            (string?)n["description"],
+            (string?)n["default"]))
+        .ToArray();
+
 static EnvVarGroups ParseAspireEnv(string aspireEnvPath, EnvVarMeta[] metadata)
 {
-    var secrets = new HashSet<string>
-    {
-        "POSTGRES_PASSWORD",
-        "POSTGRES_MIGRATOR_PASSWORD",
-        "POSTGRES_APP_PASSWORD",
-        "POSTGRES_WEB_PASSWORD",
-        "INSTANCE_KEY",
-    };
+    var secrets = ReleaseSecrets.Names.ToHashSet();
 
     var requiredConfig = new HashSet<string>
     {
@@ -313,6 +338,22 @@ static string GeneratePortainerTemplate(EnvVarGroups groups, EnvVarMeta[] metada
     };
 
     return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
+}
+
+/// <summary>
+/// Variables every deployment generates for itself: left blank in .env.example, and filled with
+/// random values by the VM image's first-boot script.
+/// </summary>
+static class ReleaseSecrets
+{
+    public static readonly string[] Names =
+    [
+        "POSTGRES_PASSWORD",
+        "POSTGRES_MIGRATOR_PASSWORD",
+        "POSTGRES_APP_PASSWORD",
+        "POSTGRES_WEB_PASSWORD",
+        "INSTANCE_KEY",
+    ];
 }
 
 record EnvVarGroups(
