@@ -32,7 +32,7 @@
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
     "eslint": "^10.3.0",
-    "layerchart": "2.9.0",
+    "layerchart": "2.9.1",
     "mode-watcher": "^1.1.0",
     "paneforge": "^1.0.2",
     "svelte": "^5.57.2",

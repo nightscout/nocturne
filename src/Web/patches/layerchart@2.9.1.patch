@@ -1,0 +1,508 @@
+diff --git a/dist/components/Chart/Chart.base.svelte b/dist/components/Chart/Chart.base.svelte
+index fe751e4..0508d81 100644
+--- a/dist/components/Chart/Chart.base.svelte
++++ b/dist/components/Chart/Chart.base.svelte
+@@ -32,7 +32,7 @@
+   import { getChartGroup } from '../../contexts/group.js';
+   import { ChartState } from '../../states/chart.svelte.js';
+   import { connectToChartGroup } from '../../states/group.svelte.js';
+-  import type { ChartPropsWithoutHTML } from './Chart.shared.svelte.js';
++  import { chartRootAttributes, type ChartPropsWithoutHTML } from './Chart.shared.svelte.js';
+   import { isScaleBand } from '../../utils/scales.svelte.js';
+   import { getObjectOrNull } from '../../utils/common.js';
+   import {
+@@ -74,6 +74,8 @@
+     ...restProps
+   } = $derived(props);
+ 
++  const rootAttributes = $derived(chartRootAttributes(restProps));
++
+   // Pass the `$props()` proxy directly — `props.X` reads stay reactive and
+   // don't pay the cost of an `{...props}` spread (recursive `ownKeys` across
+   // nested rest/spread proxies). Brush selections are supplied as getters so
+@@ -560,7 +562,7 @@
+     bind:clientWidth={chartState._containerWidth}
+     bind:clientHeight={chartState._containerHeight}
+     class={['lc-root-container', className]}
+-    {...restProps}
++    {...rootAttributes}
+   >
+     {#if !needsMeasure || chartState.isMeasured}
+       {#if transform && TransformContext}
+diff --git a/dist/components/Chart/Chart.shared.svelte.d.ts b/dist/components/Chart/Chart.shared.svelte.d.ts
+index d03d365..973cfc5 100644
+--- a/dist/components/Chart/Chart.shared.svelte.d.ts
++++ b/dist/components/Chart/Chart.shared.svelte.d.ts
+@@ -244,3 +244,5 @@ export type ChartPropsWithoutHTML<T, XScale extends AnyScale = AnyScale, YScale
+     height?: number;
+ } & ChartChildrenProps<T, XScale, YScale>;
+ export type ChartProps<T, XScale extends AnyScale = AnyScale, YScale extends AnyScale = AnyScale> = ChartPropsWithoutHTML<T, XScale, YScale> & Without<HTMLAttributes<HTMLDivElement>, ChartPropsWithoutHTML<T, XScale, YScale>>;
++/** The HTML attributes among a chart's props, without its options. */
++export declare function chartRootAttributes(props: Record<string, unknown>): Record<string, unknown>;
+diff --git a/dist/components/Chart/Chart.shared.svelte.js b/dist/components/Chart/Chart.shared.svelte.js
+index cb0ff5c..c6d3ad5 100644
+--- a/dist/components/Chart/Chart.shared.svelte.js
++++ b/dist/components/Chart/Chart.shared.svelte.js
+@@ -1 +1,121 @@
+-export {};
++/**
++ * Every chart option, so the root element receives only the HTML attributes passed alongside them.
++ * Typed as a record of the props' keys so a new option that is not added here fails to compile.
++ * `id` is also applied to the root element.
++ */
++const chartOptionKeys = {
++    ssr: true,
++    pointerEvents: true,
++    position: true,
++    percentRange: true,
++    ref: true,
++    data: true,
++    flatData: true,
++    x: true,
++    y: true,
++    z: true,
++    r: true,
++    x1: true,
++    y1: true,
++    c: true,
++    g: true,
++    fx: true,
++    fy: true,
++    fxDomain: true,
++    fyDomain: true,
++    facet: true,
++    xDomain: true,
++    yDomain: true,
++    zDomain: true,
++    rDomain: true,
++    x1Domain: true,
++    y1Domain: true,
++    cDomain: true,
++    xNice: true,
++    yNice: true,
++    zNice: true,
++    rNice: true,
++    xPadding: true,
++    yPadding: true,
++    zPadding: true,
++    rPadding: true,
++    xScale: true,
++    yScale: true,
++    zScale: true,
++    rScale: true,
++    x1Scale: true,
++    y1Scale: true,
++    cScale: true,
++    xRange: true,
++    yRange: true,
++    zRange: true,
++    rRange: true,
++    x1Range: true,
++    y1Range: true,
++    cRange: true,
++    xReverse: true,
++    yReverse: true,
++    zReverse: true,
++    rReverse: true,
++    xDomainSort: true,
++    yDomainSort: true,
++    zDomainSort: true,
++    rDomainSort: true,
++    padding: true,
++    extents: true,
++    meta: true,
++    debug: true,
++    verbose: true,
++    xBaseline: true,
++    yBaseline: true,
++    xInterval: true,
++    yInterval: true,
++    valueAxis: true,
++    radial: true,
++    view: true,
++    children: true,
++    context: true,
++    geo: true,
++    tooltipContext: true,
++    transform: true,
++    brush: true,
++    group: true,
++    groupOptions: true,
++    series: true,
++    seriesLayout: true,
++    bandPadding: true,
++    groupPadding: true,
++    onResize: true,
++    clip: true,
++    motion: true,
++    ondragstart: true,
++    ondragend: true,
++    onTransform: true,
++    width: true,
++    height: true,
++    axis: true,
++    grid: true,
++    labels: true,
++    legend: true,
++    points: true,
++    rule: true,
++    tooltip: true,
++    highlight: true,
++    annotations: true,
++    onTooltipClick: true,
++    props: true,
++    belowContext: true,
++    belowMarks: true,
++    marks: true,
++    aboveMarks: true,
++    aboveContext: true,
++};
++/** The HTML attributes among a chart's props, without its options. */
++export function chartRootAttributes(props) {
++    const attributes = {};
++    for (const key in props) {
++        if (!(key in chartOptionKeys))
++            attributes[key] = props[key];
++    }
++    return attributes;
++}
+diff --git a/dist/components/Circle/Circle.html.svelte b/dist/components/Circle/Circle.html.svelte
+index 7f1cb7e..30c48b1 100644
+--- a/dist/components/Circle/Circle.html.svelte
++++ b/dist/components/Circle/Circle.html.svelte
+@@ -14,7 +14,7 @@
+   const c = new CircleState(() => props as CircleProps);
+ 
+   // Not HTML attributes — read by `CircleState`
+-  const { z: _z, viewport: _viewport, ...rest } = $derived(props);
++  const { data: _data, z: _z, viewport: _viewport, ...rest } = $derived(props);
+ 
+   /** For `viewport`, cancels the chart's `isometric` view about each circle's centre */
+   const cancelView = $derived(c.viewportMatrix ? matrixToString(c.viewportMatrix) : '');
+diff --git a/dist/components/Circle/Circle.svg.svelte b/dist/components/Circle/Circle.svg.svelte
+index 4d140a6..90470c9 100644
+--- a/dist/components/Circle/Circle.svg.svelte
++++ b/dist/components/Circle/Circle.svg.svelte
+@@ -12,7 +12,7 @@
+   const c = new CircleState(() => props as CircleProps);
+ 
+   // Not SVG attributes — read by `CircleState`
+-  const { z: _z, viewport: _viewport, ...rest } = $derived(props);
++  const { data: _data, z: _z, viewport: _viewport, ...rest } = $derived(props);
+ 
+   let ref = $state<SVGCircleElement>();
+ 
+@@ -23,7 +23,7 @@
+   c.chartCtx.registerComponent({
+     name: 'Circle',
+     kind: 'mark',
+-    markInfo: () => circleMarkInfo(rest as CircleProps, c.dataMode),
++    markInfo: () => circleMarkInfo(props as CircleProps, c.dataMode),
+   });
+ </script>
+ 
+diff --git a/dist/components/Ellipse/Ellipse.html.svelte b/dist/components/Ellipse/Ellipse.html.svelte
+index 25b1f5d..d229bc6 100644
+--- a/dist/components/Ellipse/Ellipse.html.svelte
++++ b/dist/components/Ellipse/Ellipse.html.svelte
+@@ -7,15 +7,15 @@
+   import { resolveColorProp, resolveStyleProp } from '../../utils/dataProp.js';
+   import { EllipseState, ellipseMarkInfo, type EllipseProps } from './Ellipse.shared.svelte.js';
+ 
+-  // `rotate` turns the ellipse below, and `z` raises it — not HTML attributes
+-  let { rotate, z, ...rest }: EllipseProps = $props();
++  // `rotate` turns the ellipse below, `z` raises it, and `data` feeds `EllipseState` — not HTML attributes
++  let { rotate, z, data, ...rest }: EllipseProps = $props();
+ 
+-  const c = new EllipseState(() => ({ ...rest, z }) as EllipseProps);
++  const c = new EllipseState(() => ({ ...rest, data, z }) as EllipseProps);
+ 
+   c.chartCtx.registerComponent({
+     name: 'Ellipse',
+     kind: 'mark',
+-    markInfo: () => ellipseMarkInfo(rest as EllipseProps, c.dataMode),
++    markInfo: () => ellipseMarkInfo({ ...rest, data } as EllipseProps, c.dataMode),
+   });
+ </script>
+ 
+diff --git a/dist/components/Ellipse/Ellipse.svg.svelte b/dist/components/Ellipse/Ellipse.svg.svelte
+index 77fa489..42a12cb 100644
+--- a/dist/components/Ellipse/Ellipse.svg.svelte
++++ b/dist/components/Ellipse/Ellipse.svg.svelte
+@@ -15,12 +15,14 @@
+     rx: rxProp,
+     ry: ryProp,
+     rotate,
++    // Not SVG attributes — consumed by `EllipseState`
++    data,
+     z,
+     ...rest
+   }: EllipseProps = $props();
+ 
+   const c = new EllipseState(
+-    () => ({ cx, cy, rx: rxProp, ry: ryProp, z, ...rest }) as EllipseProps
++    () => ({ cx, cy, rx: rxProp, ry: ryProp, data, z, ...rest }) as EllipseProps
+   );
+ 
+   let ref = $state<SVGEllipseElement>();
+@@ -33,7 +35,10 @@
+     name: 'Ellipse',
+     kind: 'mark',
+     markInfo: () =>
+-      ellipseMarkInfo({ cx, cy, rx: rxProp, ry: ryProp, ...rest } as EllipseProps, c.dataMode),
++      ellipseMarkInfo(
++        { cx, cy, rx: rxProp, ry: ryProp, data, ...rest } as EllipseProps,
++        c.dataMode
++      ),
+   });
+ </script>
+ 
+diff --git a/dist/components/Line/Line.svg.svelte b/dist/components/Line/Line.svg.svelte
+index 05b66de..d305cb6 100644
+--- a/dist/components/Line/Line.svg.svelte
++++ b/dist/components/Line/Line.svg.svelte
+@@ -23,6 +23,7 @@
+     markerMid,
+     markerEnd,
+     // Consumed by `LineState`, not SVG attributes
++    data,
+     z1,
+     z2,
+     ...rest
+@@ -39,6 +40,7 @@
+         markerStart,
+         markerMid,
+         markerEnd,
++        data,
+         z1,
+         z2,
+         ...rest,
+@@ -52,7 +54,7 @@
+   c.chartCtx.registerComponent({
+     name: 'Line',
+     kind: 'mark',
+-    markInfo: () => lineMarkInfo({ x1, y1, x2, y2, ...rest } as LineProps, c.dataMode),
++    markInfo: () => lineMarkInfo({ x1, y1, x2, y2, data, ...rest } as LineProps, c.dataMode),
+   });
+ </script>
+ 
+diff --git a/dist/components/Polygon/Polygon.svg.svelte b/dist/components/Polygon/Polygon.svg.svelte
+index 85db469..65c1696 100644
+--- a/dist/components/Polygon/Polygon.svg.svelte
++++ b/dist/components/Polygon/Polygon.svg.svelte
+@@ -11,8 +11,8 @@
+ 
+   const c = new PolygonState(() => props as PolygonProps);
+ 
+-  // Not an SVG attribute — read by `PolygonState`
+-  const { z: _z, ...rest } = $derived(props);
++  // Not SVG attributes — read by `PolygonState`
++  const { data: _data, z: _z, ...rest } = $derived(props);
+ 
+   let ref = $state<SVGPathElement>();
+ 
+@@ -23,7 +23,7 @@
+   c.chartCtx.registerComponent({
+     name: 'Polygon',
+     kind: 'mark',
+-    markInfo: () => polygonMarkInfo(rest as PolygonProps, c.dataMode),
++    markInfo: () => polygonMarkInfo(props as PolygonProps, c.dataMode),
+   });
+ </script>
+ 
+diff --git a/dist/components/Rect/Rect.html.svelte b/dist/components/Rect/Rect.html.svelte
+index 234fa2b..92f5641 100644
+--- a/dist/components/Rect/Rect.html.svelte
++++ b/dist/components/Rect/Rect.html.svelte
+@@ -17,9 +17,37 @@
+ 
+   const c = new RectState(() => rest as RectProps, 'html');
+ 
+-  // `z` and `shade` are read by `RectState`, not HTML attributes
++  // Read by `RectState`, which places and paints the `<div>` through its style — not HTML attributes
+   const htmlRest = $derived.by(() => {
+-    const { z: _z, shade: _shade, ...attrs } = rest;
++    const {
++      data: _data,
++      key: _key,
++      x: _x,
++      initialX: _initialX,
++      y: _y,
++      initialY: _initialY,
++      width: _width,
++      initialWidth: _initialWidth,
++      height: _height,
++      initialHeight: _initialHeight,
++      x0: _x0,
++      x1: _x1,
++      y0: _y0,
++      y1: _y1,
++      z: _z,
++      shade: _shade,
++      insets: _insets,
++      motion: _motion,
++      dashArray: _dashArray,
++      corners: _corners,
++      fill: _fill,
++      stroke: _stroke,
++      fillOpacity: _fillOpacity,
++      strokeOpacity: _strokeOpacity,
++      strokeWidth: _strokeWidth,
++      opacity: _opacity,
++      ...attrs
++    } = rest;
+     return attrs as unknown as HTMLAttributes<HTMLDivElement>;
+   });
+ 
+diff --git a/dist/components/Rect/Rect.svg.svelte b/dist/components/Rect/Rect.svg.svelte
+index 4d3de82..bff2f4a 100644
+--- a/dist/components/Rect/Rect.svg.svelte
++++ b/dist/components/Rect/Rect.svg.svelte
+@@ -19,6 +19,7 @@
+     rx: rxProp,
+     ry: ryProp,
+     // Not SVG attributes — consumed by `RectState`
++    data,
+     z,
+     shade,
+     children,
+@@ -34,6 +35,7 @@
+         height,
+         rx: rxProp,
+         ry: ryProp,
++        data,
+         z,
+         shade,
+         ...rest,
+@@ -52,7 +54,7 @@
+     kind: 'mark',
+     markInfo: () =>
+       rectMarkInfo(
+-        { x, y, width, height, rx: rxProp, ry: ryProp, ...rest } as RectProps,
++        { x, y, width, height, rx: rxProp, ry: ryProp, data, ...rest } as RectProps,
+         c.dataMode
+       ),
+   });
+diff --git a/dist/components/Text/Text.shared.svelte.d.ts b/dist/components/Text/Text.shared.svelte.d.ts
+index c493eb4..49b5180 100644
+--- a/dist/components/Text/Text.shared.svelte.d.ts
++++ b/dist/components/Text/Text.shared.svelte.d.ts
+@@ -203,6 +203,8 @@ export type TextPropsWithoutHTML = {
+     key?: (d: any, index: number) => any;
+ } & DataDrivenStyleProps;
+ export type TextProps = TextPropsWithoutHTML & Without<SVGAttributes<SVGTextElement>, TextPropsWithoutHTML>;
++/** The SVG attributes among a text's props, without its options. */
++export declare function textAttributes(props: Record<string, unknown>): Record<string, unknown>;
+ export declare function getPathLength(pathRef: SVGPathElement | undefined): number;
+ /**
+  * Convert css value to pixel value (ex. 0.71em => 11.36)
+diff --git a/dist/components/Text/Text.shared.svelte.js b/dist/components/Text/Text.shared.svelte.js
+index b34bd60..9296d89 100644
+--- a/dist/components/Text/Text.shared.svelte.js
++++ b/dist/components/Text/Text.shared.svelte.js
+@@ -28,6 +28,50 @@ export function isTextDataProp(value) {
+         return true;
+     return false;
+ }
++/**
++ * The text's layout and content options, so the `<text>` element receives only the SVG attributes
++ * passed alongside them. Typed as a record of the props' keys so a new option that is not added
++ * here fails to compile.
++ */
++const textOptionKeys = {
++    ref: true,
++    data: true,
++    z: true,
++    motion: true,
++    width: true,
++    value: true,
++    segments: true,
++    initialX: true,
++    initialY: true,
++    dx: true,
++    dy: true,
++    lineHeight: true,
++    fontSize: true,
++    capHeight: true,
++    scaleToFit: true,
++    textAnchor: true,
++    verticalAnchor: true,
++    dominantBaseline: true,
++    rotate: true,
++    viewport: true,
++    svgRef: true,
++    svgProps: true,
++    format: true,
++    truncate: true,
++    pathId: true,
++    path: true,
++    startOffset: true,
++    key: true,
++};
++/** The SVG attributes among a text's props, without its options. */
++export function textAttributes(props) {
++    const attributes = {};
++    for (const key in props) {
++        if (!(key in textOptionKeys))
++            attributes[key] = props[key];
++    }
++    return attributes;
++}
+ const defaultKey = (_, i) => i;
+ export function getPathLength(pathRef) {
+     if (pathRef && typeof pathRef.getTotalLength === 'function') {
+diff --git a/dist/components/Text/Text.svg.svelte b/dist/components/Text/Text.svg.svelte
+index 20d4642..6d649cb 100644
+--- a/dist/components/Text/Text.svg.svelte
++++ b/dist/components/Text/Text.svg.svelte
+@@ -5,7 +5,13 @@
+ <script lang="ts">
+   import { resolveColorProp, resolveStyleProp } from '../../utils/dataProp.js';
+   import { createId } from '../../utils/createId.js';
+-  import { TextState, textMarkInfo, getPixelValue, type TextProps } from './Text.shared.svelte.js';
++  import {
++    TextState,
++    textAttributes,
++    textMarkInfo,
++    getPixelValue,
++    type TextProps,
++  } from './Text.shared.svelte.js';
+ 
+   const uid = $props.id();
+ 
+@@ -32,6 +38,8 @@
+ 
+   const c = new TextState(() => ({ rotate, dx, dy, fontSize, viewport, z, ...rest }) as TextProps);
+ 
++  const attributes = $derived(textAttributes(rest));
++
+   let ref = $state<SVGTextElement>();
+   let svgRef = $state<SVGElement>();
+ 
+@@ -62,7 +70,7 @@
+     {@const dataRotateTransform = rotate ? `rotate(${rotate}, ${item.x}, ${item.y})` : ''}
+     <svg x={dx ?? 0} y={dy ?? 0} {...rest.svgProps} class={['lc-text-svg', rest.svgProps?.class]}>
+       <text
+-        {...rest as any}
++        {...attributes}
+         x={item.x}
+         y={item.y}
+         transform={[
+@@ -102,7 +110,7 @@
+         {/key}
+       </defs>
+       <text
+-        {...rest as any}
++        {...attributes}
+         bind:this={ref}
+         dy={dy ?? 0}
+         font-size={fontSize}
+@@ -130,7 +138,7 @@
+            inside positioned parents like `<Group>` or `<Arc>` even without
+            explicit coordinates (matching `Text.canvas` / `Text.html`). -->
+       <text
+-        {...rest as any}
++        {...attributes}
+         bind:this={ref}
+         x={c.motionX}
+         y={c.motionY}
