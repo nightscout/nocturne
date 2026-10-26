@@ -3,6 +3,9 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V1;
@@ -337,5 +340,139 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
             .Select(e => new { e.LegacyId, e.DeletedAt, DeletedByUser = EF.Property<bool>(e, "DeletedByUser") })
             .ToListAsync();
         flags.Should().HaveCount(2).And.OnlyContain(f => f.DeletedAt != null && f.DeletedByUser);
+    }
+
+    /// <summary>Runs the up of <c>RepairThirtyTwoHexEntryLegacyIds</c> again, as the migrator.</summary>
+    private async Task RepairThirtyTwoHexLegacyIdsAsync()
+    {
+        await using var context = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(database.MigratorConnectionString, npgsql => npgsql.UseNocturneMigrations())
+            .Options);
+        var migrations = context.GetService<IMigrationsAssembly>();
+        var repair = migrations.Migrations.Single(m => m.Key.EndsWith("_RepairThirtyTwoHexEntryLegacyIds")).Value;
+        var up = migrations.CreateMigration(repair, context.Database.ProviderName!).UpOperations;
+        await context.GetService<IMigrationCommandExecutor>().ExecuteNonQueryAsync(
+            context.GetService<IMigrationsSqlGenerator>().Generate(up), context.GetService<IRelationalConnection>());
+    }
+
+    [Fact]
+    public async Task An_entry_an_older_v1_post_gave_a_uuid_is_read_and_deleted_by_its_served_id_once_repaired()
+    {
+        var setup = await CreateAsync();
+        var assigned = Guid.CreateVersion7().ToString("N");
+        await setup.Service.CreateEntriesAsync([new Entry { Id = assigned, Type = "sgv", Sgv = 144, Mills = Mills() }]);
+        var served = ServedId((await setup.Service.GetEntryByIdAsync(assigned))!);
+        served.Should().Be(assigned[..24]);
+        (await setup.Service.GetEntryByIdAsync(served)).Should().BeNull();
+
+        await RepairThirtyTwoHexLegacyIdsAsync();
+
+        var got = await setup.Controller.GetEntry(served);
+        JsonSerializer.SerializeToElement(got.Result.Should().BeOfType<OkObjectResult>().Subject.Value)
+            .EnumerateArray().Select(e => e.GetProperty("_id").GetString()).Should().Equal(served);
+        var deleted = await setup.Controller.DeleteEntry(served);
+        JsonSerializer.SerializeToElement(deleted.Should().BeOfType<OkObjectResult>().Subject.Value)
+            .GetProperty("n").GetInt64().Should().Be(1);
+        (await setup.Service.GetEntryByIdAsync(served)).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("mbg")]
+    [InlineData("cal")]
+    public async Task A_meter_reading_or_calibration_an_older_v1_post_gave_a_uuid_is_deleted_by_its_served_id_once_repaired(
+        string type)
+    {
+        var setup = await CreateAsync();
+        var assigned = Guid.CreateVersion7().ToString("N");
+        await setup.Service.CreateEntriesAsync([
+            new Entry { Id = assigned, Type = type, Mbg = 150, Slope = 850, Intercept = 30000, Scale = 1, Mills = Mills() },
+        ]);
+        await RepairThirtyTwoHexLegacyIdsAsync();
+
+        (await setup.Service.DeleteEntryAsync(assigned[..24])).Should().BeTrue();
+
+        (await setup.Service.GetEntryByIdAsync(assigned[..24])).Should().BeNull();
+        (await setup.Service.GetEntryByIdAsync(assigned)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_repaired_id_already_stored_keeps_its_row_and_the_repair_runs_twice()
+    {
+        var setup = await CreateAsync();
+        var assigned = Guid.CreateVersion7().ToString("N");
+        var served = assigned[..24];
+        await setup.Service.CreateEntriesAsync([
+            new Entry { Id = served, Type = "sgv", Sgv = 100, Mills = Mills() },
+            new Entry { Id = assigned, Type = "sgv", Sgv = 200, Mills = Mills() },
+        ]);
+
+        await RepairThirtyTwoHexLegacyIdsAsync();
+        await RepairThirtyTwoHexLegacyIdsAsync();
+
+        (await setup.Service.GetEntryByIdAsync(served))!.Sgv.Should().Be(100);
+        (await setup.Service.DeleteEntryAsync(served)).Should().BeTrue();
+        (await setup.Service.GetEntryByIdAsync(served)).Should().BeNull();
+        await using var db = setup.Db();
+        (await db.SensorGlucose.IgnoreQueryFilters().Select(e => e.LegacyId).ToListAsync())
+            .Should().Equal(served, served);
+    }
+
+    [Theory]
+    [InlineData(Api.V1)]
+    [InlineData(Api.V3)]
+    public async Task An_entry_an_older_v1_post_gave_a_uuid_is_still_read_and_deleted_by_that_uuid_once_repaired(Api api)
+    {
+        var setup = await CreateAsync();
+        var assigned = Guid.CreateVersion7().ToString("N");
+        await setup.Service.CreateEntriesAsync([new Entry { Id = assigned, Type = "sgv", Sgv = 166, Mills = Mills() }]);
+
+        await RepairThirtyTwoHexLegacyIdsAsync();
+
+        if (api == Api.V1)
+        {
+            var got = await setup.Controller.GetEntry(assigned);
+            JsonSerializer.SerializeToElement(got.Result.Should().BeOfType<OkObjectResult>().Subject.Value)
+                .EnumerateArray().Select(e => e.GetProperty("_id").GetString()).Should().Equal(assigned[..24]);
+            var deleted = await setup.Controller.DeleteEntry(assigned);
+            JsonSerializer.SerializeToElement(deleted.Should().BeOfType<OkObjectResult>().Subject.Value)
+                .GetProperty("n").GetInt64().Should().Be(1);
+        }
+        else
+        {
+            (await setup.V3Controller.GetEntry(assigned)).Result.Should().BeOfType<OkObjectResult>();
+            (await setup.V3Controller.DeleteEntry(assigned)).Should().BeOfType<OkObjectResult>();
+        }
+
+        (await setup.Service.GetEntryByIdAsync(assigned)).Should().BeNull();
+        (await setup.Service.GetEntryByIdAsync(assigned[..24])).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task The_repair_leaves_every_other_id_form_alone_and_collides_only_within_a_tenant()
+    {
+        var mine = await CreateAsync();
+        var theirs = await CreateAsync();
+        var assigned = Guid.CreateVersion7().ToString("N");
+        var untouched = new[]
+        {
+            Guid.NewGuid().ToString("N"),
+            Guid.CreateVersion7().ToString("D"),
+            Guid.CreateVersion7().ToString("N").ToUpperInvariant(),
+            "507f1f77bcf86cd799439abc",
+            "dexcom-1761474000000",
+        };
+        await mine.Service.CreateEntriesAsync([
+            new Entry { Id = assigned, Type = "sgv", Sgv = 120, Mills = Mills() },
+            .. untouched.Select(id => new Entry { Id = id, Type = "sgv", Sgv = 130, Mills = Mills() }),
+        ]);
+        await theirs.Service.CreateEntriesAsync([new Entry { Id = assigned[..24], Type = "sgv", Sgv = 300, Mills = Mills() }]);
+
+        await RepairThirtyTwoHexLegacyIdsAsync();
+
+        (await mine.Service.GetEntryByIdAsync(assigned[..24]))!.Sgv.Should().Be(120);
+        (await theirs.Service.GetEntryByIdAsync(assigned[..24]))!.Sgv.Should().Be(300);
+        await using var db = mine.Db();
+        (await db.SensorGlucose.Where(e => e.DeletedAt == null).Select(e => e.LegacyId).ToListAsync())
+            .Should().BeEquivalentTo([assigned[..24], .. untouched]);
     }
 }
