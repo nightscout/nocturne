@@ -30,6 +30,8 @@ public sealed class ReleaseNoticeServiceTests : IDisposable
     private readonly Mock<IInAppNotificationService> _notifications = new();
     private readonly List<InAppNotificationEntity> _active = [];
     private readonly List<(string UserId, string Type, string Version, Dictionary<string, object> Metadata)> _sent = [];
+    private readonly Dictionary<Guid, string[]> _owners = [];
+    private readonly HashSet<string> _failingOwners = [];
     private readonly ServiceProvider _provider;
 
     public ReleaseNoticeServiceTests()
@@ -49,11 +51,15 @@ public sealed class ReleaseNoticeServiceTests : IDisposable
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
                 It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()))
-            .Callback((string userId, string type, string _, NotificationCategory? _, NotificationUrgency? _,
-                    string? _, string? _, string? _, string? sourceId, List<NotificationActionDto>? _,
-                    ResolutionConditions? _, Dictionary<string, object>? metadata, CancellationToken _) =>
-                _sent.Add((userId, type, sourceId!, metadata!)))
-            .ReturnsAsync(new InAppNotificationDto());
+            .Returns((string userId, string type, string _, NotificationCategory? _, NotificationUrgency? _,
+                string? _, string? _, string? _, string? sourceId, List<NotificationActionDto>? _,
+                ResolutionConditions? _, Dictionary<string, object>? metadata, CancellationToken _) =>
+            {
+                if (_failingOwners.Contains(userId))
+                    throw new InvalidOperationException("send failed");
+                _sent.Add((userId, type, sourceId!, metadata!));
+                return Task.FromResult(new InAppNotificationDto());
+            });
 
         var repository = new Mock<IInAppNotificationRepository>();
         repository
@@ -61,8 +67,8 @@ public sealed class ReleaseNoticeServiceTests : IDisposable
             .ReturnsAsync((string userId, string _, CancellationToken _) => _active.Where(n => n.UserId == userId).ToList());
 
         var owners = new Mock<ITenantOwnerResolver>();
-        owners.Setup(o => o.GetOwnerSubjectIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid tenantId, CancellationToken _) => $"owner-{tenantId}");
+        owners.Setup(o => o.GetOwnerSubjectIdsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid tenantId, CancellationToken _) => OwnersOf(tenantId));
 
         var services = new ServiceCollection();
         _database.AddToServices(services);
@@ -113,8 +119,8 @@ public sealed class ReleaseNoticeServiceTests : IDisposable
     public async Task TheInstalledNoticeSupersedesEveryOlderReleaseNotice()
     {
         _releases.Setup(r => r.GetLatestAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Release("0.2.8"));
-        var owner = $"owner-{SecondTenant}";
-        var olderAvailable = Active(owner, ReleaseNoticeService.UpdateAvailableType);
+        var owner = OwnersOf(SecondTenant)[0];
+        var olderAvailable = Active(owner, ReleaseNoticeService.UpdateAvailableType, "0.2.8");
         var olderInstalled = Active(owner, ReleaseNoticeService.ReleaseInstalledType);
 
         await CreateService("0.2.8").CheckAsync(CancellationToken.None);
@@ -129,10 +135,14 @@ public sealed class ReleaseNoticeServiceTests : IDisposable
     public async Task AnAvailableNoticeSupersedesOnlyOlderAvailableNotices()
     {
         _releases.Setup(r => r.GetLatestAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Release("0.2.9"));
-        await new ReleaseNoticeLedger(_provider.GetRequiredService<INocturneDbContextFactory>())
-            .TryClaimAsync(ReleaseNoticeLedger.Installed, "0.2.7", CancellationToken.None);
-        var owner = $"owner-{SecondTenant}";
-        var olderAvailable = Active(owner, ReleaseNoticeService.UpdateAvailableType);
+        var owner = OwnersOf(SecondTenant)[0];
+        foreach (var tenant in await TenantsAsync())
+        foreach (var subject in OwnersOf(tenant))
+        {
+            await Ledger().TryClaimAsync(
+                ReleaseNoticeLedger.Installed, "0.2.7", tenant, Guid.Parse(subject), CancellationToken.None);
+        }
+        var olderAvailable = Active(owner, ReleaseNoticeService.UpdateAvailableType, "0.2.8");
         var installed = Active(owner, ReleaseNoticeService.ReleaseInstalledType);
 
         await CreateService("0.2.7").CheckAsync(CancellationToken.None);
@@ -143,18 +153,76 @@ public sealed class ReleaseNoticeServiceTests : IDisposable
             installed.Id, It.IsAny<NotificationArchiveReason>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private InAppNotificationEntity Active(string userId, string type)
+    [Fact]
+    public async Task AFailedSendIsRetriedOnTheNextCheck()
+    {
+        _releases.Setup(r => r.GetLatestAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Release("0.2.8"));
+        var failing = OwnersOf(SecondTenant)[1];
+        _failingOwners.Add(failing);
+        var service = CreateService("0.2.8");
+
+        await service.CheckAsync(CancellationToken.None);
+
+        _sent.Should().NotContain(s => s.UserId == failing);
+        _sent.Select(s => s.UserId).Should().Contain(OwnersOf(SecondTenant)[0], "one owner's failure does not stop the others");
+
+        _failingOwners.Clear();
+        _sent.Clear();
+        await service.CheckAsync(CancellationToken.None);
+
+        _sent.Should().ContainSingle().Which.UserId.Should().Be(failing);
+    }
+
+    [Fact]
+    public async Task ATenantCreatedLaterGetsTheCurrentNotices()
+    {
+        _releases.Setup(r => r.GetLatestAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Release("0.2.8"));
+        var service = CreateService("0.2.8");
+        await service.CheckAsync(CancellationToken.None);
+        _sent.Clear();
+
+        var later = Guid.NewGuid();
+        _database.SeedTenant(later, "later");
+        await CreateService("0.2.8").CheckAsync(CancellationToken.None);
+
+        _sent.Select(s => s.UserId).Should().BeEquivalentTo(OwnersOf(later));
+    }
+
+    [Theory]
+    [InlineData(ReleaseNoticeService.UpdateAvailableType, "0.2.9", ReleaseNoticeService.UpdateAvailableType, "0.2.8", true)]
+    [InlineData(ReleaseNoticeService.UpdateAvailableType, "0.2.9", ReleaseNoticeService.ReleaseInstalledType, "0.2.7", false)]
+    [InlineData(ReleaseNoticeService.ReleaseInstalledType, "0.2.8", ReleaseNoticeService.ReleaseInstalledType, "0.2.7", true)]
+    [InlineData(ReleaseNoticeService.ReleaseInstalledType, "0.2.8", ReleaseNoticeService.UpdateAvailableType, "0.2.8", true)]
+    [InlineData(ReleaseNoticeService.ReleaseInstalledType, "0.2.8", ReleaseNoticeService.UpdateAvailableType, "0.2.9", false)]
+    public void ANoticeSupersedesWhatItReplaces(string type, string version, string olderType, string olderVersion, bool superseded)
+    {
+        ReleaseNoticeService.Supersedes(type, version, olderType, olderVersion).Should().Be(superseded);
+    }
+
+    private string[] OwnersOf(Guid tenantId)
+    {
+        if (!_owners.TryGetValue(tenantId, out var owners))
+            _owners[tenantId] = owners = [Guid.NewGuid().ToString(), Guid.NewGuid().ToString()];
+        return owners;
+    }
+
+    private async Task<IEnumerable<Guid>> TenantsAsync() =>
+        (await Snapshot().GetAsync(CancellationToken.None)).Select(t => t.Id);
+
+    private ReleaseNoticeLedger Ledger() => new(_provider.GetRequiredService<INocturneDbContextFactory>());
+
+    private InAppNotificationEntity Active(string userId, string type, string? version = null)
     {
         var entity = new InAppNotificationEntity
         {
-            Id = Guid.NewGuid(), UserId = userId, Type = type, Source = ReleaseNoticeService.Source,
+            Id = Guid.NewGuid(), UserId = userId, Type = type, Source = ReleaseNoticeService.Source, SourceId = version,
         };
         _active.Add(entity);
         return entity;
     }
 
     private async Task<IEnumerable<string>> OwnersAsync() =>
-        (await Snapshot().GetAsync(CancellationToken.None)).Select(t => $"owner-{t.Id}");
+        (await TenantsAsync()).SelectMany(OwnersOf);
 
     private ActiveTenantSnapshot Snapshot() => new(
         _provider.GetRequiredService<INocturneDbContextFactory>(), _clock, NullLogger<ActiveTenantSnapshot>.Instance);
@@ -169,7 +237,7 @@ public sealed class ReleaseNoticeServiceTests : IDisposable
         return new ReleaseNoticeService(
             _provider,
             status,
-            new ReleaseNoticeLedger(_provider.GetRequiredService<INocturneDbContextFactory>()),
+            Ledger(),
             Snapshot(),
             options,
             _clock,

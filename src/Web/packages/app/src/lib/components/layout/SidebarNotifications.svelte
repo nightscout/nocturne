@@ -111,12 +111,7 @@
     // The release notes open in a dialog. The notice stays until the owner dismisses it or a
     // newer one supersedes it.
     if (actionId === "release_notes") {
-      if (notification.id) {
-        realtimeStore?.markNotificationRead(notification.id);
-        markAsRead(notification.id).catch((err) =>
-          console.error("Failed to mark notification read:", err)
-        );
-      }
+      markRead(notification.id);
       releaseNotification = notification;
       releaseNotesDialog.open = true;
       return;

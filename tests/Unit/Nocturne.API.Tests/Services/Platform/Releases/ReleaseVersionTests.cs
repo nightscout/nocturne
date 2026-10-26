@@ -33,6 +33,9 @@ public class ReleaseVersionTests
     [InlineData("0.10.0", "0.9.9")]
     [InlineData("1.0.0", "1.0.0-rc.2")]
     [InlineData("1.0.0-rc.2", "1.0.0-rc.1")]
+    [InlineData("1.0.0-rc.10", "1.0.0-rc.2")]
+    [InlineData("1.0.0-rc", "1.0.0-1")]
+    [InlineData("1.0.0-rc.1.1", "1.0.0-rc.1")]
     public void OrdersByCoreThenPutsAPreReleaseBeforeItsRelease(string newer, string older)
     {
         ReleaseVersion.TryParse(newer, out var a).Should().BeTrue();

@@ -15,6 +15,7 @@ public interface IReleaseSource
     /// <summary>
     /// The newest release that is neither a draft nor a pre-release, or null when there is none.
     /// </summary>
+    /// <exception cref="HttpRequestException">GitHub answered with an error other than 404.</exception>
     Task<ReleaseNotesDto?> GetLatestAsync(CancellationToken cancellationToken);
 
     /// <summary>
@@ -55,10 +56,11 @@ public class GitHubReleaseClient(
         if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
 
+        // Any other error (a rate-limit 403 or 429, a 5xx) is a failed read, not an absent release.
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("GitHub returned {Status} for {Path}", (int)response.StatusCode, path);
-            return null;
+            response.EnsureSuccessStatusCode();
         }
 
         var release = await response.Content.ReadFromJsonAsync<GitHubRelease>(cancellationToken);
@@ -72,7 +74,7 @@ public class GitHubReleaseClient(
             Name = release.Name,
             Url = release.HtmlUrl,
             PublishedAt = release.PublishedAt,
-            NotesHtml = Sanitizer.Sanitize(release.BodyHtml ?? string.Empty),
+            NotesHtml = Sanitizer.Sanitize(release.BodyHtml ?? string.Empty, release.HtmlUrl),
         };
     }
 
@@ -82,6 +84,10 @@ public class GitHubReleaseClient(
         sanitizer.AllowedSchemes.Clear();
         sanitizer.AllowedSchemes.Add("https");
         sanitizer.AllowedAttributes.Remove("style");
+        // Release notes have no use for controls, and a form could imitate a sign-in prompt.
+        foreach (var tag in new[] { "form", "input", "button", "select", "option", "optgroup", "textarea", "label", "fieldset", "legend" })
+            sanitizer.AllowedTags.Remove(tag);
+        sanitizer.AllowedAttributes.Remove("name");
         sanitizer.PostProcessNode += (_, e) =>
         {
             if (e.Node is AngleSharp.Html.Dom.IHtmlAnchorElement anchor)

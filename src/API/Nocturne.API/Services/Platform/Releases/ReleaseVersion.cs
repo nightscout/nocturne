@@ -35,8 +35,32 @@ public readonly record struct ReleaseVersion(Version Core, string? PreRelease) :
             (null, null) => 0,
             (null, _) => 1,
             (_, null) => -1,
-            _ => string.CompareOrdinal(PreRelease, other.PreRelease),
+            _ => ComparePreRelease(PreRelease!, other.PreRelease!),
         };
+    }
+
+    // SemVer precedence: dot-separated identifiers compared in turn, numeric ones by value and
+    // below alphanumeric ones, and a shorter list first when it is a prefix of the longer.
+    private static int ComparePreRelease(string left, string right)
+    {
+        var a = left.Split('.');
+        var b = right.Split('.');
+        for (var i = 0; i < Math.Min(a.Length, b.Length); i++)
+        {
+            var aNumeric = ulong.TryParse(a[i], out var aNumber);
+            var bNumeric = ulong.TryParse(b[i], out var bNumber);
+            var byIdentifier = (aNumeric, bNumeric) switch
+            {
+                (true, true) => aNumber.CompareTo(bNumber),
+                (true, false) => -1,
+                (false, true) => 1,
+                _ => string.CompareOrdinal(a[i], b[i]),
+            };
+            if (byIdentifier != 0)
+                return byIdentifier;
+        }
+
+        return a.Length.CompareTo(b.Length);
     }
 
     public static bool operator >(ReleaseVersion left, ReleaseVersion right) => left.CompareTo(right) > 0;

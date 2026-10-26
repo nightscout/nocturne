@@ -17,14 +17,20 @@ public class ReleaseNoticesIntegrationTests : ApiIntegrationTestBase
         : base(fixture, output) { }
 
     [Fact]
-    public async Task TheAppRoleClaimsANoticeOnce()
+    public async Task TheAppRoleClaimsANoticeOncePerOwner()
     {
         var ledger = Fixture.Services.GetRequiredService<IReleaseNoticeLedger>();
         var version = $"9.9.{Random.Shared.Next(1_000_000)}";
+        var tenant = Fixture.TenantId;
+        var owner = Guid.NewGuid();
 
-        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Available, version, CancellationToken.None)).Should().BeTrue();
-        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Available, version, CancellationToken.None)).Should().BeFalse();
-        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Installed, version, CancellationToken.None)).Should().BeTrue();
+        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Available, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
+        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Available, version, tenant, owner, CancellationToken.None)).Should().BeFalse();
+        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Installed, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
+        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Available, version, tenant, Guid.NewGuid(), CancellationToken.None)).Should().BeTrue();
+
+        await ledger.ReleaseAsync(ReleaseNoticeLedger.Available, version, tenant, owner, CancellationToken.None);
+        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Available, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]

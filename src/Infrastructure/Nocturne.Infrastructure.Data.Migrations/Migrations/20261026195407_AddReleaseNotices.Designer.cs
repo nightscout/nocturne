@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20261026121136_AddReleaseNotices")]
+    [Migration("20261026195407_AddReleaseNotices")]
     partial class AddReleaseNotices
     {
         /// <inheritdoc />
@@ -3941,11 +3941,19 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("kind");
 
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
                     b.Property<DateTime>("SysCreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("sys_created_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Version")
                         .IsRequired()
@@ -3955,9 +3963,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Kind", "Version")
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("Kind", "Version", "TenantId", "SubjectId")
                         .IsUnique()
-                        .HasDatabaseName("ux_release_notices_kind_version");
+                        .HasDatabaseName("ux_release_notices_kind_version_tenant_subject");
 
                     b.ToTable("release_notices");
                 });
@@ -10036,6 +10046,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.RejectedUploadEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ReleaseNoticeEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()
