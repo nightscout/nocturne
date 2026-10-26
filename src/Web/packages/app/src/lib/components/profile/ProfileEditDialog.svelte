@@ -199,7 +199,7 @@
         bind:value={activeTab}
         class="flex-1 overflow-hidden flex flex-col"
       >
-        <Tabs.List class="grid w-full grid-cols-5">
+        <Tabs.List variant="wrap">
           <Tabs.Trigger value="general">General</Tabs.Trigger>
           <Tabs.Trigger value="basal">Basal</Tabs.Trigger>
           <Tabs.Trigger value="carbratio">I:C ratio</Tabs.Trigger>

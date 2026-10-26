@@ -209,7 +209,7 @@
     </Card>
   {:else}
     <Tabs.Root bind:value={activeTab} class="space-y-6">
-      <Tabs.List class={oidcConfigManaged ? "grid w-full grid-cols-1" : "grid w-full grid-cols-2"}>
+      <Tabs.List variant="wrap">
         {#if !oidcConfigManaged}
           <Tabs.Trigger value="identity-providers">
             <Shield class="h-4 w-4" />

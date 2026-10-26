@@ -279,7 +279,7 @@
     {/if}
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
-      <Tabs.List class="grid w-full grid-cols-3">
+      <Tabs.List variant="wrap">
         <Tabs.Trigger value="migrate">
           <Play class="h-4 w-4" />
           New migration

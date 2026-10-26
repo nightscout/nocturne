@@ -218,7 +218,7 @@
 
   <!-- Tabbed Log Viewer -->
   <Tabs.Root bind:value={activeTab} class="space-y-4">
-    <Tabs.List class="grid w-full grid-cols-2">
+    <Tabs.List variant="wrap">
       <Tabs.Trigger value="mutations">
         Data changes
         {#if mutationsTotal > 0}

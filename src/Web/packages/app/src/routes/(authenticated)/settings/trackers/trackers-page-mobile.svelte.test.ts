@@ -178,6 +178,7 @@ describe("settings/trackers on a phone", () => {
   it("keeps each tab label inside its tab and the tabs touch-sized", () => {
     const tabs = Array.from(document.querySelectorAll<HTMLElement>("[role='tab']"));
     expect(tabs).toHaveLength(4);
+    expect(new Set(tabs.map((tab) => Math.round(tab.getBoundingClientRect().left))).size).toBe(2);
     for (const tab of tabs) {
       const box = tab.getBoundingClientRect();
       expect(tab.scrollWidth, tab.textContent ?? "").toBeLessThanOrEqual(tab.clientWidth);

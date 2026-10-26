@@ -114,7 +114,7 @@
 
     <div class="@container flex-1 overflow-y-auto py-4">
       <Tabs value="general" class="w-full">
-        <TabsList class="grid w-full grid-cols-5">
+        <TabsList variant="wrap">
           <TabsTrigger value="general">
             <Settings2 class="hidden @lg:block h-4 w-4 mr-2" />
             General

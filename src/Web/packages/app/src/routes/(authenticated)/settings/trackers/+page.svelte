@@ -486,7 +486,7 @@
     ]))}
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
-      <Tabs.List class="grid h-auto w-full grid-cols-2 @xl:h-9 @xl:grid-cols-4">
+      <Tabs.List variant="wrap">
         <Tabs.Trigger value="active" class="min-h-11 @xl:min-h-0">
           <Activity class="h-4 w-4" />
           Active

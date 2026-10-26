@@ -48,7 +48,7 @@
   </CardHeader>
   <CardContent class="@container">
     <Tabs.Root value="cgm">
-      <Tabs.List class="grid w-full grid-cols-3">
+      <Tabs.List variant="wrap">
         <Tabs.Trigger value="cgm">CGM apps</Tabs.Trigger>
         <Tabs.Trigger value="aid">AID systems</Tabs.Trigger>
         <Tabs.Trigger value="other">Other</Tabs.Trigger>
