@@ -22,6 +22,10 @@ export default defineConfig({
     // the node config without the production translation transform.
     include: ["src/**/*.render.test.ts"],
     environment: "node",
+    // As in the app's SSR build (vite.config.ts `ssr.noExternal`): layerchart's and @layerstack's
+    // dist import `svelte` without declaring it, which Node cannot resolve from pnpm's store, so
+    // they go through Vite. Matched against the resolved path.
+    server: { deps: { inline: [/\/layerchart\//, /\/@layerstack\//] } },
     alias: [
       {
         // The real barrel re-exports formatting, which reaches the generated client.

@@ -454,7 +454,7 @@
           {/snippet}
         </GlucoseChartShell>
       {:else if plotSnapshot}
-        <div class="plot-snapshot h-full w-full" aria-hidden="true">
+        <div class="h-full w-full" data-testid="plot-snapshot" aria-hidden="true">
           <!-- eslint-disable-next-line svelte/no-at-html-tags -- the server's own render of this chart's components, no user input -->
           {@html plotSnapshot}
         </div>
@@ -667,13 +667,3 @@
     />
   {/if}
 {/if}
-
-<style>
-  /* The snapshot was drawn at the size this device last reported; it fills the box it lands in. */
-  .plot-snapshot :global(svg) {
-    display: block;
-    width: 100%;
-    height: 100%;
-    overflow: visible;
-  }
-</style>

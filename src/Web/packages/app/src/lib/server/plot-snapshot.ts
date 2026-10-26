@@ -1,8 +1,10 @@
+import { render } from "svelte/server";
 import type { UserDisplayPreferences } from "#lib/api/index.js";
+import PlotSnapshot from "#lib/components/dashboard/glucose-chart/PlotSnapshot.svelte";
 import { parsePlotSize, PLOT_SIZE_COOKIE } from "#lib/components/dashboard/glucose-chart/plot-size.js";
-import { plotSnapshotSvg } from "#lib/components/dashboard/glucose-chart/plot-snapshot-svg.js";
 import {
   chartAreaMode,
+  chartAreaOpacity,
   chartLineColor,
   chartLineColorMode,
   chartPointColor,
@@ -22,8 +24,8 @@ export function hasPlotSize(cookies: Cookies): boolean {
 
 /**
  * The dashboard's main plot as markup, for the document to paint before any script runs
- * (`plotSnapshotSvg`), drawn in the viewer's chart style and units. Null when this device has not
- * yet reported the plot's size or there is nothing to draw: the live chart then draws alone.
+ * (`PlotSnapshot`), drawn in the viewer's chart style and units. Null when this device has not
+ * yet reported the plot's size or there is no glucose to draw: the live chart then draws alone.
  */
 export function renderPlotSnapshot(options: {
   chartData: TransformedChartData | null;
@@ -36,23 +38,29 @@ export function renderPlotSnapshot(options: {
 }): string | null {
   const { chartData, nowMs, lookbackHours, predictions, cookies, preferenceLayers: layers } = options;
   const size = parsePlotSize(cookies.get(PLOT_SIZE_COOKIE));
-  if (!chartData || !size) return null;
+  if (!chartData?.glucoseData.length || !size) return null;
 
-  return plotSnapshotSvg({
-    chartData,
-    nowMs,
-    lookbackHours,
-    forecastMinutes: predictions ? predictionMinutes.resolve(layers) : 0,
-    size: { width: size.width, height: size.height },
-    compact: size.compact,
-    style: {
-      lineColorMode: chartLineColorMode.resolve(layers),
-      lineColor: chartLineColor.resolve(layers),
-      pointColorMode: chartPointColorMode.resolve(layers),
-      pointColor: chartPointColor.resolve(layers),
-      showPoints: chartShowPoints.resolve(layers),
-      areaMode: chartAreaMode.resolve(layers),
-      units: glucoseUnits.resolve(layers),
+  const { body } = render(PlotSnapshot, {
+    props: {
+      chartData,
+      nowMs,
+      lookbackHours,
+      forecastMinutes: predictions ? predictionMinutes.resolve(layers) : 0,
+      size: { width: size.width, height: size.height },
+      compact: size.compact,
+      style: {
+        lineColorMode: chartLineColorMode.resolve(layers),
+        lineColor: chartLineColor.resolve(layers),
+        pointColorMode: chartPointColorMode.resolve(layers),
+        pointColor: chartPointColor.resolve(layers),
+        showPoints: chartShowPoints.resolve(layers),
+        areaMode: chartAreaMode.resolve(layers),
+        areaOpacity: chartAreaOpacity.resolve(layers),
+        units: glucoseUnits.resolve(layers),
+      },
     },
+    // Its gradient and clip ids must not collide with the page's own.
+    idPrefix: "plot-snapshot-",
   });
+  return body;
 }
