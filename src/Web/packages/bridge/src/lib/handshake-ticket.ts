@@ -123,6 +123,17 @@ export function signHandshakeTicket(
   return `${payloadB64}.${sig}`;
 }
 
+const TICKET_SHAPE = /^[A-Za-z0-9_-]+\.[0-9a-f]{64}$/;
+
+/**
+ * Whether a token has the wire format of a handshake ticket, valid or not. A
+ * client access token (a classic Nightscout `name-digest`, a `noc_` token or a
+ * JWT) never does.
+ */
+export function isHandshakeTicketShaped(token: string): boolean {
+  return TICKET_SHAPE.test(token);
+}
+
 /**
  * Verify a handshake ticket. Returns the payload when the signature is valid and
  * the ticket has not expired, otherwise null. Fails closed on a missing secret

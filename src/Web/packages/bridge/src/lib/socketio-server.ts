@@ -4,6 +4,7 @@ import logger from './logger.js';
 import type { ClientInfo, AlarmData, AlarmEvent, ServerStats } from '../types.js';
 import {
   verifyHandshakeTicket,
+  isHandshakeTicketShaped,
   normalizeHandshakeHost,
   REALTIME_ADMISSION_PATH,
   HANDSHAKE_TICKET_LIFETIME_MS,
@@ -18,6 +19,11 @@ interface BridgeSocketData {
   tenantSlug?: string;
   /** The tenant the socket's host resolved to, before it has authorized. */
   pendingTenantSlug?: string;
+  /**
+   * An access token a legacy client put in its handshake query, which its
+   * `authorize` presents when it carries no credential of its own.
+   */
+  handshakeToken?: string;
   /**
    * Whether the socket's credential may join the tenant-wide room. The room
    * carries live payloads of more than one category, so a guest link or
@@ -380,10 +386,14 @@ class SocketIOServer {
       }
 
       // Engine.IO v3 clients have no `auth` payload — that arrived with the v4
-      // protocol — so also accept the ticket from the handshake query.
+      // protocol — so also accept the ticket from the handshake query. A query
+      // token that is not shaped as a ticket is a legacy client's access token
+      // (LoopFollow sends one there), which its `authorize` presents to the API.
+      const queryToken = queryValue(socket.handshake.query?.token);
+      const clientToken = queryToken && !isHandshakeTicketShaped(queryToken) ? queryToken : undefined;
       const token =
         stringField(socket.handshake.auth, 'token')
-        ?? queryValue(socket.handshake.query?.token);
+        ?? (clientToken ? undefined : queryToken);
       if (token) {
         // A ticket was offered, so this is the browser path: reject it outright if
         // it doesn't verify. Admitting it silently would leave a client whose
@@ -424,6 +434,7 @@ class SocketIOServer {
       // so it receives nothing in the meantime.
       logger.debug(`Connection ${socket.id} carries no ticket; awaiting classic authorize for tenant ${tenantSlug}`);
       socket.data.pendingTenantSlug = tenantSlug;
+      socket.data.handshakeToken = clientToken;
       next();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -653,7 +664,10 @@ class SocketIOServer {
    *  obtain — a handshake ticket, because /realtime/ticket mints one only for a
    *  browser session the API admits to realtime. They
    *  authenticate the way they do against classic Nightscout instead: an API
-   *  secret (already SHA-1 hashed by the client) and/or a subject token.
+   *  secret (already SHA-1 hashed by the client) and/or a subject token, in the
+   *  payload or, for the token, in the handshake query. A client may send its
+   *  access token as `secret`, so a secret the API refuses is presented again as
+   *  a token. With no credential at all the admission is asked anonymously.
    *
    *  Rather than interpret those credentials here, replay them against the same
    *  admission the ticket endpoint asks for. The API applies its own per-tenant
@@ -685,15 +699,18 @@ class SocketIOServer {
     if (!this.apiBaseUrl) return deny('bridge has no API base URL configured');
 
     const secret = stringField(payload, 'secret');
-    const token = stringField(payload, 'token');
-    if (!secret && !token) return deny('no credentials supplied');
-
-    const admission = await this.probeRealtimeAdmission(tenantSlug, { apiSecret: secret, token });
+    let credential = { apiSecret: secret, token: stringField(payload, 'token') ?? socket.data.handshakeToken };
+    let admission = await this.probeRealtimeAdmission(tenantSlug, credential);
+    if (admission === null && secret) {
+      credential = { apiSecret: undefined, token: secret };
+      admission = await this.probeRealtimeAdmission(tenantSlug, credential);
+    }
     if (admission === null || admission === UNANSWERED) return deny('API denied the credential');
 
     this.setGrant(socket, tenantSlug, admission);
+    socket.data.handshakeToken = undefined;
     this.joinTenantRoom(socket);
-    socket.data.readmission = { kind: 'credential', apiSecret: secret, token };
+    socket.data.readmission = { kind: 'credential', ...credential };
     this.scheduleReadmission(socket, ADMISSION_RECHECK_INTERVAL_MS);
     logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
     callback?.({ read: true, write: false, write_treatment: false });
