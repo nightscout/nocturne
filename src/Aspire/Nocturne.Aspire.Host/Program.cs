@@ -927,14 +927,40 @@ class Program
         // ------------------------------------------------------------------
         if (enableWatchtower)
         {
+            // The API's release check reads Watchtower's read-only HTTP API (history, config) over
+            // the stack network to tell owners when an update installs. Watchtower reports neither
+            // its interval nor its next run, so both containers take the interval from one value.
+            // Leaving the update endpoint off keeps the periodic polls running. The published
+            // compose turns the endpoints on only when the token is set
+            // (PortainerComposePublisherExtensions.GateWatchtowerApiOnToken).
+            var watchtowerApiToken = builder
+                .AddParameter(
+                    "watchtower-api-token",
+                    new GenerateParameterDefault { MinLength = 32, Special = false },
+                    secret: true)
+                .WithPublishMetadata(
+                    "Watchtower API token",
+                    "Optional. Any random string, e.g. from openssl rand -hex 24. Lets the API read when Watchtower last checked for updates, so update notices show the install time.");
+            var watchtowerPollInterval = builder.AddParameter("watchtower-poll-interval", "86400")
+                .WithPublishMetadata(
+                    "Watchtower poll interval",
+                    "Seconds between Watchtower's checks for new images. The API uses it to tell owners when an update installs.",
+                    defaultValue: "86400");
+
             builder
                 .AddContainer("watchtower", "ghcr.io/nicholas-fedor/watchtower", "latest")
                 .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock")
                 .WithEnvironment("WATCHTOWER_CLEANUP", "true")
-                .WithEnvironment("WATCHTOWER_POLL_INTERVAL", "86400")
+                .WithEnvironment("WATCHTOWER_POLL_INTERVAL", watchtowerPollInterval)
                 .WithEnvironment("WATCHTOWER_INCLUDE_STOPPED", "false")
                 .WithEnvironment("WATCHTOWER_REVIVE_STOPPED", "false")
+                .WithEnvironment("WATCHTOWER_HTTP_API_ENDPOINTS", "history,config")
+                .WithEnvironment("WATCHTOWER_HTTP_API_TOKEN", watchtowerApiToken)
                 .PublishAsDockerComposeService((_, _) => { });
+
+            apiEnvironment
+                .WithEnvironment("ReleaseCheck__Watchtower__Token", watchtowerApiToken)
+                .WithEnvironment("ReleaseCheck__Watchtower__PollIntervalSeconds", watchtowerPollInterval);
         }
 
         // These steps depend on the "publish-compose" pipeline step, which only

@@ -175,6 +175,7 @@ static EnvVarGroups ParseAspireEnv(string aspireEnvPath, EnvVarMeta[] metadata)
         "RESEND_FROM_ADDRESS",
         "RESEND_FROM_NAME",
         "RESEND_WEBHOOK_SECRET",
+        "WATCHTOWER_API_TOKEN",
     };
 
     var seen = new HashSet<string>();

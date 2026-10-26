@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Pipelines;
@@ -135,16 +136,17 @@ public static class PortainerComposePublisherExtensions
     /// <summary>
     /// Produces a self-contained compose: inlines the init script and the Caddyfile
     /// as Compose configs (removing the ./init and ./caddy/Caddyfile bind-mounts),
-    /// adds the Postgres readiness healthcheck + service_healthy gate, and scopes
-    /// Watchtower to this stack's own containers. Each transform is idempotent and
+    /// adds the Postgres readiness healthcheck + service_healthy gate, scopes
+    /// Watchtower to this stack's own containers, and turns Watchtower's HTTP API on
+    /// only when its token is set. Each transform is idempotent and
     /// no-ops when its target isn't present, so applying it to an already-transformed
     /// compose is safe.
     /// </summary>
     internal static string SelfContainCompose(string composeYaml, string initScriptPath, string caddyfilePath)
-        => ScopeWatchtowerToStack(
+        => GateWatchtowerApiOnToken(ScopeWatchtowerToStack(
             InlineCaddyfile(
                 HardenPostgresStartup(InlineInitScript(composeYaml, initScriptPath)),
-                caddyfilePath));
+                caddyfilePath)));
 
     /// <summary>
     /// Replaces the ./init bind-mount on the postgres service with a docker compose
@@ -437,6 +439,52 @@ public static class PortainerComposePublisherExtensions
             var enabled = service.Children.ContainsKey("configs") ? "false" : "true";
             SetQuotedEntry(service, "labels", enableLabel, enabled, serviceName);
         }
+
+        var sb = new StringBuilder();
+        using (var writer = new StringWriter(sb))
+            yaml.Save(writer, assignAnchors: false);
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Rewrites Watchtower's <c>WATCHTOWER_HTTP_API_ENDPOINTS</c> to
+    /// <c>${TOKEN:+endpoints}</c>, where <c>TOKEN</c> is the variable its
+    /// <c>WATCHTOWER_HTTP_API_TOKEN</c> interpolates. Watchtower refuses to start with
+    /// endpoints enabled and no token, and the published .env leaves the generated token
+    /// blank, so without this an install that never sets it loses auto-updates. With an
+    /// empty endpoint list the API stays off and Watchtower runs as before. Returns the
+    /// compose unchanged when either variable is absent or the token is not a plain
+    /// <c>${VAR}</c> reference.
+    /// </summary>
+    internal static string GateWatchtowerApiOnToken(string composeYaml)
+    {
+        const string endpointsKey = "WATCHTOWER_HTTP_API_ENDPOINTS";
+        const string tokenKey = "WATCHTOWER_HTTP_API_TOKEN";
+
+        var yaml = new YamlStream();
+        using (var reader = new StringReader(composeYaml))
+            yaml.Load(reader);
+
+        var root = (YamlMappingNode)yaml.Documents[0].RootNode;
+        var services = (YamlMappingNode)root["services"];
+
+        if (!services.Children.TryGetValue(new YamlScalarNode("watchtower"), out var watchtowerNode)
+            || watchtowerNode is not YamlMappingNode watchtower
+            || !watchtower.Children.TryGetValue(new YamlScalarNode("environment"), out var envNode)
+            || envNode is not YamlMappingNode environment
+            || !environment.Children.TryGetValue(new YamlScalarNode(endpointsKey), out var endpointsNode)
+            || !environment.Children.TryGetValue(new YamlScalarNode(tokenKey), out var tokenNode))
+            return composeYaml;
+
+        var endpoints = ((YamlScalarNode)endpointsNode).Value ?? "";
+        var token = Regex.Match(
+            ((YamlScalarNode)tokenNode).Value ?? "", @"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$");
+        if (!token.Success || endpoints.StartsWith("${", StringComparison.Ordinal))
+            return composeYaml;
+
+        SetQuotedEntry(
+            watchtower, "environment", endpointsKey, $"${{{token.Groups[1].Value}:+{endpoints}}}", "watchtower");
 
         var sb = new StringBuilder();
         using (var writer = new StringWriter(sb))

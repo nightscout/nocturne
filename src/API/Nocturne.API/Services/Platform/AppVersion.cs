@@ -9,6 +9,14 @@ public static class AppVersion
 {
     public static string Current { get; } = Resolve(typeof(AppVersion).Assembly);
 
+    /// <summary>
+    /// Whether this build was stamped from a release tag. A <c>develop</c> image and a local build
+    /// carry the SDK's default <c>1.0.0</c>, which names no release.
+    /// </summary>
+    public static bool IsRelease { get; } = typeof(AppVersion).Assembly
+        .GetCustomAttributes<AssemblyMetadataAttribute>()
+        .Any(a => a.Key == "NocturneReleaseVersion" && !string.IsNullOrEmpty(a.Value));
+
     internal static string Resolve(Assembly assembly)
     {
         var informational = assembly

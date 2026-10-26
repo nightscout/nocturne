@@ -24,7 +24,13 @@
     <ContainerRepository>nocturne-api</ContainerRepository>
     <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
     <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>
+    <!-- Read before the SDK's targets default Version to 1.0.0, so it holds only a -p:Version
+         the release build passed. AppVersion.IsRelease reads it back. -->
+    <NocturneReleaseVersion>$(Version)</NocturneReleaseVersion>
   </PropertyGroup>
+  <ItemGroup Condition="'$(NocturneReleaseVersion)' != ''">
+    <AssemblyMetadata Include="NocturneReleaseVersion" Value="$(NocturneReleaseVersion)" />
+  </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Nocturne.API.Tests" />
     <InternalsVisibleTo Include="Nocturne.API.Performance.Tests" />

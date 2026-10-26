@@ -223,6 +223,14 @@
         Watchtower checks for image updates daily, except for Caddy and Postgres. To update everything, including Caddy and Postgres:
     </p>
     <CodeBlock code="docker compose pull && docker compose up -d" class="mb-4" />
+    <p class="text-muted-foreground mb-4">
+        When a new release is available, each tenant owner gets a notification with the release notes.
+        To show the time that Watchtower installs the release, set
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">WATCHTOWER_API_TOKEN</code> in your
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code> file to a value from the generator. Then run
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code>. This setting is optional.
+        If you installed before this setting was added, download the new bundle first.
+    </p>
     <p class="text-muted-foreground mb-8">
         Watchtower updates images, not the compose file. If you installed before the
         restart policy and log rotation below were added, download the new bundle and

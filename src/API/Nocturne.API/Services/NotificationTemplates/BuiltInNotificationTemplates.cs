@@ -1,4 +1,5 @@
 using Nocturne.API.Services.Notifications;
+using Nocturne.API.Services.Platform.Releases;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.NotificationTemplates;
@@ -121,6 +122,34 @@ public static class BuiltInNotificationTemplates
             Source = "membership"
         });
 
+        registry.Register(new NotificationTemplate
+        {
+            Type = ReleaseNoticeService.UpdateAvailableType,
+            Category = NotificationCategory.Informational,
+            DefaultUrgency = NotificationUrgency.Info,
+            Icon = "refresh-cw",
+            Source = ReleaseNoticeService.Source,
+            DefaultActions = [ReleaseNotesAction()]
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = ReleaseNoticeService.ReleaseInstalledType,
+            Category = NotificationCategory.Informational,
+            DefaultUrgency = NotificationUrgency.Info,
+            Icon = "gift",
+            Source = ReleaseNoticeService.Source,
+            DefaultActions = [ReleaseNotesAction()]
+        });
+
         return registry;
     }
+
+    private static NotificationActionDto ReleaseNotesAction() => new()
+    {
+        ActionId = ReleaseNoticeService.ReleaseNotesActionId,
+        Label = "release_notes",
+        Icon = "info",
+        Variant = "default"
+    };
 }

@@ -33,6 +33,10 @@
     () => import("$lib/components/meal-matching/MealMatchReviewDialog.svelte"),
   );
   let reviewNotification = $state<InAppNotificationDto | null>(null);
+  const releaseNotesDialog = lazyComponent(
+    () => import("$lib/components/notifications/ReleaseNotesDialog.svelte"),
+  );
+  let releaseNotification = $state<InAppNotificationDto | null>(null);
 
   // Sort notifications by urgency (Urgent > Hazard > Warn > Info), then by timestamp
   const sortedNotifications = $derived.by(() => {
@@ -101,6 +105,20 @@
     ) {
       markRead(notification.id);
       goto(resolve("/reports/data-quality/compression-lows"));
+      return;
+    }
+
+    // The release notes open in a dialog. The notice stays until the owner dismisses it or a
+    // newer one supersedes it.
+    if (actionId === "release_notes") {
+      if (notification.id) {
+        realtimeStore?.markNotificationRead(notification.id);
+        markAsRead(notification.id).catch((err) =>
+          console.error("Failed to mark notification read:", err)
+        );
+      }
+      releaseNotification = notification;
+      releaseNotesDialog.open = true;
       return;
     }
 
@@ -252,6 +270,13 @@
       }}
       notification={reviewNotification}
       onComplete={handleReviewComplete}
+    />
+  {/if}
+
+  {#if releaseNotesDialog.component}
+    <releaseNotesDialog.component
+      bind:open={releaseNotesDialog.open}
+      notification={releaseNotification}
     />
   {/if}
 
