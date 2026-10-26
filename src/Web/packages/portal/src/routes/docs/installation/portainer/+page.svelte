@@ -83,7 +83,17 @@
         </li>
         <li>
             Fill in the configuration form. Copy each value from the file that you made above into
-            the field with the same name.
+            its field.
+        </li>
+        <li class="list-none">
+            <ul class="list-disc list-inside ml-5 space-y-1">
+                <li><strong class="text-foreground">Base domain</strong>: <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">BASE_DOMAIN</code></li>
+                <li><strong class="text-foreground">Instance key</strong>: <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">INSTANCE_KEY</code></li>
+                <li><strong class="text-foreground">PostgreSQL bootstrap password</strong>: <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">POSTGRES_PASSWORD</code></li>
+                <li><strong class="text-foreground">Migrator role password</strong>: <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">POSTGRES_MIGRATOR_PASSWORD</code></li>
+                <li><strong class="text-foreground">App role password</strong>: <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">POSTGRES_APP_PASSWORD</code></li>
+                <li><strong class="text-foreground">Web role password</strong>: <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">POSTGRES_WEB_PASSWORD</code></li>
+            </ul>
         </li>
         <li>
             Select <strong class="text-foreground">Deploy the stack</strong>.

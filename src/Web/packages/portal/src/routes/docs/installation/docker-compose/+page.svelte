@@ -16,11 +16,24 @@
     const hero = DOCS_HERO["installation/docker-compose"];
 
     // @wc-ignore
+    const allowLocalLogin = [
+        "docker compose exec nocturne-postgres-server sh -c 'sed -i \"1i local all all trust\" \"$PGDATA/pg_hba.conf\"'",
+        "docker compose kill -s SIGHUP nocturne-postgres-server",
+    ].join("\n");
+
+    // @wc-ignore
     const resetPasswords = [
         "docker compose exec nocturne-postgres-server psql -U nocturne -d nocturne \\",
+        "  -c \"ALTER ROLE nocturne PASSWORD '<POSTGRES_PASSWORD>'\" \\",
         "  -c \"ALTER ROLE nocturne_migrator PASSWORD '<POSTGRES_MIGRATOR_PASSWORD>'\" \\",
         "  -c \"ALTER ROLE nocturne_app PASSWORD '<POSTGRES_APP_PASSWORD>'\" \\",
         "  -c \"ALTER ROLE nocturne_web PASSWORD '<POSTGRES_WEB_PASSWORD>'\"",
+    ].join("\n");
+
+    // @wc-ignore
+    const removeLocalLogin = [
+        "docker compose exec nocturne-postgres-server sh -c 'sed -i \"1d\" \"$PGDATA/pg_hba.conf\"'",
+        "docker compose kill -s SIGHUP nocturne-postgres-server",
         "docker compose up -d",
     ].join("\n");
 </script>
@@ -288,24 +301,37 @@
         Keep a copy of <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code> with your database backups. A database backup does not
         contain these values.
     </p>
-    <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-4">
-        <li>
-            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">INSTANCE_KEY</code>: you cannot get it back. Nocturne encrypts the connector
-            passwords and other secrets that it stores with this key. With a new key, Nocturne
-            cannot read them, and you must enter each one again. Your glucose data and your
-            accounts are not affected.
-        </li>
-        <li>
-            The database passwords: you can set new ones. Put new values in
-            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code>, then set the same values in the database. Inside its container,
-            PostgreSQL lets you connect without a password.
-        </li>
-    </ul>
-    <CodeBlock code={resetPasswords} class="mb-4" />
-    <p class="text-muted-foreground mb-8">
-        Replace each value in angle brackets with the value from your new <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code>.
-        If you changed <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">POSTGRES_USERNAME</code>, use that name in place of <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">nocturne</code>.
+    <p class="text-muted-foreground mb-2">
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">INSTANCE_KEY</code>: you cannot recover it. With a new key:
     </p>
+    <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-4">
+        <li>Alerts stop at Discord, webhooks and the other channels that use a secret, until you enter each secret again.</li>
+        <li>Connectors stop until you enter their passwords again.</li>
+        <li>Existing share links still work, but Nocturne cannot show them again. To see a link, make a new one.</li>
+    </ul>
+    <p class="text-muted-foreground mb-4">
+        Your glucose data, treatments and settings stay in the database.
+    </p>
+    <p class="text-muted-foreground mb-4">
+        The database passwords: you can set new ones. Put new values in
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code>, then do these steps to set the same values in the database.
+    </p>
+    <ol class="list-decimal list-inside space-y-3 text-muted-foreground mb-8">
+        <li>
+            Let PostgreSQL accept connections from inside its container without a password:
+            <CodeBlock code={allowLocalLogin} class="mt-2" />
+        </li>
+        <li>
+            Set the new passwords. Replace each value in angle brackets with the value from your
+            new <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code>. If you changed <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">POSTGRES_USERNAME</code>, use that name in
+            place of <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">nocturne</code>.
+            <CodeBlock code={resetPasswords} class="mt-2" />
+        </li>
+        <li>
+            Remove the line that you added in step 1, and start Nocturne with the new values:
+            <CodeBlock code={removeLocalLogin} class="mt-2" />
+        </li>
+    </ol>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Troubleshooting</h2>
     <p class="text-muted-foreground mb-4">Check the logs for error details:</p>
