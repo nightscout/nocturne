@@ -69,7 +69,7 @@
 
 <Tooltip.Root
   context={chartCtx}
-  class="bg-popover/95 border border-border rounded-lg shadow-xl text-xs z-50 backdrop-blur-sm print:hidden"
+  class="border border-border rounded-lg shadow-xl text-xs z-50 print:hidden"
 >
   {#snippet children({ data })}
     {@const activeBasal = findBasal(data.time)}

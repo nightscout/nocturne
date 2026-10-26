@@ -191,6 +191,13 @@
 }
 
 @layer components {
+  /* layerchart tints the default tooltip from surface tokens this theme does not define,
+     and mixes the result 90% over transparent. */
+  .lc-tooltip-container[data-variant="default"] {
+    --color-surface-content: var(--popover-foreground);
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
   .stack {
     @apply [&>*]:col-span-full [&>*]:row-span-full [&>*]:pointer-events-auto;
   }
