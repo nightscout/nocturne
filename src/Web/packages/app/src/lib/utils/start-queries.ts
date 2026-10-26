@@ -7,9 +7,10 @@
  * on another query) therefore sends its queries one round-trip apart. Calling this during
  * component initialization, with every query the page needs on arrival, sends them at once.
  *
- * Never pass a query held in a `$derived`: reading it here, outside any effect, evaluates the
- * derived with no owner, and the template is then left with a query whose result never arrives
- * until the derived re-runs.
+ * Never pass a query held in a `$derived`. Read here, the derived runs unconnected; the template's
+ * first read then connects it and re-runs the query's own effect, whose teardown releases the
+ * query's cache reference without the re-run taking it back, so `current` never fills
+ * (sveltejs/kit#14915).
  */
 export function startQueries(...queries: ({ readonly loading: boolean } | null | undefined)[]): void {
   for (const query of queries) void query?.loading;
