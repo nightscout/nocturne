@@ -42,7 +42,7 @@ Enter the three values using either method (see [Chat Bots](/docs/bots) for the 
 
 ### Option A: Admin UI
 
-At **Settings > Admin > Integrations**, fill in the **Discord** card:
+At **Platform > Administration > Integrations**, fill in the **Discord** card:
 
 | Field | Value |
 |-------|-------|
@@ -107,13 +107,13 @@ This bulk-overwrites the application's global commands to match Nocturne's manif
 
 To use `/bg` inside a Discord server (DMs work without this), invite the bot with the
 `bot` and `applications.commands` scopes. The quickest path: as a linked user, open
-**Settings > Integrations > Discord** in Nocturne and use **Open Discord invite**, which
+**My settings > Discord** in Nocturne and use **Open Discord invite**, which
 builds the correct OAuth2 URL for you.
 
 ## 7. Account linking from the web (optional)
 
 Users can always link by running `/connect` in Discord. If you also want the in-app **Link
-my Discord account** button (**Settings > Integrations > Discord**), enable Discord OAuth2:
+my Discord account** button (**My settings > Discord**), enable Discord OAuth2:
 
 1. In the Developer Portal, open **OAuth2** and copy the **Client Secret**.
 2. Add this redirect URL under **OAuth2 > Redirects**:
@@ -125,7 +125,7 @@ my Discord account** button (**Settings > Integrations > Discord**), enable Disc
    Use your root domain (`BASE_DOMAIN`), not a tenant subdomain.
 3. Give the client secret to Nocturne, either:
    - **Admin UI**: enter it in the **Client Secret** field on the Discord card at
-     **Settings > Admin > Integrations** (the same card as the bot credentials), or
+     **Platform > Administration > Integrations** (the same card as the bot credentials), or
    - **Environment**: set `DISCORD_CLIENT_SECRET` and restart Nocturne.
 
    The **Application ID** (`DISCORD_APPLICATION_ID`) doubles as the OAuth2 client ID, so no

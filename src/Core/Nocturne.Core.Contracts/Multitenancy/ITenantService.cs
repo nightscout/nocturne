@@ -34,6 +34,9 @@ public interface ITenantService
 
     Task<TenantSettingsDto> SetAllowPublicDocsAsync(Guid id, bool allowPublicDocs, CancellationToken ct = default);
 
+    /// <summary>Renames the tenant, leaving its slug and active state as they are.</summary>
+    Task<TenantSettingsDto> SetDisplayNameAsync(Guid id, string displayName, CancellationToken ct = default);
+
     Task<PatientRelationship?> GetPatientRelationshipAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>Records the onboarder's relationship to the patient, replacing any earlier answer.</summary>
@@ -87,7 +90,7 @@ public interface ITenantService
 
 public record TenantDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt);
 
-public record TenantSettingsDto(bool AllowPublicDocs);
+public record TenantSettingsDto(bool AllowPublicDocs, string Slug, string DisplayName, DateTime SysCreatedAt);
 
 public record TenantCreatedDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt);
 

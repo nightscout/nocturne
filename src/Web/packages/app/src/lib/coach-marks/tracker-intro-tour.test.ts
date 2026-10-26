@@ -34,7 +34,6 @@ const TARGETS: Record<string, string> = {
   "tracker-intro.settings": join(
     "routes",
     "(authenticated)",
-    "settings",
     "trackers",
     "+page.svelte"
   ),

@@ -38,7 +38,7 @@ Enter both values using either method (see [Chat Bots](/docs/bots) for the full 
 
 ### Option A: Admin UI
 
-At **Settings > Admin > Integrations**, fill in the **Slack** card:
+At **Platform > Administration > Integrations**, fill in the **Slack** card:
 
 | Field | Value |
 |-------|-------|

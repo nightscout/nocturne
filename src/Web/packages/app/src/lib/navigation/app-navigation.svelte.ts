@@ -11,35 +11,30 @@ import Home from "@lucide/svelte/icons/house";
 import BarChart3 from "@lucide/svelte/icons/chart-column";
 import PieChart from "@lucide/svelte/icons/chart-pie";
 import Settings from "@lucide/svelte/icons/settings";
+import Building from "@lucide/svelte/icons/building";
+import Server from "@lucide/svelte/icons/server";
 import Clock from "@lucide/svelte/icons/clock";
-import User from "@lucide/svelte/icons/user";
-import Syringe from "@lucide/svelte/icons/syringe";
 import Apple from "@lucide/svelte/icons/apple";
 import Utensils from "@lucide/svelte/icons/utensils";
 import Bell from "@lucide/svelte/icons/bell";
 import BellOff from "@lucide/svelte/icons/bell-off";
-import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
-import Plug from "@lucide/svelte/icons/plug";
 import Calendar from "@lucide/svelte/icons/calendar";
 import CheckCircle from "@lucide/svelte/icons/circle-check-big";
 import Terminal from "@lucide/svelte/icons/terminal";
 import TestTube from "@lucide/svelte/icons/test-tube";
-import Palette from "@lucide/svelte/icons/palette";
-import Languages from "@lucide/svelte/icons/languages";
 import Timer from "@lucide/svelte/icons/timer";
 import Layers from "@lucide/svelte/icons/layers";
-import ShieldCheck from "@lucide/svelte/icons/shield-check";
-import Building2 from "@lucide/svelte/icons/building-2";
 import Wrench from "@lucide/svelte/icons/wrench";
-import HeartPulse from "@lucide/svelte/icons/heart-pulse";
-import ListChecks from "@lucide/svelte/icons/list-checks";
 import Users from "@lucide/svelte/icons/users";
-import KeyRound from "@lucide/svelte/icons/key-round";
 import PlayCircle from "@lucide/svelte/icons/circle-play";
 import HistoryIcon from "@lucide/svelte/icons/history";
 import { satisfiesScope } from "$lib/authorization/scopes";
 import { getSidebarReportItems } from "$lib/navigation/report-navigation.svelte";
 import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
+import {
+  visibleSettingsGroups,
+  type SettingsGroupId,
+} from "$lib/navigation/settings-navigation.svelte";
 
 /** Stable identity of a top-level sidebar entry, independent of its translated title. */
 export type NavItemId =
@@ -53,8 +48,24 @@ export type NavItemId =
   | "meals"
   | "tools"
   | "alerts"
+  | "trackers"
   | "dev-tools"
-  | "settings";
+  | "settings"
+  | "site-settings"
+  | "platform";
+
+/** The sidebar entry each settings group renders as. */
+const SETTINGS_NAV_IDS: Record<SettingsGroupId, NavItemId> = {
+  personal: "settings",
+  site: "site-settings",
+  platform: "platform",
+};
+
+const SETTINGS_NAV_ICONS: Record<SettingsGroupId, IconComponent> = {
+  personal: Settings,
+  site: Building,
+  platform: Server,
+};
 
 /** An entry inside a sidebar group; its href is its identity. */
 export interface NavLink {
@@ -217,6 +228,13 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
       ],
     },
     {
+      id: "trackers",
+      title: "Trackers",
+      href: "/trackers",
+      icon: Timer,
+      scope: "alerts.read",
+    },
+    {
       id: "dev-tools",
       title: "Dev tools",
       icon: Terminal,
@@ -234,53 +252,14 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
         },
       ],
     },
-    {
-      id: "settings",
-      title: "Settings",
-      icon: Settings,
-      children: [
-        // The setup hub is the owner's.
-        ...(satisfiesScope(viewer.grantedScopes, "*")
-          ? [{ title: "Setup", href: "/setup", icon: ListChecks }]
-          : []),
-        { title: "Account", href: "/settings/account", icon: User },
-        {
-          title: "Patient record",
-          href: "/settings/patient",
-          icon: HeartPulse,
-        },
-        { title: "Appearance", href: "/settings/appearance", icon: Palette },
-        {
-          title: "Translations",
-          href: "/settings/translations",
-          icon: Languages,
-        },
-        { title: "Therapy", href: "/settings/profile", icon: Syringe },
-        {
-          title: "Data quality",
-          href: "/settings/data-quality",
-          icon: ShieldCheck,
-        },
-        {
-          title: "Notifications & trackers",
-          href: "/settings/trackers",
-          icon: Timer,
-        },
-        { title: "Active access", href: "/settings/access", icon: KeyRound },
-        { title: "Connectors & apps", href: "/settings/connectors", icon: Plug },
-        { title: "Sharing & privacy", href: "/settings/members", icon: Users },
-        {
-          title: "Support & community",
-          href: "/settings/support",
-          icon: HeartHandshake,
-        },
-        ...(viewer.isPlatformAdmin
-          ? [
-              { title: "Tenant management", href: "/settings/admin/tenants", icon: Building2 },
-            ]
-          : []),
-      ],
-    }
+    ...visibleSettingsGroups(viewer).map(
+      (group): NavItem => ({
+        id: SETTINGS_NAV_IDS[group.id],
+        title: group.title,
+        icon: SETTINGS_NAV_ICONS[group.id],
+        children: group.links.map(({ title, href, icon, strict }) => ({ title, href, icon, strict })),
+      })
+    )
   );
 
   const visible = withinScope(items, viewer);

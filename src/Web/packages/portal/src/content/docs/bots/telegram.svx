@@ -31,7 +31,7 @@ Enter the token using either method (see [Chat Bots](/docs/bots) for the full wo
 
 ### Option A: Admin UI
 
-At **Settings > Admin > Integrations**, fill in the **Telegram** card:
+At **Platform > Administration > Integrations**, fill in the **Telegram** card:
 
 | Field | Value |
 |-------|-------|

@@ -10,6 +10,25 @@
     PatientInsulinManager,
   } from "$lib/components/patient";
   import type { ClinicalState } from "$lib/components/patient";
+  import Globe from "@lucide/svelte/icons/globe";
+  import Weight from "@lucide/svelte/icons/weight";
+  import SettingsLinkCard from "$lib/components/settings/SettingsLinkCard.svelte";
+  import type { SettingsLink } from "$lib/navigation/settings-navigation.svelte";
+
+  const historyLinks: SettingsLink[] = [
+    {
+      title: "Timezone history",
+      description: "Where you lived and traveled, for correct timestamps.",
+      href: "/settings/timezone",
+      icon: Globe,
+    },
+    {
+      title: "Weight history",
+      description: "Your recorded weights over time.",
+      href: "/settings/weight",
+      icon: Weight,
+    },
+  ];
 
   let clinicalState = $state<ClinicalState | undefined>(undefined);
 
@@ -96,4 +115,8 @@
       <PatientInsulinManager variant="dialog" />
     </Card.Content>
   </Card.Root>
+
+  {#each historyLinks as link (link.href)}
+    <SettingsLinkCard {link} />
+  {/each}
 </div>

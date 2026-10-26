@@ -39,6 +39,7 @@
     removeCredential as totpRemoveCredential,
   } from "$lib/api/generated/totps.generated.remote";
   import LinkedOidcIdentities from "$lib/components/settings/LinkedOidcIdentities.svelte";
+  import ActiveSessions from "$lib/components/settings/ActiveSessions.svelte";
   import UserProfileCard from "$lib/components/account/UserProfileCard.svelte";
   import SecurityCredentialCard from "$lib/components/account/SecurityCredentialCard.svelte";
   import TotpSetupDialog from "$lib/components/account/TotpSetupDialog.svelte";
@@ -503,6 +504,8 @@
           </Button>
         </Card.Content>
       </Card.Root>
+
+      <ActiveSessions />
 
       <!-- Section 4: Recovery Mode Info -->
       <Card.Root>

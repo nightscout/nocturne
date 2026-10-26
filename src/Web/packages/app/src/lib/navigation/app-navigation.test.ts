@@ -36,8 +36,10 @@ const OWNER_ONLY = [
   "Meals",
   "Tools",
   "Alerts",
+  "Trackers",
   "Dev tools",
-  "Settings",
+  "My settings",
+  "Site settings",
 ];
 
 function titles(viewer: NavViewer): string[] {
@@ -105,7 +107,8 @@ describe("buildAppNavigation", () => {
     });
 
     expect(viewer).not.toContain("Alerts");
-    expect(viewer).toContain("Settings");
+    expect(viewer).not.toContain("Trackers");
+    expect(viewer).toContain("My settings");
   });
 
   it("withholds Reports from a member without reports.read", () => {
@@ -114,6 +117,29 @@ describe("buildAppNavigation", () => {
     expect(withoutReports).not.toContain("Reports");
     expect(withoutReports).toContain("Dashboard");
     expect(titles({ ...MEMBER, grantedScopes: ["reports.read"] })).toContain("Reports");
+  });
+
+  it("offers the platform group only to a platform admin", () => {
+    expect(titles(MEMBER)).not.toContain("Platform");
+    expect(titles({ ...MEMBER, isPlatformAdmin: true })).toContain("Platform");
+  });
+
+  it("drops the site group for a member who can change none of its pages", () => {
+    const visible = titles({ ...MEMBER, grantedScopes: ["glucose.read", "reports.read"] });
+
+    expect(visible).not.toContain("Site settings");
+    expect(visible).toContain("My settings");
+  });
+
+  it("keeps only Account and Appearance on a tenantless host", () => {
+    const settings = buildAppNavigation({ ...MEMBER, isPlatformAdmin: true, tenantless: true })
+      .filter((item) => item.children?.some((child) => child.href.startsWith("/settings")));
+
+    expect(settings.map((item) => item.id)).toEqual(["settings"]);
+    expect(settings[0]!.children!.map((child) => child.href)).toEqual([
+      "/settings/account",
+      "/settings/appearance",
+    ]);
   });
 
   it("offers the tenant switcher only to a member holding more than one", () => {

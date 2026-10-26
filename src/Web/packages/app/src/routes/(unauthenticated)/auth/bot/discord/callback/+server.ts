@@ -33,7 +33,7 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 	if (!clientId || !clientSecret || !baseDomain) {
 		throw error(
 			500,
-			"Discord OAuth2 not configured. Set Discord credentials in Settings > Admin > Integrations (or DISCORD_APPLICATION_ID / DISCORD_CLIENT_SECRET) and set BASE_DOMAIN.",
+			"Discord OAuth2 not configured. Set Discord credentials in Platform > Administration > Integrations (or DISCORD_APPLICATION_ID / DISCORD_CLIENT_SECRET) and set BASE_DOMAIN.",
 		);
 	}
 

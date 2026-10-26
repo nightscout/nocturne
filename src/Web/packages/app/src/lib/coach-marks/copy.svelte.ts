@@ -11,7 +11,7 @@ export function coachCopy() {
     "quick-tour.widgets": {
       title: "Customisable widgets",
       description:
-        "Reorder or swap these in Settings \u2192 Appearance to show the stats you care about.",
+        "Reorder or swap these in My settings \u2192 Appearance to show the stats you care about.",
     },
     "quick-tour.chart": {
       title: "Interactive chart",
@@ -130,12 +130,12 @@ export function coachCopy() {
     "tracker-intro.pill": {
       title: "Tracker pill",
       description:
-        "The pill shows the time since the last change. Its color changes when the tracker reaches a notification threshold. To change the order of the pills, go to Settings > Appearance.",
+        "The pill shows the time since the last change. Its color changes when the tracker reaches a notification threshold. To change the order of the pills, go to My settings > Appearance.",
     },
     "tracker-intro.complete": {
       title: "Record a change",
       description:
-        "When you change the item, select its pill. Then select Complete tracker. To start a new tracker from the change, select the Start another option in the Complete dialog. To change the lifespan and the alerts, go to Settings > Notifications & trackers.",
+        "When you change the item, select its pill. Then select Complete tracker. To start a new tracker from the change, select the Start another option in the Complete dialog. To change the lifespan and the alerts, go to the Trackers page.",
     },
     "tracker-intro.settings": {
       title: "Lifespan and thresholds",

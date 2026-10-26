@@ -13,7 +13,7 @@ You set up each tracker once, as a **definition**: what it is, how long it
 should last, and when to remind you. After that you start and complete it as
 often as you change the thing it tracks.
 
-Definitions live under **Settings > Notifications & Trackers**, on the
+Definitions live on the **Trackers** page, on the
 **Definitions** tab. Press **New Definition** to make one, or the pencil icon on
 a row to edit one.
 

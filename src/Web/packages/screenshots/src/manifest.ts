@@ -882,7 +882,7 @@ export const definitions: ScreenshotDefinition[] = [
 	},
 	{
 		id: 'trackers-active',
-		route: '/settings/trackers',
+		route: '/trackers',
 		scenario: 'patient',
 		clip: '[data-testid="active-trackers"]',
 		// Ages and start times come from the seeded device-change schedule, so this image differs every capture.
@@ -914,7 +914,7 @@ export const definitions: ScreenshotDefinition[] = [
 	},
 	{
 		id: 'tracker-editor',
-		route: '/settings/trackers',
+		route: '/trackers',
 		scenario: 'patient',
 		arrange: sensorTrackerWithThresholds,
 		prepare: openThresholdTrackerEditor,
@@ -923,7 +923,7 @@ export const definitions: ScreenshotDefinition[] = [
 	},
 	{
 		id: 'tracker-triggers',
-		route: '/settings/trackers',
+		route: '/trackers',
 		scenario: 'patient',
 		arrange: sensorTrackerWithThresholds,
 		prepare: (page) => centreInTrackerEditor(page, 'tracker-triggers'),
@@ -932,7 +932,7 @@ export const definitions: ScreenshotDefinition[] = [
 	},
 	{
 		id: 'tracker-thresholds',
-		route: '/settings/trackers',
+		route: '/trackers',
 		scenario: 'patient',
 		arrange: sensorTrackerWithThresholds,
 		prepare: (page) => centreInTrackerEditor(page, 'tracker-thresholds'),
@@ -941,7 +941,7 @@ export const definitions: ScreenshotDefinition[] = [
 	},
 	{
 		id: 'tracker-complete-dialog',
-		route: '/settings/trackers',
+		route: '/trackers',
 		scenario: 'patient',
 		prepare: async (page) => {
 			await openWith(page.getByTestId('tracker-complete').first(), page.getByTestId('tracker-completion-dialog'));

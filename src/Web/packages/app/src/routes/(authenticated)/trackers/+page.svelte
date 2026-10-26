@@ -55,7 +55,7 @@
   } from "$api";
 
   // Auth state from the server-resolved session. This route sits behind the
-  // authenticated + settings layout guards, so page.data.user is populated for
+  // authenticated layout and its own server guard, so page.data.user is populated for
   // every visitor. The client auth store is unauthenticated until its async
   // session load resolves, so gating actions on it bounces fast clicks to login.
   const isAuthenticated = $derived(!!page.data.user);
@@ -434,7 +434,7 @@
 </script>
 
 <svelte:head>
-  <title>Notifications & trackers - Settings - Nocturne</title>
+  <title>Trackers - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
@@ -444,9 +444,7 @@
       <Timer class="h-6 w-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">
-        Notifications & trackers
-      </h1>
+      <h1 class="text-2xl font-bold tracking-tight">Trackers</h1>
       <p class="text-muted-foreground">
         Track consumables, appointments, and reminders
       </p>

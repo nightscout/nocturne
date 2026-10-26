@@ -287,7 +287,7 @@
 			{:else}
 				<p class="text-xs text-muted-foreground">
 					Discord OAuth2 is not configured on this instance. Ask the administrator to add the
-					Application ID and Client Secret under Settings &gt; Admin &gt; Integrations. The administrator can also set <code>DISCORD_APPLICATION_ID</code> and <code>DISCORD_CLIENT_SECRET</code>. Or run <code>/connect</code> directly from Discord.
+					Application ID and Client Secret under Platform &gt; Administration &gt; Integrations. The administrator can also set <code>DISCORD_APPLICATION_ID</code> and <code>DISCORD_CLIENT_SECRET</code>. Or run <code>/connect</code> directly from Discord.
 				</p>
 			{/if}
 		</Card.Footer>

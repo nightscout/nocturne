@@ -236,7 +236,7 @@ public partial class TenantService : ITenantService
         var settings = await context.Tenants
             .AsNoTracking()
             .Where(t => t.Id == id)
-            .Select(t => new TenantSettingsDto(t.AllowPublicDocs))
+            .Select(t => new TenantSettingsDto(t.AllowPublicDocs, t.Slug, t.DisplayName, t.SysCreatedAt))
             .FirstOrDefaultAsync(ct);
 
         return settings ?? throw new KeyNotFoundException($"Tenant {id} not found");
@@ -256,7 +256,25 @@ public partial class TenantService : ITenantService
         // the opt-in.
         ScalarAuthProvider.EvictTenant(_cache, tenant.Slug);
 
-        return new TenantSettingsDto(tenant.AllowPublicDocs);
+        return ToSettingsDto(tenant);
+    }
+
+    public async Task<TenantSettingsDto> SetDisplayNameAsync(
+        Guid id, string displayName, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreatePlatformAsync(ct);
+        var tenant = await context.Tenants.FindAsync([id], ct)
+            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+
+        tenant.DisplayName = displayName;
+        await context.SaveChangesAsync(ct);
+
+        // Both the host and the share-link resolutions cache a TenantContext, which carries the name.
+        TenantResolutionMiddleware.EvictTenant(_cache, tenant.Slug);
+        if (tenant.ShareToken is { } shareTokenHash)
+            ShareTokenCacheService.EvictByHash(_cache, shareTokenHash);
+
+        return ToSettingsDto(tenant);
     }
 
     public async Task<PatientRelationship?> GetPatientRelationshipAsync(Guid id, CancellationToken ct = default)
@@ -677,6 +695,9 @@ public partial class TenantService : ITenantService
 
     private static TenantDto ToDto(TenantEntity t) =>
         new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt);
+
+    private static TenantSettingsDto ToSettingsDto(TenantEntity t) =>
+        new(t.AllowPublicDocs, t.Slug, t.DisplayName, t.SysCreatedAt);
 
     private static TenantCreatedDto ToCreatedDto(TenantEntity t) =>
         new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt);

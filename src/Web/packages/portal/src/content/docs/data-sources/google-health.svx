@@ -16,7 +16,7 @@ using the server only click **Connect**.
 
 1. In the Google Health app on your phone, make sure the data you want is there and linked to
    your Google account.
-2. In Nocturne, open **Settings > Connectors & Apps** and choose **Google Health**.
+2. In Nocturne, open **Site settings > Connectors & Apps** and choose **Google Health**.
 3. Click **Connect Google Health**, pick your Google account, and allow the data Nocturne asks
    to read.
 4. Back in Nocturne, click **Refresh inventory** to see what Google has, choose the data types to

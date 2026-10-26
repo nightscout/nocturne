@@ -56,6 +56,20 @@ vi.mock("$api/generated/migrations.generated.remote", () => {
   };
 });
 
+const transition = vi.hoisted(() => ({
+  status: undefined as object | undefined,
+}));
+
+vi.mock("$api/generated/nightscoutTransitions.generated.remote", () => ({
+  getTransitionStatus: () => ({
+    get current() {
+      return transition.status;
+    },
+    loading: false,
+    error: undefined,
+  }),
+}));
+
 import MigrationPage from "./+page.svelte";
 
 const entry = (overrides: Partial<MigrationJobInfo>): MigrationJobInfo =>
@@ -266,5 +280,28 @@ describe("settings/migration running job", () => {
     render(MigrationPage, {});
 
     await expect.element(page.getByText("Failed to read migration status")).toBeVisible();
+  });
+});
+
+describe("settings/migration status", () => {
+  beforeEach(() => {
+    history = [];
+    polled = null;
+    transition.status = {
+      migration: { isComplete: true, recordCounts: { entries: 1200 } },
+      writeBack: { circuitBreakerOpen: false, requestsLast24h: 3 },
+      recommendation: { status: "almost-ready", stabilityDaysRemaining: 2, blockers: [] },
+    };
+  });
+
+  it("shows disconnect readiness on the Status tab", async () => {
+    render(MigrationPage, {});
+
+    const tab = page.getByRole("tab", { name: /Status/ });
+    await expect.element(tab).toBeVisible();
+    await tab.click();
+
+    await expect.element(page.getByText("Almost ready")).toBeVisible();
+    await expect.element(page.getByText("entries", { exact: true })).toBeVisible();
   });
 });

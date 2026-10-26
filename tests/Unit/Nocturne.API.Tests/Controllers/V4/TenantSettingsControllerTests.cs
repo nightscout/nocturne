@@ -41,12 +41,12 @@ public class TenantSettingsControllerTests
     {
         var (controller, tenants) = Build(Scope.TenantSettings);
         tenants.Setup(t => t.SetAllowPublicDocsAsync(TenantId, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TenantSettingsDto(true));
+            .ReturnsAsync(Settings(true));
 
         var result = await controller.SetPublicDocs(new SetPublicDocsRequest(true), CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>()
-            .Which.Value.Should().BeEquivalentTo(new TenantSettingsDto(true));
+            .Which.Value.Should().BeEquivalentTo(Settings(true));
         tenants.Verify(t => t.SetAllowPublicDocsAsync(TenantId, true, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -55,7 +55,7 @@ public class TenantSettingsControllerTests
     {
         var (controller, tenants) = Build(Scope.TenantSettings);
         tenants.Setup(t => t.SetAllowPublicDocsAsync(TenantId, false, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TenantSettingsDto(false));
+            .ReturnsAsync(Settings(false));
 
         await controller.SetPublicDocs(new SetPublicDocsRequest(false), CancellationToken.None);
 
@@ -79,12 +79,54 @@ public class TenantSettingsControllerTests
     {
         var (controller, tenants) = Build(Scope.TenantSettings);
         tenants.Setup(t => t.GetSettingsAsync(TenantId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TenantSettingsDto(true));
+            .ReturnsAsync(Settings(true));
 
         var result = await controller.GetTenantSettings(CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>()
-            .Which.Value.Should().BeEquivalentTo(new TenantSettingsDto(true));
+            .Which.Value.Should().BeEquivalentTo(Settings(true));
+    }
+
+    [Fact]
+    public async Task SetDisplayName_RefusesAMemberWithoutTenantSettings()
+    {
+        var (controller, tenants) = Build(Scope.IdentityRead);
+
+        var result = await controller.SetDisplayName(
+            new SetDisplayNameRequest { DisplayName = "Sam's site" }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ForbidResult>();
+        tenants.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SetDisplayName_RejectsABlankName(string name)
+    {
+        var (controller, tenants) = Build(Scope.TenantSettings);
+
+        var result = await controller.SetDisplayName(
+            new SetDisplayNameRequest { DisplayName = name }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        tenants.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task SetDisplayName_RenamesTheResolvedTenantWithTheTrimmedName()
+    {
+        var (controller, tenants) = Build(Scope.TenantSettings);
+        var renamed = Settings(false) with { DisplayName = "Sam's site" };
+        tenants.Setup(t => t.SetDisplayNameAsync(TenantId, "Sam's site", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(renamed);
+
+        var result = await controller.SetDisplayName(
+            new SetDisplayNameRequest { DisplayName = "  Sam's site " }, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(renamed);
+        tenants.Verify(t => t.SetDisplayNameAsync(TenantId, "Sam's site", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -220,6 +262,9 @@ public class TenantSettingsControllerTests
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(saved);
     }
+
+    private static TenantSettingsDto Settings(bool allowPublicDocs) =>
+        new(allowPublicDocs, "sam", "Sam", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
     private static (TenantSettingsController, Mock<IUnitsAndTimezoneService>) BuildForUnits(params string[] grantedScopes)
     {

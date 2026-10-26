@@ -101,7 +101,11 @@ public sealed class ShareTokenCacheService : IShareTokenResolver
     /// Evicts the cached resolution for a stored token digest. Call on rotate or disable, passing
     /// the value held in <c>tenants.share_token</c>.
     /// </summary>
-    public void EvictByHash(string tokenHash) => _cache.Remove(CacheKey(tokenHash));
+    public void EvictByHash(string tokenHash) => EvictByHash(_cache, tokenHash);
+
+    /// <inheritdoc cref="EvictByHash(string)"/>
+    /// <remarks>For a writer that holds the shared cache but not this service.</remarks>
+    public static void EvictByHash(IMemoryCache cache, string tokenHash) => cache.Remove(CacheKey(tokenHash));
 
     private static string CacheKey(string tokenHash) => $"share-token:{tokenHash}";
 }

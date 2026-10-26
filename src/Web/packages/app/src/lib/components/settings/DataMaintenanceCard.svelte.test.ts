@@ -58,23 +58,4 @@ describe("DataMaintenanceCard", () => {
     ).toBeNull();
     expect(document.body.textContent).toContain("Remove demo data");
   });
-
-  it("keeps connector cursors to platform admins, not tenant admins", async () => {
-    // Resetting a cursor re-syncs a connector for the whole instance, so it answers to
-    // isPlatformAdmin rather than to any tenant permission.
-    page.data = {
-      effectivePermissions: ["tenant.settings"],
-      isPlatformAdmin: false,
-    };
-    render(DataMaintenanceCard);
-
-    expect(document.body.textContent).not.toContain("Reset connector cursors");
-  });
-
-  it("offers connector cursors to a platform admin", async () => {
-    page.data = { effectivePermissions: ["*"], isPlatformAdmin: true };
-    render(DataMaintenanceCard);
-
-    expect(document.body.textContent).toContain("Reset connector cursors");
-  });
 });

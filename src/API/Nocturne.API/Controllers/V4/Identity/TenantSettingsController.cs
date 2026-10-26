@@ -75,6 +75,25 @@ public class TenantSettingsController : ControllerBase
             _tenantAccessor.TenantId, request.Enabled, ct));
     }
 
+    [DenyDemoSubject]
+    [HttpPut("display-name")]
+    [RemoteCommand(Invalidates = ["GetTenantSettings"])]
+    [ProducesResponseType(typeof(TenantSettingsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<TenantSettingsDto>> SetDisplayName(
+        [FromBody] SetDisplayNameRequest request, CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.TenantSettings))
+            return Forbid();
+
+        var name = request.DisplayName.Trim();
+        if (name.Length == 0)
+            return Problem(detail: "The display name must not be blank.", statusCode: 400, title: "Bad Request");
+
+        return Ok(await _tenantService.SetDisplayNameAsync(_tenantAccessor.TenantId, name, ct));
+    }
+
     /// <summary>
     /// Who the tenant is for, as its onboarder answered, with the patient's preferred name.
     /// Owner-only: the answer describes the owner's own relationship to the patient.
@@ -193,6 +212,15 @@ public record SetPatientRelationshipRequest
 
     [MaxLength(256)]
     public string? PatientName { get; init; }
+}
+
+/// <remarks>Nominal for the same reason as <see cref="SetPatientRelationshipRequest"/>.</remarks>
+public record SetDisplayNameRequest
+{
+    /// <summary>Trimmed before it is stored; the 256 limit is the <c>tenants.display_name</c> column's.</summary>
+    [Required(AllowEmptyStrings = false)]
+    [MaxLength(256)]
+    public string DisplayName { get; init; } = "";
 }
 
 public record PatientRelationshipDto(PatientRelationship? Relationship, string? PatientName);

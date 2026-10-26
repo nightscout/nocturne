@@ -11,32 +11,13 @@
 	import Moon from '@lucide/svelte/icons/moon';
 	import Activity from '@lucide/svelte/icons/activity';
 	import AlertCircle from '@lucide/svelte/icons/circle-alert';
-	import Globe from '@lucide/svelte/icons/globe';
-	import Weight from '@lucide/svelte/icons/weight';
 	import SettingsPageSkeleton from '$lib/components/settings/SettingsPageSkeleton.svelte';
 	import DataMaintenanceCard from '$lib/components/settings/DataMaintenanceCard.svelte';
-	import SettingsLinkCard from '$lib/components/settings/SettingsLinkCard.svelte';
-	import type { SettingsLink } from '$lib/components/settings/settings-links';
 	import { toast } from 'svelte-sonner';
 
 	// Read via .current rather than an {#await} block: consuming a remote query
 	// through its thenable reads the hydration cache and throws
 	// hydratable_missing_but_required during hydration.
-	const historyLinks: SettingsLink[] = [
-		{
-			title: 'Timezone history',
-			description: "Where you lived and traveled, for correct timestamps.",
-			href: '/settings/timezone',
-			icon: Globe
-		},
-		{
-			title: 'Weight history',
-			description: 'Your recorded weights over time.',
-			href: '/settings/weight',
-			icon: Weight
-		}
-	];
-
 	const settingsQuery = getUiSettings();
 	const dataQuality = $derived(settingsQuery.current?.dataQuality);
 
@@ -210,11 +191,6 @@
 			</CardContent>
 		</Card>
 
-		<!-- Both live here because correct timestamps and weights are what the rest of this
-		     page's analysis is computed from. -->
-		{#each historyLinks as link (link.href)}
-			<SettingsLinkCard {link} />
-		{/each}
 	{/if}
 
 	<!-- Outside the branches above: these tools read no UI settings, so a

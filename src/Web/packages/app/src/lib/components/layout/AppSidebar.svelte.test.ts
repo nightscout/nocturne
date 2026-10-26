@@ -80,7 +80,7 @@ describe("AppSidebar", () => {
     await expect.element(link("Sign in")).toBeVisible();
     await expect.element(group("Reports")).not.toBeInTheDocument();
     await expect.element(link("Food")).not.toBeInTheDocument();
-    await expect.element(group("Settings")).not.toBeInTheDocument();
+    await expect.element(group("My settings")).not.toBeInTheDocument();
   });
 
   it("offers a public share its reports when the share grants them", async () => {
@@ -89,7 +89,7 @@ describe("AppSidebar", () => {
     render(Harness, {});
 
     await expect.element(group("Reports")).toBeVisible();
-    await expect.element(group("Settings")).not.toBeInTheDocument();
+    await expect.element(group("My settings")).not.toBeInTheDocument();
   });
 
   it("offers a member the surfaces they own", async () => {
@@ -97,7 +97,7 @@ describe("AppSidebar", () => {
 
     render(Harness, { user: MEMBER });
 
-    await expect.element(group("Settings")).toBeVisible();
+    await expect.element(group("My settings")).toBeVisible();
     await expect.element(link("Food")).toBeVisible();
     await expect.element(group("Reports")).toBeVisible();
   });

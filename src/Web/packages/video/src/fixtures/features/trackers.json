@@ -1,5 +1,5 @@
 {
- "route": "/settings/trackers",
+ "route": "/trackers",
  "params": {},
  "capturedAt": 1792830849654,
  "entries": [
