@@ -152,7 +152,7 @@ public class CompressionLowDetectionService : BackgroundService
                     DateOnly.FromDateTime(nowUtc.AddDays(-1)),
                     cancellationToken);
 
-                var night = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(nowUtc, userTimeZone)).AddDays(-1);
+                var night = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(nowUtc, userTimeZone));
                 while (ReadyAtUtc(night, userTimeZone, sleepSchedule) > nowUtc)
                     night = night.AddDays(-1);
 
@@ -538,9 +538,7 @@ public class CompressionLowDetectionService : BackgroundService
 
     internal static double TimeOfNightFraction(TimeSpan nadirLocalTime, int bedtimeHour, int wakeTimeHour)
     {
-        var windowHours = ((wakeTimeHour - bedtimeHour) % 24 + 24) % 24;
-        if (windowHours == 0)
-            windowHours = 24;
+        var windowHours = TimeZoneHelper.SleepSpanHours(bedtimeHour, wakeTimeHour);
 
         var hoursIntoWindow = ((nadirLocalTime.TotalHours - bedtimeHour) % 24 + 24) % 24;
         if (hoursIntoWindow >= windowHours)
