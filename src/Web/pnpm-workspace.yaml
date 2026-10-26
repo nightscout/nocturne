@@ -40,7 +40,7 @@ overrides:
   # therefore make every snippet-to-snippet assignment fail with "Two different types with this
   # name exist, but they are unrelated" — 20 such errors in glucose-chart's dialogs alone, and the
   # same trap for anything consuming these packages by path. One copy, one brand.
-  svelte: "5.55.5"
+  svelte: "5.57.3"
 
 packageExtensions:
   tiptap-extension-auto-joiner:
