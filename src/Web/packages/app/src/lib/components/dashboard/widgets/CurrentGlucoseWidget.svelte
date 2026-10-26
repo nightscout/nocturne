@@ -103,11 +103,12 @@
   {/if}
 {/snippet}
 
-<!-- Dropped when empty (a stale reading with no battery report), so no blank gap sits under the
+<!-- Held empty while the reading loads, as the placeholder holds it, since a fresh reading fills it;
+     dropped when empty (a stale reading with no battery report), so no blank gap sits under the
      tile. -->
 {#snippet details(battery: Awaited<typeof batteryStatusPromise> | undefined)}
   {@const uploader = battery?.min && Object.keys(battery.devices ?? {}).length > 0 ? battery : undefined}
-  {#if (!isLoading && !isStale) || uploader}
+  {#if isLoading || !isStale || uploader}
     <div class="flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       {#if !isLoading && !isStale}
         <p class="flex items-baseline gap-1.5 tabular-nums">

@@ -7,6 +7,7 @@ import { SHARE_UNAVAILABLE_PATH } from "#lib/share-host.js";
 import { toIsoString } from "#lib/utils/api-date.js";
 import { toTenantSwitcherTargets, type TenantSwitcherTarget } from "#lib/utils/tenant-host.js";
 import { autoLoginEndpoint, autoLoginRedirect } from "#lib/server/auto-login.js";
+import { PILL_ROWS_COOKIE, parsePillRows } from "#lib/components/status-pills/pill-rows.js";
 
 /** Permissions that grant read access to glucose data (mirrors API's CanRead + OAuth scopes). */
 const GLUCOSE_READ_PERMISSIONS = [
@@ -175,5 +176,6 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url, untrack, pa
     isDemo,
     nextResetAt,
     onboardingComplete,
+    pillRows: parsePillRows(cookies.get(PILL_ROWS_COOKIE)),
   };
 };

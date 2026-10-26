@@ -79,6 +79,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     limitTo24Hours: false,
     refusedAsDemoSubject: false,
     onboardingComplete: true,
+    pillRows: { desktop: 1, mobile: 1 },
     displayPreferences: [],
     displayLanguage: "en",
     serverPreferences: null,

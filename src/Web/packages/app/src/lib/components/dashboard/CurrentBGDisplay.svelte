@@ -113,9 +113,7 @@
   );
 
   // The desktop key predates the mobile rail, so rows stored before it still apply.
-  const tenantSlug = $derived(page.data.tenantSlug ?? "");
-  const desktopRowsKey = $derived(`nocturne:status-pill-rows:${tenantSlug}`);
-  const mobileRowsKey = $derived(`nocturne:status-pill-rows:mobile:${tenantSlug}`);
+  const pillRows = $derived(page.data.pillRows);
 
   // Tracker Completion Dialog State
   const trackerCompletionDialog = lazyComponent(
@@ -183,7 +181,8 @@
 
     <StatusRail
       items={railItems}
-      rowsKey={desktopRowsKey}
+      rail="desktop"
+      initialRows={pillRows?.desktop}
       onTrackerComplete={handleTrackerComplete}
       class="flex-1 @max-xl:order-last @max-xl:basis-full"
       testid="status-pills"
@@ -207,7 +206,8 @@
 
 <StatusRail
   items={railItems}
-  rowsKey={mobileRowsKey}
+  rail="mobile"
+  initialRows={pillRows?.mobile}
   onTrackerComplete={handleTrackerComplete}
   hideWhenEmpty
   class="mt-2 @md:hidden"

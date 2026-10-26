@@ -15,12 +15,11 @@
      text-2xl h-8). -->
 <WidgetCard title="Loading">
   {#if shape === "current-glucose"}
-    <!-- GlucoseValueIndicator's xl loading skeleton, inside an inline-flex root as the
-         indicator's is, so the line box keeps the same descent below it. -->
-    <div>
-      <div class="inline-flex w-full">
-        <div class="bg-muted h-28 flex-1 animate-pulse rounded-lg"></div>
-      </div>
+    <!-- GlucoseValueIndicator's xl loading skeleton, then the details row the widget holds while
+         its reading loads. -->
+    <div class="flex flex-col gap-3">
+      <div class="bg-muted h-28 animate-pulse rounded-lg"></div>
+      <div class="min-h-5"></div>
     </div>
   {:else if shape === "stat"}
     <div class="bg-muted h-8 w-20 animate-pulse rounded"></div>

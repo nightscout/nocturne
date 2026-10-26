@@ -117,10 +117,12 @@
 
 <!-- Horizontal layout with grid overlay on status text to prevent layout shift when syncing -->
 <!-- The xl tile sizes its text from this box, not the viewport: a dashboard cell is as narrow as a
-     third of a tablet, and inline-size containment lets it shrink below its own text. -->
+     third of a tablet, and inline-size containment lets it shrink below its own text. It fills its
+     row, so it is laid out as a block: on a line, its empty loading skeleton would sit on the
+     baseline and carry the line's descent below it, a few pixels the loaded value does not. -->
 <div
   data-slot="glucose-value-indicator"
-  class="inline-flex items-center gap-2 {size === 'xl' ? '@container w-full min-w-0' : ''} {className}"
+  class="items-center gap-2 {size === 'xl' ? 'flex @container w-full min-w-0' : 'inline-flex'} {className}"
 >
   {#if isLoading}
     <!-- Loading skeleton -->
