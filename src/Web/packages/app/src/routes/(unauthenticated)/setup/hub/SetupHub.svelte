@@ -139,7 +139,7 @@
               helps, and mark the rest "not for me".
             </p>
           {:else}
-            <Skeleton class="h-4 w-64" />
+            <Skeleton class="h-4 w-64 max-w-full" />
           {/if}
         </div>
       </Card.Root>
