@@ -740,6 +740,8 @@ public static class ServiceRegistrationExtensions
         ).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
         {
             ConnectCallback = new PinnedConnector(OutboundAddressPolicy.NotLinkLocal).ConnectAsync,
+            // OidcConfigurationSource holds one client for the life of the process.
+            PooledConnectionLifetime = TimeSpan.FromMinutes(15),
         });
 
         services.AddSingleton<ClientAddressResolver>();

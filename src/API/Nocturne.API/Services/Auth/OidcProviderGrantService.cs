@@ -33,7 +33,15 @@ public class OidcProviderGrantService(
             return;
 
         identity.ProviderRefreshTokenEncrypted = _protector.Protect(Encoding.UTF8.GetBytes(refreshToken));
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            // The sign-in has succeeded by now; an unkept token only means the grant is left to expire.
+            logger.LogWarning(ex, "Could not keep the refresh token provider {Provider} issued", provider.Name);
+        }
     }
 
     /// <inheritdoc />
@@ -73,7 +81,10 @@ public class OidcProviderGrantService(
             {
                 await RevokeOneAsync(grant, ct);
             }
-            catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException)
+            // The identity is already gone, so nothing signing or sending can throw may fail the caller.
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
+                or InvalidOperationException or ArgumentException or NotSupportedException
+                or CryptographicException or Microsoft.IdentityModel.Tokens.SecurityTokenException)
             {
                 logger.LogWarning(ex, "Could not revoke the grant provider {ProviderId} holds", grant.ProviderId);
             }

@@ -30,6 +30,7 @@ public class AppleNotificationServiceTests : IDisposable
     private readonly RsaSecurityKey _appleKey = new(RSA.Create(2048)) { KeyId = "apple-key" };
     private readonly Mock<IFirstPartyTokenRepository> _sessions = new();
     private readonly Mock<IOidcProviderService> _providers = new();
+    private readonly Mock<IOidcConfigurationSource> _configurations = new();
     private readonly AppleNotificationService _service;
     private readonly Guid _subjectId = Guid.CreateVersion7();
     private readonly Guid _providerId = Guid.NewGuid();
@@ -51,11 +52,10 @@ public class AppleNotificationServiceTests : IDisposable
 
         var configuration = new OpenIdConnectConfiguration { Issuer = Issuer };
         configuration.SigningKeys.Add(_appleKey);
-        var configurations = new Mock<IOidcConfigurationSource>();
-        configurations.Setup(c => c.GetAsync(Issuer, It.IsAny<CancellationToken>())).ReturnsAsync(configuration);
+        _configurations.Setup(c => c.GetAsync(Issuer, It.IsAny<CancellationToken>())).ReturnsAsync(configuration);
 
         _service = new AppleNotificationService(
-            _providers.Object, configurations.Object, _db.AsFactory(), _sessions.Object,
+            _providers.Object, _configurations.Object, _db.AsFactory(), _sessions.Object,
             Mock.Of<IAuthAuditService>(), NullLogger<AppleNotificationService>.Instance);
 
         _db.Subjects.Add(new SubjectEntity { Id = _subjectId, Name = "ada", IsActive = true });
@@ -77,7 +77,7 @@ public class AppleNotificationServiceTests : IDisposable
 
     private string Notification(
         string type, string? email = null, string audience = ServicesId, SecurityKey? key = null,
-        bool eventsAsString = true, string sub = AppleSub)
+        bool eventsAsString = true, string sub = AppleSub, DateTime? expires = null)
     {
         var events = new Dictionary<string, object> { ["type"] = type, ["sub"] = sub, ["event_time"] = 1700000000000 };
         if (email is not null)
@@ -87,7 +87,8 @@ public class AppleNotificationServiceTests : IDisposable
         {
             Issuer = Issuer,
             Audience = audience,
-            IssuedAt = DateTime.UtcNow,
+            IssuedAt = expires is null ? DateTime.UtcNow : expires.Value.AddMinutes(-5),
+            Expires = expires,
             Claims = new Dictionary<string, object>
             {
                 ["jti"] = Guid.NewGuid().ToString(),
@@ -186,5 +187,43 @@ public class AppleNotificationServiceTests : IDisposable
         _providers.Setup(p => p.GetEnabledProvidersAsync()).ReturnsAsync([]);
 
         (await _service.HandleAsync(Notification("account-deleted"))).Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task AnExpiredNotification_IsRefused()
+    {
+        (await _service.HandleAsync(Notification("account-deleted", expires: DateTime.UtcNow.AddHours(-1))))
+            .Should().BeFalse();
+
+        _db.SubjectOidcIdentities.Should().HaveCount(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task TheOlderAccountDeleteName_IsActedOn()
+    {
+        (await _service.HandleAsync(Notification("account-delete"))).Should().BeTrue();
+
+        _db.ChangeTracker.Clear();
+        _db.SubjectOidcIdentities.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ANewAppleKey_RefreshesTheKeysAndValidates()
+    {
+        var rotated = new RsaSecurityKey(RSA.Create(2048)) { KeyId = "rotated" };
+        var stale = new OpenIdConnectConfiguration { Issuer = Issuer };
+        stale.SigningKeys.Add(_appleKey);
+        var fresh = new OpenIdConnectConfiguration { Issuer = Issuer };
+        fresh.SigningKeys.Add(rotated);
+        _configurations.SetupSequence(c => c.GetAsync(Issuer, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(stale)
+            .ReturnsAsync(fresh);
+
+        (await _service.HandleAsync(Notification("consent-revoked", key: rotated))).Should().BeTrue();
+
+        _configurations.Verify(c => c.RequestRefresh(Issuer));
     }
 }

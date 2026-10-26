@@ -239,6 +239,42 @@ public class OidcAuthServiceAppleTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task LoginCallback_RefusesASetupState()
+    {
+        // Apple has one redirect URI for every flow, so only the intent tells them apart.
+        var request = await _service.GenerateSetupAuthorizationUrlAsync(ProviderId, Guid.NewGuid());
+        _tokenEndpoint.Respond(IdToken(request.Nonce!));
+
+        var result = await _service.HandleCallbackAsync("the-code", request.State, request.State);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("invalid_intent");
+        _subjects.Verify(s => s.FindOrCreateFromOidcAsync(
+            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<bool>(), It.IsAny<string?>(), It.IsAny<IEnumerable<string>?>()), Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task LinkCallback_PresentsTheAppleRedirectUri_AndKeepsTheRefreshToken()
+    {
+        var subjectId = Guid.NewGuid();
+        _subjects
+            .Setup(s => s.AttachOidcIdentityAsync(subjectId, ProviderId, "001234.apple-user", Issuer, It.IsAny<string?>()))
+            .ReturnsAsync((OidcLinkOutcome.Created, (Guid?)Guid.NewGuid()));
+        var request = await _service.GenerateLinkAuthorizationUrlAsync(ProviderId, subjectId);
+        _tokenEndpoint.Respond(IdToken(request.Nonce!), refreshToken: "apple-refresh");
+
+        var result = await _service.HandleLinkCallbackAsync("the-code", request.State, request.State, subjectId);
+
+        result.Success.Should().BeTrue();
+        _tokenEndpoint.Form!["redirect_uri"].Should().Be(AppleCallback);
+        _grants.Verify(g => g.KeepAsync(
+            It.Is<OidcProvider>(p => p.Id == ProviderId), "001234.apple-user", "apple-refresh", It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task Callback_IgnoresANameRelayedForAnotherSignIn()
     {
         var other = await _service.GenerateAuthorizationUrlAsync(ProviderId);
@@ -303,14 +339,18 @@ public class OidcAuthServiceAppleTests
     [Theory]
     [Trait("Category", "Unit")]
     [InlineData("escaped")]
+    [InlineData("escaped-crlf")]
     [InlineData("bare")]
     public void ClientSecret_ReadsAKeyFromAOneLineEnvironmentVariable(string form)
     {
         var pem = _key.ExportPkcs8PrivateKeyPem();
         var provider = AppleProvider();
-        provider.ClientSecret = form == "escaped"
-            ? pem.Replace("\n", "\\n")
-            : Convert.ToBase64String(_key.ExportPkcs8PrivateKey());
+        provider.ClientSecret = form switch
+        {
+            "escaped" => pem.Replace("\n", "\\n"),
+            "escaped-crlf" => pem.Replace("\n", "\\r\\n"),
+            _ => Convert.ToBase64String(_key.ExportPkcs8PrivateKey()),
+        };
 
         var act = () => AppleClientSecret.Create(provider, DateTimeOffset.UtcNow);
 

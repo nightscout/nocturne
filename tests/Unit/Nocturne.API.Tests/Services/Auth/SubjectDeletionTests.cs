@@ -165,4 +165,38 @@ public class SubjectDeletionTests : IDisposable
         _db.Dispose();
         GC.SuppressFinalize(this);
     }
+
+    [Fact]
+    public async Task Delete_RevokesTheGrantsItsIdentitiesHeld_AfterTheSubjectIsGone()
+    {
+        var grant = new HeldProviderGrant(Guid.NewGuid(), "apple-refresh");
+        var grants = new Mock<IOidcProviderGrantService>();
+        grants.Setup(g => g.CaptureAsync(_deletedId, null, It.IsAny<CancellationToken>())).ReturnsAsync([grant]);
+        var subjectGoneWhenRevoked = false;
+        grants.Setup(g => g.RevokeAsync(It.IsAny<IReadOnlyCollection<HeldProviderGrant>>(), It.IsAny<CancellationToken>()))
+            .Callback(() =>
+            {
+                using var check = _db.CreateContext();
+                subjectGoneWhenRevoked = !check.Subjects.Any(s => s.Id == _deletedId);
+            })
+            .Returns(Task.CompletedTask);
+
+        await using var dbContext = _db.CreateContext();
+        var deletion = new SubjectDeletion(
+            dbContext.AsFactory(),
+            new SubjectRepository(dbContext.AsFactory(), AccountLinkRoutes.Off),
+            new TenantMembershipRepository(dbContext.AsFactory(), AccountLinkRoutes.Off),
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            grants.Object,
+            Mock.Of<IAuthAuditService>(),
+            TimeProvider.System,
+            NullLogger<SubjectDeletion>.Instance);
+
+        (await deletion.DeleteAsync(_deletedId, evenLastOwner: false, CancellationToken.None)).Change
+            .Should().BeOfType<SubjectChange.Changed>();
+
+        grants.Verify(g => g.RevokeAsync(
+            It.Is<IReadOnlyCollection<HeldProviderGrant>>(c => c.Single() == grant), It.IsAny<CancellationToken>()));
+        subjectGoneWhenRevoked.Should().BeTrue();
+    }
 }
