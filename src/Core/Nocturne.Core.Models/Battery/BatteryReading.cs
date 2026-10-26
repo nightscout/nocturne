@@ -60,10 +60,10 @@ public class BatteryReading
     public string Display => GetDisplayValue();
 
     /// <summary>
-    /// Battery level category (25, 50, 75, 100) for icon display
+    /// Battery level category (0, 25, 50, 75, 100) for icon display
     /// </summary>
     [JsonPropertyName("level")]
-    public int Level => GetBatteryLevel();
+    public int Level => BatteryLevelBucket.Of(Battery);
 
     /// <summary>
     /// Notification level (none, warn, urgent) based on battery level
@@ -87,19 +87,5 @@ public class BatteryReading
         }
 
         return $"?%{chargeIndicator}";
-    }
-
-    private int GetBatteryLevel()
-    {
-        if (!Battery.HasValue)
-            return 0;
-
-        return Battery.Value switch
-        {
-            >= 95 => 100,
-            >= 55 => 75,
-            >= 30 => 50,
-            _ => 25,
-        };
     }
 }

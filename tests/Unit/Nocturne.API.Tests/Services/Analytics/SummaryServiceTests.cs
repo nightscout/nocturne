@@ -957,6 +957,23 @@ public class SummaryServiceTests
         result.Battery.Should().Be(85);
     }
 
+    [Fact]
+    public async Task ConstructStateAsync_LeavesBatteryNull_WhenUpbatHasNoLevel()
+    {
+        var properties = new Dictionary<string, object>
+        {
+            ["upbat"] = new Dictionary<string, object> { ["devices"] = new List<object>() },
+        };
+
+        _mockPropertiesService
+            .Setup(x => x.GetAllPropertiesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(properties);
+
+        var result = await _service.ConstructStateAsync(CancellationToken.None);
+
+        result.Battery.Should().BeNull();
+    }
+
     private Dictionary<string, object> CreateTestPropertiesWithCalibration()
     {
         return new Dictionary<string, object>

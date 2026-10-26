@@ -174,18 +174,10 @@ public class BatteryStatistics
         CurrentLevel.HasValue ? $"{CurrentLevel}%{(IsCharging ? "⚡" : "")}" : "?%";
 
     /// <summary>
-    /// Battery level category for icon display (25, 50, 75, 100)
+    /// Battery level category for icon display (0, 25, 50, 75, 100)
     /// </summary>
     [JsonPropertyName("level")]
-    public int Level =>
-        CurrentLevel switch
-        {
-            >= 95 => 100,
-            >= 55 => 75,
-            >= 30 => 50,
-            >= 1 => 25,
-            _ => 0,
-        };
+    public int Level => BatteryLevelBucket.Of(CurrentLevel);
 
     /// <summary>
     /// Notification status based on current level

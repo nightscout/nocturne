@@ -536,14 +536,23 @@ public class PropertiesService : IPropertiesService
             })
             .ToList();
 
-        properties["upbat"] = new Dictionary<string, object>
+        var upbat = new Dictionary<string, object> { ["devices"] = devices };
+
+        if (UpbatLevel(weakest) is { } level)
         {
-            ["level"] = weakest.Level,
-            ["display"] = $"{weakest.Battery}%",
-            ["displayLine"] = $"Battery: {weakest.Battery}%",
-            ["devices"] = devices,
-        };
+            upbat["level"] = level;
+            upbat["display"] = $"{weakest.Battery}%";
+            upbat["displayLine"] = $"Battery: {weakest.Battery}%";
+        }
+
+        properties["upbat"] = upbat;
     }
+
+    // Nightscout sets nothing for 0% without a voltage, and falls through to 25 for 0% with one.
+    private static int? UpbatLevel(BatteryReading reading) =>
+        reading.Battery != 0 ? reading.Level
+        : reading.Voltage is > 0 ? 25
+        : null;
 
     private static string DeviceKey(DeviceStatus status) =>
         string.IsNullOrEmpty(status.Device) ? "unknown" : status.Device;

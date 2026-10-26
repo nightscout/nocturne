@@ -667,7 +667,8 @@ public class AlexaService : IAlexaService
         return
             properties.TryGetValue("upbat", out var upbat)
             && upbat is Dictionary<string, object> battery
-            && battery["display"] is string display
+            && battery.TryGetValue("display", out var displayValue)
+            && displayValue is string display
             ? Translate("virtAsstUploaderBattery", request.Locale, display)
             : null;
     }

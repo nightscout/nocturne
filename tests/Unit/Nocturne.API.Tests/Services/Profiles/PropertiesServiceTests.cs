@@ -853,6 +853,64 @@ public class PropertiesServiceTests
     }
 
     [Fact]
+    public async Task GetAllPropertiesAsync_UpbatOmitsLevel_ForZeroPercentWithNoVoltage()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var ddata = CreateTestDData();
+        ddata.DeviceStatus = new List<DeviceStatus>
+        {
+            new DeviceStatus
+            {
+                Device = "phone-a",
+                Mills = now - 60_000,
+                Uploader = new UploaderStatus { Battery = 0 },
+            },
+        };
+
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ddata);
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        var upbat = Assert.IsType<Dictionary<string, object>>(result["upbat"]);
+        Assert.False(upbat.ContainsKey("level"));
+        Assert.False(upbat.ContainsKey("display"));
+        Assert.False(upbat.ContainsKey("displayLine"));
+    }
+
+    [Theory]
+    [InlineData(3.7, 25)]
+    [InlineData(3700.0, 25)]
+    [InlineData(0.0, null)]
+    public async Task GetAllPropertiesAsync_UpbatLevel_ForZeroPercentFollowsVoltage(double voltage, int? expectedLevel)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var ddata = CreateTestDData();
+        ddata.DeviceStatus = new List<DeviceStatus>
+        {
+            new DeviceStatus
+            {
+                Device = "phone-a",
+                Mills = now - 60_000,
+                Uploader = new UploaderStatus { Battery = 0, BatteryVoltage = voltage },
+            },
+        };
+
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ddata);
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        var upbat = Assert.IsType<Dictionary<string, object>>(result["upbat"]);
+        if (expectedLevel is { } level)
+            Assert.Equal(level, upbat["level"]);
+        else
+            Assert.False(upbat.ContainsKey("level"));
+    }
+
+    [Fact]
     public async Task GetAllPropertiesAsync_OmitsUpbat_WhenNoUploaderStatusWithinThirtyMinutes()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
