@@ -46,6 +46,7 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
             { href: "/docs/authentication/request-membership", label: "Request membership" },
             { href: "/docs/authentication/google", label: "Sign in with Google" },
             { href: "/docs/authentication/github", label: "Sign in with GitHub" },
+            { href: "/docs/authentication/apple", label: "Sign in with Apple" },
             { href: "/docs/authentication/oidc", label: "Generic OIDC" },
         ],
     },

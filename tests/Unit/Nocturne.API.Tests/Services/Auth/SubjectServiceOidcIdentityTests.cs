@@ -28,6 +28,7 @@ public class SubjectServiceOidcIdentityTests : IDisposable
             _db.AsFactory(),
             _audit.Object,
             Mock.Of<IRecoveryCodeService>(),
+            new NoProviderGrants(),
             NullLogger<SubjectService>.Instance
         );
     }

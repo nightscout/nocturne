@@ -44,8 +44,16 @@ public class SubjectServiceFactorRemovalPostgresTests(SubjectServiceFactorRemova
                 .Options);
     }
 
-    private static SubjectService CreateService(NocturneDbContext db) =>
-        new(db.AsFactory(), Mock.Of<IAuthAuditService>(), Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
+    private static SubjectService CreateService(NocturneDbContext db, IOidcProviderGrantService? grants = null) =>
+        new(db.AsFactory(), Mock.Of<IAuthAuditService>(), Mock.Of<IRecoveryCodeService>(), grants ?? new NoProviderGrants(),
+            NullLogger<SubjectService>.Instance);
+
+    private static Mock<IOidcProviderGrantService> GrantsHolding(Guid subjectId, Guid identityId, HeldProviderGrant grant)
+    {
+        var grants = new Mock<IOidcProviderGrantService>();
+        grants.Setup(g => g.CaptureAsync(subjectId, identityId, It.IsAny<CancellationToken>())).ReturnsAsync([grant]);
+        return grants;
+    }
 
     private async Task<Guid> SeedSubjectAsync()
     {
@@ -230,5 +238,35 @@ public class SubjectServiceFactorRemovalPostgresTests(SubjectServiceFactorRemova
 
         results.Should().BeEquivalentTo([FactorRemovalResult.Removed, FactorRemovalResult.LastPrimaryFactor]);
         (await CountFactorsAsync(subjectId)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RemovingAnIdentity_RevokesTheGrantItsProviderHolds()
+    {
+        var subjectId = await SeedSubjectAsync();
+        await AddPasskeyAsync(subjectId);
+        var identityId = await AddIdentityAsync(subjectId);
+        var grant = new HeldProviderGrant(Guid.NewGuid(), "apple-refresh");
+        var grants = GrantsHolding(subjectId, identityId, grant);
+        await using var db = database.CreateContext();
+
+        await CreateService(db, grants.Object).TryRemoveOidcIdentityAsync(subjectId, identityId);
+
+        grants.Verify(g => g.RevokeAsync(
+            It.Is<IReadOnlyCollection<HeldProviderGrant>>(c => c.Single() == grant), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task RefusingToRemoveAnIdentity_LeavesItsGrantAlone()
+    {
+        var subjectId = await SeedSubjectAsync();
+        var identityId = await AddIdentityAsync(subjectId);
+        var grants = GrantsHolding(subjectId, identityId, new HeldProviderGrant(Guid.NewGuid(), "apple-refresh"));
+        await using var db = database.CreateContext();
+
+        await CreateService(db, grants.Object).TryRemoveOidcIdentityAsync(subjectId, identityId);
+
+        grants.Verify(g => g.RevokeAsync(
+            It.IsAny<IReadOnlyCollection<HeldProviderGrant>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

@@ -6,6 +6,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import { Textarea } from "$lib/components/ui/textarea";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -16,6 +17,15 @@
   import { describeSubmitError } from "$lib/forms/submit-error";
 
   const OIDC_SCOPES = "openid profile email";
+
+  // Apple has one issuer and names its own scopes; the Apple logo on a black button is what its
+  // sign-in button guidelines ask for.
+  const APPLE_PRESET = {
+    issuerUrl: "https://appleid.apple.com",
+    scopes: "openid name email",
+    icon: "apple",
+    buttonColor: "#000000",
+  };
 
   // GitHub is just one OAuth2 provider, expressed purely as data: the endpoints it would advertise
   // via discovery if it spoke OIDC, plus how to read identity from its user API. Other OAuth2
@@ -74,6 +84,11 @@
   let oauth2UserInfoEndpoint = $state("");
   let oauth2UserInfoEmailEndpoint = $state("");
   let oauth2ClaimMappings = $state<Record<string, string>>({});
+
+  // Apple-only: the values the client secret is signed with.
+  let appleTeamId = $state("");
+  let appleKeyId = $state("");
+  let applePrimaryAppId = $state("");
   let providerIcon = $state("");
   let providerButtonColor = $state("");
   let providerDisplayOrder = $state(0);
@@ -103,6 +118,9 @@
     oauth2UserInfoEndpoint = "";
     oauth2UserInfoEmailEndpoint = "";
     oauth2ClaimMappings = {};
+    appleTeamId = "";
+    appleKeyId = "";
+    applePrimaryAppId = "";
     providerDialogError = null;
     testResult = null;
   }
@@ -115,17 +133,45 @@
   }
 
   const isOAuth2 = $derived(providerType === OidcProviderType.OAuth2);
+  const isApple = $derived(providerType === OidcProviderType.Apple);
+  const appleSettingsMissing = $derived(
+    isApple && (!appleTeamId.trim() || !appleKeyId.trim() || !applePrimaryAppId.trim()),
+  );
+
+  const typeLabel = $derived(
+    isApple ? "Sign in with Apple" : isOAuth2 ? "OAuth 2.0" : "OpenID Connect",
+  );
 
   // Switching protocol clears the OIDC default scopes when moving to OAuth2 (which has no universal
   // default) and restores them when moving back. Only while creating, so editing keeps customizations.
   function onProviderTypeChange(value: OidcProviderType) {
+    const wasApple = providerType === OidcProviderType.Apple;
     providerType = value;
     if (editingProvider) return;
+    if (value === OidcProviderType.Apple) {
+      applyApplePreset();
+      return;
+    }
+    if (wasApple) {
+      if (providerIssuerUrl === APPLE_PRESET.issuerUrl) providerIssuerUrl = "";
+      if (providerScopes === APPLE_PRESET.scopes) providerScopes = OIDC_SCOPES;
+      if (providerIcon === APPLE_PRESET.icon) providerIcon = "";
+      if (providerButtonColor === APPLE_PRESET.buttonColor) providerButtonColor = "";
+      if (providerName === "Apple") providerName = "";
+    }
     if (value === OidcProviderType.OAuth2 && providerScopes === OIDC_SCOPES) {
       providerScopes = "";
     } else if (value === OidcProviderType.Oidc && providerScopes.trim() === "") {
       providerScopes = OIDC_SCOPES;
     }
+  }
+
+  function applyApplePreset() {
+    providerIssuerUrl = APPLE_PRESET.issuerUrl;
+    providerScopes = APPLE_PRESET.scopes;
+    providerIcon = APPLE_PRESET.icon;
+    providerButtonColor ||= APPLE_PRESET.buttonColor;
+    if (!providerName) providerName = "Apple";
   }
 
   // Quick-fill the OAuth2 fields for GitHub. Pure data — the backend treats this like any OAuth2 provider.
@@ -190,6 +236,13 @@
               claimMappings: oauth2ClaimMappings,
             }
           : undefined,
+        apple: isApple
+          ? {
+              teamId: appleTeamId.trim(),
+              keyId: appleKeyId.trim(),
+              primaryAppId: applePrimaryAppId.trim(),
+            }
+          : undefined,
       };
 
       await onSave(providerData);
@@ -225,6 +278,9 @@
       oauth2UserInfoEndpoint = editingProvider.oAuth2?.userInfoEndpoint ?? "";
       oauth2UserInfoEmailEndpoint = editingProvider.oAuth2?.userInfoEmailEndpoint ?? "";
       oauth2ClaimMappings = editingProvider.oAuth2?.claimMappings ?? {};
+      appleTeamId = editingProvider.apple?.teamId ?? "";
+      appleKeyId = editingProvider.apple?.keyId ?? "";
+      applePrimaryAppId = editingProvider.apple?.primaryAppId ?? "";
       providerDialogError = null;
       testResult = null;
     } else if (open && !editingProvider) {
@@ -275,14 +331,35 @@
           }}
         >
           <Select.Trigger id="provider-type">
-            {isOAuth2 ? "OAuth 2.0" : "OpenID Connect"}
+            {typeLabel}
           </Select.Trigger>
           <Select.Content>
             <Select.Item value={OidcProviderType.Oidc} label="OpenID Connect" />
             <Select.Item value={OidcProviderType.OAuth2} label="OAuth 2.0" />
+            <Select.Item value={OidcProviderType.Apple} label="Sign in with Apple" />
           </Select.Content>
         </Select.Root>
       </div>
+
+      {#if isApple}
+        <Alert.Root>
+          <Globe class="h-4 w-4" />
+          <Alert.Description>
+            <p>In your Apple Developer account, add these URLs:</p>
+            <ul class="list-disc list-inside mt-1">
+              <li>
+                On the Services ID, the Return URL:
+                <code>{`{your-domain}`}/api/auth/oidc/apple/callback</code>
+              </li>
+              <li>
+                On the primary App ID, the server-to-server notification endpoint:
+                <code>{`{your-domain}`}/api/auth/oidc/apple/notifications</code>
+              </li>
+            </ul>
+            <p class="mt-1">Apple accepts only HTTPS domains. It does not accept localhost.</p>
+          </Alert.Description>
+        </Alert.Root>
+      {/if}
 
       {#if isOAuth2}
         <Alert.Root>
@@ -335,19 +412,63 @@
       {/if}
 
       <div class="space-y-2">
-        <Label for="provider-client-id">Client ID</Label>
-        <Input id="provider-client-id" bind:value={providerClientId} />
-      </div>
-
-      <div class="space-y-2">
-        <Label for="provider-client-secret">Client secret</Label>
+        <Label for="provider-client-id">{isApple ? "Services ID" : "Client ID"}</Label>
         <Input
-          id="provider-client-secret"
-          type="password"
-          bind:value={providerClientSecret}
-          placeholder={editingProvider ? "Leave blank to keep existing" : ""}
+          id="provider-client-id"
+          bind:value={providerClientId}
+          placeholder={isApple ? "com.example.signin" : ""}
         />
       </div>
+
+      {#if isApple}
+        <div class="space-y-2">
+          <Label for="provider-apple-team-id">Team ID</Label>
+          <Input id="provider-apple-team-id" bind:value={appleTeamId} placeholder="A1B2C3D4E5" />
+        </div>
+        <div class="space-y-2">
+          <Label for="provider-apple-key-id">Key ID</Label>
+          <Input id="provider-apple-key-id" bind:value={appleKeyId} placeholder="F6G7H8I9J0" />
+          <p class="text-xs text-muted-foreground">
+            The ID of the Sign in with Apple private key.
+          </p>
+        </div>
+        <div class="space-y-2">
+          <Label for="provider-apple-app-id">Primary App ID</Label>
+          <Input
+            id="provider-apple-app-id"
+            bind:value={applePrimaryAppId}
+            placeholder="com.example.app"
+          />
+          <p class="text-xs text-muted-foreground">
+            The bundle ID of the App ID that has the notification endpoint. Apple sends
+            notifications to this ID.
+          </p>
+        </div>
+        <div class="space-y-2">
+          <Label for="provider-client-secret">Private key</Label>
+          <Textarea
+            id="provider-client-secret"
+            bind:value={providerClientSecret}
+            rows={5}
+            placeholder={editingProvider
+              ? "Leave blank to keep existing"
+              : "-----BEGIN PRIVATE KEY-----"}
+          />
+          <p class="text-xs text-muted-foreground">
+            Paste all of the .p8 file that you downloaded from Apple.
+          </p>
+        </div>
+      {:else}
+        <div class="space-y-2">
+          <Label for="provider-client-secret">Client secret</Label>
+          <Input
+            id="provider-client-secret"
+            type="password"
+            bind:value={providerClientSecret}
+            placeholder={editingProvider ? "Leave blank to keep existing" : ""}
+          />
+        </div>
+      {/if}
 
       <div class="space-y-2">
         <Label for="provider-scopes">Scopes</Label>
@@ -451,7 +572,7 @@
       <Button variant="outline" onclick={handleCancel}>
         Cancel
       </Button>
-      <Button onclick={handleSave} disabled={providerSaving}>
+      <Button onclick={handleSave} disabled={providerSaving || appleSettingsMissing}>
         {#if providerSaving}
           <Loader2 class="h-4 w-4 animate-spin" />
         {/if}

@@ -129,7 +129,7 @@ public class SubjectServiceDeleteTests : IDisposable
             new AuditContext(),
             NullLogger<AuthAuditService>.Instance);
         var service = new SubjectService(
-            dbContext.AsFactory(), audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
+            dbContext.AsFactory(), audit, Mock.Of<IRecoveryCodeService>(), new NoProviderGrants(), NullLogger<SubjectService>.Instance);
 
         (await service.DeleteSubjectAsync(_deletedId)).Should().BeTrue();
     }
@@ -155,5 +155,32 @@ public class SubjectServiceDeleteTests : IDisposable
     {
         _db.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public async Task Delete_RevokesTheGrantsItsIdentitiesHeld_AfterTheSubjectIsGone()
+    {
+        var grant = new HeldProviderGrant(Guid.NewGuid(), "apple-refresh");
+        var grants = new Mock<IOidcProviderGrantService>();
+        grants.Setup(g => g.CaptureAsync(_deletedId, null, It.IsAny<CancellationToken>())).ReturnsAsync([grant]);
+        var subjectGoneWhenRevoked = false;
+        grants.Setup(g => g.RevokeAsync(It.IsAny<IReadOnlyCollection<HeldProviderGrant>>(), It.IsAny<CancellationToken>()))
+            .Callback(() =>
+            {
+                using var check = _db.CreateContext();
+                subjectGoneWhenRevoked = !check.Subjects.Any(s => s.Id == _deletedId);
+            })
+            .Returns(Task.CompletedTask);
+
+        await using var dbContext = _db.CreateContext();
+        var service = new SubjectService(
+            dbContext.AsFactory(), Mock.Of<IAuthAuditService>(), Mock.Of<IRecoveryCodeService>(), grants.Object,
+            NullLogger<SubjectService>.Instance);
+
+        (await service.DeleteSubjectAsync(_deletedId)).Should().BeTrue();
+
+        grants.Verify(g => g.RevokeAsync(
+            It.Is<IReadOnlyCollection<HeldProviderGrant>>(c => c.Single() == grant), It.IsAny<CancellationToken>()));
+        subjectGoneWhenRevoked.Should().BeTrue();
     }
 }

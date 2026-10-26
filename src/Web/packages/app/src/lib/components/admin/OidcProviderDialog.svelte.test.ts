@@ -2,9 +2,10 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import OidcProviderDialog from "./OidcProviderDialog.svelte";
-import type {
-	OidcProviderResponse,
-	TenantRoleDto,
+import {
+	OidcProviderType,
+	type OidcProviderResponse,
+	type TenantRoleDto,
 } from "$lib/api/generated/nocturne-api-client";
 
 function make_provider(
@@ -186,5 +187,63 @@ describe("OidcProviderDialog", () => {
 		await expect
 			.element(page.getByLabelText("Default roles"))
 			.toHaveValue("readable");
+	});
+
+	describe("Sign in with Apple", () => {
+		const apple = () =>
+			make_provider({
+				name: "Apple",
+				providerType: OidcProviderType.Apple,
+				issuerUrl: "https://appleid.apple.com",
+				clientId: "com.example.signin",
+				scopes: ["openid", "name", "email"],
+				icon: "apple",
+				buttonColor: "#000000",
+				apple: { teamId: "A1B2C3D4E5", keyId: "F6G7H8I9J0", primaryAppId: "com.example.app" },
+			});
+
+		it("asks for the Services ID, team, key and private key", async () => {
+			render(OidcProviderDialog, default_props({ open: true, editingProvider: apple() }));
+
+			await expect.element(page.getByLabelText("Services ID")).toHaveValue("com.example.signin");
+			await expect.element(page.getByLabelText("Team ID")).toHaveValue("A1B2C3D4E5");
+			await expect.element(page.getByLabelText("Key ID")).toHaveValue("F6G7H8I9J0");
+			await expect.element(page.getByLabelText("Private key")).toHaveValue("");
+			await expect.element(page.getByLabelText("Client secret")).not.toBeInTheDocument();
+		});
+
+		it("shows the URLs to register with Apple", async () => {
+			render(OidcProviderDialog, default_props({ open: true, editingProvider: apple() }));
+
+			await expect
+				.element(page.getByText("{your-domain}/api/auth/oidc/apple/callback"))
+				.toBeVisible();
+			await expect
+				.element(page.getByText("{your-domain}/api/auth/oidc/apple/notifications"))
+				.toBeVisible();
+		});
+
+		it("saves the team and key IDs with the provider", async () => {
+			const onSave = vi.fn(async (_data: Record<string, unknown>) => {});
+			render(OidcProviderDialog, default_props({ open: true, editingProvider: apple(), onSave }));
+
+			await page.getByLabelText("Key ID").fill("NEWKEY0001");
+			await page.getByRole("button", { name: "Save changes" }).click();
+
+			await expect.poll(() => onSave.mock.calls.length).toBe(1);
+			expect(onSave.mock.calls[0][0]).toMatchObject({
+				providerType: OidcProviderType.Apple,
+				apple: { teamId: "A1B2C3D4E5", keyId: "NEWKEY0001", primaryAppId: "com.example.app" },
+				oAuth2: undefined,
+			});
+		});
+
+		it("does not save without the Primary App ID", async () => {
+			render(OidcProviderDialog, default_props({ open: true, editingProvider: apple() }));
+
+			await page.getByLabelText("Primary App ID").fill("");
+
+			await expect.element(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+		});
 	});
 });

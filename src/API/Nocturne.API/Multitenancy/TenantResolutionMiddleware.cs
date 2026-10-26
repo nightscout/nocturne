@@ -183,6 +183,13 @@ public class TenantResolutionMiddleware
         // the same shape as the login/callback pair above.
         new TenantlessPath("/api/auth/oidc/link", HttpMethods.Get),
         new TenantlessPath("/api/auth/oidc/link/callback", HttpMethods.Get),
+        // Apple's one registered redirect URI, which is the apex. It only reads the state it posts
+        // and answers with a redirect to the flow's GET callback above, which then resolves the
+        // tenant as any callback does.
+        new TenantlessPath("/api/auth/oidc/apple/callback", HttpMethods.Post),
+        // Apple's server-to-server notifications, about an Apple user rather than a tenant. The
+        // identity and sessions they act on are subject-scoped.
+        new TenantlessPath("/api/auth/oidc/apple/notifications", HttpMethods.Post),
         // GET is [AllowAnonymous] and serves any subject's picture by id on every tenant host
         // already; it is admitted here because the page renders through it.
         "/api/v4/me/avatar",

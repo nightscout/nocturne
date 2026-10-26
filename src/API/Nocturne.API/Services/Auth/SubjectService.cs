@@ -25,6 +25,7 @@ public class SubjectService : ISubjectService
     private readonly INocturneDbContextFactory _contexts;
     private readonly IAuthAuditService _auditService;
     private readonly IRecoveryCodeService _recoveryCodeService;
+    private readonly IOidcProviderGrantService _providerGrants;
     private readonly ILogger<SubjectService> _logger;
 
     /// <summary>
@@ -32,17 +33,20 @@ public class SubjectService : ISubjectService
     /// </summary>
     /// <param name="auditService">Service for recording audit events on authentication actions.</param>
     /// <param name="recoveryCodeService">Service for counting the subject's unused recovery codes.</param>
+    /// <param name="providerGrants">Revokes the grants a provider holds for an identity that is removed.</param>
     /// <param name="logger">The logger instance.</param>
     public SubjectService(
         INocturneDbContextFactory contexts,
         IAuthAuditService auditService,
         IRecoveryCodeService recoveryCodeService,
+        IOidcProviderGrantService providerGrants,
         ILogger<SubjectService> logger
     )
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _auditService = auditService;
         _recoveryCodeService = recoveryCodeService;
+        _providerGrants = providerGrants;
         _logger = logger;
     }
 
@@ -278,6 +282,8 @@ public class SubjectService : ISubjectService
             return false;
         }
 
+        var providerGrants = await _providerGrants.CaptureAsync(subjectId);
+
         await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var tx = await db.Database.BeginTransactionAsync();
@@ -293,6 +299,8 @@ public class SubjectService : ISubjectService
         _logger.LogInformation("Deleted subject {SubjectId}", subjectId);
 
         await _auditService.LogAsync(AuthAuditEventType.SubjectDeleted, subjectId, success: true);
+
+        await _providerGrants.RevokeAsync(providerGrants);
 
         return true;
     }
@@ -642,12 +650,21 @@ public class SubjectService : ISubjectService
     }
 
     /// <inheritdoc />
-    public Task<FactorRemovalResult> TryRemoveOidcIdentityAsync(Guid subjectId, Guid identityId) =>
-        TryRemoveFactorAsync(
+    public async Task<FactorRemovalResult> TryRemoveOidcIdentityAsync(Guid subjectId, Guid identityId)
+    {
+        var providerGrants = await _providerGrants.CaptureAsync(subjectId, identityId);
+
+        var result = await TryRemoveFactorAsync(
             db => db.SubjectOidcIdentities.Where(x => x.Id == identityId && x.SubjectId == subjectId),
             async db => await db.PasskeyCredentials.CountAsync(p => p.SubjectId == subjectId)
                 + await db.WorkingOidcIdentities()
                     .CountAsync(i => i.SubjectId == subjectId && i.Id != identityId));
+
+        if (result == FactorRemovalResult.Removed)
+            await _providerGrants.RevokeAsync(providerGrants);
+
+        return result;
+    }
 
     /// <inheritdoc />
     public Task<FactorRemovalResult> TryRemovePasskeyCredentialAsync(Guid subjectId, Guid credentialId) =>

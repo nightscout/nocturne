@@ -1,0 +1,181 @@
+---
+title: Sign in with Apple
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import PlatformAdminNote from '$lib/components/docs/PlatformAdminNote.svelte';
+</script>
+
+# Sign in with Apple
+
+Let your users sign in to Nocturne with their Apple Account. This guide shows how to make a
+Services ID and a private key in your Apple Developer account, and how to add them to Nocturne.
+
+Sign in with Apple is not the same as other providers:
+
+- Apple does not use a fixed client secret. Nocturne signs a new one each time from your private key.
+- Apple sends the user back with a form POST to its own return URL,
+  `/api/auth/oidc/apple/callback`, not to the usual callback URL.
+- Apple sends the user's name only one time, on the first sign-in.
+- Users can hide their email. Apple then gives a relay address, for example
+  `abc123@privaterelay.appleid.com`.
+
+You must have a paid Apple Developer Program membership.
+
+<Callout type="warning" title="No localhost">
+
+  Apple accepts only HTTPS return URLs on a domain name. It does not accept
+  <code>localhost</code> or an IP address. To test on your computer, use a tunnel that gives
+  you a public HTTPS domain.
+
+</Callout>
+
+## 1. Get your Team ID
+
+1. Go to [developer.apple.com/account](https://developer.apple.com/account).
+2. Find the **Team ID** under **Membership details**. It has 10 characters.
+
+## 2. Make an App ID
+
+Apple groups a Services ID under a primary App ID. If you already have an App ID with Sign in
+with Apple, use it and go to step 3.
+
+1. Go to **Certificates, Identifiers & Profiles > Identifiers** and click **+**.
+2. Select **App IDs**, then **App**.
+3. Type a description and a bundle ID, for example `com.example.nocturne`.
+4. Under **Capabilities**, select **Sign in with Apple**.
+5. Click **Continue**, then **Register**.
+
+## 3. Make a Services ID
+
+The Services ID is the client ID that Nocturne gives to Apple.
+
+1. In **Identifiers**, click **+**, select **Services IDs** and click **Continue**.
+2. Type a description and an identifier, for example `com.example.nocturne.signin`.
+3. Click **Continue**, then **Register**.
+4. Open the new Services ID. Select **Sign in with Apple** and click **Configure**.
+5. Set **Primary App ID** to the App ID from step 2.
+6. Under **Domains and Subdomains**, add your Nocturne domain, for example `your-instance.com`.
+7. Under **Return URLs**, add:
+
+```
+https://your-instance.com/api/auth/oidc/apple/callback
+```
+
+8. Click **Next**, then **Done**, then **Save**.
+
+<Callout type="tip" title="One URL for all tenants">
+
+  Register only the apex domain. Nocturne sends each sign-in back to the tenant it started on,
+  so you do not register a URL for each tenant.
+
+</Callout>
+
+## 4. Make a private key
+
+1. Go to **Keys** and click **+**.
+2. Type a key name and select **Sign in with Apple**. Click **Configure** and select the App ID
+   from step 2.
+3. Click **Continue**, then **Register**.
+4. Write down the **Key ID**. It has 10 characters.
+5. Click **Download** to get the `.p8` file. You can download it only one time. Keep it safe.
+
+## 5. Add the server-to-server notification endpoint
+
+Apple tells Nocturne when a user stops using Sign in with Apple with your app, or deletes their
+Apple Account. Nocturne then ends that user's sessions.
+
+1. Go to **Identifiers** and open the App ID from step 2.
+2. Next to **Sign in with Apple**, click **Edit** (or **Configure**).
+3. Under **Server-to-Server Notification Endpoint**, type:
+
+```
+https://your-instance.com/api/auth/oidc/apple/notifications
+```
+
+4. Click **Save**.
+
+Apple addresses notifications to the App ID, not to the Services ID. Set **Primary App ID** in
+step 6. If you do not, Nocturne refuses the notifications.
+
+## 6. Add the provider in Nocturne
+
+### Option A: the admin UI
+
+<PlatformAdminNote />
+
+1. Sign in to your Nocturne instance as a platform admin.
+2. Go to **Settings > Administration** (`/settings/admin`) and open the **Identity Providers** tab.
+3. Click **Add Provider** and set **Type** to **Sign in with Apple**. Nocturne fills in the
+   issuer, scopes, icon and button color.
+4. Fill in:
+
+| Field | Value |
+|-------|-------|
+| **Name** | `Apple` |
+| **Services ID** | The identifier from step 3 |
+| **Team ID** | The Team ID from step 1 |
+| **Key ID** | The Key ID from step 4 |
+| **Primary App ID** | The bundle ID of the App ID from step 2 |
+| **Private key** | All of the `.p8` file from step 4, including the `BEGIN` and `END` lines |
+
+5. Click **Save**.
+
+### Option B: configuration
+
+```jsonc
+"Oidc": {
+  "Providers": [
+    {
+      "Name": "Apple",
+      "ProviderType": "Apple",
+      "IssuerUrl": "https://appleid.apple.com",
+      "ClientId": "com.example.nocturne.signin",
+      "Apple": {
+        "TeamId": "A1B2C3D4E5",
+        "KeyId": "F6G7H8I9J0",
+        "PrimaryAppId": "com.example.nocturne"
+      },
+      "Icon": "apple",
+      "ButtonColor": "#000000"
+    }
+  ]
+}
+```
+
+Put the contents of the `.p8` file in `ClientSecret`. Do not put it in `appsettings.json`:
+
+```bash
+# Local development (user-secrets)
+dotnet user-secrets set "Oidc:Providers:0:ClientSecret" "$(cat AuthKey_F6G7H8I9J0.p8)"
+
+# Production (environment variable)
+Oidc__Providers__0__ClientSecret="$(cat AuthKey_F6G7H8I9J0.p8)"
+```
+
+## 7. Test it
+
+1. Open your Nocturne login page in a private window.
+2. Click **Sign in with Apple**.
+3. Sign in with your Apple Account. Apple asks if it can share your name and email.
+4. Apple sends you back to Nocturne, and you are signed in.
+
+## When a user leaves
+
+- **A user removes Apple from their account in Nocturne:** Nocturne tells Apple to revoke its
+  grant. The next time the user signs in with Apple, Apple asks again for their name and email.
+- **A user's account is deleted:** Nocturne revokes the grant for each linked Apple Account.
+- **A user stops using Sign in with Apple with your app** (in their Apple Account settings):
+  Apple tells Nocturne, and Nocturne ends the user's sessions. The Apple Account stays linked,
+  so the user can sign in with Apple again.
+- **A user deletes their Apple Account:** Apple tells Nocturne. Nocturne removes the link to
+  that Apple Account and ends the user's sessions.
+
+<Callout type="info" title="Relay email">
+
+  To send email to a relay address, register your sending domain in your Apple Developer
+  account under **Services > Sign in with Apple for Email Communication**. If you do not,
+  Apple does not deliver the email.
+
+</Callout>
