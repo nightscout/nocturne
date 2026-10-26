@@ -36,7 +36,7 @@
     GuestLinkStatus,
   } from "$api/generated/nocturne-api-client";
   import { retainQuery } from "$lib/api/retain-query.svelte";
-  import { describeSubmitError } from "$lib/forms";
+  import { describeSubmitError, FormError } from "$lib/forms";
 
   let { onCreated }: { onCreated?: () => void } = $props();
 
@@ -71,6 +71,7 @@
   const chosenScopes = $derived(pickedScopes ?? scopeOptions?.defaults ?? []);
   let isCreating = $state(false);
   let createError = $state<string | null>(null);
+  let linkError = $state<string | null>(null);
   let createdCode = $state<string | null>(null);
   let createdUrl = $state<string | null>(null);
 
@@ -174,21 +175,36 @@
     }
   }
 
-  async function mutateLink(id: string, run: RemoteCommand<string, unknown>) {
+  async function mutateLink(
+    id: string,
+    run: RemoteCommand<string, unknown>,
+    failureMessage: string
+  ) {
     pendingIds = new Set([...pendingIds, id]);
+    linkError = null;
     try {
       await run(id).updates(getGuestLinks);
+    } catch (err) {
+      linkError = describeSubmitError(err, failureMessage);
     } finally {
       pendingIds = new Set([...pendingIds].filter((x) => x !== id));
     }
   }
 
   async function handleDismiss(id: string) {
-    await mutateLink(id, dismissGuestLink);
+    await mutateLink(
+      id,
+      dismissGuestLink,
+      "Failed to dismiss the link. Try again."
+    );
   }
 
   async function handleRevoke(id: string) {
-    await mutateLink(id, revokeGuestLink);
+    await mutateLink(
+      id,
+      revokeGuestLink,
+      "Failed to revoke the link. Try again."
+    );
   }
 
   let reissuingId = $state<string | null>(null);
@@ -199,7 +215,7 @@
    */
   async function handleReissue(link: GuestLinkInfo) {
     reissuingId = link.id!;
-    createError = null;
+    linkError = null;
     try {
       const result = await createGuestLink({
         label: link.label || "Untitled",
@@ -209,11 +225,10 @@
       createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
       showCreateForm = true;
     } catch (err) {
-      createError = describeSubmitError(
+      linkError = describeSubmitError(
         err,
         "Failed to create a new code. Active links are limited to 5 at a time."
       );
-      showCreateForm = true;
     } finally {
       reissuingId = null;
     }
@@ -426,6 +441,7 @@
       />
     {:else if allLinks.length > 0}
       <div class="space-y-2">
+        <FormError issues={linkError} focusOnShow />
         {#each guestLinks as link (link.id)}
           <div
             class={link.dismissedAt ? "opacity-50" : undefined}
