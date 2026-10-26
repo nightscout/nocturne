@@ -6,7 +6,7 @@
     import VerificationSteps from "$lib/components/docs/VerificationSteps.svelte";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
-    import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
+    import EnvFileGenerator from "$lib/components/docs/EnvFileGenerator.svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
     import Callout from "@nocturne/cms/components/Callout.svelte";
     import envExample from "$lib/release/docker-compose/default.env.example?raw";
@@ -14,6 +14,15 @@
     import bindDataCompose from "$lib/release/docker-compose/docker-compose.bind-data.yaml?raw";
 
     const hero = DOCS_HERO["installation/docker-compose"];
+
+    // @wc-ignore
+    const resetPasswords = [
+        "docker compose exec nocturne-postgres-server psql -U nocturne -d nocturne \\",
+        "  -c \"ALTER ROLE nocturne_migrator PASSWORD '<POSTGRES_MIGRATOR_PASSWORD>'\" \\",
+        "  -c \"ALTER ROLE nocturne_app PASSWORD '<POSTGRES_APP_PASSWORD>'\" \\",
+        "  -c \"ALTER ROLE nocturne_web PASSWORD '<POSTGRES_WEB_PASSWORD>'\"",
+        "docker compose up -d",
+    ].join("\n");
 </script>
 
 <div class="max-w-3xl">
@@ -64,7 +73,7 @@
         A second, optional override lets PostgreSQL store its data in a directory on
         the Docker host.
     </p>
-    <CodeBlock code={"mkdir nocturne && cd nocturne\ncurl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.yaml\ncurl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.bind-data.yaml\ncurl -L -o .env https://github.com/nightscout/nocturne/releases/latest/download/default.env.example"} class="mb-4" />
+    <CodeBlock code={"mkdir nocturne && cd nocturne\ncurl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.yaml\ncurl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.bind-data.yaml"} class="mb-4" />
 
     <details class="mb-8">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">View docker-compose.yaml</summary>
@@ -73,12 +82,15 @@
 
     <h2 data-install-step="2" class="text-2xl font-bold mt-8 mb-4">Step 2: Configure environment variables</h2>
     <p class="text-muted-foreground mb-4">
-        Edit <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code> and fill in your
-        values. The required fields come first and are left blank. Optional bot integrations are commented out.
-        Use the generator below for each password field and <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">INSTANCE_KEY</code>.
+        This page made the file below in your browser, with a new random value for each key and
+        password. The values do not leave your browser. Enter your domain, then download a copy
+        of the file. Then copy the file to <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code> in the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">nocturne</code> folder:
     </p>
-    <PasswordGenerator label="password" />
-    <CodeBlock code={envExample} class="mb-8" maxHeight="400px" />
+    <EnvFileGenerator template={envExample} />
+    <CodeBlock code="nano .env    # paste the file, then save it" class="mb-4" />
+    <p class="text-muted-foreground mb-8">
+        Optional bot integrations are commented out. To use one, remove the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">#</code> and add its value.
+    </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Optional: use a host directory for PostgreSQL</h2>
     <p class="text-muted-foreground mb-4">
@@ -269,6 +281,30 @@
         To keep yours, set <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">logging</code>
         on the services in a <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.override.yaml</code>. Compose reads that file only when you pass no <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code> (<a href="https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/" class="text-primary hover:underline">Docker docs</a>). With the bring-your-own-proxy command, also pass
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f docker-compose.override.yaml</code>.
+    </p>
+
+    <h2 class="text-2xl font-bold mt-8 mb-4">If you lose the .env file</h2>
+    <p class="text-muted-foreground mb-4">
+        Keep a copy of <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code> with your database backups. A database backup does not
+        contain these values.
+    </p>
+    <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-4">
+        <li>
+            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">INSTANCE_KEY</code>: you cannot get it back. Nocturne encrypts the connector
+            passwords and other secrets that it stores with this key. With a new key, Nocturne
+            cannot read them, and you must enter each one again. Your glucose data and your
+            accounts are not affected.
+        </li>
+        <li>
+            The database passwords: you can set new ones. Put new values in
+            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code>, then set the same values in the database. Inside its container,
+            PostgreSQL lets you connect without a password.
+        </li>
+    </ul>
+    <CodeBlock code={resetPasswords} class="mb-4" />
+    <p class="text-muted-foreground mb-8">
+        Replace each value in angle brackets with the value from your new <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code>.
+        If you changed <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">POSTGRES_USERNAME</code>, use that name in place of <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">nocturne</code>.
     </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Troubleshooting</h2>

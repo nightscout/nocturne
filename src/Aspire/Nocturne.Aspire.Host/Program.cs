@@ -113,6 +113,7 @@ class Program
                 defaultValue: ServiceNames.Defaults.PostgresUsername);
             var postgresPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresPassword,
+                new GenerateParameterDefault { MinLength = 32, Special = false },
                 secret: true
             ).WithPublishMetadata(
                 "PostgreSQL bootstrap password",
@@ -246,7 +247,13 @@ class Program
         // Secret parameters. AddParameter handles dashboard prompting and
         // env var override (Parameters__name) for free.
         // ------------------------------------------------------------------
-        var instanceKey = builder.AddParameter(ServiceNames.Parameters.InstanceKey, secret: true)
+        // Generated and kept in user secrets on first run; a value already set there wins. Publish
+        // leaves it blank in the .env template.
+        var instanceKey = builder
+            .AddParameter(
+                ServiceNames.Parameters.InstanceKey,
+                new GenerateParameterDefault { MinLength = 64, Special = false },
+                secret: true)
             .WithPublishMetadata(
                 "Instance key",
                 "Minimum 32 characters: used for JWT signing and service authentication");

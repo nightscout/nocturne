@@ -3,10 +3,11 @@
     import { resolve } from "$app/paths";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
-    import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
+    import EnvFileGenerator from "$lib/components/docs/EnvFileGenerator.svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
     import Callout from "@nocturne/cms/components/Callout.svelte";
     import { DOCS_HERO } from "$lib/data/docs-artwork";
+    import envExample from "$lib/release/portainer/default.env.example?raw";
 
     const hero = DOCS_HERO["installation/portainer"];
 
@@ -48,6 +49,14 @@
         <li>Ports <strong>80</strong> and <strong>443</strong> open to the internet for automatic TLS certificates.</li>
     </ul>
 
+    <h2 class="text-2xl font-bold mt-8 mb-4">Make your keys and passwords</h2>
+    <p class="text-muted-foreground mb-4">
+        This page made the file below in your browser, with a new random value for each key and
+        password. The values do not leave your browser. Enter your domain, then download a copy
+        of the file. Both options below use these values.
+    </p>
+    <EnvFileGenerator template={envExample} />
+
     <h2 class="text-2xl font-bold mt-8 mb-4">Option 1: App Template (recommended)</h2>
     <p class="text-muted-foreground mb-6">
         The Nocturne app template lets you deploy directly from Portainer's template gallery with
@@ -73,12 +82,8 @@
             Find <strong class="text-foreground">Nocturne</strong> in the list and select it.
         </li>
         <li>
-            Fill in the configuration form. Set a strong password for each PostgreSQL role and a
-            unique <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">INSTANCE_KEY</code>
-            (minimum 32 characters). Use the generator below for each secret field.
-        </li>
-        <li class="list-none -ml-5">
-            <PasswordGenerator label="password" />
+            Fill in the configuration form. Copy each value from the file that you made above into
+            the field with the same name.
         </li>
         <li>
             Select <strong class="text-foreground">Deploy the stack</strong>.
@@ -124,9 +129,7 @@
             into the editor.
         </li>
         <li>
-            Scroll to <strong class="text-foreground">Environment variables</strong>. Select <strong class="text-foreground">Advanced mode</strong>. Paste your values from
-            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env.example</code>
-            in <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">KEY=VALUE</code> format.
+            Scroll to <strong class="text-foreground">Environment variables</strong>. Select <strong class="text-foreground">Advanced mode</strong>. Paste the file that you made above.
         </li>
         <li>
             Select <strong class="text-foreground">Deploy the stack</strong>.
