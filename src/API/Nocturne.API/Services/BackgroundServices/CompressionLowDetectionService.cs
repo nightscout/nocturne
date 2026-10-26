@@ -60,6 +60,10 @@ public class CompressionLowDetectionService : BackgroundService
     internal const double RecoveryWeight = 0.30;
     internal const double SharpDropRateMgDlPerMin = 5.0;
     internal const double SleepWindowEdgeShare = 0.25;
+    internal const double InsulinPenaltyWeight = 0.4;
+    internal const double CarbPenaltyWeight = 0.2;
+    // A snack's worth of carbs on board: from here the penalty stays at its weight.
+    internal const double CarbPenaltyFullCobGrams = 30.0;
     private const int StartTrimMinutes = 5;
 
     /// <summary>
@@ -230,7 +234,8 @@ public class CompressionLowDetectionService : BackgroundService
     {
         var repository = scopedProvider.GetRequiredService<ICompressionLowRepository>();
         var entryService = scopedProvider.GetRequiredService<IEntryService>();
-        var treatmentService = scopedProvider.GetRequiredService<ITreatmentService>();
+        var iobCobReader = scopedProvider.GetRequiredService<IIobCobReader>();
+        var sensitivityResolver = scopedProvider.GetRequiredService<ISensitivityResolver>();
         var notificationService = scopedProvider.GetRequiredService<IInAppNotificationService>();
         var uiSettingsService = scopedProvider.GetRequiredService<IUISettingsService>();
         var tenantAccessor = scopedProvider.GetRequiredService<ITenantAccessor>();
@@ -286,12 +291,6 @@ public class CompressionLowDetectionService : BackgroundService
             return 0;
         }
 
-        // Get treatments for IOB context
-        var treatments = (await treatmentService.GetTreatmentsAsync(
-            find: $"{{\"mills\":{{\"$gte\":{windowStart},\"$lte\":{windowEnd}}}}}",
-            cancellationToken: cancellationToken))
-            .ToList();
-
         // Detect V-shape candidates
         var candidates = DetectVShapeCandidates(entries);
 
@@ -299,7 +298,8 @@ public class CompressionLowDetectionService : BackgroundService
         var suggestions = new List<CompressionLowSuggestion>();
         foreach (var candidate in candidates)
         {
-            var confidence = ScoreCandidate(candidate, treatments, userTimeZone, bedtimeHour, wakeTimeHour);
+            var confidence = await ScoreCandidateAsync(
+                candidate, userTimeZone, bedtimeHour, wakeTimeHour, iobCobReader, sensitivityResolver, cancellationToken);
             if (confidence >= MinConfidenceThreshold)
             {
                 var trimmedStartMills = candidate.StartMills + (StartTrimMinutes * 60 * 1000);
@@ -509,12 +509,14 @@ public class CompressionLowDetectionService : BackgroundService
         return merged;
     }
 
-    internal double ScoreCandidate(
+    internal async Task<double> ScoreCandidateAsync(
         VShapeCandidate candidate,
-        List<Treatment> treatments,
         TimeZoneInfo userTimeZone,
         int bedtimeHour,
-        int wakeTimeHour)
+        int wakeTimeHour,
+        IIobCobReader iobCobReader,
+        ISensitivityResolver sensitivityResolver,
+        CancellationToken cancellationToken)
     {
         var sharpness = Math.Clamp(
             (candidate.MaxDropRate - MinDropRateMgDlPerMin) / (SharpDropRateMgDlPerMin - MinDropRateMgDlPerMin),
@@ -527,8 +529,9 @@ public class CompressionLowDetectionService : BackgroundService
             + TimeOfNightFraction(nadirLocalTime, bedtimeHour, wakeTimeHour) * TimeOfNightWeight
             + recovery * RecoveryWeight;
 
-        score -= CalculateIobPenalty(candidate.StartMills, treatments);
-        score -= CalculateCarbPenalty(candidate.StartMills, treatments);
+        var onBoard = await iobCobReader.ReadTotalAsync(candidate.StartMills, live: false, cancellationToken);
+        score -= await InsulinPenaltyAsync(candidate, onBoard, sensitivityResolver, cancellationToken);
+        score -= CarbPenalty(onBoard);
 
         return Math.Clamp(score, 0, 1);
     }
@@ -547,24 +550,30 @@ public class CompressionLowDetectionService : BackgroundService
         return Math.Min(1, Math.Min(share, 1 - share) / SleepWindowEdgeShare);
     }
 
-    private double CalculateIobPenalty(long dropStartMills, List<Treatment> treatments)
+    private static async Task<double> InsulinPenaltyAsync(
+        VShapeCandidate candidate,
+        IobCobReading onBoard,
+        ISensitivityResolver sensitivityResolver,
+        CancellationToken cancellationToken)
     {
-        var windowStart = dropStartMills - (2 * 60 * 60 * 1000);
-        var recentInsulin = treatments
-            .Where(t => t.Mills >= windowStart && t.Mills <= dropStartMills)
-            .Sum(t => t.Insulin ?? 0);
+        var observedDrop = candidate.PreDropGlucose - candidate.LowestGlucose;
+        if (!onBoard.HasIob || onBoard.Iob.Iob <= 0 || observedDrop <= 0)
+            return 0;
 
-        return Math.Min(0.2, recentInsulin * 0.1);
+        var isf = await sensitivityResolver.GetSensitivityAsync(candidate.StartMills, ct: cancellationToken);
+        if (isf <= 0)
+            return 0;
+
+        var explainedDrop = onBoard.Iob.Iob * isf;
+        return Math.Min(1, explainedDrop / observedDrop) * InsulinPenaltyWeight;
     }
 
-    private double CalculateCarbPenalty(long dropStartMills, List<Treatment> treatments)
+    private static double CarbPenalty(IobCobReading onBoard)
     {
-        var windowStart = dropStartMills - (2 * 60 * 60 * 1000);
-        var recentCarbs = treatments
-            .Where(t => t.Mills >= windowStart && t.Mills <= dropStartMills)
-            .Sum(t => t.Carbs ?? 0);
+        if (!onBoard.HasCob || onBoard.Cob!.Cob <= 0)
+            return 0;
 
-        return Math.Min(0.15, recentCarbs / 200.0);
+        return Math.Min(1, onBoard.Cob.Cob / CarbPenaltyFullCobGrams) * CarbPenaltyWeight;
     }
 
     private async Task CreateNotificationAsync(

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Profiles;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -14,6 +15,7 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
@@ -170,25 +172,55 @@ public class CompressionLowDetectionServiceTests
             NadirTime: nadir);
     }
 
-    private static double ScoreInWindow(
+    private sealed record OnBoard(double Iob = 0, double Cob = 0, double Isf = 50, bool TempBasalOnly = false);
+
+    private static async Task<double> ScoreInWindowAsync(
         int bedtimeHour,
         int wakeTimeHour,
         CompressionLowDetectionService.VShapeCandidate candidate,
-        params Treatment[] treatments) =>
-        Detector().ScoreCandidate(candidate, treatments.ToList(), TimeZoneInfo.Utc, bedtimeHour, wakeTimeHour);
+        OnBoard? onBoard = null)
+    {
+        onBoard ??= new OnBoard();
 
-    private static double Score(
+        var inputs = new IobCobInputs(
+            [],
+            onBoard.TempBasalOnly ? [new TempBasal()] : [],
+            []);
+        var reader = new Mock<IIobCobReader>();
+        reader
+            .Setup(r => r.ReadTotalAsync(candidate.StartMills, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IobCobReading(
+                new IobResult { Iob = onBoard.Iob, ReportedByDevice = !onBoard.TempBasalOnly },
+                new CobResult { Cob = onBoard.Cob, ReportedByDevice = true },
+                inputs)
+            { InsulinInWindow = onBoard.TempBasalOnly });
+        var sensitivity = new Mock<ISensitivityResolver>();
+        sensitivity
+            .Setup(r => r.GetSensitivityAsync(candidate.StartMills, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(onBoard.Isf);
+
+        return await Detector().ScoreCandidateAsync(
+            candidate, TimeZoneInfo.Utc, bedtimeHour, wakeTimeHour, reader.Object, sensitivity.Object, CancellationToken.None);
+    }
+
+    private static Task<double> ScoreAsync(
         CompressionLowDetectionService.VShapeCandidate candidate,
-        params Treatment[] treatments) =>
-        ScoreInWindow(23, 7, candidate, treatments);
+        OnBoard? onBoard = null) =>
+        ScoreInWindowAsync(23, 7, candidate, onBoard);
+
+    private static async Task<double> PenaltyAsync(OnBoard onBoard)
+    {
+        var candidate = Candidate(3, SharpDrop, FastRecovery);
+        return await ScoreAsync(candidate) - await ScoreAsync(candidate, onBoard);
+    }
 
     private static bool Accepted(double confidence) =>
         confidence >= CompressionLowDetectionService.MinConfidenceThreshold;
 
     [Fact]
-    public void ScoreCandidate_acceptsATextbookNightTimeVNearTheTopOfTheScale()
+    public async Task ScoreCandidate_acceptsATextbookNightTimeVNearTheTopOfTheScale()
     {
-        var confidence = Score(Candidate(3, SharpDrop, FastRecovery));
+        var confidence = await ScoreAsync(Candidate(3, SharpDrop, FastRecovery));
 
         Accepted(confidence).Should().BeTrue();
         confidence.Should().BeGreaterThan(0.95);
@@ -197,15 +229,15 @@ public class CompressionLowDetectionServiceTests
     [Theory]
     [InlineData(23, 0)]
     [InlineData(6, 59)]
-    public void ScoreCandidate_rejectsAnEdgeOfNightVWithASlowRecoveryAndNoTreatments(int hour, int minute)
+    public async Task ScoreCandidate_rejectsAnEdgeOfNightVWithASlowRecoveryAndNoTreatments(int hour, int minute)
     {
-        Accepted(Score(Candidate(hour, SharpDrop, SlowRecovery, minute))).Should().BeFalse();
+        Accepted(await ScoreAsync(Candidate(hour, SharpDrop, SlowRecovery, minute))).Should().BeFalse();
     }
 
     [Fact]
-    public void ScoreCandidate_rejectsAMinimumSlopeSlowRecoveryVEvenAtTheBestTimeOfNight()
+    public async Task ScoreCandidate_rejectsAMinimumSlopeSlowRecoveryVEvenAtTheBestTimeOfNight()
     {
-        var confidence = Score(
+        var confidence = await ScoreAsync(
             Candidate(3, CompressionLowDetectionService.MinDropRateMgDlPerMin, SlowRecovery));
 
         Accepted(confidence).Should().BeFalse();
@@ -213,51 +245,118 @@ public class CompressionLowDetectionServiceTests
     }
 
     [Fact]
-    public void ScoreCandidate_rejectsATextbookVAfterALargeMealBolus()
+    public async Task ScoreCandidate_rejectsATextbookVAfterALargeBolusAlone()
     {
-        var candidate = Candidate(3, SharpDrop, FastRecovery);
-        var beforeDrop = candidate.StartMills - 30 * 60_000L;
-
-        var confidence = Score(
-            candidate,
-            new Treatment { Mills = beforeDrop, Insulin = 6, Carbs = 60 });
-
-        Accepted(confidence).Should().BeFalse();
+        Accepted(await ScoreAsync(Candidate(3, SharpDrop, FastRecovery), new OnBoard(Iob: 3))).Should().BeFalse();
     }
 
     [Fact]
-    public void ScoreCandidate_scoresAMinimumSlopeDropBelowASharpOneAtTheSameTimeAndRecovery()
+    public async Task ScoreCandidate_rejectsATextbookVAfterAMealBolus()
     {
-        var weak = Score(Candidate(3, CompressionLowDetectionService.MinDropRateMgDlPerMin, FastRecovery));
-        var sharp = Score(Candidate(3, SharpDrop, FastRecovery));
+        Accepted(await ScoreAsync(Candidate(3, SharpDrop, FastRecovery), new OnBoard(Iob: 3, Cob: 40))).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ScoreCandidate_penalisesInsulinOnBoardFromTempBasalsAlone()
+    {
+        var penalty = await PenaltyAsync(new OnBoard(Iob: 1.5, TempBasalOnly: true));
+
+        penalty.Should().BeGreaterThan(0.3);
+    }
+
+    [Fact]
+    public async Task ScoreCandidate_penalisesInsulinOnBoardHoweverLongAgoTheBolusWas()
+    {
+        var penalty = await PenaltyAsync(new OnBoard(Iob: 1.2));
+
+        penalty.Should().BeGreaterThan(0.3);
+    }
+
+    [Fact]
+    public async Task ScoreCandidate_growsTheInsulinPenaltyPastTwoUnits()
+    {
+        var two = await PenaltyAsync(new OnBoard(Iob: 2, Isf: 10));
+        var four = await PenaltyAsync(new OnBoard(Iob: 4, Isf: 10));
+
+        four.Should().BeGreaterThan(two);
+        two.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task ScoreCandidate_stopsTheInsulinPenaltyOnceTheInsulinExplainsTheWholeDrop()
+    {
+        var explained = await PenaltyAsync(new OnBoard(Iob: 1, Isf: 50));
+        var more = await PenaltyAsync(new OnBoard(Iob: 6, Isf: 50));
+
+        explained.Should().BeApproximately(CompressionLowDetectionService.InsulinPenaltyWeight, 0.001);
+        more.Should().BeApproximately(explained, 0.001);
+    }
+
+    [Fact]
+    public async Task ScoreCandidate_growsTheCarbPenaltyWithCarbsOnBoardUpToItsWeight()
+    {
+        var half = await PenaltyAsync(new OnBoard(Cob: CompressionLowDetectionService.CarbPenaltyFullCobGrams / 2));
+        var full = await PenaltyAsync(new OnBoard(Cob: CompressionLowDetectionService.CarbPenaltyFullCobGrams));
+        var more = await PenaltyAsync(new OnBoard(Cob: CompressionLowDetectionService.CarbPenaltyFullCobGrams * 2));
+
+        half.Should().BeGreaterThan(0).And.BeLessThan(full);
+        full.Should().BeApproximately(CompressionLowDetectionService.CarbPenaltyWeight, 0.001);
+        more.Should().BeApproximately(full, 0.001);
+    }
+
+    [Fact]
+    public async Task ScoreCandidate_doesNotPenaliseWithNoInsulinAndNoCarbs()
+    {
+        (await PenaltyAsync(new OnBoard())).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public async Task ScoreCandidate_doesNotPenaliseInsulinWhenThereIsNoSensitivity(double isf)
+    {
+        (await PenaltyAsync(new OnBoard(Iob: 3, Isf: isf))).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ScoreCandidate_doesNotPenaliseNegativeInsulinOnBoard()
+    {
+        (await PenaltyAsync(new OnBoard(Iob: -1))).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ScoreCandidate_scoresAMinimumSlopeDropBelowASharpOneAtTheSameTimeAndRecovery()
+    {
+        var weak = await ScoreAsync(Candidate(3, CompressionLowDetectionService.MinDropRateMgDlPerMin, FastRecovery));
+        var sharp = await ScoreAsync(Candidate(3, SharpDrop, FastRecovery));
 
         weak.Should().BeLessThan(sharp);
     }
 
     [Fact]
-    public void ScoreCandidate_letsEachTermAloneMoveACandidateAcrossTheThreshold()
+    public async Task ScoreCandidate_letsEachTermAloneMoveACandidateAcrossTheThreshold()
     {
         const double midRate = 3.5;
         const int midRecovery = SlowRecovery / 2;
 
-        Accepted(Score(Candidate(0, midRate, midRecovery, 30))).Should().BeFalse();
+        Accepted(await ScoreAsync(Candidate(0, midRate, midRecovery, 30))).Should().BeFalse();
 
-        Accepted(Score(Candidate(0, SharpDrop, midRecovery, 30))).Should().BeTrue("sharpness");
-        Accepted(Score(Candidate(3, midRate, midRecovery))).Should().BeTrue("time of night");
-        Accepted(Score(Candidate(0, midRate, FastRecovery, 30))).Should().BeTrue("recovery");
+        Accepted(await ScoreAsync(Candidate(0, SharpDrop, midRecovery, 30))).Should().BeTrue("sharpness");
+        Accepted(await ScoreAsync(Candidate(3, midRate, midRecovery))).Should().BeTrue("time of night");
+        Accepted(await ScoreAsync(Candidate(0, midRate, FastRecovery, 30))).Should().BeTrue("recovery");
     }
 
     [Fact]
-    public void ScoreCandidate_scoresADaySleepersVByWhereItFallsInTheirWindow()
+    public async Task ScoreCandidate_scoresADaySleepersVByWhereItFallsInTheirWindow()
     {
-        Accepted(ScoreInWindow(9, 17, Candidate(13, SharpDrop, FastRecovery))).Should().BeTrue();
-        Accepted(ScoreInWindow(9, 17, Candidate(9, SharpDrop, SlowRecovery, 30))).Should().BeFalse();
+        Accepted(await ScoreInWindowAsync(9, 17, Candidate(13, SharpDrop, FastRecovery))).Should().BeTrue();
+        Accepted(await ScoreInWindowAsync(9, 17, Candidate(9, SharpDrop, SlowRecovery, 30))).Should().BeFalse();
     }
 
     [Fact]
-    public void ScoreCandidate_acceptsATextbookVMidWindowForAnEarlyBedtime()
+    public async Task ScoreCandidate_acceptsATextbookVMidWindowForAnEarlyBedtime()
     {
-        Accepted(ScoreInWindow(21, 7, Candidate(1, SharpDrop, FastRecovery))).Should().BeTrue();
+        Accepted(await ScoreInWindowAsync(21, 7, Candidate(1, SharpDrop, FastRecovery))).Should().BeTrue();
     }
 
     [Theory]
@@ -461,7 +560,8 @@ public class CompressionLowDetectionServiceTests
                     .ReturnsAsync(Array.Empty<Entry>());
                 return entries.Object;
             });
-            services.AddScoped(_ => Mock.Of<ITreatmentService>());
+            services.AddScoped(_ => TestIobCobReader.Empty());
+            services.AddScoped(_ => Mock.Of<ISensitivityResolver>());
             services.AddScoped(_ => Mock.Of<IInAppNotificationService>());
             services.AddScoped(_ => Mock.Of<ITherapySettingsResolver>());
             var provider = services.BuildServiceProvider();
@@ -526,7 +626,8 @@ public class CompressionLowDetectionServiceTests
         services.AddScoped<IUISettingsService>(_ => settingsService);
         services.AddScoped(_ => _repository.Object);
         services.AddScoped(_ => _entryService.Object);
-        services.AddScoped(_ => Mock.Of<ITreatmentService>());
+        services.AddScoped(_ => TestIobCobReader.Empty());
+        services.AddScoped(_ => Mock.Of<ISensitivityResolver>());
         services.AddScoped(_ => Mock.Of<IInAppNotificationService>());
         services.AddScoped(_ => Mock.Of<ITherapySettingsResolver>());
         services.AddScoped(_ => tenantAccessor.Object);
