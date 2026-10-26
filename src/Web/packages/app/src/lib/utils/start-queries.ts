@@ -6,6 +6,10 @@
  * (`a.loading || b.loading`, consecutive `await`s in markup, a read inside an `{#if}` that waits
  * on another query) therefore sends its queries one round-trip apart. Calling this during
  * component initialization, with every query the page needs on arrival, sends them at once.
+ *
+ * Never pass a query held in a `$derived`: reading it here, outside any effect, evaluates the
+ * derived with no owner, and the template is then left with a query whose result never arrives
+ * until the derived re-runs.
  */
 export function startQueries(...queries: ({ readonly loading: boolean } | null | undefined)[]): void {
   for (const query of queries) void query?.loading;

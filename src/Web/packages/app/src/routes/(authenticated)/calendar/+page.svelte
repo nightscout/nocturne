@@ -86,9 +86,8 @@
   const trackersQuery = getActiveInstances();
   const historyQuery = getInstanceHistory({ limit: 100 });
   const definitionsQuery = getDefinitions({});
-  // Only the first month's query needs starting with the others; the template reads every later one.
-  // svelte-ignore state_referenced_locally
-  startQueries(punchCardQuery, trackersQuery, historyQuery, definitionsQuery);
+  // The punch card query is left out: see startQueries. The template's first read starts it.
+  startQueries(trackersQuery, historyQuery, definitionsQuery);
 
   // Tracker event types
   type TrackerEventType = "start" | "due" | "completed";
