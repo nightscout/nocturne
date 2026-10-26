@@ -5,10 +5,17 @@
 #   app_version  the release version stamped into the API assembly; empty off a release tag
 #   extra_tags   space-separated further tags pointed at the same manifest
 #   web_tags     comma-separated full references for the web image (primary + extra)
+#   build_tag    the tag the dotnet images are pushed to; never a tag anything deploys by polling
+#   promote_tags space-separated tags pointed at build_tag once its image is verified
 #
-#   push to main       develop, main-<sha7>
-#   v1.2.3 tag         1.2.3, latest
-#   v1.2.3-rc.1 tag    1.2.3-rc.1        (a pre-release never moves latest)
+# The dotnet images get build_tag and promote_tags rather than version because `dotnet publish`
+# pushes each platform's single-arch image to its tags before it pushes the index: pushed straight
+# to :develop, a host polling that tag sees only the first platform for a minute or so, pulls it,
+# and crash-loops on exec format error if it is the other architecture.
+#
+#   push to main       develop, main-<sha7>                   dotnet build_tag main-<sha7>
+#   v1.2.3 tag         1.2.3, latest                          dotnet build_tag release-<sha7>
+#   v1.2.3-rc.1 tag    1.2.3-rc.1 (never moves latest)        dotnet build_tag release-<sha7>
 #
 # Pull requests publish nothing. Reads REGISTRY and IMAGE_REPOSITORY from the environment.
 set -euo pipefail
@@ -25,10 +32,14 @@ if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
   else
     extra="latest"
   fi
+  build_tag="release-${GITHUB_SHA::7}"
+  promote="$version${extra:+ $extra}"
 elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
   version="develop"
   app_version=""
   extra="main-${GITHUB_SHA::7}"
+  build_tag="$extra"
+  promote="$version"
 else
   echo "::error::images are published from main and v* tags only, not ${GITHUB_REF}"
   exit 1
@@ -45,4 +56,6 @@ done
   echo "app_version=${app_version}"
   echo "extra_tags=${extra}"
   echo "web_tags=${web_tags}"
+  echo "build_tag=${build_tag}"
+  echo "promote_tags=${promote}"
 } >> "$GITHUB_OUTPUT"
