@@ -8,8 +8,7 @@
   import Shield from "@lucide/svelte/icons/shield";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import UserPlus from "@lucide/svelte/icons/user-plus";
-  import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
-  import Languages from "@lucide/svelte/icons/languages";
+  import { helpLinks } from "$lib/navigation/settings-navigation.svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
@@ -119,14 +118,13 @@
           </DropdownMenu.Group>
           <DropdownMenu.Separator />
           <DropdownMenu.Group>
-            <DropdownMenu.Item onSelect={() => goto(resolve("/settings/support"))}>
-              <HeartHandshake class="mr-2 h-4 w-4" />
-              <span>Support & community</span>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => goto(resolve("/settings/translations"))}>
-              <Languages class="mr-2 h-4 w-4" />
-              <span>Translations</span>
-            </DropdownMenu.Item>
+            {#each helpLinks() as link (link.href)}
+              <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a literal in-app path from settings-navigation -->
+              <DropdownMenu.Item onSelect={() => goto(link.href)}>
+                <link.icon class="mr-2 h-4 w-4" />
+                <span>{link.title}</span>
+              </DropdownMenu.Item>
+            {/each}
           </DropdownMenu.Group>
         {/if}
       {:else}

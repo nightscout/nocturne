@@ -43,7 +43,10 @@
   const dirty = $derived(
     draft !== null && trimmed !== (settings?.displayName ?? ""),
   );
+  // The demo's account holds tenant.settings, but the endpoint refuses it (DenyDemoSubject).
+  const canRename = $derived(page.data.refusedAsDemoSubject !== true);
   const canSave = $derived(
+    canRename &&
     dirty && trimmed.length > 0 && trimmed.length <= MAX_NAME_LENGTH && !saving,
   );
 
@@ -129,6 +132,7 @@
               id="site-display-name"
               value={name}
               maxlength={MAX_NAME_LENGTH}
+              disabled={!canRename}
               aria-invalid={draft !== null && trimmed.length === 0}
               oninput={(e) => {
                 draft = e.currentTarget.value;
@@ -143,6 +147,11 @@
             Save
           </Button>
         </form>
+        {#if !canRename}
+          <p class="mt-2 text-sm text-muted-foreground">
+            You cannot change the name of the demo site.
+          </p>
+        {/if}
         {#if draft !== null && trimmed.length === 0}
           <p class="mt-2 text-sm text-destructive">Enter a site name.</p>
         {/if}

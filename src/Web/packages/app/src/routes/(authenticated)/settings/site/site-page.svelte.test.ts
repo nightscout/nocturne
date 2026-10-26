@@ -31,8 +31,19 @@ describe("site details page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     page.data.effectivePermissions = ["tenant.settings"];
+    page.data.refusedAsDemoSubject = undefined;
     mocks.getTenantSettings.mockImplementation(() => remoteQuery(() => settings));
     mocks.setDisplayName.mockResolvedValue({ ...settings, displayName: "Sam's site" });
+  });
+
+  it("does not let the demo visitor rename the site", async () => {
+    page.data.refusedAsDemoSubject = true;
+    render(SitePage);
+
+    await expect.element(browserPage.getByLabelText("Site name")).toBeDisabled();
+    await expect
+      .element(browserPage.getByText("You cannot change the name of the demo site."))
+      .toBeVisible();
   });
 
   it("offers the API reference switch with the site's other settings", async () => {

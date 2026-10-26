@@ -122,10 +122,27 @@ function settingsGroups(): SettingsGroup[] {
           description: "Sleep schedule, compression low detection, and data cleanup.",
           href: "/settings/data-quality",
           icon: ShieldCheck,
-          anyScope: ["alerts.readwrite"],
+          anyScope: ["alerts.readwrite", "glucose.readwrite"],
         },
-        connectorsLink(),
-        sharingLink(),
+        {
+          title: "Connectors & apps",
+          description: "Data sources, your connected apps and API keys, and the move from Nightscout.",
+          href: "/settings/connectors",
+          icon: Plug,
+        },
+        {
+          title: "Sharing & privacy",
+          description: "Members, invitations, and public sharing.",
+          href: "/settings/members",
+          icon: Users,
+          anyScope: [
+            "members.invite",
+            "members.manage",
+            "roles.manage",
+            "sharing.manage",
+            "sharing.guest",
+          ],
+        },
         {
           title: "Audit log",
           description: "Who read and changed the data on this site.",
@@ -138,7 +155,7 @@ function settingsGroups(): SettingsGroup[] {
     {
       id: "platform",
       title: "Platform",
-      description: "Settings for every site on this server.",
+      description: "Settings for every site on this Nocturne server.",
       links: [
         {
           title: "Administration",
@@ -168,34 +185,6 @@ function settingsGroups(): SettingsGroup[] {
       ],
     },
   ];
-}
-
-/** Named where another page links to the same destination, so both say the same thing. */
-export function connectorsLink(): SettingsLink {
-  return {
-    title: "Connectors & apps",
-    description: "Data sources, authorized devices, and the move from Nightscout.",
-    href: "/settings/connectors",
-    icon: Plug,
-    anyScope: ["tenant.settings"],
-  };
-}
-
-/** @see {@link connectorsLink} */
-export function sharingLink(): SettingsLink {
-  return {
-    title: "Sharing & privacy",
-    description: "Members, invitations, and public sharing.",
-    href: "/settings/members",
-    icon: Users,
-    anyScope: [
-      "members.invite",
-      "members.manage",
-      "roles.manage",
-      "sharing.manage",
-      "sharing.guest",
-    ],
-  };
 }
 
 /** Help and contribution pages. They are not settings, so no group carries them. */

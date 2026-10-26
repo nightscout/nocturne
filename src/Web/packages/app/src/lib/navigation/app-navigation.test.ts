@@ -124,11 +124,11 @@ describe("buildAppNavigation", () => {
     expect(titles({ ...MEMBER, isPlatformAdmin: true })).toContain("Platform");
   });
 
-  it("drops the site group for a member who can change none of its pages", () => {
-    const visible = titles({ ...MEMBER, grantedScopes: ["glucose.read", "reports.read"] });
+  it("narrows the site group to the pages a member can use", () => {
+    const site = buildAppNavigation({ ...MEMBER, grantedScopes: ["glucose.read", "reports.read"] })
+      .find((item) => item.id === "site-settings");
 
-    expect(visible).not.toContain("Site settings");
-    expect(visible).toContain("My settings");
+    expect(site?.children?.map((child) => child.href)).toEqual(["/settings/connectors"]);
   });
 
   it("keeps only Account and Appearance on a tenantless host", () => {

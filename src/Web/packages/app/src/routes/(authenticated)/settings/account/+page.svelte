@@ -505,7 +505,10 @@
         </Card.Content>
       </Card.Root>
 
-      <ActiveSessions />
+      <!-- A tenantless host admits the account page but not the sessions endpoint. -->
+      {#if page.data.tenantless !== true}
+        <ActiveSessions />
+      {/if}
 
       <!-- Section 4: Recovery Mode Info -->
       <Card.Root>

@@ -32,10 +32,7 @@ describe("visibleSettingsGroups", () => {
   });
 
   it("offers a platform admin who holds no site scope the platform group still", () => {
-    expect(Object.keys(hrefs({ grantedScopes: [], isPlatformAdmin: true }))).toEqual([
-      "personal",
-      "platform",
-    ]);
+    expect(Object.keys(hrefs({ grantedScopes: [], isPlatformAdmin: true }))).toContain("platform");
   });
 
   it("offers each site page only to a member holding one of its scopes", () => {
@@ -44,6 +41,7 @@ describe("visibleSettingsGroups", () => {
     expect(groups.site).toEqual([
       "/settings/patient",
       "/settings/profile",
+      "/settings/connectors",
       "/settings/members",
     ]);
   });
@@ -52,13 +50,20 @@ describe("visibleSettingsGroups", () => {
     expect(hrefs({ grantedScopes: ["therapy.readwrite"], isPlatformAdmin: false }).site).toEqual([
       "/settings/patient",
       "/settings/profile",
+      "/settings/connectors",
     ]);
   });
 
-  it("drops the site group when the member holds none of its scopes", () => {
-    expect(Object.keys(hrefs({ grantedScopes: ["glucose.read"], isPlatformAdmin: false }))).toEqual([
-      "personal",
+  it("offers every member Connectors & apps, where their own apps and API keys are", () => {
+    expect(hrefs({ grantedScopes: ["glucose.read"], isPlatformAdmin: false }).site).toEqual([
+      "/settings/connectors",
     ]);
+  });
+
+  it("drops a group left with no links", () => {
+    expect(Object.keys(hrefs({ grantedScopes: [], isPlatformAdmin: false }))).not.toContain(
+      "platform"
+    );
   });
 
   it("does not offer the help pages as settings", () => {
