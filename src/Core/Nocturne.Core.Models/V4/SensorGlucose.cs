@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using NJsonSchema.Annotations;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models.Projections;
 
 namespace Nocturne.Core.Models.V4;
 
@@ -39,6 +40,16 @@ public class SensorGlucose : V4RecordBase, IDeviceAttributed
     /// moves the existing row instead of duplicating it.
     /// </summary>
     public string? SyncIdentifier { get; set; }
+
+    /// <summary>
+    /// The <c>_id</c> this reading is served under on the legacy APIs and in realtime events.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="V4RecordBase.Id"/> and <see cref="V4RecordBase.LegacyId"/> are not what those
+    /// surfaces carry: a legacy id that is not an ObjectId is hashed into one, so a client pairs a
+    /// realtime event with a row it holds by this value.
+    /// </remarks>
+    public string LegacyApiId => MongoObjectId.Coerce(EntryProjection.ServedId(Id, LegacyId))!;
 
     /// <summary>
     /// Glucose value in mg/dL

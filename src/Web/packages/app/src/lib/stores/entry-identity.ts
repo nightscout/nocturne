@@ -10,28 +10,16 @@ export function entryReadingIdentity(entry: Entry): string {
 }
 
 /**
- * Whether two entries are the same reading, by `_id` or by reading. An entry backfilled from the
- * V4 REST DTO carries the reading's uuid as `_id`, while a realtime event carries the legacy
- * ObjectId form, so the ids alone cannot pair the two copies.
+ * Whether a held entry is the one `doc` names: by `_id` when the event carries one, else by its
+ * reading. Two uploaders can report one reading under their own ids, so the reading never stands
+ * in for an id: an id that no entry holds names no entry.
  */
-export function isSameEntry(a: Entry, b: Entry): boolean {
-  if (typeof a._id === "string" && a._id === b._id) return true;
-  return typeof a.mills === "number" && entryReadingIdentity(a) === entryReadingIdentity(b);
-}
-
-/**
- * Whether a held entry is the one `doc` names: by `_id` when an entry in `known` holds it,
- * else by {@link isSameEntry}. Two uploaders can report one reading under their own ids, so
- * the reading stands in for the id only when no entry holds it; matching it first lets one
- * uploader's update overwrite the other's row while its own row stays, which leaves two rows
- * under one `_id`.
- */
-export function namedEntry(known: readonly Entry[], doc: Entry): (entry: Entry) => boolean {
+export function namedEntry(doc: Entry): (entry: Entry) => boolean {
   const id = doc._id;
-  if (typeof id === "string" && known.some((entry) => entry._id === id)) {
-    return (entry) => entry._id === id;
-  }
-  return (entry) => isSameEntry(entry, doc);
+  if (id) return (entry) => entry._id === id;
+  if (typeof doc.mills !== "number") return () => false;
+  const reading = entryReadingIdentity(doc);
+  return (entry) => entryReadingIdentity(entry) === reading;
 }
 
 /**

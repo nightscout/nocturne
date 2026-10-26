@@ -698,11 +698,12 @@ describe("RealtimeStore entry create batching", () => {
 });
 
 describe("RealtimeStore events for a REST-backfilled reading", () => {
-  // The store keys a backfilled reading on its uuid; the socket names the
-  // same reading by its ObjectId form, as the legacy REST surface does.
+  // The store keys a backfilled reading on the id the API serves it under, which is the
+  // id the socket names it by.
   const backfilled = () =>
     sensorGlucoseToEntry({
       id: "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f",
+      legacyApiId: "0198c2a41f3b7c2d9e556a1b",
       mgdl: 120,
       mills: 1_000,
     } as SensorGlucose);
@@ -736,6 +737,18 @@ describe("RealtimeStore events for a REST-backfilled reading", () => {
     expect(store.entries[0]).toMatchObject({ _id: "0198c2a41f3b7c2d9e556a1b", direction: "Flat" });
     store.destroy();
   });
+
+  it("replaces the reading when the update revises its value", () => {
+    const store = makeStore();
+    store.entries = [backfilled()];
+
+    store.handleUpdate({ colName: "entries", doc: { ...socketDoc, sgv: 150 } });
+
+    expect(store.entries.map((entry) => [entry._id, entry.sgv])).toEqual([
+      ["0198c2a41f3b7c2d9e556a1b", 150],
+    ]);
+    store.destroy();
+  });
 });
 
 describe("RealtimeStore events for a reading two uploaders report", () => {
@@ -765,6 +778,19 @@ describe("RealtimeStore events for a reading two uploaders report", () => {
     store.handleDelete({ colName: "entries", doc: { ...aaps, sgv: 201.8 } });
 
     expect(store.entries.map((entry) => entry._id)).toEqual(["prelude-reading"]);
+    store.destroy();
+  });
+
+  it("leaves both rows when a delete names an id no row holds", () => {
+    const store = makeStore();
+    store.entries = [prelude, { ...aaps, sgv: 201.8 }];
+
+    store.handleDelete({
+      colName: "entries",
+      doc: { _id: "unheld", type: "sgv", sgv: 201.8, mills: 1_000 },
+    });
+
+    expect(store.entries.map((entry) => entry._id)).toEqual(["prelude-reading", "aaps-reading"]);
     store.destroy();
   });
 });
@@ -1927,7 +1953,7 @@ describe("loadInitialGlucose", () => {
   }
 
   const readings = (...mgdl: number[]) => ({
-    data: mgdl.map((value, i) => ({ id: `r${value}`, mills: 1000 - i, mgdl: value })),
+    data: mgdl.map((value, i) => ({ id: `r${value}`, legacyApiId: `r${value}`, mills: 1000 - i, mgdl: value })),
   });
 
   it("asks only for the given window when it holds a full recent list", async () => {
@@ -1947,6 +1973,7 @@ describe("loadInitialGlucose", () => {
     const FIVE_MINUTES = 5 * 60_000;
     const window = Array.from({ length: GLUCOSE_WINDOW_HOURS * 12 + 1 }, (_, i) => ({
       id: `r${i}`,
+      legacyApiId: `r${i}`,
       mills: NOW - i * FIVE_MINUTES,
       mgdl: 100 + i,
     }));
