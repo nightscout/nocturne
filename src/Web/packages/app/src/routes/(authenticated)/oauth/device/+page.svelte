@@ -23,6 +23,7 @@
     isSensitiveDeviceScope,
   } from "$lib/constants/oauth-scopes";
   import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
+  import DeletionDisclosure from "$lib/components/auth/DeletionDisclosure.svelte";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
@@ -72,7 +73,6 @@
   const scopes = $derived(
     deviceInfo ? deviceInfo.scopes.filter(Boolean) : []
   );
-  const hasFullAccess = $derived(scopes.includes("*"));
   const appName = $derived(
     deviceInfo
       ? deviceInfo.displayName ?? deviceInfo.clientId
@@ -183,24 +183,7 @@
           </ul>
         </div>
 
-        {#if !hasFullAccess}
-          <div class="flex items-start gap-3 rounded-md bg-muted/50 p-3">
-            <Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <p class="text-sm text-muted-foreground">
-              This app cannot delete your data.
-            </p>
-          </div>
-        {:else}
-          <div
-            class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-          >
-            <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-            <p class="text-sm text-destructive">
-              This app is requesting full access, including the ability to delete
-              data.
-            </p>
-          </div>
-        {/if}
+        <DeletionDisclosure access={deviceInfo.deletionAccess} />
 
         <Separator />
 

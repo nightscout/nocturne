@@ -4,6 +4,7 @@
     UploaderApp,
     UploaderSetupResponse,
     DataSourceInfo,
+    ScopeDeletionAccess,
   } from "$lib/api/generated/nocturne-api-client";
   import { getUploaderName, getUploaderDescription } from "$lib/utils/uploader-labels";
   import { getActiveDataSources } from "$api/generated/services.generated.remote";
@@ -23,10 +24,10 @@
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import X from "@lucide/svelte/icons/x";
   import Shield from "@lucide/svelte/icons/shield";
-  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
   import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
+  import DeletionDisclosure from "$lib/components/auth/DeletionDisclosure.svelte";
   import QRCode from "qrcode";
 
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
@@ -57,6 +58,7 @@
     clientId: string;
     displayName: string | null;
     scopes: string[];
+    deletionAccess: ScopeDeletionAccess | undefined;
   } | null>(null);
   let deviceApproveLoading = $state(false);
   let deviceApproved = $state(false);
@@ -134,6 +136,7 @@
         clientId: info.clientId ?? "",
         displayName: info.clientDisplayName ?? null,
         scopes: (info.scopes ?? []).filter(Boolean),
+        deletionAccess: info.deletionAccess,
       };
     } catch (err) {
       deviceLookupError = describeSubmitError(
@@ -337,17 +340,7 @@
               </ul>
             </div>
 
-            {#if deviceInfo.scopes.includes("*")}
-              <div class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-                <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                <p class="text-sm text-destructive">This app is requesting full access, including the ability to delete data.</p>
-              </div>
-            {:else}
-              <div class="flex items-start gap-3 rounded-md bg-muted/50 p-3">
-                <Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <p class="text-sm text-muted-foreground">This app cannot delete your data.</p>
-              </div>
-            {/if}
+            <DeletionDisclosure access={deviceInfo.deletionAccess} />
 
             {#if deviceLookupError}
               <div class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">

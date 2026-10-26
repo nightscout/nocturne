@@ -18,8 +18,9 @@ vi.mock("../oauth.remote", () => ({
       userCode: "BCDF-GHJK",
       clientId: "0192f0e4-0000-7000-8000-000000000001",
       displayName: "Trio",
-      scopes: ["glucose.read"],
+      scopes: ["glucose.read", "treatments.readwrite"],
       isExpired: false,
+      deletionAccess: "ReadWrite",
     },
   }),
   approveDeviceForm: formStub(undefined),
@@ -44,5 +45,20 @@ describe("device approval", () => {
       .toBeVisible();
     expect(browserPage.getByText("Trio", { exact: true }).elements()).toHaveLength(1);
     expect(notice.element().contains(browserPage.getByText("Trio", { exact: true }).element())).toBe(true);
+  });
+
+  it("discloses the deletion the API reports for read-write scopes", async () => {
+    render(DevicePage);
+
+    await expect
+      .element(
+        browserPage.getByText(
+          "This app can change and delete the data in the categories above."
+        )
+      )
+      .toBeVisible();
+    await expect
+      .element(browserPage.getByText("This app cannot delete your data."))
+      .not.toBeInTheDocument();
   });
 });

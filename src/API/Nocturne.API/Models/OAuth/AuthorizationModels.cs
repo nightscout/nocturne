@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Models.OAuth;
 
@@ -80,6 +81,12 @@ public class OAuthClientInfoResponse
     /// URL of the client application's logo image.
     /// </summary>
     public string? LogoUri { get; set; }
+
+    /// <summary>
+    /// What the requested scopes allow the client to delete. Null when the request names no
+    /// scope, so a caller that forgets to send it gets no answer rather than a reassuring one.
+    /// </summary>
+    public ScopeDeletionAccess? DeletionAccess { get; set; }
 }
 
 /// <summary>

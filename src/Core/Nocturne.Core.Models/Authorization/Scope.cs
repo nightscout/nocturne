@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.Core.Models.Authorization;
 
 /// <summary>
@@ -464,6 +466,25 @@ public static class Scope
         permissions.Any(IsReadScope)
         && permissions.All(p => IsReadScope(p) || MemberPersonalScopes.Contains(p));
 
+    /// <summary>
+    /// What a consent screen must disclose about deleting data if <paramref name="scopes"/> are
+    /// granted. A readwrite scope deletes as well as writes (see the class remarks), so read-only
+    /// is the only tier that cannot delete. <see cref="SharingReadWrite"/> counts although no
+    /// endpoint reads it yet: a consent screen that understates what a grant may do is the failure
+    /// to avoid.
+    /// </summary>
+    /// <param name="scopes">The requested scopes, aliases included.</param>
+    public static ScopeDeletionAccess DeletionAccess(IEnumerable<string> scopes)
+    {
+        var normalized = Normalize(scopes);
+
+        if (normalized.Contains(FullAccess)) return ScopeDeletionAccess.Full;
+
+        return normalized.Any(s => ReadWriteImpliesRead.ContainsKey(s) || s == SharingReadWrite)
+            ? ScopeDeletionAccess.ReadWrite
+            : ScopeDeletionAccess.None;
+    }
+
     /// <summary>Whether a scope string is one an OAuth client may request.</summary>
     public static bool IsValid(string scope)
     {
@@ -704,6 +725,18 @@ public static class Scope
     /// <param name="approverScopes">The approving caller's resolved scopes.</param>
     public static HashSet<string> CapAt(IEnumerable<string> requested, IReadOnlySet<string> approverScopes) =>
         requested.Where(scope => Satisfies(approverScopes, scope)).ToHashSet(StringComparer.Ordinal);
+}
+
+/// <summary>The deletion a scope set allows, from <see cref="Scope.DeletionAccess"/>.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ScopeDeletionAccess>))]
+public enum ScopeDeletionAccess
+{
+    /// <summary>Read-only or device capability scopes: nothing can be deleted.</summary>
+    None,
+    /// <summary>Readwrite scopes: records in the categories they cover can be changed and deleted.</summary>
+    ReadWrite,
+    /// <summary>Full access (<c>*</c>): every category, including bulk deletes.</summary>
+    Full,
 }
 
 /// <summary>

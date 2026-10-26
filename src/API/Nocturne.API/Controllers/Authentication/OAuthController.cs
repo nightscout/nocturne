@@ -614,12 +614,14 @@ public class OAuthController : ControllerBase
     /// Get client info for the consent page.
     /// </summary>
     /// <param name="client_id">The client identifier to look up.</param>
-    /// <returns>An <see cref="OAuthClientInfoResponse"/> with the client's display name and whether it is a known first-party client.</returns>
+    /// <param name="scope">The space-delimited scopes the client is requesting.</param>
+    /// <returns>An <see cref="OAuthClientInfoResponse"/> with the client's display name, whether it is a known first-party client, and what the requested scopes allow it to delete (null when no scope is sent).</returns>
     [HttpGet("client-info")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(OAuthClientInfoResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<OAuthClientInfoResponse>> GetClientInfo(
-        [FromQuery] string client_id
+        [FromQuery] string client_id,
+        [FromQuery] string? scope = null
     )
     {
         var client = await _clientService.GetClientAsync(client_id);
@@ -639,6 +641,9 @@ public class OAuthController : ControllerBase
             IsKnown = client.IsKnown,
             Homepage = client.ClientUri,
             LogoUri = client.LogoUri,
+            DeletionAccess = string.IsNullOrWhiteSpace(scope)
+                ? null
+                : Scope.DeletionAccess(scope.Split(' ', StringSplitOptions.RemoveEmptyEntries)),
         });
     }
 

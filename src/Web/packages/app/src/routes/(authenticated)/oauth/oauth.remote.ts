@@ -37,23 +37,17 @@ export const getDeviceInfo = query(
 export const getClientInfo = query(
   z.object({
     clientId: z.string().min(1, "Client ID is required"),
+    scope: z.string(),
   }),
-  async ({ clientId }) => {
+  async ({ clientId, scope }) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
 
     try {
-      return await apiClient.oAuth.getClientInfo(clientId);
+      return await apiClient.oAuth.getClientInfo(clientId, scope);
     } catch (err) {
       console.error("Error fetching client info:", err);
-      // Return a default unknown client info if fetch fails
-      return {
-        clientId,
-        displayName: null,
-        isKnown: false,
-        homepage: null,
-        logoUri: null,
-      };
+      throw error(400, "Could not load the details of this app.");
     }
   }
 );
@@ -85,6 +79,7 @@ export const lookupDeviceForm = form(deviceLookupSchema, async (data, issue) => 
         displayName: deviceInfo.clientDisplayName ?? null,
         scopes: deviceInfo.scopes ?? [],
         isExpired: deviceInfo.isExpired ?? false,
+        deletionAccess: deviceInfo.deletionAccess,
       },
     };
   } catch (err) {

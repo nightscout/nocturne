@@ -192,4 +192,21 @@ public class OAuthControllerConsentTests
                 It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    [Theory]
+    [InlineData("glucose.read treatments.read", ScopeDeletionAccess.None)]
+    [InlineData("glucose.read treatments.readwrite", ScopeDeletionAccess.ReadWrite)]
+    [InlineData("health.readwrite", ScopeDeletionAccess.ReadWrite)]
+    [InlineData("*", ScopeDeletionAccess.Full)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public async Task Client_info_reports_what_the_requested_scopes_may_delete(
+        string? scope, ScopeDeletionAccess? expected)
+    {
+        var result = await CreateController().GetClientInfo(ClientId, scope);
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<OAuthClientInfoResponse>()
+            .Which.DeletionAccess.Should().Be(expected);
+    }
 }

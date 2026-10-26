@@ -235,4 +235,30 @@ public class ScopeTests
         Assert.True(Scope.Satisfies(granted, "food.readwrite"));
         Assert.False(Scope.Satisfies(granted, "entries.read"));
     }
+
+    [Theory]
+    [InlineData(new[] { "*" }, ScopeDeletionAccess.Full)]
+    [InlineData(new[] { "glucose.read", "*" }, ScopeDeletionAccess.Full)]
+    [InlineData(new[] { "treatments.readwrite" }, ScopeDeletionAccess.ReadWrite)]
+    [InlineData(new[] { "health.readwrite" }, ScopeDeletionAccess.ReadWrite)]
+    [InlineData(new[] { "glucose.read", "alerts.readwrite" }, ScopeDeletionAccess.ReadWrite)]
+    [InlineData(new[] { "sharing.readwrite" }, ScopeDeletionAccess.ReadWrite)]
+    [InlineData(new[] { "glucose.read", "treatments.read" }, ScopeDeletionAccess.None)]
+    [InlineData(new[] { "health.read" }, ScopeDeletionAccess.None)]
+    [InlineData(new[] { "alerts.acknowledge", "identity.read" }, ScopeDeletionAccess.None)]
+    [InlineData(new[] { "device.notify", "device.actuate" }, ScopeDeletionAccess.None)]
+    [InlineData(new[] { "glucose.delete", "roles.manage" }, ScopeDeletionAccess.None)]
+    [InlineData(new string[0], ScopeDeletionAccess.None)]
+    public void DeletionAccess_ReturnsTheWidestTierRequested(string[] scopes, ScopeDeletionAccess expected)
+    {
+        Assert.Equal(expected, Scope.DeletionAccess(scopes));
+    }
+
+    [Fact]
+    public void DeletionAccess_EveryReadWriteRequestScopeAllowsDeletion()
+    {
+        var readWrite = Scope.ValidRequestScopes.Where(s => s.EndsWith(".readwrite", StringComparison.Ordinal));
+
+        Assert.All(readWrite, s => Assert.Equal(ScopeDeletionAccess.ReadWrite, Scope.DeletionAccess([s])));
+    }
 }

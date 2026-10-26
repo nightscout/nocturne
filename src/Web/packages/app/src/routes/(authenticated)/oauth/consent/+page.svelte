@@ -19,6 +19,7 @@
   import { consentForm, getClientInfo } from "../oauth.remote";
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
   import { retainQuery } from "$lib/api/retain-query.svelte";
+  import DeletionDisclosure from "$lib/components/auth/DeletionDisclosure.svelte";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
@@ -39,7 +40,7 @@
   const missingParams = $derived(!clientId || !redirectUri || !scope || !codeChallenge);
 
   // Fetch client info via remote function
-  const clientInfoQuery = $derived(clientId ? getClientInfo({ clientId }) : null);
+  const clientInfoQuery = $derived(clientId ? getClientInfo({ clientId, scope }) : null);
   retainQuery(() => clientInfoQuery);
   const clientInfo = $derived(clientInfoQuery?.current ?? {
     clientId,
@@ -47,10 +48,10 @@
     isKnown: false,
     homepage: null,
     logoUri: null,
+    deletionAccess: undefined,
   });
 
   const scopes = $derived(scope.split(" ").filter(Boolean));
-  const hasFullAccess = $derived(scopes.includes("*"));
   const appName = $derived(clientInfo.displayName ?? clientId);
 
   /** Previously-approved scopes parsed from the query parameter. */
@@ -89,7 +90,7 @@
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center bg-background p-4">
-  {#if missingParams}
+  {#if missingParams || clientInfoQuery?.error}
     <Card.Root class="w-full max-w-md">
       <Card.Header class="space-y-1 text-center">
         <div
@@ -99,7 +100,11 @@
         </div>
         <Card.Title class="text-2xl font-bold">Invalid request</Card.Title>
         <Card.Description>
-          Missing required OAuth parameters.
+          {#if missingParams}
+            Missing required OAuth parameters.
+          {:else}
+            Could not load the details of this app.
+          {/if}
         </Card.Description>
       </Card.Header>
     </Card.Root>
@@ -243,24 +248,7 @@
           </div>
         {/if}
 
-        {#if !hasFullAccess}
-          <div class="flex items-start gap-3 rounded-md bg-muted/50 p-3">
-            <Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <p class="text-sm text-muted-foreground">
-              This app cannot delete your data.
-            </p>
-          </div>
-        {:else}
-          <div
-            class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-          >
-            <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-            <p class="text-sm text-destructive">
-              This app is requesting full access, including the ability to delete
-              data.
-            </p>
-          </div>
-        {/if}
+        <DeletionDisclosure access={clientInfo.deletionAccess} />
 
         <Separator />
 
@@ -353,7 +341,7 @@
             <Button
               type="submit"
               class="w-full"
-              disabled={!!approveForm.pending}
+              disabled={!!approveForm.pending || clientInfo.deletionAccess == null}
             >
               {#if approveForm.pending}
                 <Loader2 class="mr-2 h-4 w-4 animate-spin" />
