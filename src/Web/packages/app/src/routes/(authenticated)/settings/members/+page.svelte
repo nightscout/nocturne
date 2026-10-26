@@ -165,9 +165,6 @@
     errorMessage = null;
     try {
       await approveRequest({ id: requestId, request: { roleIds } });
-      // The approved requester becomes a member; GetMembers is on another
-      // controller so ApproveRequest's Invalidates cannot name it.
-      await membersQuery?.refresh();
       successMessage = { text: "Membership request approved.", wash: true };
       clearMessages();
     } catch (err) {

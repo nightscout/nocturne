@@ -252,10 +252,10 @@ public class PasskeyController : ControllerBase
     /// The challenge must have been issued for the subject the caller's credentials resolve to,
     /// so a challenge minted by another flow cannot be redeemed as an enrolment onto it.
     /// <para>
-    /// Declares no invalidation because a recovery session reaches it: the generated command would
-    /// refresh <see cref="ListCredentials"/>, which needs a session, and its 401 would surface as a
-    /// failure on an enrolment that in fact succeeded. Callers holding a session refresh their
-    /// own list.
+    /// Invalidates <see cref="ListCredentials"/> so a caller holding a session sees the new passkey
+    /// in the response. A recovery session reaches this endpoint too and cannot read that list; the
+    /// generated command settles a refresh that fails and logs it, so the 401 does not fail an
+    /// enrolment that succeeded, and a query is returned only to a client that asked for it.
     /// </para>
     /// </remarks>
     [HttpPost("register/complete")]
@@ -263,7 +263,7 @@ public class PasskeyController : ControllerBase
     [DenyDemoSubject]
     [AllowAnonymous]
     [EnableRateLimiting("passkey-register")]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["ListCredentials"])]
     [ProducesResponseType(typeof(PasskeyRegisterCompleteResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]

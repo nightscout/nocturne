@@ -368,7 +368,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [HttpPut("definitions/{id:guid}")]
     [RequireDeclaredWriteScope]
     [Authorize]
-    [RemoteForm(Invalidates = ["GetDefinitions", "GetDefinition"])]
+    [RemoteForm(Invalidates = ["GetDefinitions", "GetDefinition", "GetActiveInstances", "GetInstanceHistory", "GetPresets"])]
     [ProducesResponseType(typeof(TrackerDefinitionDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<TrackerDefinitionDto>> UpdateDefinition(
         Guid id,

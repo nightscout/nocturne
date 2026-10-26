@@ -76,15 +76,6 @@
   const historyInstances = $derived<TrackerInstanceDto[]>(historyInstancesQuery.current ?? []);
   const presets = $derived<TrackerPresetDto[]>(presetsQuery.current ?? []);
 
-  async function loadData() {
-    await Promise.all([
-      definitionsQuery.refresh(),
-      activeInstancesQuery.refresh(),
-      historyInstancesQuery.refresh(),
-      presetsQuery.refresh(),
-    ]);
-  }
-
   // Dialog state
   let isDefinitionDialogOpen = $state(false);
   let editingDefinition = $state<TrackerDefinitionDto | null>(null);
@@ -582,7 +573,6 @@
   bind:formCovers
   bind:formTriggerNotesContains
   {categoryLabels}
-  {loadData}
 />
 
 <!-- Start Instance Dialog -->

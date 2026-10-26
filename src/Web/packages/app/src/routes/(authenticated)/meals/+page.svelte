@@ -347,12 +347,6 @@
       toast.error(describeSubmitError(err, "Failed to dismiss match"));
     }
   }
-
-  function handleReviewComplete() {
-    reviewMatch = null;
-    mealsQuery?.refresh();
-    suggestionsQuery.refresh();
-  }
 </script>
 
 <svelte:head>
@@ -466,7 +460,6 @@
     if (!value) reviewMatch = null;
   }}
   match={reviewMatch}
-  onComplete={handleReviewComplete}
   onAccepted={markMatched}
 />
 

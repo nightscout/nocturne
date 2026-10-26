@@ -46,7 +46,6 @@
     formCovers?: PumpCapability[];
     formTriggerNotesContains?: string;
     categoryLabels: Record<TrackerCategory, string>;
-    loadData: () => Promise<void>;
   }
 
   let {
@@ -71,7 +70,6 @@
     formCovers = $bindable([]),
     formTriggerNotesContains = $bindable(""),
     categoryLabels,
-    loadData,
   }: Props = $props();
 
   const triggerEventTypesQuery = trackersRemote.getTriggerEventTypes();
@@ -589,7 +587,6 @@
         {...createForm.enhance(async ({ submit }) => {
           await submit();
           if (createForm.result) {
-            await loadData();
             await tick();
             open = false;
           }
@@ -620,7 +617,6 @@
         {...updateForm.enhance(async ({ submit }) => {
           await submit();
           if (updateForm.result) {
-            await loadData();
             await tick();
             open = false;
           }

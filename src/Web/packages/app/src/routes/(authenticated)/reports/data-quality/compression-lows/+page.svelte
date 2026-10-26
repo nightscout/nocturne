@@ -21,9 +21,7 @@
 	import {
 		getSuggestions as getCompressionLowSuggestions,
 		getSuggestion as getCompressionLowSuggestion,
-		acceptSuggestion as acceptCompressionLow,
-		dismissSuggestion as dismissCompressionLow,
-		deleteSuggestion as deleteCompressionLow,
+		reviewSuggestions as reviewCompressionLows,
 		triggerDetection as triggerCompressionLowDetection
 	} from '$api/generated/compressionLows.generated.remote';
 	import { contextResource } from '$lib/hooks/resource-context.svelte';
@@ -43,7 +41,11 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { EmptyState } from '$lib/components/shared';
 	import { bg, bgLabel, formatShortDate, time } from "$lib/utils/formatting";
-	import type { CompressionLowSuggestion } from '$lib/api';
+	import {
+		CompressionLowBatchAction,
+		CompressionLowStatus,
+		type CompressionLowSuggestion
+	} from '$lib/api';
 
 	// Accepting, dismissing, deleting and re-running detection all write state
 	// spans and suggestion rows, so the server gates them on glucose.readwrite.
@@ -56,8 +58,9 @@
 	const mutationError = (err: unknown) =>
 		permissionGatedMutationError(err, NEEDS_GLUCOSE_READWRITE);
 
+	const suggestionsQuery = $derived(getCompressionLowSuggestions({}));
 	const suggestionsResource = contextResource(
-		() => getCompressionLowSuggestions({}),
+		() => suggestionsQuery,
 		{ errorTitle: 'Error loading compression low history' }
 	);
 
@@ -158,78 +161,45 @@
 		}
 	}
 
-	async function handleAccept() {
+	async function review(action: CompressionLowBatchAction) {
 		if (selectedSuggestions.size === 0) return;
 		isLoading = true;
+		const ids = [...selectedSuggestions];
+		const reviewed = new Set(ids);
+		const firstSelectedIndex = filteredSuggestions.findIndex((s) => s.id === ids[0]);
+		const reviewedStatus =
+			action === CompressionLowBatchAction.Accept
+				? CompressionLowStatus.Accepted
+				: CompressionLowStatus.Dismissed;
+		const optimistic = (current: CompressionLowSuggestion[]) =>
+			action === CompressionLowBatchAction.Delete
+				? current.filter((s) => !s.id || !reviewed.has(s.id))
+				: current.map((s) => (s.id && reviewed.has(s.id) ? { ...s, status: reviewedStatus } : s));
 		try {
-			const ids = [...selectedSuggestions];
-			const firstSelectedIndex = filteredSuggestions.findIndex((s) => s.id === ids[0]);
-			for (const id of ids) {
-				if (id === activeSuggestion && brushDomain) {
-					await acceptCompressionLow({
-						id,
-						request: {
-							startMills: brushDomain[0].getTime(),
-							endMills: brushDomain[1].getTime()
-						}
-					});
-				} else {
-					const s = suggestions.find((s) => s.id === id);
-					if (s?.startMills && s?.endMills) {
-						await acceptCompressionLow({
-							id,
-							request: { startMills: s.startMills, endMills: s.endMills }
-						});
-					}
-				}
-			}
-			suggestionsResource.refresh();
+			const call = reviewCompressionLows({
+				action,
+				items: ids.map((id) =>
+					action === CompressionLowBatchAction.Accept && id === activeSuggestion && brushDomain
+						? { id, startMills: brushDomain[0].getTime(), endMills: brushDomain[1].getTime() }
+						: { id }
+				)
+			}).updates(suggestionsQuery.withOverride(optimistic));
 			selectedSuggestions = new Set();
 			selectNextSuggestion(firstSelectedIndex);
+			await call;
 		} catch (err) {
 			toast.error(mutationError(err));
+			selectedSuggestions = reviewed;
+			void loadSuggestionDetail(ids[0]);
+			suggestionsResource.refresh();
 		} finally {
 			isLoading = false;
 		}
 	}
 
-	async function handleDismiss() {
-		if (selectedSuggestions.size === 0) return;
-		isLoading = true;
-		try {
-			const ids = [...selectedSuggestions];
-			const firstSelectedIndex = filteredSuggestions.findIndex((s) => s.id === ids[0]);
-			for (const id of ids) {
-				await dismissCompressionLow(id);
-			}
-			suggestionsResource.refresh();
-			selectedSuggestions = new Set();
-			selectNextSuggestion(firstSelectedIndex);
-		} catch (err) {
-			toast.error(mutationError(err));
-		} finally {
-			isLoading = false;
-		}
-	}
-
-	async function handleDelete() {
-		if (selectedSuggestions.size === 0) return;
-		isLoading = true;
-		try {
-			const ids = [...selectedSuggestions];
-			const firstSelectedIndex = filteredSuggestions.findIndex((s) => s.id === ids[0]);
-			for (const id of ids) {
-				await deleteCompressionLow(id);
-			}
-			suggestionsResource.refresh();
-			selectedSuggestions = new Set();
-			selectNextSuggestion(firstSelectedIndex);
-		} catch (err) {
-			toast.error(mutationError(err));
-		} finally {
-			isLoading = false;
-		}
-	}
+	const handleAccept = () => review(CompressionLowBatchAction.Accept);
+	const handleDismiss = () => review(CompressionLowBatchAction.Dismiss);
+	const handleDelete = () => review(CompressionLowBatchAction.Delete);
 
 	function selectNextSuggestion(previousIndex: number) {
 		if (filteredSuggestions.length === 0) {

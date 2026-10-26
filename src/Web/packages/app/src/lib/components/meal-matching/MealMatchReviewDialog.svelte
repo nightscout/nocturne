@@ -6,7 +6,13 @@
   import { Label } from "$lib/components/ui/label";
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";
-  import { getFoodEntry, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
+  import {
+    getFoodEntry,
+    getSuggestions,
+    acceptMatch,
+    dismissMatch,
+  } from "$api/generated/mealMatchings.generated.remote";
+  import { getMeals } from "$api/generated/nutritions.generated.remote";
   import type {
     InAppNotificationDto,
     ConnectorFoodEntry,
@@ -154,7 +160,7 @@
         carbIntakeId,
         carbs,
         timeOffsetMinutes,
-      });
+      }).updates(getSuggestions, getMeals);
       if (onAccepted) onAccepted(carbIntakeId);
       else toast.success("Meal match accepted");
       onComplete?.();
@@ -169,7 +175,7 @@
     }
 
     await dismiss.run(async () => {
-      await dismissMatch({ foodEntryId });
+      await dismissMatch({ foodEntryId }).updates(getSuggestions);
       toast.success("Meal match dismissed");
       onComplete?.();
       resetAndClose();

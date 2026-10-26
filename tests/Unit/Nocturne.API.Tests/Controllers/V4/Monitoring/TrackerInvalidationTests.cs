@@ -29,6 +29,23 @@ public class TrackerInvalidationTests
         ]);
     }
 
+    /// <summary>Instances and presets list the name of their definition.</summary>
+    [Fact]
+    public void UpdatingADefinition_RefreshesTheInstancesAndPresetsThatCarryItsName()
+    {
+        var update = typeof(TrackersController)
+            .GetMethod(nameof(TrackersController.UpdateDefinition))!
+            .GetCustomAttribute<RemoteFormAttribute>()!;
+
+        update.Invalidates.Should().Contain(
+        [
+            nameof(TrackersController.GetDefinitions),
+            nameof(TrackersController.GetActiveInstances),
+            nameof(TrackersController.GetInstanceHistory),
+            nameof(TrackersController.GetPresets),
+        ]);
+    }
+
     /// <summary>A start replaces the running instance, which moves into history.</summary>
     [Theory]
     [InlineData(nameof(TrackersController.StartInstance))]

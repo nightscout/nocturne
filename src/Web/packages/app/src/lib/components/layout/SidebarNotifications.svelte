@@ -130,7 +130,7 @@
     } catch (err) {
       // A 404 means the notification is already gone, so putting it back would only
       // offer the same failing action again.
-      if (errorStatus(err) === 404) removal?.settle();
+      if (errorStatus(err) === 404) removal?.release();
       else removal?.restore();
       toast.error(describeSubmitError(err));
     }

@@ -28,7 +28,6 @@ function open(formCategory: TrackerCategory) {
         editingDefinition: null,
         formCategory,
         categoryLabels,
-        loadData: vi.fn(),
       },
     },
   });

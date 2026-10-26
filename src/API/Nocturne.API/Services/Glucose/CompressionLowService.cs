@@ -183,13 +183,13 @@ public class CompressionLowService : ICompressionLowService
         _logger.LogInformation("Dismissed compression low suggestion {SuggestionId}", id);
     }
 
-    public async Task DeleteSuggestionAsync(
+    private async Task DeleteSuggestionAsync(
         Guid id,
         CancellationToken cancellationToken = default)
     {
         var suggestion = await _repository.GetByIdAsync(id, cancellationToken);
         if (suggestion == null)
-            throw new InvalidOperationException($"Suggestion {id} not found");
+            return;
 
         // If accepted, delete the associated state span
         if (suggestion.Status == CompressionLowStatus.Accepted && suggestion.StateSpanId.HasValue)
@@ -214,6 +214,68 @@ public class CompressionLowService : ICompressionLowService
         await _repository.DeleteAsync(id, cancellationToken);
 
         _logger.LogInformation("Deleted compression low suggestion {SuggestionId}", id);
+    }
+
+    public async Task ApplyBatchAsync(
+        CompressionLowBatchAction action,
+        IReadOnlyCollection<CompressionLowBatchItem> items,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(action))
+            throw new InvalidOperationException($"Unknown batch action {(int)action}");
+
+        var due = new List<(CompressionLowBatchItem Item, CompressionLowSuggestion Suggestion)>();
+        foreach (var item in items.DistinctBy(i => i.Id))
+        {
+            var suggestion = await _repository.GetByIdAsync(item.Id, cancellationToken);
+            if (suggestion == null)
+            {
+                if (action != CompressionLowBatchAction.Delete)
+                    throw new InvalidOperationException($"Suggestion {item.Id} not found");
+                continue;
+            }
+
+            if (NeedsApplying(action, suggestion))
+                due.Add((item, suggestion));
+        }
+
+        foreach (var (item, suggestion) in due)
+        {
+            switch (action)
+            {
+                case CompressionLowBatchAction.Accept:
+                    await AcceptSuggestionAsync(
+                        item.Id,
+                        item.StartMills ?? suggestion.StartMills,
+                        item.EndMills ?? suggestion.EndMills,
+                        cancellationToken);
+                    break;
+                case CompressionLowBatchAction.Dismiss:
+                    await DismissSuggestionAsync(item.Id, cancellationToken);
+                    break;
+                case CompressionLowBatchAction.Delete:
+                    await DeleteSuggestionAsync(item.Id, cancellationToken);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(action), action, null);
+            }
+        }
+    }
+
+    private static bool NeedsApplying(CompressionLowBatchAction action, CompressionLowSuggestion suggestion)
+    {
+        var applied = action switch
+        {
+            CompressionLowBatchAction.Accept => CompressionLowStatus.Accepted,
+            CompressionLowBatchAction.Dismiss => CompressionLowStatus.Dismissed,
+            CompressionLowBatchAction.Delete => (CompressionLowStatus?)null,
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
+        };
+        if (suggestion.Status == applied)
+            return false;
+        if (applied != null && suggestion.Status != CompressionLowStatus.Pending)
+            throw new InvalidOperationException($"Suggestion {suggestion.Id} is not pending");
+        return true;
     }
 
     private async Task TryArchiveNotificationAsync(

@@ -183,14 +183,13 @@
         attestationResponseJson: pendingPasskey.attestationResponseJson,
         challengeToken: pendingPasskey.challengeToken,
         label: newPasskeyLabel.trim() || undefined,
-      });
-      await credentialsQuery.refresh();
-      await invalidateAll();
+      }).updates(credentialsQuery);
       showLabelDialog = false;
       pendingPasskey = null;
       newPasskeyLabel = "";
       successMessage = { text: "Passkey added successfully.", wash: true, icon: fingerprintArtwork };
       clearMessages();
+      void invalidateAll();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to register passkey.");
     } finally {
@@ -220,9 +219,9 @@
 
     try {
       await removeCredential(removeTarget.id);
-      await invalidateAll();
       successMessage = { text: "Passkey removed.", wash: false };
       clearMessages();
+      void invalidateAll();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to remove passkey.");
     } finally {
@@ -244,7 +243,7 @@
       const result = await regenerateRecoveryCodes();
       newRecoveryCodes = result.codes ?? [];
       showNewCodesDialog = true;
-      await invalidateAll();
+      void invalidateAll();
     } catch (err) {
       errorMessage = describeSubmitError(
         err,
