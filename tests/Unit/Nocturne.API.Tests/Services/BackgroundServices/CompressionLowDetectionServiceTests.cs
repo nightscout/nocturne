@@ -148,6 +148,137 @@ public class CompressionLowDetectionServiceTests
         unnamed.Should().Equal(named);
     }
 
+    private const double SharpDrop = 5.0;
+    private const int FastRecovery = 5;
+    private const int SlowRecovery = CompressionLowDetectionService.MaxRecoveryMinutes;
+
+    private static CompressionLowDetectionService.VShapeCandidate Candidate(
+        int nadirHour,
+        double dropRate,
+        int recoveryMinutes,
+        int nadirMinute = 0)
+    {
+        var nadir = new DateTime(2026, 4, 17, nadirHour, nadirMinute, 0, DateTimeKind.Utc);
+        var start = new DateTimeOffset(nadir).AddMinutes(-20).ToUnixTimeMilliseconds();
+        return new CompressionLowDetectionService.VShapeCandidate(
+            StartMills: start,
+            EndMills: start + (20 + recoveryMinutes) * 60_000L,
+            LowestGlucose: 60,
+            PreDropGlucose: 110,
+            MaxDropRate: dropRate,
+            RecoveryMinutes: recoveryMinutes,
+            NadirTime: nadir);
+    }
+
+    private static double ScoreInWindow(
+        int bedtimeHour,
+        int wakeTimeHour,
+        CompressionLowDetectionService.VShapeCandidate candidate,
+        params Treatment[] treatments) =>
+        Detector().ScoreCandidate(candidate, treatments.ToList(), TimeZoneInfo.Utc, bedtimeHour, wakeTimeHour);
+
+    private static double Score(
+        CompressionLowDetectionService.VShapeCandidate candidate,
+        params Treatment[] treatments) =>
+        ScoreInWindow(23, 7, candidate, treatments);
+
+    private static bool Accepted(double confidence) =>
+        confidence >= CompressionLowDetectionService.MinConfidenceThreshold;
+
+    [Fact]
+    public void ScoreCandidate_acceptsATextbookNightTimeVNearTheTopOfTheScale()
+    {
+        var confidence = Score(Candidate(3, SharpDrop, FastRecovery));
+
+        Accepted(confidence).Should().BeTrue();
+        confidence.Should().BeGreaterThan(0.95);
+    }
+
+    [Theory]
+    [InlineData(23, 0)]
+    [InlineData(6, 59)]
+    public void ScoreCandidate_rejectsAnEdgeOfNightVWithASlowRecoveryAndNoTreatments(int hour, int minute)
+    {
+        Accepted(Score(Candidate(hour, SharpDrop, SlowRecovery, minute))).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ScoreCandidate_rejectsAMinimumSlopeSlowRecoveryVEvenAtTheBestTimeOfNight()
+    {
+        var confidence = Score(
+            Candidate(3, CompressionLowDetectionService.MinDropRateMgDlPerMin, SlowRecovery));
+
+        Accepted(confidence).Should().BeFalse();
+        confidence.Should().BeApproximately(0.35, 0.01);
+    }
+
+    [Fact]
+    public void ScoreCandidate_rejectsATextbookVAfterALargeMealBolus()
+    {
+        var candidate = Candidate(3, SharpDrop, FastRecovery);
+        var beforeDrop = candidate.StartMills - 30 * 60_000L;
+
+        var confidence = Score(
+            candidate,
+            new Treatment { Mills = beforeDrop, Insulin = 6, Carbs = 60 });
+
+        Accepted(confidence).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ScoreCandidate_scoresAMinimumSlopeDropBelowASharpOneAtTheSameTimeAndRecovery()
+    {
+        var weak = Score(Candidate(3, CompressionLowDetectionService.MinDropRateMgDlPerMin, FastRecovery));
+        var sharp = Score(Candidate(3, SharpDrop, FastRecovery));
+
+        weak.Should().BeLessThan(sharp);
+    }
+
+    [Fact]
+    public void ScoreCandidate_letsEachTermAloneMoveACandidateAcrossTheThreshold()
+    {
+        const double midRate = 3.5;
+        const int midRecovery = SlowRecovery / 2;
+
+        Accepted(Score(Candidate(0, midRate, midRecovery, 30))).Should().BeFalse();
+
+        Accepted(Score(Candidate(0, SharpDrop, midRecovery, 30))).Should().BeTrue("sharpness");
+        Accepted(Score(Candidate(3, midRate, midRecovery))).Should().BeTrue("time of night");
+        Accepted(Score(Candidate(0, midRate, FastRecovery, 30))).Should().BeTrue("recovery");
+    }
+
+    [Fact]
+    public void ScoreCandidate_scoresADaySleepersVByWhereItFallsInTheirWindow()
+    {
+        Accepted(ScoreInWindow(9, 17, Candidate(13, SharpDrop, FastRecovery))).Should().BeTrue();
+        Accepted(ScoreInWindow(9, 17, Candidate(9, SharpDrop, SlowRecovery, 30))).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ScoreCandidate_acceptsATextbookVMidWindowForAnEarlyBedtime()
+    {
+        Accepted(ScoreInWindow(21, 7, Candidate(1, SharpDrop, FastRecovery))).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(23, 7, 3, 0, 1.0)]
+    [InlineData(23, 7, 23, 0, 0.0)]
+    [InlineData(23, 7, 7, 0, 0.0)]
+    [InlineData(23, 7, 12, 0, 0.0)]
+    [InlineData(22, 6, 23, 0, 0.5)]
+    [InlineData(9, 17, 13, 0, 1.0)]
+    [InlineData(9, 17, 3, 0, 0.0)]
+    [InlineData(9, 17, 11, 0, 1.0)]
+    [InlineData(9, 17, 10, 0, 0.5)]
+    [InlineData(9, 17, 9, 30, 0.25)]
+    public void TimeOfNightFraction_followsTheNadirThroughTheConfiguredWindow(
+        int bedtimeHour, int wakeTimeHour, int hour, int minute, double expected)
+    {
+        CompressionLowDetectionService
+            .TimeOfNightFraction(new TimeSpan(hour, minute, 0), bedtimeHour, wakeTimeHour)
+            .Should().BeApproximately(expected, 0.001);
+    }
+
     private static readonly DateTimeOffset BeforeEastWake = new(2026, 10, 20, 0, 50, 0, TimeSpan.Zero);
 
     private const string SixHoursEast = "Etc/GMT-6";

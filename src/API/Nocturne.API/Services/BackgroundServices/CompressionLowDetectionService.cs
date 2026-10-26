@@ -54,7 +54,12 @@ public class CompressionLowDetectionService : BackgroundService
     internal const double NadirThresholdMgDl = 70.0;
     internal const double RecoveryPercentage = 0.20;
     internal const int MaxRecoveryMinutes = 60;
-    internal const double MinConfidenceThreshold = 0.5;
+    internal const double MinConfidenceThreshold = 0.65;
+    internal const double SharpnessWeight = 0.35;
+    internal const double TimeOfNightWeight = 0.35;
+    internal const double RecoveryWeight = 0.30;
+    internal const double SharpDropRateMgDlPerMin = 5.0;
+    internal const double SleepWindowEdgeShare = 0.25;
     private const int StartTrimMinutes = 5;
 
     /// <summary>
@@ -294,7 +299,7 @@ public class CompressionLowDetectionService : BackgroundService
         var suggestions = new List<CompressionLowSuggestion>();
         foreach (var candidate in candidates)
         {
-            var confidence = ScoreCandidate(candidate, treatments, userTimeZone);
+            var confidence = ScoreCandidate(candidate, treatments, userTimeZone, bedtimeHour, wakeTimeHour);
             if (confidence >= MinConfidenceThreshold)
             {
                 var trimmedStartMills = candidate.StartMills + (StartTrimMinutes * 60 * 1000);
@@ -504,37 +509,42 @@ public class CompressionLowDetectionService : BackgroundService
         return merged;
     }
 
-    internal double ScoreCandidate(VShapeCandidate candidate, List<Treatment> treatments, TimeZoneInfo userTimeZone)
+    internal double ScoreCandidate(
+        VShapeCandidate candidate,
+        List<Treatment> treatments,
+        TimeZoneInfo userTimeZone,
+        int bedtimeHour,
+        int wakeTimeHour)
     {
-        var score = 0.4; // Base score
+        var sharpness = Math.Clamp(
+            (candidate.MaxDropRate - MinDropRateMgDlPerMin) / (SharpDropRateMgDlPerMin - MinDropRateMgDlPerMin),
+            0,
+            1);
+        var recovery = Math.Clamp(1.0 - candidate.RecoveryMinutes / (double)MaxRecoveryMinutes, 0, 1);
+        var nadirLocalTime = TimeZoneInfo.ConvertTimeFromUtc(candidate.NadirTime, userTimeZone).TimeOfDay;
 
-        // V-shape clarity (0-0.3)
-        var sharpness = candidate.MaxDropRate / 5.0;
-        score += Math.Min(0.3, sharpness * 0.3);
+        var score = sharpness * SharpnessWeight
+            + TimeOfNightFraction(nadirLocalTime, bedtimeHour, wakeTimeHour) * TimeOfNightWeight
+            + recovery * RecoveryWeight;
 
-        // Time of night (0-0.25)
-        var nadirTimeLocal = TimeZoneInfo.ConvertTimeFromUtc(candidate.NadirTime, userTimeZone);
-        var nadirHour = nadirTimeLocal.Hour;
-        if (nadirHour >= 2 && nadirHour <= 5)
-            score += 0.25;
-        else if (nadirHour >= 0 && nadirHour <= 1)
-            score += 0.15;
-        else if (nadirHour == 23 || nadirHour == 6)
-            score += 0.10;
+        score -= CalculateIobPenalty(candidate.StartMills, treatments);
+        score -= CalculateCarbPenalty(candidate.StartMills, treatments);
 
-        // Recovery completeness (0-0.2)
-        var recoveryScore = 1.0 - (candidate.RecoveryMinutes / (double)MaxRecoveryMinutes);
-        score += recoveryScore * 0.2;
+        return Math.Clamp(score, 0, 1);
+    }
 
-        // IOB penalty (0-0.2 penalty)
-        var iobPenalty = CalculateIobPenalty(candidate.StartMills, treatments);
-        score -= iobPenalty;
+    internal static double TimeOfNightFraction(TimeSpan nadirLocalTime, int bedtimeHour, int wakeTimeHour)
+    {
+        var windowHours = ((wakeTimeHour - bedtimeHour) % 24 + 24) % 24;
+        if (windowHours == 0)
+            windowHours = 24;
 
-        // Carb penalty (0-0.15 penalty)
-        var carbPenalty = CalculateCarbPenalty(candidate.StartMills, treatments);
-        score -= carbPenalty;
+        var hoursIntoWindow = ((nadirLocalTime.TotalHours - bedtimeHour) % 24 + 24) % 24;
+        if (hoursIntoWindow >= windowHours)
+            return 0;
 
-        return Math.Max(0, Math.Min(1, score));
+        var share = hoursIntoWindow / windowHours;
+        return Math.Min(1, Math.Min(share, 1 - share) / SleepWindowEdgeShare);
     }
 
     private double CalculateIobPenalty(long dropStartMills, List<Treatment> treatments)
