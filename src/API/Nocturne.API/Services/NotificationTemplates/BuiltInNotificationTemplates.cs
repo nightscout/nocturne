@@ -1,4 +1,5 @@
 using Nocturne.API.Services.Notifications;
+using Nocturne.API.Services.Platform.InstanceKey;
 using Nocturne.API.Services.Platform.Releases;
 using Nocturne.Core.Models;
 
@@ -140,6 +141,34 @@ public static class BuiltInNotificationTemplates
             Icon = "gift",
             Source = ReleaseNoticeService.Source,
             DefaultActions = [ReleaseNotesAction()]
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = InstanceKeyChangeService.TenantNoticeType,
+            Category = NotificationCategory.ActionRequired,
+            DefaultUrgency = NotificationUrgency.Warn,
+            Icon = "key-round",
+            Source = InstanceKeyChangeService.Source
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = InstanceKeyChangeService.PlatformNoticeType,
+            Category = NotificationCategory.ActionRequired,
+            DefaultUrgency = NotificationUrgency.Warn,
+            Icon = "key-round",
+            Source = InstanceKeyChangeService.Source,
+            DefaultActions =
+            [
+                new NotificationActionDto
+                {
+                    ActionId = InstanceKeyChangeService.OpenPlatformSettingsActionId,
+                    Label = InstanceKeyChangeService.OpenPlatformSettingsActionId,
+                    Icon = "key-round",
+                    Variant = "default"
+                }
+            ]
         });
 
         return registry;

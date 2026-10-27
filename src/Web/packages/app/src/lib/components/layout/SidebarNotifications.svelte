@@ -123,6 +123,24 @@
       return;
     }
 
+    if (notification.type?.startsWith("system.instance_key_changed")) {
+      if (actionId === "open_connectors") {
+        markRead(notification.id);
+        goto(resolve("settings/connectors"));
+        return;
+      }
+      if (actionId === "open_alerts") {
+        markRead(notification.id);
+        goto(resolve("alerts"));
+        return;
+      }
+      if (actionId === "open_platform_settings") {
+        markRead(notification.id);
+        goto(resolve("settings/admin?tab=integrations"));
+        return;
+      }
+    }
+
     const removal = realtimeStore?.removeNotification(notification.id);
     try {
       await executeAction({ id: notification.id, actionId });

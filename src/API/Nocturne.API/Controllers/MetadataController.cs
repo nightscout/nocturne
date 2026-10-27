@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Models.OAuth;
+using Nocturne.API.Services.Platform.InstanceKey;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Models;
@@ -176,6 +177,23 @@ public class MetadataController : ControllerBase
     }
 
     /// <summary>
+    /// Get the shapes the instance key change notice carries in its metadata. Exists so the
+    /// generated client has <see cref="UndecryptableAlertChannel"/>, which the notice lists.
+    /// </summary>
+    [HttpGet("instance-key-notice")]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(InstanceKeyNoticeMetadata), 200)]
+    public ActionResult<InstanceKeyNoticeMetadata> GetInstanceKeyNotice()
+    {
+        return Ok(
+            new InstanceKeyNoticeMetadata
+            {
+                Description = "Shapes in the metadata of the instance key change notice",
+            }
+        );
+    }
+
+    /// <summary>
     /// Get permission atoms metadata
     /// This endpoint ensures NSwag generates a TypeScript enum for PermissionAtom, which the
     /// permission selector is checked against
@@ -344,5 +362,16 @@ public class SyncPhasesMetadata
     /// <summary>
     /// Description of the sync phases
     /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// The metadata shapes of the <c>system.instance_key_changed</c> notice.
+/// </summary>
+public class InstanceKeyNoticeMetadata
+{
+    /// <summary>One entry of the notice's <c>AlertChannels</c> list.</summary>
+    public UndecryptableAlertChannel? AlertChannel { get; set; }
+
     public string Description { get; set; } = string.Empty;
 }

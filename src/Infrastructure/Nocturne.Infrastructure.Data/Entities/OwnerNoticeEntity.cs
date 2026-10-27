@@ -4,25 +4,26 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
-/// A release notice this instance has sent, one row per kind, version and tenant owner. Not
-/// tenant-scoped: the release check reads and writes it for every tenant. The row outlives the
-/// notification it sent, so an owner who dismisses a notice is not sent it again.
+/// A one-time notice this instance has sent, one row per kind, version and tenant owner. Not
+/// tenant-scoped: the background jobs that send notices read and write it for every tenant. The row
+/// outlives the notification it sent, so an owner who dismisses a notice is not sent it again.
 /// </summary>
-[Table("release_notices")]
-public class ReleaseNoticeEntity : ISystemCreated
+[Table("owner_notices")]
+public class OwnerNoticeEntity : ISystemCreated
 {
     [Key]
     [Column("id")]
     public Guid Id { get; set; }
 
-    /// <summary>
-    /// <c>available</c> for a newer release, <c>installed</c> for the release now running.
-    /// </summary>
     [Required]
     [MaxLength(32)]
     [Column("kind")]
     public string Kind { get; set; } = string.Empty;
 
+    /// <summary>
+    /// What the notice is about within its kind: a release version, or an instance key check
+    /// generation.
+    /// </summary>
     [Required]
     [MaxLength(64)]
     [Column("version")]

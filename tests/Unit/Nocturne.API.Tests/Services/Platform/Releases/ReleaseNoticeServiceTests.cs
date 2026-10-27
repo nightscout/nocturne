@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.API.Services.Notifications;
 using Nocturne.API.Services.Platform.Releases;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -140,7 +141,7 @@ public sealed class ReleaseNoticeServiceTests : IDisposable
         foreach (var subject in OwnersOf(tenant))
         {
             await Ledger().TryClaimAsync(
-                ReleaseNoticeLedger.Installed, "0.2.7", tenant, Guid.Parse(subject), CancellationToken.None);
+                ReleaseNoticeService.InstalledKind, "0.2.7", tenant, Guid.Parse(subject), CancellationToken.None);
         }
         var olderAvailable = Active(owner, ReleaseNoticeService.UpdateAvailableType, "0.2.8");
         var installed = Active(owner, ReleaseNoticeService.ReleaseInstalledType);
@@ -209,7 +210,7 @@ public sealed class ReleaseNoticeServiceTests : IDisposable
     private async Task<IEnumerable<Guid>> TenantsAsync() =>
         (await Snapshot().GetAsync(CancellationToken.None)).Select(t => t.Id);
 
-    private ReleaseNoticeLedger Ledger() => new(_provider.GetRequiredService<INocturneDbContextFactory>());
+    private OwnerNoticeLedger Ledger() => new(_provider.GetRequiredService<INocturneDbContextFactory>());
 
     private InAppNotificationEntity Active(string userId, string type, string? version = null)
     {

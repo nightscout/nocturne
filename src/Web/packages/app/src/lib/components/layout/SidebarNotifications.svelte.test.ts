@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "svelte-sonner";
+import { goto } from "$app/navigation";
 import {
   NotificationUrgency,
   type InAppNotificationDto,
@@ -9,12 +10,21 @@ import {
 
 const server = vi.hoisted(() => ({
   answer: (): Promise<unknown> => Promise.resolve(),
+  executed: [] as string[],
 }));
 
 vi.mock("#lib/api/generated/notifications.generated.remote.js", () => ({
-  executeAction: () => server.answer(),
+  executeAction: ({ actionId }: { actionId: string }) => {
+    server.executed.push(actionId);
+    return server.answer();
+  },
   markAsRead: () => server.answer(),
   markAllAsRead: () => server.answer(),
+}));
+
+vi.mock("$app/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("$app/navigation")>()),
+  goto: vi.fn(),
 }));
 
 import Harness from "./SidebarNotificationsHarness.test.svelte";
@@ -41,7 +51,74 @@ function pending() {
 describe("SidebarNotifications", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(goto).mockClear();
     server.answer = () => Promise.resolve();
+    server.executed = [];
+  });
+
+  it("lists what to enter again after an instance key change and opens the alerts", async () => {
+    render(Harness, {
+      notifications: [
+        {
+          id: "k1",
+          type: "system.instance_key_changed",
+          urgency: NotificationUrgency.Urgent,
+          title: "instance_key_changed",
+          createdAt: new Date().toISOString(),
+          metadata: {
+            Connectors: ["Dexcom", "Glooko"],
+            AlertChannels: [
+              { ruleName: "High glucose", destination: "hooks.example.com" },
+              { ruleName: "Low glucose", destination: "" },
+            ],
+          },
+          actions: [
+            { actionId: "open_connectors", label: "open_connectors" },
+            { actionId: "open_alerts", label: "open_alerts" },
+          ],
+        },
+      ],
+    });
+
+    await page.getByRole("button", { name: "Notifications" }).click();
+
+    await expect.element(page.getByText("Enter some secrets again")).toBeVisible();
+    await expect
+      .element(page.getByTestId("instance-key-connectors"))
+      .toHaveTextContent("Connectors: Dexcom and Glooko");
+    await expect
+      .element(page.getByTestId("instance-key-alert-channels"))
+      .toHaveTextContent("Alert webhooks: High glucose (hooks.example.com) and Low glucose");
+
+    await page.getByRole("button", { name: "Open alerts", exact: true }).click();
+
+    expect(goto).toHaveBeenCalledWith("/alerts");
+    expect(server.executed).toEqual([]);
+  });
+
+  it("names the platform credentials to enter again and opens the platform settings", async () => {
+    render(Harness, {
+      notifications: [
+        {
+          id: "k2",
+          type: "system.instance_key_changed_platform",
+          urgency: NotificationUrgency.Warn,
+          title: "instance_key_changed_platform",
+          createdAt: new Date().toISOString(),
+          metadata: { PlatformSettings: ["discord", "resend"] },
+          actions: [{ actionId: "open_platform_settings", label: "open_platform_settings" }],
+        },
+      ],
+    });
+
+    await page.getByRole("button", { name: "Notifications" }).click();
+
+    await expect
+      .element(page.getByText("Nocturne cannot read the saved credentials for Discord and Resend (email)."))
+      .toBeVisible();
+    await page.getByRole("button", { name: "Open platform settings", exact: true }).click();
+
+    expect(goto).toHaveBeenCalledWith("/settings/admin?tab=integrations");
   });
 
   it("loads the meal match review dialog when a suggested match is first reviewed", async () => {

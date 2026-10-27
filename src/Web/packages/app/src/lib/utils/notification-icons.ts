@@ -12,6 +12,7 @@ import Utensils from "@lucide/svelte/icons/utensils";
 import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import WifiOff from "@lucide/svelte/icons/wifi-off";
 import Gift from "@lucide/svelte/icons/gift";
+import KeyRound from "@lucide/svelte/icons/key-round";
 import Activity from "@lucide/svelte/icons/activity";
 import Zap from "@lucide/svelte/icons/zap";
 import Shield from "@lucide/svelte/icons/shield";
@@ -44,6 +45,7 @@ const ICON_MAP: Record<string, Component> = {
   "refresh-cw": RefreshCw,
   "wifi-off": WifiOff,
   gift: Gift,
+  "key-round": KeyRound,
   activity: Activity,
   zap: Zap,
   shield: Shield,

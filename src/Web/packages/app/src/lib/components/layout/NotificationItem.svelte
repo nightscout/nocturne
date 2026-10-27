@@ -11,6 +11,7 @@
   import { resolveNotificationIcon } from "#lib/utils/notification-icons.js";
   import { resolveNotificationLabel } from "#lib/utils/notification-labels.js";
   import InstallTiming from "#lib/components/notifications/InstallTiming.svelte";
+  import InstanceKeyChanged from "#lib/components/notifications/InstanceKeyChanged.svelte";
 
   interface Props {
     notification: InAppNotificationDto;
@@ -106,6 +107,13 @@
       </p>
     {:else if notification.type === "system.release_installed"}
       <p class="text-xs mt-0.5 opacity-75">See what changed in this version.</p>
+    {:else if notification.type === "system.instance_key_changed" || notification.type === "system.instance_key_changed_platform"}
+      <div class="text-xs mt-0.5 opacity-75 space-y-0.5">
+        <InstanceKeyChanged
+          metadata={notification.metadata}
+          platform={notification.type === "system.instance_key_changed_platform"}
+        />
+      </div>
     {:else if notification.subtitle}
       <p class="text-xs mt-0.5 opacity-75">
         {resolveNotificationLabel(notification.subtitle)}

@@ -92,6 +92,7 @@ using JwtOptions = Nocturne.Core.Models.Configuration.JwtOptions;
 using OidcOptions = Nocturne.Core.Models.Configuration.OidcOptions;
 using OpenTelemetry.Metrics;
 using Nocturne.API.Services.Caching;
+using Nocturne.API.Services.Platform.InstanceKey;
 using Nocturne.API.Services.Platform.Releases;
 
 namespace Nocturne.API.Extensions;
@@ -412,6 +413,8 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<ITranslationContributionService, GitHubTranslationService>();
         services.AddSingleton<IContentContributionService, GitHubContentService>();
 
+        services.AddSingleton<IOwnerNoticeLedger, OwnerNoticeLedger>();
+
         // Release check: notices to tenant owners about new and newly installed releases
         services.Configure<ReleaseCheckOptions>(configuration.GetSection(ReleaseCheckOptions.SectionName));
         services.AddSingleton(RunningRelease.FromAssembly());
@@ -419,8 +422,12 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<IAutoUpdateProbe, WatchtowerProbe>();
         services.AddHttpClient(WatchtowerProbe.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5));
         services.AddSingleton<ReleaseStatusService>();
-        services.AddSingleton<IReleaseNoticeLedger, ReleaseNoticeLedger>();
         services.AddHostedService<ReleaseNoticeService>();
+
+        services.AddSingleton<InstanceKeyCheck>();
+        services.AddTransient<UndecryptableSecretScanner>();
+        services.AddHostedService<InstanceKeyChangeService>();
+
         services.AddScoped<ITranslationDraftService, TranslationDraftService>();
 
         return services;

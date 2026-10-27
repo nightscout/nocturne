@@ -19,14 +19,7 @@
   import { toast } from "svelte-sonner";
   import type { PlatformSettingsSummary } from "#lib/api/index.js";
   import { errorMessage } from "#lib/forms/submit-error.js";
-
-  const DISPLAY_NAMES: Record<string, string> = {
-    discord: "Discord",
-    slack: "Slack",
-    telegram: "Telegram",
-    whatsapp: "WhatsApp",
-    resend: "Resend (email)",
-  };
+  import { platformCategoryName } from "#lib/utils/platform-categories.js";
 
   const TELEGRAM_SET_WEBHOOK =
     'curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" -d "url=https://<your-instance>/api/v4/webhooks/telegram" -d "secret_token=<WEBHOOK_SECRET_TOKEN>"';
@@ -97,7 +90,7 @@
 
   async function handleDelete(platform: PlatformSettingsSummary) {
     const category = platform.category ?? "";
-    const displayName = DISPLAY_NAMES[category] ?? category;
+    const displayName = platformCategoryName(category);
     if (!confirm(`Remove all ${displayName} credentials? This cannot be undone.`)) return;
 
     const state = states[category];
@@ -124,7 +117,7 @@
     {#each platforms as platform (platform.category)}
       {@const category = platform.category ?? ""}
       {@const state = states[category]}
-      {@const displayName = DISPLAY_NAMES[category] ?? category}
+      {@const displayName = platformCategoryName(category)}
       {@const isConfigured = hasAnyConfiguredFields(platform)}
       <Card>
         <CardHeader class="flex flex-row items-center justify-between">

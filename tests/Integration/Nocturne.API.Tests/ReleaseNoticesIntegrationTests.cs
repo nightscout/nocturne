@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Services.Notifications;
 using Nocturne.API.Services.Platform.Releases;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models;
@@ -19,18 +20,18 @@ public class ReleaseNoticesIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task TheAppRoleClaimsANoticeOncePerOwner()
     {
-        var ledger = Fixture.Services.GetRequiredService<IReleaseNoticeLedger>();
+        var ledger = Fixture.Services.GetRequiredService<IOwnerNoticeLedger>();
         var version = $"9.9.{Random.Shared.Next(1_000_000)}";
         var tenant = Fixture.TenantId;
         var owner = Guid.NewGuid();
 
-        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Available, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
-        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Available, version, tenant, owner, CancellationToken.None)).Should().BeFalse();
-        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Installed, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
-        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Available, version, tenant, Guid.NewGuid(), CancellationToken.None)).Should().BeTrue();
+        (await ledger.TryClaimAsync(ReleaseNoticeService.AvailableKind, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
+        (await ledger.TryClaimAsync(ReleaseNoticeService.AvailableKind, version, tenant, owner, CancellationToken.None)).Should().BeFalse();
+        (await ledger.TryClaimAsync(ReleaseNoticeService.InstalledKind, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
+        (await ledger.TryClaimAsync(ReleaseNoticeService.AvailableKind, version, tenant, Guid.NewGuid(), CancellationToken.None)).Should().BeTrue();
 
-        await ledger.ReleaseAsync(ReleaseNoticeLedger.Available, version, tenant, owner, CancellationToken.None);
-        (await ledger.TryClaimAsync(ReleaseNoticeLedger.Available, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
+        await ledger.ReleaseAsync(ReleaseNoticeService.AvailableKind, version, tenant, owner, CancellationToken.None);
+        (await ledger.TryClaimAsync(ReleaseNoticeService.AvailableKind, version, tenant, owner, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]

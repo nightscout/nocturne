@@ -241,9 +241,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<PlatformSettingsEntity> PlatformSettings { get; set; }
 
     /// <summary>
-    /// Release notices sent to tenant owners (not tenant-scoped), one per kind, version and owner.
+    /// One-time notices sent to tenant owners (not tenant-scoped), one per kind, version and owner.
     /// </summary>
-    public DbSet<ReleaseNoticeEntity> ReleaseNotices { get; set; }
+    public DbSet<OwnerNoticeEntity> OwnerNotices { get; set; }
+
+    public DbSet<InstanceKeyCheckEntity> InstanceKeyChecks { get; set; }
 
     // In-App Notification entities
 
@@ -1576,16 +1578,20 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_platform_settings_category")
             .IsUnique();
 
-        modelBuilder.Entity<ReleaseNoticeEntity>()
+        modelBuilder.Entity<OwnerNoticeEntity>()
             .HasIndex(n => new { n.Kind, n.Version, n.TenantId, n.SubjectId })
-            .HasDatabaseName("ux_release_notices_kind_version_tenant_subject")
+            .HasDatabaseName("ux_owner_notices_kind_version_tenant_subject")
             .IsUnique();
 
-        modelBuilder.Entity<ReleaseNoticeEntity>()
+        modelBuilder.Entity<OwnerNoticeEntity>()
             .HasOne<TenantEntity>()
             .WithMany()
             .HasForeignKey(n => n.TenantId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<InstanceKeyCheckEntity>()
+            .Property(c => c.Id)
+            .ValueGeneratedNever();
 
         modelBuilder
             .Entity<InAppNotificationEntity>()

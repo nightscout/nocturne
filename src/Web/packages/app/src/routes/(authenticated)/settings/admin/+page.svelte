@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { page } from "$app/state";
   import {
     Card,
     CardContent,
@@ -29,7 +30,9 @@
   import { fresh } from "#lib/api/fresh-query.js";
 
   // State
-  let activeTab = $state("identity-providers");
+  let activeTab = $state(
+    page.url.searchParams.get("tab") === "integrations" ? "integrations" : "identity-providers"
+  );
   let loading = $state(true);
   let error = $state<string | null>(null);
 

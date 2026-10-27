@@ -1,12 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data.Services;
 
-namespace Nocturne.API.Services.Platform.Releases;
+namespace Nocturne.API.Services.Notifications;
 
 /// <summary>
-/// The instance's record of which release notices it has sent to which owner (<c>release_notices</c>).
+/// The instance's record of which one-time notices it has sent to which owner (<c>owner_notices</c>).
 /// </summary>
-public interface IReleaseNoticeLedger
+public interface IOwnerNoticeLedger
 {
     /// <summary>
     /// Records the notice for one owner and returns true, or returns false when it was already
@@ -20,19 +20,15 @@ public interface IReleaseNoticeLedger
     Task ReleaseAsync(string kind, string version, Guid tenantId, Guid subjectId, CancellationToken cancellationToken);
 }
 
-public class ReleaseNoticeLedger(INocturneDbContextFactory contexts) : IReleaseNoticeLedger
+public class OwnerNoticeLedger(INocturneDbContextFactory contexts) : IOwnerNoticeLedger
 {
-    public const string Available = "available";
-
-    public const string Installed = "installed";
-
     public async Task<bool> TryClaimAsync(
         string kind, string version, Guid tenantId, Guid subjectId, CancellationToken cancellationToken)
     {
         await using var db = await contexts.CreatePlatformAsync(cancellationToken);
         var inserted = await db.Database.ExecuteSqlInterpolatedAsync(
             $"""
-            INSERT INTO release_notices (id, kind, version, tenant_id, subject_id)
+            INSERT INTO owner_notices (id, kind, version, tenant_id, subject_id)
             VALUES ({Guid.CreateVersion7()}, {kind}, {version}, {tenantId}, {subjectId})
             ON CONFLICT (kind, version, tenant_id, subject_id) DO NOTHING
             """,
@@ -44,7 +40,7 @@ public class ReleaseNoticeLedger(INocturneDbContextFactory contexts) : IReleaseN
         string kind, string version, Guid tenantId, Guid subjectId, CancellationToken cancellationToken)
     {
         await using var db = await contexts.CreatePlatformAsync(cancellationToken);
-        await db.ReleaseNotices
+        await db.OwnerNotices
             .Where(n => n.Kind == kind && n.Version == version && n.TenantId == tenantId && n.SubjectId == subjectId)
             .ExecuteDeleteAsync(cancellationToken);
     }

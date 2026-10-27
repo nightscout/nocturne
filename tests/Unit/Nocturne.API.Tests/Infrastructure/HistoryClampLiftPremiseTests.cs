@@ -34,8 +34,10 @@ public class HistoryClampLiftPremiseTests
     [
         // rejected_uploads is unclamped, and its upsert runs as a plain query.
         "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/RejectedUploadRepository.cs",
-        // release_notices is a platform table no policy covers, and its insert does nothing on conflict.
-        "src/API/Nocturne.API/Services/Platform/Releases/ReleaseNoticeLedger.cs",
+        // owner_notices and instance_key_check are platform tables no policy covers, and their
+        // inserts do nothing on conflict.
+        "src/API/Nocturne.API/Services/Notifications/OwnerNoticeLedger.cs",
+        "src/API/Nocturne.API/Services/Platform/InstanceKey/InstanceKeyCheck.cs",
     ];
 
     [Fact]

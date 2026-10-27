@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.API.Services.Notifications;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -14,7 +15,7 @@ namespace Nocturne.API.Services.Platform.Releases;
 /// Watchtower will install it, and once when a release first runs here, with its notes.
 /// </summary>
 /// <remarks>
-/// Each notice is claimed per owner in <see cref="IReleaseNoticeLedger"/> before it is sent, and the
+/// Each notice is claimed per owner in <see cref="IOwnerNoticeLedger"/> before it is sent, and the
 /// claim is released when the send fails, so every owner gets it once. Each check offers the current
 /// notices to every active tenant, so a tenant created later gets them on its first check.
 /// A newer notice archives the owner's older ones as <see cref="NotificationArchiveReason.Superseded"/>.
@@ -22,7 +23,7 @@ namespace Nocturne.API.Services.Platform.Releases;
 public class ReleaseNoticeService(
     IServiceProvider serviceProvider,
     ReleaseStatusService releaseStatus,
-    IReleaseNoticeLedger ledger,
+    IOwnerNoticeLedger ledger,
     ActiveTenantSnapshot activeTenants,
     IOptions<ReleaseCheckOptions> options,
     TimeProvider timeProvider,
@@ -37,6 +38,10 @@ public class ReleaseNoticeService(
     public const string ReleaseInstalledType = "system.release_installed";
 
     public const string ReleaseNotesActionId = "release_notes";
+
+    public const string AvailableKind = "available";
+
+    public const string InstalledKind = "installed";
 
     private static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(1);
 
@@ -75,9 +80,9 @@ public class ReleaseNoticeService(
 
         var notices = new List<(string Kind, string Type, string Version)>();
         if (status.Current is { } current)
-            notices.Add((ReleaseNoticeLedger.Installed, ReleaseInstalledType, current.Version));
+            notices.Add((InstalledKind, ReleaseInstalledType, current.Version));
         if (status.Latest is { } latest)
-            notices.Add((ReleaseNoticeLedger.Available, UpdateAvailableType, latest.Version));
+            notices.Add((AvailableKind, UpdateAvailableType, latest.Version));
         if (notices.Count == 0)
             return;
 
