@@ -369,6 +369,9 @@ export function createChartDataEngine(
   let refreshSeq = 0;
   let seenFingerprint: string | null = null;
   let skippedWhileHidden = false;
+  // A frozen tab runs no timers, so it never records a skipped refresh; on return the age of
+  // the window decides instead.
+  let refreshedAt = Date.now();
   // svelte-ignore state_referenced_locally
   let seenInitialData = options.initialChartData;
 
@@ -397,6 +400,7 @@ export function createChartDataEngine(
     fresh(getChartData({ startTime, endTime, intervalMinutes: 5 }))
       .then((recent) => {
         if (seq !== refreshSeq) return;
+        refreshedAt = Date.now();
         const current = untrack(() => serverChartData);
         serverChartData = current ? replaceWindow(current, recent, startTime) : recent;
       })
@@ -412,6 +416,7 @@ export function createChartDataEngine(
     if (!next || next === seenInitialData) return;
     seenInitialData = next;
     refreshSeq++;
+    refreshedAt = Date.now();
     const current = untrack(() => serverChartData);
     serverChartData = current ? replaceWindow(
           current,
@@ -437,7 +442,8 @@ export function createChartDataEngine(
 
     fallbackTimer = setTimeout(refreshRecent, RECENT_REFRESH_FALLBACK_MS);
     const onVisible = () => {
-      if (document.visibilityState === "visible" && skippedWhileHidden) scheduleRefresh();
+      if (document.visibilityState !== "visible") return;
+      if (skippedWhileHidden || Date.now() - refreshedAt >= RECENT_REFRESH_FALLBACK_MS) scheduleRefresh();
     };
     document.addEventListener("visibilitychange", onVisible);
 

@@ -99,6 +99,17 @@ describe("GlucoseTileWash", () => {
     await expect.element(priorFill()).toHaveClass("bg-glucose-low");
   });
 
+  it("holds the grey wash hidden until its first frame is drawn", async () => {
+    const view = await settledTile("high");
+    await view.rerender({ mills: newReading(), variant: "high" });
+    const arrival = () => greyWash().element().closest<HTMLElement>(".wash-arrival")!;
+    await expect.element(arrival()).toHaveStyle({ opacity: "0" });
+
+    for (const painting of engine.live()) if (painting.artwork === "wash") painting.paint(0);
+
+    await expect.element(arrival()).toHaveClass("drawn");
+  });
+
   it("fades the grey wash out once it settles, leaving the flat range fill", async () => {
     const view = await settledTile("high");
     await view.rerender({ mills: newReading(), variant: "high" });
@@ -106,7 +117,7 @@ describe("GlucoseTileWash", () => {
 
     for (const painting of engine.live()) painting.paint(1, true);
 
-    await expect.element(page.getByTestId("artwork-wash").element().parentElement!).toHaveClass("faded");
+    await expect.element(page.getByTestId("artwork-wash").element().closest<HTMLElement>(".wash-fade")!).toHaveClass("faded");
   });
 
   it("blooms over the neutral fill when the first reading showed before its status", async () => {

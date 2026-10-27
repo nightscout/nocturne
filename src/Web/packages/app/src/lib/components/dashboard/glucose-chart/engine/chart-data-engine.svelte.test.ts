@@ -635,6 +635,17 @@ describe("chart data engine — SSR data refresh", () => {
       expect(calls()).toBe(1);
     });
 
+    it("refreshes on becoming visible after a freeze that ran none of its timers", async () => {
+      await mount();
+      setVisibility("hidden");
+      vi.setSystemTime(Date.now() + 60 * MINUTE);
+
+      setVisibility("visible");
+      await vi.advanceTimersByTimeAsync(3 * SECOND);
+
+      expect(calls()).toBe(1);
+    });
+
     it("does not refresh on becoming visible when nothing was skipped", async () => {
       await mount();
       setVisibility("hidden");
