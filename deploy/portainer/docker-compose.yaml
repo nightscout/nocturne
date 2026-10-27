@@ -62,6 +62,8 @@ services:
       DemoService__Enabled: "false"
       WEB_URL: "http://nocturne-web:8000"
       BASE_DOMAIN: "${BASE_DOMAIN}"
+      ReleaseCheck__Watchtower__Token: "${WATCHTOWER_API_TOKEN}"
+      ReleaseCheck__Watchtower__PollIntervalSeconds: "${WATCHTOWER_POLL_INTERVAL}"
     expose:
     - "8080"
     depends_on:
@@ -262,9 +264,11 @@ services:
     image: "ghcr.io/nicholas-fedor/watchtower:latest"
     environment:
       WATCHTOWER_CLEANUP: "true"
-      WATCHTOWER_POLL_INTERVAL: "86400"
+      WATCHTOWER_POLL_INTERVAL: "${WATCHTOWER_POLL_INTERVAL}"
       WATCHTOWER_INCLUDE_STOPPED: "false"
       WATCHTOWER_REVIVE_STOPPED: "false"
+      WATCHTOWER_HTTP_API_ENDPOINTS: "${WATCHTOWER_API_TOKEN:+history,config}"
+      WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_API_TOKEN}"
       WATCHTOWER_LABEL_ENABLE: "true"
     volumes:
     - type: "bind"
@@ -412,7 +416,12 @@ configs:
       # the operator's own domain, and its other hosts are not Nocturne's to pin to HTTPS. nosniff is a
       # default (set only when the upstream sent none) for the static assets served before the web
       # app's own headers apply.
+      #
+      # encode compresses the SSR documents and the API's JSON, which nothing behind the gateway does;
+      # the web server only ships precompressed copies of its static assets, which encode leaves alone.
+      # A response of unknown length (streamed SSR, long polling) is still flushed as it is written.
       (to_gateway) {
+      	encode zstd gzip
       	header {
       		Strict-Transport-Security "max-age=31536000"
       		?X-Content-Type-Options nosniff

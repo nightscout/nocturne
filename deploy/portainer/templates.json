@@ -83,6 +83,17 @@
           "name": "NOCTURNE_WEB_IMAGE",
           "label": "Web image",
           "default": "ghcr.io/nightscout/nocturne/nocturne-web:latest"
+        },
+        {
+          "name": "WATCHTOWER_API_TOKEN",
+          "label": "Watchtower API token",
+          "description": "Optional. Any random string, e.g. from openssl rand -hex 24. Lets the API read when Watchtower last checked for updates, so update notices show the install time."
+        },
+        {
+          "name": "WATCHTOWER_POLL_INTERVAL",
+          "label": "Watchtower poll interval",
+          "default": "86400",
+          "description": "Seconds between Watchtower\u0027s checks for new images. The API uses it to tell owners when an update installs."
         }
       ]
     }
