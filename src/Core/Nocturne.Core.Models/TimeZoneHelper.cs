@@ -179,13 +179,43 @@ public static class TimeZoneHelper
     }
 
     /// <summary>
-    /// A local time the clock skipped resolves to the first instant after the gap.
+    /// The UTC instant a wall-clock time falls at in <paramref name="timeZone"/>. Only the clock reading
+    /// of <paramref name="local"/> is used, whatever its <see cref="DateTimeKind"/>. A time the clock
+    /// skipped resolves to the first instant after the gap, exact to the tick. An ambiguous time resolves
+    /// to its first occurrence, the one at the larger offset.
     /// </summary>
-    private static DateTime LocalToUtc(DateTime local, TimeZoneInfo timeZone)
+    /// <returns>The instant, with <see cref="DateTimeKind.Utc"/>.</returns>
+    public static DateTime LocalToUtc(DateTime local, TimeZoneInfo timeZone)
     {
-        while (timeZone.IsInvalidTime(local))
-            local = local.AddMinutes(1);
+        var wall = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
 
-        return TimeZoneInfo.ConvertTimeToUtc(local, timeZone);
+        if (timeZone.IsInvalidTime(wall))
+            return DateTime.SpecifyKind(GapEnd(wall, timeZone), DateTimeKind.Utc);
+
+        var offset = timeZone.IsAmbiguousTime(wall)
+            ? timeZone.GetAmbiguousTimeOffsets(wall).Max()
+            : timeZone.GetUtcOffset(wall);
+
+        return DateTime.SpecifyKind(wall - offset, DateTimeKind.Utc);
+    }
+
+    private static DateTime GapEnd(DateTime wall, TimeZoneInfo timeZone)
+    {
+        var before = timeZone.GetUtcOffset(wall.AddDays(-1));
+        var after = timeZone.GetUtcOffset(wall.AddDays(1));
+
+        var low = (wall - after).Ticks;
+        var high = (wall - before).Ticks;
+        while (low < high)
+        {
+            var middle = low + (high - low) / 2;
+            var offset = timeZone.GetUtcOffset(new DateTimeOffset(middle, TimeSpan.Zero));
+            if (offset == before)
+                low = middle + 1;
+            else
+                high = middle;
+        }
+
+        return new DateTime(low, DateTimeKind.Utc);
     }
 }

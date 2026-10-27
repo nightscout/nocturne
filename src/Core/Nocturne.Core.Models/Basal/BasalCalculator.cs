@@ -121,7 +121,7 @@ public static class BasalCalculator
             {
                 var localBoundary = day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified)
                     .AddSeconds(entry.Seconds);
-                var boundaryUtc = LocalToUtcAcrossDst(localBoundary, tz);
+                var boundaryUtc = TimeZoneHelper.LocalToUtc(localBoundary, tz);
                 var boundary = boundaryUtc.ToMills()
                     - timeshiftMs;
                 if (boundary <= fromMills) continue;
@@ -149,40 +149,5 @@ public static class BasalCalculator
     {
         if (string.IsNullOrEmpty(timezoneId)) return TimeZoneInfo.Utc;
         return TimeZoneHelper.GetTimeZoneInfoFromId(timezoneId);
-    }
-
-    /// <summary>
-    /// Convert a local DateTime to UTC, handling DST gaps and overlaps explicitly.
-    /// Spring-forward (skipped time, e.g. local 02:30 on a US spring-forward day): the schedule
-    /// entry is treated as if it activates at the end of the gap (when wall-clocks jump to the
-    /// next valid local time), so the new rate kicks in as soon as that local time exists.
-    /// Fall-back (ambiguous time, e.g. local 02:30 on a US fall-back day): use the FIRST
-    /// occurrence (DST-active interpretation) so the rate transition happens earlier of the two.
-    /// </summary>
-    private static DateTime LocalToUtcAcrossDst(DateTime localDateTime, TimeZoneInfo tz)
-    {
-        var unspecified = DateTime.SpecifyKind(localDateTime, DateTimeKind.Unspecified);
-        if (tz.IsInvalidTime(unspecified))
-        {
-            // Skipped local time. Walk forward minute-by-minute until we land in a valid slot —
-            // bounded by the maximum DST gap (typically 1h, never more than 2h in practice).
-            for (int i = 1; i <= 180; i++)
-            {
-                var candidate = unspecified.AddMinutes(i);
-                if (!tz.IsInvalidTime(candidate))
-                    return TimeZoneInfo.ConvertTimeToUtc(candidate, tz);
-            }
-            // Pathological tz with a >3h gap — fall back to treating the local time as UTC.
-            return DateTime.SpecifyKind(localDateTime, DateTimeKind.Utc);
-        }
-        if (tz.IsAmbiguousTime(unspecified))
-        {
-            // Ambiguous: pick the first UTC occurrence. UTC = local - offset, so the EARLIER UTC
-            // instant comes from the LARGER signed offset (DST-active interpretation).
-            var offsets = tz.GetAmbiguousTimeOffsets(unspecified);
-            var firstOccurrenceOffset = offsets.Max();
-            return new DateTimeOffset(unspecified, firstOccurrenceOffset).UtcDateTime;
-        }
-        return TimeZoneInfo.ConvertTimeToUtc(unspecified, tz);
     }
 }

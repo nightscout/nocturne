@@ -173,13 +173,13 @@ public class TimeZoneHelperTests
     }
 
     [Fact]
-    public void GetOvernightWindow_keepsTheStandardInterpretationOfAFallBackAmbiguousBedtime()
+    public void GetOvernightWindow_takesTheFirstOccurrenceOfAFallBackAmbiguousBedtime()
     {
         var newYork = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
 
         var (start, _) = TimeZoneHelper.GetOvernightWindow(new DateOnly(2026, 11, 1), newYork, 1, 9);
 
-        DateTimeOffset.FromUnixTimeMilliseconds(start).Should().Be(new DateTimeOffset(2026, 11, 1, 6, 0, 0, TimeSpan.Zero));
+        DateTimeOffset.FromUnixTimeMilliseconds(start).Should().Be(new DateTimeOffset(2026, 11, 1, 5, 0, 0, TimeSpan.Zero));
     }
 
     [Theory]
@@ -202,6 +202,88 @@ public class TimeZoneHelperTests
 
         TimeSpan.FromMilliseconds(end - start).Should().Be(TimeSpan.FromHours(8));
         DateTimeOffset.FromUnixTimeMilliseconds(start).Should().Be(new DateTimeOffset(2026, 3, 8, 13, 0, 0, TimeSpan.Zero));
+    }
+
+    [Theory]
+    [InlineData("America/New_York", "2026-01-15T12:00:00", "2026-01-15T17:00:00")]
+    [InlineData("Europe/Berlin", "2026-01-15T12:00:00", "2026-01-15T11:00:00")]
+    [InlineData("Australia/Lord_Howe", "2026-01-15T12:00:00", "2026-01-15T01:00:00")]
+    public void LocalToUtc_appliesTheOffsetInForceToAnOrdinaryTime(string zoneId, string local, string expectedUtc)
+    {
+        var result = TimeZoneHelper.LocalToUtc(DateTime.Parse(local), TimeZoneInfo.FindSystemTimeZoneById(zoneId));
+
+        result.Should().Be(DateTime.Parse(expectedUtc));
+        result.Kind.Should().Be(DateTimeKind.Utc);
+    }
+
+    [Theory]
+    [InlineData("America/New_York", "2026-03-08T02:00:00", "2026-03-08T07:00:00")]
+    [InlineData("America/New_York", "2026-03-08T02:30:00", "2026-03-08T07:00:00")]
+    [InlineData("America/New_York", "2026-03-08T02:59:59.9999999", "2026-03-08T07:00:00")]
+    [InlineData("Europe/Berlin", "2026-03-29T02:00:00", "2026-03-29T01:00:00")]
+    [InlineData("Europe/Berlin", "2026-03-29T02:30:00", "2026-03-29T01:00:00")]
+    [InlineData("Europe/Berlin", "2026-03-29T02:59:59.9999999", "2026-03-29T01:00:00")]
+    [InlineData("Australia/Lord_Howe", "2026-10-04T02:00:00", "2026-10-03T15:30:00")]
+    [InlineData("Australia/Lord_Howe", "2026-10-04T02:15:00", "2026-10-03T15:30:00")]
+    [InlineData("Australia/Lord_Howe", "2026-10-04T02:29:59.9999999", "2026-10-03T15:30:00")]
+    public void LocalToUtc_mapsATimeInASpringForwardGapToTheFirstInstantAfterTheGap(
+        string zoneId, string local, string expectedUtc)
+    {
+        var result = TimeZoneHelper.LocalToUtc(DateTime.Parse(local), TimeZoneInfo.FindSystemTimeZoneById(zoneId));
+
+        result.Should().Be(DateTime.Parse(expectedUtc));
+    }
+
+    [Theory]
+    [InlineData("America/New_York", "2026-03-08T01:59:59.9999999", "2026-03-08T06:59:59.9999999")]
+    [InlineData("America/New_York", "2026-03-08T03:00:00", "2026-03-08T07:00:00")]
+    [InlineData("Europe/Berlin", "2026-03-29T01:59:59.9999999", "2026-03-29T00:59:59.9999999")]
+    [InlineData("Europe/Berlin", "2026-03-29T03:00:00", "2026-03-29T01:00:00")]
+    [InlineData("Australia/Lord_Howe", "2026-10-04T01:59:59.9999999", "2026-10-03T15:29:59.9999999")]
+    [InlineData("Australia/Lord_Howe", "2026-10-04T02:30:00", "2026-10-03T15:30:00")]
+    public void LocalToUtc_keepsTheOffsetInForceAtEitherEdgeOfAGap(string zoneId, string local, string expectedUtc)
+    {
+        var result = TimeZoneHelper.LocalToUtc(DateTime.Parse(local), TimeZoneInfo.FindSystemTimeZoneById(zoneId));
+
+        result.Should().Be(DateTime.Parse(expectedUtc));
+    }
+
+    [Theory]
+    [InlineData("America/New_York", "2026-11-01T01:00:00", "2026-11-01T05:00:00")]
+    [InlineData("America/New_York", "2026-11-01T01:30:00", "2026-11-01T05:30:00")]
+    [InlineData("America/New_York", "2026-11-01T02:00:00", "2026-11-01T07:00:00")]
+    [InlineData("Europe/Berlin", "2026-10-25T02:00:00", "2026-10-25T00:00:00")]
+    [InlineData("Europe/Berlin", "2026-10-25T02:30:00", "2026-10-25T00:30:00")]
+    [InlineData("Europe/Berlin", "2026-10-25T03:00:00", "2026-10-25T02:00:00")]
+    [InlineData("Australia/Lord_Howe", "2026-04-05T01:30:00", "2026-04-04T14:30:00")]
+    [InlineData("Australia/Lord_Howe", "2026-04-05T01:45:00", "2026-04-04T14:45:00")]
+    [InlineData("Australia/Lord_Howe", "2026-04-05T02:00:00", "2026-04-04T15:30:00")]
+    public void LocalToUtc_mapsAnAmbiguousTimeToItsEarlierInstant(string zoneId, string local, string expectedUtc)
+    {
+        var result = TimeZoneHelper.LocalToUtc(DateTime.Parse(local), TimeZoneInfo.FindSystemTimeZoneById(zoneId));
+
+        result.Should().Be(DateTime.Parse(expectedUtc));
+    }
+
+    [Theory]
+    [InlineData(DateTimeKind.Unspecified)]
+    [InlineData(DateTimeKind.Utc)]
+    [InlineData(DateTimeKind.Local)]
+    public void LocalToUtc_readsTheClockWhateverTheKind(DateTimeKind kind)
+    {
+        var newYork = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+
+        var result = TimeZoneHelper.LocalToUtc(new DateTime(2026, 1, 15, 12, 0, 0, kind), newYork);
+
+        result.Should().Be(new DateTime(2026, 1, 15, 17, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void LocalToUtc_isTheIdentityInUtc()
+    {
+        var local = new DateTime(2026, 3, 8, 2, 30, 0);
+
+        TimeZoneHelper.LocalToUtc(local, TimeZoneInfo.Utc).Should().Be(DateTime.SpecifyKind(local, DateTimeKind.Utc));
     }
 
     // A system zone whose ID contains letters (so toggling case is meaningful). "UTC" qualifies but
