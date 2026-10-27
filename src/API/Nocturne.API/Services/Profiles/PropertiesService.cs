@@ -541,8 +541,9 @@ public class PropertiesService : IPropertiesService
         if (UpbatLevel(weakest) is { } level)
         {
             upbat["level"] = level;
-            upbat["display"] = $"{weakest.Battery}%";
-            upbat["displayLine"] = $"Battery: {weakest.Battery}%";
+            var display = UpbatDisplay(weakest);
+            upbat["display"] = display;
+            upbat["displayLine"] = $"Battery: {display}";
         }
 
         properties["upbat"] = upbat;
@@ -553,6 +554,11 @@ public class PropertiesService : IPropertiesService
         reading.Battery != 0 ? reading.Level
         : reading.Voltage is > 0 ? 25
         : null;
+
+    private static string UpbatDisplay(BatteryReading reading) =>
+        reading.Battery == 0 && reading.Voltage is > 0
+            ? BatteryReading.FormatVoltage(reading.Voltage.Value)
+            : $"{reading.Battery}%";
 
     private static string DeviceKey(DeviceStatus status) =>
         string.IsNullOrEmpty(status.Device) ? "unknown" : status.Device;
