@@ -53,7 +53,7 @@ function posted(): Record<string, unknown> {
 }
 import Wrapper from "./meal-bolus-dialog-test-wrapper.svelte";
 
-function mount(meal: { correlationId?: string; boluses?: { id: string; mills: number; insulin: number }[] } = { correlationId: "c1" }) {
+function mount(meal: { correlationId?: string; boluses?: ({ id: string; mills: number; insulin: number } & Record<string, unknown>)[] } = { correlationId: "c1" }) {
   let store!: RealtimeStore;
   const onSave = vi.fn();
   render(Wrapper, {
@@ -147,6 +147,35 @@ describe("MealBolusDialog", () => {
     await vi.waitFor(() => expect(submitted.fields.length).toBeGreaterThan(0));
     const body = posted();
     expect(body).toMatchObject({ id: "b1", request: { insulin: 4 } });
+    const schema = formCoerce(z.object({ id: z.string(), request: UpdateBolusRequestSchema }));
+    expect(schema.safeParse(body).error?.issues, JSON.stringify(body)).toBeUndefined();
+  });
+
+  it("keeps the optional fields an edited bolus already holds", async () => {
+    const patientInsulinId = "0192f0e4-0000-7000-8000-000000000002";
+    mount({
+      boluses: [
+        {
+          id: "b1",
+          mills: Date.now(),
+          insulin: 4,
+          programmed: 4.5,
+          delivered: 4,
+          duration: 30,
+          insulinType: "Fiasp",
+          insulinContext: { patientInsulinId },
+        },
+      ],
+    });
+
+    await page.getByRole("button", { name: "Edit bolus" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await vi.waitFor(() => expect(submitted.fields.length).toBeGreaterThan(0));
+    const body = posted();
+    expect(body).toMatchObject({
+      request: { programmed: 4.5, delivered: 4, duration: 30, insulinType: "Fiasp", patientInsulinId },
+    });
     const schema = formCoerce(z.object({ id: z.string(), request: UpdateBolusRequestSchema }));
     expect(schema.safeParse(body).error?.issues, JSON.stringify(body)).toBeUndefined();
   });

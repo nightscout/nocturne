@@ -135,4 +135,49 @@ describe("EntryEditDialog saves", () => {
     expect(issues(update(UpsertDeviceEventRequestSchema), "deviceEvent.update")).toBeUndefined();
     expect(issues(update(UpdateBasalInjectionRequestSchema), "basalInjection.update")).toBeUndefined();
   });
+
+  it("keeps the optional fields a record already holds", async () => {
+    const entry: EntryRecord = {
+      kind: "bolus",
+      data: {
+        id: id(1),
+        mills: at,
+        insulin: 2,
+        duration: 30,
+        programmed: 2.5,
+        delivered: 2,
+        insulinType: "Fiasp",
+        unabsorbed: 0.5,
+      },
+    };
+    const correlatedRecords: EntryRecord[] = [
+      { kind: "carbs", data: { id: id(2), mills: at, carbs: 30, carbTime: 15, absorptionTime: 180 } },
+      { kind: "deviceEvent", data: { id: id(5), mills: at, notes: "New site" } },
+      {
+        kind: "basalInjection",
+        data: { id: id(6), mills: at, units: 10, notes: "Evening", insulinContext: { patientInsulinId: id(7) } },
+      },
+    ];
+    render(EntryEditDialog, { open: true, entry, correlatedRecords, onClose: () => {} });
+
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    const kinds = ["bolus", "carbs", "deviceEvent", "basalInjection"];
+    await vi.waitFor(() => expect(Object.keys(submitted)).toEqual(expect.arrayContaining(kinds.map((k) => `${k}.update`))));
+
+    expect(posted("bolus.update")).toMatchObject({
+      request: { duration: 30, programmed: 2.5, delivered: 2, insulinType: "Fiasp", unabsorbed: 0.5 },
+    });
+    expect(posted("carbs.update")).toMatchObject({ request: { carbTime: 15, absorptionTime: 180 } });
+    expect(posted("deviceEvent.update")).toMatchObject({ request: { notes: "New site" } });
+    expect(posted("basalInjection.update")).toMatchObject({
+      request: { notes: "Evening", patientInsulinId: id(7) },
+    });
+
+    const update = (request: z.ZodType) => z.object({ id: z.string(), request });
+    expect(issues(update(UpdateBolusRequestSchema), "bolus.update")).toBeUndefined();
+    expect(issues(update(UpdateCarbIntakeRequestSchema), "carbs.update")).toBeUndefined();
+    expect(issues(update(UpsertDeviceEventRequestSchema), "deviceEvent.update")).toBeUndefined();
+    expect(issues(update(UpdateBasalInjectionRequestSchema), "basalInjection.update")).toBeUndefined();
+  });
 });
