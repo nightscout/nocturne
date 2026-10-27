@@ -9,6 +9,7 @@
   import { getAuthStatus } from "#lib/api/generated/index.js";
   import { page } from "$app/state";
   import { goToReturnUrl } from "#lib/navigation/return-url.js";
+  import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
   import { resolve } from "$app/paths";
   import LoginForm from "#lib/components/auth/LoginForm.svelte";
   import RequestMembershipDialog from "#lib/components/members/RequestMembershipDialog.svelte";
@@ -36,8 +37,7 @@
   );
   const showGuestCode = $derived(guestCodePending && !guestCodeDismissed);
 
-  // Get return URL from query params
-  const returnUrl = $derived(page.url.searchParams.get("returnUrl") || "/");
+  const returnUrl = $derived(safeReturnUrl(page.url.searchParams.get("returnUrl")));
 
   // Resolved once by the root layout; here it decides which sign-in methods can work at all.
   const tenantless = $derived(page.data.tenantless === true);
@@ -173,4 +173,4 @@
   </Card.Root>
 </div>
 
-<RequestMembershipDialog bind:open={showRequestDialog} />
+<RequestMembershipDialog bind:open={showRequestDialog} {returnUrl} />

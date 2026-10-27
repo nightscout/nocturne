@@ -1,5 +1,5 @@
 import { NOCTURNE_DEV_AUTO_LOGIN } from "$app/env/private";
-import { safeReturnUrl } from "#lib/server/return-url.js";
+import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
 
 // Marker appended to returnUrl so a single auto-login attempt can be detected
 // after it bounces back. It survives the round-trip because the auth guard

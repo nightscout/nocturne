@@ -2,7 +2,7 @@ import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 import { GUEST_CODE_DISMISSED_COOKIE } from "#lib/components/auth/guest-code-dismissal.js";
 import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
-import { safeReturnUrl } from "#lib/server/return-url.js";
+import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
 import { autoLoginEndpoint, autoLoginRedirect, withMarker } from "#lib/server/auto-login.js";
 
 // Every auth guard funnels to /auth/login?returnUrl=..., so this one page covers

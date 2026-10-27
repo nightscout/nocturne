@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { safeReturnUrl } from "./return-url";
+import { safeReturnUrl } from "./safe-return-url";
 
 describe("safeReturnUrl", () => {
   it("keeps a rooted path", () => {
@@ -9,6 +9,10 @@ describe("safeReturnUrl", () => {
 
   it("falls back for an absolute URL", () => {
     expect(safeReturnUrl("https://evil.test/steal")).toBe("/");
+  });
+
+  it("falls back for a script URL", () => {
+    expect(safeReturnUrl("javascript:alert(document.domain)")).toBe("/");
   });
 
   it("falls back for a protocol-relative URL", () => {
