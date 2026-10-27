@@ -1128,9 +1128,9 @@
             Each tracker's dashboard visibility is configured in 
 
             <a
-              href={resolve('settings/trackers')}
+              href={resolve('trackers')}
               class="text-primary hover:underline"
-            >Settings → Trackers</a>
+            >Trackers</a>
           </p>
         </CardContent>
       </Card>

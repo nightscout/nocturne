@@ -158,7 +158,7 @@ async function expectDialogFits(open: () => Promise<void>) {
   await expect.poll(() => document.querySelectorAll("[role='dialog'], [role='alertdialog']").length).toBe(0);
 }
 
-describe("settings/trackers on a phone", () => {
+describe("trackers on a phone", () => {
   const original = [window.innerWidth, window.innerHeight] as const;
 
   beforeEach(async () => {
@@ -220,7 +220,7 @@ describe("settings/trackers on a phone", () => {
   });
 });
 
-describe.each([430, 500, 536, 600, 640, 768])("settings/trackers at %ipx", (width) => {
+describe.each([430, 500, 536, 600, 640, 768])("trackers at %ipx", (width) => {
   const original = [window.innerWidth, window.innerHeight] as const;
 
   beforeEach(async () => {

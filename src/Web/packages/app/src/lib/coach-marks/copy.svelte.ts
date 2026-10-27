@@ -135,7 +135,7 @@ export function coachCopy() {
     "tracker-intro.complete": {
       title: "Record a change",
       description:
-        "When you change the item, select its pill. Then select Complete tracker. To start a new tracker from the change, select the Start another option in the Complete dialog. To change the lifespan and the alerts, go to Settings > Notifications & trackers.",
+        "When you change the item, select its pill. Then select Complete tracker. To start a new tracker from the change, select the Start another option in the Complete dialog. To change the lifespan and the alerts, go to Trackers.",
     },
     "tracker-intro.settings": {
       title: "Lifespan and thresholds",

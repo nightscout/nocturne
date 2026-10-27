@@ -55,7 +55,7 @@
   const voice = $derived(patientVoice(relationshipQuery.current));
   const setup = $derived(setupQuery.current);
 
-  const trackerSettingsHref = resolve("/(authenticated)/settings/trackers");
+  const trackerSettingsHref = resolve("/(authenticated)/trackers");
   const alertsHref = resolve("/(authenticated)/alerts");
 
   // The device and insulin managers below write through their own remote functions, which

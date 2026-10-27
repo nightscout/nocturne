@@ -206,7 +206,7 @@
           {/if}
           {#if sortedNotifications.length > 0}
             <a
-              href={resolve('settings/trackers')}
+              href={resolve('trackers')}
               class="text-xs text-muted-foreground hover:underline"
             >
               Manage
@@ -225,7 +225,7 @@
         >
           {#snippet action()}
             <a
-              href={resolve('settings/trackers')}
+              href={resolve('trackers')}
               class="text-xs text-primary hover:underline"
             >
               Configure trackers

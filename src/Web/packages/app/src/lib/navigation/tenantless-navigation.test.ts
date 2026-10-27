@@ -43,12 +43,12 @@ describe("filterTenantlessNav", () => {
     expect(isTenantlessRoute("/settings/account")).toBe(true);
   });
 
-  it("keeps the rest of settings off a tenantless host", () => {
+  it("keeps tenant-scoped pages off a tenantless host", () => {
     for (const href of [
       "/settings",
       "/settings/members",
       "/settings/profile",
-      "/settings/trackers",
+      "/trackers",
     ]) {
       expect(isTenantlessRoute(href)).toBe(false);
     }

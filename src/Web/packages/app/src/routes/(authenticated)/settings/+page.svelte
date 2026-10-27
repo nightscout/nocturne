@@ -1,17 +1,21 @@
 <script lang="ts">
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Settings from "@lucide/svelte/icons/settings";
+  import { page } from "$app/state";
   import {
-    adminSettingsSections,
-    onboardingSection,
-    settingsSections,
+    settingsGroups,
     type SettingsLink,
   } from "#lib/components/settings/settings-links.js";
   import type { PageData } from "./$types";
 
   const { data }: { data: PageData } = $props();
 
-  const isPlatformAdmin = $derived(data.isPlatformAdmin ?? false);
+  const groups = $derived(
+    settingsGroups({
+      isPlatformAdmin: data.isPlatformAdmin ?? false,
+      grantedScopes: page.data.effectivePermissions ?? [],
+    })
+  );
 </script>
 
 <svelte:head>
@@ -54,17 +58,13 @@
     </div>
   </div>
 
-  {@render linkList(settingsSections)}
-
-  {#if isPlatformAdmin}
-    <section class="space-y-2 pt-6">
-      <h2 class="text-lg font-semibold">Platform administration</h2>
-      {@render linkList(adminSettingsSections)}
+  {#each groups as group (group.id)}
+    <section class="space-y-2">
+      <div>
+        <h2 class="text-lg font-semibold">{group.title}</h2>
+        <p class="text-sm text-muted-foreground">{group.description}</p>
+      </div>
+      {@render linkList(group.links)}
     </section>
-  {/if}
-
-  <section class="space-y-2 pt-6">
-    <h2 class="text-lg font-semibold">Onboarding</h2>
-    {@render linkList([onboardingSection])}
-  </section>
+  {/each}
 </div>

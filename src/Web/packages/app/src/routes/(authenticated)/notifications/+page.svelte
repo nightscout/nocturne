@@ -218,7 +218,7 @@
             <Badge variant="severity-warn">{warnCount} warning</Badge>
           {/if}
 
-          <a href={resolve('settings/trackers')}><Button variant="outline" size="sm"><Settings2 class="h-4 w-4 mr-2" />Manage</Button></a>
+          <a href={resolve('trackers')}><Button variant="outline" size="sm"><Settings2 class="h-4 w-4 mr-2" />Manage</Button></a>
         </div>
       </CardHeader>
       <CardContent>

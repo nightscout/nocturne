@@ -35,9 +35,12 @@ const OWNER_ONLY = [
   "Food",
   "Meals",
   "Tools",
+  "Trackers",
   "Alerts",
-  "Dev tools",
-  "Settings",
+  "Community",
+  "Legacy",
+  "My settings",
+  "Tenant settings",
 ];
 
 function titles(viewer: NavViewer): string[] {
@@ -105,7 +108,7 @@ describe("buildAppNavigation", () => {
     });
 
     expect(viewer).not.toContain("Alerts");
-    expect(viewer).toContain("Settings");
+    expect(viewer).toContain("My settings");
   });
 
   it("withholds Reports from a member without reports.read", () => {
@@ -121,6 +124,50 @@ describe("buildAppNavigation", () => {
     expect(titles({ ...REPORTING_SHARE, tenantCount: 2 })).not.toContain(
       "Tenants"
     );
+  });
+});
+
+describe("settings groups", () => {
+  function hrefs(viewer: NavViewer, id: NavItem["id"]): string[] | undefined {
+    return buildAppNavigation(viewer)
+      .find((item) => item.id === id)
+      ?.children?.map((child) => child.href);
+  }
+
+  it("offers the platform group only to a platform admin", () => {
+    expect(titles(MEMBER)).not.toContain("Platform");
+    expect(hrefs({ ...MEMBER, isPlatformAdmin: true }, "platform")).toEqual([
+      "/settings/admin",
+      "/settings/admin/tenants",
+      "/settings/access-requests",
+      "/settings/admin/connector-cursors",
+    ]);
+  });
+
+  it("keeps tenant settings that need a scope from a member without it", () => {
+    const member = { ...MEMBER, grantedScopes: ["glucose.read"] };
+
+    expect(hrefs(member, "tenant-settings")).not.toContain("/setup");
+    expect(hrefs(member, "tenant-settings")).not.toContain("/settings/audit");
+    expect(hrefs(MEMBER, "tenant-settings")).toEqual(
+      expect.arrayContaining(["/setup", "/settings/audit"])
+    );
+  });
+
+  it("files trackers and the notification inbox outside settings", () => {
+    expect(hrefs(MEMBER, "trackers")).toEqual(["/trackers", "/notifications"]);
+  });
+
+  it("leaves only the subject's own settings on a tenantless host", () => {
+    expect(
+      buildAppNavigation({ ...MEMBER, tenantless: true, isPlatformAdmin: true }).map((item) => [
+        item.id,
+        item.children?.map((child) => child.href),
+      ])
+    ).toEqual([
+      ["dashboard", undefined],
+      ["my-settings", ["/settings/account", "/settings/appearance"]],
+    ]);
   });
 });
 

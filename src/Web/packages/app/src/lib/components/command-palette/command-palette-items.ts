@@ -8,6 +8,7 @@ import {
 import type { Component } from "svelte";
 import Activity from "@lucide/svelte/icons/activity";
 import Apple from "@lucide/svelte/icons/apple";
+import Archive from "@lucide/svelte/icons/archive";
 import Bell from "@lucide/svelte/icons/bell";
 import Building from "@lucide/svelte/icons/building";
 import CalendarDays from "@lucide/svelte/icons/calendar-days";
@@ -25,6 +26,8 @@ import Plug from "@lucide/svelte/icons/plug";
 import Plus from "@lucide/svelte/icons/plus";
 import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Ruler from "@lucide/svelte/icons/ruler";
+import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
+import Languages from "@lucide/svelte/icons/languages";
 import Shield from "@lucide/svelte/icons/shield";
 import Stethoscope from "@lucide/svelte/icons/stethoscope";
 import Sun from "@lucide/svelte/icons/sun";
@@ -179,6 +182,46 @@ export const items: CommandPaletteItem[] = [
 		href: "/notifications",
 	},
 	{
+		id: "page-trackers",
+		label: "Trackers",
+		group: "pages",
+		keywords: ["trackers", "consumables", "sensor", "site change", "reminders", "appointments"],
+		icon: Timer,
+		href: "/trackers",
+	},
+	{
+		id: "page-community",
+		label: "Community",
+		group: "pages",
+		keywords: ["community", "github", "discord", "documentation", "foundation"],
+		icon: HeartHandshake,
+		href: "/community",
+	},
+	{
+		id: "page-translations",
+		label: "Translations",
+		group: "pages",
+		keywords: ["translations", "translate", "language", "locale"],
+		icon: Languages,
+		href: "/community",
+	},
+	{
+		id: "page-migration",
+		label: "Data migration",
+		group: "pages",
+		keywords: ["migration", "import", "nightscout", "mongodb", "legacy"],
+		icon: Archive,
+		href: "/settings/migration",
+	},
+	{
+		id: "page-nightscout-transition",
+		label: "Nightscout transition",
+		group: "pages",
+		keywords: ["nightscout", "transition", "disconnect", "legacy"],
+		icon: Archive,
+		href: "/settings/nightscout-transition",
+	},
+	{
 		id: "page-time-spans",
 		label: "Time spans",
 		group: "pages",
@@ -245,7 +288,7 @@ export const items: CommandPaletteItem[] = [
 		group: "settings",
 		keywords: ["grants", "access", "permissions", "sharing"],
 		icon: Shield,
-		href: "/settings/grants",
+		href: "/settings/members",
 		scope: "sharing.manage",
 	},
 	{
@@ -281,7 +324,7 @@ export const items: CommandPaletteItem[] = [
 		group: "settings",
 		keywords: ["therapy", "treatment", "insulin type"],
 		icon: Stethoscope,
-		href: "/settings/therapy",
+		href: "/settings/profile",
 	},
 	{
 		id: "settings-patient",
