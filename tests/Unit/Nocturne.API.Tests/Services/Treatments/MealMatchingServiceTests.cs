@@ -1,13 +1,16 @@
+using System.Globalization;
 using Nocturne.Tests.Shared.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -36,6 +39,8 @@ public class MealMatchingServiceTests
     private readonly Mock<IInAppNotificationService> _notificationService = new();
     private readonly Mock<IInAppNotificationRepository> _notificationRepository = new();
     private readonly Mock<IMyFitnessPalMatchingSettingsService> _settingsService = new();
+    private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
+    private readonly FakeTimeProvider _time = new();
 
     private static readonly DateTimeOffset ConsumedAt = new(2026, 7, 20, 8, 0, 0, TimeSpan.Zero);
 
@@ -66,6 +71,8 @@ public class MealMatchingServiceTests
             _notificationService.Object,
             _notificationRepository.Object,
             _settingsService.Object,
+            _therapySettings.Object,
+            _time,
             Mock.Of<ILogger<MealMatchingService>>());
 
     /// <summary>
@@ -93,6 +100,8 @@ public class MealMatchingServiceTests
             _notificationService.Object,
             _notificationRepository.Object,
             settings,
+            _therapySettings.Object,
+            _time,
             Mock.Of<ILogger<MealMatchingService>>());
     }
 
@@ -264,6 +273,65 @@ public class MealMatchingServiceTests
         _notificationService.Verify(
             n => n.CreateNotificationAsync(
                 UserId, "meal_matching.suggested_match", It.IsAny<string>(),
+                It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), id.ToString(),
+                It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// The carb intake is at 08:00 UTC. Its time and its day are read on the tenant's clock,
+    /// whatever zone the server runs in: in the Honolulu rows the tenant's date is a day behind
+    /// UTC's.
+    /// </summary>
+    [Theory]
+    [InlineData("Australia/Sydney", "2026-07-20T09:00:00Z", "at 6:00pm")]
+    [InlineData("Australia/Sydney", "2026-07-21T01:00:00Z", "yesterday at 6:00pm")]
+    [InlineData("Australia/Sydney", "2026-07-22T01:00:00Z", "on jul 20 at 6:00pm")]
+    [InlineData("Pacific/Honolulu", "2026-07-20T09:30:00Z", "at 10:00pm")]
+    [InlineData("Pacific/Honolulu", "2026-07-20T10:30:00Z", "yesterday at 10:00pm")]
+    public async Task ProcessNewFoodEntriesAsync_TitlesTheMealOnTheTenantsClock(
+        string timeZoneId, string now, string expectedTime)
+    {
+        _therapySettings
+            .Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(timeZoneId);
+        _time.SetUtcNow(DateTimeOffset.Parse(now, CultureInfo.InvariantCulture));
+        var id = Guid.NewGuid();
+        _foodEntryRepository
+            .Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Entry(id)]);
+
+        await NewService().ProcessNewFoodEntriesAsync(UserId, [id]);
+
+        _notificationService.Verify(
+            n => n.CreateNotificationAsync(
+                UserId, "meal_matching.suggested_match", $"Confirm you ate \"Breakfast\" {expectedTime}",
+                It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), id.ToString(),
+                It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessNewFoodEntriesAsync_StillSuggestsOnUtcWhenTheTimezoneLookupFails()
+    {
+        _therapySettings
+            .Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("therapy settings read failed"));
+        _time.SetUtcNow(ConsumedAt.AddHours(1));
+        var id = Guid.NewGuid();
+        _foodEntryRepository
+            .Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Entry(id)]);
+
+        await NewService().ProcessNewFoodEntriesAsync(UserId, [id]);
+
+        _notificationService.Verify(
+            n => n.CreateNotificationAsync(
+                UserId, "meal_matching.suggested_match", "Confirm you ate \"Breakfast\" at 8:00am",
                 It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), id.ToString(),
                 It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),

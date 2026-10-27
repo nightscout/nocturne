@@ -1,6 +1,7 @@
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -33,6 +34,8 @@ public class MealMatchingService : IMealMatchingService
     private readonly IInAppNotificationService _notificationService;
     private readonly IInAppNotificationRepository _notificationRepository;
     private readonly IMyFitnessPalMatchingSettingsService _settingsService;
+    private readonly ITherapySettingsResolver _therapySettings;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<MealMatchingService> _logger;
 
     public MealMatchingService(
@@ -42,6 +45,8 @@ public class MealMatchingService : IMealMatchingService
         IInAppNotificationService notificationService,
         IInAppNotificationRepository notificationRepository,
         IMyFitnessPalMatchingSettingsService settingsService,
+        ITherapySettingsResolver therapySettings,
+        TimeProvider timeProvider,
         ILogger<MealMatchingService> logger)
     {
         _foodEntryRepository = foodEntryRepository;
@@ -50,6 +55,8 @@ public class MealMatchingService : IMealMatchingService
         _notificationService = notificationService;
         _notificationRepository = notificationRepository;
         _settingsService = settingsService;
+        _therapySettings = therapySettings;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -346,7 +353,10 @@ public class MealMatchingService : IMealMatchingService
         }
 
         var foodName = entry.Food?.Name ?? entry.MealName;
-        var timeDisplay = FormatTimeDisplay(CarbIntakeTime(carbIntake));
+        var timeDisplay = FormatTimeDisplay(
+            CarbIntakeTime(carbIntake),
+            await GetTenantTimeZoneAsync(ct),
+            _timeProvider.GetUtcNow());
 
         var title = $"Confirm you ate \"{foodName}\" {timeDisplay}";
         var subtitle = $"{entry.MealName} · {entry.Carbs:0}g carbs · via MyFitnessPal";
@@ -383,16 +393,30 @@ public class MealMatchingService : IMealMatchingService
             carbIntake.Id);
     }
 
-    private static string FormatTimeDisplay(DateTimeOffset time)
+    private async Task<TimeZoneInfo> GetTenantTimeZoneAsync(CancellationToken ct)
     {
-        var now = DateTimeOffset.UtcNow;
-        var localTime = time.ToLocalTime();
+        // A failed lookup costs the title the tenant's clock, not the user the suggestion.
+        try
+        {
+            return TimeZoneHelper.GetTimeZoneInfoFromId(await _therapySettings.GetTimezoneAsync(ct: ct));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Tenant timezone lookup failed; the meal match title falls back to UTC");
+            return TimeZoneInfo.Utc;
+        }
+    }
 
-        if (localTime.Date == now.Date)
+    private static string FormatTimeDisplay(DateTimeOffset time, TimeZoneInfo zone, DateTimeOffset now)
+    {
+        var localTime = TimeZoneInfo.ConvertTime(time, zone);
+        var today = TimeZoneInfo.ConvertTime(now, zone).Date;
+
+        if (localTime.Date == today)
         {
             return $"at {localTime:h:mmtt}".ToLowerInvariant();
         }
-        else if (localTime.Date == now.Date.AddDays(-1))
+        else if (localTime.Date == today.AddDays(-1))
         {
             return $"yesterday at {localTime:h:mmtt}".ToLowerInvariant();
         }
