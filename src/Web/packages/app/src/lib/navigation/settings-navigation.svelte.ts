@@ -10,7 +10,7 @@ import Building2 from "@lucide/svelte/icons/building-2";
 import FileSearch from "@lucide/svelte/icons/file-search";
 import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
 import HeartPulse from "@lucide/svelte/icons/heart-pulse";
-import Languages from "@lucide/svelte/icons/languages";
+import LifeBuoy from "@lucide/svelte/icons/life-buoy";
 import ListChecks from "@lucide/svelte/icons/list-checks";
 import MessageCircle from "@lucide/svelte/icons/message-circle";
 import Palette from "@lucide/svelte/icons/palette";
@@ -191,16 +191,16 @@ function settingsGroups(): SettingsGroup[] {
 export function helpLinks(): SettingsLink[] {
   return [
     {
-      title: "Support & community",
-      description: "Get help and connect with the community.",
+      title: "Support",
+      description: "Get help, tutorials, and diagnostic logs.",
       href: "/settings/support",
-      icon: HeartHandshake,
+      icon: LifeBuoy,
     },
     {
-      title: "Translations",
-      description: "Help translate Nocturne into your language.",
-      href: "/settings/translations",
-      icon: Languages,
+      title: "Community",
+      description: "Project links, and help to translate Nocturne.",
+      href: "/community",
+      icon: HeartHandshake,
     },
   ];
 }

@@ -70,6 +70,6 @@ describe("visibleSettingsGroups", () => {
     const all = Object.values(hrefs({ ...OWNER, isPlatformAdmin: true })).flat();
 
     expect(all).not.toContain("/settings/support");
-    expect(all).not.toContain("/settings/translations");
+    expect(all).not.toContain("/community");
   });
 });

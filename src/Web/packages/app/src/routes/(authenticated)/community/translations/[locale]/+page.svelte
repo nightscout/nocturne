@@ -320,7 +320,7 @@
 </script>
 
 <svelte:head>
-  <title>Translate {languageLabel} - Settings</title>
+  <title>Translate {languageLabel} - Community - Nocturne</title>
 </svelte:head>
 
 {#if !localeValid}
@@ -335,11 +335,11 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <a
-            href={resolve('settings/translations')}
+            href={resolve('community')}
             class="mb-1 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft class="h-3.5 w-3.5" />
-            Translations
+            Community
           </a>
           <h1 class="text-2xl font-bold">
             {nativeLanguageLabel}

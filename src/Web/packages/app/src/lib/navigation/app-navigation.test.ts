@@ -37,7 +37,8 @@ const OWNER_ONLY = [
   "Tools",
   "Alerts",
   "Trackers",
-  "Dev tools",
+  "Community",
+  "Legacy",
   "My settings",
   "Site settings",
 ];
@@ -147,6 +148,29 @@ describe("buildAppNavigation", () => {
     expect(titles({ ...REPORTING_SHARE, tenantCount: 2 })).not.toContain(
       "Tenants"
     );
+  });
+});
+
+describe("trackers, community and legacy", () => {
+  function hrefs(id: NavItem["id"]): (string | undefined)[] | undefined {
+    const item = buildAppNavigation(MEMBER).find((entry) => entry.id === id);
+    return item?.children ? item.children.map((child) => child.href) : [item?.href];
+  }
+
+  it("puts the notification inbox beside trackers", () => {
+    expect(hrefs("trackers")).toEqual(["/trackers", "/notifications"]);
+  });
+
+  it("offers the community page as its own entry", () => {
+    expect(hrefs("community")).toEqual(["/community"]);
+  });
+
+  it("files the Nightscout move and the compatibility pages under Legacy", () => {
+    expect(hrefs("legacy")).toEqual([
+      "/settings/migration",
+      "/compatibility",
+      "/compatibility/test",
+    ]);
   });
 });
 
