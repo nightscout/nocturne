@@ -35,7 +35,7 @@
     "layerchart": "2.9.0",
     "mode-watcher": "^1.1.0",
     "paneforge": "^1.0.2",
-    "svelte": "^5.57.3",
+    "svelte": "^5.57.2",
     "svelte-check": "^4.7.7",
     "svelte-sonner": "^1.1.1",
     "tailwind-merge": "^3.6.0",

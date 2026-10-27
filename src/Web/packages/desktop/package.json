@@ -31,7 +31,7 @@
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
     "eslint": "^10.3.0",
-    "svelte": "^5.57.3",
+    "svelte": "^5.57.2",
     "svelte-check": "^4.7.7",
     "tailwind-merge": "^3.6.0",
     "tailwind-variants": "^3.2.2",

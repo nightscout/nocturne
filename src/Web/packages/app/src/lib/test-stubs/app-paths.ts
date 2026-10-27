@@ -10,6 +10,11 @@ export function resolve(id: string, params?: Record<string, string>): string {
   return Object.entries(params).reduce<string>((acc, [key, value]) => acc.replace(`[${key}]`, value), id);
 }
 
+/** Every path is a page of the app here; a test that needs otherwise mocks `$app/paths`. */
+export async function match(url: URL | string): Promise<{ id: string; params: Record<string, string> }> {
+  return { id: new URL(url, "http://localhost").pathname, params: {} };
+}
+
 export function asset(file: string): string {
   return `/${file}`;
 }

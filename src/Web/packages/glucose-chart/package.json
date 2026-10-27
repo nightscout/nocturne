@@ -37,7 +37,7 @@
     "d3-scale": "^4.0.2",
     "eslint": "^10.3.0",
     "layerchart": "2.9.0",
-    "svelte": "^5.57.3",
+    "svelte": "^5.57.2",
     "svelte-check": "^4.7.7",
     "typescript": "^6.0.3",
     "vite": "^8.0.12"

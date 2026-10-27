@@ -25,7 +25,8 @@
     loginOptions,
     loginComplete,
   } from "#lib/api/generated/passkeys.generated.remote.js";
-  import { goto, invalidateAll } from "$app/navigation";
+  import { invalidateAll } from "$app/navigation";
+  import { goToReturnUrl } from "#lib/navigation/return-url.js";
   import { page } from "$app/state";
   import { describePasskeyError } from "./passkey-errors";
   import {
@@ -160,8 +161,7 @@
     if (onSuccess) {
       onSuccess();
     } else {
-      // eslint-disable-next-line svelte/no-navigation-without-resolve -- returnUrl is a caller-supplied same-origin path, not a route; goto() rejects cross-origin URLs
-      await goto(returnUrl, { refreshAll: true });
+      await goToReturnUrl(returnUrl, { refreshAll: true });
     }
   }
 

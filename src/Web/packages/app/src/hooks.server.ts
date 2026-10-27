@@ -406,15 +406,18 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
 };
 
 export const handleError: HandleServerError = async ({ kind, error, event }) => {
-  // An `error(...)` throw, a framework 404 or a rejected remote argument already carries the
-  // status, message and issues its caller reads. Returning nothing keeps them.
-  if (kind !== "unknown") return;
+  // An `error(...)` throw or a rejected remote argument already carries the status, message and
+  // issues its caller reads. Returning nothing keeps them.
+  if (kind === "app" || kind === "validation") return;
 
   const errorId = randomUUID();
   console.error(`Error ID: ${errorId}`, error);
   console.log(
     `Error occurred during request: ${event.request.method} ${event.request.url}`
   );
+
+  // SvelteKit's own errors (a 404, a 405) carry a message meant for the page.
+  if (kind === "framework") return { message: error.message, errorId };
 
   // Extract meaningful error message
   let message = "An unexpected error occurred";

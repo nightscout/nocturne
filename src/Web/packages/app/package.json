@@ -84,7 +84,7 @@
     "prettier-plugin-jsdoc": "^1.8.0",
     "prettier-plugin-svelte": "^3.5.2",
     "socket.io-client": "^4.8.3",
-    "svelte": "^5.57.3",
+    "svelte": "^5.57.2",
     "svelte-check": "^4.7.7",
     "svelte-sonner": "^1.1.1",
     "tailwind-merge": "^3.6.0",

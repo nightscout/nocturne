@@ -8,7 +8,7 @@
   import { getAuthState } from "../auth.remote";
   import { getAuthStatus } from "#lib/api/generated/index.js";
   import { page } from "$app/state";
-  import { goto } from "$app/navigation";
+  import { goToReturnUrl } from "#lib/navigation/return-url.js";
   import { resolve } from "$app/paths";
   import LoginForm from "#lib/components/auth/LoginForm.svelte";
   import RequestMembershipDialog from "#lib/components/members/RequestMembershipDialog.svelte";
@@ -46,8 +46,7 @@
   $effect(() => {
     const currentAuth = authStateQuery.current;
     if (currentAuth?.isAuthenticated && currentAuth?.user) {
-      // eslint-disable-next-line svelte/no-navigation-without-resolve -- returnUrl is a caller-supplied same-origin path, not a route; goto() rejects cross-origin URLs
-      goto(returnUrl, { replace: true });
+      void goToReturnUrl(returnUrl, { replace: true });
     }
   });
 </script>

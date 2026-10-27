@@ -22,17 +22,19 @@ export const init: ClientInit = () => {
 };
 
 export const handleError: HandleClientError = ({ kind, error }) => {
-  // Expected errors keep their own status and message, and are not reported.
-  if (kind !== "unknown") return;
+  // An `error(...)` throw keeps its own status and message, and is not reported.
+  if (kind === "app") return;
 
   const errorId = crypto.randomUUID();
 
   const message =
-    error instanceof Error
+    kind === "framework"
       ? error.message
-      : typeof error === "string"
-        ? error
-        : "An unexpected error occurred";
+      : error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "An unexpected error occurred";
 
   const stack = error instanceof Error ? error.stack : undefined;
 

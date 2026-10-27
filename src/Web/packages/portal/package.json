@@ -36,7 +36,7 @@
 		"mdsvex": "^0.12.3",
 		"mode-watcher": "^1.1.0",
 		"rehype-slug": "^6.0.0",
-		"svelte": "^5.57.3",
+		"svelte": "^5.57.2",
 		"svelte-check": "^4.7.7",
 		"svelte-sonner": "^1.0.7",
 		"tailwind-merge": "^3.6.0",

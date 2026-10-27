@@ -37,7 +37,7 @@ vi.mock("#lib/server/api-client-factory.js", () => ({
   }),
 }));
 
-const { handle } = await import("./hooks.server");
+const { handle, handleError } = await import("./hooks.server");
 /** Sets up the request store SvelteKit's server wraps `handle` in, which sequence() reads. */
 const withRequestStore = (kitInternal as { with_request_store: <T>(store: unknown, fn: () => T) => T })
   .with_request_store;
@@ -300,5 +300,49 @@ describe("hooks — response headers", () => {
     });
 
     expect(response.headers.has("link")).toBe(false);
+  });
+});
+
+describe("hooks — handleError", () => {
+  const event = { request: new Request("https://sleepy.nocturne.test/reports/agp") } as unknown as RequestEvent;
+  const quiet = () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  };
+  afterEach(() => vi.restoreAllMocks());
+
+  it("leaves an error(...) throw as the caller wrote it", async () => {
+    const outcome = await handleError({
+      kind: "app",
+      error: { status: 409, message: "Already redeemed", issues: [] },
+      event,
+    });
+
+    expect(outcome).toBeUndefined();
+  });
+
+  it("leaves a rejected remote argument to SvelteKit's own message", async () => {
+    const outcome = await handleError({
+      kind: "validation",
+      error: { status: 400, message: "Bad Request" },
+      issues: [],
+      event,
+    });
+
+    expect(outcome).toBeUndefined();
+  });
+
+  it("keeps SvelteKit's message for its own errors and names the occurrence", async () => {
+    quiet();
+    const outcome = await handleError({ kind: "framework", error: { status: 404, message: "Not Found" }, event });
+
+    expect(outcome).toMatchObject({ message: "Not Found", errorId: expect.any(String) });
+  });
+
+  it("names an unexpected error and carries its message", async () => {
+    quiet();
+    const outcome = await handleError({ kind: "unknown", error: new Error("boom"), event });
+
+    expect(outcome).toMatchObject({ message: "boom", errorId: expect.any(String) });
   });
 });

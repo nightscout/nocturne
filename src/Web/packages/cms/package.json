@@ -65,7 +65,7 @@
     "mdsvex": "^0.12.3",
     "remark-html": "^16.0.1",
     "remark-parse": "^11.0.0",
-    "svelte": "^5.57.3",
+    "svelte": "^5.57.2",
     "svelte-check": "^4.7.7",
     "svelte-sonner": "^1.1.1",
     "svelte-tiptap": "^3.0.0",
