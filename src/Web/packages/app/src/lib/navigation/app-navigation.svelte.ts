@@ -20,7 +20,10 @@ import Bell from "@lucide/svelte/icons/bell";
 import BellOff from "@lucide/svelte/icons/bell-off";
 import Calendar from "@lucide/svelte/icons/calendar";
 import CheckCircle from "@lucide/svelte/icons/circle-check-big";
-import Terminal from "@lucide/svelte/icons/terminal";
+import Archive from "@lucide/svelte/icons/archive";
+import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
+import Import from "@lucide/svelte/icons/import";
+import Inbox from "@lucide/svelte/icons/inbox";
 import TestTube from "@lucide/svelte/icons/test-tube";
 import Timer from "@lucide/svelte/icons/timer";
 import Layers from "@lucide/svelte/icons/layers";
@@ -49,7 +52,8 @@ export type NavItemId =
   | "tools"
   | "alerts"
   | "trackers"
-  | "dev-tools"
+  | "community"
+  | "legacy"
   | "settings"
   | "site-settings"
   | "platform";
@@ -230,15 +234,25 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
     {
       id: "trackers",
       title: "Trackers",
-      href: "/trackers",
       icon: Timer,
       scope: "alerts.read",
+      children: [
+        { title: "Trackers", href: "/trackers", icon: Timer },
+        { title: "Notifications", href: "/notifications", icon: Inbox },
+      ],
     },
     {
-      id: "dev-tools",
-      title: "Dev tools",
-      icon: Terminal,
+      id: "community",
+      title: "Community",
+      href: "/community",
+      icon: HeartHandshake,
+    },
+    {
+      id: "legacy",
+      title: "Legacy",
+      icon: Archive,
       children: [
+        { title: "Move from Nightscout", href: "/settings/migration", icon: Import },
         {
           title: "Compatibility",
           href: "/compatibility",

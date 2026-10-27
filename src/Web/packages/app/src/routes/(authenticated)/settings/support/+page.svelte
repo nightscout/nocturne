@@ -13,8 +13,7 @@
   import { Label } from "#lib/components/ui/label/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import GithubIcon from "#lib/components/icons/GithubIcon.svelte";
-  import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
-  import MessageCircle from "@lucide/svelte/icons/message-circle";
+  import LifeBuoy from "@lucide/svelte/icons/life-buoy";
   import FileText from "@lucide/svelte/icons/file-text";
   import Bug from "@lucide/svelte/icons/bug";
   import ExternalLink from "@lucide/svelte/icons/external-link";
@@ -23,7 +22,6 @@
   import Shield from "@lucide/svelte/icons/shield";
   import Heart from "@lucide/svelte/icons/heart";
   import Users from "@lucide/svelte/icons/users";
-  import BookOpen from "@lucide/svelte/icons/book-open";
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import Lightbulb from "@lucide/svelte/icons/lightbulb";
@@ -40,7 +38,6 @@
   import { toast } from "svelte-sonner";
   import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
   import { describeSubmitError } from "#lib/forms/submit-error.js";
-  import { docsUrl } from "#lib/docs-url.js";
   import {
     buildDiagnosticReport,
     readDiagnosticDevice,
@@ -86,36 +83,6 @@
     coachCtx.setDisabled(value);
     toast.success(value ? "Tutorials disabled" : "Tutorials enabled");
   }
-
-  const communityLinks = $derived([
-    {
-      name: "GitHub repository",
-      description: "Source code, issues, and feature requests",
-      icon: GithubIcon,
-      href: "https://github.com/nightscout/nocturne",
-      badge: "Open source",
-    },
-    {
-      name: "Discord community",
-      description: "Chat with developers and other users",
-      icon: MessageCircle,
-      href: "https://discord.gg/xWYz9fFWrj",
-      badge: "Active",
-    },
-    {
-      name: "Documentation",
-      description: "Guides, tutorials, and API reference",
-      icon: BookOpen,
-      href: docsUrl("/docs", "support"),
-    },
-    {
-      name: "Nightscout Foundation",
-      description: "The organization behind Nightscout",
-      icon: Heart,
-      href: "https://www.nightscoutfoundation.org/",
-      badge: "501(c)(3)",
-    },
-  ]);
 
   const supportOptions = [
     {
@@ -179,63 +146,22 @@
 </script>
 
 <svelte:head>
-  <title>Support & community - Settings - Nocturne</title>
+  <title>Support - Settings - Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
   <!-- Header -->
   <div class="flex items-center gap-3">
     <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-      <HeartHandshake class="h-6 w-6 text-primary" />
+      <LifeBuoy class="h-6 w-6 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Support & community</h1>
+      <h1 class="text-2xl font-bold tracking-tight">Support</h1>
       <p class="text-muted-foreground">
-        Get help, connect with the community, and share feedback
+        Get help, report problems, and share feedback
       </p>
     </div>
   </div>
-
-  <!-- Community Links -->
-  <Card>
-    <CardHeader>
-      <CardTitle class="flex items-center gap-2">
-        <HeartHandshake class="h-5 w-5" />
-        Community
-      </CardTitle>
-      <CardDescription>Connect with the Nightscout community</CardDescription>
-    </CardHeader>
-    <CardContent class="space-y-4">
-      {#each communityLinks as link (link.name)}
-        <a
-          href={link.href}
-          target="_blank"
-          rel="external noopener noreferrer"
-          class="flex items-center justify-between gap-3 p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
-        >
-          <div class="flex min-w-0 items-center gap-4">
-            <div
-              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
-            >
-              <link.icon class="h-5 w-5 text-primary" />
-            </div>
-            <div class="min-w-0">
-              <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span class="font-medium">{link.name}</span>
-                {#if link.badge}
-                  <Badge variant="secondary">
-                    {link.badge}
-                  </Badge>
-                {/if}
-              </div>
-              <p class="text-sm text-muted-foreground">{link.description}</p>
-            </div>
-          </div>
-          <ExternalLink class="h-4 w-4 shrink-0 text-muted-foreground" />
-        </a>
-      {/each}
-    </CardContent>
-  </Card>
 
   <!-- Support Options -->
   <Card>
