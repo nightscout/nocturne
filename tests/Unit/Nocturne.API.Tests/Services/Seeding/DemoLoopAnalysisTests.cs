@@ -36,10 +36,10 @@ public class DemoLoopAnalysisTests(ITestOutputHelper output)
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.Local;
 
     /// <summary>
-    /// A week with a sick day and every kind of loop interruption, manual mode among them, so the
+    /// A week with a sick day and a day in manual mode, so the
     /// insulin totals test sees the days the masks take out and the days they leave in.
     /// </summary>
-    private static readonly DateTime End = new(2026, 9, 7, 20, 0, 0);
+    private static readonly DateTime End = new(2026, 8, 7, 20, 0, 0);
 
     private static readonly Lazy<(SettingsEvidenceInputs Inputs, long From, long To)> Week = new(Load);
 

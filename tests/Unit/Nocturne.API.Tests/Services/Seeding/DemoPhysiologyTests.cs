@@ -12,7 +12,7 @@ public class DemoPhysiologyTests
 {
     private static readonly OrefProfile Profile = new()
     {
-        Dia = 3,
+        Dia = 5,
         CurrentBasal = 1,
         Sens = 40,
         CarbRatio = 10,
@@ -32,6 +32,23 @@ public class DemoPhysiologyTests
             .Sum(i => simulator.CalculateInsulinActivity(Start.AddMinutes(5 * i)));
 
         drop.Should().BeApproximately(5 * 40, 5);
+    }
+
+    [Fact]
+    public void Simulator_ActivityIsMinusTheSlopeOfIob()
+    {
+        var simulator = new OrefPhysiologySimulator(NullLogger<OrefPhysiologySimulator>.Instance, Profile);
+        simulator.AddInsulinDose(Start, 5);
+
+        foreach (var minutes in new[] { 30, 75, 150, 240 })
+        {
+            var iobBefore = simulator.CalculateIob(Start.AddMinutes(minutes - 0.5));
+            var iobAfter = simulator.CalculateIob(Start.AddMinutes(minutes + 0.5));
+            var perFiveMinutes = (iobBefore - iobAfter) * Profile.Sens * 5;
+
+            simulator.CalculateInsulinActivity(Start.AddMinutes(minutes))
+                .Should().BeApproximately(perFiveMinutes, perFiveMinutes * 0.1 + 0.05);
+        }
     }
 
     [Fact]

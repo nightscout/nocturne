@@ -33,7 +33,7 @@ public class OrefPhysiologySimulator
 
         var diaMinutes = _profile.Dia * 60;
         for (var t = 0.0; t <= diaMinutes; t += 5)
-            _insulinCurveSum += CalculateExponentialActivity(t, _profile.Peak, diaMinutes);
+            _insulinCurveSum += ExponentialInsulinCurve.ActivityFraction(t, _profile.Peak, diaMinutes);
     }
 
     /// <summary>
@@ -166,8 +166,7 @@ public class OrefPhysiologySimulator
             if (minutesSince < 0 || minutesSince > diaMinutes)
                 continue;
 
-            // Calculate activity (derivative of IOB curve)
-            var activity = CalculateExponentialActivity(minutesSince, peakMinutes, diaMinutes);
+            var activity = ExponentialInsulinCurve.ActivityFraction(minutesSince, peakMinutes, diaMinutes);
 
             totalActivity += dose.Units * _profile.Sens * activity / _insulinCurveSum;
         }
@@ -268,26 +267,6 @@ public class OrefPhysiologySimulator
         netChange = Math.Clamp(netChange, -20, 20);
 
         return currentGlucose + netChange;
-    }
-
-    /// <summary>
-    /// Exponential insulin activity model from oref0
-    /// Returns activity level (higher = more glucose lowering)
-    /// </summary>
-    private static double CalculateExponentialActivity(
-        double minutesSince,
-        double peakMinutes,
-        double diaMinutes
-    )
-    {
-        var tau = peakMinutes * (1 - peakMinutes / diaMinutes) / (1 - 2 * peakMinutes / diaMinutes);
-        var a = 2 * tau / diaMinutes;
-        var S = 1 / (1 - a + (1 + a) * Math.Exp(-diaMinutes / tau));
-
-        var t = minutesSince;
-        var activity = S * (t / (tau * tau)) * Math.Exp(-t / tau);
-
-        return Math.Max(0, activity);
     }
 
     /// <summary>
