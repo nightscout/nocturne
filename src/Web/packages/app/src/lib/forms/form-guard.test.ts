@@ -4,15 +4,6 @@ vi.mock("$app/navigation", () => ({
   beforeNavigate: vi.fn(),
 }));
 
-vi.mock("runed", () => ({
-  Debounced: class {
-    current: unknown;
-    constructor(fn: () => unknown, _delay: number) {
-      this.current = fn();
-    }
-  },
-}));
-
 import { beforeNavigate, type BeforeNavigate } from "$app/navigation";
 import { z } from "zod";
 import type { Mock } from "vitest";

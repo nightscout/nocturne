@@ -1,7 +1,6 @@
 import { beforeNavigate } from "$app/navigation";
 import { flushSync } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
-import { Debounced } from "runed";
 import type { z, ZodIssue } from "zod";
 import { deepEqual } from "./deep-equal";
 import { FOLLOW_UP_ERROR, GENERIC_SUBMIT_ERROR } from "./submit-error";
@@ -39,7 +38,6 @@ export class FormGuard<T extends Record<string, unknown>> {
   #blurred = new SvelteSet<string>();
   #edited = new SvelteSet<string>();
   #submission: Submission;
-  #debounced: Debounced<boolean>;
 
   constructor(options: FormGuardOptions<T>) {
     this.#options = options;
@@ -69,8 +67,9 @@ export class FormGuard<T extends Record<string, unknown>> {
       }
     });
 
-    // Debounced validation
-    this.#debounced = new Debounced(() => this.validate(), 300);
+    $effect(() => {
+      this.validate();
+    });
 
     // Navigation blocking
     if (options.navBlockMessage) {
@@ -141,11 +140,6 @@ export class FormGuard<T extends Record<string, unknown>> {
     }
     this.#issues = result.error.issues;
     return false;
-  }
-
-  debouncedValidate(): void {
-    // Access .current to trigger the debounced evaluation
-    void this.#debounced.current;
   }
 
   /** The issues for one field that are due to show: see {@link visibleIssues}. */
