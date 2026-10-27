@@ -12,10 +12,12 @@ const readings = Array.from({ length: 12 * 12 }, (_, i) => ({
   sgv: 100 + 50 * Math.sin(i / 10),
 }));
 
+const thresholds = { low: 70, high: 180, veryLow: 54, veryHigh: 250, glucoseYMax: 300 };
+
 const props = (style: Partial<Props["style"]> = {}, rest: Partial<Props> = {}): Props => ({
   chartData: transformChartData({
     glucoseData: readings,
-    thresholds: { low: 70, high: 180, veryLow: 54, veryHigh: 250, glucoseYMax: 300 },
+    thresholds,
   }),
   nowMs: now,
   lookbackHours: 12,
@@ -46,6 +48,17 @@ describe("PlotSnapshot", () => {
     expect(html).toMatch(/<svg width="1118" height="450"/);
     expect(html).toMatch(/<path d="M[-\d.]+,[-\d.]+C[^"]*" stroke="url\(#[^)]+\)" class="lc-path stroke-2 fill-none"/);
     expect(circleXs(html)).toHaveLength(readings.length);
+  });
+
+  it("draws the readings in the window and the two either side of it", () => {
+    const twoDays = Array.from({ length: 48 * 12 }, (_, i) => ({ time: now - i * 5 * 60 * 1000, sgv: 120 }));
+    const html = snapshot(
+      props({}, { chartData: transformChartData({ glucoseData: twoDays, thresholds }) })
+    );
+
+    // 12 h of 5-minute readings, both ends included, and two before the window's start.
+    expect(circleXs(html)).toHaveLength(12 * 12 + 1 + 2);
+    expect(circleXs(html).filter((x) => x < 0)).toHaveLength(2);
   });
 
   it("writes only attributes onto the chart's elements", () => {

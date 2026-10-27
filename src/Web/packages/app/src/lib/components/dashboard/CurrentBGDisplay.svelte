@@ -112,7 +112,6 @@
     })
   );
 
-  // The desktop key predates the mobile rail, so rows stored before it still apply.
   const pillRows = $derived(page.data.pillRows);
 
   // Tracker Completion Dialog State

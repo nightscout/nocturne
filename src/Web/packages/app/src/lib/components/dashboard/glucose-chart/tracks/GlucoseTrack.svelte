@@ -8,7 +8,7 @@
     ChartClipPath,
     getChartContext,
   } from "layerchart";
-  import { curveMonotoneX } from "d3";
+  import { bisector, curveMonotoneX } from "d3";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import type { GlucosePoint } from "../engine/chart-data-view.svelte";
   import { bg } from "#lib/utils/formatting.js";
@@ -52,6 +52,12 @@
     pointColorMode?: LineColorMode;
     pointColor?: string;
     areaOpacity?: number;
+    /**
+     * Draw only the readings in the chart's x domain. Two more on each side keep the curve and
+     * the points at its edges as the whole series draws them: a monotone curve's segment reads
+     * the readings either side of it.
+     */
+    visibleOnly?: boolean;
   }
 
   let {
@@ -63,12 +69,20 @@
     pointColorMode,
     pointColor,
     areaOpacity = 0.5,
+    visibleOnly = false,
   }: Props = $props();
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();
 
   const glucoseData = $derived(ctx.engine.glucoseData);
+  const bisectTime = bisector((d: GlucosePoint) => d.time);
+  const drawnData = $derived.by(() => {
+    if (!visibleOnly) return glucoseData;
+    const [from, to] = chartCtx.xScale.domain();
+    const start = Math.max(0, bisectTime.left(glucoseData, from) - 2);
+    return glucoseData.slice(start, bisectTime.right(glucoseData, to) + 2);
+  });
   const glucoseScale = $derived(ctx.layout.glucose.scale);
   const glucoseAxisScale = $derived(ctx.layout.glucose.axisScale);
   const thresholds = $derived(ctx.engine.thresholds);
@@ -121,7 +135,7 @@
 {#snippet splineOrArea(stroke: string)}
   {#if areaMode === "off"}
     <Spline
-      data={glucoseData}
+      data={drawnData}
       x={(d) => d.time}
       y={(d) => glucoseScale(d.sgv)}
       {stroke}
@@ -139,7 +153,7 @@
     >
       {#snippet children({ gradient: fillGrad })}
         <Area
-          data={glucoseData}
+          data={drawnData}
           x={(d: GlucosePoint) => d.time}
           y1={(d: GlucosePoint) => glucoseScale(d.sgv)}
           {y0}
@@ -178,7 +192,7 @@
          cost O(N^2) synchronous work. Data mode renders the whole series from
          one mark with a per-point fill accessor. -->
     <Circle
-      data={glucoseData}
+      data={drawnData}
       key={(d) => d.time.getTime()}
       cx={(d) => d.time}
       cy={(d) => glucoseScale(d.sgv)}

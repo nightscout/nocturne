@@ -106,6 +106,7 @@
       showPoints={style.showPoints}
       areaMode={style.areaMode}
       areaOpacity={style.areaOpacity}
+      visibleOnly
     />
   {/snippet}
 </GlucoseChartShell>
