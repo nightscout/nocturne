@@ -27,6 +27,12 @@ import { dirname } from "node:path";
 const require = createRequire(
   createRequire(import.meta.url).resolve("@nocturne/bot/package.json"),
 );
+const workspaceDependencies = Object.entries(
+  (createRequire(import.meta.url)("./package.json") as { dependencies: Record<string, string> }).dependencies,
+)
+  .filter(([, version]) => version.startsWith("workspace:"))
+  .map(([name]) => name);
+
 const reactAliases = {
   react: dirname(require.resolve("react/package.json")),
   "react-dom": dirname(require.resolve("react-dom/package.json")),
@@ -56,7 +62,11 @@ export default defineConfig(({ mode }) => {
       // store path at prerender/runtime. Same reason for layerchart and its
       // @layerstack/* utilities: their dist emits bare `svelte` imports that
       // Node can't resolve from pnpm's isolated store, so bundle them for SSR.
-      noExternal: ["@resend/chat-sdk-adapter", "layerchart", /^@layerstack\//],
+      //
+      // adapter-node marks every production dependency external unless it is named here, and the
+      // runtime image installs none of the workspace packages, so those stay bundled as Vite
+      // bundled linked packages before.
+      noExternal: [...workspaceDependencies, "@resend/chat-sdk-adapter", "layerchart", /^@layerstack\//],
     },
     optimizeDeps: {
       // sveltekit-search-params is only imported by the dashboard's
