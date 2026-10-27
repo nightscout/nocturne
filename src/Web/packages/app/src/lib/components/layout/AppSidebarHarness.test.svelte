@@ -1,9 +1,9 @@
 <script lang="ts">
-  import * as Sidebar from "$lib/components/ui/sidebar";
-  import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import * as Sidebar from "#lib/components/ui/sidebar/index.js";
+  import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import AppSidebar from "./AppSidebar.svelte";
-  import type { AuthUser } from "$lib/stores/auth-store.svelte";
-  import type { TenantSwitcherTarget } from "$lib/utils/tenant-host";
+  import type { AuthUser } from "#lib/stores/auth-store.svelte.js";
+  import type { TenantSwitcherTarget } from "#lib/utils/tenant-host.js";
 
   const {
     user = null,

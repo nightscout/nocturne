@@ -1,16 +1,16 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { EmptyState } from "$lib/components/shared";
-  import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
-  import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import FormError from "$lib/forms/FormError.svelte";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import PermissionCategorySelector from "#lib/components/rbac/PermissionCategorySelector.svelte";
+  import PermissionSummary from "#lib/components/rbac/PermissionSummary.svelte";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import FormError from "#lib/forms/FormError.svelte";
   import Shield from "@lucide/svelte/icons/shield";
   import Ban from "@lucide/svelte/icons/ban";
   import Plus from "@lucide/svelte/icons/plus";
@@ -26,8 +26,8 @@
     createRole,
     updateRole,
     deleteRole,
-  } from "$lib/api/generated/roles.generated.remote";
-  import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/roles.generated.remote.js";
+  import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
 
   // Query
   const rolesQuery = getRoles();

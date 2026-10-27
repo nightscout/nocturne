@@ -257,7 +257,7 @@ ensure_env() {
 
   # Only ever fill in a blank. Regenerating a password that Postgres has already
   # initialised itself with would lock Nocturne out of its own database.
-  for key in INSTANCE_KEY POSTGRES_PASSWORD POSTGRES_APP_PASSWORD POSTGRES_MIGRATOR_PASSWORD POSTGRES_WEB_PASSWORD; do
+  for key in INSTANCE_KEY POSTGRES_PASSWORD POSTGRES_APP_PASSWORD POSTGRES_MIGRATOR_PASSWORD POSTGRES_WEB_PASSWORD WATCHTOWER_API_TOKEN; do
     grep -q "^${key}=" .env || printf '%s=\n' "$key" >> .env
     if [[ -z "$(get_env "$key")" ]]; then
       set_env "$key" "$(openssl rand -hex 24)"
@@ -266,7 +266,7 @@ ensure_env() {
   done
   chmod 600 .env
 
-  for key in BASE_DOMAIN INSTANCE_KEY POSTGRES_PASSWORD POSTGRES_APP_PASSWORD POSTGRES_MIGRATOR_PASSWORD POSTGRES_WEB_PASSWORD; do
+  for key in BASE_DOMAIN INSTANCE_KEY POSTGRES_PASSWORD POSTGRES_APP_PASSWORD POSTGRES_MIGRATOR_PASSWORD POSTGRES_WEB_PASSWORD WATCHTOWER_API_TOKEN; do
     [[ -n "$(get_env "$key")" ]] || { log "$key is empty in .env and could not be filled in"; return 1; }
   done
 }

@@ -28,13 +28,13 @@ import Wrench from "@lucide/svelte/icons/wrench";
 import Users from "@lucide/svelte/icons/users";
 import PlayCircle from "@lucide/svelte/icons/circle-play";
 import HistoryIcon from "@lucide/svelte/icons/history";
-import { satisfiesScope } from "$lib/authorization/scopes";
-import { getSidebarReportItems } from "$lib/navigation/report-navigation.svelte";
-import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
+import { satisfiesScope } from "#lib/authorization/scopes.js";
+import { getSidebarReportItems } from "#lib/navigation/report-navigation.svelte.js";
+import { filterTenantlessNav } from "#lib/navigation/tenantless-navigation.js";
 import {
   visibleSettingsGroups,
   type SettingsGroupId,
-} from "$lib/navigation/settings-navigation.svelte";
+} from "#lib/navigation/settings-navigation.svelte.js";
 
 /** Stable identity of a top-level sidebar entry, independent of its translated title. */
 export type NavItemId =

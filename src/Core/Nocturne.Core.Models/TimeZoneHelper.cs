@@ -143,7 +143,19 @@ public static class TimeZoneHelper
     }
 
     /// <summary>
-    /// Calculate overnight window boundaries in Unix milliseconds for a given night and timezone
+    /// Hours from <paramref name="bedtimeHour"/> to the next <paramref name="wakeTimeHour"/>, 1 to 24.
+    /// Equal hours span a full day.
+    /// </summary>
+    public static int SleepSpanHours(int bedtimeHour, int wakeTimeHour)
+    {
+        var hours = ((wakeTimeHour - bedtimeHour) % 24 + 24) % 24;
+        return hours == 0 ? 24 : hours;
+    }
+
+    /// <summary>
+    /// Calculate overnight window boundaries in Unix milliseconds for a given night and timezone.
+    /// The window runs from bedtime on <paramref name="nightOf"/> to the next wake time after it:
+    /// the same day when the wake hour is later than the bedtime hour, otherwise the next day.
     /// </summary>
     /// <param name="nightOf">The night to analyze (date when sleep started)</param>
     /// <param name="userTimeZone">User's timezone</param>
@@ -156,17 +168,24 @@ public static class TimeZoneHelper
         int bedtimeHour = 23,
         int wakeTimeHour = 7)
     {
-        // Night of 2026-02-01 means bedtime on Feb 1 to wake time on Feb 2 in user's local time
+        var wakeDay = wakeTimeHour > bedtimeHour ? nightOf : nightOf.AddDays(1);
         var startLocalDateTime = nightOf.ToDateTime(new TimeOnly(bedtimeHour, 0));
-        var endLocalDateTime = nightOf.AddDays(1).ToDateTime(new TimeOnly(wakeTimeHour, 0));
+        var endLocalDateTime = wakeDay.ToDateTime(new TimeOnly(wakeTimeHour, 0));
 
-        // Convert local times to UTC for querying
-        var startUtc = TimeZoneInfo.ConvertTimeToUtc(startLocalDateTime, userTimeZone);
-        var endUtc = TimeZoneInfo.ConvertTimeToUtc(endLocalDateTime, userTimeZone);
+        var startUtc = LocalToUtc(startLocalDateTime, userTimeZone);
+        var endUtc = LocalToUtc(endLocalDateTime, userTimeZone);
 
-        var windowStart = startUtc.ToMills();
-        var windowEnd = endUtc.ToMills();
+        return (startUtc.ToMills(), endUtc.ToMills());
+    }
 
-        return (windowStart, windowEnd);
+    /// <summary>
+    /// A local time the clock skipped resolves to the first instant after the gap.
+    /// </summary>
+    private static DateTime LocalToUtc(DateTime local, TimeZoneInfo timeZone)
+    {
+        while (timeZone.IsInvalidTime(local))
+            local = local.AddMinutes(1);
+
+        return TimeZoneInfo.ConvertTimeToUtc(local, timeZone);
     }
 }

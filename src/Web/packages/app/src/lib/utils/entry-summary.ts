@@ -8,9 +8,9 @@
  * 0.30000000000000004 and has to read as 0.30.
  */
 
-import type { EntryRecord } from "$lib/constants/entry-categories";
-import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
-import { formatCarbDisplay, formatInsulinDisplay } from "$lib/utils/formatting";
+import type { EntryRecord } from "#lib/constants/entry-categories.js";
+import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
+import { formatCarbDisplay, formatInsulinDisplay } from "#lib/utils/formatting.js";
 
 /**
  * The headline line for an entry row — the amount with its unit, or the

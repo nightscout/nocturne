@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Input } from "$lib/components/ui/input";
-  import { Button } from "$lib/components/ui/button";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Check from "@lucide/svelte/icons/check";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
@@ -9,7 +9,7 @@
     FormError,
     FormField,
     useAvailability,
-  } from "$lib/forms";
+  } from "#lib/forms/index.js";
   import { setupTenant, validateSetupSlug, setSetupTenantSlug } from "../setup.remote";
 
   let {

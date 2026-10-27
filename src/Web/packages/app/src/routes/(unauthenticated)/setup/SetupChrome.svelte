@@ -2,16 +2,12 @@
   import type { Snippet } from "svelte";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
-  import AppLogo from "$lib/components/ui/AppLogo.svelte";
+  import AppLogo from "#lib/components/ui/AppLogo.svelte";
 
-  let {
-    actions,
-    children,
-  }: {
-    /** The header's right-hand side, before the signed-in user. */
-    actions?: Snippet;
-    children: Snippet;
-  } = $props();
+  let { actions, children
+
+  /** The header's right-hand side, before the signed-in user. */
+   }: { actions?: Snippet; children: Snippet } = $props();
 
   const userEmail = $derived<string>(page.data?.user?.email ?? "");
   const userInitials = $derived(
@@ -60,9 +56,18 @@
     class="relative px-5 py-5 md:px-8 border-t flex flex-wrap gap-2.5 justify-between items-center text-xs text-muted-foreground"
   >
     <div class="flex flex-wrap items-center gap-5">
-      <span>&copy; 2026 Nocturne</span>
-      <a href={resolve("/privacy")} class="hover:text-foreground">Privacy</a>
-      <a href="/docs" rel="external" class="hover:text-foreground">Docs</a>
+      <span>© 2026 Nocturne</span>
+
+      <a
+        href={resolve('privacy')}
+        class="hover:text-foreground"
+      >Privacy</a>
+
+      <a
+        href="/docs"
+        rel="external"
+        class="hover:text-foreground"
+      >Docs</a>
     </div>
     <a
       href="https://github.com/nightscout/nocturne"

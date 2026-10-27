@@ -2,7 +2,7 @@
     import { tick } from "svelte";
     import { SvelteSet } from "svelte/reactivity";
     import { afterNavigate } from "$app/navigation";
-    import { track } from "$lib/analytics";
+    import { track } from "#lib/analytics.js";
 
     // A step counts as reached once its marker is in the upper 60% of the viewport, where the
     // reader is looking, rather than as soon as its edge appears at the bottom.

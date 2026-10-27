@@ -5,8 +5,8 @@
   }
   let { textBlock = null, flow = null }: Props = $props();
 
-  import { auroraTime, sampleSurface } from "$lib/utils/aurora-noise";
-  import type { FlowField } from "$lib/utils/aurora-flow";
+  import { auroraTime, sampleSurface } from "#lib/utils/aurora-noise.js";
+  import type { FlowField } from "#lib/utils/aurora-flow.js";
 
   // ── Chip definitions ──────────────────────────────────────────────────────
   // hPos: left or right as % of container width. Preserved from the original

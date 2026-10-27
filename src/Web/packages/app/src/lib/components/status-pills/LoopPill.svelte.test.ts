@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
-import type { LoopPillData } from "$lib/types/status-pills";
+import type { LoopPillData } from "#lib/types/status-pills.js";
 import LoopPill from "./LoopPill.svelte";
 
 type LastEnacted = NonNullable<LoopPillData["lastEnacted"]>;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import Shield from "@lucide/svelte/icons/shield";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
-  import { ScopeDeletionAccess } from "$lib/api";
+  import { ScopeDeletionAccess } from "#lib/api/index.js";
 
   /** Unknown until the API answers: no claim is better than a wrong one. */
   let { access }: { access: ScopeDeletionAccess | null | undefined } = $props();

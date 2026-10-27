@@ -26,10 +26,10 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@typescript/native-preview": "7.0.0-dev.20260513.1",
-    "openapi-remote-codegen": "0.8.1",
+    "openapi-remote-codegen": "0.9.0",
     "prettier": "^3.7.2",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "vite-plugin-lingo": "^0.1.0",
     "zod": "^4.3.6"
   },
@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "@wuchale/svelte": "^0.20.7",
-    "runed": "^0.37.0",
+    "runed": "^0.38.0",
     "wuchale": "^0.25.8"
   }
 }

@@ -5,10 +5,10 @@ import { page } from "$app/state";
 
 // The dialogs each open a remote command on mount; the card under test only owns whether they
 // are reachable, so they are stubbed down to nothing renderable.
-vi.mock("$lib/components/connectors/DeduplicationDialog.svelte", () => ({
+vi.mock("#lib/components/connectors/DeduplicationDialog.svelte", () => ({
   default: () => {},
 }));
-vi.mock("$lib/components/connectors/DemoDataSection.svelte", () => ({
+vi.mock("#lib/components/connectors/DemoDataSection.svelte", () => ({
   default: () => {},
 }));
 

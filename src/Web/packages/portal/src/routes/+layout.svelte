@@ -1,15 +1,15 @@
 <script lang="ts">
     import "../app.css";
-    import SiteHeader from "$lib/components/SiteHeader.svelte";
-    import SiteFooter from "$lib/components/SiteFooter.svelte";
+    import SiteHeader from "#lib/components/SiteHeader.svelte";
+    import SiteFooter from "#lib/components/SiteFooter.svelte";
     import { afterNavigate } from "$app/navigation";
-    import { PLAUSIBLE_DOMAIN } from "$lib/config";
+    import { PLAUSIBLE_DOMAIN } from "#lib/config.js";
     import {
         PLAUSIBLE_ENABLED,
         PLAUSIBLE_EVENT_API,
         PLAUSIBLE_SCRIPT_SRC,
         trackPageview,
-    } from "$lib/analytics";
+    } from "#lib/analytics.js";
 
     let { children } = $props();
 

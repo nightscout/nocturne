@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { EntryRecord } from "$lib/constants/entry-categories";
+  import type { EntryRecord } from "#lib/constants/entry-categories.js";
   import {
     ENTRY_CATEGORIES,
     getEntryStyle,
-  } from "$lib/constants/entry-categories";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/constants/entry-categories.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Link from "@lucide/svelte/icons/link";
   import {
     formatDateTimeCompact,
@@ -14,7 +14,7 @@
     formatCarbDisplay,
     bg,
     bgLabel,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
 
   interface Props {
     records: EntryRecord[];

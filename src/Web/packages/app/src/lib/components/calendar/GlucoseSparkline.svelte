@@ -13,12 +13,12 @@
   import {
     partialEngine,
     setGlucoseChartContext,
-  } from "$lib/components/dashboard/glucose-chart/chart-context.svelte";
-  import { computeTrackLayout } from "$lib/components/dashboard/glucose-chart/engine/track-layout";
-  import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
-  import type { ChartThresholdsDto } from "$lib/api/generated/nocturne-api-client";
-  import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
-  import { tenantChartThresholds } from "$lib/stores/realtime-store.svelte";
+  } from "#lib/components/dashboard/glucose-chart/chart-context.svelte.js";
+  import { computeTrackLayout } from "#lib/components/dashboard/glucose-chart/engine/track-layout.js";
+  import GlucoseTrack from "#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
+  import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
+  import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+  import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
 
   interface Props {
     /** Glucose entries for the day: { mills, mgdl } */

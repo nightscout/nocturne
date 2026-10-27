@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
   import { Line, Rect, getChartContext } from "layerchart";
-  import type { LoopHealthHourValue } from "$lib/api";
+  import type { LoopHealthHourValue } from "#lib/api/index.js";
   import { BAND_FILL, hourSpan, SPARSE_BAND_FILL } from "./loop-health-view";
 
   interface Props {

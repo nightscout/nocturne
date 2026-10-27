@@ -5,8 +5,8 @@
  * and configurations for the clock face builder.
  */
 
-import { randomUUID } from "$lib/utils";
-import type { ClockElement, ClockFaceConfig } from "$lib/api";
+import { randomUUID } from "#lib/utils/index.js";
+import type { ClockElement, ClockFaceConfig } from "#lib/api/index.js";
 import { DEFAULT_ELEMENT_COLOR } from "./utils";
 import {
   ELEMENT_INFO,

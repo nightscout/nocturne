@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cssColorToHex } from "$lib/utils/css-color";
+  import { cssColorToHex } from "#lib/utils/css-color.js";
 
   let {
     color,

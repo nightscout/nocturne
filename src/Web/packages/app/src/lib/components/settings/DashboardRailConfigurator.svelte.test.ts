@@ -5,7 +5,7 @@ import {
   LegacyConsumableKind,
   RailItemId,
   type DashboardRailPreference,
-} from "$lib/api/generated/nocturne-api-client";
+} from "#lib/api/generated/nocturne-api-client.js";
 import DashboardRailConfigurator from "./DashboardRailConfigurator.svelte";
 import DashboardRailConfiguratorHost from "./DashboardRailConfigurator.test-host.svelte";
 

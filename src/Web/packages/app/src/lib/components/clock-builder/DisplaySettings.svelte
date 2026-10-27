@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Slider } from "$lib/components/ui/slider";
-  import * as Select from "$lib/components/ui/select";
-  import { Separator } from "$lib/components/ui/separator";
-  import * as Popover from "$lib/components/ui/popover";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Slider } from "#lib/components/ui/slider/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import Settings from "@lucide/svelte/icons/settings";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
-  import type { ClockSettings } from "$lib/api";
+  import type { ClockSettings } from "#lib/api/index.js";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
 
   interface Props {
     settings: ClockSettings;

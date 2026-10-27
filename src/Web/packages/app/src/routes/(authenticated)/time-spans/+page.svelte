@@ -1,18 +1,18 @@
 <script lang="ts">
-  import { toggled } from "$lib/utils/collections";
+  import { toggled } from "#lib/utils/collections.js";
   import { parseDate } from "@internationalized/date";
-  import { formatLongDate, formatShortDate } from "$lib/utils/formatting";
+  import { formatLongDate, formatShortDate } from "#lib/utils/formatting.js";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Toggle } from "$lib/components/ui/toggle";
-  import DateRangePicker from "$lib/components/ui/date-range-picker.svelte";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Toggle } from "#lib/components/ui/toggle/index.js";
+  import DateRangePicker from "#lib/components/ui/date-range-picker.svelte";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
-  import { StateSpansTimeline } from "$lib/components/dashboard/state-spans-timeline";
+  import { StateSpansTimeline } from "#lib/components/dashboard/state-spans-timeline/index.js";
   import { getTimeSpansData } from "./data.remote";
   import {
     dayCount as countDays,
@@ -20,7 +20,7 @@
     isDayString,
     resolveDayRange,
     startOfDay,
-  } from "$lib/utils/date-range";
+  } from "#lib/utils/date-range.js";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
 
@@ -94,14 +94,12 @@
     const anchor = parseDate(direction === -1 ? fromParam : toParam);
     const newFirst = anchor.add({ days: direction * (direction === -1 ? dayCount : 1) });
     const newLast = newFirst.add({ days: dayCount - 1 });
-    goto(
-      resolve(`/time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`),
-      { invalidateAll: true }
-    );
+
+    goto(resolve(`time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`), { refreshAll: true });
   }
 
   function goBack() {
-    goto(resolve("/"));
+    goto(resolve(""));
   }
 
   // Format date range for display
@@ -180,7 +178,7 @@
         tempBasalSpans={data?.tempBasalSpans ?? []}
         overrideSpans={data?.overrideSpans ?? []}
         activitySpans={data?.activitySpans ?? []}
-        {dateRange}
+        dateRange={dateRange}
         showPumpModes={isShown("pumpModes")}
         showProfiles={isShown("profiles")}
         showTempBasals={isShown("basal")}

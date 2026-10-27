@@ -1,4 +1,4 @@
-import { hourLabel } from "$lib/utils/formatting";
+import { hourLabel } from "#lib/utils/formatting.js";
 
 const atHour = (hour: number) => new Date(2000, 0, 1, hour);
 

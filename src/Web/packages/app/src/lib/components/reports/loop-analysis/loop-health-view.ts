@@ -5,7 +5,7 @@ import type {
   LoopHealthHourValue,
   LoopHealthShare,
   LoopHealthShareHour,
-} from "$lib/api";
+} from "#lib/api/index.js";
 import { clockTime, SLOT_MINUTES } from "./daily-profile-view";
 
 const SLOTS_PER_HOUR = 60 / SLOT_MINUTES;

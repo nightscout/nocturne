@@ -1,10 +1,10 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
-import type { TenantRoleDto } from "$api-clients";
+import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
 import CreateInviteCard from "./CreateInviteCard.svelte";
 
-vi.mock("$api/generated/memberInvites.generated.remote", () => ({
+vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
   createInvite: vi.fn(),
 }));
 

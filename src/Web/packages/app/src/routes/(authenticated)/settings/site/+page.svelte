@@ -1,12 +1,12 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { invalidate } from "$app/navigation";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import * as Card from "$lib/components/ui/card";
-  import * as Alert from "$lib/components/ui/alert";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import Globe from "@lucide/svelte/icons/globe";
   import Lock from "@lucide/svelte/icons/lock";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -14,13 +14,13 @@
   import {
     getTenantSettings,
     setDisplayName,
-  } from "$api/generated/tenantSettings.generated.remote";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { formatNumericDate } from "$lib/utils/formatting";
-  import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
-  import ApiReference from "$lib/components/settings/ApiReference.svelte";
+  } from "#lib/api/generated/tenantSettings.generated.remote.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { formatNumericDate } from "#lib/utils/formatting.js";
+  import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+  import ApiReference from "#lib/components/settings/ApiReference.svelte";
 
   const MAX_NAME_LENGTH = 256;
 

@@ -1,40 +1,40 @@
 <script lang="ts">
-  import { EmptyState } from "$lib/components/shared";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     a1cLabel,
     a1cUnitLabel,
     formatA1cValue,
-  } from "$lib/utils/a1c-formatting";
+  } from "#lib/utils/a1c-formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Target from "@lucide/svelte/icons/target";
   import Activity from "@lucide/svelte/icons/activity";
   import Droplets from "@lucide/svelte/icons/droplets";
-  import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
-  import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
-  import GlycemicRiskIndexChart from "$lib/components/reports/GlycemicRiskIndexChart.svelte";
-  import ScheduledBasalRateChart from "$lib/components/reports/ScheduledBasalRateChart.svelte";
-  import HourlyBolusChart from "$lib/components/reports/HourlyBolusChart.svelte";
-  import ScheduleFooter from "$lib/components/reports/ScheduleFooter.svelte";
-  import ActiveProfileHeading from "$lib/components/reports/ActiveProfileHeading.svelte";
-  import AidSystemUseCard from "$lib/components/reports/AidSystemUseCard.svelte";
-  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
-  import { bgPatternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import { getIdpData } from "$api/idp.remote";
-  import { bg, bgLabel, formatMediumDateTime, formatNumber, formatNumericDate } from "$lib/utils/formatting";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { AmbulatoryGlucoseProfile } from "#lib/components/ambulatory-glucose-profile/index.js";
+  import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
+  import GlycemicRiskIndexChart from "#lib/components/reports/GlycemicRiskIndexChart.svelte";
+  import ScheduledBasalRateChart from "#lib/components/reports/ScheduledBasalRateChart.svelte";
+  import HourlyBolusChart from "#lib/components/reports/HourlyBolusChart.svelte";
+  import ScheduleFooter from "#lib/components/reports/ScheduleFooter.svelte";
+  import ActiveProfileHeading from "#lib/components/reports/ActiveProfileHeading.svelte";
+  import AidSystemUseCard from "#lib/components/reports/AidSystemUseCard.svelte";
+  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
+  import { bgPatternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { getIdpData } from "#lib/api/idp.remote.js";
+  import { bg, bgLabel, formatMediumDateTime, formatNumber, formatNumericDate } from "#lib/utils/formatting.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is the standard IDP report period

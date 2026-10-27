@@ -1,7 +1,7 @@
 <script module lang="ts">
-  import { SyncPhase } from "$lib/api";
-  import { ConnectorState } from "$lib/constants/connector-states";
-  import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
+  import { SyncPhase } from "#lib/api/index.js";
+  import { ConnectorState } from "#lib/constants/connector-states.js";
+  import type { ConnectorStatusDto } from "#lib/api/generated/nocturne-api-client.js";
 
   export interface ConnectorStatusWithDescription extends ConnectorStatusDto {
     description?: string;
@@ -14,16 +14,16 @@
     ConnectorCapabilities,
     DataSourceInfo,
     GoogleHealthStatus,
-  } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/nocturne-api-client.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Cloud from "@lucide/svelte/icons/cloud";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -32,13 +32,13 @@
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import HeartPulse from "@lucide/svelte/icons/heart-pulse";
-  import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
+  import DataSourceRow from "#lib/components/settings/DataSourceRow.svelte";
   import GoogleHealthSourceRow from "./GoogleHealthSourceRow.svelte";
-  import AppLogo from "$lib/components/ui/AppLogo.svelte";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
-  import { mapConnectorStatus } from "$lib/utils/connector-display";
+  import AppLogo from "#lib/components/ui/AppLogo.svelte";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
+  import { mapConnectorStatus } from "#lib/utils/connector-display.js";
   import { page } from "$app/state";
-  import type { SyncProgressEvent } from "$lib/websocket/types";
+  import type { SyncProgressEvent } from "#lib/websocket/types.js";
   import { resolve } from "$app/paths";
 
   interface Props {
@@ -95,24 +95,23 @@
   ): DataSourceInfo | null {
     if (!activeDataSources) return null;
     if (!connector.dataSourceId && !connector.id) return null;
-    return (
-      activeDataSources.find((source) => {
-        if (connector.dataSourceId) {
+
+    return activeDataSources.find((source) => {
+      if (connector.dataSourceId) {
           if (
             source.deviceId === connector.dataSourceId ||
             source.sourceType === connector.dataSourceId
           ) {
-            return true;
-          }
+          return true;
         }
-        if (connector.id) {
-          if (source.sourceType === connector.id) {
-            return true;
-          }
+      }
+      if (connector.id) {
+        if (source.sourceType === connector.id) {
+          return true;
         }
-        return false;
-      }) ?? null
-    );
+      }
+      return false;
+    }) ?? null;
   }
 </script>
 
@@ -171,7 +170,7 @@
             <GoogleHealthSourceRow connection={googleHealth} />
           {:else}
             <a
-              href={resolve("/settings/connectors/google-health")}
+              href={resolve('settings/connectors/google-health')}
               class="group relative flex items-center gap-4 rounded-lg border bg-muted/30 p-4 transition-colors hover:border-primary/50 hover:bg-accent/50"
             >
               <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -209,160 +208,150 @@
         {@const isDisabled =
           connectorStatusInfo?.isEnabled === false &&
           connectorStatusInfo?.hasDatabaseConfig === true}
-        {@const connectorDataSource = getConnectorDataSource(connector)}
-        {@const hasData =
-          connectorDataSource !== null ||
-          (isDisabled && (connectorStatusInfo?.totalEntries ?? 0) > 0)}
-        {@const connectorCapabilities = connector.id
-          ? connectorCapabilitiesById[connector.id]
-          : null}
-        {@const canQuickSync =
-          isConnected && (connectorCapabilities?.supportsManualSync ?? true)}
+          {@const connectorDataSource = getConnectorDataSource(connector)}
+          {@const hasData = connectorDataSource !== null || isDisabled && (connectorStatusInfo?.totalEntries ?? 0) > 0}
+          {@const connectorCapabilities = connector.id ? connectorCapabilitiesById[connector.id] : null}
+          {@const canQuickSync = isConnected && (connectorCapabilities?.supportsManualSync ?? true)}
 
-        {#if isConnected && connectorStatusInfo}
-          <!-- Connected connector -->
-          {@const connectorStatus: ConnectorStatusWithDescription = {
-            ...connectorStatusInfo,
-            id: connector.id,
-            name: connector.name ?? connector.id,
+          {#if isConnected && connectorStatusInfo}
+            <!-- Connected connector -->
+            {@const connectorStatus: ConnectorStatusWithDescription = {
+              ...connectorStatusInfo,
+              id: connector.id,
+              name: connector.name ?? connector.id,
             description: connector.description,
-          }}
-          <DataSourceRow
-            name={connector.name ?? connector.id ?? "Unknown"}
-            icon={connector.icon}
+            }}
+            <DataSourceRow
+              name={connector.name ?? connector.id ?? "Unknown"}
+              icon={connector.icon}
             status={syncProgressByConnector[connector.id ?? ""]?.phase ===
             SyncPhase.Syncing
               ? "syncing"
               : mapConnectorStatus(connectorStatus)}
-            syncProgress={syncProgressByConnector[connector.id ?? ""] ?? null}
-            totalEntries={connectorStatus.totalEntries}
-            totalEntriesWindowDays={connectorStatus.totalEntriesWindowDays}
-            entriesLast24h={connectorStatus.entriesLast24Hours}
-            lastSeen={connectorStatus.lastEntryTime}
-            lastSyncAttempt={connectorStatus.lastSyncAttempt}
-            lastSuccessfulSync={connectorStatus.lastSuccessfulSync}
-            totalBreakdown={connectorStatus.totalItemsBreakdown ?? undefined}
+              syncProgress={syncProgressByConnector[connector.id ?? ""] ?? null}
+              totalEntries={connectorStatus.totalEntries}
+              totalEntriesWindowDays={connectorStatus.totalEntriesWindowDays}
+              entriesLast24h={connectorStatus.entriesLast24Hours}
+              lastSeen={connectorStatus.lastEntryTime}
+              lastSyncAttempt={connectorStatus.lastSyncAttempt}
+              lastSuccessfulSync={connectorStatus.lastSuccessfulSync}
+              totalBreakdown={connectorStatus.totalItemsBreakdown ?? undefined}
             last24hBreakdown={connectorStatus.itemsLast24HoursBreakdown ??
               undefined}
-            onclick={() => onConnectorClick(connectorStatus, connector.id)}
-          >
-            {#snippet actions()}
-              {#if canManage && connector.id && canQuickSync}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  class="absolute right-3 top-1/2 -translate-y-1/2"
-                  disabled={quickSyncingById[connector.id] === true}
-                  onclick={(event: MouseEvent) => {
-                    event.stopPropagation();
-                    onQuickSync(connector.id!);
-                  }}
-                >
-                  {#if quickSyncingById[connector.id] === true}
-                    <Loader2 class="h-4 w-4 animate-spin" />
-                  {:else}
-                    <RefreshCw class="h-4 w-4" />
-                  {/if}
-                </Button>
-              {/if}
-            {/snippet}
-          </DataSourceRow>
-        {:else if hasData || isDisabled}
-          <!-- Has data but not connected/disabled -->
-          {@const countSource = isDisabled
-            ? connectorStatusInfo
-            : connectorDataSource}
-          {@const entries24h = isDisabled
-            ? 0
-            : (connectorDataSource?.entriesLast24h ?? 0)}
-          {@const lastSeenDate = isDisabled
-            ? undefined
-            : connectorDataSource?.lastSeen}
-          <DataSourceRow
-            name={connector.name ?? connector.id ?? "Unknown"}
-            icon={connector.icon}
-            status={isDisabled ? "disabled" : "offline"}
-            syncProgress={syncProgressByConnector[connector.id ?? ""] ?? null}
-            totalEntries={countSource?.totalEntries}
-            totalEntriesWindowDays={countSource?.totalEntriesWindowDays}
-            entriesLast24h={entries24h}
-            lastSeen={lastSeenDate}
-            onclick={() => {
-              const dataSource = getConnectorDataSource(connector);
-              const status: ConnectorStatusWithDescription = {
-                id: connector.id,
-                name: connector.name ?? connector.id,
-                description: connector.description,
-                totalEntries: countSource?.totalEntries,
-                totalEntriesWindowDays: countSource?.totalEntriesWindowDays,
-                lastEntryTime: dataSource?.lastSeen,
-                entriesLast24Hours: dataSource?.entriesLast24h ?? 0,
+              onclick={() => onConnectorClick(connectorStatus, connector.id)}
+            >
+              {#snippet actions()}
+                {#if canManage && connector.id && canQuickSync}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    class="absolute right-3 top-1/2 -translate-y-1/2"
+                    disabled={quickSyncingById[connector.id] === true}
+                    onclick={(event: MouseEvent) => {
+                      event.stopPropagation();
+                      onQuickSync(connector.id!);
+                    }}
+                  >
+                    {#if quickSyncingById[connector.id] === true}
+                      <Loader2 class="h-4 w-4 animate-spin" />
+                    {:else}
+                      <RefreshCw class="h-4 w-4" />
+                    {/if}
+                  </Button>
+                {/if}
+              {/snippet}
+            </DataSourceRow>
+          {:else if hasData || isDisabled}
+            <!-- Has data but not connected/disabled -->
+            {@const countSource = isDisabled ? connectorStatusInfo : connectorDataSource}
+            {@const entries24h = isDisabled ? 0 : connectorDataSource?.entriesLast24h ?? 0}
+            {@const lastSeenDate = isDisabled ? undefined : connectorDataSource?.lastSeen}
+
+            <DataSourceRow
+              name={connector.name ?? connector.id ?? "Unknown"}
+              icon={connector.icon}
+              status={isDisabled ? "disabled" : "offline"}
+              syncProgress={syncProgressByConnector[connector.id ?? ""] ?? null}
+              totalEntries={countSource?.totalEntries}
+              totalEntriesWindowDays={countSource?.totalEntriesWindowDays}
+              entriesLast24h={entries24h}
+              lastSeen={lastSeenDate}
+              onclick={() => {
+                const dataSource = getConnectorDataSource(connector);
+                const status: ConnectorStatusWithDescription = {
+                  id: connector.id,
+                  name: connector.name ?? connector.id,
+                  description: connector.description,
+                  totalEntries: countSource?.totalEntries,
+                  totalEntriesWindowDays: countSource?.totalEntriesWindowDays,
+                  lastEntryTime: dataSource?.lastSeen,
+                  entriesLast24Hours: dataSource?.entriesLast24h ?? 0,
                 state:
                   connectorStatusInfo?.state ??
                   (isDisabled ? ConnectorState.Disabled : ConnectorState.Offline),
-                isHealthy: false,
-                isEnabled: connectorStatusInfo?.isEnabled,
-                hasDatabaseConfig: connectorStatusInfo?.hasDatabaseConfig,
+                  isHealthy: false,
+                  isEnabled: connectorStatusInfo?.isEnabled,
+                  hasDatabaseConfig: connectorStatusInfo?.hasDatabaseConfig,
                 hasSecrets: connectorStatusInfo?.hasSecrets,
-              };
-              onConnectorClick(status, connector.id);
-            }}
-          >
-            {#snippet badges()}
-              {#if hasData}
+                };
+                onConnectorClick(status, connector.id);
+              }}
+            >
+              {#snippet badges()}
+                {#if hasData}
                 <Badge variant="info">
                   <Database class="h-3 w-3 mr-1" />
                   Has data
                 </Badge>
-              {/if}
-            {/snippet}
-          </DataSourceRow>
-        {:else}
-          <!-- Not connected and no data - show with configure button -->
-          <!-- The documentation link is a sibling of the configure link, not a
+                {/if}
+              {/snippet}
+            </DataSourceRow>
+          {:else}
+            <!-- Not connected and no data - show with configure button -->
+            <!-- The documentation link is a sibling of the configure link, not a
                descendant: nesting an anchor inside an anchor is invalid and
                leaves the inner one unreachable by keyboard. -->
-          <div
-            class="group relative flex items-center gap-4 p-4 rounded-lg border bg-muted/30 transition-colors hover:border-primary/50 hover:bg-accent/50 focus-within:border-primary/50"
-          >
             <div
-              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
+              class="group relative flex items-center gap-4 p-4 rounded-lg border bg-muted/30 transition-colors hover:border-primary/50 hover:bg-accent/50 focus-within:border-primary/50"
+            >
+              <div
+                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
             >
               <AppLogo icon={connector.icon} invertMode />
             </div>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 flex-wrap">
-                <a
-                  href={resolve(`/settings/connectors/${connector.id?.toLowerCase()}`)}
-                  class="font-medium before:absolute before:inset-0 before:content-[''] hover:underline"
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <a
+                    href={resolve(`settings/connectors/${connector.id?.toLowerCase()}`)}
+                    class="font-medium before:absolute before:inset-0 before:content-[''] hover:underline"
                 >
                   {connector.name}
                 </a>
-                <Badge variant="outline">Not configured</Badge>
-              </div>
+                  <Badge variant="outline">Not configured</Badge>
+                </div>
               <p class="text-sm text-muted-foreground">
                 {connector.description}
               </p>
-            </div>
-            <div class="relative flex items-center gap-2">
-              {#if connector.documentationUrl}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  href={connector.documentationUrl}
-                  target="_blank"
-                  rel="noopener"
-                  aria-label="{connector.name} documentation"
+              </div>
+              <div class="relative flex items-center gap-2">
+                {#if connector.documentationUrl}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    href={connector.documentationUrl}
+                    target="_blank"
+                    rel="noopener"
+                    aria-label="{connector.name} documentation"
                 >
                   <ExternalLink class="h-4 w-4" />
                 </Button>
-              {/if}
-              <ChevronRight
-                class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors"
-              />
+                {/if}
+                <ChevronRight
+                  class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors"
+                />
+              </div>
             </div>
-          </div>
-        {/if}
+          {/if}
         {/if}
       {/each}
     </div>

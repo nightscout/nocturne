@@ -205,9 +205,12 @@ public class EntryReadService : IEntryStore
     /// <inheritdoc />
     public async Task<IV4Record?> GetStoredByIdAsync(string id, CancellationToken ct = default)
     {
-        // A uuid-shaped id may also be a legacy id: older v1 uploads without an _id were given one.
+        // A uuid-shaped id may also be a client-supplied legacy id, or the dashless uuid an older v1
+        // POST assigned and served, since stored as the ObjectId it coerces to.
         if (Guid.TryParse(id, out var guid))
-            return await GetByGuidAsync(guid, ct) ?? await GetByLegacyIdAsync(id, ct);
+            return await GetByGuidAsync(guid, ct)
+                ?? await GetByLegacyIdAsync(id, ct)
+                ?? await GetByLegacyIdAsync(MongoObjectId.Coerce(id)!, ct);
 
         // A non-UUID id is either a legacy/AAPS-supplied ObjectId (stored as LegacyId) or a 24-hex
         // ObjectId we derived from the record's UUID; resolve the latter via its uuid prefix range.

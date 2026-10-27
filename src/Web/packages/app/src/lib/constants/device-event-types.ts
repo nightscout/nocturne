@@ -1,5 +1,5 @@
-import { DeviceEventType } from '$lib/api';
-import { isOneOf } from '$lib/utils/type-guards';
+import { DeviceEventType } from '#lib/api/index.js';
+import { isOneOf } from '#lib/utils/type-guards.js';
 
 const DEVICE_EVENT_TYPE_VALUES: readonly DeviceEventType[] = Object.values(DeviceEventType);
 

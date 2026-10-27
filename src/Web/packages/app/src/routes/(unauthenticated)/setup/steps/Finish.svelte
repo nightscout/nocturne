@@ -6,11 +6,11 @@
 </script>
 
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as Alert from "$lib/components/ui/alert";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
 
   let {
     path,

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { distinct } from "$lib/utils/collections";
+  import { distinct } from "#lib/utils/collections.js";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import {
@@ -8,9 +8,9 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import User from "@lucide/svelte/icons/user";
   import Clock from "@lucide/svelte/icons/clock";
   import Settings from "@lucide/svelte/icons/settings";
@@ -18,24 +18,24 @@
   import Lock from "@lucide/svelte/icons/lock";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import { EmptyState } from "$lib/components/shared";
-  import { syringeArtwork } from "$lib/watercolour-icons";
-  import * as Alert from "$lib/components/ui/alert";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { syringeArtwork } from "#lib/watercolour-icons.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
   import { goto } from "$app/navigation";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import {
     getProfileSummary,
     setDefaultProfile,
     deleteProfileByName,
-  } from "$api/generated/profiles.generated.remote";
-  import { getActivationStatus } from "$api/generated/profileActivations.generated.remote";
-  import { startQueries } from "$lib/utils/start-queries";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { relativeAge } from "$lib/utils/formatting";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import ProfileSchedules from "$lib/components/schedule/ProfileSchedules.svelte";
-  import ProfileSwitchDialog from "$lib/components/profile/ProfileSwitchDialog.svelte";
-  import ActiveProfileActivation from "$lib/components/profile/ActiveProfileActivation.svelte";
+  } from "#lib/api/generated/profiles.generated.remote.js";
+  import { getActivationStatus } from "#lib/api/generated/profileActivations.generated.remote.js";
+  import { startQueries } from "#lib/utils/start-queries.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { relativeAge } from "#lib/utils/formatting.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import ProfileSchedules from "#lib/components/schedule/ProfileSchedules.svelte";
+  import ProfileSwitchDialog from "#lib/components/profile/ProfileSwitchDialog.svelte";
+  import ActiveProfileActivation from "#lib/components/profile/ActiveProfileActivation.svelte";
 
   type Summary = Awaited<ReturnType<typeof getProfileSummary>>;
 
@@ -63,8 +63,8 @@
       confirmingDelete = false;
       // The deleted name is still in the query string, which would render as a
       // profile whose settings have vanished.
-      await goto(resolve("/settings/profile"), { replaceState: true, noScroll: true });
-    } catch (err) {
+      await goto(resolve('settings/profile'), { replace: true, reset: false });
+    } catch(err) {
       deleteError = describeSubmitError(err, "We could not delete this profile.");
     } finally {
       deleting = false;
@@ -249,8 +249,8 @@
                 {@const isDefault = profileTherapy?.isDefault === true}
                 {@const isExternal = profileTherapy?.isExternallyManaged === true}
                 <a
-                  href={resolve(`/settings/profile?name=${encodeURIComponent(profileName)}`)}
-                  data-sveltekit-noscroll
+                  href={resolve(`settings/profile?name=${encodeURIComponent(profileName)}`)}
+                  data-sveltekit-reset="false"
                   data-sveltekit-replacestate
                   class="flex items-center gap-3 p-3 rounded-lg border text-left transition-colors
                        {isSelected
@@ -363,19 +363,22 @@
                   <CardDescription>
                     Created {relativeAge(therapy.createdAt)}
                     {#if therapy.enteredBy}
-                      &middot; Entered by {therapy.enteredBy}
+                      · Entered by {therapy.enteredBy}
                     {/if}
                     {#if therapy.dataSource}
-                      &middot; Synced from {therapy.dataSource}
+                      · Synced from {therapy.dataSource}
                     {/if}
                   </CardDescription>
                 {/if}
               </div>
               <div class="flex flex-col items-end gap-1 shrink-0">
                 <div class="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onclick={() => openSwitch(selectedProfileName)}>
-                    Switch…
-                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onclick={() => openSwitch(selectedProfileName)}
+                  >Switch…</Button>
+
                   <Button
                     variant="ghost-destructive"
                     size="sm"
@@ -429,17 +432,17 @@
 
         <ProfileSchedules
           profileName={selectedProfileName}
-          {basal}
-          {carbRatio}
-          {sensitivity}
-          {targetRange}
+          basal={basal}
+          carbRatio={carbRatio}
+          sensitivity={sensitivity}
+          targetRange={targetRange}
           readOnly={!!therapy.isExternallyManaged}
         />
 
         <ConfirmDialog
           open={confirmingDelete}
-          onOpenChange={(open) => (confirmingDelete = open)}
-          title="Delete the profile &ldquo;{selectedProfileName}&rdquo;?"
+          onOpenChange={(open) => confirmingDelete = open}
+          title="Delete the profile “{selectedProfileName}”?"
           confirmLabel="Delete profile"
           destructive
           busy={deleting}

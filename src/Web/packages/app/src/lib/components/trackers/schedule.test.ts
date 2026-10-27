@@ -4,7 +4,7 @@ import {
   NotificationUrgency,
   type LegacyFallbackDto,
   type TrackerInstanceDto,
-} from "$api";
+} from "#lib/api/index.js";
 import { reachedStep, reachedUrgency } from "./schedule";
 
 const HOUR = 60 * 60 * 1000;

@@ -1,12 +1,12 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { indexBy } from "$lib/utils/collections";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { indexBy } from "#lib/utils/collections.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Check from "@lucide/svelte/icons/check";
   import X from "@lucide/svelte/icons/x";
@@ -14,19 +14,19 @@
   import Clock from "@lucide/svelte/icons/clock";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Pencil from "@lucide/svelte/icons/pencil";
-  import { relativeAge } from "$lib/utils/formatting";
-  import { EmptyState } from "$lib/components/shared";
-  import { Now } from "$lib/hooks/now.svelte";
+  import { relativeAge } from "#lib/utils/formatting.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { Now } from "#lib/hooks/now.svelte.js";
 
   const now = new Now();
-  import { deviceKindLabel } from "$lib/utils/device-kind-labels";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { deviceKindLabel } from "#lib/utils/device-kind-labels.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     getDevices,
     getCapabilityCatalog,
     rename,
     revoke,
-  } from "$lib/api/generated/clientDevices.generated.remote";
+  } from "#lib/api/generated/clientDevices.generated.remote.js";
 
   const devicesQuery = getDevices();
   const catalogQuery = getCapabilityCatalog();

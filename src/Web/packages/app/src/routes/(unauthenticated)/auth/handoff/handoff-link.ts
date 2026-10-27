@@ -1,3 +1,4 @@
+import type { ReadonlyURL } from "$app/state";
 /** The exchange a handoff link asks for. */
 export interface HandoffExchange {
   code: string;
@@ -8,7 +9,7 @@ export interface HandoffExchange {
  * The exchange carried by a handoff URL, or null when the link has no code —
  * which is the same dead end for the visitor as a code the API refuses.
  */
-export function readHandoffExchange(url: URL): HandoffExchange | null {
+export function readHandoffExchange(url: ReadonlyURL): HandoffExchange | null {
   const code = url.searchParams.get("code");
   if (!code) return null;
 

@@ -3,7 +3,7 @@
   import { getChartContext } from "layerchart";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import TrackerExpirationMarker from "./TrackerExpirationMarker.svelte";
-  import { markerKey } from "$lib/utils/chart-data-merge";
+  import { markerKey } from "#lib/utils/chart-data-merge.js";
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();

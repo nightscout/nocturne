@@ -16,7 +16,7 @@
     const coachParam = page.url.searchParams.get("coach");
     if (coachParam) {
       // Strip the param immediately
-      const url = new URL(page.url);
+      const url = new URL(page.url.href);
       url.searchParams.delete("coach");
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus one param, already resolved
       replaceState(url, {});

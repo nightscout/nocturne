@@ -1,18 +1,18 @@
 import type { LayoutServerLoad } from "./$types";
-import type { UserDisplayPreferences } from "$lib/api";
-import { resolvePermissions } from "$lib/server/resolve-permissions";
-import { classifyRequestHost, isTenantlessHost } from "$lib/server/tenantless-host";
-import { getRequestStatus } from "$lib/server/request-status";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
-import { parseLastSignIn } from "$lib/components/auth/last-sign-in";
+import type { UserDisplayPreferences } from "#lib/api/index.js";
+import { resolvePermissions } from "#lib/server/resolve-permissions.js";
+import { classifyRequestHost, isTenantlessHost } from "#lib/server/tenantless-host.js";
+import { getRequestStatus } from "#lib/server/request-status.js";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
+import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+import { parseLastSignIn } from "#lib/components/auth/last-sign-in.js";
 import {
   LANGUAGE_COOKIE_NAME,
   PREFS_COOKIE_NAME,
   hasStoredPreferences,
   parsePrefsCookie,
   resolveLanguage,
-} from "$lib/stores/appearance-store.svelte";
+} from "#lib/stores/appearance-store.svelte.js";
 
 /**
  * The owner's presentation settings, for the viewers with no account of their own to save any: a

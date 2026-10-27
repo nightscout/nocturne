@@ -12,23 +12,23 @@
     type DailyProfileResponse,
     type DailyProfileSlot,
     type LoopAnalysisAggregate,
-  } from "$lib/api";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import FigureStrip, { type Figure } from "$lib/components/reports/FigureStrip.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { CHART_TEXTURES, dashClass, patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  } from "#lib/api/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import FigureStrip, { type Figure } from "#lib/components/reports/FigureStrip.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { CHART_TEXTURES, dashClass, patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
   import {
     BASAL_BANDS,
     COB_BANDS as COB,
     GLUCOSE_BANDS,
     IOB_BANDS as IOB,
-  } from "$lib/components/reports/percentile-band-colors";
-  import { plural } from "$lib/utils/plural";
+  } from "#lib/components/reports/percentile-band-colors.js";
+  import { plural } from "#lib/utils/plural.js";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
-  import { tenantChartThresholds } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { bg, bgLabel, convertToDisplayUnits, hourLabel } from "$lib/utils/formatting";
+  import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { bg, bgLabel, convertToDisplayUnits, hourLabel } from "#lib/utils/formatting.js";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import TimeOfDayPanel from "./TimeOfDayPanel.svelte";
   import PercentileBands from "./PercentileBands.svelte";
@@ -39,7 +39,7 @@
   import { TimeOfDayCursor } from "./time-of-day-cursor.svelte";
   import { loopAnalysisMark } from "./loop-analysis-tour.svelte";
   import { atMinute, axisEnd, axisStart, signedTwoPlaces as signed } from "./daily-profile-view";
-  import NoTimeZone from "$lib/components/reports/NoTimeZone.svelte";
+  import NoTimeZone from "#lib/components/reports/NoTimeZone.svelte";
   import { loopAnalysisTimeZoneNeed } from "./time-zone-need.svelte";
   import IgnoredFiltersNotice from "./IgnoredFiltersNotice.svelte";
   import HistoryClampNote from "./HistoryClampNote.svelte";

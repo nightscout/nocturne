@@ -8,14 +8,14 @@
     formatLocale,
     formatWeekdayDate,
     relativeAge,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
   import {
     getEnergyUnit,
     preferredLanguage,
     timeFormat,
     yearOverviewColors,
   } from "./appearance-store.svelte";
-  import { a1cLabel, formatA1c } from "$lib/utils/a1c-formatting";
+  import { a1cLabel, formatA1c } from "#lib/utils/a1c-formatting.js";
 
   const derivedValue = $derived(bg(100));
 

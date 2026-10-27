@@ -5,14 +5,14 @@
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
+  } from "#lib/components/ui/select/index.js";
   import {
     preferredLanguage,
     supportedLocales,
     getNativeLanguageLabel,
     setLanguage,
     isSupportedLocale,
-  } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/stores/appearance-store.svelte.js";
 
   interface Props {
     /** Compact mode: shows globe icon + language code (for headers) */

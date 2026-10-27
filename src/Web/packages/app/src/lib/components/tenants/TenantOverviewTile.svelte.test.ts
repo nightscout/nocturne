@@ -6,7 +6,7 @@ import {
   GlucoseDirection,
   AlertRuleSeverity,
   type TenantOverviewItem,
-} from "$lib/api/generated/nocturne-api-client";
+} from "#lib/api/generated/nocturne-api-client.js";
 import TenantOverviewTile from "./TenantOverviewTile.svelte";
 
 function makeTenant(

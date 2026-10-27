@@ -208,7 +208,8 @@
 </p>
 
 <p>
-  See also: <a href={resolve("/terms")}>Terms of service</a>
+  See also: 
+  <a href={resolve('terms')}>Terms of service</a>
 </p>
 
 <hr />

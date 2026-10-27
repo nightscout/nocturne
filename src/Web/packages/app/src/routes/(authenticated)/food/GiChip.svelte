@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { GiIcon, type GiLevel } from '$lib/components/food';
+	import { GiIcon, type GiLevel } from '#lib/components/food/index.js';
 
 	interface Props {
 		level: GiLevel;

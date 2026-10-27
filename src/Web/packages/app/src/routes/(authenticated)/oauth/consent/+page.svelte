@@ -2,11 +2,11 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Separator } from "$lib/components/ui/separator";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import Shield from "@lucide/svelte/icons/shield";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -17,15 +17,15 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Globe from "@lucide/svelte/icons/globe";
   import { consentForm, getClientInfo } from "../oauth.remote";
-  import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
-  import DeletionDisclosure from "$lib/components/auth/DeletionDisclosure.svelte";
+  import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import DeletionDisclosure from "#lib/components/auth/DeletionDisclosure.svelte";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
     if (!page.data.isAuthenticated) {
       const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
-      goto(resolve(`/auth/login?returnUrl=${returnUrl}`), { replaceState: true });
+      goto(resolve(`auth/login?returnUrl=${returnUrl}`), { replace: true });
     }
   });
 
@@ -298,17 +298,13 @@
             })}
             class="flex-1"
           >
-            <input type="hidden" name="client_id" value={clientId} />
-            <input type="hidden" name="redirect_uri" value={redirectUri} />
-            <input type="hidden" name="scope" value={scope} />
-            <input type="hidden" name="state" value={oauthState} />
-            <input type="hidden" name="code_challenge" value={codeChallenge} />
-            <input type="hidden" name="approved" value="false" />
-            <input
-              type="hidden"
-              name="limit_to_24_hours"
-              value={limitTo24Hours ? "true" : "false"}
-            />
+            <input {...denyForm.fields.client_id.as("hidden", clientId)} />
+            <input {...denyForm.fields.redirect_uri.as("hidden", redirectUri)} />
+            <input {...denyForm.fields.scope.as("hidden", scope)} />
+            <input {...denyForm.fields.state.as("hidden", oauthState)} />
+            <input {...denyForm.fields.code_challenge.as("hidden", codeChallenge)} />
+            <input {...denyForm.fields.approved.as("hidden", "false")} />
+            <input {...denyForm.fields.limit_to_24_hours.as("hidden", limitTo24Hours ? "true" : "false")} />
             <Button
               type="submit"
               variant="outline"
@@ -327,17 +323,13 @@
             })}
             class="flex-1"
           >
-            <input type="hidden" name="client_id" value={clientId} />
-            <input type="hidden" name="redirect_uri" value={redirectUri} />
-            <input type="hidden" name="scope" value={scope} />
-            <input type="hidden" name="state" value={oauthState} />
-            <input type="hidden" name="code_challenge" value={codeChallenge} />
-            <input type="hidden" name="approved" value="true" />
-            <input
-              type="hidden"
-              name="limit_to_24_hours"
-              value={limitTo24Hours ? "true" : "false"}
-            />
+            <input {...approveForm.fields.client_id.as("hidden", clientId)} />
+            <input {...approveForm.fields.redirect_uri.as("hidden", redirectUri)} />
+            <input {...approveForm.fields.scope.as("hidden", scope)} />
+            <input {...approveForm.fields.state.as("hidden", oauthState)} />
+            <input {...approveForm.fields.code_challenge.as("hidden", codeChallenge)} />
+            <input {...approveForm.fields.approved.as("hidden", "true")} />
+            <input {...approveForm.fields.limit_to_24_hours.as("hidden", limitTo24Hours ? "true" : "false")} />
             <Button
               type="submit"
               class="w-full"

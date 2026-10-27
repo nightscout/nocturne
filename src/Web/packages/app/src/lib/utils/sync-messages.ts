@@ -1,4 +1,4 @@
-import type { SyncMessageType } from "$lib/websocket/types";
+import type { SyncMessageType } from "#lib/websocket/types.js";
 import { getDataTypeLabel } from "./data-type-labels";
 
 const MESSAGE_TEMPLATES: Record<SyncMessageType, string> = {

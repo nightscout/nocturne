@@ -22,7 +22,7 @@ import Syringe from "@lucide/svelte/icons/syringe";
 import User from "@lucide/svelte/icons/user";
 import UserPlus from "@lucide/svelte/icons/user-plus";
 import Users from "@lucide/svelte/icons/users";
-import { satisfiesScope } from "$lib/authorization/scopes";
+import { satisfiesScope } from "#lib/authorization/scopes.js";
 
 /** One settings destination. */
 export type SettingsLink = {

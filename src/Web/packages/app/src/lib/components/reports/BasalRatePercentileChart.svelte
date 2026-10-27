@@ -1,10 +1,10 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
   import { BASAL_BANDS } from "./percentile-band-colors";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { EmptyState } from "$lib/components/shared";
+  import { EmptyState } from "#lib/components/shared/index.js";
 
   // Local type definition for hourly basal percentile data
   interface HourlyBasalPercentileData {

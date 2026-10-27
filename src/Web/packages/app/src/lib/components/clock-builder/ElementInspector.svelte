@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Slider } from "$lib/components/ui/slider";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
-  import * as Select from "$lib/components/ui/select";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Slider } from "#lib/components/ui/slider/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import X from "@lucide/svelte/icons/x";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
+  import type { ClockElement, TrackerDefinitionDto } from "#lib/api/index.js";
   import {
     elementInfo,
     VISIBILITY_OPTIONS,
@@ -21,7 +21,7 @@
     isShowOptionChecked,
     isCategoryChecked,
     getTrackerName,
-  } from "$lib/clock-builder";
+  } from "#lib/clock-builder/index.js";
   import TextStyleControls from "./TextStyleControls.svelte";
 
   interface Props {

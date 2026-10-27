@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { formatLocale, formatNumericDate } from "$lib/utils/formatting";
+  import { formatLocale, formatNumericDate } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import BatteryCharging from "@lucide/svelte/icons/battery-charging";
   import BatteryFull from "@lucide/svelte/icons/battery-full";
   import BatteryLow from "@lucide/svelte/icons/battery-low";
@@ -20,13 +20,13 @@
   import Zap from "@lucide/svelte/icons/zap";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import type { BatteryStatistics, ChargeCycle, BatteryReading } from "$lib/api";
-  import { getBatteryReportData } from "$api/battery.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { formatMinutesDuration } from "$lib/utils/duration";
-  import { EmptyState } from "$lib/components/shared";
-  import { batteryArtwork } from "$lib/watercolour-icons";
+  import type { BatteryStatistics, ChargeCycle, BatteryReading } from "#lib/api/index.js";
+  import { getBatteryReportData } from "#lib/api/battery.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { batteryArtwork } from "#lib/watercolour-icons.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 7 days is good for battery analysis (typical charge cycle period)

@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAttachmentKey } from "svelte/attachments";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const state = vi.hoisted(() => ({
   record: {} as Record<string, unknown>,
@@ -44,22 +44,25 @@ function submittingForm() {
   };
 }
 
-vi.mock("$api/generated/patientRecords.generated.remote", () => ({
-  getPatientRecord: () => remoteQuery(() => state.record),
-  updatePatientRecord: submittingForm(),
-}));
-vi.mock("$api/generated/bodyWeights.generated.remote", () => ({
+vi.mock("#lib/api/generated/patientRecords.generated.remote.js", async () => {
+  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
+  return {
+    getPatientRecord: () => remoteQuery(() => state.record),
+    updatePatientRecord: { ...submittingForm(), fields: remoteFormFields() },
+  };
+});
+vi.mock("#lib/api/generated/bodyWeights.generated.remote.js", () => ({
   getBodyWeights: () => remoteQuery(() => []),
   create: vi.fn(),
 }));
-vi.mock("$api/generated/insulinCatalogs.generated.remote", () => ({
+vi.mock("#lib/api/generated/insulinCatalogs.generated.remote.js", () => ({
   getCatalog: () => remoteQuery(() => []),
 }));
-vi.mock("$api/generated/setupHubs.generated.remote", () => ({
+vi.mock("#lib/api/generated/setupHubs.generated.remote.js", () => ({
   getSetupHub: () => Object.assign(remoteQuery(() => undefined), { refresh: state.hubRefreshed }),
   confirmAboutSetupItem: state.confirmed,
 }));
-vi.mock("$api/generated/tenantSettings.generated.remote", () => ({
+vi.mock("#lib/api/generated/tenantSettings.generated.remote.js", () => ({
   getPatientRelationship: () => remoteQuery(() => state.relationship),
 }));
 

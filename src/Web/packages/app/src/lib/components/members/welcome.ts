@@ -1,3 +1,4 @@
+import type { ReadonlyURL } from "$app/state";
 /**
  * The one-shot marker an accept flow (member invite or guest code) puts on the
  * URL it lands on, so the authenticated layout greets the newcomer once.
@@ -25,9 +26,9 @@ export function withWelcome(path: string): string {
 }
 
 /** `url` with the marker removed, or null when it carries none. */
-export function takeWelcome(url: URL): URL | null {
+export function takeWelcome(url: ReadonlyURL): URL | null {
   if (!url.searchParams.has(WELCOME_PARAM)) return null;
-  const rest = new URL(url);
+  const rest = new URL(url.href);
   rest.searchParams.delete(WELCOME_PARAM);
   return rest;
 }

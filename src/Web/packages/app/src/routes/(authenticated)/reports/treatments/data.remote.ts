@@ -15,8 +15,8 @@ import {
 	UpsertDeviceEventRequestSchema,
 	CreateBasalInjectionRequestSchema,
 	UpdateBasalInjectionRequestSchema,
-} from '$lib/api/generated/schemas';
-import { DateRangeSchema, resolveReportRange } from '$api/report-range';
+} from '#lib/api/generated/schemas.js';
+import { DateRangeSchema, resolveReportRange } from '#lib/api/report-range.js';
 
 async function fetchEntries(startDate: string, endDate: string) {
 	const { apiClient } = getRequestEvent().locals;

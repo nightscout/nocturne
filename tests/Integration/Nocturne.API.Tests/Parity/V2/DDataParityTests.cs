@@ -18,6 +18,12 @@ public class DDataParityTests : ParityTestBase
     public DDataParityTests(ParityTestFixture fixture, ITestOutputHelper output)
         : base(fixture, output) { }
 
+    public override async Task InitializeAsync()
+    {
+        await base.InitializeAsync();
+        await WaitForNightscoutEmptyAsync();
+    }
+
     protected override ComparisonOptions GetComparisonOptions()
     {
         // DData responses contain dynamic timestamps and computed values. Nocturne serves no store

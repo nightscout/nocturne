@@ -22,7 +22,7 @@ const deleted: string[] = [];
 
 // Hoisted above every declaration in this file, so the factory may only reach out to the
 // lazily-read bindings above it.
-vi.mock("$api/generated/profiles.generated.remote", () => ({
+vi.mock("#lib/api/generated/profiles.generated.remote.js", () => ({
   getProfileSummary: () => ({
     current: {
       therapySettings,
@@ -58,7 +58,7 @@ const therapy = (overrides: TherapyFixture): TherapyFixture => ({
 // place rather than swapped for a fresh URL.
 /** Selects a profile the way the page does, through the `name` query parameter. */
 const select = (name: string) => {
-  appState.url.search = `?name=${encodeURIComponent(name)}`;
+  (appState.url as URL).search = `?name=${encodeURIComponent(name)}`;
 };
 
 const deleteButton = () => page.getByRole("button", { name: "Delete", exact: true });
@@ -66,7 +66,7 @@ const deleteButton = () => page.getByRole("button", { name: "Delete", exact: tru
 beforeEach(() => {
   therapySettings = [];
   deleted.length = 0;
-  appState.url.search = "";
+  (appState.url as URL).search = "";
 });
 
 describe("settings/profile delete", () => {

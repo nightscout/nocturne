@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isHttpError } from "@sveltejs/kit";
-import { errorStatus } from "$lib/forms/submit-error";
+import { errorStatus } from "#lib/forms/submit-error.js";
 import {
 	DISCORD_LINK_COOKIE,
 	signDiscordLinkClaim,
 	signDiscordLinkState,
 	verifyDiscordLinkState,
-} from "$lib/server/bot/oauth-state";
+} from "#lib/server/bot/oauth-state.js";
 
 let event: Record<string, unknown>;
 
@@ -17,7 +17,7 @@ vi.mock("$app/server", () => ({
 }));
 
 const create_pending = vi.fn();
-vi.mock("$lib/server/bot/api-client", () => ({
+vi.mock("#lib/server/bot/api-client.js", () => ({
 	buildScopedBotApiClient: () => ({ pendingLinks: { create: create_pending } }),
 }));
 
@@ -29,7 +29,9 @@ function browser(cookie: string | undefined, subjectId = "member-a") {
 	const jar = new Map(cookie ? [[DISCORD_LINK_COOKIE, cookie]] : []);
 	const claim_link = vi.fn().mockResolvedValue({ label: "sleepy", displayName: "Sleepy" });
 	event = {
-		url: new URL("https://sleepy.nocturne.test/auth/bot/discord/finalize"),
+		request: new Request("https://sleepy.nocturne.test/auth/bot/discord/finalize", {
+			headers: { "x-forwarded-host": "sleepy.nocturne.test" },
+		}),
 		locals: {
 			isAuthenticated: true,
 			user: { subjectId },

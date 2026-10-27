@@ -1,4 +1,4 @@
-import type { ActogramDay } from "$lib/components/actogram";
+import type { ActogramDay } from "#lib/components/actogram/index.js";
 
 const MS_PER_MINUTE = 60_000;
 

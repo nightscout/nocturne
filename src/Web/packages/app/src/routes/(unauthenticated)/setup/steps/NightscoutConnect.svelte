@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ConnectorSetup from "$lib/components/connectors/ConnectorSetup.svelte";
+  import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
 
   let {
     onComplete,

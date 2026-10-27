@@ -8,25 +8,25 @@
 </script>
 
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as RadioGroup from "$lib/components/ui/radio-group";
-  import { Select, SelectContent, SelectItem, SelectTrigger } from "$lib/components/ui/select";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
+  import { Select, SelectContent, SelectItem, SelectTrigger } from "#lib/components/ui/select/index.js";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
-  import CopyInvitationMessageButton from "$lib/components/members/CopyInvitationMessageButton.svelte";
-  import CopyButton from "$lib/components/members/CopyButton.svelte";
+  import PermissionCategorySelector from "#lib/components/rbac/PermissionCategorySelector.svelte";
+  import CopyInvitationMessageButton from "#lib/components/members/CopyInvitationMessageButton.svelte";
+  import CopyButton from "#lib/components/members/CopyButton.svelte";
   import { Artwork } from "water-ui";
-  import { createInvite } from "$api/generated/memberInvites.generated.remote";
-  import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
-  import { describeSubmitError } from "$lib/forms";
+  import { createInvite } from "#lib/api/generated/memberInvites.generated.remote.js";
+  import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+  import { describeSubmitError } from "#lib/forms/index.js";
 
   interface Props {
     roles: TenantRoleDto[];

@@ -3,29 +3,29 @@
   import ArrowLeftRight from "@lucide/svelte/icons/arrow-left-right";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import * as Popover from "$lib/components/ui/popover";
-  import * as Select from "$lib/components/ui/select";
-  import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
-  import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import GlucoseRangeCalendarPicker from "#lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
+  import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import { setReportPrintMeta } from "#lib/components/reports/print/report-print.svelte.js";
   import {
     getReportsAnalysis,
     getReportsInsulinDelivery,
     type DateRangeInput,
-  } from "$api/reports.remote";
+  } from "#lib/api/reports.remote.js";
   import {
     bg,
     bgDelta,
     bgLabel,
     formatInsulinToCarbRatio,
     formatShortDate,
-  } from "$lib/utils/formatting";
-  import { formatMinutesDuration } from "$lib/utils/duration";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  } from "#lib/utils/formatting.js";
+  import { formatMinutesDuration } from "#lib/utils/duration.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { parseDate } from "@internationalized/date";
   import { untrack } from "svelte";
   import { useSearchParams } from "runed/kit";
@@ -35,7 +35,7 @@
     dayPart,
     isDayString,
     startOfDay,
-  } from "$lib/utils/date-range";
+  } from "#lib/utils/date-range.js";
 
   let { today }: { today: string } = $props();
 

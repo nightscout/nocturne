@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   import { Artwork, type ArtworkId, type IconArtworkSource } from "water-ui";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils/index.js";
 
   /**
    * A small painted mark that confirms something just took effect, then

@@ -1,22 +1,22 @@
 <script lang="ts">
-  import { SyncPhase } from "$lib/api";
+  import { SyncPhase } from "#lib/api/index.js";
   import type { Snippet } from "svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item, type ItemVariant } from "$lib/components/ui/item";
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Item, type ItemVariant } from "#lib/components/ui/item/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import Clock from "@lucide/svelte/icons/clock";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import WifiOff from "@lucide/svelte/icons/wifi-off";
-  import AppLogo from "$lib/components/ui/AppLogo.svelte";
-  import { getDataTypeLabel } from "$lib/utils/data-type-labels";
-  import { formatSyncMessage } from "$lib/utils/sync-messages";
-  import type { SyncProgressEvent } from "$lib/websocket/types";
+  import AppLogo from "#lib/components/ui/AppLogo.svelte";
+  import { getDataTypeLabel } from "#lib/utils/data-type-labels.js";
+  import { formatSyncMessage } from "#lib/utils/sync-messages.js";
+  import type { SyncProgressEvent } from "#lib/websocket/types.js";
   import {
     formatNumber,
     relativeAge,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
 
   export type DataSourceStatus =
     | "active"

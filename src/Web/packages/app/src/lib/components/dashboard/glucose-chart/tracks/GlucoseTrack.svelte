@@ -11,11 +11,11 @@
   import { curveMonotoneX } from "d3";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import type { GlucosePoint } from "../engine/chart-data-view.svelte";
-  import { bg } from "$lib/utils/formatting";
+  import { bg } from "#lib/utils/formatting.js";
   import {
     getGlucoseColor,
     getGlucoseColorContinuous,
-  } from "$lib/utils/chart-colors";
+  } from "#lib/utils/chart-colors.js";
   import {
     lineStopsFor,
     fillStopsFor,

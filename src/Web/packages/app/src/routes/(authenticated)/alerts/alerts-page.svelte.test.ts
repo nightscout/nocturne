@@ -3,8 +3,8 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import type { AlertRuleResponse, TenantAlertSettingsResponse } from "$api-clients";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
+import type { AlertRuleResponse, TenantAlertSettingsResponse } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 
@@ -30,14 +30,14 @@ const alertHistory = { items: [], totalCount: 0 };
 // it stands in for the server's refusal.
 let toggleImpl: () => Promise<unknown>;
 
-vi.mock("$api/generated/alertRules.generated.remote", () => ({
+vi.mock("#lib/api/generated/alertRules.generated.remote.js", () => ({
   getRules: () => remoteQuery(() => rules),
   deleteRule: remoteCommand(() => undefined),
   toggleRule: remoteCommand(() => toggleImpl()),
   testFire: remoteCommand(() => undefined),
 }));
 
-vi.mock("$api/generated/alerts.generated.remote", () => ({
+vi.mock("#lib/api/generated/alerts.generated.remote.js", () => ({
   getActiveAlerts: () => remoteQuery(() => activeAlerts),
   getAlertHistory: () => remoteQuery(() => alertHistory),
   acknowledge: remoteCommand(() => undefined),
@@ -45,7 +45,7 @@ vi.mock("$api/generated/alerts.generated.remote", () => ({
 
 let dndSettings: TenantAlertSettingsResponse | null = null;
 
-vi.mock("$api/generated/tenantAlertSettings.generated.remote", () => ({
+vi.mock("#lib/api/generated/tenantAlertSettings.generated.remote.js", () => ({
   get: () => remoteQuery(() => dndSettings),
   update: remoteCommand(() => undefined),
 }));

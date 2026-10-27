@@ -1,15 +1,15 @@
 <script lang="ts">
-  import * as Tabs from "$lib/components/ui/tabs";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Alert from "$lib/components/ui/alert";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
   import Plus from "@lucide/svelte/icons/plus";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -17,10 +17,10 @@
   import ToggleLeft from "@lucide/svelte/icons/toggle-left";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { EmptyState } from "$lib/components/shared";
-  import { fingerprintArtwork } from "$lib/watercolour-icons";
-  import ProviderIcon from "$lib/components/auth/ProviderIcon.svelte";
-  import type { OidcProviderResponse } from "$api";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { fingerprintArtwork } from "#lib/watercolour-icons.js";
+  import ProviderIcon from "#lib/components/auth/ProviderIcon.svelte";
+  import type { OidcProviderResponse } from "#lib/api/index.js";
 
   interface Props {
     oidcLoading: boolean;

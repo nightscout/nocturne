@@ -2,18 +2,18 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
+  } from "#lib/components/ui/card/index.js";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
-  import ConnectorSetup from "$lib/components/connectors/ConnectorSetup.svelte";
+  import ConnectorSetup from "#lib/components/connectors/ConnectorSetup.svelte";
   import RepullHistoryCard from "./RepullHistoryCard.svelte";
-  import type { AvailableConnector } from "$lib/api/generated/nocturne-api-client";
+  import type { AvailableConnector } from "#lib/api/generated/nocturne-api-client.js";
 
   const connectorName = $derived(page.params.connector);
   const isHomeAssistant = $derived(
@@ -45,7 +45,7 @@
     showCapabilities
     primaryAction="save-only"
     showEnvVarHints={page.data.isPlatformAdmin === true}
-    onCancel={() => goto(resolve("/settings/connectors"))}
+    onCancel={() => goto(resolve('settings/connectors'))}
   >
     {#snippet extras({ connector }: { connector: AvailableConnector })}
       {#if connector.id}

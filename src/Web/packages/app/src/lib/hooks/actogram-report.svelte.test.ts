@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { servedDays } from "$lib/test-stubs/actogram-days";
+import { servedDays } from "#lib/test-stubs/actogram-days.js";
 
 const AUCKLAND_MINUTES = 13 * 60;
 const HONOLULU_MINUTES = -10 * 60;
 
 const hoisted = vi.hoisted(() => ({ days: [] as unknown[] }));
 
-vi.mock("$api/actogram.remote", () => ({ getActogramData: vi.fn() }));
+vi.mock("#lib/api/actogram.remote.js", () => ({ getActogramData: vi.fn() }));
 vi.mock("./date-params.svelte", () => ({
   requireDateParamsContext: () => ({
     fromDay: "2025-11-01",

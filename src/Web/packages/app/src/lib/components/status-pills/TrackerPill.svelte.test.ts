@@ -5,7 +5,7 @@ import {
   TrackerCategory,
   type TrackerDefinitionDto,
   type TrackerInstanceDto,
-} from "$lib/api/generated/nocturne-api-client";
+} from "#lib/api/generated/nocturne-api-client.js";
 import TrackerPill from "./TrackerPill.svelte";
 
 const HOUR = 3600_000;

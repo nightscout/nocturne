@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Tabs from "$lib/components/ui/tabs";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import type {
     EntryCategoryId,
-  } from "$lib/constants/entry-categories";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
+  } from "#lib/constants/entry-categories.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Utensils from "@lucide/svelte/icons/utensils";
   import Droplet from "@lucide/svelte/icons/droplet";
@@ -42,14 +42,8 @@
     if (category) onChange(category);
   }}
 >
-  <!-- eslint-disable shadcn/no-restyle -- the treatment filter is the only tab list drawn as a wrapping grid of tiles, each an icon over its label and count -->
-  <Tabs.List
-    class="grid h-auto w-full grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-2 bg-transparent p-0"
-  >
-    <Tabs.Trigger
-      value="all"
-      class="flex h-auto min-w-0 flex-col items-center gap-1 p-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-lg data-[state=active]:border-primary/30"
-    >
+  <Tabs.List variant="tiles">
+    <Tabs.Trigger value="all">
       <List class="h-5 w-5" />
       <span class="text-xs font-medium">All</span>
       <Badge variant="secondary" size="sm">
@@ -59,17 +53,13 @@
 
     {#each Object.values(ENTRY_CATEGORIES) as cat (cat.id)}
       {@const Icon = categoryIcons[cat.id]}
-      <Tabs.Trigger
-        value={cat.id}
-        class="flex h-auto min-w-0 flex-col items-center gap-1 p-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-lg data-[state=active]:border-primary/30"
-      >
+      <Tabs.Trigger value={cat.id}>
         <Icon class="h-5 w-5 {cat.colorClass}" />
-        <span class="text-center text-xs leading-tight font-medium whitespace-normal">{cat.name}</span>
+        <span class="text-center text-xs leading-tight font-medium">{cat.name}</span>
         <Badge variant="secondary" size="sm">
           {categoryCounts[cat.id]}
         </Badge>
       </Tabs.Trigger>
     {/each}
   </Tabs.List>
-  <!-- eslint-enable shadcn/no-restyle -->
 </Tabs.Root>

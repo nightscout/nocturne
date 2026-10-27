@@ -2,11 +2,11 @@
   import { onMount } from "svelte";
   import ReportsFilterSidebar from "./ReportsFilterSidebar.svelte";
   import ReportFilterExtensionProbe from "./ReportFilterExtensionProbe.test-harness.svelte";
-  import { createReportSlots } from "$lib/hooks/report-slots.svelte";
+  import { createReportSlots } from "#lib/hooks/report-slots.svelte.js";
   import {
     setDateParamsContext,
     useDateParams,
-  } from "$lib/hooks/date-params.svelte";
+  } from "#lib/hooks/date-params.svelte.js";
 
   interface Props {
     customFrom?: string;

@@ -1,10 +1,10 @@
 <script lang="ts">
   import Scale from "@lucide/svelte/icons/scale";
-  import { labelFor } from "$lib/components/ui/enum-value";
-  import { Input } from "$lib/components/ui/input";
-  import * as Select from "$lib/components/ui/select";
-  import { FormField } from "$lib/forms";
-  import { DiabetesType } from "$api";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { FormField } from "#lib/forms/index.js";
+  import { DiabetesType } from "#lib/api/index.js";
   import { diabetesTypeLabels, biologicalSexLabels } from "./labels";
   import { ClinicalState } from "./state.svelte";
   import TimezoneCombobox from "./TimezoneCombobox.svelte";
@@ -37,26 +37,26 @@
 >
   <!-- Hidden fields for read-only record data -->
   {#if clinical.record?.id}
-    <input type="hidden" name="id" value={clinical.record.id} />
+    <input {...clinical.form.fields.id.as("hidden", clinical.record.id)} />
   {/if}
   {#if clinical.record?.avatarUrl}
-    <input type="hidden" name="avatarUrl" value={clinical.record.avatarUrl} />
+    <input {...clinical.form.fields.avatarUrl.as("hidden", clinical.record.avatarUrl)} />
   {/if}
   {#if clinical.record?.createdAt}
-    <input type="hidden" name="createdAt" value={clinical.record.createdAt} />
+    <input {...clinical.form.fields.createdAt.as("hidden", clinical.record.createdAt)} />
   {/if}
   {#if clinical.record?.modifiedAt}
-    <input type="hidden" name="modifiedAt" value={clinical.record.modifiedAt} />
+    <input {...clinical.form.fields.modifiedAt.as("hidden", clinical.record.modifiedAt)} />
   {/if}
 
   <div class="grid gap-4 @sm:grid-cols-2">
     <FormField
       label="Diabetes type"
       id="diabetes-type"
-      issues={clinical.guard.issuesFor("diabetesType")}
+      {...clinical.guard.field("diabetesType")}
     >
       {#snippet control(field)}
-        <Select.Root type="single" name="diabetesType" bind:value={clinical.diabetesType}>
+        <Select.Root type="single" name={clinical.form.fields.diabetesType.as("select").name} bind:value={clinical.diabetesType}>
           <Select.Trigger
             id={field.id}
             aria-invalid={field["aria-invalid"]}
@@ -81,7 +81,7 @@
         {#snippet control(field)}
           <Input
             {...field}
-            name="diabetesTypeOther"
+            name={clinical.form.fields.diabetesTypeOther.as("text").name}
             bind:value={clinical.diabetesTypeOther}
             placeholder="e.g. Type 3c"
           />
@@ -93,7 +93,7 @@
       {#snippet control(field)}
         <Input
           {...field}
-          name="diagnosisDate"
+          name={clinical.form.fields.diagnosisDate.as("date").name}
           type="date"
           autocomplete="off"
           bind:value={clinical.diagnosisDate}
@@ -105,7 +105,7 @@
       {#snippet control(field)}
         <Input
           {...field}
-          name="dateOfBirth"
+          name={clinical.form.fields.dateOfBirth.as("date").name}
           type="date"
           autocomplete="bday"
           bind:value={clinical.dateOfBirth}
@@ -119,7 +119,7 @@
       description="Biological sex, used with your age to show sex-specific typical ranges in sleep reports. Separate from pronouns."
     >
       {#snippet control(field)}
-        <Select.Root type="single" name="sex" bind:value={clinical.sex}>
+        <Select.Root type="single" name={clinical.form.fields.sex.as("select").name} bind:value={clinical.sex}>
           <Select.Trigger {...field}>
             {clinical.sex
               ? (labelFor(biologicalSexLabels, clinical.sex) ?? clinical.sex)
@@ -139,7 +139,7 @@
       {#snippet control(field)}
         <Input
           {...field}
-          name="preferredName"
+          name={clinical.form.fields.preferredName.as("text").name}
           autocomplete="nickname"
           bind:value={clinical.preferredName}
           placeholder="How you want to be addressed"
@@ -151,7 +151,7 @@
       {#snippet control(field)}
         <Input
           {...field}
-          name="pronouns"
+          name={clinical.form.fields.pronouns.as("text").name}
           bind:value={clinical.pronouns}
           placeholder="e.g. she/her, he/him, they/them"
         />
@@ -162,10 +162,10 @@
       label="Timezone"
       id="timezone"
       class="@sm:col-span-2"
-      issues={clinical.guard.issuesFor("timezone")}
+      {...clinical.guard.field("timezone")}
     >
       {#snippet control(field)}
-        <input type="hidden" name="timezone" value={clinical.timezone} />
+        <input {...clinical.form.fields.timezone.as("hidden", clinical.timezone)} />
         <TimezoneCombobox
           id={field.id}
           aria-invalid={field["aria-invalid"]}

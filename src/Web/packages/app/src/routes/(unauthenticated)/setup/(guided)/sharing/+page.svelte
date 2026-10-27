@@ -2,20 +2,20 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import Check from "@lucide/svelte/icons/check";
-  import { Button } from "$lib/components/ui/button";
-  import { FormError } from "$lib/forms";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import CreateInviteCard from "$lib/components/members/CreateInviteCard.svelte";
-  import GuestLinksSection from "$lib/components/members/GuestLinksSection.svelte";
-  import PublicAccessCard from "$lib/components/members/PublicAccessCard.svelte";
-  import { getRoles } from "$api/generated/roles.generated.remote";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { FormError } from "#lib/forms/index.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import CreateInviteCard from "#lib/components/members/CreateInviteCard.svelte";
+  import GuestLinksSection from "#lib/components/members/GuestLinksSection.svelte";
+  import PublicAccessCard from "#lib/components/members/PublicAccessCard.svelte";
+  import { getRoles } from "#lib/api/generated/roles.generated.remote.js";
   import {
     getSetupHub,
     setSetupHubItemState,
-  } from "$api/generated/setupHubs.generated.remote";
-  import { getPatientRelationship } from "$api/generated/tenantSettings.generated.remote";
-  import { SetupHubItemKey, SetupHubItemState } from "$api";
-  import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
+  } from "#lib/api/generated/setupHubs.generated.remote.js";
+  import { getPatientRelationship } from "#lib/api/generated/tenantSettings.generated.remote.js";
+  import { SetupHubItemKey, SetupHubItemState } from "#lib/api/index.js";
+  import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
   import {
     familyRoleChoices,
     sharingAudiences,
@@ -50,7 +50,7 @@
       : [...chosen.filter((id) => !exclusiveIds.includes(id)), audience.id];
   }
 
-  const close = (id: SharingAudienceId) => (chosen = chosen.filter((c) => c !== id));
+  const close = (id: SharingAudienceId) => chosen = chosen.filter((c) => c !== id);
 
   /** The item is done by what was just created, which only a fresh read of the hub reports. */
   const shared = () => void hubQuery.refresh();
@@ -65,8 +65,8 @@
           request: { state: SetupHubItemState.NotForMe },
         });
       }
-      await goto(resolve("/setup"));
-    } catch (err) {
+      await goto(resolve('setup'));
+    } catch(err) {
       error = describeSubmitError(err, "We could not save that.");
     } finally {
       keeping = false;
@@ -117,7 +117,7 @@
       {#if audience.id === "family"}
         <CreateInviteCard
           roles={rolesQuery.current ?? []}
-          {roleChoices}
+          roleChoices={roleChoices}
           onCreated={shared}
           onCancel={() => close("family")}
         />

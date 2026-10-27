@@ -5,23 +5,23 @@
   import Check from "@lucide/svelte/icons/check";
   import Info from "@lucide/svelte/icons/info";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import * as Alert from "$lib/components/ui/alert";
-  import { Button } from "$lib/components/ui/button";
-  import { FormError } from "$lib/forms";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import ProfileSchedules from "$lib/components/schedule/ProfileSchedules.svelte";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { FormError } from "#lib/forms/index.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import ProfileSchedules from "#lib/components/schedule/ProfileSchedules.svelte";
   import {
     confirmTherapySettings,
     getTherapyReview,
-  } from "$api/generated/setupTherapies.generated.remote";
-  import { getSetupHub } from "$api/generated/setupHubs.generated.remote";
-  import { getInsulinActionTime } from "$api/generated/setupDevices.generated.remote";
-  import { InsulinActionTimeNote } from "$lib/components/patient";
-  import { getPatientRelationship } from "$api/generated/tenantSettings.generated.remote";
-  import { TherapySource } from "$api";
-  import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
-  import { formatLongDate } from "$lib/utils/formatting";
+  } from "#lib/api/generated/setupTherapies.generated.remote.js";
+  import { getSetupHub } from "#lib/api/generated/setupHubs.generated.remote.js";
+  import { getInsulinActionTime } from "#lib/api/generated/setupDevices.generated.remote.js";
+  import { InsulinActionTimeNote } from "#lib/components/patient/index.js";
+  import { getPatientRelationship } from "#lib/api/generated/tenantSettings.generated.remote.js";
+  import { TherapySource } from "#lib/api/index.js";
+  import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+  import { formatLongDate } from "#lib/utils/formatting.js";
   import TherapyEntry from "./TherapyEntry.svelte";
 
   const reviewQuery = getTherapyReview();
@@ -40,7 +40,7 @@
 
   async function backToHub() {
     await Promise.all([getSetupHub().refresh(), actionTimeQuery.refresh()]);
-    await goto(resolve("/setup"));
+    await goto(resolve('setup'));
   }
 
   async function confirm() {
@@ -65,7 +65,7 @@
   <p class="animate-pulse text-sm text-muted-foreground">Loading therapy settings...</p>
 {:else if review.source === TherapySource.None}
   <TherapyEntry
-    {voice}
+    voice={voice}
     rules={review.wrongUnitRules ?? []}
     onsaved={backToHub}
     onconflict={async () => {
@@ -136,7 +136,7 @@
     {#if actionTimeQuery.current}
       <InsulinActionTimeNote
         actionTime={actionTimeQuery.current}
-        {voice}
+        voice={voice}
         profileHasNoActionTime={review.source === TherapySource.Entered}
       />
     {/if}
@@ -194,9 +194,7 @@
         <div class="flex flex-wrap items-center gap-3">
           <FormError issues={error} />
           {#if !mismatch}
-            <Button variant="outline" onclick={() => (mismatch = true)}>
-              Something does not match
-            </Button>
+            <Button variant="outline" onclick={() => mismatch = true}>Something does not match</Button>
           {/if}
           <Button disabled={confirming} onclick={confirm}>
             <Check class="h-4 w-4" />

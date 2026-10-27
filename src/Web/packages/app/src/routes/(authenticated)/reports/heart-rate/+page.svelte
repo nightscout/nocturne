@@ -1,23 +1,23 @@
 <script lang="ts">
-  import { formatNumber } from "$lib/utils/formatting";
+  import { formatNumber } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
+  } from "#lib/components/ui/card/index.js";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import HeartPulse from "@lucide/svelte/icons/heart-pulse";
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
   import {
     Actogram,
     extentOf,
     pointsInRange,
     type ActogramRowContext,
-  } from "$lib/components/actogram";
-  import { MS_PER_HOUR } from "$lib/components/actogram/actogram";
-  import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
-  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
+  } from "#lib/components/actogram/index.js";
+  import { MS_PER_HOUR } from "#lib/components/actogram/actogram.js";
+  import { useActogramReport } from "#lib/hooks/actogram-report.svelte.js";
+  import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
 
   const VISIBLE_DAYS = 14;
   const print = new PrintMode();

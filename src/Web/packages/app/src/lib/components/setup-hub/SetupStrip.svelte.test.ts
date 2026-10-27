@@ -1,15 +1,15 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import { page as appPage } from "$lib/test-stubs/app-state";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { page as appPage } from "#lib/test-stubs/app-state.js";
 
 const hub = vi.hoisted(() => ({
   status: undefined as unknown,
   asked: 0,
   dismiss: vi.fn(),
 }));
-vi.mock("$api/generated/setupHubs.generated.remote", () => ({
+vi.mock("#lib/api/generated/setupHubs.generated.remote.js", () => ({
   getSetupHub: () => {
     hub.asked += 1;
     return remoteQuery(() => hub.status);

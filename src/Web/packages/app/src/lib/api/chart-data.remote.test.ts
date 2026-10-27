@@ -7,7 +7,7 @@ const { getDashboardChartData } = vi.hoisted(() => ({
 vi.mock("$app/server", () => ({
   query: (_schema: unknown, fn: unknown) => fn,
 }));
-vi.mock("$api/generated/chartDatas.generated.remote", () => ({ getDashboardChartData }));
+vi.mock("#lib/api/generated/chartDatas.generated.remote.js", () => ({ getDashboardChartData }));
 
 const { getChartData } = await import("./chart-data.remote");
 

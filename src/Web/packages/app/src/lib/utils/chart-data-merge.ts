@@ -1,5 +1,5 @@
-import type { CarbMarkerDto } from '$lib/api/generated/nocturne-api-client';
-import type { TransformedChartData } from '$lib/utils/chart-data-transform';
+import type { CarbMarkerDto } from '#lib/api/generated/nocturne-api-client.js';
+import type { TransformedChartData } from '#lib/utils/chart-data-transform.js';
 
 // Either half may have seen the pump last, or neither.
 const latestOf = (a: number | null, b: number | null): number | null =>

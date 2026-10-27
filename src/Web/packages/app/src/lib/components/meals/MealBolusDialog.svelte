@@ -3,21 +3,21 @@
     formatClock,
     formatInsulinDisplay,
     formatLocale,
-  } from "$lib/utils/formatting";
-  import type { MealEvent, Bolus, BolusType, PatientInsulin } from "$lib/api";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import BolusFormFields from "$lib/components/treatments/edit-dialog/BolusFormFields.svelte";
-  import * as patientRemote from "$api/generated/patientRecords.generated.remote";
+  } from "#lib/utils/formatting.js";
+  import type { MealEvent, Bolus, BolusType, PatientInsulin } from "#lib/api/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import BolusFormFields from "#lib/components/treatments/edit-dialog/BolusFormFields.svelte";
+  import * as patientRemote from "#lib/api/generated/patientRecords.generated.remote.js";
   import {
     create as createBolusForm,
     update as updateBolusForm,
     remove as removeBolus,
-  } from "$api/generated/bolus.generated.remote";
+  } from "#lib/api/generated/bolus.generated.remote.js";
   import { toast } from "svelte-sonner";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { useToastSubmission } from "$lib/forms";
+  import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { useToastSubmission } from "#lib/forms/index.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Plus from "@lucide/svelte/icons/plus";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -177,54 +177,52 @@
     })}
   >
     {#if editingBolus?.id}
-      <input type="hidden" name="id" value={editingBolus.id} />
-      <input type="hidden" name="request.timestamp" value={editingBolus.timestamp} />
-      <input type="hidden" name="request.insulin" value={editForm.insulin ?? 0} />
-      <input type="hidden" name="request.automatic" value={editForm.automatic} />
+      <input {...updateBolusForm.fields.id.as("hidden", editingBolus.id)} />
+      {#if editingBolus.timestamp}
+        <input {...updateBolusForm.fields.request.timestamp.as("hidden", editingBolus.timestamp)} />
+      {/if}
+      <input {...updateBolusForm.fields.request.insulin.as("hidden", editForm.insulin ?? 0)} />
+      <input {...updateBolusForm.fields.request.automatic.as("hidden", editForm.automatic)} />
       {#if editForm.programmed != null}
-        <input type="hidden" name="request.programmed" value={editForm.programmed} />
+        <input {...updateBolusForm.fields.request.programmed.as("hidden", editForm.programmed)} />
       {/if}
       {#if editForm.delivered != null}
-        <input type="hidden" name="request.delivered" value={editForm.delivered} />
+        <input {...updateBolusForm.fields.request.delivered.as("hidden", editForm.delivered)} />
       {/if}
       {#if editForm.duration != null}
-        <input type="hidden" name="request.duration" value={editForm.duration} />
+        <input {...updateBolusForm.fields.request.duration.as("hidden", editForm.duration)} />
       {/if}
       {#if editForm.insulinType}
-        <input type="hidden" name="request.insulinType" value={editForm.insulinType} />
+        <input {...updateBolusForm.fields.request.insulinType.as("hidden", editForm.insulinType)} />
       {/if}
       {#if editForm.patientInsulinId}
-        <input type="hidden" name="request.patientInsulinId" value={editForm.patientInsulinId} />
+        <input {...updateBolusForm.fields.request.patientInsulinId.as("hidden", editForm.patientInsulinId)} />
       {/if}
     {:else}
-      <input
-        type="hidden"
-        name="timestamp"
-        value={new Date(meal.carbIntakes?.[0]?.mills ?? Date.now()).toISOString()}
-      />
-      <input type="hidden" name="insulin" value={editForm.insulin ?? 0} />
-      <input type="hidden" name="kind" value="Manual" />
-      <input type="hidden" name="automatic" value={editForm.automatic} />
+      <input {...createBolusForm.fields.timestamp.as("hidden", new Date(meal.carbIntakes?.[0]?.mills ?? Date.now()).toISOString())} />
+      <input {...createBolusForm.fields.insulin.as("hidden", editForm.insulin ?? 0)} />
+      <input {...createBolusForm.fields.kind.as("hidden", "Manual")} />
+      <input {...createBolusForm.fields.automatic.as("hidden", editForm.automatic)} />
       {#if editForm.bolusType}
-        <input type="hidden" name="bolusType" value={editForm.bolusType} />
+        <input {...createBolusForm.fields.bolusType.as("hidden", editForm.bolusType)} />
       {/if}
       {#if editForm.programmed != null}
-        <input type="hidden" name="programmed" value={editForm.programmed} />
+        <input {...createBolusForm.fields.programmed.as("hidden", editForm.programmed)} />
       {/if}
       {#if editForm.delivered != null}
-        <input type="hidden" name="delivered" value={editForm.delivered} />
+        <input {...createBolusForm.fields.delivered.as("hidden", editForm.delivered)} />
       {/if}
       {#if editForm.duration != null}
-        <input type="hidden" name="duration" value={editForm.duration} />
+        <input {...createBolusForm.fields.duration.as("hidden", editForm.duration)} />
       {/if}
       {#if editForm.insulinType}
-        <input type="hidden" name="insulinType" value={editForm.insulinType} />
+        <input {...createBolusForm.fields.insulinType.as("hidden", editForm.insulinType)} />
       {/if}
       {#if editForm.patientInsulinId}
-        <input type="hidden" name="patientInsulinId" value={editForm.patientInsulinId} />
+        <input {...createBolusForm.fields.patientInsulinId.as("hidden", editForm.patientInsulinId)} />
       {/if}
       {#if meal.correlationId}
-        <input type="hidden" name="correlationId" value={meal.correlationId} />
+        <input {...createBolusForm.fields.correlationId.as("hidden", meal.correlationId)} />
       {/if}
     {/if}
   </form>

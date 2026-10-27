@@ -5,33 +5,32 @@
  * ones, so there is one description of the shape rather than one per test.
  *
  * Mirrored: the surface a component touches. A query is a thenable carrying
- * `current`, `error`, `loading` and `ready` alongside `run`, `set`, `refresh`
- * and `withOverride`, and reading any of those getters starts the work, as the
+ * `current`, `error`, `loading` and `ready` alongside `set`, `refresh` and
+ * `withOverride`, and reading any of those getters starts the work, as the
  * framework's does. A command call is a promise carrying `updates()`, behind a
- * wrapper counting `pending` and recording the queries each `updates()` named. `fields.issues()` and `fields.allIssues()` answer
+ * wrapper counting `pending` and recording the queries each `updates()` named;
+ * an override handed to `updates()` is released once the call settles, so a
+ * failed command rolls it back. `fields.issues()` and `fields.allIssues()` answer
  * `undefined`, not `[]`, when there is nothing to report: the framework builds
  * its issue map with `flatten_issues`, which yields `{}` for no issues, so the
  * lookup misses and the `?.map` short-circuits. Callers have to be written
  * against that.
  *
- * Not mirrored: reactivity, per-argument caching, schema validation, and form
- * submission. The getters read a snapshot rather than a signal, so nothing
- * re-renders when a pending resource settles; a test that needs a value on
+ * Not mirrored: reactivity beyond overrides, per-argument caching, schema
+ * validation, and form submission. Adding or releasing an override re-renders
+ * whatever read `current`, but the getters otherwise read a snapshot rather than
+ * a signal, so nothing re-renders when a pending resource settles; a test that needs a value on
  * screen builds the resource with `remoteQuery`, which is settled before the
  * first read and re-reads its source on every access, keeping whatever
  * reactivity that source has.
- *
- * Deliberately more permissive than production: the framework refuses `run()`
- * inside an effect and refuses to be awaited outside a tracking context, and
- * these resources allow both. Code that only a test exercises can rely on
- * either and still fail in the browser.
  */
+import { createSubscriber } from "svelte/reactivity";
+
 export interface RemoteQueryStub<T> extends PromiseLike<T> {
   readonly current: T | undefined;
   readonly error: unknown;
   readonly loading: boolean;
   readonly ready: boolean;
-  run(): Promise<T>;
   set(value: T): void;
   refresh(): Promise<void>;
   withOverride(update: (current: T) => T): () => void;
@@ -54,6 +53,8 @@ export function updatedBy(command: unknown): unknown[][] {
   return (command as RemoteCommandStub<unknown>).updated;
 }
 
+const overrideReleases = new WeakSet<() => void>();
+
 class QueryResource<T> implements RemoteQueryStub<T> {
   #run: () => Promise<T>;
   #read: (() => T) | null = null;
@@ -61,6 +62,13 @@ class QueryResource<T> implements RemoteQueryStub<T> {
   #loading = false;
   #error: unknown = undefined;
   #overrides: ((current: T) => T)[] = [];
+  #overridesChanged: (() => void) | null = null;
+  #subscribe = createSubscriber((update) => {
+    this.#overridesChanged = update;
+    return () => {
+      this.#overridesChanged = null;
+    };
+  });
 
   constructor(run: () => Promise<T>) {
     this.#run = run;
@@ -113,6 +121,7 @@ class QueryResource<T> implements RemoteQueryStub<T> {
   }
 
   get current(): T | undefined {
+    this.#subscribe();
     void this.#start();
     return this.#read ? this.#overridden(this.#read) : undefined;
   }
@@ -142,7 +151,7 @@ class QueryResource<T> implements RemoteQueryStub<T> {
       | null
       | undefined
   ): Promise<TResult1 | TResult2> {
-    return this.run().then(onfulfilled, onrejected);
+    return this.#value().then(onfulfilled, onrejected);
   }
 
   catch<TResult = never>(
@@ -151,14 +160,14 @@ class QueryResource<T> implements RemoteQueryStub<T> {
       | null
       | undefined
   ): Promise<T | TResult> {
-    return this.run().catch(onrejected);
+    return this.#value().catch(onrejected);
   }
 
   finally(onfinally?: (() => void) | null | undefined): Promise<T> {
-    return this.run().finally(onfinally);
+    return this.#value().finally(onfinally);
   }
 
-  run(): Promise<T> {
+  #value(): Promise<T> {
     return this.#start().then(() => {
       if (!this.#read) throw new Error("the resource settled without a value");
       return this.#overridden(this.#read);
@@ -176,11 +185,16 @@ class QueryResource<T> implements RemoteQueryStub<T> {
 
   withOverride(update: (current: T) => T): () => void {
     this.#overrides.push(update);
+    this.#overridesChanged?.();
 
-    return () => {
+    const release = () => {
       const index = this.#overrides.indexOf(update);
-      if (index !== -1) this.#overrides.splice(index, 1);
+      if (index === -1) return;
+      this.#overrides.splice(index, 1);
+      this.#overridesChanged?.();
     };
+    overrideReleases.add(release);
+    return release;
   }
 }
 
@@ -232,6 +246,11 @@ export function remoteCommand<T>(
       {
         updates: (...queries: unknown[]) => {
           stub.updated.push(queries);
+          for (const query of queries) {
+            if (overrideReleases.has(query as () => void)) {
+              void call.then(query as () => void, query as () => void);
+            }
+          }
           return call;
         },
       }
@@ -253,8 +272,38 @@ export function remoteCommand<T>(
  * nothing to report. An unrecognised property nests, so a path of any depth
  * answers.
  */
+/** The props kit's `as()` gives a control, without the form id it suffixes onto the name. */
+function fieldProps(name: string, type: string, value: unknown): Record<string, unknown> {
+  const prefix =
+    type === "number" || type === "range"
+      ? "n:"
+      : type === "checkbox" && typeof value !== "string"
+        ? "b:"
+        : (type === "hidden" || type === "submit") && typeof value === "number"
+          ? "n:"
+          : (type === "hidden" || type === "submit") && typeof value === "boolean"
+            ? "b:"
+            : "";
+  const props: Record<string, unknown> = { name: prefix + name, type };
+  if (type === "hidden" || type === "submit") {
+    props.value = typeof value === "boolean" ? (value ? "on" : "off") : value;
+  }
+  return props;
+}
+
+/**
+ * A remote form's `fields`, for a test that builds its own form stand-in: any path, each with
+ * `issues`, `allIssues`, `value`, `set` and `as`, the last answering the name kit would give it.
+ */
+export function remoteFormFields(): unknown {
+  return fieldProxy();
+}
+
 function fieldProxy(path: string[] = []): unknown {
-  const name = path.join(".");
+  // As kit builds it: an index is `[n]`, a key is `.key`.
+  const name = path
+    .map((key, i) => (/^\d+$/.test(key) ? `[${key}]` : i === 0 ? key : `.${key}`))
+    .join("");
 
   return new Proxy(() => undefined, {
     get(target, prop) {
@@ -262,7 +311,7 @@ function fieldProxy(path: string[] = []): unknown {
       if (prop === "issues" || prop === "allIssues") return () => undefined;
       if (prop === "value") return () => undefined;
       if (prop === "set") return (value: unknown) => value;
-      if (prop === "as") return (type: string) => ({ name, type });
+      if (prop === "as") return (type: string, value?: unknown) => fieldProps(name, type, value);
       return fieldProxy([...path, prop]);
     },
   });

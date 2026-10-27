@@ -1,48 +1,54 @@
-import { isInternalOnlyApiPath } from "$lib/server/internal-only-api-paths";
-import { type Handle } from "@sveltejs/kit";
-import { randomUUID } from "$lib/utils";
-import { isRecord, nonEmptyString } from "$lib/utils/type-guards";
-import { applySecurityHeaders, parseFrameAncestors } from "$lib/server/security-headers";
-import type { HandleServerError } from "@sveltejs/kit";
-import { env } from "$env/dynamic/private";
-import { env as publicEnv } from "$env/dynamic/public";
-import { dev } from "$app/environment";
+import { isInternalOnlyApiPath } from "#lib/server/internal-only-api-paths.js";
+import { randomUUID } from "#lib/utils/index.js";
+import { isRecord, nonEmptyString } from "#lib/utils/type-guards.js";
+import { applySecurityHeaders, parseFrameAncestors } from "#lib/server/security-headers.js";
+import { MARKETING_URL, ALLOWED_FRAME_ANCESTORS } from "$app/env/private";
+import { PUBLIC_DEFAULT_LANGUAGE } from "$app/env/public";
+import { dev } from "$app/env";
 import {
   getApiBaseUrl,
   createServerApiClient,
-} from "$lib/server/api-client-factory";
-import { isApiOutage } from "$lib/server/api-outage";
-import { forgetSession, getCachedSession, sessionCacheKey } from "$lib/server/session-cache";
-import { authenticateGuestSession } from "$lib/server/guest-session-auth";
-import { sequence } from "@sveltejs/kit/hooks";
+} from "#lib/server/api-client-factory.js";
+import { isApiOutage } from "#lib/server/api-outage.js";
+import { forgetSession, getCachedSession, sessionCacheKey } from "#lib/server/session-cache.js";
+import { authenticateGuestSession } from "#lib/server/guest-session-auth.js";
+import { sequence, type Handle, type HandleServerError } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { buildProxyHeaders } from "$lib/server/api-proxy-headers";
-import { clientAddressHeaders } from "$lib/server/client-address";
-import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from "$lib/server/request-host";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
+import { buildProxyHeaders } from "#lib/server/api-proxy-headers.js";
+import { clientAddressHeaders } from "#lib/server/client-address.js";
+
+import {
+  getOriginalProto,
+  getEffectiveHost,
+  getOriginalHost,
+  isShareHost
+} from "#lib/server/request-host.js";
+
 import {
   STATIC_ASSET_PREFIXES,
   TENANT_INACTIVE_PATH,
   statusProbeRedirect,
-} from "$lib/server/public-routes";
-import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
+} from "#lib/server/public-routes.js";
+import { SHARE_UNAVAILABLE_PATH } from "#lib/share-host.js";
 import {
   installRequestScopedBitsIdCounter,
   withFreshBitsIdCounter,
-} from "$lib/server/bits-id";
+} from "#lib/server/bits-id.js";
 import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
 import * as main from '../../../locales/main.loader.server.svelte.js'
 import * as js from '../../../locales/js.loader.server.js'
 import { locales } from '../../../locales/data.js'
 import supportedLocales from '../../../supportedLocales.json';
-import { renderColorScheme } from "$lib/server/color-scheme-html";
-import { dropModulepreloads } from "$lib/server/link-header";
-import { LANGUAGE_COOKIE_NAME } from "$lib/stores/appearance-store.svelte";
+import { renderColorScheme } from "#lib/server/color-scheme-html.js";
+import { dropModulepreloads } from "#lib/server/link-header.js";
+import { LANGUAGE_COOKIE_NAME } from "#lib/stores/appearance-store.svelte.js";
 
 // Await so no request can render before catalogs are registered: a lookup
 // against an unloaded runtime silently renders every message as ''.
-await loadLocales(main.key, main.loadCount, main.loadCatalog, locales)
-await loadLocales(js.key, js.loadCount, js.loadCatalog, locales)
+await loadLocales(main.key, main.loadCount, main.loadCatalog, locales);
+
+await loadLocales(js.key, js.loadCount, js.loadCatalog, locales);
 
 // Turn off SSL validation during development for self-signed certs
 if (dev) {
@@ -195,16 +201,7 @@ function cacheReadyStatus(host: string | null, body: App.TenantStatus): void {
  * cannot follow HTML redirects and will treat any non-2xx as a hard failure.
  */
 function skipsStatusProbe(pathname: string): boolean {
-  return (
-    STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) ||
-    pathname.startsWith(SHARE_UNAVAILABLE_PATH) ||
-    pathname.startsWith(TENANT_INACTIVE_PATH) ||
-    pathname.startsWith("/setup") ||
-    pathname.startsWith("/auth") ||
-    pathname.startsWith("/api/v4/webhooks") ||
-    pathname.startsWith("/api/v4/bot") ||
-    pathname.startsWith("/api/otel")
-  );
+  return STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) || pathname.startsWith(SHARE_UNAVAILABLE_PATH) || pathname.startsWith(TENANT_INACTIVE_PATH) || pathname.startsWith("/setup") || pathname.startsWith("/auth") || pathname.startsWith("/api/v4/webhooks") || pathname.startsWith("/api/v4/bot") || pathname.startsWith("/api/otel");
 }
 
 /**
@@ -249,7 +246,7 @@ const statusProbeHandle: Handle = async ({ event, resolve }) => {
   })();
 
   event.locals.statusProbe = probe;
-  event.locals.statusPromise = probe.then((result) => (result.ok ? result.body : null));
+  event.locals.statusPromise = probe.then((result) => result.ok ? result.body : null);
   return resolve(event);
 };
 
@@ -290,7 +287,7 @@ const readinessHandle: Handle = async ({ event, resolve }) => {
       apiStatus: error.status,
       recoveryMode: body.recoveryMode === true,
       errorCode: typeof body.error === "string" ? body.error : undefined,
-      marketingUrl: env.MARKETING_URL,
+      marketingUrl: MARKETING_URL,
     });
 
     if (redirect) {
@@ -408,12 +405,19 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   return resolve(event);
 };
 
-export const handleError: HandleServerError = async ({ error, event }) => {
+export const handleError: HandleServerError = async ({ kind, error, event }) => {
+  // An `error(...)` throw or a rejected remote argument already carries the status, message and
+  // issues its caller reads. Returning nothing keeps them.
+  if (kind === "app" || kind === "validation") return;
+
   const errorId = randomUUID();
   console.error(`Error ID: ${errorId}`, error);
   console.log(
     `Error occurred during request: ${event.request.method} ${event.request.url}`
   );
+
+  // SvelteKit's own errors (a 404, a 405) carry a message meant for the page.
+  if (kind === "framework") return { message: error.message, errorId };
 
   // Extract meaningful error message
   let message = "An unexpected error occurred";
@@ -504,7 +508,7 @@ function resolveLocale(event: Parameters<Handle>[0]["event"]): string {
   }
 
   // 4. Environment default
-  const envDefault = publicEnv.PUBLIC_DEFAULT_LANGUAGE;
+  const envDefault = PUBLIC_DEFAULT_LANGUAGE;
   if (envDefault && supported.has(envDefault)) {
     return envDefault;
   }
@@ -560,7 +564,7 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
   applySecurityHeaders(response.headers, {
     isShareHost: event.locals.isShareHost,
     pathname: event.url.pathname,
-    frameAncestors: parseFrameAncestors(env.ALLOWED_FRAME_ANCESTORS),
+    frameAncestors: parseFrameAncestors(ALLOWED_FRAME_ANCESTORS),
   });
   return response;
 };

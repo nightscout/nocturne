@@ -1,11 +1,11 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import KeyRound from "@lucide/svelte/icons/key-round";
-  import { FormError, FormField, useSubmission } from "$lib/forms";
-  import { activateGuestCode } from "$lib/api/guest.remote";
+  import { FormError, FormField, useSubmission } from "#lib/forms/index.js";
+  import { activateGuestCode } from "#lib/api/guest.remote.js";
 
   let {
     initialCode = "",
@@ -28,7 +28,7 @@
   })}
 >
   <FormError issues={submission.error} focusOnShow />
-  <input type="hidden" name="returnUrl" value={returnUrl} />
+  <input {...activateGuestCode.fields.returnUrl.as("hidden", returnUrl)} />
 
   <FormField
     label="Guest code"
@@ -39,7 +39,7 @@
     {#snippet control(field)}
       <Input
         {...field}
-        name="code"
+        name={activateGuestCode.fields.code.as("text").name}
         bind:value={code}
         placeholder="ABC-DEFG"
         autocomplete="one-time-code"

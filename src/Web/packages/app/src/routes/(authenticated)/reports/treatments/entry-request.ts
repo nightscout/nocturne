@@ -6,7 +6,7 @@
  * expect an ISO `timestamp` rather than `mills` — so the shaping happens here,
  * once, in one place.
  */
-import type { EntryRecord } from "$lib/constants/entry-categories";
+import type { EntryRecord } from "#lib/constants/entry-categories.js";
 
 const APP = "Nocturne Web";
 

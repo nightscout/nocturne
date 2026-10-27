@@ -1,6 +1,6 @@
-import type { RustValidationIssue } from "$api-clients";
-import { parseIssues } from "$lib/api/error-body";
-import { recordApiFailure } from "$lib/support/api-failure-log";
+import type { RustValidationIssue } from "#lib/api/generated/nocturne-api-client.js";
+import { parseIssues } from "#lib/api/error-body.js";
+import { recordApiFailure } from "#lib/support/api-failure-log.js";
 
 /** Fallback shown when a submission fails for a reason we can't safely surface. */
 export const GENERIC_SUBMIT_ERROR =
@@ -27,19 +27,26 @@ export function errorStatus(err: unknown): number | undefined {
   return undefined;
 }
 
-/** The `body` a thrown `HttpError` carries, when it has one. */
+/**
+ * The `App.Error` behind a rejection: the `body` of a thrown `HttpError`, or the error itself where
+ * SvelteKit hands it over unwrapped, as a query's `error` does.
+ */
 function errorBody(err: unknown): object | undefined {
-  if (!err || typeof err !== "object" || !("body" in err)) return undefined;
+  if (!err || typeof err !== "object") return undefined;
 
-  const { body } = err;
-  if (!body || typeof body !== "object") return undefined;
+  if ("body" in err) {
+    const { body } = err;
+    return body && typeof body === "object" ? body : undefined;
+  }
 
-  return body;
+  if (!(err instanceof Error) && "status" in err && typeof err.status === "number") return err;
+
+  return undefined;
 }
 
 /**
  * The message a remote handler put in `error(status, message)`. SvelteKit
- * delivers it as `HttpError.body.message`.
+ * delivers it as `HttpError.body.message`, or as `message` on a query's `error`.
  */
 export function errorMessage(err: unknown): string | undefined {
   const body = errorBody(err);
@@ -122,7 +129,7 @@ function serverWrittenReason(err: unknown): string | undefined {
  * Which one a call site wants follows from the operation, not from the sentence
  * it passes: `describeSubmitError` is the writing half, for a command, form or
  * any other mutation, where a person is mid-task; `remoteErrorMessage`
- * (`$lib/api/remote-error`) is the reading half, for a query whose rejection is
+ * (`#lib/api/remote-error.js`) is the reading half, for a query whose rejection is
  * rendered in place of the data it was going to show.
  *
  * The fallback sentence is the usual tell — a mutation's names the action the

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-vi.mock("$app/environment", () => ({ browser: true }));
+vi.mock("$app/env", () => ({ browser: true }));
 
 const { recordApiFailure, readApiFailures, clearApiFailures } = await import(
   "./api-failure-log"
@@ -85,7 +85,7 @@ describe("api-failure-log", () => {
 describe("api-failure-log on the server", () => {
   it("records nothing, so one request cannot leak into another's report", async () => {
     vi.resetModules();
-    vi.doMock("$app/environment", () => ({ browser: false }));
+    vi.doMock("$app/env", () => ({ browser: false }));
 
     const serverSide = await import("./api-failure-log");
     serverSide.recordApiFailure(500, "Something went wrong");

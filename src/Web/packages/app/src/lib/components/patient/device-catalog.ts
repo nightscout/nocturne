@@ -1,4 +1,4 @@
-import type { DeviceCatalogEntry } from "$api";
+import type { DeviceCatalogEntry } from "#lib/api/index.js";
 
 /** What adding {@link entry} sets up besides the device itself, or null when nothing. */
 export function trackerNote(entry: DeviceCatalogEntry | undefined): string | null {

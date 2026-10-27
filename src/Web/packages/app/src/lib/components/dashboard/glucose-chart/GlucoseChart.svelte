@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
   import { findNearbyEntries } from "./engine/nearby-entries";
   import type { Snippet } from "svelte";
-  import type { TransformedChartData } from "$lib/utils/chart-data-transform";
-  import type { PredictionData } from "$api/predictions.remote";
+  import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+  import type { PredictionData } from "#lib/api/predictions.remote.js";
   import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
-  import type { EntryRecord } from "$lib/constants/entry-categories";
+  import type { EntryRecord } from "#lib/constants/entry-categories.js";
   import {
     createChartDataEngine,
   } from "./engine/chart-data-engine.svelte";
   import { createPointInspection, syncInspectionDialogs } from "./engine/point-inspection.svelte";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import {
     chartLineColorMode,
     chartLineColor,
@@ -19,8 +19,8 @@
     chartShowPoints,
     chartAreaMode,
     chartAreaOpacity,
-  } from "$lib/stores/appearance-store.svelte";
-  import { getEntryByTreatmentId } from "$api/entries.remote";
+  } from "#lib/stores/appearance-store.svelte.js";
+  import { getEntryByTreatmentId } from "#lib/api/entries.remote.js";
 
   // Shell & tracks
   import GlucoseChartShell from "./GlucoseChartShell.svelte";
@@ -39,6 +39,7 @@
   import { openDayInReview } from "./day-in-review";
 
   import PointInspectionPicker from "./dialogs/PointInspectionPicker.svelte";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     dateRange?: { from: Date | string; to: Date | string };
@@ -125,7 +126,7 @@
       realtimeStore.findEntryByTreatmentId(treatmentId) ?? null;
 
     if (!entry) {
-      const result = await getEntryByTreatmentId({ treatmentId }).run();
+      const result = await fresh(getEntryByTreatmentId({ treatmentId }));
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- generated entry shape bridged to the app EntryRecord union
       entry = result as EntryRecord | null;
     }
@@ -168,7 +169,7 @@
   }
 
   const entryEditDialog = lazyComponent(
-    () => import("$lib/components/entries/EntryEditDialog.svelte"),
+    () => import("#lib/components/entries/EntryEditDialog.svelte"),
   );
   const disambiguationDialog = lazyComponent(
     () => import("./dialogs/TreatmentDisambiguationDialog.svelte"),

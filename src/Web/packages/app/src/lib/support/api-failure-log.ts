@@ -1,4 +1,4 @@
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 
 /** One rejected API call, as the support form reports it. */
 export interface ApiFailure {

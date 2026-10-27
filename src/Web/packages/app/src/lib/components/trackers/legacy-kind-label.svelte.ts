@@ -1,4 +1,4 @@
-import { LegacyConsumableKind } from "$lib/api";
+import { LegacyConsumableKind } from "#lib/api/index.js";
 
 /** The one name each legacy consumable has in the UI. Built per call so wuchale translates it. */
 export function legacyKindLabel(kind: LegacyConsumableKind): string {

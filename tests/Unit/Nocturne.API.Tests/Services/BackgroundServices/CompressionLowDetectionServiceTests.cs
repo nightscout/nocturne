@@ -150,6 +150,79 @@ public class CompressionLowDetectionServiceTests
         unnamed.Should().Equal(named);
     }
 
+    [Theory]
+    [InlineData(1, 9, 5)]
+    [InlineData(9, 17, 13)]
+    public async Task DetectForNightAsync_filesADipUnderTheOneNightWhoseWindowHoldsIt(
+        int bedtimeHour, int wakeTimeHour, int dipHour)
+    {
+        var night = new DateOnly(2026, 10, 20);
+        var dipStart = night.ToDateTime(new TimeOnly(dipHour, 0));
+        var firstReading = night.AddDays(-1).ToDateTime(TimeOnly.MinValue);
+        var readings = Enumerable.Range(0, 3 * 24 * 12)
+            .Select(i => firstReading.AddMinutes(5 * i))
+            .Select(time =>
+            {
+                var step = (int)(time - dipStart).TotalMinutes / 5;
+                var glucose = time >= dipStart && step < CompressionLow.Length ? CompressionLow[step] : 110d;
+                var mills = new DateTimeOffset(time, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                return new Entry { Mills = mills, Sgv = glucose, Mgdl = glucose };
+            })
+            .ToList();
+        var saved = new List<CompressionLowSuggestion>();
+        _repository
+            .Setup(r => r.ActiveSuggestionsExistForNightAsync(It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _repository
+            .Setup(r => r.CreateManyAsync(It.IsAny<IReadOnlyCollection<CompressionLowSuggestion>>(), It.IsAny<CancellationToken>()))
+            .Callback((IReadOnlyCollection<CompressionLowSuggestion> batch, CancellationToken _) => saved.AddRange(batch))
+            .Returns(Task.CompletedTask);
+        _entryService
+            .Setup(e => e.GetEntriesAsync(
+                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string? find, int? _, int? _, CancellationToken _) =>
+            {
+                var bounds = System.Text.RegularExpressions.Regex.Matches(find!, @"\d+")
+                    .Select(m => long.Parse(m.Value))
+                    .ToList();
+                return readings.Where(e => e.Mills >= bounds[0] && e.Mills <= bounds[1]).ToList();
+            });
+        var settings = new Mock<IUISettingsService>();
+        settings
+            .Setup(s => s.GetSettingsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UISettingsConfiguration
+            {
+                DataQuality = new DataQualitySettings
+                {
+                    SleepSchedule = new SleepScheduleSettings
+                    {
+                        Timezone = "UTC",
+                        BedtimeHour = bedtimeHour,
+                        WakeTimeHour = wakeTimeHour,
+                    },
+                },
+            });
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.SetupGet(a => a.TenantId).Returns(TenantId);
+        var services = new ServiceCollection();
+        services.AddScoped(_ => settings.Object);
+        services.AddScoped(_ => _repository.Object);
+        services.AddScoped(_ => _entryService.Object);
+        services.AddScoped(_ => TestIobCobReader.Empty());
+        services.AddScoped(_ => Mock.Of<ISensitivityResolver>());
+        services.AddScoped(_ => Mock.Of<IInAppNotificationService>());
+        services.AddScoped(_ => tenantAccessor.Object);
+        services.AddScoped(_ => Mock.Of<Nocturne.Core.Contracts.Identity.ITenantOwnerResolver>());
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var sut = Detector();
+
+        foreach (var day in new[] { night.AddDays(-1), night, night.AddDays(1) })
+            await sut.DetectForNightAsync(day, scope.ServiceProvider, CancellationToken.None);
+
+        saved.Should().ContainSingle().Which.NightOf.Should().Be(night);
+    }
+
     private const double SharpDrop = 5.0;
     private const int FastRecovery = 5;
     private const int SlowRecovery = CompressionLowDetectionService.MaxRecoveryMinutes;
@@ -460,6 +533,32 @@ public class CompressionLowDetectionServiceTests
     }
 
     [Fact]
+    public async Task ScanReadyNightsAsync_scansADaySleepersNightOnceItsOwnWindowHasEnded()
+    {
+        var beforeWake = new DateTimeOffset(2026, 10, 20, 8, 50, 0, TimeSpan.Zero);
+        using var fixture = await ScheduleFixture.CreateAsync(beforeWake, "UTC", bedtimeHour: 1, wakeTimeHour: 9);
+
+        await fixture.Sut.ScanReadyNightsAsync(CancellationToken.None);
+        fixture.Scans.Should().Equal(new DateOnly(2026, 10, 19));
+
+        fixture.Clock.Advance(TimeSpan.FromMinutes(36));
+        await fixture.Sut.ScanReadyNightsAsync(CancellationToken.None);
+        fixture.Scans.Should().Equal(new DateOnly(2026, 10, 19), new DateOnly(2026, 10, 20));
+    }
+
+    [Fact]
+    public async Task ScanReadyNightsAsync_sleepsUntilTheNextDaySleepersWindowEnds()
+    {
+        var afterWake = new DateTimeOffset(2026, 10, 20, 9, 30, 0, TimeSpan.Zero);
+        using var fixture = await ScheduleFixture.CreateAsync(afterWake, "UTC", bedtimeHour: 1, wakeTimeHour: 9);
+
+        var delay = await fixture.Sut.ScanReadyNightsAsync(CancellationToken.None);
+
+        delay.Should().Be(CompressionLowDetectionService.MaxSleep);
+        fixture.Scans.Should().Equal(new DateOnly(2026, 10, 20));
+    }
+
+    [Fact]
     public async Task ScanReadyNightsAsync_doesNotRescanANightWhoseSuggestionsWereAllDismissed()
     {
         using var fixture = await ScheduleFixture.CreateAsync(BeforeEastWake, SixHoursEast);
@@ -500,7 +599,15 @@ public class CompressionLowDetectionServiceTests
             TenantScans = scans;
         }
 
-        public static Task<ScheduleFixture> CreateAsync(DateTimeOffset now, params string[] tenantTimezones)
+        public static Task<ScheduleFixture> CreateAsync(DateTimeOffset now, params string[] tenantTimezones) =>
+            CreateAsync(now, tenantTimezones, 23, 7);
+
+        public static Task<ScheduleFixture> CreateAsync(
+            DateTimeOffset now, string timezone, int bedtimeHour, int wakeTimeHour) =>
+            CreateAsync(now, [timezone], bedtimeHour, wakeTimeHour);
+
+        private static Task<ScheduleFixture> CreateAsync(
+            DateTimeOffset now, string[] tenantTimezones, int bedtimeHour, int wakeTimeHour)
         {
             var clock = new FakeTimeProvider(now);
             var tenantIds = tenantTimezones.Select(_ => Guid.NewGuid()).ToList();
@@ -516,7 +623,12 @@ public class CompressionLowDetectionServiceTests
                     {
                         DataQuality = new DataQualitySettings
                         {
-                            SleepSchedule = new SleepScheduleSettings { Timezone = pair.Second },
+                            SleepSchedule = new SleepScheduleSettings
+                            {
+                                Timezone = pair.Second,
+                                BedtimeHour = bedtimeHour,
+                                WakeTimeHour = wakeTimeHour,
+                            },
                         },
                     });
             var nightsWithSuggestions = new HashSet<DateOnly>();

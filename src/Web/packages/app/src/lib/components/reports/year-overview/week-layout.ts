@@ -10,8 +10,8 @@ import {
   timeTuesday,
   timeWednesday,
 } from "d3-time";
-import { weekdayIndex } from "$lib/components/calendar/calendar-date";
-import { toDayString } from "$lib/utils/date-range";
+import { weekdayIndex } from "#lib/components/calendar/calendar-date.js";
+import { toDayString } from "#lib/utils/date-range.js";
 
 const WEEKS = [
   timeSunday,

@@ -6,7 +6,7 @@
     helpLinks,
     visibleSettingsGroups,
     type SettingsLink,
-  } from "$lib/navigation/settings-navigation.svelte";
+  } from "#lib/navigation/settings-navigation.svelte.js";
   import type { PageData } from "./$types";
 
   const { data }: { data: PageData } = $props();

@@ -4,7 +4,7 @@ title: Connecting your app
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import OAuthScopeTable from '$lib/components/docs/OAuthScopeTable.svelte';
+  import OAuthScopeTable from '#lib/components/docs/OAuthScopeTable.svelte';
 </script>
 
 # Connecting your app to Nocturne

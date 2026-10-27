@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { isRecord } from "$lib/utils/type-guards";
-  import * as Card from "$lib/components/ui/card";
+  import { isRecord } from "#lib/utils/type-guards.js";
+  import * as Card from "#lib/components/ui/card/index.js";
   import UserAvatar from "./UserAvatar.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Mail from "@lucide/svelte/icons/mail";
   import Shield from "@lucide/svelte/icons/shield";
   import Clock from "@lucide/svelte/icons/clock";
@@ -14,10 +14,10 @@
   import Camera from "@lucide/svelte/icons/camera";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { formatSessionExpiry, getAuthStore } from "$lib/stores/auth-store.svelte";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
-  import { upload as uploadAvatar, remove as deleteAvatar } from "$lib/api/generated/avatars.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { formatSessionExpiry, getAuthStore } from "#lib/stores/auth-store.svelte.js";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { upload as uploadAvatar, remove as deleteAvatar } from "#lib/api/generated/avatars.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   interface User {
     name: string;
@@ -145,7 +145,7 @@
           <!-- eslint-disable-next-line no-restricted-syntax -- hidden file input, opened by the avatar -->
           <input
             type="file"
-            name="file"
+            name={uploadAvatar.fields.file.as("file").name}
             accept="image/png,image/jpeg,image/webp"
             class="hidden"
             bind:this={fileInput}

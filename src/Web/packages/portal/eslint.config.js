@@ -26,7 +26,7 @@ export default [
   {
     // Build-time tooling over the repo's own files: every path is built from the package
     // root or a checked-in manifest, never from a request.
-    files: ["scripts/**", "vite.config.ts", "app-aliases.ts"],
+    files: ["scripts/**", "vite.config.ts"],
     rules: { "security/detect-non-literal-fs-filename": "off" }
   }
 ];

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TreatmentFood } from "$lib/api";
+  import type { TreatmentFood } from "#lib/api/index.js";
 
   interface Props {
     food: TreatmentFood;

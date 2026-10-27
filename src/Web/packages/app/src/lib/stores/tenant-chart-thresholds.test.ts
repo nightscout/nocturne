@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
 
 const context = vi.hoisted(() => ({ store: null as unknown }));
 

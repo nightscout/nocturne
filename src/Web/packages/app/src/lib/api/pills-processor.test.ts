@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { AidAlgorithm, type ApsSnapshot } from "$lib/api/generated/nocturne-api-client";
-import type { DeviceStatus } from "$api/pills-processor";
+import { AidAlgorithm, type ApsSnapshot } from "#lib/api/generated/nocturne-api-client.js";
+import type { DeviceStatus } from "#lib/api/pills-processor.js";
 
-// The module graph for $lib/api transitively imports several $app/* modules
+// The module graph for #lib/api transitively imports several $app/* modules
 // and @sveltejs/kit.  Mock them all before loading the module under test.
-vi.mock("$app/environment", () => ({ browser: false, dev: false }));
+vi.mock("$app/env", () => ({ browser: false, dev: false }));
 vi.mock("$app/navigation", () => ({}));
 vi.mock("$app/state", () => ({}));
 vi.mock("$app/server", () => ({
@@ -18,7 +18,7 @@ vi.mock("@sveltejs/kit", () => ({
 	redirect: vi.fn((status: number, url: string) => { throw Object.assign(new Error(url), { status }); }),
 }));
 
-const { processPillsData } = await import("$api/pills-processor");
+const { processPillsData } = await import("#lib/api/pills-processor.js");
 
 // ---------------------------------------------------------------------------
 // Test helpers

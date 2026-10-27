@@ -2,14 +2,14 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
-import type { TenantRoleDto } from "$api-clients";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 let roles: TenantRoleDto[];
 let createImpl: (arg: unknown) => Promise<unknown>;
 let updateImpl: (arg: unknown) => Promise<unknown>;
 
-vi.mock("$lib/api/generated/roles.generated.remote", () => ({
+vi.mock("#lib/api/generated/roles.generated.remote.js", () => ({
   getRoles: () => remoteQuery(() => roles),
   createRole: (arg: unknown) => createImpl(arg),
   updateRole: (arg: unknown) => updateImpl(arg),

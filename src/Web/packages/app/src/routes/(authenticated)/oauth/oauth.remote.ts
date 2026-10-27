@@ -4,8 +4,8 @@
 import { getRequestEvent, query, form } from "$app/server";
 import { z } from "zod";
 import { error, invalid, redirect } from "@sveltejs/kit";
-import { deviceApprove } from "$api/generated/oAuths.generated.remote";
-import { describeSubmitError } from "$lib/forms/submit-error";
+import { deviceApprove } from "#lib/api/generated/oAuths.generated.remote.js";
+import { describeSubmitError } from "#lib/forms/submit-error.js";
 
 // ============================================================================
 // Query Functions
@@ -191,7 +191,7 @@ export const consentForm = form(consentSchema, async (data, issue) => {
   if (response.status === 302 || response.status === 301) {
     const location = response.headers.get("Location");
     if (location) {
-      throw redirect(302, location);
+      throw redirect(302, location, { external: true });
     }
   }
 

@@ -2,11 +2,11 @@
  * Dashboard Widget System
  *
  * Widget icon mappings and helpers.
- * Types must be imported directly from '$lib/api/generated/nocturne-api-client'.
+ * Types must be imported directly from '#lib/api/generated/nocturne-api-client.js'.
  */
 
-import { WidgetId, type WidgetConfig } from "$lib/api/generated/nocturne-api-client";
-import type { TopWidgetId } from "$lib/components/dashboard/top-widget-ids";
+import { WidgetId, type WidgetConfig } from "#lib/api/generated/nocturne-api-client.js";
+import type { TopWidgetId } from "#lib/components/dashboard/top-widget-ids.js";
 
 import TrendingUp from "@lucide/svelte/icons/trending-up";
 import Clock from "@lucide/svelte/icons/clock";

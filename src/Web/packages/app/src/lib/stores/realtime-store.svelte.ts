@@ -1,8 +1,8 @@
 // Real-time data store using Svelte 5 Runes and WebSocket integration
-import { WebSocketClient } from "$lib/websocket/websocket-client.svelte";
+import { WebSocketClient } from "#lib/websocket/websocket-client.svelte.js";
 import { entryIdentity, namedEntry, unseenEntries } from "./entry-identity";
 import { markedRead } from "./notification-read";
-import { untilNow } from "$lib/utils/now";
+import { untilNow } from "#lib/utils/now.js";
 import {
   DAY_MS,
   initialReadWindows,
@@ -10,8 +10,8 @@ import {
   initialReadsStash,
   releaseInitialReads,
 } from "./initial-reads";
-import { relativeAge, toDate } from "$lib/utils/formatting";
-import { afterNextPaint } from "$lib/utils/after-next-paint";
+import { relativeAge, toDate } from "#lib/utils/formatting.js";
+import { afterNextPaint } from "#lib/utils/after-next-paint.js";
 import type {
   Entry,
   WebSocketConfig,
@@ -22,7 +22,7 @@ import type {
   TrackerUpdateEvent,
   TrackerDefinitionUpdateEvent,
   SyncProgressEvent,
-} from "$lib/websocket/types";
+} from "#lib/websocket/types.js";
 import type {
   TrackerInstanceDto,
   TrackerDefinitionDto,
@@ -40,7 +40,7 @@ import type {
   ChartThresholdsDto,
   SensorGlucose,
   SensorGlucoseClient,
-} from "$lib/api";
+} from "#lib/api/index.js";
 
 /**
  * Nightscout v1/v2 device status shape received via WebSocket and legacy API.
@@ -50,15 +50,15 @@ export interface DeviceStatus extends PillsDeviceStatus {
   _id?: string;
   uploader?: Record<string, unknown>;
 }
-import { NotificationUrgency, TrackerRealtimeAction } from "$lib/api";
-import { reachedStep } from "$lib/components/trackers/schedule";
+import { NotificationUrgency, TrackerRealtimeAction } from "#lib/api/index.js";
+import { reachedStep } from "#lib/components/trackers/schedule.js";
 import {
   mergeEntryRecords,
   type EntryRecord,
-} from "$lib/constants/entry-categories";
+} from "#lib/constants/entry-categories.js";
 import { toast } from "svelte-sonner";
 import { isErrorStatus, presentConnection } from "./connection-indicator.svelte";
-import * as alarmState from "$lib/stores/alarm-state.svelte";
+import * as alarmState from "#lib/stores/alarm-state.svelte.js";
 import { closeAlertNotification, raiseAlertNotification } from "./alert-notifications.svelte";
 import { getContext, setContext } from "svelte";
 import {
@@ -74,21 +74,21 @@ import {
   sensorGlucoseClient,
   trackerLegacyFallbacksClient,
   trackersClient,
-} from "$lib/api/browser-clients";
+} from "#lib/api/browser-clients.js";
 import {
   processPillsData,
   type DeviceStatus as PillsDeviceStatus,
   type ProcessedPillsData,
-} from "$api/pills-processor";
-import { isEntryDocument, isRecordDocument } from "$lib/websocket/payloads";
-import { isRecord } from "$lib/utils/type-guards";
-import { SyncPhase } from "$lib/api/generated/nocturne-api-client";
-import { NightscoutEventType } from "$lib/constants/nightscout-event-types";
-import { toIsoString } from "$lib/utils/api-date";
+} from "#lib/api/pills-processor.js";
+import { isEntryDocument, isRecordDocument } from "#lib/websocket/payloads.js";
+import { isRecord } from "#lib/utils/type-guards.js";
+import { SyncPhase } from "#lib/api/generated/nocturne-api-client.js";
+import { NightscoutEventType } from "#lib/constants/nightscout-event-types.js";
+import { toIsoString } from "#lib/utils/api-date.js";
 import {
   resolveChartThresholds,
   type ChartThresholds,
-} from "$lib/constants/glucose-thresholds";
+} from "#lib/constants/glucose-thresholds.js";
 
 /** The tracker levels loud enough for the notifications list; Info stays on the pill. */
 const TRACKER_NOTIFICATION_LEVELS: Partial<Record<NotificationUrgency, "warn" | "hazard" | "urgent">> = {
@@ -197,6 +197,10 @@ export class RealtimeStore {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- batch buffer; the flush commits it to $state as one update
   private pendingEntryCreates = new Map<string, Entry>();
   private entryCreateFlushTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pendingRemovals: Record<string, InAppNotificationDto> = {};
+  /** Ids the server has archived, newest last. A broadcast that crosses the archive on the wire
+   *  (mark all read sends an update for every notification it touched) must not list one again. */
+  private archivedIds: string[] = [];
   private static readonly ENTRY_CREATE_BATCH_MS = 100;
 
   /** True once every starting read is applied, not only the current reading ({@link currentReadingLoaded}). */
@@ -252,6 +256,7 @@ export class RealtimeStore {
   /** Pending refetch of the records the backend derives from devicestatus. */
   private decompositionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly DECOMPOSITION_REFRESH_MS = 3_000;
+  private static readonly ARCHIVED_IDS_KEPT = 200;
 
   /** Whether the socket connected once already, so a connect is a reconnection. */
   private connectedBefore = false;
@@ -995,20 +1000,49 @@ export class RealtimeStore {
     }
   }
 
-  /** Optimistically mark every loaded notification read so the badge and styling
-   *  update instantly; the server's notificationUpdated broadcast reconciles other
-   *  clients (and this one). */
-  markAllNotificationsRead(): void {
-    this.inAppNotifications = markedRead(this.inAppNotifications);
+  /** Optimistically marks the notifications `match` accepts read, ahead of the server's
+   *  notificationUpdated broadcast. The returned function undoes it for each one no
+   *  broadcast has replaced since. */
+  markNotificationsRead(match?: (notification: InAppNotificationDto) => boolean): () => void {
+    const before = this.inAppNotifications;
+    const marked = markedRead(before, match);
+    const changed = marked.flatMap((n, i) => (n === before[i] ? [] : [[n, before[i]] as const]));
+    this.inAppNotifications = marked;
+    return () => {
+      this.inAppNotifications = this.inAppNotifications.map(
+        (n) => changed.find(([optimistic]) => optimistic === n)?.[1] ?? n
+      );
+    };
   }
 
-  /** Optimistically mark a single notification read by id. */
-  markNotificationRead(id: string): void {
-    this.inAppNotifications = markedRead(this.inAppNotifications, (n) => n.id === id);
+  /** Optimistically takes a notification off the list, ahead of the server's
+   *  notificationArchived broadcast. Until the removal settles, an update broadcast
+   *  for it does not bring it back. `settle` records the server archived it; `release` ends the
+   *  wait without that record, for an answer that does not say the notification was archived.
+   *  `restore` puts it back unless its archive broadcast has arrived since. */
+  removeNotification(id: string): { settle(): void; release(): void; restore(): void } {
+    const removed = this.inAppNotifications.find((n) => n.id === id);
+    if (removed) this.pendingRemovals[id] = removed;
+    this.inAppNotifications = this.inAppNotifications.filter((n) => n.id !== id);
+    return {
+      settle: () => {
+        delete this.pendingRemovals[id];
+        this.rememberArchived(id);
+      },
+      release: () => {
+        delete this.pendingRemovals[id];
+      },
+      restore: () => {
+        const pending = this.pendingRemovals[id];
+        delete this.pendingRemovals[id];
+        if (pending) this.addNotification(pending);
+      },
+    };
   }
 
   /** Handle new in-app notification from SignalR */
   private handleNotificationCreated(notification: InAppNotificationDto): void {
+    this.archivedIds = this.archivedIds.filter((id) => id !== notification.id);
     if (!this.addNotification(notification)) return;
     raiseAlertNotification(notification);
   }
@@ -1022,12 +1056,27 @@ export class RealtimeStore {
 
   /** Handle notification archived from SignalR */
   private handleNotificationArchived(notification: InAppNotificationDto): void {
+    if (notification.id) {
+      delete this.pendingRemovals[notification.id];
+      this.rememberArchived(notification.id);
+    }
     this.inAppNotifications = this.inAppNotifications.filter((n) => n.id !== notification.id);
     closeAlertNotification(notification);
   }
 
+  private rememberArchived(id: string): void {
+    this.archivedIds = [...this.archivedIds.filter((archived) => archived !== id), id].slice(
+      -RealtimeStore.ARCHIVED_IDS_KEPT
+    );
+  }
+
   /** Handle notification updated from SignalR */
   private handleNotificationUpdated(notification: InAppNotificationDto): void {
+    if (notification.id && this.archivedIds.includes(notification.id)) return;
+    if (notification.id && this.pendingRemovals[notification.id]) {
+      this.pendingRemovals[notification.id] = notification;
+      return;
+    }
     const index = this.inAppNotifications.findIndex((n) => n.id === notification.id);
     if (index !== -1) {
       this.inAppNotifications = [

@@ -1,9 +1,9 @@
-import type { FactSnapshotPoint } from "$api-clients";
+import type { FactSnapshotPoint } from "#lib/api/generated/nocturne-api-client.js";
 import type { ConditionNode } from "./types";
-import { formatMinutesDuration } from "$lib/utils/duration";
+import { formatMinutesDuration } from "#lib/utils/duration.js";
 import { MGDL_PER_MMOL } from "@nocturne/ui/glucose";
-import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-import { bg, bgLabel } from "$lib/utils/formatting";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import { bg, bgLabel } from "#lib/utils/formatting.js";
 
 /**
  * Sparse-time-series lookup over the per-tick numeric fact snapshots emitted by

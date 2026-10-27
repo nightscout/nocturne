@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RequestEvent } from "@sveltejs/kit";
 // @ts-expect-error SvelteKit publishes no types for this entry point.
 import * as kitInternal from "@sveltejs/kit/internal/server";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { clearSessionCache } from "$lib/server/session-cache";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
+import { clearSessionCache } from "#lib/server/session-cache.js";
 
 // The real loaders read catalogs that only a wuchale build compiles.
 vi.mock("wuchale/load-utils/server", () => ({
@@ -21,8 +21,7 @@ vi.mock("../../../locales/js.loader.server.js", () => ({
   loadCatalog: () => ({}),
 }));
 vi.mock("../../../locales/data.js", () => ({ locales: ["en"] }));
-vi.mock("$env/dynamic/public", () => ({ env: {} }));
-vi.mock("$lib/stores/appearance-store.svelte", () => ({
+vi.mock("#lib/stores/appearance-store.svelte.js", () => ({
   LANGUAGE_COOKIE_NAME: "nocturne-language",
 }));
 
@@ -30,7 +29,7 @@ const getSession = vi.fn();
 const getStatus = vi.fn();
 
 // Every API client the hooks build (session, status probe, per-request) answers from these.
-vi.mock("$lib/server/api-client-factory", () => ({
+vi.mock("#lib/server/api-client-factory.js", () => ({
   getApiBaseUrl: () => "http://api.test",
   createServerApiClient: () => ({
     oidc: { getSession: () => getSession() },
@@ -38,11 +37,11 @@ vi.mock("$lib/server/api-client-factory", () => ({
   }),
 }));
 
-const { handle } = await import("./hooks.server");
+const { handle, handleError } = await import("./hooks.server");
 /** Sets up the request store SvelteKit's server wraps `handle` in, which sequence() reads. */
 const withRequestStore = (kitInternal as { with_request_store: <T>(store: unknown, fn: () => T) => T })
   .with_request_store;
-const { getRequestStatus } = await import("$lib/server/request-status");
+const { getRequestStatus } = await import("#lib/server/request-status.js");
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -301,5 +300,49 @@ describe("hooks — response headers", () => {
     });
 
     expect(response.headers.has("link")).toBe(false);
+  });
+});
+
+describe("hooks — handleError", () => {
+  const event = { request: new Request("https://sleepy.nocturne.test/reports/agp") } as unknown as RequestEvent;
+  const quiet = () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  };
+  afterEach(() => vi.restoreAllMocks());
+
+  it("leaves an error(...) throw as the caller wrote it", async () => {
+    const outcome = await handleError({
+      kind: "app",
+      error: { status: 409, message: "Already redeemed", issues: [] },
+      event,
+    });
+
+    expect(outcome).toBeUndefined();
+  });
+
+  it("leaves a rejected remote argument to SvelteKit's own message", async () => {
+    const outcome = await handleError({
+      kind: "validation",
+      error: { status: 400, message: "Bad Request" },
+      issues: [],
+      event,
+    });
+
+    expect(outcome).toBeUndefined();
+  });
+
+  it("keeps SvelteKit's message for its own errors and names the occurrence", async () => {
+    quiet();
+    const outcome = await handleError({ kind: "framework", error: { status: 404, message: "Not Found" }, event });
+
+    expect(outcome).toMatchObject({ message: "Not Found", errorId: expect.any(String) });
+  });
+
+  it("names an unexpected error and carries its message", async () => {
+    quiet();
+    const outcome = await handleError({ kind: "unknown", error: new Error("boom"), event });
+
+    expect(outcome).toMatchObject({ message: "boom", errorId: expect.any(String) });
   });
 });

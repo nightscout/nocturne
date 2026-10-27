@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Rule } from "layerchart";
   import { getGlucoseChartContext } from "../chart-context.svelte";
-  import { dashOf } from "$lib/components/charts/print/chart-print-patterns";
+  import { dashOf } from "#lib/components/charts/print/chart-print-patterns.js";
 
   interface Props {
     level: "high" | "low" | "veryHigh" | "veryLow" | "targetLow" | "targetHigh";

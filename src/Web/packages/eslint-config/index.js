@@ -81,10 +81,11 @@ export const RAW_BUTTON_SYNTAX = [
   }
 ];
 
-// Hidden inputs carry form state and render nothing.
+// Hidden inputs carry form state and render nothing, whether typed by hand or by a remote form
+// field's `.as("hidden", value)`.
 export const RAW_MARKUP_SYNTAX = [
   {
-    selector: 'SvelteElement[kind="html"][name.name="input"]:not(:has(SvelteAttribute[key.name="type"] > SvelteLiteral[value="hidden"]))',
+    selector: 'SvelteElement[kind="html"][name.name="input"]:not(:has(SvelteAttribute[key.name="type"] > SvelteLiteral[value="hidden"])):not(:has(SvelteSpreadAttribute > CallExpression[callee.property.name="as"][arguments.0.value="hidden"]))',
     message: "Use <Input>, <Checkbox>, <Switch>, <RadioGroup> or <Slider> instead of a raw <input>. type=\"hidden\" is allowed."
   },
   {

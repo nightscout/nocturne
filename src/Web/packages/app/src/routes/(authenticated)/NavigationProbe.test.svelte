@@ -4,7 +4,7 @@
 
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { refreshOnReturn } from "$lib/utils/refresh-on-return.svelte";
+  import { refreshOnReturn } from "#lib/utils/refresh-on-return.svelte.js";
 
   const { children }: { children: Snippet } = $props();
   refreshOnReturn(() => navigationProbe.refreshes++);

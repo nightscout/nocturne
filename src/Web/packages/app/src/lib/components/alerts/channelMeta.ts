@@ -2,7 +2,7 @@ import Bell from "@lucide/svelte/icons/bell";
 import BellRing from "@lucide/svelte/icons/bell-ring";
 import MonitorSmartphone from "@lucide/svelte/icons/monitor-smartphone";
 import WebhookIcon from "@lucide/svelte/icons/webhook";
-import { ChannelType } from "$api-clients";
+import { ChannelType } from "#lib/api/generated/nocturne-api-client.js";
 
 /**
  * Every channel kind but the legacy ones the picker never offers. Excluding rather than listing

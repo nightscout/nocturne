@@ -20,11 +20,11 @@
   } from "@internationalized/date";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import { Button } from "$lib/components/ui/button";
-  import { getPunchCardData } from "$api/generated/statistics.generated.remote";
-  import GlucosePickerCell from "$lib/components/alerts/GlucosePickerCell.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import { formatLocale } from "$lib/utils/formatting";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { getPunchCardData } from "#lib/api/generated/statistics.generated.remote.js";
+  import GlucosePickerCell from "#lib/components/alerts/GlucosePickerCell.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import { formatLocale } from "#lib/utils/formatting.js";
 
   interface Props {
     /** Currently-selected date, or undefined for the "Last 24 hours" sentinel. */

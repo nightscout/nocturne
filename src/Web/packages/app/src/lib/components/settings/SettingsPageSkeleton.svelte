@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { Card, CardContent, CardHeader } from "$lib/components/ui/card";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { Card, CardContent, CardHeader } from "#lib/components/ui/card/index.js";
 
   interface Props {
     /** Number of card sections to show */

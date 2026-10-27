@@ -240,6 +240,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     public DbSet<PlatformSettingsEntity> PlatformSettings { get; set; }
 
+    /// <summary>
+    /// Release notices sent to tenant owners (not tenant-scoped), one per kind, version and owner.
+    /// </summary>
+    public DbSet<ReleaseNoticeEntity> ReleaseNotices { get; set; }
+
     // In-App Notification entities
 
     public DbSet<InAppNotificationEntity> InAppNotifications { get; set; }
@@ -1570,6 +1575,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(ps => ps.Category)
             .HasDatabaseName("ix_platform_settings_category")
             .IsUnique();
+
+        modelBuilder.Entity<ReleaseNoticeEntity>()
+            .HasIndex(n => new { n.Kind, n.Version, n.TenantId, n.SubjectId })
+            .HasDatabaseName("ux_release_notices_kind_version_tenant_subject")
+            .IsUnique();
+
+        modelBuilder.Entity<ReleaseNoticeEntity>()
+            .HasOne<TenantEntity>()
+            .WithMany()
+            .HasForeignKey(n => n.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder
             .Entity<InAppNotificationEntity>()

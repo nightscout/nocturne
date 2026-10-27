@@ -81,6 +81,8 @@ public class StorageDeleteBroadcastContractTests
 
         public JsonElement Create => Wire("create");
 
+        public JsonElement Update => Wire("update");
+
         private IHubContext<THub> StubHub<THub>()
             where THub : Hub
         {
@@ -337,6 +339,85 @@ public class StorageDeleteBroadcastContractTests
         IdKeys(capture.Create.GetProperty("doc"))
             .Should()
             .BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = v3 });
+    }
+
+    /// <summary>
+    /// An AAPS devicestatus upload whose loop has not run yet. AAPS reads the echo with Gson, which
+    /// throws on a <c>null</c> where its model declares an object (<c>openaps.suggested</c>,
+    /// <c>openaps.enacted</c>), so the keys the upload left out must stay out.
+    /// </summary>
+    private static DeviceStatus AapsUploadWithEmptyOpenAps() =>
+        JsonSerializer.Deserialize<DeviceStatus>(
+            """{"device":"openaps://samsung SM-S911B","created_at":"2026-10-23T09:47:00.000Z","openaps":{},"pump":{"reservoir":120}}""",
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        )!;
+
+    /// <summary>
+    /// Scalars a model writes even when null, as Nightscout does; Gson reads a null scalar without
+    /// complaint.
+    /// </summary>
+    private static readonly string[] DeviceStatusAlwaysWritten = ["$.uploaderBattery"];
+
+    [Fact]
+    public async Task DeviceStatusCreate_LeavesOutTheOpenApsKeysTheUploadLeftOut()
+    {
+        var capture = new BroadcastCapture();
+
+        await CreateSideEffects(capture).OnCreatedAsync("devicestatus", new[] { AapsUploadWithEmptyOpenAps() });
+
+        var doc = capture.Create.GetProperty("doc");
+        doc.GetProperty("openaps").EnumerateObject().Should().BeEmpty();
+        doc.GetProperty("pump").GetProperty("reservoir").GetDouble().Should().Be(120);
+        NullProperties(doc).Should().Equal(DeviceStatusAlwaysWritten);
+    }
+
+    [Fact]
+    public async Task DeviceStatusUpdate_LeavesOutTheOpenApsKeysTheUploadLeftOut()
+    {
+        var capture = new BroadcastCapture();
+
+        await CreateSideEffects(capture).OnUpdatedAsync("devicestatus", AapsUploadWithEmptyOpenAps());
+
+        capture.Update.GetProperty("doc").GetProperty("openaps").EnumerateObject().Should().BeEmpty();
+        NullProperties(capture.Update.GetProperty("doc")).Should().Equal(DeviceStatusAlwaysWritten);
+    }
+
+    [Fact]
+    public async Task TreatmentSinkCreate_LeavesOutUnsetKeys()
+    {
+        var capture = new BroadcastCapture();
+
+        await CreateTreatmentSink(capture)
+            .OnCreatedAsync(new Treatment { Id = RecordGuid, EventType = "Meal Bolus", Carbs = 30 }, CancellationToken.None);
+
+        var doc = capture.Create.GetProperty("doc");
+        doc.GetProperty("carbs").GetDouble().Should().Be(30);
+        NullProperties(doc).Should().Equal("$.enteredBy");
+    }
+
+    /// <summary>The paths of every object property that is on the wire as <c>null</c>.</summary>
+    private static List<string> NullProperties(JsonElement element, string path = "$")
+    {
+        var found = new List<string>();
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                var child = $"{path}.{property.Name}";
+                if (property.Value.ValueKind == JsonValueKind.Null)
+                    found.Add(child);
+                else
+                    found.AddRange(NullProperties(property.Value, child));
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            var index = 0;
+            foreach (var item in element.EnumerateArray())
+                found.AddRange(NullProperties(item, $"{path}[{index++}]"));
+        }
+
+        return found;
     }
 
     /// <summary>The keys a client could take for the record's own id, under the hub's naming.</summary>

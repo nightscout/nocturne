@@ -1,18 +1,18 @@
 <script lang="ts">
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
-	import type { DataQualitySettings } from '$lib/api/generated/nocturne-api-client';
-	import { getUiSettings, saveDataQualitySettings } from '$api/ui-settings.remote';
-	import { remoteErrorMessage } from '$lib/api/remote-error';
-	import { SETTINGS_LOAD_FAILED } from '$lib/api/ui-settings-messages';
-	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
-	import { Switch } from '$lib/components/ui/switch';
-	import { Label } from '$lib/components/ui/label';
-	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
+	import type { DataQualitySettings } from '#lib/api/generated/nocturne-api-client.js';
+	import { getUiSettings, saveDataQualitySettings } from '#lib/api/ui-settings.remote.js';
+	import { remoteErrorMessage } from '#lib/api/remote-error.js';
+	import { SETTINGS_LOAD_FAILED } from '#lib/api/ui-settings-messages.js';
+	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#lib/components/ui/card/index.js';
+	import { Switch } from '#lib/components/ui/switch/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+	import { Select, SelectContent, SelectItem, SelectTrigger } from '#lib/components/ui/select/index.js';
 	import Moon from '@lucide/svelte/icons/moon';
 	import Activity from '@lucide/svelte/icons/activity';
 	import AlertCircle from '@lucide/svelte/icons/circle-alert';
-	import SettingsPageSkeleton from '$lib/components/settings/SettingsPageSkeleton.svelte';
-	import DataMaintenanceCard from '$lib/components/settings/DataMaintenanceCard.svelte';
+	import SettingsPageSkeleton from '#lib/components/settings/SettingsPageSkeleton.svelte';
+	import DataMaintenanceCard from '#lib/components/settings/DataMaintenanceCard.svelte';
 	import { toast } from 'svelte-sonner';
 
 	// Read via .current rather than an {#await} block: consuming a remote query

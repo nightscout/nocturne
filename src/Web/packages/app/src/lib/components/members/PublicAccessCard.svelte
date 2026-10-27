@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { toggled } from "$lib/utils/collections";
-  import { formatDayTime } from "$lib/utils/formatting";
+  import { toggled } from "#lib/utils/collections.js";
+  import { formatDayTime } from "#lib/utils/formatting.js";
   import { page } from "$app/state";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Switch } from "$lib/components/ui/switch";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
   import Globe from "@lucide/svelte/icons/globe";
   import Lock from "@lucide/svelte/icons/lock";
   import Copy from "@lucide/svelte/icons/copy";
@@ -25,10 +25,10 @@
     disableShareLink,
     setShareLinkFullHistory,
     setShareLinkScopes,
-  } from "$api/generated/shareLinks.generated.remote";
+  } from "#lib/api/generated/shareLinks.generated.remote.js";
   import { categoriesIn, formatList } from "./data-categories";
-  import { retainQuery } from "$lib/api/retain-query.svelte";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { retainQuery } from "#lib/api/retain-query.svelte.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   let { onEnabled }: { onEnabled?: () => void } = $props();
 

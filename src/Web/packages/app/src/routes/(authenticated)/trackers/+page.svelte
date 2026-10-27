@@ -1,31 +1,31 @@
 <script lang="ts">
-  import { formatAge } from "$lib/components/trackers/age.svelte";
-  import { formatDayTime } from "$lib/utils/formatting";
+  import { formatAge } from "#lib/components/trackers/age.svelte.js";
+  import { formatDayTime } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Tabs from "$lib/components/ui/tabs";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
-  import { Textarea } from "$lib/components/ui/textarea";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     TrackerCompletionDialog,
     TrackerStartDialog,
     ReservoirReportDialog,
     type TrackerNotification,
-  } from "$lib/components/trackers";
-  import { reachedUrgency } from "$lib/components/trackers/schedule";
-  import ActiveTrackersTab from "$lib/components/trackers/ActiveTrackersTab.svelte";
-  import TrackerHistoryTab from "$lib/components/trackers/TrackerHistoryTab.svelte";
-  import TrackerDefinitionsTab from "$lib/components/trackers/TrackerDefinitionsTab.svelte";
-  import TrackerPresetsTab from "$lib/components/trackers/TrackerPresetsTab.svelte";
-  import TrackerEditorDialog from "$lib/components/trackers/TrackerEditorDialog.svelte";
+  } from "#lib/components/trackers/index.js";
+  import { reachedUrgency } from "#lib/components/trackers/schedule.js";
+  import ActiveTrackersTab from "#lib/components/trackers/ActiveTrackersTab.svelte";
+  import TrackerHistoryTab from "#lib/components/trackers/TrackerHistoryTab.svelte";
+  import TrackerDefinitionsTab from "#lib/components/trackers/TrackerDefinitionsTab.svelte";
+  import TrackerPresetsTab from "#lib/components/trackers/TrackerPresetsTab.svelte";
+  import TrackerEditorDialog from "#lib/components/trackers/TrackerEditorDialog.svelte";
   import Timer from "@lucide/svelte/icons/timer";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import History from "@lucide/svelte/icons/history";
@@ -33,14 +33,15 @@
   import Bookmark from "@lucide/svelte/icons/bookmark";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Activity from "@lucide/svelte/icons/activity";
-  import { tick } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import * as trackersRemote from "$api/generated/trackers.generated.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import * as trackersRemote from "#lib/api/generated/trackers.generated.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { toast } from "svelte-sonner";
   import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
   import {
     NotificationUrgency,
     TrackerCategory,
@@ -52,7 +53,7 @@
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     type TrackerPresetDto,
-  } from "$api";
+  } from "#lib/api/index.js";
 
   // Auth state from the server-resolved session. This route sits behind the
   // authenticated layout and its own server guard, so page.data.user is populated for
@@ -74,15 +75,6 @@
   const activeInstances = $derived<TrackerInstanceDto[]>(activeInstancesQuery.current ?? []);
   const historyInstances = $derived<TrackerInstanceDto[]>(historyInstancesQuery.current ?? []);
   const presets = $derived<TrackerPresetDto[]>(presetsQuery.current ?? []);
-
-  async function loadData() {
-    await Promise.all([
-      definitionsQuery.refresh(),
-      activeInstancesQuery.refresh(),
-      historyInstancesQuery.refresh(),
-      presetsQuery.refresh(),
-    ]);
-  }
 
   // Dialog state
   let isDefinitionDialogOpen = $state(false);
@@ -267,7 +259,7 @@
   function requireAuth(): boolean {
     if (!isAuthenticated) {
       const returnUrl = encodeURIComponent(window.location.pathname);
-      goto(resolve(`/auth/login?returnUrl=${returnUrl}`));
+      goto(resolve(`auth/login?returnUrl=${returnUrl}`));
       return false;
     }
     return true;
@@ -319,9 +311,9 @@
     formMode = def.mode ?? TrackerMode.Duration;
     formStartEventType = def.startEventType ?? undefined;
     formCompletionEventType = def.completionEventType ?? undefined;
-    formTriggerEventTypes = [...(def.triggerEventTypes ?? [])];
-    formEndEventTypes = [...(def.endEventTypes ?? [])];
-    formCovers = [...(def.covers ?? [])];
+    formTriggerEventTypes = [...def.triggerEventTypes ?? []];
+    formEndEventTypes = [...def.endEventTypes ?? []];
+    formCovers = [...def.covers ?? []];
     formTriggerNotesContains = def.triggerNotesContains ?? "";
     isDefinitionDialogOpen = true;
   }
@@ -334,16 +326,23 @@
     isDeleteDefinitionDialogOpen = true;
   }
 
+  // Its instances and presets go with it on the server.
   async function confirmDeleteDefinition() {
-    if (!deletingDefinitionId) return;
+    const id = deletingDefinitionId;
+    if (!id) return;
+    isDeleteDefinitionDialogOpen = false;
+    deletingDefinitionId = null;
+    const notOfDefinition = <T extends { definitionId?: string }>(current: T[]) =>
+      current.filter((x) => x.definitionId !== id);
     try {
-      await trackersRemote.deleteDefinition(deletingDefinitionId);
-      await loadData();
-      await tick();
-      isDeleteDefinitionDialogOpen = false;
-      deletingDefinitionId = null;
+      await trackersRemote.deleteDefinition(id).updates(
+        definitionsQuery.withOverride((current) => current.filter((d) => d.id !== id)),
+        activeInstancesQuery.withOverride(notOfDefinition),
+        historyInstancesQuery.withOverride(notOfDefinition),
+        presetsQuery.withOverride(notOfDefinition)
+      );
     } catch (err) {
-      console.error("Failed to delete definition:", err);
+      toast.error(describeSubmitError(err));
     }
   }
 
@@ -358,15 +357,16 @@
   }
 
   async function confirmDeleteInstance() {
-    if (!deletingInstanceId) return;
+    const id = deletingInstanceId;
+    if (!id) return;
+    isDeleteInstanceDialogOpen = false;
+    deletingInstanceId = null;
     try {
-      await trackersRemote.deleteInstance(deletingInstanceId);
-      await loadData();
-      await tick();
-      isDeleteInstanceDialogOpen = false;
-      deletingInstanceId = null;
+      await trackersRemote.deleteInstance(id).updates(
+        activeInstancesQuery.withOverride((current) => current.filter((i) => i.id !== id))
+      );
     } catch (err) {
-      console.error("Failed to delete instance:", err);
+      toast.error(describeSubmitError(err));
     }
   }
 
@@ -375,11 +375,10 @@
     if (!requireAuth()) return;
 
     try {
-      await trackersRemote.applyPreset({ id: presetId });
-      await loadData();
-      await tick();
+      await trackersRemote.applyPreset({ id: presetId })
+        .updates(activeInstancesQuery, historyInstancesQuery);
     } catch (err) {
-      console.error("Failed to apply preset:", err);
+      toast.error(describeSubmitError(err));
     }
   }
 
@@ -402,12 +401,10 @@
         name: formPresetName,
         definitionId: formPresetDefinitionId,
         defaultStartNotes: formPresetDefaultStartNotes || undefined,
-      });
-      await loadData();
-      await tick();
+      }).updates(presetsQuery);
       isPresetDialogOpen = false;
     } catch (err) {
-      console.error("Failed to save preset:", err);
+      toast.error(describeSubmitError(err));
     }
   }
 
@@ -420,15 +417,16 @@
   }
 
   async function confirmDeletePreset() {
-    if (!deletingPresetId) return;
+    const id = deletingPresetId;
+    if (!id) return;
+    isDeletePresetDialogOpen = false;
+    deletingPresetId = null;
     try {
-      await trackersRemote.deletePreset(deletingPresetId);
-      await loadData();
-      await tick();
-      isDeletePresetDialogOpen = false;
-      deletingPresetId = null;
+      await trackersRemote.deletePreset(id).updates(
+        presetsQuery.withOverride((current) => current.filter((p) => p.id !== id))
+      );
     } catch (err) {
-      console.error("Failed to delete preset:", err);
+      toast.error(describeSubmitError(err));
     }
   }
 </script>
@@ -469,79 +467,79 @@
       </Card>
     {/snippet}
 
-    {void (await Promise.all([
+    {void await Promise.all([
       definitionsQuery,
       activeInstancesQuery,
       historyInstancesQuery,
-      presetsQuery,
-    ]))}
+      presetsQuery
+    ])} 
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
-      <Tabs.List class="grid w-full grid-cols-4">
-        <Tabs.Trigger value="active">
+      <Tabs.List variant="wrap">
+        <Tabs.Trigger value="active" class="min-h-11 @xl:min-h-0">
           <Activity class="h-4 w-4" />
           Active
           {#if activeCount > 0}
             <Badge variant="secondary" class="ml-1">{activeCount}</Badge>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger value="history">
+        <Tabs.Trigger value="history" class="min-h-11 @xl:min-h-0">
           <History class="h-4 w-4" />
           History
         </Tabs.Trigger>
         <div class="flex" {@attach coachmark({ ...coachFor("tracker-intro.settings") })}>
-          <Tabs.Trigger value="definitions">
+          <Tabs.Trigger value="definitions" class="min-h-11 @xl:min-h-0">
             <Settings2 class="h-4 w-4" />
             Definitions
           </Tabs.Trigger>
         </div>
-        <Tabs.Trigger value="presets">
+        <Tabs.Trigger value="presets" class="min-h-11 @xl:min-h-0">
           <Bookmark class="h-4 w-4" />
           Presets
         </Tabs.Trigger>
       </Tabs.List>
 
       <!-- Active Instances Tab -->
-            <ActiveTrackersTab
-        {definitions}
-        {activeInstances}
-        {openStartDialog}
-        {openCompleteDialog}
-        {openReservoirReportDialog}
-        {openDeleteInstanceDialog}
-        {getInstanceLevel}
-        {getTimeRemaining}
-        {getLevelStyle}
-        {formatAge}
-        {formatDate}
+      <ActiveTrackersTab
+        definitions={definitions}
+        activeInstances={activeInstances}
+        openStartDialog={openStartDialog}
+        openCompleteDialog={openCompleteDialog}
+        openReservoirReportDialog={openReservoirReportDialog}
+        openDeleteInstanceDialog={openDeleteInstanceDialog}
+        getInstanceLevel={getInstanceLevel}
+        getTimeRemaining={getTimeRemaining}
+        getLevelStyle={getLevelStyle}
+        formatAge={formatAge}
+        formatDate={formatDate}
       />
 
       <!-- History Tab -->
-            <TrackerHistoryTab
-        {historyInstances}
-        {completionReasonLabels}
-        {formatAge}
-        {formatDate}
+      <TrackerHistoryTab
+        historyInstances={historyInstances}
+        completionReasonLabels={completionReasonLabels}
+        formatAge={formatAge}
+        formatDate={formatDate}
       />
 
       <!-- Definitions Tab -->
-            <TrackerDefinitionsTab
-        {definitions}
-        {categoryLabels}
-        {categoryColors}
-        {openNewDefinition}
-        {openStartDialog}
-        {openEditDefinition}
-        {openDeleteDefinitionDialog}
+      <TrackerDefinitionsTab
+        definitions={definitions}
+        categoryLabels={categoryLabels}
+        categoryColors={categoryColors}
+        openNewDefinition={openNewDefinition}
+        openStartDialog={openStartDialog}
+        openEditDefinition={openEditDefinition}
+        openDeleteDefinitionDialog={openDeleteDefinitionDialog}
       />
 
       <!-- Presets Tab -->
-            <TrackerPresetsTab
-        {definitions}
-        {presets}
-        {openNewPreset}
-        {applyPresetHandler}
-        {openDeletePresetDialog}
+      <TrackerPresetsTab
+        definitions={definitions}
+        presets={presets}
+        openNewPreset={openNewPreset}
+        applyPresetHandler={applyPresetHandler}
+        openDeletePresetDialog={openDeletePresetDialog}
       />
     </Tabs.Root>
   </svelte:boundary>
@@ -553,8 +551,8 @@
 <!-- Tracker Editor Dialog -->
 <TrackerEditorDialog
   bind:open={isDefinitionDialogOpen}
-  {isNewDefinition}
-  {editingDefinition}
+  isNewDefinition={isNewDefinition}
+  editingDefinition={editingDefinition}
   bind:formName
   bind:formDescription
   bind:formCategory
@@ -572,8 +570,7 @@
   bind:formEndEventTypes
   bind:formCovers
   bind:formTriggerNotesContains
-  {categoryLabels}
-  {loadData}
+  categoryLabels={categoryLabels}
 />
 
 <!-- Start Instance Dialog -->
@@ -581,11 +578,8 @@
   bind:open={isStartDialogOpen}
   definition={startDefinition}
   history={historyInstances}
-  onClose={() => (startDefinition = null)}
-  onStart={() => {
-    startDefinition = null;
-    loadData();
-  }}
+  onClose={() => startDefinition = null}
+  onStart={() => startDefinition = null}
 />
 
 <!-- Complete Instance Dialog -->
@@ -603,7 +597,6 @@
   onComplete={() => {
     completingInstance = null;
     completingDefinition = null;
-    loadData();
   }}
 />
 
@@ -688,9 +681,11 @@
       </div>
     </div>
     <Dialog.Footer>
-      <Button variant="outline" onclick={() => (isPresetDialogOpen = false)}>
-        Cancel
-      </Button>
+      <Button
+        variant="outline"
+        onclick={() => isPresetDialogOpen = false}
+      >Cancel</Button>
+
       <Button
         onclick={savePreset}
         disabled={!formPresetName || !formPresetDefinitionId}

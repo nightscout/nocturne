@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
-import type { TherapyReview } from "$api";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import type { TherapyReview } from "#lib/api/index.js";
 
 // $state, so a refresh after a conflict re-renders with the profile that arrived.
 let reviewState = $state<unknown>(undefined);
@@ -11,36 +11,36 @@ const therapy = vi.hoisted(() => ({
   confirm: vi.fn(),
   enter: vi.fn(),
 }));
-vi.mock("$api/generated/setupTherapies.generated.remote", () => ({
+vi.mock("#lib/api/generated/setupTherapies.generated.remote.js", () => ({
   getTherapyReview: () => remoteQuery(() => reviewState),
   confirmTherapySettings: remoteCommand(therapy.confirm),
   enterTherapySettings: remoteCommand(therapy.enter),
 }));
 
 const actionTime = vi.hoisted(() => ({ value: undefined as unknown, refresh: vi.fn() }));
-vi.mock("$api/generated/setupDevices.generated.remote", () => ({
+vi.mock("#lib/api/generated/setupDevices.generated.remote.js", () => ({
   getInsulinActionTime: () =>
     Object.assign(remoteQuery(() => actionTime.value), { refresh: actionTime.refresh }),
 }));
 
 const hubRefresh = vi.hoisted(() => vi.fn());
-vi.mock("$api/generated/setupHubs.generated.remote", () => ({
+vi.mock("#lib/api/generated/setupHubs.generated.remote.js", () => ({
   getSetupHub: () => ({ refresh: hubRefresh }),
 }));
 
 const tenant = vi.hoisted(() => ({
   relationship: {} as { relationship?: string; patientName?: string },
 }));
-vi.mock("$api/generated/tenantSettings.generated.remote", () => ({
+vi.mock("#lib/api/generated/tenantSettings.generated.remote.js", () => ({
   getPatientRelationship: () => remoteQuery(() => tenant.relationship),
 }));
 
-vi.mock("$api/generated/profiles.generated.remote", () => ({
+vi.mock("#lib/api/generated/profiles.generated.remote.js", () => ({
   createTargetRangeSchedule: vi.fn(),
 }));
 
-import { InsulinActionTimeSource, TherapyGlucoseField, TherapySource } from "$api";
-import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { InsulinActionTimeSource, TherapyGlucoseField, TherapySource } from "#lib/api/index.js";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import TherapyPage from "./+page.svelte";
 
 const RULES = [

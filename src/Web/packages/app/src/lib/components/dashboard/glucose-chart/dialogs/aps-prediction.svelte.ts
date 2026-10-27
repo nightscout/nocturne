@@ -1,7 +1,7 @@
-import type { ApsSnapshot } from "$lib/api";
-import type { PredictionData } from "$api/predictions.remote";
-import { getAll as getApsSnapshots } from "$lib/api/generated/apsSnapshots.generated.remote";
-import { apsSnapshotToPrediction } from "$lib/utils/aps-snapshot-to-prediction";
+import type { ApsSnapshot } from "#lib/api/index.js";
+import type { PredictionData } from "#lib/api/predictions.remote.js";
+import { getAll as getApsSnapshots } from "#lib/api/generated/apsSnapshots.generated.remote.js";
+import { apsSnapshotToPrediction } from "#lib/utils/aps-snapshot-to-prediction.js";
 import { inspectionSearchWindow } from "./inspection-window";
 
 export interface ApsPrediction {

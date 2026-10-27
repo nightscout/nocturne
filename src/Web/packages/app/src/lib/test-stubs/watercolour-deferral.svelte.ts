@@ -1,11 +1,11 @@
 /**
- * Stand-in for `$lib/watercolour-deferral.svelte` whose first-interaction window passes only when
+ * Stand-in for `#lib/watercolour-deferral.svelte.js` whose first-interaction window passes only when
  * the test calls `releaseWatercolour`, so a test can assert what a page shows before its deferred
  * watercolour and after. Artwork that draws a still is due at once. Install with
- * `vi.mock("$lib/watercolour-deferral.svelte", () => import("$lib/test-stubs/watercolour-deferral.svelte"))`.
+ * `vi.mock("#lib/watercolour-deferral.svelte.js", () => import("#lib/test-stubs/watercolour-deferral.svelte.js"))`.
  */
-import { watercolourDue } from "$lib/stores/illustrations.svelte";
-import { lazyComponent, type AnyComponent } from "$lib/utils/lazy-component.svelte";
+import { watercolourDue } from "#lib/stores/illustrations.svelte.js";
+import { lazyComponent, type AnyComponent } from "#lib/utils/lazy-component.svelte.js";
 
 const deferral = $state({ due: false });
 

@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { DateValue } from "@internationalized/date";
   import { getLocalTimeZone } from "@internationalized/date";
-  import { cn } from "$lib/utils";
-  import GlucoseSparkline from "$lib/components/calendar/GlucoseSparkline.svelte";
-  import { formatLocale } from "$lib/utils/formatting";
+  import { cn } from "#lib/utils/index.js";
+  import GlucoseSparkline from "#lib/components/calendar/GlucoseSparkline.svelte";
+  import { formatLocale } from "#lib/utils/formatting.js";
 
   interface Props {
     date: DateValue;

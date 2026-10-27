@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { formatInsulinToCarbRatio } from "$lib/utils/formatting";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
+  import { formatInsulinToCarbRatio } from "#lib/utils/formatting.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import {
     bg,
@@ -11,19 +11,19 @@
     formatInsulinDisplay,
     formatLocale,
     time,
-  } from "$lib/utils/formatting";
-  import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
-  import { entrySummary } from "$lib/utils/entry-summary";
-  import type { BolusCalculation, MealPeriod } from "$lib/api";
-  import { CalculationType } from "$lib/api";
-  import type { EntryRecord } from "$lib/constants/entry-categories";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
-  import { getAll as getBolusCalculations } from "$lib/api/generated/bolusCalculations.generated.remote";
+  } from "#lib/utils/formatting.js";
+  import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
+  import { entrySummary } from "#lib/utils/entry-summary.js";
+  import type { BolusCalculation, MealPeriod } from "#lib/api/index.js";
+  import { CalculationType } from "#lib/api/index.js";
+  import type { EntryRecord } from "#lib/constants/entry-categories.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
+  import { getAll as getBolusCalculations } from "#lib/api/generated/bolusCalculations.generated.remote.js";
   import { carbMarkerName } from "../meal-period-labels.svelte";
   import { useApsPrediction } from "./aps-prediction.svelte";
   import { inspectionSearchWindow } from "./inspection-window";
   import InspectionChart from "./InspectionChart.svelte";
-  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import InspectionFooter from "./InspectionFooter.svelte";
 
   interface Props {

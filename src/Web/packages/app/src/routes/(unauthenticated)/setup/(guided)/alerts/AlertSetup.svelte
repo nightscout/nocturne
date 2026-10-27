@@ -6,37 +6,38 @@
   import Check from "@lucide/svelte/icons/check";
   import Info from "@lucide/svelte/icons/info";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-  import * as Alert from "$lib/components/ui/alert";
-  import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
-  import { FormError } from "$lib/forms";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { FormError } from "#lib/forms/index.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     confirmSetupTestAlertReceived,
     getSetupTestAlert,
     saveAlertSetup,
     sendSetupTestAlert,
     setUrgentLowRecipient,
-  } from "$api/generated/setupAlerts.generated.remote";
-  import { getSetupHub } from "$api/generated/setupHubs.generated.remote";
+  } from "#lib/api/generated/setupAlerts.generated.remote.js";
+  import { getSetupHub } from "#lib/api/generated/setupHubs.generated.remote.js";
   import {
     AlertRouting,
     ChannelType,
     StarterAlertKind,
     type AlertSetupStatus,
     type AlertSetupTest,
-  } from "$api";
-  import ChannelsSection from "$lib/components/alerts/ChannelsSection.svelte";
-  import { findChannelMeta } from "$lib/components/alerts/channelMeta";
-  import { channelLabel as channelKindLabel } from "$lib/components/alerts/channelText.svelte";
-  import { toChannelDef, toChannelRequest, type ChannelDef } from "$lib/components/alerts/types";
-  import { getNotificationPermission, requestNotificationPermission } from "$lib/audio/alarm-sounds";
-  import { listenForAlertNotifications } from "$lib/stores/alert-notifications.svelte";
-  import { getUnitLabel } from "$lib/utils/formatting";
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  } from "#lib/api/index.js";
+  import ChannelsSection from "#lib/components/alerts/ChannelsSection.svelte";
+  import { findChannelMeta } from "#lib/components/alerts/channelMeta.js";
+  import { channelLabel as channelKindLabel } from "#lib/components/alerts/channelText.svelte.js";
+  import { toChannelDef, toChannelRequest, type ChannelDef } from "#lib/components/alerts/types.js";
+  import { getNotificationPermission, requestNotificationPermission } from "#lib/audio/alarm-sounds.js";
+  import { listenForAlertNotifications } from "#lib/stores/alert-notifications.svelte.js";
+  import { getUnitLabel } from "#lib/utils/formatting.js";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   let { status: initial, voice }: { status: AlertSetupStatus; voice: PatientVoice } = $props();
 
@@ -132,7 +133,7 @@
   /** Follows the test's deliveries until none is still sending, for the troubleshooting list. */
   async function followTest(instanceId: string) {
     for (let i = 0; i < 20; i++) {
-      const current = await getSetupTestAlert(instanceId).run();
+      const current = await fresh(getSetupTestAlert(instanceId));
       if (test?.instanceId !== instanceId) return;
       test = current;
       if (!current.deliveries?.some((d) => d.status === "pending")) return;

@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
-import { encodeBase64Utf8 } from "$lib/utils";
+import { encodeBase64Utf8 } from "#lib/utils/index.js";
 
 vi.mock("$app/navigation", () => ({
   goto: vi.fn((url: string) => {

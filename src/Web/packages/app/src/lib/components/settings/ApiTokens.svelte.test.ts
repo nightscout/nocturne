@@ -1,26 +1,18 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { DirectGrantDto } from "$api";
+import type { DirectGrantDto } from "#lib/api/index.js";
 import {
   fakeRemoteQuery,
   type FakeQuery,
-} from "$lib/api/fake-remote-query.svelte";
-
-/**
- * A remote `query()` can only be awaited when its proxy was built in a tracking
- * context, so a component that reloads its list from a click handler gets a
- * rejection instead of data — the create still succeeds on the server, and the
- * failed reload is what reaches the user. {@link fakeRemoteQuery} reproduces
- * that rule; a bare `Promise` stand-in cannot.
- */
+} from "#lib/api/fake-remote-query.svelte.js";
 
 let grants: DirectGrantDto[];
 let listQuery: () => FakeQuery<DirectGrantDto[]>;
 let createImpl: (body?: unknown) => Promise<{ token?: string }>;
 let revokeImpl: () => Promise<unknown>;
 
-vi.mock("$lib/api/generated/directGrants.generated.remote", () => ({
+vi.mock("#lib/api/generated/directGrants.generated.remote.js", () => ({
   list: () => listQuery(),
   create: (body: unknown) => createImpl(body),
   revoke: () => revokeImpl(),
@@ -159,7 +151,7 @@ describe("ApiTokens load failure", () => {
     render(ApiTokens);
 
     // A reading surface shows a server-written 5xx reason in place of its
-    // fallback; see READ_SURFACE in $lib/forms/submit-error.
+    // fallback; see READ_SURFACE in #lib/forms/submit-error.
     await expect.element(page.getByText("boom", { exact: true })).toBeVisible();
     await expect
       .element(page.getByText("No API tokens"))

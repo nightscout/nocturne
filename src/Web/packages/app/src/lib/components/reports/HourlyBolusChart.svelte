@@ -1,6 +1,6 @@
 <script lang="ts">
   import { BarChart } from "layerchart";
-  import type { Bolus } from "$lib/api";
+  import type { Bolus } from "#lib/api/index.js";
 
   interface Props {
     /** Raw bolus records for the report period */

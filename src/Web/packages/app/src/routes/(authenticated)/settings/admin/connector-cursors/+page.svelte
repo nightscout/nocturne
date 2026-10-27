@@ -1,22 +1,22 @@
 <script lang="ts">
   import Database from "@lucide/svelte/icons/database";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
-  import * as Alert from "$lib/components/ui/alert";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -24,20 +24,21 @@
   import XCircle from "@lucide/svelte/icons/circle-x";
   import Plug from "@lucide/svelte/icons/plug";
   import Building2 from "@lucide/svelte/icons/building-2";
-  import * as tenantRemote from "$api/generated/tenants.generated.remote";
+  import * as tenantRemote from "#lib/api/generated/tenants.generated.remote.js";
   import {
     getTenantConnectors,
     resetTenantCursors,
     getResetJobStatus,
     cancelResetJob,
-  } from "$api/generated/connectorAdmins.generated.remote";
+  } from "#lib/api/generated/connectorAdmins.generated.remote.js";
   import {
     ConnectorResetConnectorState,
     ConnectorResetJobState,
     type TenantDto,
     type TenantConnectorsDto,
     type ConnectorResetJobStatus,
-  } from "$api";
+  } from "#lib/api/index.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // Tenant list (platform admin)
   let tenants = $state<TenantDto[]>([]);
@@ -83,7 +84,7 @@
     tenantsLoading = true;
     tenantsError = null;
     try {
-      tenants = (await tenantRemote.getAll().run()) ?? [];
+      tenants = (await fresh(tenantRemote.getAll())) ?? [];
     } catch (err) {
       console.error("Failed to load tenants:", err);
       tenantsError = remoteErrorMessage(err, "Failed to load tenants.");
@@ -92,7 +93,7 @@
     }
   }
 
-  // `.run()` rejects during the render/effect flush, so defer the bootstrap out of it.
+  // Deferred so this effect does not track what the load reads.
   $effect(() => {
     queueMicrotask(loadTenants);
   });
@@ -109,8 +110,8 @@
     connectorsLoading = true;
     connectorsError = null;
     try {
-      // One-shot fetch via .run() — re-selecting a tenant re-executes, so health is never stale.
-      connectors = await getTenantConnectors(value).run();
+      // Fetched afresh on each selection, so health is never stale.
+      connectors = await fresh(getTenantConnectors(value));
     } catch (err) {
       console.error("Failed to load connectors:", err);
       connectorsError = remoteErrorMessage(
@@ -136,15 +137,15 @@
     // can reach.
     stopPolling();
     try {
-      // One-shot fetch each tick — .run() re-executes every call, bypassing query memoisation.
-      const status = await getResetJobStatus(activeJobId).run();
+      // Fetched afresh each tick.
+      const status = await fresh(getResetJobStatus(activeJobId));
       jobStatus = status;
 
       if (isTerminal(status.state)) {
         stopPolling();
         // Re-fetch the connector list so the admin sees updated sync timestamps.
         if (selectedTenantId) {
-          connectors = await getTenantConnectors(selectedTenantId).run();
+          connectors = await fresh(getTenantConnectors(selectedTenantId));
         }
         return;
       }

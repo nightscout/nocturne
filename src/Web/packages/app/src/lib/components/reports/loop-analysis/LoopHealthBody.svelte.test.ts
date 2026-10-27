@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { describe, expect, it } from "vitest";
-import { LoopAnalysisSeries, LoopHealthUnknownReason, TimeZoneUnavailableReason } from "$lib/api";
+import { LoopAnalysisSeries, LoopHealthUnknownReason, TimeZoneUnavailableReason } from "#lib/api/index.js";
 import LoopHealthBody from "./LoopHealthBody.svelte";
 import { loopHealthResponse } from "./loop-health.test-fixtures";
 

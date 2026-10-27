@@ -21,6 +21,6 @@ export type {
 	LoopStatusCode,
 	StatusPillsConfig,
 	PillType
-} from '$lib/types/status-pills';
+} from '#lib/types/status-pills.js';
 
-export { DEFAULT_PILLS_CONFIG } from '$lib/types/status-pills';
+export { DEFAULT_PILLS_CONFIG } from '#lib/types/status-pills.js';

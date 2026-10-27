@@ -7,7 +7,7 @@
     ActogramRowContext,
     GlucosePoint,
   } from './actogram';
-  import type { ChartThresholds } from '$lib/constants/glucose-thresholds';
+  import type { ChartThresholds } from '#lib/constants/glucose-thresholds.js';
   import {
     sliceIntoRows,
     sliceBgIntoRows,
@@ -22,10 +22,10 @@
   import { cubicOut } from 'svelte/easing';
   import ChevronUp from '@lucide/svelte/icons/chevron-up';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
-  import { Button } from '$lib/components/ui/button';
-  import { bgRange } from '$lib/utils/formatting';
-  import { PrintMode } from '$lib/components/charts/print/print-mode.svelte';
-  import ChartKey, { type ChartKeyItem } from '$lib/components/charts/print/ChartKey.svelte';
+  import { Button } from '#lib/components/ui/button/index.js';
+  import { bgRange } from '#lib/utils/formatting.js';
+  import { PrintMode } from '#lib/components/charts/print/print-mode.svelte.js';
+  import ChartKey, { type ChartKeyItem } from '#lib/components/charts/print/ChartKey.svelte';
 
   interface Props {
     data: T[];

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
+  import * as Card from "#lib/components/ui/card/index.js";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import type { SettingsLink } from "$lib/navigation/settings-navigation.svelte";
+  import type { SettingsLink } from "#lib/navigation/settings-navigation.svelte.js";
 
   let { link }: { link: SettingsLink } = $props();
 </script>

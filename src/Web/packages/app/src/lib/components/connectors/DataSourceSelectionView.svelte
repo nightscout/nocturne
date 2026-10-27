@@ -2,25 +2,25 @@
   import {
     UploaderPlatform,
     UploaderCategory,
-  } from "$lib/api/generated/nocturne-api-client";
+  } from "#lib/api/generated/nocturne-api-client.js";
   import type {
     UploaderApp,
     DataSourceInfo,
     AvailableConnector,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { getUploaderName, getUploaderDescription } from "$lib/utils/uploader-labels";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { getUploaderName, getUploaderDescription } from "#lib/utils/uploader-labels.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import Cloud from "@lucide/svelte/icons/cloud";
   import Apple from "@lucide/svelte/icons/apple";
-  import { EmptyState } from "$lib/components/shared";
-  import AppLogo from "$lib/components/ui/AppLogo.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import AppLogo from "#lib/components/ui/AppLogo.svelte";
 
   interface Props {
     connectors: AvailableConnector[];

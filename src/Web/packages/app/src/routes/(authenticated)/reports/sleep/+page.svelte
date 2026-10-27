@@ -6,31 +6,31 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import * as Select from "$lib/components/ui/select";
+  } from "#lib/components/ui/card/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import Moon from "@lucide/svelte/icons/moon";
   import CalendarRange from "@lucide/svelte/icons/calendar-range";
   import {
     Actogram,
     formatActogramDay,
     type ActogramRowContext,
-  } from "$lib/components/actogram";
-  import { MS_PER_HOUR, HOURS_PER_ROW, type ActogramPoint } from "$lib/components/actogram/actogram";
-  import { getSleepTrends } from "$api/reports.remote";
-  import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  } from "#lib/components/actogram/index.js";
+  import { MS_PER_HOUR, HOURS_PER_ROW, type ActogramPoint } from "#lib/components/actogram/actogram.js";
+  import { getSleepTrends } from "#lib/api/reports.remote.js";
+  import { useActogramReport } from "#lib/hooks/actogram-report.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
   import { resolve } from "$app/paths";
-  import { bgDelta, bgLabel } from "$lib/utils/formatting";
-  import FigureStrip, { type Figure } from "$lib/components/reports/FigureStrip.svelte";
-  import SleepCompositionChart from "$lib/components/reports/sleep/SleepCompositionChart.svelte";
-  import SleepWeeklyBreakdown from "$lib/components/reports/sleep/SleepWeeklyBreakdown.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import { SleepScoreSource, SleepSource } from "$api";
-  import { laneForStage, laneTexture } from "$lib/utils/sleep-stages";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import { bgDelta, bgLabel } from "#lib/utils/formatting.js";
+  import FigureStrip, { type Figure } from "#lib/components/reports/FigureStrip.svelte";
+  import SleepCompositionChart from "#lib/components/reports/sleep/SleepCompositionChart.svelte";
+  import SleepWeeklyBreakdown from "#lib/components/reports/sleep/SleepWeeklyBreakdown.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import { SleepScoreSource, SleepSource } from "#lib/api/index.js";
+  import { laneForStage, laneTexture } from "#lib/utils/sleep-stages.js";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
-  import { EmptyState } from "$lib/components/shared";
+  import { EmptyState } from "#lib/components/shared/index.js";
 
   const VISIBLE_DAYS = 14;
 

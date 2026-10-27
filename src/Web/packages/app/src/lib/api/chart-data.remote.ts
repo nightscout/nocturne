@@ -5,8 +5,8 @@
  */
 import { query } from "$app/server";
 import { z } from "zod";
-import { getDashboardChartData } from "$api/generated/chartDatas.generated.remote";
-import { transformChartData } from "$lib/utils/chart-data-transform";
+import { getDashboardChartData } from "#lib/api/generated/chartDatas.generated.remote.js";
+import { transformChartData } from "#lib/utils/chart-data-transform.js";
 
 const chartDataSchema = z.object({
   startTime: z.number(),

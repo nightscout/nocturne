@@ -5,19 +5,19 @@
     RecentEntriesCard,
     RecentTreatmentsCard,
     WidgetGrid,
-  } from "$lib/components/dashboard";
-  import { showsCurrentGlucoseWidget } from "$lib/components/dashboard/top-widget-ids";
-  import { getUiSettings } from "$api/ui-settings.remote";
-  import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
-  import { WidgetId } from "$lib/api/generated/nocturne-api-client";
-  import { isMainSectionEnabled } from "$lib/types/dashboard-widgets";
+  } from "#lib/components/dashboard/index.js";
+  import { showsCurrentGlucoseWidget } from "#lib/components/dashboard/top-widget-ids.js";
+  import { getUiSettings } from "#lib/api/ui-settings.remote.js";
+  import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
+  import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+  import { isMainSectionEnabled } from "#lib/types/dashboard-widgets.js";
   import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
-  import TenantsOverview from "$lib/components/tenants/TenantsOverview.svelte";
-  import HistoryLimitNotice from "$lib/components/layout/HistoryLimitNotice.svelte";
-  import FirstReadingChartArea from "$lib/components/dashboard/first-reading/FirstReadingChartArea.svelte";
-  import SetupStrip from "$lib/components/setup-hub/SetupStrip.svelte";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
+  import TenantsOverview from "#lib/components/tenants/TenantsOverview.svelte";
+  import HistoryLimitNotice from "#lib/components/layout/HistoryLimitNotice.svelte";
+  import FirstReadingChartArea from "#lib/components/dashboard/first-reading/FirstReadingChartArea.svelte";
+  import SetupStrip from "#lib/components/setup-hub/SetupStrip.svelte";
+  import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import type { PageData } from "./$types";
 
   const { data }: { data: PageData } = $props();

@@ -1,15 +1,15 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
-  import { Input } from "$lib/components/ui/input";
-  import * as Select from "$lib/components/ui/select";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import Droplet from "@lucide/svelte/icons/droplet";
   import { toast } from "svelte-sonner";
-  import { useToastSubmission } from "$lib/forms";
-  import { create as createReservoirReport } from "$api/generated/reservoirReports.generated.remote";
-  import { ReservoirReportKind } from "$api";
+  import { useToastSubmission } from "#lib/forms/index.js";
+  import { create as createReservoirReport } from "#lib/api/generated/reservoirReports.generated.remote.js";
+  import { ReservoirReportKind } from "#lib/api/index.js";
 
   interface ReservoirReportDialogProps {
     open: boolean;

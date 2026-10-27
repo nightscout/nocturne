@@ -3,7 +3,7 @@
   Decorative for assistive technology: the row's text carries every value.
 -->
 <script lang="ts">
-  import type { ExtendedTimeInRangePercentages } from "$lib/api";
+  import type { ExtendedTimeInRangePercentages } from "#lib/api/index.js";
   import { hourlyBandSeries } from "../hourly-bands";
 
   interface Props {

@@ -1,7 +1,7 @@
 <script lang="ts">
   // Test-only wrapper: FormField takes a snippet, which can't be passed from a
   // plain `render(Component, props)` call.
-  import { Input } from "$lib/components/ui/input";
+  import { Input } from "#lib/components/ui/input/index.js";
   import FormField from "./FormField.svelte";
   import type { FieldIssues } from "./field-messages";
 

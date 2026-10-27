@@ -1,22 +1,23 @@
 <script lang="ts">
-  import * as Sheet from "$lib/components/ui/sheet";
-  import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
-  import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import * as Sheet from "#lib/components/ui/sheet/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { ScrollArea } from "#lib/components/ui/scroll-area/index.js";
   import { untrack } from "svelte";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
   import type { DateRange } from "bits-ui";
-  import { requireDateParamsContext, withRange, type RangeWrite } from "$lib/hooks/date-params.svelte";
-  import { getReportSlots } from "$lib/hooks/report-slots.svelte";
-  import { RangeCalendar } from "$lib/components/ui/range-calendar";
-  import { dayCount } from "$lib/utils/date-range";
-  import { formatLocale, formatMediumDateRange } from "$lib/utils/formatting";
+  import { requireDateParamsContext, withRange, type RangeWrite } from "#lib/hooks/date-params.svelte.js";
+  import { getReportSlots } from "#lib/hooks/report-slots.svelte.js";
+  import { RangeCalendar } from "#lib/components/ui/range-calendar/index.js";
+  import { dayCount } from "#lib/utils/date-range.js";
+  import { formatLocale, formatMediumDateRange } from "#lib/utils/formatting.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Filter from "@lucide/svelte/icons/funnel";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import type { ReadonlyURLSearchParams } from "$app/state";
 
   interface Props {
     open?: boolean;
@@ -92,10 +93,10 @@
   }
 
   /** Writes the range and the report's filters in one navigation, so one history entry. */
-  async function write(range: RangeWrite | null, report: (search: URLSearchParams) => URLSearchParams) {
+  async function write(range: RangeWrite | null, report: (search: ReadonlyURLSearchParams) => URLSearchParams) {
     const search = report(range ? withRange(page.url.searchParams, range) : page.url.searchParams);
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- a query on the page on screen
-    await goto(`?${search.toString()}`, { noScroll: true, keepFocus: true });
+    await goto(`?${search.toString()}`, { reset: false });
   }
 
   /**

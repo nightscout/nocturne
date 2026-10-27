@@ -5,20 +5,20 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
-  import { formatShortDate } from "$lib/utils/formatting";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { formatShortDate } from "#lib/utils/formatting.js";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Info from "@lucide/svelte/icons/info";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
   import Clock from "@lucide/svelte/icons/clock";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import SiteChangeImpactChart from "$lib/components/reports/SiteChangeImpactChart.svelte";
-  import { getSiteChangeImpact } from "$api/reports.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import SiteChangeImpactChart from "#lib/components/reports/SiteChangeImpactChart.svelte";
+  import { getSiteChangeImpact } from "#lib/api/reports.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 30 days to capture multiple site changes for meaningful analysis

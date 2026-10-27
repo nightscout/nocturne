@@ -25,6 +25,14 @@ public class PasskeyInvalidationTests
             .Contain(read);
     }
 
+    [Fact]
+    public void RegisteringAPasskey_RefreshesTheCredentialList()
+    {
+        Command(nameof(PasskeyController.RegisterComplete))
+            .Invalidates.Should()
+            .Contain(nameof(PasskeyController.ListCredentials));
+    }
+
     [Theory]
     [InlineData(nameof(PasskeyController.GetRecoveryStatus))]
     [InlineData(nameof(PasskeyController.ListCredentials))]

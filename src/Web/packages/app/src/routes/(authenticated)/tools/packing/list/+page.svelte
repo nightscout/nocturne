@@ -7,19 +7,19 @@
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Input } from "$lib/components/ui/input";
-  import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import ListChecks from "@lucide/svelte/icons/list-checks";
   import Plus from "@lucide/svelte/icons/plus";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import X from "@lucide/svelte/icons/x";
-  import { EmptyState } from "$lib/components/shared";
-  import PackingSuitcase from "$lib/components/tools/packing/packing-suitcase.svelte";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import PackingSuitcase from "#lib/components/tools/packing/packing-suitcase.svelte";
   import type { PlayerState } from "water-ui";
-  import { decodeBase64Utf8, encodeBase64Utf8 } from "$lib/utils";
+  import { decodeBase64Utf8, encodeBase64Utf8 } from "#lib/utils/index.js";
 
   interface PackingItem {
     c: string; // category
@@ -105,10 +105,10 @@
 
   function updateUrl() {
     const encoded = encodeBase64Utf8(JSON.stringify(items));
-    const url = new URL(page.url);
+    const url = new URL(page.url.href);
     url.searchParams.set("d", encodeURIComponent(encoded));
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with one param changed, already resolved
-    goto(url.toString(), { replaceState: true, noScroll: true });
+    goto(url.toString(), { replace: true, reset: false });
   }
 
   function startAdding(category: string) {

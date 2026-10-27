@@ -3,10 +3,11 @@ import {
   getAll,
   updateStatus,
   deleteAll as deleteAllRemote,
-} from "$lib/api/generated/coachMarks.generated.remote";
-import { errorStatus } from "$lib/forms/submit-error";
-import { whenIdle } from "$lib/utils/when-idle";
-import { isOneOf, isRecord } from "$lib/utils/type-guards";
+} from "#lib/api/generated/coachMarks.generated.remote.js";
+import { errorStatus } from "#lib/forms/submit-error.js";
+import { whenIdle } from "#lib/utils/when-idle.js";
+import { isOneOf, isRecord } from "#lib/utils/type-guards.js";
+import { fresh } from "#lib/api/fresh-query.js";
 
 const LOCAL_STORAGE_KEY = "nocturne:coach-marks";
 
@@ -70,7 +71,7 @@ export function createCoachMarkAdapter(localOnly = false): CoachMarkAdapter {
       await new Promise<void>((resolve) => whenIdle(resolve));
 
       try {
-        const states = await getAll().run();
+        const states = await fresh(getAll());
         // Authenticated — merge any localStorage marks into the server response
         // then clear local storage so we don't drift.
         const local = readLocal();

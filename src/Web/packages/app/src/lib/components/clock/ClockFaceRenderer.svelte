@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
-  import { getClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
+  import { browser } from "$app/env";
+  import { getClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
   import {
     buildCustomCssString,
     buildStyleString,
@@ -11,32 +11,32 @@
     getFontWeightClass,
     getTrackerDefinition,
     isUnwiredElementType,
-  } from "$lib/clock-builder";
-  import { faceUnits, renderClockElementValue } from "$lib/components/clock/element-value";
-  import TrendArrow from "$lib/components/clock/TrendArrow.svelte";
-  import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
-  import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
-  import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
-  import BasalTrack from "$lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte";
-  import IobCobTrack from "$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
-  import ThresholdRules from "$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
-  import PredictionTrack from "$lib/components/dashboard/glucose-chart/tracks/PredictionTrack.svelte";
-  import DeviceEventMarkers from "$lib/components/dashboard/glucose-chart/markers/DeviceEventMarkers.svelte";
-  import TrackerMarkers from "$lib/components/dashboard/glucose-chart/markers/TrackerMarkers.svelte";
-  import ChartTooltip from "$lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
-  import { openDayInReview } from "$lib/components/dashboard/glucose-chart/day-in-review";
-  import TrackerCategoryIcon from "$lib/components/icons/TrackerCategoryIcon.svelte";
-  import type { ClockFaceConfig, TrackerDefinitionDto } from "$lib/api";
-  import { getDefinitions } from "$api/generated/trackers.generated.remote";
+  } from "#lib/clock-builder/index.js";
+  import { faceUnits, renderClockElementValue } from "#lib/components/clock/element-value.js";
+  import TrendArrow from "#lib/components/clock/TrendArrow.svelte";
+  import { createChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js";
+  import GlucoseChartShell from "#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
+  import GlucoseTrack from "#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
+  import BasalTrack from "#lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte";
+  import IobCobTrack from "#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
+  import ThresholdRules from "#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
+  import PredictionTrack from "#lib/components/dashboard/glucose-chart/tracks/PredictionTrack.svelte";
+  import DeviceEventMarkers from "#lib/components/dashboard/glucose-chart/markers/DeviceEventMarkers.svelte";
+  import TrackerMarkers from "#lib/components/dashboard/glucose-chart/markers/TrackerMarkers.svelte";
+  import ChartTooltip from "#lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
+  import { openDayInReview } from "#lib/components/dashboard/glucose-chart/day-in-review.js";
+  import TrackerCategoryIcon from "#lib/components/icons/TrackerCategoryIcon.svelte";
+  import type { ClockFaceConfig, TrackerDefinitionDto } from "#lib/api/index.js";
+  import { getDefinitions } from "#lib/api/generated/trackers.generated.remote.js";
   import {
     advance,
     angleToVel,
     computeAngleToCorner,
     randomNonAxialAngle,
     type Vec2,
-  } from "$lib/components/clock/screensaver-math";
-  import ScreensaverPulse, { PULSE_DURATION_MS } from "$lib/components/clock/ScreensaverPulse.svelte";
-  import { isClockReadingStale } from "$lib/components/clock/staleness";
+  } from "#lib/components/clock/screensaver-math.js";
+  import ScreensaverPulse, { PULSE_DURATION_MS } from "#lib/components/clock/ScreensaverPulse.svelte";
+  import { isClockReadingStale } from "#lib/components/clock/staleness.js";
 
   interface Props {
     config: ClockFaceConfig;

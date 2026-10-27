@@ -1,13 +1,13 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
-  import { EmptyState } from "$lib/components/shared";
-  import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import PermissionCategorySelector from "#lib/components/rbac/PermissionCategorySelector.svelte";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import CheckCircle2 from "@lucide/svelte/icons/circle-check";
   import XCircle from "@lucide/svelte/icons/circle-x";
@@ -19,11 +19,11 @@
     getPendingRequests,
     approve,
     deny,
-  } from "$lib/api/generated/accessRequests.generated.remote";
-  import { getRoles } from "$lib/api/generated/roles.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { relativeAge } from "$lib/utils/formatting";
-  import FormError from "$lib/forms/FormError.svelte";
+  } from "#lib/api/generated/accessRequests.generated.remote.js";
+  import { getRoles } from "#lib/api/generated/roles.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { relativeAge } from "#lib/utils/formatting.js";
+  import FormError from "#lib/forms/FormError.svelte";
 
   // Queries
   const requestsQuery = getPendingRequests();

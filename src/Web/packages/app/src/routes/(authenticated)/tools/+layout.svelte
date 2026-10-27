@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
 
   const { children } = $props();

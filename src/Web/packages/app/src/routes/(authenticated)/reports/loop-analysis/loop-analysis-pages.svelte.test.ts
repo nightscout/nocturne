@@ -11,13 +11,13 @@ import {
   type LoopHealthResponse,
   type PredictionAccuracyResponse,
   type SettingsEvidenceReport,
-} from "$lib/api";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import { ALL_SCOPES, profileResponse } from "$lib/components/reports/loop-analysis/daily-profile.test-fixtures";
-import { eventResponse } from "$lib/components/reports/loop-analysis/event-response.test-fixtures";
-import { predictionResponse } from "$lib/components/reports/loop-analysis/prediction-accuracy.test-fixtures";
-import { loopHealthResponse } from "$lib/components/reports/loop-analysis/loop-health.test-fixtures";
-import { settingsEvidenceResponse } from "$lib/components/reports/loop-analysis/settings-evidence.test-fixtures";
+} from "#lib/api/index.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { ALL_SCOPES, profileResponse } from "#lib/components/reports/loop-analysis/daily-profile.test-fixtures.js";
+import { eventResponse } from "#lib/components/reports/loop-analysis/event-response.test-fixtures.js";
+import { predictionResponse } from "#lib/components/reports/loop-analysis/prediction-accuracy.test-fixtures.js";
+import { loopHealthResponse } from "#lib/components/reports/loop-analysis/loop-health.test-fixtures.js";
+import { settingsEvidenceResponse } from "#lib/components/reports/loop-analysis/settings-evidence.test-fixtures.js";
 import Harness from "./LoopAnalysisHarness.test.svelte";
 
 const calls = vi.hoisted(() => ({
@@ -33,7 +33,7 @@ const calls = vi.hoisted(() => ({
 // The pages read `page.url` reactively; the shared stub's is a plain property.
 vi.mock("$app/state", async () => {
   const stub = await vi.importActual<typeof import("$app/state")>("$app/state");
-  const { reactiveFields } = await import("$lib/test-stubs/reactive-fields.svelte");
+  const { reactiveFields } = await import("#lib/test-stubs/reactive-fields.svelte.js");
   return { ...stub, page: reactiveFields({ ...stub.page }) };
 });
 
@@ -47,7 +47,7 @@ let health: LoopHealthResponse;
 let evidence: SettingsEvidenceReport;
 let stale = false;
 
-vi.mock("$api/generated/loopAnalysis.generated.remote", () => {
+vi.mock("#lib/api/generated/loopAnalysis.generated.remote.js", () => {
   const remote = (name: string, read: (input: unknown) => unknown) => (input: unknown) => {
     (calls.fetched[name] ??= []).push(input);
     return remoteQuery(() => read(input));
@@ -73,11 +73,11 @@ vi.mock("$app/navigation", async () => {
   };
 });
 
-vi.mock("$lib/hooks/date-params.svelte", () => ({
+vi.mock("#lib/hooks/date-params.svelte.js", () => ({
   requireDateParamsContext: () => ({ fromDay: "2026-10-09", toDay: "2026-10-22" }),
 }));
 
-vi.mock("$lib/hooks/resource-context.svelte", () => ({
+vi.mock("#lib/hooks/resource-context.svelte.js", () => ({
   contextResource: <T>(create: () => { current: T | undefined }, options?: { errorTitle?: string }) => {
     calls.created.push(options?.errorTitle ?? "");
     return {
@@ -307,7 +307,7 @@ describe("Loop Analysis pages", () => {
     expect(url.pathname).toBe("/reports/loop-analysis/daily-profile");
     expect(url.searchParams.has("excludeOpenLoop")).toBe(false);
     expect(url.searchParams.get("excludeIllness")).toBe("false");
-    expect(options).toMatchObject({ replaceState: true });
+    expect(options).toMatchObject({ replace: true });
   });
 
   it("leaves a URL alone when every filter it sets is usable", async () => {

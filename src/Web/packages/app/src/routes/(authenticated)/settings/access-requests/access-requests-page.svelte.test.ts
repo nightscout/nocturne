@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { error } from "@sveltejs/kit";
-import type { TenantRoleDto } from "$api-clients";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import type { TenantRoleDto } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const mocks = vi.hoisted(() => ({ approve: vi.fn() }));
 
@@ -29,12 +29,12 @@ const requests = [
   { subjectId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", name: "Jo" },
 ];
 
-vi.mock("$lib/api/generated/accessRequests.generated.remote", () => ({
+vi.mock("#lib/api/generated/accessRequests.generated.remote.js", () => ({
   getPendingRequests: () => remoteQuery(() => requests),
   approve: mocks.approve,
   deny: () => Promise.resolve(),
 }));
-vi.mock("$lib/api/generated/roles.generated.remote", () => ({
+vi.mock("#lib/api/generated/roles.generated.remote.js", () => ({
   getRoles: () => remoteQuery(() => [owner, viewer]),
 }));
 

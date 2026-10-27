@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { AlertRuleResponse } from "$api-clients";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Switch } from "$lib/components/ui/switch";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import type { AlertRuleResponse } from "#lib/api/generated/nocturne-api-client.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";

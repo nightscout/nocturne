@@ -1,21 +1,21 @@
 <script lang="ts">
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge, type BadgeVariant } from "$lib/components/ui/badge";
-  import * as Tabs from "$lib/components/ui/tabs";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import * as RadioGroup from "$lib/components/ui/radio-group";
-  import { Progress } from "$lib/components/ui/progress";
-  import * as Alert from "$lib/components/ui/alert";
-  import { SkippedRecordsNote } from "$lib/components/shared";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
+  import { Progress } from "#lib/components/ui/progress/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { SkippedRecordsNote } from "#lib/components/shared/index.js";
   import Import from "@lucide/svelte/icons/import";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -30,11 +30,11 @@
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Info from "@lucide/svelte/icons/info";
   import ArrowRightLeft from "@lucide/svelte/icons/arrow-right-left";
-  import { EmptyState } from "$lib/components/shared";
-  import { databaseArtwork } from "$lib/watercolour-icons";
-  import * as migrationRemote from "$api/generated/migrations.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { databaseArtwork } from "#lib/watercolour-icons.js";
+  import * as migrationRemote from "#lib/api/generated/migrations.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import MigrationCompleteMoment from "./MigrationCompleteMoment.svelte";
   import NightscoutTransitionStatus from "./NightscoutTransitionStatus.svelte";
   import { completedCleanly } from "./migration-outcome";
@@ -45,7 +45,8 @@
     type MigrationSourceDto,
     MigrationJobState,
     MigrationMode,
-  } from "$api";
+  } from "#lib/api/index.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // State
   let activeTab = $state("migrate");
@@ -94,9 +95,9 @@
     error = null;
     try {
       const [configResult, sourcesResult, historyResult] = await Promise.all([
-        migrationRemote.getPendingConfig().run(),
-        migrationRemote.getSources().run(),
-        migrationRemote.getHistory().run(),
+        fresh(migrationRemote.getPendingConfig()),
+        fresh(migrationRemote.getSources()),
+        fresh(migrationRemote.getHistory()),
       ]);
       if (destroyed) return;
 
@@ -134,7 +135,7 @@
     }
   }
 
-  // Initial load. `.run()` rejects during the render/effect flush, so defer it.
+  // Initial load. Deferred so this effect does not track what the load reads.
   $effect(() => {
     queueMicrotask(loadData);
     return () => {
@@ -151,7 +152,7 @@
     completedJobId = null;
     try {
       while (activePoll === poll) {
-        const status = await migrationRemote.getStatus(jobId).run();
+        const status = await fresh(migrationRemote.getStatus(jobId));
         if (activePoll !== poll) return;
         activeMigration = status;
 
@@ -281,7 +282,7 @@
     {/if}
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
-      <Tabs.List class="grid h-auto w-full grid-cols-2 @lg:grid-cols-4">
+      <Tabs.List variant="wrap">
         <Tabs.Trigger value="migrate">
           <Play class="h-4 w-4" />
           New migration
@@ -458,13 +459,13 @@
                   }
                 })}
               >
-                <input type="hidden" name="n:mode" value={mode} />
+                <input {...testConnectionForm.fields.mode.as("hidden", mode)} />
                 {#if mode === MigrationMode.Api}
-                  <input type="hidden" name="nightscoutUrl" value={nightscoutUrl} />
-                  <input type="hidden" name="nightscoutApiSecret" value={nightscoutApiSecret} />
+                  <input {...testConnectionForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  <input {...testConnectionForm.fields.nightscoutApiSecret.as("hidden", nightscoutApiSecret)} />
                 {:else}
-                  <input type="hidden" name="mongoConnectionString" value={mongoConnectionString} />
-                  <input type="hidden" name="mongoDatabaseName" value={mongoDatabaseName} />
+                  <input {...testConnectionForm.fields.mongoConnectionString.as("hidden", mongoConnectionString)} />
+                  <input {...testConnectionForm.fields.mongoDatabaseName.as("hidden", mongoDatabaseName)} />
                 {/if}
                 <Button
                   type="submit"
@@ -494,22 +495,22 @@
                   }
                 })}
               >
-                <input type="hidden" name="n:mode" value={mode} />
+                <input {...startMigrationForm.fields.mode.as("hidden", mode)} />
                 {#if mode === MigrationMode.Api}
-                  <input type="hidden" name="nightscoutUrl" value={nightscoutUrl} />
-                  <input type="hidden" name="nightscoutApiSecret" value={nightscoutApiSecret} />
+                  <input {...startMigrationForm.fields.nightscoutUrl.as("hidden", nightscoutUrl)} />
+                  <input {...startMigrationForm.fields.nightscoutApiSecret.as("hidden", nightscoutApiSecret)} />
                 {:else}
-                  <input type="hidden" name="mongoConnectionString" value={mongoConnectionString} />
-                  <input type="hidden" name="mongoDatabaseName" value={mongoDatabaseName} />
+                  <input {...startMigrationForm.fields.mongoConnectionString.as("hidden", mongoConnectionString)} />
+                  <input {...startMigrationForm.fields.mongoDatabaseName.as("hidden", mongoDatabaseName)} />
                 {/if}
                 {#if dateRangeStart}
-                  <input type="hidden" name="startDate" value={new Date(dateRangeStart).toISOString()} />
+                  <input {...startMigrationForm.fields.startDate.as("hidden", new Date(dateRangeStart).toISOString())} />
                 {/if}
                 {#if dateRangeEnd}
-                  <input type="hidden" name="endDate" value={new Date(dateRangeEnd).toISOString()} />
+                  <input {...startMigrationForm.fields.endDate.as("hidden", new Date(dateRangeEnd).toISOString())} />
                 {/if}
-                <input type="hidden" name="collections[]" value="entries" />
-                <input type="hidden" name="collections[]" value="treatments" />
+                <input {...startMigrationForm.fields.collections[0].as("hidden", "entries")} />
+                <input {...startMigrationForm.fields.collections[1].as("hidden", "treatments")} />
                 <Button
                   type="submit"
                   disabled={!isFormValid ||

@@ -16,4 +16,10 @@ public interface ITenantOwnerResolver
     /// </summary>
     /// <param name="tenantId">The tenant whose owner is wanted.</param>
     Task<string?> GetOwnerSubjectIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the subject ids of every owner of the tenant, for notices each owner is to receive.
+    /// </summary>
+    /// <param name="tenantId">The tenant whose owners are wanted.</param>
+    Task<IReadOnlyList<string>> GetOwnerSubjectIdsAsync(Guid tenantId, CancellationToken cancellationToken = default);
 }

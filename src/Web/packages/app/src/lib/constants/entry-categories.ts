@@ -6,7 +6,7 @@ import {
   type Note,
   type DeviceEvent,
   type BasalInjection,
-} from "$lib/api";
+} from "#lib/api/index.js";
 
 export const ENTRY_CATEGORIES = {
   bolus: {

@@ -3,8 +3,8 @@ import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import { flushSync } from "svelte";
 import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
-import { ChannelType, AlertRuleSeverity } from "$api-clients";
-import type { DeviceCapabilityCatalog } from "$api-clients";
+import { ChannelType, AlertRuleSeverity } from "#lib/api/generated/nocturne-api-client.js";
+import type { DeviceCapabilityCatalog } from "#lib/api/generated/nocturne-api-client.js";
 import type { ChannelDef } from "./types";
 
 // Mirrors the server's DeviceCapabilities.BuildCatalog() projection: notify is

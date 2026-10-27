@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
-import { ScopeDeletionAccess } from "$lib/api";
+import { ScopeDeletionAccess } from "#lib/api/index.js";
 import DeletionDisclosure from "./DeletionDisclosure.svelte";
 
 const FULL = "This app is requesting full access, including the ability to delete data.";

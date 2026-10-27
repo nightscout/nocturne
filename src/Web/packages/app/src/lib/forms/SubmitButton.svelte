@@ -9,8 +9,8 @@
     watchSurface,
     type Surface,
   } from "water-ui";
-  import { buttonVariants, type ButtonVariant } from "$lib/components/ui/button";
-  import { cn } from "$lib/utils";
+  import { buttonVariants, type ButtonVariant } from "#lib/components/ui/button/index.js";
+  import { cn } from "#lib/utils/index.js";
 
   /**
    * The sizes whose padding moves onto the content. A glaze is fitted to the

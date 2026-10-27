@@ -5,7 +5,7 @@ import { createRawSnippet } from "svelte";
 import Actogram from "./Actogram.svelte";
 import type { ActogramDay } from "./actogram";
 import Harness from "./ActogramHarness.test.svelte";
-import { servedDay, servedDays } from "$lib/test-stubs/actogram-days";
+import { servedDay, servedDays } from "#lib/test-stubs/actogram-days.js";
 
 describe.each(["steps", "heart-rate"] as const)("%s actogram", (metric) => {
   it.each([

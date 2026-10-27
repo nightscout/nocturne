@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
 import { buildProxyHeaders } from "./api-proxy-headers";
 import {
   CLIENT_IP_HEADER,

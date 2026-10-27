@@ -1,15 +1,15 @@
 <script lang="ts">
 	import { Key } from '@nocturne/ui/keys';
-	import type { Food } from '$api';
+	import type { Food } from '#lib/api/index.js';
 	import Star from '@lucide/svelte/icons/star';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import CarbPill from './CarbPill.svelte';
 	import GiChip from './GiChip.svelte';
-	import { giFromInt } from '$lib/components/food';
-	import { Toggle } from '$lib/components/ui/toggle';
+	import { giFromInt } from '#lib/components/food/index.js';
+	import { Toggle } from '#lib/components/ui/toggle/index.js';
 	import { FOOD_COLUMNS } from './food-columns';
 	import { energyToDisplayUnits } from '@nocturne/ui/energy';
-	import { getEnergyUnit } from '$lib/stores/appearance-store.svelte';
+	import { getEnergyUnit } from '#lib/stores/appearance-store.svelte.js';
 
 	interface Props {
 		food: Food;

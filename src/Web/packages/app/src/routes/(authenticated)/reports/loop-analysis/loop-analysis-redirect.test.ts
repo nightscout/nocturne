@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { isRedirect, type Redirect } from "@sveltejs/kit";
 
-vi.mock("$app/paths", () => ({ resolve: (path: string) => path }));
+vi.mock("$app/paths", () => import("#lib/test-stubs/app-paths.js"));
 
 const { load } = await import("./+page");
 

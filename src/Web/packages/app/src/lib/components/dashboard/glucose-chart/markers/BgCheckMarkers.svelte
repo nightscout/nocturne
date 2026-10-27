@@ -1,8 +1,8 @@
 <script lang="ts">
   import { Group, getChartContext } from "layerchart";
   import { getGlucoseChartContext } from "../chart-context.svelte";
-  import { getGlucoseColor } from "$lib/utils/chart-colors";
-  import { markerKey } from "$lib/utils/chart-data-merge";
+  import { getGlucoseColor } from "#lib/utils/chart-colors.js";
+  import { markerKey } from "#lib/utils/chart-data-merge.js";
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();

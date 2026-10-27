@@ -1,5 +1,5 @@
-import { env } from "$env/dynamic/private";
-import { safeReturnUrl } from "$lib/server/return-url";
+import { NOCTURNE_DEV_AUTO_LOGIN } from "$app/env/private";
+import { safeReturnUrl } from "#lib/server/return-url.js";
 
 // Marker appended to returnUrl so a single auto-login attempt can be detected
 // after it bounces back. It survives the round-trip because the auth guard
@@ -30,7 +30,7 @@ export function autoLoginEndpoint(
   isDemo: boolean | undefined,
   isShareHost: boolean | undefined,
 ): string | null {
-  if (env.NOCTURNE_DEV_AUTO_LOGIN === "true") return DEV_LOGIN_ENDPOINT;
+  if (NOCTURNE_DEV_AUTO_LOGIN === "true") return DEV_LOGIN_ENDPOINT;
   if (isShareHost) return null;
   return isDemo ? DEMO_LOGIN_ENDPOINT : null;
 }

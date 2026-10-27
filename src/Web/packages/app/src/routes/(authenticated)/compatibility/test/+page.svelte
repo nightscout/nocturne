@@ -1,22 +1,22 @@
 <script lang="ts">
-  import { HttpMethod } from "$lib/constants/http-methods";
+  import { HttpMethod } from "#lib/constants/http-methods.js";
   import { runCompatibilityTest } from "./data.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { createPatch } from "diff";
-  import { formatElapsedMs } from "$lib/utils/duration";
+  import { formatElapsedMs } from "#lib/utils/duration.js";
 
   // UI Components
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import * as Select from "$lib/components/ui/select";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Play from "@lucide/svelte/icons/play";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { indexBy } from "$lib/utils/collections";
+  import { indexBy } from "#lib/utils/collections.js";
 
   // Form state - default URL matches CompatibilityProxy format
   let nightscoutUrl = $state("https://your-nightscout.herokuapp.com");

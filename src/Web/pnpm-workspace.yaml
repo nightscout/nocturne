@@ -40,7 +40,7 @@ overrides:
   # therefore make every snippet-to-snippet assignment fail with "Two different types with this
   # name exist, but they are unrelated" — 20 such errors in glucose-chart's dialogs alone, and the
   # same trap for anything consuming these packages by path. One copy, one brand.
-  svelte: "5.55.5"
+  svelte: "5.57.2"
 
 packageExtensions:
   tiptap-extension-auto-joiner:
@@ -92,4 +92,4 @@ packageExtensions:
 # the wrappers this workspace generates, so waiting a day to adopt one buys nothing.
 # Drop an entry once its version ages past the cutoff.
 minimumReleaseAgeExclude:
-  - openapi-remote-codegen@0.8.1
+  - openapi-remote-codegen@0.9.0

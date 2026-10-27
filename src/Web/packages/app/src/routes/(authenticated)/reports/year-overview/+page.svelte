@@ -1,34 +1,32 @@
 <script lang="ts">
-  import { BAND_KEY_SUFFIX } from "$lib/constants/year-overview-keys";
-  import { browser } from "$app/environment";
+  import { BAND_KEY_SUFFIX } from "#lib/constants/year-overview-keys.js";
+  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { scaleThreshold } from "d3-scale";
-  import { Button } from "$lib/components/ui/button";
-  import { EmptyState } from "$lib/components/shared";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
   import {
     getAvailableYears,
     getYearSummary,
-  } from "$api/generated/dataOverviews.generated.remote";
-  import GlycemicRiskIndexChart from "$lib/components/reports/GlycemicRiskIndexChart.svelte";
-  import YearOverviewFilters from "$lib/components/reports/year-overview/YearOverviewFilters.svelte";
-  import HeatmapLegend from "$lib/components/reports/year-overview/HeatmapLegend.svelte";
-  import YearHeatmap from "$lib/components/reports/year-overview/YearHeatmap.svelte";
-  import VisibleChart from "$lib/components/reports/year-overview/VisibleChart.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
+  } from "#lib/api/generated/dataOverviews.generated.remote.js";
+  import GlycemicRiskIndexChart from "#lib/components/reports/GlycemicRiskIndexChart.svelte";
+  import YearOverviewFilters from "#lib/components/reports/year-overview/YearOverviewFilters.svelte";
+  import HeatmapLegend from "#lib/components/reports/year-overview/HeatmapLegend.svelte";
+  import YearHeatmap from "#lib/components/reports/year-overview/YearHeatmap.svelte";
+  import VisibleChart from "#lib/components/reports/year-overview/VisibleChart.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import type {
     DailySummaryDay,
     GlycemicThresholds,
     GriTimelinePeriod,
     TimeZoneUnavailableReason,
     YearOverviewColorPreferences,
-  } from "$api/generated/nocturne-api-client";
-  import { getUnitLabel } from "$lib/utils/formatting";
-  import {
-    glucoseUnits,
-    yearOverviewColors,
-  } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { getUnitLabel } from "#lib/utils/formatting.js";
+  import { glucoseUnits, yearOverviewColors } from "#lib/stores/appearance-store.svelte.js";
+
   import {
     glucoseScale,
     intensityScale,
@@ -37,17 +35,18 @@
     type ColorBoundary,
     type ColorEnds,
     type ColorFocusRange,
-  } from "$lib/utils/metric-color-focus";
+  } from "#lib/utils/metric-color-focus.js";
   import { onMount, untrack, tick } from "svelte";
   import { fade } from "svelte/transition";
-  import { YearLoader } from "$lib/components/reports/year-overview/year-loader";
-  import { toggled } from "$lib/utils/collections";
+  import { YearLoader } from "#lib/components/reports/year-overview/year-loader.js";
+  import { toggled } from "#lib/utils/collections.js";
   import {
     getReportPrintContext,
     setReportPrintMeta,
     setReportPrintPreparation,
-  } from "$lib/components/reports/print/report-print.svelte";
-  import type { TextureKey } from "$lib/components/charts/print/chart-print-patterns";
+  } from "#lib/components/reports/print/report-print.svelte.js";
+  import type { TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   // =========================================================================
   // State
@@ -66,13 +65,7 @@
   let metadataLoading = $state(false);
   let sentinelElements: Record<number, HTMLDivElement | undefined> = $state({});
 
-  type HeatmapMetric =
-    | "avgGlucose"
-    | "tir"
-    | "bolus"
-    | "basal"
-    | "tdd"
-    | "carbs";
+  type HeatmapMetric = "avgGlucose" | "tir" | "bolus" | "basal" | "tdd" | "carbs";
 
   const METRIC_OPTIONS: { value: HeatmapMetric; label: string }[] = [
     { value: "avgGlucose", label: "Avg glucose" },
@@ -365,7 +358,7 @@
     metadataLoading = true;
     metadataRequest = (async () => {
       try {
-        const result = await getAvailableYears().run();
+        const result = await fresh(getAvailableYears());
         if (disposed) return;
         availableYears = result.years ?? [];
         availableDataSources = result.availableDataSources ?? [];
@@ -387,10 +380,10 @@
   const yearLoader = new YearLoader(
     {
       summary: (year, sources) =>
-        getYearSummary({
+        fresh(getYearSummary({
           year,
           dataSources: sources.length ? sources : undefined,
-        }).run(),
+        })),
     },
     {
       daily: (year, result) => {
@@ -427,12 +420,7 @@
       throw new Error("Year overview is unavailable");
     const sources = [...selectedDataSources].sort().join(",");
     for (const year of sortedYears) {
-      if (
-        !(await (failedYears.has(year)
-          ? yearLoader.retry(year)
-          : loadYearData(year)))
-      )
-        throw new Error("Year overview is incomplete");
+      if (!await (failedYears.has(year) ? yearLoader.retry(year) : loadYearData(year))) throw new Error("Year overview is incomplete");
     }
     if (disposed || sources !== [...selectedDataSources].sort().join(",")) {
       throw new Error("Year overview filters changed");
@@ -555,7 +543,7 @@
   }
 
   function navigateToDayInReview(dateStr: string) {
-    goto(resolve(`/reports/day-in-review?date=${dateStr}`));
+    goto(resolve(`reports/day-in-review?date=${dateStr}`));
   }
 
   // =========================================================================
@@ -563,15 +551,13 @@
   // =========================================================================
 
   onMount(() => {
-    // `.run()` rejects when called during the render/effect flush, so defer the
-    // bootstrap to a microtask — onMount's synchronous body still counts as render.
-    queueMicrotask(async () => {
+    void (async () => {
       await loadMetadata();
       if (disposed) return;
       if (sortedYears.length > 0) {
         loadYearData(sortedYears[0]);
       }
-    });
+    })();
     return () => {
       disposed = true;
       yearLoader.dispose();
@@ -632,12 +618,12 @@
     <div class="print:hidden">
       <YearOverviewFilters
         disabled={printContext?.printing ?? false}
-        {availableDataSources}
+        availableDataSources={availableDataSources}
         bind:selectedDataSources
-        {presentDataTypes}
-        {hiddenDataTypes}
-        {toggleDataType}
-        {showAllDataTypes}
+        presentDataTypes={presentDataTypes}
+        hiddenDataTypes={hiddenDataTypes}
+        toggleDataType={toggleDataType}
+        showAllDataTypes={showAllDataTypes}
       />
     </div>
 
@@ -645,16 +631,16 @@
     <HeatmapLegend
       bind:selectedMetric
       metricOptions={METRIC_OPTIONS}
-      {units}
+      units={units}
       unit={METRIC_UNITS[selectedMetric]}
-      {scale}
+      scale={scale}
       limits={scaleLimits}
       onWindowChange={setScaleWindow}
       onBoundariesChange={setScaleBoundaries}
       onEndsChange={setScaleEnds}
       onDimChange={setDim}
       onReset={resetScale}
-      {glucoseBands}
+      glucoseBands={glucoseBands}
     />
 
     <!-- Loading state for metadata -->
@@ -708,22 +694,22 @@
       <div class="space-y-10">
         {#each sortedYears as year, yearIndex (year)}
           <YearHeatmap
-            {year}
-            {yearIndex}
-            {loadingYears}
+            year={year}
+            yearIndex={yearIndex}
+            loadingYears={loadingYears}
             failed={failedYears.has(year)}
             onRetry={() => yearLoader.retry(year)}
-            {yearData}
-            {transformYearData}
-            {getCellFill}
-            {getCellHatch}
-            {navigateToDayInReview}
-            {glucoseColorScale}
-            {glucoseBands}
-            {units}
-            {unitLabel}
-            {formatUnits}
-            {getVisibleCounts}
+            yearData={yearData}
+            transformYearData={transformYearData}
+            getCellFill={getCellFill}
+            getCellHatch={getCellHatch}
+            navigateToDayInReview={navigateToDayInReview}
+            glucoseColorScale={glucoseColorScale}
+            glucoseBands={glucoseBands}
+            units={units}
+            unitLabel={unitLabel}
+            formatUnits={formatUnits}
+            getVisibleCounts={getVisibleCounts}
             bind:sentinelElement={sentinelElements[year]}
           />
 

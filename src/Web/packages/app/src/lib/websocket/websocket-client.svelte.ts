@@ -21,8 +21,8 @@ import {
   parseTrackerUpdate,
   parseUrgentAlarm,
 } from "./payloads";
-import { isRecord } from "$lib/utils/type-guards";
-import { isoNow } from "$lib/utils/now";
+import { isRecord } from "#lib/utils/type-guards.js";
+import { isoNow } from "#lib/utils/now.js";
 
 /** The bridge's handshake error for a share host. Final: retrying cannot change it. */
 const SHARE_REALTIME_UNSUPPORTED = "share_realtime_unsupported";

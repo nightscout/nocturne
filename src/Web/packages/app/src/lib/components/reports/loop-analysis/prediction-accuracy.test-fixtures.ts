@@ -7,7 +7,7 @@ import {
   type PredictionAccuracyResponse,
   type PredictionCurveAccuracy,
   type PredictionHorizonAccuracy,
-} from "$lib/api";
+} from "#lib/api/index.js";
 import { ALL_SCOPES, unavailableFor } from "./daily-profile.test-fixtures";
 
 const HORIZONS = [30, 60, 90, 120];

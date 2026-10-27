@@ -1,13 +1,13 @@
 <script lang="ts">
-  import * as Command from "$lib/components/ui/command";
-  import * as Popover from "$lib/components/ui/popover";
-  import { Button } from "$lib/components/ui/button";
+  import * as Command from "#lib/components/ui/command/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Check from "@lucide/svelte/icons/check";
   import Plus from "@lucide/svelte/icons/plus";
   import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
-  import { cn } from "$lib/utils";
-  import { labelFor } from "$lib/components/ui/enum-value";
-  import type { DeviceCatalogEntry } from "$api";
+  import { cn } from "#lib/utils/index.js";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
+  import type { DeviceCatalogEntry } from "#lib/api/index.js";
   import { deviceCategoryLabels } from "./labels";
 
   interface Props {

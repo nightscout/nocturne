@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
     import { SvelteSet } from "svelte/reactivity";
     import { afterNavigate } from "$app/navigation";
-    import { track } from "$lib/analytics";
+    import { track } from "#lib/analytics.js";
 
     const MILESTONES = [25, 50, 75, 100] as const;
 

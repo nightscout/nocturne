@@ -1,5 +1,5 @@
 import { redirect } from "@sveltejs/kit";
-import { satisfiesScope } from "$lib/authorization/scopes";
+import { satisfiesScope } from "#lib/authorization/scopes.js";
 import type { PageLoad } from "./$types";
 
 export const load: PageLoad = async ({ parent }) => {

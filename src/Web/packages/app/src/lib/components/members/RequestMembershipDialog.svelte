@@ -1,11 +1,11 @@
 <script lang="ts">
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { browser } from "$app/environment";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { membershipRequestStorageKey } from "$lib/membership-request-storage";
+  import { membershipRequestStorageKey } from "#lib/membership-request-storage.js";
 
   interface Props {
     open: boolean;
@@ -27,7 +27,7 @@
     open = false;
 
     const returnUrl = encodeURIComponent(window.location.pathname);
-    goto(resolve(`/auth/login?returnUrl=${returnUrl}`));
+    goto(resolve(`auth/login?returnUrl=${returnUrl}`));
   }
 </script>
 
@@ -51,7 +51,7 @@
       </p>
     </div>
     <Dialog.Footer>
-      <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
+      <Button variant="outline" onclick={() => open = false}>Cancel</Button>
       <Button onclick={handleSubmit}>Continue to sign up</Button>
     </Dialog.Footer>
   </Dialog.Content>

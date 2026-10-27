@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Cookies } from "@sveltejs/kit";
-import type { UserDisplayPreferences } from "$lib/api";
-import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
-import { PREFS_COOKIE_NAME } from "$lib/stores/appearance-store.svelte";
+import type { UserDisplayPreferences } from "#lib/api/index.js";
+import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+import { PREFS_COOKIE_NAME } from "#lib/stores/appearance-store.svelte.js";
 import { load } from "./+layout.server";
 
 /**

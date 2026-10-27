@@ -2,10 +2,10 @@
   import Calendar from "@lucide/svelte/icons/calendar";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import { Button } from "$lib/components/ui/button";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
 
   type ViewMode = "tir" | "profile";
 

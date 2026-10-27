@@ -4,9 +4,9 @@
   import BellOff from "@lucide/svelte/icons/bell-off";
   import Clock from "@lucide/svelte/icons/clock";
   import Eye from "@lucide/svelte/icons/eye";
-  import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import type { JoinInviteInfo } from "$lib/api/generated/nocturne-api-client";
+  import PermissionSummary from "#lib/components/rbac/PermissionSummary.svelte";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import type { JoinInviteInfo } from "#lib/api/generated/nocturne-api-client.js";
 
   interface Props {
     invite: JoinInviteInfo;

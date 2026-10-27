@@ -7,8 +7,8 @@
 <script lang="ts">
   import { Key } from "@nocturne/ui/keys";
   import { Axis, Chart, Rule, Svg } from "layerchart";
-  import type { PredictionCurve, PredictionCurveAccuracy, PredictionHorizonAccuracy } from "$lib/api";
-  import { plural } from "$lib/utils/plural";
+  import type { PredictionCurve, PredictionCurveAccuracy, PredictionHorizonAccuracy } from "#lib/api/index.js";
+  import { plural } from "#lib/utils/plural.js";
   import HorizonErrorMarks from "./HorizonErrorMarks.svelte";
   import { curveCaption, curveLabel, horizonLabel } from "./prediction-labels.svelte";
 

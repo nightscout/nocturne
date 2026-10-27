@@ -1,52 +1,52 @@
 <script lang="ts">
   import { Key } from "@nocturne/ui/keys";
-  import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import {
     displayedGlucose,
     refreshSummaryOnNewReading,
-  } from "$lib/stores/current-glucose-status.svelte";
-  import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
-  import { createAuthStore } from "$lib/stores/auth-store.svelte";
-  import { authInterceptorState } from "$lib/api/auth-interceptor";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  } from "#lib/stores/current-glucose-status.svelte.js";
+  import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
+  import { createAuthStore } from "#lib/stores/auth-store.svelte.js";
+  import { authInterceptorState } from "#lib/api/auth-interceptor.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { onMount, onDestroy, type Snippet } from "svelte";
-  import * as Sidebar from "$lib/components/ui/sidebar";
-  import AppSidebar from "$lib/components/layout/AppSidebar.svelte";
-  import MobileHeader from "$lib/components/layout/MobileHeader.svelte";
+  import * as Sidebar from "#lib/components/ui/sidebar/index.js";
+  import AppSidebar from "#lib/components/layout/AppSidebar.svelte";
+  import MobileHeader from "#lib/components/layout/MobileHeader.svelte";
   import type { LayoutData } from "./$types";
-  import { getTitleFaviconService } from "$lib/services/title-favicon-service.svelte";
-  import { getDefaultSettings } from "$lib/components/settings/constants";
-  import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
-  import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
-  import { browser, dev } from "$app/environment";
+  import { getTitleFaviconService } from "#lib/services/title-favicon-service.svelte.js";
+  import { getDefaultSettings } from "#lib/components/settings/constants.js";
+  import type { AlarmVisualSettings } from "#lib/types/alarm-profile.js";
+  import type { TitleFaviconSettings } from "#lib/stores/serverSettings.js";
+  import { browser, dev } from "$app/env";
   import { invalidate } from "$app/navigation";
-  import { refreshOnVisible } from "$lib/utils/refresh-on-return.svelte";
-  import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "$lib/constants/shell-data";
-  import { createShellRevalidator } from "$lib/utils/shell-session";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import AlertSurfaces from "$lib/components/alerts/AlertSurfaces.svelte";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import DemoBanner from "$lib/components/layout/DemoBanner.svelte";
-  import InitialReadsPrefetch from "$lib/components/layout/InitialReadsPrefetch.svelte";
-  import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
-  import BackupSignInPrompt from "$lib/components/layout/BackupSignInPrompt.svelte";
-  import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
-  import { WELCOME_PARAM } from "$lib/components/members/welcome";
+  import { refreshOnVisible } from "#lib/utils/refresh-on-return.svelte.js";
+  import { SHELL_DATA_KEY, SHELL_REVALIDATE_INTERVAL_MS } from "#lib/constants/shell-data.js";
+  import { createShellRevalidator } from "#lib/utils/shell-session.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import AlertSurfaces from "#lib/components/alerts/AlertSurfaces.svelte";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import DemoBanner from "#lib/components/layout/DemoBanner.svelte";
+  import InitialReadsPrefetch from "#lib/components/layout/InitialReadsPrefetch.svelte";
+  import GuestBanner from "#lib/components/layout/GuestBanner.svelte";
+  import BackupSignInPrompt from "#lib/components/layout/BackupSignInPrompt.svelte";
+  import MembershipRequestAutoSubmit from "#lib/components/members/MembershipRequestAutoSubmit.svelte";
+  import { WELCOME_PARAM } from "#lib/components/members/welcome.js";
   import { page } from "$app/state";
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
   import { getEngineHost } from "water-ui";
-  import { deferredWatercolour } from "$lib/watercolour-deferral.svelte";
+  import { deferredWatercolour } from "#lib/watercolour-deferral.svelte.js";
   import { CoachMarkProvider } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
   import "../../styles/coach-theme-overrides.css";
-  import { createCoachMarkAdapter } from "$lib/coach-marks/adapter";
-  import { createCoachRouter } from "$lib/coach-marks/router";
-  import { ONBOARDING_CORE_GATE, sequences } from "$lib/coach-marks/sequences";
-  import { coachLabels } from "$lib/coach-marks/copy.svelte";
-  import CoachParamHandler from "$lib/coach-marks/CoachParamHandler.svelte";
-  import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
-  import ChartPrintPatterns from "$lib/components/charts/print/ChartPrintPatterns.svelte";
+  import { createCoachMarkAdapter } from "#lib/coach-marks/adapter.js";
+  import { createCoachRouter } from "#lib/coach-marks/router.js";
+  import { ONBOARDING_CORE_GATE, sequences } from "#lib/coach-marks/sequences.js";
+  import { coachLabels } from "#lib/coach-marks/copy.svelte.js";
+  import CoachParamHandler from "#lib/coach-marks/CoachParamHandler.svelte";
+  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import ChartPrintPatterns from "#lib/components/charts/print/ChartPrintPatterns.svelte";
 
   // LocalStorage key for title/favicon settings
   const SETTINGS_STORAGE_KEY = "nocturne-title-favicon-settings";
@@ -109,10 +109,10 @@
   });
 
   const commandPalette = lazyComponent(
-    () => import("$lib/components/command-palette/CommandPalette.svelte"),
+    () => import("#lib/components/command-palette/CommandPalette.svelte"),
   );
   // Kept once loaded: the greeting strips the marker it was loaded for.
-  const joinWelcome = lazyComponent(() => import("$lib/components/members/JoinWelcome.svelte"));
+  const joinWelcome = lazyComponent(() => import("#lib/components/members/JoinWelcome.svelte"));
   $effect(() => {
     if (!tenantless && page.url.searchParams.has(WELCOME_PARAM)) joinWelcome.open = true;
   });

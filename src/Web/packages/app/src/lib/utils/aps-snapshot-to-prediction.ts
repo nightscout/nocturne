@@ -2,8 +2,8 @@
  * Transforms an ApsSnapshot (from V4 device status) into PredictionData
  * compatible with the glucose chart's prediction rendering.
  */
-import type { ApsSnapshot } from '$lib/api';
-import type { PredictionData, PredictionPoint } from '$api/predictions.remote';
+import type { ApsSnapshot } from '#lib/api/index.js';
+import type { PredictionData, PredictionPoint } from '#lib/api/predictions.remote.js';
 
 const INTERVAL_MS = 5 * 60 * 1000; // 5-minute intervals (standard APS)
 

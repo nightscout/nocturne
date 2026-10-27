@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { trianglePoints } from "$lib/components/icons/marker-shapes";
+  import { trianglePoints } from "#lib/components/icons/marker-shapes.js";
 
   interface Props {
     xPos: number;

@@ -1,10 +1,10 @@
 <script lang="ts" module>
-  import { NightscoutEventType } from "$lib/constants/nightscout-event-types";
+  import { NightscoutEventType } from "#lib/constants/nightscout-event-types.js";
   import type {
     EntryRecord,
     EntryCategoryId,
-  } from "$lib/constants/entry-categories";
-  import { getEntryStyle } from "$lib/constants/entry-categories";
+  } from "#lib/constants/entry-categories.js";
+  import { getEntryStyle } from "#lib/constants/entry-categories.js";
   import type {
     Column,
     ColumnDef,
@@ -24,27 +24,27 @@
     createSvelteTable,
     FlexRender,
     renderSnippet,
-  } from "$lib/components/ui/data-table";
+  } from "#lib/components/ui/data-table/index.js";
 </script>
 
 <script lang="ts">
-  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
-  import { cn } from "$lib/utils";
-  import { distinct } from "$lib/utils/collections";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import * as Table from "$lib/components/ui/table";
+  import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
+  import { cn } from "#lib/utils/index.js";
+  import { distinct } from "#lib/utils/collections.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { formatDateTimeCompact, bg, bgLabel } from "$lib/utils/formatting";
-  import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
+  import { formatDateTimeCompact, bg, bgLabel } from "#lib/utils/formatting.js";
+  import { ENTRY_CATEGORIES } from "#lib/constants/entry-categories.js";
   import DataTableToolbar from "./DataTableToolbar.svelte";
   import DataTablePagination from "./DataTablePagination.svelte";
   import ColumnFilterPopover from "./ColumnFilterPopover.svelte";
-  import { getDeviceEventTypeLabel } from "$lib/constants/device-event-types";
+  import { getDeviceEventTypeLabel } from "#lib/constants/device-event-types.js";
 
   interface Props {
     rows: EntryRecord[];

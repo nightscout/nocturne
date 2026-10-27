@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 let revokeImpl: () => Promise<unknown>;
 
-vi.mock("$lib/api/generated/sessions.generated.remote", () => ({
+vi.mock("#lib/api/generated/sessions.generated.remote.js", () => ({
   list: () => ({
     current: [
       {

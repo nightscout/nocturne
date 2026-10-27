@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
   import { findNearbyEntries } from "./engine/nearby-entries";
-  import type { EntryRecord } from "$lib/constants/entry-categories";
+  import type { EntryRecord } from "#lib/constants/entry-categories.js";
   import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { IsMobile } from "$lib/hooks/is-mobile.svelte";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { IsMobile } from "#lib/hooks/is-mobile.svelte.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import {
     predictionEnabled,
     predictionDisplayMode,
@@ -22,9 +22,9 @@
     chartShowPoints,
     chartAreaMode,
     chartAreaOpacity,
-  } from "$lib/stores/appearance-store.svelte";
-  import type { PredictionDisplayMode } from "$lib/stores/appearance-store.svelte";
-  import { BasalDeliveryOrigin, type SystemEventType } from "$lib/api";
+  } from "#lib/stores/appearance-store.svelte.js";
+  import type { PredictionDisplayMode } from "#lib/stores/appearance-store.svelte.js";
+  import { BasalDeliveryOrigin, type SystemEventType } from "#lib/api/index.js";
   import PredictionSettings from "../PredictionSettings.svelte";
   import MiniOverviewChart from "../MiniOverviewChart.svelte";
   import GlucoseChartShell from "./GlucoseChartShell.svelte";
@@ -32,11 +32,11 @@
   import ZoomIndicator from "./ZoomIndicator.svelte";
   import { createChartDataEngine } from "./engine/chart-data-engine.svelte";
   import { createPointInspection, syncInspectionDialogs } from "./engine/point-inspection.svelte";
-  import { getEntryByTreatmentId } from "$api/entries.remote";
+  import { getEntryByTreatmentId } from "#lib/api/entries.remote.js";
   import type { LegendState } from "./chart-context.svelte";
-  import type { TransformedChartData } from "$lib/utils/chart-data-transform";
-  import type { PredictionData } from "$api/predictions.remote";
-  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
+  import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+  import type { PredictionData } from "#lib/api/predictions.remote.js";
+  import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
 
   // Tracks
   import BasalTrack from "./tracks/BasalTrack.svelte";
@@ -55,8 +55,9 @@
   import PointInspectionPicker from "./dialogs/PointInspectionPicker.svelte";
   import BasalInjectionMarkers from "./markers/BasalInjectionMarkers.svelte";
   import BgCheckMarkers from "./markers/BgCheckMarkers.svelte";
-  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { afterNextPaint } from "$lib/utils/after-next-paint";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { afterNextPaint } from "#lib/utils/after-next-paint.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     dateRange?: { from: Date | string; to: Date | string };
@@ -264,7 +265,7 @@
       realtimeStore.findEntryByTreatmentId(treatmentId) ?? null;
 
     if (!entry) {
-      const result = await getEntryByTreatmentId({ treatmentId }).run();
+      const result = await fresh(getEntryByTreatmentId({ treatmentId }));
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- generated entry shape bridged to the app EntryRecord union
       entry = result as EntryRecord | null;
     }
@@ -337,7 +338,7 @@
   );
 
   const entryEditDialog = lazyComponent(
-    () => import("$lib/components/entries/EntryEditDialog.svelte"),
+    () => import("#lib/components/entries/EntryEditDialog.svelte"),
   );
   const disambiguationDialog = lazyComponent(
     () => import("./dialogs/TreatmentDisambiguationDialog.svelte"),

@@ -1,10 +1,10 @@
 import { createBot, registerAllCommands, AlertDeliveryHandler, type BotOptions, type PlatformCredentials } from "@nocturne/bot";
 import type { BotApiClient, AlertDispatchEvent } from "@nocturne/bot";
-import { env } from "$env/dynamic/private";
-import { createServerApiClient, getApiBaseUrl } from "$lib/server/api-client-factory";
-import { getHashedInstanceKey } from "$lib/server/instance-key";
+import { DISCORD_BOT_TOKEN, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, TELEGRAM_BOT_TOKEN, WHATSAPP_ACCESS_TOKEN, WHATSAPP_APP_SECRET, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, RESEND_API_KEY, RESEND_FROM_ADDRESS } from "$app/env/private";
+import { createServerApiClient, getApiBaseUrl } from "#lib/server/api-client-factory.js";
+import { getHashedInstanceKey } from "#lib/server/instance-key.js";
 import { fetchDecryptedPlatformCredentials } from "./platform-credentials";
-import type { PlatformCredentials as ApiPlatformCredentials } from "$api";
+import type { PlatformCredentials as ApiPlatformCredentials } from "#lib/api/index.js";
 
 type Bot = ReturnType<typeof createBot>;
 
@@ -41,7 +41,7 @@ const platformBuilders: Record<string, PlatformConfigBuilder> = {
 			publicKey: fields["publicKey"],
 			applicationId: fields["applicationId"],
 		}),
-		fromEnv: () => !!env.DISCORD_BOT_TOKEN,
+		fromEnv: () => !!DISCORD_BOT_TOKEN,
 	},
 	slack: {
 		fromDb: (fields) => ({
@@ -49,7 +49,7 @@ const platformBuilders: Record<string, PlatformConfigBuilder> = {
 			botToken: fields["botToken"],
 			signingSecret: fields["signingSecret"],
 		}),
-		fromEnv: () => !!(env.SLACK_BOT_TOKEN && env.SLACK_SIGNING_SECRET),
+		fromEnv: () => !!(SLACK_BOT_TOKEN && SLACK_SIGNING_SECRET),
 	},
 	telegram: {
 		fromDb: (fields) => ({
@@ -57,7 +57,7 @@ const platformBuilders: Record<string, PlatformConfigBuilder> = {
 			botToken: fields["botToken"],
 			webhookSecretToken: fields["webhookSecretToken"],
 		}),
-		fromEnv: () => !!env.TELEGRAM_BOT_TOKEN,
+		fromEnv: () => !!TELEGRAM_BOT_TOKEN,
 	},
 	whatsapp: {
 		fromDb: (fields) => ({
@@ -69,10 +69,10 @@ const platformBuilders: Record<string, PlatformConfigBuilder> = {
 		}),
 		fromEnv: () =>
 			!!(
-				env.WHATSAPP_ACCESS_TOKEN &&
-				env.WHATSAPP_APP_SECRET &&
-				env.WHATSAPP_PHONE_NUMBER_ID &&
-				env.WHATSAPP_VERIFY_TOKEN
+				WHATSAPP_ACCESS_TOKEN &&
+				WHATSAPP_APP_SECRET &&
+				WHATSAPP_PHONE_NUMBER_ID &&
+				WHATSAPP_VERIFY_TOKEN
 			),
 	},
 	resend: {
@@ -83,7 +83,7 @@ const platformBuilders: Record<string, PlatformConfigBuilder> = {
 			apiKey: fields["apiKey"],
 			webhookSecret: fields["webhookSecret"],
 		}),
-		fromEnv: () => !!(env.RESEND_API_KEY && env.RESEND_FROM_ADDRESS),
+		fromEnv: () => !!(RESEND_API_KEY && RESEND_FROM_ADDRESS),
 	},
 };
 

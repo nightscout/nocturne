@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import QRCode from "qrcode";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
-  import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import DeviceAppClaimNotice from "#lib/components/auth/DeviceAppClaimNotice.svelte";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -13,11 +13,12 @@
   import Shield from "@lucide/svelte/icons/shield";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import X from "@lucide/svelte/icons/x";
-  import { buildPreludeDeepLink, buildConnectPageUrl } from "$lib/utils/prelude-links";
-  import { getDeviceInfo } from "$routes/(authenticated)/oauth/oauth.remote";
-  import { deviceApprove } from "$api/generated/oAuths.generated.remote";
-  import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { buildPreludeDeepLink, buildConnectPageUrl } from "#lib/utils/prelude-links.js";
+  import { getDeviceInfo } from "#routes/(authenticated)/oauth/oauth.remote.js";
+  import { deviceApprove } from "#lib/api/generated/oAuths.generated.remote.js";
+  import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   interface Props {
     /** Origin URL of the Nocturne instance (trailing slash tolerated). */
@@ -73,7 +74,7 @@
     deviceLookupError = null;
 
     try {
-      const info = await getDeviceInfo({ userCode: code }).run();
+      const info = await fresh(getDeviceInfo({ userCode: code }));
       if (!info) {
         deviceLookupError = "Invalid or expired device code.";
         return;

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { flushSync } from "svelte";
-import type { DashboardChartData } from "$api-clients";
-import { transformChartData } from "$lib/utils/chart-data-transform";
-import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
+import type { DashboardChartData } from "#lib/api/generated/nocturne-api-client.js";
+import { transformChartData } from "#lib/utils/chart-data-transform.js";
+import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
 import { createStaticChartEngine, type ChartDataEngine } from "./chart-data-view.svelte";
 
 const MINUTE = 60_000;

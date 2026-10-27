@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ScheduleEntry } from "$lib/api/generated/nocturne-api-client";
+  import type { ScheduleEntry } from "#lib/api/generated/nocturne-api-client.js";
   import { AreaChart } from "layerchart";
   import { curveStepAfter } from "d3";
 

@@ -1,4 +1,4 @@
-import { TimeZoneUnavailableReason } from "$lib/api";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 
 export interface TimeZoneReasonCopy {
   cause: string;

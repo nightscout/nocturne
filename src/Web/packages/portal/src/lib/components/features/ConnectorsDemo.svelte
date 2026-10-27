@@ -3,7 +3,7 @@
   import Check from "@lucide/svelte/icons/check";
   import Clock from "@lucide/svelte/icons/clock";
 
-  import { CONNECTORS, type Connector } from "$lib/data/connectors";
+  import { CONNECTORS, type Connector } from "#lib/data/connectors.js";
 
   const TYPE_TARGETS = ["Dexcom", "Libre", "Loop", "Tandem", "xDrip"];
 

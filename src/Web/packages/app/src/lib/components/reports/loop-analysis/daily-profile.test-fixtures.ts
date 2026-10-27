@@ -7,7 +7,7 @@ import {
   type DailyProfileResponse,
   type DailyProfileSlot,
   type LoopAnalysisAggregate,
-} from "$lib/api";
+} from "#lib/api/index.js";
 
 /** A coverage bitmap, laid out as `DailyProfileDayCoverage` documents, with the given slots set. */
 export function bitmapOf(slots: number[]): string {

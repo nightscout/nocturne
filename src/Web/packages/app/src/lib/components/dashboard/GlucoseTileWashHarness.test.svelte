@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { GlucoseTileVariant } from "@nocturne/ui/glucose";
-  import { GlucoseValueIndicator } from "$lib/components/shared";
+  import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
   import GlucoseTileWash from "./GlucoseTileWash.svelte";
   import { trackUnwashedFill } from "./glucose-tile-wash-state.svelte";
 

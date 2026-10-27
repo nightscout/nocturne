@@ -1,4 +1,4 @@
-import { satisfiesScope } from "$lib/authorization/scopes";
+import { satisfiesScope } from "#lib/authorization/scopes.js";
 
 /** Bounds each status read, as `checkOnboarding` does, so a hung API fails the page instead. */
 const STATUS_TIMEOUT_MS = 5000;

@@ -2,10 +2,10 @@
   import User from "@lucide/svelte/icons/user";
   import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
   import HandHelping from "@lucide/svelte/icons/hand-helping";
-  import * as RadioGroup from "$lib/components/ui/radio-group";
-  import { Input } from "$lib/components/ui/input";
-  import { FormError, FormField } from "$lib/forms";
-  import { PatientRelationship } from "$api";
+  import * as RadioGroup from "#lib/components/ui/radio-group/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { FormError, FormField } from "#lib/forms/index.js";
+  import { PatientRelationship } from "#lib/api/index.js";
 
   interface Props {
     relationship: PatientRelationship | undefined;

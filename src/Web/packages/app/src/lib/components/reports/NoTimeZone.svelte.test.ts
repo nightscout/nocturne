@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createRawSnippet } from "svelte";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { TimeZoneUnavailableReason } from "$lib/api";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 import NoTimeZone from "./NoTimeZone.svelte";
 
 const pageSentence = createRawSnippet(() => ({ render: () => "<span>This page sentence stays.</span>" }));

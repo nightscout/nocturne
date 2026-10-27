@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Star from "@lucide/svelte/icons/star";
-  import { FoodFields, type FoodCategoryMap } from "$lib/components/food";
-  import type { Food } from "$lib/api";
+  import { FoodFields, type FoodCategoryMap } from "#lib/components/food/index.js";
+  import type { Food } from "#lib/api/index.js";
 
   interface Props {
     draft: Food;

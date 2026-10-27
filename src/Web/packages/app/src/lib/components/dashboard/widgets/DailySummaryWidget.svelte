@@ -2,11 +2,11 @@
   import { onMount } from "svelte";
   import WidgetCard from "./WidgetCard.svelte";
   import WidgetStatSkeleton from "./WidgetStatSkeleton.svelte";
-  import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { GlycemicVariabilityStatus } from "$lib/api";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
+  import { getMultiPeriodStatistics } from "#lib/api/generated/statistics.generated.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { GlycemicVariabilityStatus } from "#lib/api/index.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { formatGlucoseValue, getUnitLabel } from "#lib/utils/formatting.js";
   import TrendingUp from "@lucide/svelte/icons/trending-up";
   import TrendingDown from "@lucide/svelte/icons/trending-down";
   import Minus from "@lucide/svelte/icons/minus";

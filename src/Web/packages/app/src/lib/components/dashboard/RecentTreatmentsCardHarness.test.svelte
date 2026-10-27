@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import type { EntryRecord } from "$lib/constants/entry-categories";
+  import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import type { EntryRecord } from "#lib/constants/entry-categories.js";
   import RecentTreatmentsCard from "./RecentTreatmentsCard.svelte";
 
   let { entries }: { entries: EntryRecord[] } = $props();

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatNumber } from "$lib/utils/formatting";
+  import { formatNumber } from "#lib/utils/formatting.js";
   import Database from "@lucide/svelte/icons/database";
   import Upload from "@lucide/svelte/icons/upload";
   import Users from "@lucide/svelte/icons/users";
@@ -8,13 +8,14 @@
   import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import * as migrationRemote from "$api/generated/migrations.generated.remote";
-  import { MigrationJobState } from "$api";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import * as migrationRemote from "#lib/api/generated/migrations.generated.remote.js";
+  import { MigrationJobState } from "#lib/api/index.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { findSessionJob } from "../migration-session";
-  import { SkippedRecordsNote } from "$lib/components/shared";
+  import { SkippedRecordsNote } from "#lib/components/shared/index.js";
   import type { ImportResult } from "./Finish.svelte";
-  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+  import type { PatientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   let {
     jobId,
@@ -115,7 +116,7 @@
       if (!resolvedJobId) {
         try {
           resolvedJobId = findSessionJob(
-            await migrationRemote.getHistory().run()
+            await fresh(migrationRemote.getHistory())
           );
         } catch (err) {
           error = remoteErrorMessage(err, "Failed to find active migration");
@@ -152,7 +153,7 @@
       // startedAt is set after the first successful poll of a live (non-complete) migration
       while (active) {
         try {
-          const status = await migrationRemote.getStatus(resolvedJobId).run();
+          const status = await fresh(migrationRemote.getStatus(resolvedJobId));
           if (!active) break;
           consecutiveFailures = 0; // a successful poll clears the transient-failure streak
 
@@ -234,7 +235,7 @@
       }
     }
 
-    // `.run()` rejects during the render/effect flush, so defer out of it.
+    // Deferred so this effect does not track what the load reads.
     queueMicrotask(() => {
       if (active) poll();
     });

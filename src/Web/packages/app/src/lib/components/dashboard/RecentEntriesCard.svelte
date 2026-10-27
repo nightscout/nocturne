@@ -1,17 +1,17 @@
 <script lang="ts">
-  import type { Entry } from "$lib/api";
-  import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
-  import { EmptyState } from "$lib/components/shared";
+  import type { Entry } from "#lib/api/index.js";
+  import { Card, CardContent, CardHeader, CardTitle } from "#lib/components/ui/card/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
 
-  import { getRealtimeStore, RECENT_READINGS } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { getRealtimeStore, RECENT_READINGS } from "#lib/stores/realtime-store.svelte.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
     getUnitLabel,
     time,
-  } from "$lib/utils/formatting";
-  import { getDirectionInfo } from "$lib/utils";
+  } from "#lib/utils/formatting.js";
+  import { getDirectionInfo } from "#lib/utils/index.js";
 
   interface ComponentProps {
     entries?: Entry[];

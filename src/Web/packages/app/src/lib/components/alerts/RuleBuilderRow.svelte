@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import X from "@lucide/svelte/icons/x";
   import Ban from "@lucide/svelte/icons/ban";
   import Brackets from "@lucide/svelte/icons/brackets";
@@ -31,8 +31,8 @@
   import Moon from "@lucide/svelte/icons/moon";
   import type { ConditionNode } from "./types";
   import { isTrendBucket, toAlertConditionType, type TrendBucket } from "./types";
-  import { Direction } from "$lib/api";
-  import { getDirectionInfo } from "$lib/utils";
+  import { Direction } from "#lib/api/index.js";
+  import { getDirectionInfo } from "#lib/utils/index.js";
   import RuleBuilder from "./RuleBuilder.svelte";
   import RuleBuilderLeafEditor from "./RuleBuilderLeafEditor.svelte";
   import { FACT_GROUP_COLOURS, getFact, type LucideIconName } from "./factCatalog";

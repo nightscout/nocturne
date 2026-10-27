@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { formatNumber } from "$lib/utils/formatting";
+  import { formatNumber } from "#lib/utils/formatting.js";
   import { onMount } from "svelte";
   import WidgetCard from "./WidgetCard.svelte";
   import WidgetStatSkeleton from "./WidgetStatSkeleton.svelte";
-  import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
-  import { Button } from "$lib/components/ui/button";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
+  import { getMultiPeriodStatistics } from "#lib/api/generated/statistics.generated.remote.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
   // Toggle between today and 90-day average
   let showAverage = $state(false);

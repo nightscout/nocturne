@@ -146,6 +146,7 @@ public class ReadEndpointScopeEnforcementTests
             ["ShareLinkController.GetShareLink"] = V4Reason.ActionChecksAccess,
             ["GuestLinkController.GetGuestLinkScopeOptions"] = V4Reason.ActionChecksAccess,
             ["TenantSettingsController.GetTenantSettings"] = V4Reason.ActionChecksAccess,
+            ["ReleasesController.GetReleaseStatus"] = V4Reason.ActionChecksAccess,
             ["AuditController.GetMutationAuditLog"] = V4Reason.ActionChecksAccess,
             ["AuditController.GetReadAccessAuditLog"] = V4Reason.ActionChecksAccess,
             ["AuditController.GetAuditConfig"] = V4Reason.ActionChecksAccess,

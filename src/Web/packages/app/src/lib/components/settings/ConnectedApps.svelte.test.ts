@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import { OAuthClientIdentity } from "$api-clients";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { OAuthClientIdentity } from "#lib/api/generated/nocturne-api-client.js";
 
 // Mock the generated remote functions before importing the component.
 // The component calls list() as a reactive query (reading `.current`) and
@@ -11,7 +11,7 @@ const revoke = vi.fn().mockResolvedValue({ success: true });
 
 let appsCurrent: unknown[] = [];
 
-vi.mock("$lib/api/generated/connectedApps.generated.remote", () => ({
+vi.mock("#lib/api/generated/connectedApps.generated.remote.js", () => ({
   list: () => remoteQuery(() => appsCurrent),
   revoke: (...args: unknown[]) => revoke(...args),
 }));

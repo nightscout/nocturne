@@ -6,43 +6,44 @@
   import Activity from "@lucide/svelte/icons/activity";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import * as Card from "$lib/components/ui/card";
-  import { EmptyState } from "$lib/components/shared";
-  import { labResultArtwork } from "$lib/watercolour-icons";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { labResultArtwork } from "#lib/watercolour-icons.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import {
     getAvailableYears,
     getEHbA1cTimeline,
-  } from "$api/generated/dataOverviews.generated.remote";
-  import * as labResultsApi from "$api/generated/labHbA1cs.generated.remote";
+  } from "#lib/api/generated/dataOverviews.generated.remote.js";
+  import * as labResultsApi from "#lib/api/generated/labHbA1cs.generated.remote.js";
   import type {
     EHbA1cPoint,
     LabHbA1cResult,
     A1cDisplayValue,
     A1cDisplayReferences,
     TimeZoneUnavailableReason,
-  } from "$api/generated/nocturne-api-client";
-  import { a1cUnits } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { a1cUnits } from "#lib/stores/appearance-store.svelte.js";
   import {
     a1cLabel,
     a1cUnitLabel,
     a1cDisplayValue,
     formatA1c,
     formatA1cNumber,
-  } from "$lib/utils/a1c-formatting";
-  import { bg, bgLabel, formatLongDate } from "$lib/utils/formatting";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
-  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
+  } from "#lib/utils/a1c-formatting.js";
+  import { bg, bgLabel, formatLongDate } from "#lib/utils/formatting.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { setReportPrintMeta } from "#lib/components/reports/print/report-print.svelte.js";
+  import ChartKey from "#lib/components/charts/print/ChartKey.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import {
     CHART_TEXTURES,
     patternClass,
     type TextureKey,
-  } from "$lib/components/charts/print/chart-print-patterns";
+  } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   type ChartPoint = {
     date: Date;
@@ -206,15 +207,15 @@
     error = null;
     try {
       const [{ years, timeZoneUnavailableReason }, results] = await Promise.all([
-        getAvailableYears().run(),
-        labResultsApi.getAll().run(),
+        fresh(getAvailableYears()),
+        fresh(labResultsApi.getAll()),
       ]);
       labResults = results ?? [];
       const timelineReasons: (TimeZoneUnavailableReason | undefined)[] = [];
       const pointResults = await Promise.all(
         (years?.length ? years : [new Date().getFullYear()]).map(
           async (year) => {
-            const response = await getEHbA1cTimeline({ year }).run();
+            const response = await fresh(getEHbA1cTimeline({ year }));
             references = response.a1cReferences;
             timelineReasons.push(response.timeZoneUnavailableReason);
             return [year, response.points ?? []] as const;
@@ -305,7 +306,7 @@
         unit: a1cUnits.current,
         note: newLabNote || undefined,
       });
-      labResults = (await labResultsApi.getAll().run()) ?? [];
+      labResults = (await fresh(labResultsApi.getAll())) ?? [];
       newLabDate = "";
       newLabValue = "";
       newLabNote = "";
@@ -322,7 +323,7 @@
     if (!target?.id) return;
     try {
       await labResultsApi.remove(target.id);
-      labResults = (await labResultsApi.getAll().run()) ?? [];
+      labResults = (await fresh(labResultsApi.getAll())) ?? [];
     } catch (err) {
       labResultError = describeSubmitError(err, "Failed to delete lab result");
     }

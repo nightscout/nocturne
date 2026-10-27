@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { BolusType2 } from "$lib/api";
+  import { BolusType2 } from "#lib/api/index.js";
   import {
     bolusMarkerPoints,
     BOLUS_LABEL_Y,
     PRINT_BOLUS_LABEL_Y,
     MARKER_HEIGHT,
     MARKER_HEIGHT_OVERRIDE,
-  } from "$lib/components/icons/marker-shapes";
+  } from "#lib/components/icons/marker-shapes.js";
 
   interface Props {
     xPos: number;

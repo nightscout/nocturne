@@ -2,8 +2,8 @@
 <script lang="ts">
   import { CoachMarkProvider, type CoachMarkAdapter, type CoachMarkContext } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
-  import { coachLabels } from "$lib/coach-marks/copy.svelte";
-  import { sequences } from "$lib/coach-marks/sequences";
+  import { coachLabels } from "#lib/coach-marks/copy.svelte.js";
+  import { sequences } from "#lib/coach-marks/sequences.js";
   import Probe from "./loop-analysis/CoachContextProbe.test.svelte";
   import Layout from "./+layout.svelte";
 

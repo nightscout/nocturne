@@ -1,31 +1,31 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { lazyComponent } from "$lib/utils/lazy-component.svelte";
-  import { RailItemId, TrackerCategory } from "$lib/api";
-  import { Badge } from "$lib/components/ui/badge";
-  import StatusRail from "$lib/components/status-pills/StatusRail.svelte";
-  import { effectiveRail } from "$lib/components/status-pills/rail";
-  import { GlucoseValueIndicator } from "$lib/components/shared";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { lazyComponent } from "#lib/utils/lazy-component.svelte.js";
+  import { RailItemId, TrackerCategory } from "#lib/api/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import StatusRail from "#lib/components/status-pills/StatusRail.svelte";
+  import { effectiveRail } from "#lib/components/status-pills/rail.js";
+  import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import {
     dashboardRail,
     dashboardTopWidgets,
     glucoseUnits,
-  } from "$lib/stores/appearance-store.svelte";
-  import { getUiSettings } from "$api/ui-settings.remote";
-  import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
+  } from "#lib/stores/appearance-store.svelte.js";
+  import { getUiSettings } from "#lib/api/ui-settings.remote.js";
+  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
     formatLocale,
     relativeAge,
     prefersHour12,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
   import Clock from "@lucide/svelte/icons/clock";
-  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
-  import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
+  import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
+  import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
   import { trackUnwashedFill } from "./glucose-tile-wash-state.svelte";
-  import { stillArtwork } from "$lib/watercolour-deferral.svelte";
+  import { stillArtwork } from "#lib/watercolour-deferral.svelte.js";
   import { showsCurrentGlucoseWidget } from "./top-widget-ids";
 
   interface ComponentProps {
@@ -119,7 +119,7 @@
 
   // Tracker Completion Dialog State
   const trackerCompletionDialog = lazyComponent(
-    () => import("$lib/components/trackers/TrackerCompletionDialog.svelte"),
+    () => import("#lib/components/trackers/TrackerCompletionDialog.svelte"),
   );
   let completingInstanceId = $state<string | null>(null);
   let completingInstanceName = $state("");

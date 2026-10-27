@@ -1,29 +1,30 @@
 import { untrack } from "svelte";
-import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-import { getChartData } from "$api/chart-data.remote";
-import { remoteErrorMessage } from "$lib/api/remote-error";
-import { PREDICTIONS_UNAVAILABLE } from "$lib/api/predictions-messages";
+import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+import { getChartData } from "#lib/api/chart-data.remote.js";
+import { remoteErrorMessage } from "#lib/api/remote-error.js";
+import { PREDICTIONS_UNAVAILABLE } from "#lib/api/predictions-messages.js";
 import {
   getPredictions,
   getPredictionStatus,
   type PredictionData,
-} from "$api/predictions.remote";
+} from "#lib/api/predictions.remote.js";
 import {
   predictionMinutes,
   predictionEnabled,
   glucoseChartLookback,
   GLUCOSE_CHART_FETCH_HOURS,
-} from "$lib/stores/appearance-store.svelte";
-import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
-import { mergeChartData, replaceWindow } from "$lib/utils/chart-data-merge";
-import type { TransformedChartData } from "$lib/utils/chart-data-transform";
-import { stableBy } from "$lib/utils/stable-by";
+} from "#lib/stores/appearance-store.svelte.js";
+import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import { mergeChartData, replaceWindow } from "#lib/utils/chart-data-merge.js";
+import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+import { stableBy } from "#lib/utils/stable-by.js";
 import { mergeRealtimeGlucose } from "./merge-glucose";
 import {
   createChartDataView,
   type ChartDataEngine,
   type PredictionAvailability,
 } from "./chart-data-view.svelte";
+import { fresh } from "#lib/api/fresh-query.js";
 
 export * from "./chart-data-view.svelte";
 
@@ -368,6 +369,9 @@ export function createChartDataEngine(
   let refreshSeq = 0;
   let seenFingerprint: string | null = null;
   let skippedWhileHidden = false;
+  // A frozen tab runs no timers, so it never records a skipped refresh; on return the age of
+  // the window decides instead.
+  let refreshedAt = Date.now();
   // svelte-ignore state_referenced_locally
   let seenInitialData = options.initialChartData;
 
@@ -393,10 +397,10 @@ export function createChartDataEngine(
 
     const seq = ++refreshSeq;
     const { startTime, endTime } = recentWindow();
-    getChartData({ startTime, endTime, intervalMinutes: 5 })
-      .run()
+    fresh(getChartData({ startTime, endTime, intervalMinutes: 5 }))
       .then((recent) => {
         if (seq !== refreshSeq) return;
+        refreshedAt = Date.now();
         const current = untrack(() => serverChartData);
         serverChartData = current ? replaceWindow(current, recent, startTime) : recent;
       })
@@ -412,6 +416,7 @@ export function createChartDataEngine(
     if (!next || next === seenInitialData) return;
     seenInitialData = next;
     refreshSeq++;
+    refreshedAt = Date.now();
     const current = untrack(() => serverChartData);
     serverChartData = current ? replaceWindow(
           current,
@@ -437,7 +442,8 @@ export function createChartDataEngine(
 
     fallbackTimer = setTimeout(refreshRecent, RECENT_REFRESH_FALLBACK_MS);
     const onVisible = () => {
-      if (document.visibilityState === "visible" && skippedWhileHidden) scheduleRefresh();
+      if (document.visibilityState !== "visible") return;
+      if (skippedWhileHidden || Date.now() - refreshedAt >= RECENT_REFRESH_FALLBACK_MS) scheduleRefresh();
     };
     document.addEventListener("visibilitychange", onVisible);
 

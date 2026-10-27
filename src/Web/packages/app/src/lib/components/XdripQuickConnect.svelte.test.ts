@@ -7,19 +7,20 @@ const mocks = vi.hoisted(() => ({
   deviceApprove: vi.fn(),
 }));
 
-vi.mock("$api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   getActiveDataSources: () => ({ current: [], refresh: () => Promise.resolve() }),
 }));
 
-vi.mock("$routes/(authenticated)/oauth/oauth.remote", () => ({
-  getDeviceInfo: (args: unknown) => ({ run: () => mocks.lookup(args) }),
+vi.mock("#routes/(authenticated)/oauth/oauth.remote.js", () => ({
+  getDeviceInfo: (args: unknown) => createQueryResource(() => mocks.lookup(args)),
 }));
 
-vi.mock("$api/generated/oAuths.generated.remote", () => ({
+vi.mock("#lib/api/generated/oAuths.generated.remote.js", () => ({
   deviceApprove: (...args: unknown[]) => mocks.deviceApprove(...args),
 }));
 
 import XdripQuickConnect from "./XdripQuickConnect.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 describe("XdripQuickConnect", () => {
   beforeEach(() => {

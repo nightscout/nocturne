@@ -1,14 +1,14 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import * as Card from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Languages from "@lucide/svelte/icons/languages";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import {
     supportedLocales,
     getLanguageLabel,
     type SupportedLocale,
-  } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/stores/appearance-store.svelte.js";
 
   const targetLocales = supportedLocales.filter(
     (l): l is SupportedLocale => l !== "en",

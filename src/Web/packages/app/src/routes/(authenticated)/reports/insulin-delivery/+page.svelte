@@ -5,16 +5,16 @@
     formatNumericDate,
     unitsPerTenGrams,
     writesUnitsPerTenGrams,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import PieChart from "@lucide/svelte/icons/chart-pie";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Info from "@lucide/svelte/icons/info";
@@ -23,19 +23,19 @@
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Layers from "@lucide/svelte/icons/layers";
-  import BasalBolusRatioChart from "$lib/components/reports/BasalBolusRatioChart.svelte";
-  import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
-  import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
-  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import type { InsulinDeliveryStatistics } from "$lib/api";
+  import BasalBolusRatioChart from "#lib/components/reports/BasalBolusRatioChart.svelte";
+  import InsulinDeliveryChart from "#lib/components/reports/InsulinDeliveryChart.svelte";
+  import ReliabilityBadge from "#lib/components/reports/ReliabilityBadge.svelte";
+  import FigureStrip from "#lib/components/reports/FigureStrip.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import type { InsulinDeliveryStatistics } from "#lib/api/index.js";
   import {
     getInsulinDeliveryStatistics,
     getDailyBasalBolusRatios,
     getHourlyInsulinDelivery,
-  } from "$api/generated/statistics.generated.remote";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  } from "#lib/api/generated/statistics.generated.remote.js";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
+  import { contextResource } from "#lib/hooks/resource-context.svelte.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 30 days for insulin delivery analysis (TDD and ratios benefit from more data)

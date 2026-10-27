@@ -1,4 +1,4 @@
-import type { ClientInit, HandleClientError } from "@sveltejs/kit";
+import type { ClientInit, HandleClientError } from "@sveltejs/kit/hooks";
 
 const PRELOAD_RELOAD_KEY = "nocturne:preload-error-reload";
 const PRELOAD_RELOAD_WINDOW_MS = 10_000;
@@ -21,15 +21,20 @@ export const init: ClientInit = () => {
   });
 };
 
-export const handleError: HandleClientError = ({ error }) => {
+export const handleError: HandleClientError = ({ kind, error }) => {
+  // An `error(...)` throw keeps its own status and message, and is not reported.
+  if (kind === "app") return;
+
   const errorId = crypto.randomUUID();
 
   const message =
-    error instanceof Error
+    kind === "framework"
       ? error.message
-      : typeof error === "string"
-        ? error
-        : "An unexpected error occurred";
+      : error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "An unexpected error occurred";
 
   const stack = error instanceof Error ? error.stack : undefined;
 

@@ -9,14 +9,14 @@ import {
   GoogleHealthTypeState,
   type GoogleHealthDataTypeStatus,
   type GoogleHealthStatus,
-} from "$lib/api";
-import { googleHealthMocks } from "$lib/test-stubs/google-health";
+} from "#lib/api/index.js";
+import { googleHealthMocks } from "#lib/test-stubs/google-health.js";
 
 import GoogleHealthPage from "./google-health-page.svelte";
 
 vi.mock(
-  "$lib/api/generated/googleHealths.generated.remote",
-  () => import("$lib/test-stubs/google-health")
+  "#lib/api/generated/googleHealths.generated.remote.js",
+  () => import("#lib/test-stubs/google-health.js")
 );
 
 function type(

@@ -1,6 +1,6 @@
 import { SvelteMap } from "svelte/reactivity";
 import { toast } from "svelte-sonner";
-import { copyToClipboard } from "$lib/utils";
+import { copyToClipboard } from "#lib/utils/index.js";
 
 const RESET_MS = 2000;
 const DEFAULT_KEY = "default";

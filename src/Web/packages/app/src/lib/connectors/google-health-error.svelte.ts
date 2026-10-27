@@ -1,4 +1,4 @@
-import { errorMessage, errorStatus } from "$lib/forms/submit-error";
+import { errorMessage, errorStatus } from "#lib/forms/submit-error.js";
 
 export type GoogleHealthOperation =
   | "status"

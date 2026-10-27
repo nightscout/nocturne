@@ -7,11 +7,11 @@ let deleteConfigImpl: () => Promise<unknown>;
 let deleteDataImpl: () => Promise<unknown>;
 let deleteDataArgs: unknown[] = [];
 
-vi.mock("$lib/api/generated/configurations.generated.remote", () => ({
+vi.mock("#lib/api/generated/configurations.generated.remote.js", () => ({
   deleteConfiguration: () => deleteConfigImpl(),
 }));
 
-vi.mock("$lib/api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   deleteConnectorData: (args: unknown) => {
     deleteDataArgs.push(args);
     return deleteDataImpl();

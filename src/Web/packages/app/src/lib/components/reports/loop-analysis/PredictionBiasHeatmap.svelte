@@ -5,8 +5,8 @@
   read alone.
 -->
 <script lang="ts">
-  import type { PredictionCurveAccuracy, PredictionHorizonAccuracy } from "$lib/api";
-  import { hourLabel } from "$lib/utils/formatting";
+  import type { PredictionCurveAccuracy, PredictionHorizonAccuracy } from "#lib/api/index.js";
+  import { hourLabel } from "#lib/utils/formatting.js";
   import { atMinute } from "./daily-profile-view";
   import { curveLabel, horizonLabel } from "./prediction-labels.svelte";
 

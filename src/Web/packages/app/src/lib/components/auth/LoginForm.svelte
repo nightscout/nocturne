@@ -1,9 +1,9 @@
 <script lang="ts">
   import { untrack, type ComponentProps } from "svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import * as InputGroup from "$lib/components/ui/input-group";
-  import { Label } from "$lib/components/ui/label";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
@@ -11,21 +11,22 @@
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Smartphone from "@lucide/svelte/icons/smartphone";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
-  import * as InputOTP from "$lib/components/ui/input-otp";
-  import { FormError, FormField, useSubmission } from "$lib/forms";
+  import * as InputOTP from "#lib/components/ui/input-otp/index.js";
+  import { FormError, FormField, useSubmission } from "#lib/forms/index.js";
   import { WebAuthnAbortService } from "@simplewebauthn/browser";
   import {
     getOidcProviders,
     setAuthCookies,
     signInWithAuthenticator,
     signInWithRecoveryCode,
-  } from "$routes/(unauthenticated)/auth/auth.remote";
+  } from "#routes/(unauthenticated)/auth/auth.remote.js";
   import {
     discoverableLoginOptions,
     loginOptions,
     loginComplete,
-  } from "$lib/api/generated/passkeys.generated.remote";
-  import { goto, invalidateAll } from "$app/navigation";
+  } from "#lib/api/generated/passkeys.generated.remote.js";
+  import { invalidateAll } from "$app/navigation";
+  import { goToReturnUrl } from "#lib/navigation/return-url.js";
   import { page } from "$app/state";
   import { describePasskeyError } from "./passkey-errors";
   import {
@@ -160,8 +161,7 @@
     if (onSuccess) {
       onSuccess();
     } else {
-      // eslint-disable-next-line svelte/no-navigation-without-resolve -- returnUrl is a caller-supplied same-origin path, not a route; goto() rejects cross-origin URLs
-      await goto(returnUrl, { invalidateAll: true });
+      await goToReturnUrl(returnUrl, { refreshAll: true });
     }
   }
 
@@ -474,7 +474,7 @@
           await recovery.run(submit, onSuccess);
         })}
       >
-        <input type="hidden" name="returnUrl" value={returnUrl} />
+        <input {...signInWithRecoveryCode.fields.returnUrl.as("hidden", returnUrl)} />
 
         <FormError issues={recovery.error} focusOnShow />
 
@@ -491,7 +491,7 @@
               </InputGroup.Addon>
               <InputGroup.Input
                 {...field}
-                name="username"
+                name={signInWithRecoveryCode.fields.username.as("text").name}
                 type="text"
                 placeholder="your-username"
                 autocomplete="username"
@@ -517,7 +517,7 @@
               </InputGroup.Addon>
               <InputGroup.Input
                 {...field}
-                name="code"
+                name={signInWithRecoveryCode.fields.code.as("text").name}
                 type="text"
                 placeholder="XXXX-XXXX"
                 class="font-mono"
@@ -557,8 +557,8 @@
           await authenticator.run(submit, onSuccess);
         })}
       >
-        <input type="hidden" name="returnUrl" value={returnUrl} />
-        <input type="hidden" name="stepUpToken" value={stepUpToken} />
+        <input {...signInWithAuthenticator.fields.returnUrl.as("hidden", returnUrl)} />
+        <input {...signInWithAuthenticator.fields.stepUpToken.as("hidden", stepUpToken)} />
 
         <FormError issues={authenticator.error} focusOnShow />
 
@@ -570,7 +570,7 @@
           <Label for="totp-code-input">Authenticator code</Label>
           <div class="flex justify-center">
             <InputOTP.Root
-              name="code"
+              name={signInWithAuthenticator.fields.code.as("text").name}
               inputId="totp-code-input"
               maxlength={6}
               bind:value={totpCode}

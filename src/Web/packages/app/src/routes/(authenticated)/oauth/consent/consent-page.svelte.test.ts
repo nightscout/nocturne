@@ -6,7 +6,6 @@ import { page } from "$app/state";
 const { clientInfo, formStub } = vi.hoisted(() => {
   const formStub = () => ({
     pending: 0,
-    fields: { allIssues: () => [] },
     enhance: () => ({}),
   });
   return {
@@ -15,10 +14,11 @@ const { clientInfo, formStub } = vi.hoisted(() => {
   };
 });
 
-vi.mock("../oauth.remote", () => ({
-  getClientInfo: () => clientInfo,
-  consentForm: { ...formStub(), for: formStub },
-}));
+vi.mock("../oauth.remote", async () => {
+  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
+  const form = () => ({ ...formStub(), fields: remoteFormFields() });
+  return { getClientInfo: () => clientInfo, consentForm: { ...form(), for: form } };
+});
 
 import ConsentPage from "./+page.svelte";
 

@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { describe, it, expect, vi } from "vitest";
-import { MealPeriod } from "$lib/api";
+import { MealPeriod } from "#lib/api/index.js";
 import Harness from "./IobCobTrackHarness.test.svelte";
 
 const baseTime = new Date("2026-01-01T12:00:00Z").getTime();

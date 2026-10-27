@@ -1,12 +1,12 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
-import { Direction } from "$lib/api/generated/nocturne-api-client";
+import { Direction } from "#lib/api/generated/nocturne-api-client.js";
 
 let reportedDirection: string | undefined;
 let reportedError: unknown;
 
-vi.mock("$api/generated/retrospectives.generated.remote", () => ({
+vi.mock("#lib/api/generated/retrospectives.generated.remote.js", () => ({
   getRetrospectiveData: () => ({
     current: reportedError
       ? undefined

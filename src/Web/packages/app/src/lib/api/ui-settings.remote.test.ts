@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ApiException } from "$api-clients";
-import { errorMessage } from "$lib/forms/submit-error";
+import { ApiException } from "#lib/api/generated/nocturne-api-client.js";
+import { errorMessage } from "#lib/forms/submit-error.js";
 
 let upstream: () => Promise<unknown>;
 let isShareHost: boolean;
@@ -17,7 +17,10 @@ vi.mock("$app/server", () => ({
         },
       },
     },
-    url: new URL("https://app.example.test/settings/appearance?tab=theme"),
+    // SvelteKit throws here inside a query.
+    get url(): never {
+      throw new Error("a query cannot read event.url");
+    },
   }),
   query: (fn: unknown) => fn,
   command: (_schema: unknown, fn: unknown) => fn,
@@ -133,8 +136,7 @@ describe("a failed UI settings read", () => {
 
     expect(rejection).toMatchObject({
       status: 302,
-      location:
-        "/auth/login?returnUrl=%2Fsettings%2Fappearance%3Ftab%3Dtheme",
+      location: "/auth/login",
     });
   });
 

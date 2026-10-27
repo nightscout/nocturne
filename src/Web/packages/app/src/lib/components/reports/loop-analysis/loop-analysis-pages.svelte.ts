@@ -1,4 +1,5 @@
 import { resolve } from "$app/paths";
+import type { ReadonlyURLSearchParams } from "$app/state";
 
 export const LOOP_ANALYSIS_PAGES = [
   "daily-profile",
@@ -32,7 +33,7 @@ export function loopAnalysisPageIntros(): Record<LoopAnalysisPage, string> {
 }
 
 /** The resolved path of a Loop Analysis page, with the query string the report is shown with. */
-export function loopAnalysisPath(page: LoopAnalysisPage, search: URLSearchParams, hash = ""): string {
+export function loopAnalysisPath(page: LoopAnalysisPage, search: ReadonlyURLSearchParams, hash = ""): string {
   const query = search.toString();
-  return `${resolve(`/reports/loop-analysis/${page}`)}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
+  return `${resolve(`reports/loop-analysis/${page}`)}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
 }

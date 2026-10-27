@@ -2,14 +2,14 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, expect, it, vi } from "vitest";
 import { page as appPage } from "$app/state";
-import { applyPreferences } from "$lib/stores/appearance-store.svelte";
-import { reportsOverviewScopes } from "$lib/navigation/report-navigation.svelte";
+import { applyPreferences } from "#lib/stores/appearance-store.svelte.js";
+import { reportsOverviewScopes } from "#lib/navigation/report-navigation.svelte.js";
 
-vi.mock("$api/reports.remote", () => ({ getReportsData: vi.fn() }));
-vi.mock("$lib/hooks/date-params.svelte", () => ({
+vi.mock("#lib/api/reports.remote.js", () => ({ getReportsData: vi.fn() }));
+vi.mock("#lib/hooks/date-params.svelte.js", () => ({
   requireDateParamsContext: () => ({ dateRangeInput: {} }),
 }));
-vi.mock("$lib/hooks/resource-context.svelte", () => ({
+vi.mock("#lib/hooks/resource-context.svelte.js", () => ({
   contextResource: () => ({
     loading: false,
     error: null,

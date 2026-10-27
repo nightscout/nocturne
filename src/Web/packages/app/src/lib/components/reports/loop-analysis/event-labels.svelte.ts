@@ -1,5 +1,5 @@
-import { EventAnchorKind, type EventCohortDefinition } from "$lib/api";
-import { bg, bgDelta, bgLabel, time } from "$lib/utils/formatting";
+import { EventAnchorKind, type EventCohortDefinition } from "#lib/api/index.js";
+import { bg, bgDelta, bgLabel, time } from "#lib/utils/formatting.js";
 import type { EventMetricKey, MetricKind } from "./event-response-view";
 import { atMinute } from "./daily-profile-view";
 

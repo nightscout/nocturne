@@ -2,7 +2,7 @@ import { getContext, setContext } from "svelte";
 import type { ChartDataEngine } from "./engine/chart-data-view.svelte";
 import type { TrackLayout } from "./engine/track-layout";
 import type { PointInspection } from "./engine/point-inspection.svelte";
-import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
 export interface LegendState {
 	readonly iob: boolean;

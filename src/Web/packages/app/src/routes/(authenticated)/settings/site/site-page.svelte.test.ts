@@ -3,8 +3,8 @@ import { render } from "vitest-browser-svelte";
 import { page as browserPage } from "vitest/browser";
 import { error } from "@sveltejs/kit";
 import { page } from "$app/state";
-import type { TenantSettingsDto } from "$api-clients";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import type { TenantSettingsDto } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const mocks = vi.hoisted(() => ({
   getTenantSettings: vi.fn(),
@@ -19,7 +19,7 @@ const settings: TenantSettingsDto = {
   sysCreatedAt: "2026-01-01T00:00:00Z",
 };
 
-vi.mock("$lib/api/generated/tenantSettings.generated.remote", () => ({
+vi.mock("#lib/api/generated/tenantSettings.generated.remote.js", () => ({
   getTenantSettings: mocks.getTenantSettings,
   setDisplayName: mocks.setDisplayName,
   setPublicDocs: mocks.setPublicDocs,

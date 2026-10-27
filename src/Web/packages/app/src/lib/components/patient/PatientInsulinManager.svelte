@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { labelFor } from "$lib/components/ui/enum-value";
-  import { formatMediumDate } from "$lib/utils/formatting";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Card from "$lib/components/ui/card";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
+  import { labelFor } from "#lib/components/ui/enum-value.js";
+  import { formatMediumDate } from "#lib/utils/formatting.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
   import Syringe from "@lucide/svelte/icons/syringe";
   import Plus from "@lucide/svelte/icons/plus";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -17,14 +17,14 @@
     type InsulinFormulation,
     InsulinCategory,
     InsulinRole,
-  } from "$api";
+  } from "#lib/api/index.js";
   import {
     insulinCategoryLabels,
     insulinRoleLabels,
   } from "./labels";
   import { InsulinListState } from "./state.svelte";
-  import { EmptyState } from "$lib/components/shared";
-  import { syringeArtwork } from "$lib/watercolour-icons";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { syringeArtwork } from "#lib/watercolour-icons.js";
   import InsulinFormFields from "./InsulinFormFields.svelte";
 
   interface Props {
@@ -140,7 +140,10 @@
   const dialogSaving = $derived(!!insulinList.createForm.pending || !!insulinList.updateForm.pending);
   // updateInsulin's schema is { id, request: PatientInsulinSchema } — fields must nest under
   // "request." for SvelteKit's dot-path form parsing; createInsulin's schema is flat.
-  const namePrefix = $derived(editing?.id ? "request." : "");
+  // updateInsulin takes the record's fields under `request`; createInsulin takes them flat.
+  const insulinFields = $derived(
+    editing?.id ? insulinList.updateForm.fields.request : insulinList.createForm.fields,
+  );
 
   function onDialogCategoryChange() {
     insulinFormulationId = "";
@@ -271,6 +274,7 @@
       >
         <Card.Content class="space-y-4">
           <InsulinFormFields
+            fields={insulinList.createForm.fields}
             bind:category={inlineCategory}
             bind:formulationId={inlineFormulationId}
             bind:name={inlineName}
@@ -286,14 +290,20 @@
           />
 
           <!-- Hidden fields for form submission -->
-          <input type="hidden" name="b:isCurrent" value="on" />
-          <input type="hidden" name="n:dia" value={inlineDia} />
-          <input type="hidden" name="n:peak" value={inlinePeak} />
-          <input type="hidden" name="curve" value={inlineCurve} />
-          <input type="hidden" name="n:concentration" value={inlineConcentration} />
-          <input type="hidden" name="b:isPrimary" value={insulinList.items.length === 0 ? "on" : ""} />
+          <input {...insulinList.createForm.fields.isCurrent.as("hidden", true)} />
+          {#if inlineDia != null}
+            <input {...insulinList.createForm.fields.dia.as("hidden", inlineDia)} />
+          {/if}
+          {#if inlinePeak != null}
+            <input {...insulinList.createForm.fields.peak.as("hidden", inlinePeak)} />
+          {/if}
+          <input {...insulinList.createForm.fields.curve.as("hidden", inlineCurve)} />
+          {#if inlineConcentration != null}
+            <input {...insulinList.createForm.fields.concentration.as("hidden", inlineConcentration)} />
+          {/if}
+          <input {...insulinList.createForm.fields.isPrimary.as("hidden", insulinList.items.length === 0)} />
           {#if inlineFormulationId}
-            <input type="hidden" name="formulationId" value={inlineFormulationId} />
+            <input {...insulinList.createForm.fields.formulationId.as("hidden", inlineFormulationId)} />
           {/if}
 
           {#each insulinList.createForm.fields.allIssues() ?? [] as issue, i (i)}
@@ -422,11 +432,11 @@
         })}
       >
         {#if editing?.id}
-          <input type="hidden" name="id" value={editing.id} />
+          <input {...insulinList.updateForm.fields.id.as("hidden", editing.id)} />
         {/if}
         <div class="space-y-4 py-4">
           <InsulinFormFields
-            {namePrefix}
+            fields={insulinFields}
             bind:category={insulinCategory}
             bind:formulationId={insulinFormulationId}
             bind:name={insulinName}
@@ -447,12 +457,18 @@
           />
 
           <!-- Hidden fields for form submission -->
-          <input type="hidden" name="n:{namePrefix}dia" value={insulinDia} />
-          <input type="hidden" name="n:{namePrefix}peak" value={insulinPeak} />
-          <input type="hidden" name="{namePrefix}curve" value={insulinCurve} />
-          <input type="hidden" name="n:{namePrefix}concentration" value={insulinConcentration} />
+          {#if insulinDia != null}
+            <input {...insulinFields.dia.as("hidden", insulinDia)} />
+          {/if}
+          {#if insulinPeak != null}
+            <input {...insulinFields.peak.as("hidden", insulinPeak)} />
+          {/if}
+          <input {...insulinFields.curve.as("hidden", insulinCurve)} />
+          {#if insulinConcentration != null}
+            <input {...insulinFields.concentration.as("hidden", insulinConcentration)} />
+          {/if}
           {#if insulinFormulationId}
-            <input type="hidden" name="{namePrefix}formulationId" value={insulinFormulationId} />
+            <input {...insulinFields.formulationId.as("hidden", insulinFormulationId)} />
           {/if}
 
           {#each activeForm.fields.allIssues() ?? [] as issue, i (i)}

@@ -33,4 +33,21 @@ public class TenantOwnerResolver : ITenantOwnerResolver
 
         return ownerSubjectId == Guid.Empty ? null : ownerSubjectId.ToString();
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> GetOwnerSubjectIdsAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateForTenantAsync(
+            tenantId, cancellationToken);
+
+        var owners = await context.TenantMembers.AsNoTracking()
+            .OwnersOf(tenantId)
+            .Select(tm => tm.SubjectId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return owners.Select(id => id.ToString()).ToList();
+    }
 }

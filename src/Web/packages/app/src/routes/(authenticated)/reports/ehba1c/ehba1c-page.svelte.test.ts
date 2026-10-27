@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const createLab = vi.hoisted(() => vi.fn(() => undefined));
 
@@ -48,7 +48,7 @@ const labResults = [
   },
 ];
 
-vi.mock("$api/generated/dataOverviews.generated.remote", () => ({
+vi.mock("#lib/api/generated/dataOverviews.generated.remote.js", () => ({
   getAvailableYears: () => remoteQuery(() => ({ years: [2025] })),
   getEHbA1cTimeline: () =>
     remoteQuery(() => ({
@@ -64,13 +64,13 @@ vi.mock("$api/generated/dataOverviews.generated.remote", () => ({
     })),
 }));
 
-vi.mock("$api/generated/labHbA1cs.generated.remote", () => ({
+vi.mock("#lib/api/generated/labHbA1cs.generated.remote.js", () => ({
   getAll: () => remoteQuery(() => labResults),
   create: remoteCommand(createLab),
   remove: remoteCommand(() => undefined),
 }));
 
-import { applyPreferences } from "$lib/stores/appearance-store.svelte";
+import { applyPreferences } from "#lib/stores/appearance-store.svelte.js";
 
 import EHbA1cPage from "./+page.svelte";
 

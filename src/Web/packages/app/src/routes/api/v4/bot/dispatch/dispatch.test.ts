@@ -1,9 +1,16 @@
 import { createHash } from "crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The tests set process.env per case; the getter reads it at each access.
+vi.mock("$app/env/private", () => ({
+  get INSTANCE_KEY() {
+    return process.env.INSTANCE_KEY;
+  },
+}));
 import {
   INSTANCE_KEY_HEADER,
   INSTANCE_SERVICE_HEADER,
-} from "$lib/server/instance-key";
+} from "#lib/server/instance-key.js";
 
 const handleBotDispatch = vi.fn(
   (_event: { deliveryId: string }, _api: unknown) => Promise.resolve(),
@@ -12,12 +19,12 @@ const buildScopedBotApiClient = vi.fn(
   (_fetchFn: typeof fetch, _tenantSlug: string) => ({ scoped: true }),
 );
 
-vi.mock("$lib/server/bot", () => ({
+vi.mock("#lib/server/bot/index.js", () => ({
   handleBotDispatch: (event: { deliveryId: string }, api: unknown) =>
     handleBotDispatch(event, api),
 }));
 
-vi.mock("$lib/server/bot/api-client", () => ({
+vi.mock("#lib/server/bot/api-client.js", () => ({
   buildScopedBotApiClient: (fetchFn: typeof fetch, tenantSlug: string) =>
     buildScopedBotApiClient(fetchFn, tenantSlug),
 }));

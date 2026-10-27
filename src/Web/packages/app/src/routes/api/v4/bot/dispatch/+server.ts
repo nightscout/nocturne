@@ -1,7 +1,7 @@
 import type { RequestHandler } from "./$types";
-import { handleBotDispatch } from "$lib/server/bot";
-import { buildScopedBotApiClient } from "$lib/server/bot/api-client";
-import { isTrustedInstanceRequest } from "$lib/server/instance-key";
+import { handleBotDispatch } from "#lib/server/bot/index.js";
+import { buildScopedBotApiClient } from "#lib/server/bot/api-client.js";
+import { isTrustedInstanceRequest } from "#lib/server/instance-key.js";
 import type { AlertDispatchEvent } from "@nocturne/bot";
 
 export const POST: RequestHandler = async ({ request, fetch }) => {

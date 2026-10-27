@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { TrackerCategoryIcon } from "$lib/components/icons";
-  import type { TrackerCategory } from "$lib/api";
-  import { time as formatTime } from "$lib/utils/formatting";
+  import { TrackerCategoryIcon } from "#lib/components/icons/index.js";
+  import type { TrackerCategory } from "#lib/api/index.js";
+  import { time as formatTime } from "#lib/utils/formatting.js";
 
   interface Props {
     xPos: number;

@@ -1,33 +1,8 @@
 /**
- * Stand-in for a generated remote `query()` export, for component tests.
- *
- * A real query proxy decides once, in its constructor, whether it was built in a
- * tracking context, and refuses to be awaited when it was not — the failure the
- * `nocturne/no-imperative-remote-query` lint rule exists to catch. Tests that
- * hand a component a bare `Promise` cannot see that, so a component which awaits
- * a query from an event handler passes its tests and fails in the browser.
- *
- * Tracking is probed here the same way SvelteKit probes it, so the double agrees
- * with the runtime on the one thing it exists to model. That probe only carries
- * information under the browser runner: Svelte's server build makes
- * `$effect.pre` a no-op rather than a throw, so a Node test always reads as
- * tracking and cannot exercise the rule at all.
- *
- * @see $lib/api/retain-query.svelte for the registration lifetime this implies.
+ * Stand-in for a generated remote `query()` export, for component tests. Every call shares one
+ * result, as a real query memoized on its payload does, so a component that reads the query in
+ * one place and refreshes it in another sees the one value.
  */
-
-/** SvelteKit's own tracking probe: `$effect.pre` throws outside a reactive context. */
-function isTracking(): boolean {
-  try {
-    $effect.pre(() => {});
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const NOT_REACTIVE =
-  "This query was not created in a reactive context and cannot be awaited. Use `.run()` to execute the query instead.";
 
 export interface FakeQuery<T> extends PromiseLike<T> {
   readonly current: T | undefined;
@@ -80,9 +55,7 @@ export function fakeRemoteQuery<T>(load: () => Promise<T>): () => FakeQuery<T> {
   const state = new FakeQueryState(load);
 
   return () => {
-    const tracking = isTracking();
-
-    if (tracking && state.settled === null) state.run();
+    if (state.settled === null) state.run();
 
     return {
       get current() {
@@ -99,7 +72,6 @@ export function fakeRemoteQuery<T>(load: () => Promise<T>): () => FakeQuery<T> {
       },
       refresh: () => state.run(),
       get then() {
-        if (!tracking) throw new Error(NOT_REACTIVE);
         const pending = state.settled ?? state.run();
         return pending.then.bind(pending);
       },

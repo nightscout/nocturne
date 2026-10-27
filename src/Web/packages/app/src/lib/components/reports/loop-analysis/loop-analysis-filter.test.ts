@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DayOfWeek, LoopAnalysisComparison } from "$lib/api";
+import { DayOfWeek, LoopAnalysisComparison } from "#lib/api/index.js";
 import {
   customComparisonProblem,
   dailyProfileQuery,

@@ -3,20 +3,20 @@
     formatFileSize,
     formatNumber,
     formatNumericDate,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
   import Building2 from "@lucide/svelte/icons/building-2";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -26,21 +26,22 @@
   import Plus from "@lucide/svelte/icons/plus";
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
   import { Debounced } from "runed";
-  import * as Alert from "$lib/components/ui/alert";
-  import * as tenantRemote from "$api/generated/tenants.generated.remote";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import * as tenantRemote from "#lib/api/generated/tenants.generated.remote.js";
   import {
     createTenant,
     validateSlug,
-  } from "$api/generated/myTenants.generated.remote";
+  } from "#lib/api/generated/myTenants.generated.remote.js";
   import * as adminSubjectsRemote from "../admin-subjects.remote";
-  import type { TenantDetailDto, TenantDto, TenantMemberDto } from "$api";
+  import type { TenantDetailDto, TenantDto, TenantMemberDto } from "#lib/api/index.js";
   import { getCurrentTenantId } from "../../current-tenant.remote";
-  import { getTransitionStatus } from "$api/generated/platforms.generated.remote";
-  import { get as getDatabaseCapacity } from "$api/generated/databaseCapacities.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { getTransitionStatus } from "#lib/api/generated/platforms.generated.remote.js";
+  import { get as getDatabaseCapacity } from "#lib/api/generated/databaseCapacities.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { invalidate } from "$app/navigation";
-  import { SHELL_DATA_KEY } from "$lib/constants/shell-data";
+  import { SHELL_DATA_KEY } from "#lib/constants/shell-data.js";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   const tenantIdQuery = getCurrentTenantId();
   const currentTenantId = $derived(tenantIdQuery.current ?? undefined);
@@ -130,7 +131,7 @@
     membersLoading = true;
     membersError = null;
     try {
-      currentTenant = await tenantRemote.getById(currentTenantId).run();
+      currentTenant = await fresh(tenantRemote.getById(currentTenantId));
     } catch (err) {
       membersError = remoteErrorMessage(
         err,
@@ -142,7 +143,7 @@
   }
 
   $effect(() => {
-    // `.run()` rejects during the render/effect flush, so defer out of it.
+    // Deferred so this effect does not track what the load reads.
     if (currentTenantId) {
       queueMicrotask(loadCurrentTenant);
     }

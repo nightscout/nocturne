@@ -4,8 +4,9 @@ import {
   type EventResponseDefinition,
   type EventResponseLimits,
   type EventUnavailableAnchor,
-} from "$lib/api";
-import type { getEventResponse } from "$api/generated/loopAnalysis.generated.remote";
+} from "#lib/api/index.js";
+import type { getEventResponse } from "#lib/api/generated/loopAnalysis.generated.remote.js";
+import type { ReadonlyURLSearchParams } from "$app/state";
 
 type EventResponseQuery = Parameters<typeof getEventResponse>[0];
 
@@ -49,7 +50,7 @@ function toWhole(value: string | null): number | undefined {
   return n != null && Number.isInteger(n) ? n : undefined;
 }
 
-export function readEventResponse(search: URLSearchParams): EventResponseState {
+export function readEventResponse(search: ReadonlyURLSearchParams): EventResponseState {
   const cohorts: EventCohortDefinition[] = [];
   for (const n of COHORT_NUMBERS) {
     const anchor = toAnchor(search.get(`anchor${n}`));
@@ -73,8 +74,8 @@ export function readEventResponse(search: URLSearchParams): EventResponseState {
 }
 
 /** The search params with the builder written into them, every other parameter left as it was. */
-export function writeEventResponse(state: EventResponseState, search: URLSearchParams): URLSearchParams {
-  const next = new URLSearchParams(search);
+export function writeEventResponse(state: EventResponseState, search: ReadonlyURLSearchParams): URLSearchParams {
+  const next = new URLSearchParams(search.toString());
   for (const name of EVENT_PARAM_NAMES) next.delete(name);
   for (const [name, value] of Object.entries(eventParameters(state))) next.set(name, String(value));
   return next;

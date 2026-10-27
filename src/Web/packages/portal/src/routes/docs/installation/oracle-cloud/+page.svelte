@@ -1,11 +1,11 @@
 <script lang="ts">
     import { ArtworkHero } from "water-ui";
-    import { DOCS_HERO } from "$lib/data/docs-artwork";
+    import { DOCS_HERO } from "#lib/data/docs-artwork.js";
     import Callout from "@nocturne/cms/components/Callout.svelte";
-    import NextSteps from "$lib/components/docs/NextSteps.svelte";
-    import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
-    import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
-    import installScript from "$lib/release/oracle-cloud/oracle-cloud-install.sh?raw";
+    import NextSteps from "#lib/components/docs/NextSteps.svelte";
+    import SupportNocturne from "#lib/components/docs/SupportNocturne.svelte";
+    import CodeBlock from "#lib/components/docs/CodeBlock.svelte";
+    import installScript from "#lib/release/oracle-cloud/oracle-cloud-install.sh?raw";
 
     const runCommand =
         "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/oracle-cloud-install.sh)";

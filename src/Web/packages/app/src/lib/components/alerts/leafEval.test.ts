@@ -3,7 +3,7 @@ import {
 	AlertConditionType,
 	type AlertRuleResponse,
 	type LeafTransitionLog as ApiLeafTransitionLog,
-} from "$api-clients";
+} from "#lib/api/generated/nocturne-api-client.js";
 import { assignLeafIds, LeafTransitionLog, composeRuleTruth } from "./leafEval";
 import { nodeFromApi, toAlertConditionType, type ConditionNode } from "./types";
 

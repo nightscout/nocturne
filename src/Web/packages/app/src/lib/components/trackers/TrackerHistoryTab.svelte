@@ -1,14 +1,14 @@
 <script lang="ts">
-  import * as Tabs from "$lib/components/ui/tabs";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { EmptyState } from "$lib/components/shared";
-  import { CompletionReason, type TrackerInstanceDto } from "$api";
+  } from "#lib/components/ui/card/index.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { CompletionReason, type TrackerInstanceDto } from "#lib/api/index.js";
 
   interface Props {
     historyInstances: TrackerInstanceDto[];
@@ -38,11 +38,11 @@
         <div class="space-y-2">
           {#each historyInstances as instance (instance.id)}
             <div
-              class="flex items-center justify-between p-3 rounded-lg border"
+              class="flex flex-col gap-1 p-3 rounded-lg border @md:flex-row @md:items-center @md:justify-between"
             >
-              <div>
-                <div class="font-medium">{instance.definitionName}</div>
-                <div class="text-sm text-muted-foreground">
+              <div class="min-w-0">
+                <div class="font-medium break-words">{instance.definitionName}</div>
+                <div class="text-sm text-muted-foreground break-words">
                   {formatAge(instance.ageHours ?? 0)} ·
                   {completionReasonLabels[
                     instance.completionReason ??
@@ -53,7 +53,7 @@
                   {/if}
                 </div>
               </div>
-              <div class="text-sm text-muted-foreground">
+              <div class="shrink-0 text-sm text-muted-foreground">
                 {formatDate(instance.completedAt ?? instance.startedAt)}
               </div>
             </div>

@@ -1,21 +1,21 @@
 <script lang="ts">
-  import { formatNumber } from "$lib/utils/formatting";
-  import type { ConnectorDataSummary } from "$lib/api/generated/nocturne-api-client";
-  import { deleteConfiguration } from "$lib/api/generated/configurations.generated.remote";
-  import { deleteConnectorData } from "$lib/api/generated/services.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { formatNumber } from "#lib/utils/formatting.js";
+  import type { ConnectorDataSummary } from "#lib/api/generated/nocturne-api-client.js";
+  import { deleteConfiguration } from "#lib/api/generated/configurations.generated.remote.js";
+  import { deleteConnectorData } from "#lib/api/generated/services.generated.remote.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Separator } from "$lib/components/ui/separator";
-  import { DangerZoneDialog } from "$lib/components/ui/danger-zone-dialog";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
+  } from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import { DangerZoneDialog } from "#lib/components/ui/danger-zone-dialog/index.js";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import { page } from "$app/state";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";

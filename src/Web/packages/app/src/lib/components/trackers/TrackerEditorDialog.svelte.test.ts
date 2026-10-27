@@ -1,11 +1,11 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
-import { TrackerCategory } from "$lib/api/generated/nocturne-api-client";
-import { remoteForm, remoteQuery } from "$lib/test-stubs/remote-resource";
-import WithTooltipProvider from "$lib/test-stubs/WithTooltipProvider.test-stub.svelte";
+import { TrackerCategory } from "#lib/api/generated/nocturne-api-client.js";
+import { remoteForm, remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import WithTooltipProvider from "#lib/test-stubs/WithTooltipProvider.test-stub.svelte";
 
-vi.mock("$api/generated/trackers.generated.remote", () => ({
+vi.mock("#lib/api/generated/trackers.generated.remote.js", () => ({
   getTriggerEventTypes: () => remoteQuery(() => ["Pod Change", "Pod Activated", "Site Change"]),
   getEndEventTypes: () => remoteQuery(() => ["Sensor Stop", "Pod Deactivated"]),
   createDefinition: remoteForm(),
@@ -28,14 +28,13 @@ function open(formCategory: TrackerCategory) {
         editingDefinition: null,
         formCategory,
         categoryLabels,
-        loadData: vi.fn(),
       },
     },
   });
 }
 
 const postedCovers = () =>
-  [...document.querySelectorAll<HTMLInputElement>('input[name="covers[]"]')].map((i) => i.value);
+  [...document.querySelectorAll<HTMLInputElement>('input[name^="covers["]')].map((i) => i.value);
 
 describe("TrackerEditorDialog covers", () => {
   it("offers what a pump part replaces, and a low reservoir alert once it replaces the insulin", async () => {

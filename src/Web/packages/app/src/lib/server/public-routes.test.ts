@@ -4,7 +4,7 @@ import {
   TENANT_INACTIVE_PATH,
   statusProbeRedirect,
 } from "./public-routes";
-import { SHARE_UNAVAILABLE_PATH } from "$lib/share-host";
+import { SHARE_UNAVAILABLE_PATH } from "#lib/share-host.js";
 
 describe("statusProbeRedirect", () => {
   /** A self-hosted install with no marketing site, on an ordinary tenant host. */

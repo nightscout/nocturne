@@ -1,14 +1,14 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import { beforeNavigate } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Textarea } from "$lib/components/ui/textarea";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import GitPullRequest from "@lucide/svelte/icons/git-pull-request";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -20,11 +20,11 @@
     parsePo,
     type TranslationMessage,
   } from "@nocturne/cms/translations";
-  import * as translationsApi from "$api/generated/translations.generated.remote";
+  import * as translationsApi from "#lib/api/generated/translations.generated.remote.js";
   import {
     getLanguageLabel,
     isSupportedLocale,
-  } from "$lib/stores/appearance-store.svelte";
+  } from "#lib/stores/appearance-store.svelte.js";
   import { SvelteMap } from "svelte/reactivity";
 
   // The repository coordinates are configurable per instance, so the base the
@@ -195,18 +195,15 @@
   async function sendBatch(forLocale: string, batch: PendingEdit[]) {
     // A partly-filled plural draft cannot be stored (the API requires
     // non-empty values); it stays local-only until completed.
-    const isCleared = (values: string[] | null) =>
-      values === null || values.every((v) => v.length === 0);
-    const isStorable = (values: string[] | null) =>
-      isCleared(values) || !values!.some((v) => v.length === 0);
+    const isCleared = (values: string[] | null) => values === null || values.every((v) => v.length === 0);
 
-    const entries = batch
-      .filter(({ values }) => isStorable(values))
-      .map(({ message, values }) => ({
-        msgId: message.msgid,
-        context: message.context.length === 0 ? null : message.context,
+    const isStorable = (values: string[] | null) => isCleared(values) || !(values!).some((v) => v.length === 0);
+
+    const entries = batch.filter(({ values }) => isStorable(values)).map(({ message, values }) => ({
+      msgId: message.msgid,
+      context: message.context.length === 0 ? null : message.context,
         translations: isCleared(values) ? [] : values!,
-      }));
+    }));
     if (entries.length === 0) return;
     if (forLocale === activeLocale) saveState = "saving";
     try {
@@ -338,7 +335,7 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <a
-            href={resolve("/settings/translations")}
+            href={resolve('settings/translations')}
             class="mb-1 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft class="h-3.5 w-3.5" />
@@ -360,11 +357,9 @@
           <Button
             variant="outline"
             disabled={drafts.size === 0}
-            onclick={() => (clearOpen = true)}
-          >
-            <Trash2 class="mr-1 h-4 w-4" />
-            Clear drafts
-          </Button>
+            onclick={() => clearOpen = true}
+          ><Trash2 class="mr-1 h-4 w-4" />Clear drafts</Button>
+
           <Button
             disabled={drafts.size === 0}
             onclick={() => {
@@ -387,7 +382,11 @@
       {:else if catalogError}
         <p class="py-12 text-center text-sm text-destructive">{catalogError}</p>
       {:else}
-        <TranslationEditor {messages} {drafts} ondraft={onDraft} />
+        <TranslationEditor
+          messages={messages}
+          drafts={drafts}
+          ondraft={onDraft}
+        />
       {/if}
     </div>
   </div>
@@ -414,9 +413,8 @@
             View the pull request
           </a>
         {/if}
-        <Dialog.Footer>
-          <Button onclick={() => (submitOpen = false)}>Done</Button>
-        </Dialog.Footer>
+
+        <Dialog.Footer><Button onclick={() => submitOpen = false}>Done</Button></Dialog.Footer>
       {:else}
         <Dialog.Header>
           <Dialog.Title>Submit translations</Dialog.Title>
@@ -450,10 +448,16 @@
           {/if}
         </div>
         <Dialog.Footer>
-          <Button variant="outline" onclick={() => (submitOpen = false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button onclick={submit} disabled={submitting || contributorName.trim().length === 0}>
+          <Button
+            variant="outline"
+            onclick={() => submitOpen = false}
+            disabled={submitting}
+          >Cancel</Button>
+
+          <Button
+            onclick={submit}
+            disabled={submitting || contributorName.trim().length === 0}
+          >
             {#if submitting}
               <Loader2 class="mr-1 h-4 w-4 animate-spin" />
             {/if}

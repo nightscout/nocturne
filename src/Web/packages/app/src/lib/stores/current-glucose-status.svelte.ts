@@ -1,7 +1,7 @@
 import { untrack } from "svelte";
-import { getSummary } from "$api/generated/summaries.generated.remote";
-import type { GlucoseStatus } from "$lib/api/generated/nocturne-api-client";
-import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
+import { getSummary } from "#lib/api/generated/summaries.generated.remote.js";
+import type { GlucoseStatus } from "#lib/api/generated/nocturne-api-client.js";
+import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
 
 /** Longest a superseded reading stays on screen while the summary catches up. */
 export const PAIR_HOLD_MS = 5000;

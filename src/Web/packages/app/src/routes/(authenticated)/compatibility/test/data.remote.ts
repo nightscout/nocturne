@@ -3,8 +3,8 @@
  */
 import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import { ManualTestRequestSchema } from '$lib/api/generated/schemas';
-import { errorStatus } from '$lib/forms/submit-error';
+import { ManualTestRequestSchema } from '#lib/api/generated/schemas.js';
+import { errorStatus } from '#lib/forms/submit-error.js';
 
 /**
  * Run a manual compatibility test between Nightscout and Nocturne

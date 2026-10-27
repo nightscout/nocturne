@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import BolusSection from "./BolusSection.svelte";
-import { BolusType } from "$lib/api/generated/nocturne-api-client";
+import { BolusType } from "#lib/api/generated/nocturne-api-client.js";
 
 describe("BolusSection", () => {
 	it("renders section heading with icon", async () => {

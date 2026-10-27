@@ -16,13 +16,13 @@ import {
   preferredLanguage,
   type CarbRatioFormat,
   type GlucoseUnits,
-} from "$lib/stores/appearance-store.svelte";
+} from "#lib/stores/appearance-store.svelte.js";
 import {
   relativeAge as sharedRelativeAge,
   relativeTime as sharedRelativeTime,
   type RelativeTimeOptions,
 } from "@nocturne/ui/relative-time";
-import type { OverallAverages, Treatment, TreatmentSummary } from "$api-clients";
+import type { OverallAverages, Treatment, TreatmentSummary } from "#lib/api/generated/nocturne-api-client.js";
 
 // Re-export for backward compatibility
 export type { GlucoseUnits, OverallAverages, Treatment, TreatmentSummary };
@@ -33,7 +33,7 @@ export type { GlucoseUnits, OverallAverages, Treatment, TreatmentSummary };
 
 // Pure unit conversion/formatting lives in the shared design system (@nocturne/ui/glucose) so the
 // web app and the desktop companion render glucose identically. Re-exported here so existing
-// import sites (`$lib/utils/formatting`) keep working unchanged.
+// import sites (`#lib/utils/formatting.js`) keep working unchanged.
 export {
   convertToDisplayUnits,
   convertFromDisplayUnits,

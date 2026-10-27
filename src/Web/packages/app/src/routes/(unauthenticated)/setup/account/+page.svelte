@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
+  import * as Card from "#lib/components/ui/card/index.js";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import UserPlus from "@lucide/svelte/icons/user-plus";
@@ -17,22 +17,20 @@
     getAuthState,
     getOidcProviders,
     setAuthCookies,
-  } from "$routes/(unauthenticated)/auth/auth.remote";
-  import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
-  import OidcProviderButtons from "$lib/components/auth/OidcProviderButtons.svelte";
-  import PasskeyRegistrationForm from "$lib/components/auth/PasskeyRegistrationForm.svelte";
+  } from "#routes/(unauthenticated)/auth/auth.remote.js";
+  import RecoveryCodes from "#lib/components/auth/RecoveryCodes.svelte";
+  import OidcProviderButtons from "#lib/components/auth/OidcProviderButtons.svelte";
+  import PasskeyRegistrationForm from "#lib/components/auth/PasskeyRegistrationForm.svelte";
   import {
     describePasskeyError,
     parseCeremonyOptions,
-  } from "$lib/components/auth/passkey-errors";
+  } from "#lib/components/auth/passkey-errors.js";
 
   // ── Remote data ───────────────────────────────────────────────────
   const authStateQuery = getAuthState();
-  const oidcQuery = getOidcProviders();
 
-  const isAuthenticated = $derived(
-    authStateQuery.current?.isAuthenticated ?? false,
-  );
+  const oidcQuery = getOidcProviders();
+  const isAuthenticated = $derived(authStateQuery.current?.isAuthenticated ?? false);
   const oidc = $derived(oidcQuery.current);
   const hasOidc = $derived(oidc?.enabled && (oidc?.providers?.length ?? 0) > 0);
 
@@ -42,7 +40,7 @@
   // the user needs to see their recovery codes before navigating away.
   $effect(() => {
     if (isAuthenticated && !registrationComplete) {
-      goto(resolve("/setup"), { replaceState: true, invalidateAll: true });
+      goto(resolve('setup'), { replace: true, refreshAll: true });
     }
   });
 
@@ -107,7 +105,7 @@
   }
 
   function handleContinueToSetup() {
-    goto(resolve("/setup"), { replaceState: true, invalidateAll: true });
+    goto(resolve('setup'), { replace: true, refreshAll: true });
   }
 </script>
 
@@ -172,15 +170,15 @@
               providers={oidc.providers}
               disabled={isRedirecting || isRegistering}
               onLogin={loginWithProvider}
-              {isRedirecting}
-              {selectedProvider}
+              isRedirecting={isRedirecting}
+              selectedProvider={selectedProvider}
             />
           {/if}
 
           <PasskeyRegistrationForm
             onRegister={handlePasskeyRegister}
             disabled={isRedirecting}
-            {isRegistering}
+            isRegistering={isRegistering}
           />
         </div>
       </Card.Content>

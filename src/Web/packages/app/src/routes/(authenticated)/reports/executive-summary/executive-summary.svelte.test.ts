@@ -1,9 +1,9 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, expect, it, vi } from "vitest";
-import { TargetStatus, type GlycemicVariability } from "$api/generated/nocturne-api-client";
-import { applyPreferences } from "$lib/stores/appearance-store.svelte";
-import { TimeZoneUnavailableReason } from "$lib/api";
+import { TargetStatus, type GlycemicVariability } from "#lib/api/generated/nocturne-api-client.js";
+import { applyPreferences } from "#lib/stores/appearance-store.svelte.js";
+import { TimeZoneUnavailableReason } from "#lib/api/index.js";
 
 const report = vi.hoisted(() => ({
   variability: null as GlycemicVariability | null,
@@ -12,11 +12,11 @@ const report = vi.hoisted(() => ({
   thresholds: { veryLow: 54, low: 63, targetBottom: 63, targetTop: 140, high: 140, veryHigh: 250 },
 }));
 
-vi.mock("$api/reports.remote", () => ({ getReportsData: vi.fn() }));
-vi.mock("$lib/hooks/date-params.svelte", () => ({
+vi.mock("#lib/api/reports.remote.js", () => ({ getReportsData: vi.fn() }));
+vi.mock("#lib/hooks/date-params.svelte.js", () => ({
   requireDateParamsContext: () => ({ dateRangeInput: {} }),
 }));
-vi.mock("$lib/hooks/resource-context.svelte", () => ({
+vi.mock("#lib/hooks/resource-context.svelte.js", () => ({
   contextResource: () => ({
     date: { dayCount: 14 },
     current: {

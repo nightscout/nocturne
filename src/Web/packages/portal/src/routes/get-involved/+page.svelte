@@ -8,10 +8,10 @@
   import { onMount } from "svelte";
   import { Button } from "@nocturne/ui/ui/button";
   import { resolve } from "$app/paths";
-  import { LINKS } from "$lib/data/links";
-  import { campaignUrl, track } from "$lib/analytics";
-  import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
-  import { issueAge } from "$lib/utils/issue-age";
+  import { LINKS } from "#lib/data/links.js";
+  import { campaignUrl, track } from "#lib/analytics.js";
+  import SupportNocturne from "#lib/components/docs/SupportNocturne.svelte";
+  import { issueAge } from "#lib/utils/issue-age.js";
   import { preferredLanguage } from "@nocturne/app/stores/appearance-store.svelte";
 
   const BRAND = { background: "var(--brand)", foreground: "white" };

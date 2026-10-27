@@ -4,9 +4,9 @@ import {
   SettingsEvidenceConfidenceReason,
   SettingsEvidenceRule,
   SettingsEvidenceUnavailableReason,
-} from "$lib/api";
-import { bg, bgLabel } from "$lib/utils/formatting";
-import { plural } from "$lib/utils/plural";
+} from "#lib/api/index.js";
+import { bg, bgLabel } from "#lib/utils/formatting.js";
+import { plural } from "#lib/utils/plural.js";
 
 const HOUR_MS = 3_600_000;
 

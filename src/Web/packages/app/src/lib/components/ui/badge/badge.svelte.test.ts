@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import { createRawSnippet } from "svelte";
-import { Badge } from "$lib/components/ui/badge";
+import { Badge } from "#lib/components/ui/badge/index.js";
 
 const children = createRawSnippet(() => ({ render: () => "<span>Banana</span>" }));
 

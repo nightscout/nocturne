@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import Check from "@lucide/svelte/icons/check";
   import Copy from "@lucide/svelte/icons/copy";
   import Download from "@lucide/svelte/icons/download";
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-  import { copyToClipboard } from "$lib/utils";
+  import { copyToClipboard } from "#lib/utils/index.js";
 
   interface Props {
     codes: string[];

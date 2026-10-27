@@ -1,6 +1,6 @@
 <script lang="ts" generics="TData">
-  import { Button } from "$lib/components/ui/button";
-  import * as Select from "$lib/components/ui/select";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ChevronsLeft from "@lucide/svelte/icons/chevrons-left";

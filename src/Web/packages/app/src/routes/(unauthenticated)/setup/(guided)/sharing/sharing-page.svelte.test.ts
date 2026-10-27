@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
+import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 
 const state = vi.hoisted(() => ({
   relationship: {} as { relationship?: string; patientName?: string },
@@ -35,7 +35,7 @@ vi.mock("$app/navigation", async (importOriginal) => ({
   goto: commands.goto,
 }));
 vi.mock("$app/state", () => ({ page: { data: { effectivePermissions: ["*"] } } }));
-vi.mock("$api/generated/setupHubs.generated.remote", () => ({
+vi.mock("#lib/api/generated/setupHubs.generated.remote.js", () => ({
   getSetupHub: () =>
     Object.assign(
       remoteQuery(() =>
@@ -54,16 +54,16 @@ vi.mock("$api/generated/setupHubs.generated.remote", () => ({
     ),
   setSetupHubItemState: commands.setState,
 }));
-vi.mock("$api/generated/tenantSettings.generated.remote", () => ({
+vi.mock("#lib/api/generated/tenantSettings.generated.remote.js", () => ({
   getPatientRelationship: () => remoteQuery(() => state.relationship),
 }));
-vi.mock("$api/generated/roles.generated.remote", () => ({
+vi.mock("#lib/api/generated/roles.generated.remote.js", () => ({
   getRoles: () => remoteQuery(() => state.roles),
 }));
-vi.mock("$api/generated/memberInvites.generated.remote", () => ({
+vi.mock("#lib/api/generated/memberInvites.generated.remote.js", () => ({
   createInvite: commands.createInvite,
 }));
-vi.mock("$api/generated/guestLinks.generated.remote", () => ({
+vi.mock("#lib/api/generated/guestLinks.generated.remote.js", () => ({
   getGuestLinks: () => remoteQuery(() => []),
   getGuestLinkScopeOptions: () =>
     remoteQuery(() => ({ available: ["glucose.read"], defaults: ["glucose.read"] })),
@@ -71,7 +71,7 @@ vi.mock("$api/generated/guestLinks.generated.remote", () => ({
   revokeGuestLink: vi.fn(),
   dismissGuestLink: vi.fn(),
 }));
-vi.mock("$api/generated/shareLinks.generated.remote", () => ({
+vi.mock("#lib/api/generated/shareLinks.generated.remote.js", () => ({
   getShareLink: () => remoteQuery(() => share),
   rotateShareLink: commands.rotateShareLink,
   revealShareLink: vi.fn(),

@@ -1,10 +1,10 @@
-import { a1cLabel } from "$lib/utils/a1c-formatting";
+import { a1cLabel } from "#lib/utils/a1c-formatting.js";
 import {
 	estimatedA1cTitle,
 	reportTitle,
 	visibleReportCategories,
 	type ReportViewer,
-} from "$lib/navigation/report-navigation.svelte";
+} from "#lib/navigation/report-navigation.svelte.js";
 import type { Component } from "svelte";
 import Activity from "@lucide/svelte/icons/activity";
 import Apple from "@lucide/svelte/icons/apple";
@@ -37,7 +37,7 @@ import Users from "@lucide/svelte/icons/users";
 import UtensilsCrossed from "@lucide/svelte/icons/utensils-crossed";
 import Wrench from "@lucide/svelte/icons/wrench";
 import ZoomIn from "@lucide/svelte/icons/zoom-in";
-import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
+import { filterTenantlessNav } from "#lib/navigation/tenantless-navigation.js";
 
 export type CommandPaletteGroup =
 	| "stats"

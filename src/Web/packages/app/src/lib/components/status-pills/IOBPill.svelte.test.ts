@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
-import type { IOBPillData } from "$lib/types/status-pills";
+import type { IOBPillData } from "#lib/types/status-pills.js";
 import IOBPill from "./IOBPill.svelte";
 
 /**

@@ -32,8 +32,8 @@ import { fileURLToPath } from "node:url";
  *   keeps its fixed copy and adds a comment passes, and only review catches
  *   that.
  * - It sees calls to names imported from a `*.generated.remote` module, plus
- *   `.run()` and `.refresh()`. A remote call reached any other way is
- *   invisible.
+ *   `fresh()`, `.run()` and `.refresh()`. A remote call reached any other way
+ *   is invisible.
  */
 const SRC = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -79,7 +79,7 @@ function tryBlockBefore(source: string, catchIndex: number): string {
 }
 
 function callsRemote(block: string, imported: string[]): boolean {
-  if (/\.(run|refresh)\s*\(/.test(block)) return true;
+  if (/\.(run|refresh)\s*\(|\bfresh\s*\(/.test(block)) return true;
   return imported.some((name) => new RegExp(`\\b${name}\\s*[(.]`).test(block));
 }
 
@@ -300,7 +300,7 @@ describe("catches around generated remote calls", () => {
     // The guard is only worth its cost if it fails on the shape it exists to
     // catch, so exercise its parts on that shape directly.
     const lossy = `
-      import { createRole } from "$api/generated/roles.generated.remote";
+      import { createRole } from "#lib/api/generated/roles.generated.remote.js";
       async function handle() {
         try {
           await createRole({ name });
@@ -320,7 +320,7 @@ describe("catches around generated remote calls", () => {
 
   it("recognises a bound reason the body never reads", () => {
     const lossy = `
-      import { revoke } from "$api/generated/sessions.generated.remote";
+      import { revoke } from "#lib/api/generated/sessions.generated.remote.js";
       async function handle() {
         try {
           await revoke(id);
@@ -340,7 +340,7 @@ describe("catches around generated remote calls", () => {
 
   it("leaves a bound reason the body reads alone", () => {
     const routed = `
-      import { revoke } from "$api/generated/sessions.generated.remote";
+      import { revoke } from "#lib/api/generated/sessions.generated.remote.js";
       async function handle() {
         try {
           await revoke(id);
@@ -357,10 +357,10 @@ describe("catches around generated remote calls", () => {
 
   it("recognises a reason that only reaches the console", () => {
     const lossy = `
-      import { getTenants } from "$api/generated/tenants.generated.remote";
+      import { getTenants } from "#lib/api/generated/tenants.generated.remote.js";
       async function load() {
         try {
-          tenants = await getTenants().run();
+          tenants = await fresh(getTenants());
         } catch (err) {
           console.error("Failed to load tenants:", String(err));
           loadError = "Failed to load tenants.";
@@ -375,10 +375,10 @@ describe("catches around generated remote calls", () => {
 
   it("reports a reason that only reaches the console as an offence", () => {
     const lossy = `
-      import { getAll } from "$api/generated/tenants.generated.remote";
+      import { getAll } from "#lib/api/generated/tenants.generated.remote.js";
       async function load() {
         try {
-          tenants = await getAll().run();
+          tenants = await fresh(getAll());
         } catch (err) {
           console.error("Failed to load tenants:", err);
           loadError = "Failed to load tenants.";
@@ -394,7 +394,7 @@ describe("catches around generated remote calls", () => {
   it("leaves a logged reason that is also shown alone", () => {
     const routed = `
       try {
-        tenants = await getTenants().run();
+        tenants = await fresh(getTenants());
       } catch (err) {
         console.error("Failed to load tenants:", err);
         loadError = remoteErrorMessage(err, "Failed to load tenants.");
@@ -421,7 +421,7 @@ describe("catches around generated remote calls", () => {
 
   it("passes a swallow that explains itself", () => {
     const deliberate = `
-      import { getStatus } from "$api/generated/jobs.generated.remote";
+      import { getStatus } from "#lib/api/generated/jobs.generated.remote.js";
       async function poll() {
         try {
           await getStatus().refresh();
@@ -437,7 +437,7 @@ describe("catches around generated remote calls", () => {
 
   it("ignores a catch that has nothing to do with a remote call", () => {
     const local = `
-      import { getStatus } from "$api/generated/jobs.generated.remote";
+      import { getStatus } from "#lib/api/generated/jobs.generated.remote.js";
       function parse(raw: string) {
         try {
           return JSON.parse(raw);

@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { cn } from "$lib/utils";
-  import * as Tooltip from "$lib/components/ui/tooltip";
-  import * as Popover from "$lib/components/ui/popover";
-  import { TrackerCategoryIcon } from "$lib/components/icons";
-  import DayStackedBar from "$lib/components/calendar/DayStackedBar.svelte";
-  import DayGlucoseProfile from "$lib/components/calendar/DayGlucoseProfile.svelte";
-  import TrackerPopoverContent from "$lib/components/calendar/TrackerPopoverContent.svelte";
-  import { TrackerCategory } from "$api";
-  import type { TrackerInstanceDto, TrackerDefinitionDto, PunchCardDay } from "$api";
+  import { cn } from "#lib/utils/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { TrackerCategoryIcon } from "#lib/components/icons/index.js";
+  import DayStackedBar from "#lib/components/calendar/DayStackedBar.svelte";
+  import DayGlucoseProfile from "#lib/components/calendar/DayGlucoseProfile.svelte";
+  import TrackerPopoverContent from "#lib/components/calendar/TrackerPopoverContent.svelte";
+  import { TrackerCategory } from "#lib/api/index.js";
+  import type { TrackerInstanceDto, TrackerDefinitionDto, PunchCardDay } from "#lib/api/index.js";
 
   /** A calendar grid slot: a day with data, a numbered day without, or padding. */
   type CalendarSlot = PunchCardDay | null | { empty: true; dayNumber?: number };
@@ -17,9 +17,9 @@
     eventType: "start" | "due" | "completed";
     date: string;
   }
-  import { formatGlucoseValue, formatLocale } from "$lib/utils/formatting";
-  import type { GlucoseUnits } from "$lib/utils/formatting";
-  import { formatCalendarDate, getCalendarDayNumber } from "$lib/components/calendar/calendar-date";
+  import { formatGlucoseValue, formatLocale } from "#lib/utils/formatting.js";
+  import type { GlucoseUnits } from "#lib/utils/formatting.js";
+  import { formatCalendarDate, getCalendarDayNumber } from "#lib/components/calendar/calendar-date.js";
 
 
   let {

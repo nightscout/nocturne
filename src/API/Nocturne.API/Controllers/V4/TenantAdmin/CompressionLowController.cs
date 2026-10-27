@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
@@ -14,7 +15,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// <remarks>
 /// Every write here is the glucose category and requires <see cref="Scope.GlucoseReadWrite"/>.
 /// Accepting a suggestion writes a <see cref="StateSpanCategory.DataExclusion"/> span
-/// (<c>CompressionLowService.AcceptSuggestionAsync</c>) marking the flagged readings, which is the
+/// (<c>CompressionLowService.ApplyBatchAsync</c>) marking the flagged readings, which is the
 /// glucose category for the reason <c>StateSpanWriteScopeGuard</c> gives, and dismiss, delete and
 /// detection all write the suggestions that propose one. Each write therefore carries its own
 /// <see cref="Scope.GlucoseReadWrite"/> requirement, and the class-level gate gives the reads
@@ -36,6 +37,12 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 [RequireScope(Scope.GlucoseRead)]
 public class CompressionLowController : ControllerBase
 {
+    /// <summary>
+    /// Ceiling on one review. Each item is read twice and written up to four times, each on its own
+    /// context, so the shared bulk ceiling of 1000 would hold a request for too long.
+    /// </summary>
+    private const int MaxBatchItems = 200;
+
     private readonly ICompressionLowService _compressionLowService;
     private readonly ICompressionLowDetectionService _detectionService;
 
@@ -47,8 +54,8 @@ public class CompressionLowController : ControllerBase
         "Your settings could not be read just now, so this cannot be shown. Try again in a moment.";
 
     /// <summary>
-    /// What accepting or dismissing tells the reader when the suggestion has already been acted on
-    /// or removed. The service says which id and which state, which is of no use to them.
+    /// What reviewing tells the reader when a suggestion has already been acted on or removed. The
+    /// service says which id and which state, which is of no use to them.
     /// </summary>
     private const string SuggestionUnavailable =
         "That suggestion is no longer waiting for a decision. Refresh the page to see the current list.";
@@ -111,75 +118,36 @@ public class CompressionLowController : ControllerBase
     }
 
     /// <summary>
-    /// Accept a suggestion with adjusted bounds
+    /// Accept, dismiss or delete several suggestions at once
     /// </summary>
-    [HttpPost("suggestions/{id:guid}/accept")]
-    [RequireScope(Scope.GlucoseReadWrite)]
-    [RemoteCommand(Invalidates = ["GetSuggestions"])]
-    [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<StateSpan>> AcceptSuggestion(
-        Guid id,
-        [FromBody] AcceptSuggestionRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var stateSpan = await _compressionLowService.AcceptSuggestionAsync(
-                id, request.StartMills, request.EndMills, cancellationToken);
-            return Ok(stateSpan);
-        }
-        catch (InvalidOperationException)
-        {
-            return Problem(detail: SuggestionUnavailable, statusCode: 400);
-        }
-    }
-
-    /// <summary>
-    /// Dismiss a suggestion
-    /// </summary>
-    [HttpPost("suggestions/{id:guid}/dismiss")]
+    /// <remarks>
+    /// Not one database commit: <see cref="ICompressionLowService.ApplyBatchAsync"/> says what a
+    /// refused or failed request leaves behind.
+    /// </remarks>
+    [HttpPost("suggestions/review")]
     [RequireScope(Scope.GlucoseReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> DismissSuggestion(
-        Guid id,
+    public async Task<IActionResult> ReviewSuggestions(
+        [FromBody] CompressionLowBatchRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (request.Action is not { } action || !Enum.IsDefined(action))
+            return Problem(detail: "Action must be Accept, Dismiss or Delete", statusCode: 400, title: "Bad Request");
+
+        if (this.ValidateBulkSize(request.Items, "Suggestion", "suggestions", MaxBatchItems) is { } invalid)
+            return invalid;
+
         try
         {
-            await _compressionLowService.DismissSuggestionAsync(id, cancellationToken);
+            await _compressionLowService.ApplyBatchAsync(
+                action, request.Items, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException)
         {
             return Problem(detail: SuggestionUnavailable, statusCode: 400);
-        }
-    }
-
-    /// <summary>
-    /// Delete a suggestion and its associated state span
-    /// </summary>
-    [HttpDelete("suggestions/{id:guid}")]
-    [RequireScope(Scope.GlucoseReadWrite)]
-    [RemoteCommand(Invalidates = ["GetSuggestions"])]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteSuggestion(
-        Guid id,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            await _compressionLowService.DeleteSuggestionAsync(id, cancellationToken);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: 404, title: "Not Found");
         }
     }
 

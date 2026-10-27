@@ -2,30 +2,30 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { startQueries } from "$lib/utils/start-queries";
-  import * as Card from "$lib/components/ui/card";
-  import { getPunchCardData } from "$api/generated/statistics.generated.remote";
-  import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { getActiveInstances, getDefinitions, getInstanceHistory } from "$api/generated/trackers.generated.remote";
-  import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
-  import { reachedUrgency } from "$lib/components/trackers/schedule";
-  import { Button } from "$lib/components/ui/button";
-  import { calendarShowTirPercent, glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { getUnitLabel, formatLocale, formatMediumDateTime, time } from "$lib/utils/formatting";
+  import { startQueries } from "#lib/utils/start-queries.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { getPunchCardData } from "#lib/api/generated/statistics.generated.remote.js";
+  import { remoteErrorMessage } from "#lib/api/remote-error.js";
+  import { getActiveInstances, getDefinitions, getInstanceHistory } from "#lib/api/generated/trackers.generated.remote.js";
+  import type { TrackerInstanceDto, TrackerDefinitionDto } from "#lib/api/index.js";
+  import { reachedUrgency } from "#lib/components/trackers/schedule.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { calendarShowTirPercent, glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { getUnitLabel, formatLocale, formatMediumDateTime, time } from "#lib/utils/formatting.js";
   import {
     leadingBlankDays,
     weekdayLabels,
-  } from "$lib/components/calendar/calendar-date";
-  import CalendarSkeleton from "$lib/components/calendar/CalendarSkeleton.svelte";
-  import { TrackerCompletionDialog } from "$lib/components/trackers";
-  import CalendarHeader from "$lib/components/calendar/CalendarHeader.svelte";
-  import CalendarMonthSummary from "$lib/components/calendar/CalendarMonthSummary.svelte";
-  import CalendarDayCell from "$lib/components/calendar/CalendarDayCell.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
+  } from "#lib/components/calendar/calendar-date.js";
+  import CalendarSkeleton from "#lib/components/calendar/CalendarSkeleton.svelte";
+  import { TrackerCompletionDialog } from "#lib/components/trackers/index.js";
+  import CalendarHeader from "#lib/components/calendar/CalendarHeader.svelte";
+  import CalendarMonthSummary from "#lib/components/calendar/CalendarMonthSummary.svelte";
+  import CalendarDayCell from "#lib/components/calendar/CalendarDayCell.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
-  import { groupBy, indexBy } from "$lib/utils/collections";
-  import { toDayString } from "$lib/utils/date-range";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
+  import { groupBy, indexBy } from "#lib/utils/collections.js";
+  import { toDayString } from "#lib/utils/date-range.js";
 
   // Infer DayStats type from the query result
   type PunchCardMonth = NonNullable<
@@ -54,16 +54,16 @@
   const today = new Date();
   let viewDate = $state(
     (() => {
-      const yearParam = page.url.searchParams.get("year");
-      const monthParam = page.url.searchParams.get("month");
-      if (yearParam && monthParam) {
-        const year = parseInt(yearParam);
-        const month = parseInt(monthParam) - 1; // URL uses 1-indexed month
-        if (!isNaN(year) && !isNaN(month) && month >= 0 && month <= 11) {
-          return new Date(year, month, 1);
-        }
+    const yearParam = page.url.searchParams.get("year");
+    const monthParam = page.url.searchParams.get("month");
+    if (yearParam && monthParam) {
+      const year = parseInt(yearParam);
+      const month = parseInt(monthParam) - 1; // URL uses 1-indexed month
+      if (!isNaN(year) && !isNaN(month) && month >= 0 && month <= 11) {
+        return new Date(year, month, 1);
       }
-      return today;
+    }
+    return today;
     })()
   );
   const currentMonth = $derived(viewDate.getMonth());
@@ -100,7 +100,7 @@
 
   // Navigation functions
   function updateUrl(date: Date) {
-    const url = new URL(page.url);
+    const url = new URL(page.url.href);
     const today = new Date();
     const isCurrentMonth =
       today.getMonth() === date.getMonth() &&
@@ -114,7 +114,7 @@
       url.searchParams.set("month", String(date.getMonth() + 1)); // 1-indexed
     }
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with its month params changed, already resolved
-    goto(url.toString(), { invalidateAll: true });
+    goto(url.toString(), { refreshAll: true });
   }
 
   function previousMonth() {
@@ -134,9 +134,8 @@
 
   const isCurrentMonth = $derived.by(() => {
     const today = new Date();
-    return (
-      today.getMonth() === currentMonth && today.getFullYear() === currentYear
-    );
+
+    return today.getMonth() === currentMonth && today.getFullYear() === currentYear;
   });
 
   const units = $derived(glucoseUnits.current);
@@ -187,11 +186,8 @@
     let currentDay = 1;
 
     for (let week = 0; week < 6; week++) {
-      const weekDays: (
-        | DayStats
-        | null
-        | { empty: true; dayNumber?: number }
-      )[] = [];
+      const weekDays: (DayStats | null | { empty: true; dayNumber?: number })[] = [];
+
       for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
         if (week === 0 && dayOfWeek < startDayOfWeek) {
           weekDays.push(null);
@@ -215,7 +211,7 @@
   });
 
   function handleDayClick(day: DayStats) {
-    goto(resolve(`/reports/day-in-review?date=${day.date}`));
+    goto(resolve(`reports/day-in-review?date=${day.date}`));
   }
 
   const monthSummary = $derived(
@@ -318,7 +314,7 @@
     completingDefinition = null;
     completingDefaultDate = null;
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- reloads the current page's URL, already resolved
-    goto(page.url.toString(), { invalidateAll: true });
+    goto(page.url.toString(), { refreshAll: true });
   }
 </script>
 
@@ -362,16 +358,16 @@
       })}
     >
       <CalendarHeader
-        {viewDate}
+        viewDate={viewDate}
         bind:viewMode
-        {isCurrentMonth}
-        {MONTH_NAMES}
-        {previousMonth}
-        {nextMonth}
-        {goToToday}
-        {setViewMode}
+        isCurrentMonth={isCurrentMonth}
+        MONTH_NAMES={MONTH_NAMES}
+        previousMonth={previousMonth}
+        nextMonth={nextMonth}
+        goToToday={goToToday}
+        setViewMode={setViewMode}
         showTirPercent={calendarShowTirPercent.current}
-        setShowTirPercent={(show) => (calendarShowTirPercent.current = show)}
+        setShowTirPercent={(show) => calendarShowTirPercent.current = show}
       />
     </div>
 
@@ -422,31 +418,35 @@
                   <div class="grid grid-cols-7 gap-1">
                     {#each week as day, i (i)}
                       <CalendarDayCell
-                      {day}
-                      {viewMode}
-                      showTirPercent={calendarShowTirPercent.current}
-                      {currentYear}
-                      {currentMonth}
-                      {trackerEvents}
-                      {definitions}
-                      bind:openPopoverId
-                      {units}
-                      {unitLabel}
-                      {handleDayClick}
-                      {getDefinition}
-                      {getTrackerLevel}
-                      {getTrackerTone}
-                      {formatTrackerStartTime}
-                      {formatTrackerAge}
-                      {openCompletionDialog}
-                    />
-                  {/each}
-                </div>
-              {/each}
+                        day={day}
+                        viewMode={viewMode}
+                        showTirPercent={calendarShowTirPercent.current}
+                        currentYear={currentYear}
+                        currentMonth={currentMonth}
+                        trackerEvents={trackerEvents}
+                        definitions={definitions}
+                        bind:openPopoverId
+                        units={units}
+                        unitLabel={unitLabel}
+                        handleDayClick={handleDayClick}
+                        getDefinition={getDefinition}
+                        getTrackerLevel={getTrackerLevel}
+                        getTrackerTone={getTrackerTone}
+                        formatTrackerStartTime={formatTrackerStartTime}
+                        formatTrackerAge={formatTrackerAge}
+                        openCompletionDialog={openCompletionDialog}
+                      />
+                    {/each}
+                  </div>
+                {/each}
               </div>
             </div>
 
-            <CalendarMonthSummary {monthSummary} {units} {unitLabel} />
+            <CalendarMonthSummary
+              monthSummary={monthSummary}
+              units={units}
+              unitLabel={unitLabel}
+            />
           </Card.Content>
         </Card.Root>
       </div>

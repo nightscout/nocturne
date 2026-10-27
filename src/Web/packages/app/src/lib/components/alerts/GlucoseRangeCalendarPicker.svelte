@@ -24,11 +24,11 @@
   } from "@internationalized/date";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
-  import { Button } from "$lib/components/ui/button";
-  import GlucosePickerCell from "$lib/components/alerts/GlucosePickerCell.svelte";
-  import TimeZoneNote from "$lib/components/reports/TimeZoneNote.svelte";
-  import { getPunchCardData } from "$api/generated/statistics.generated.remote";
-  import { formatLocale } from "$lib/utils/formatting";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import GlucosePickerCell from "#lib/components/alerts/GlucosePickerCell.svelte";
+  import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
+  import { getPunchCardData } from "#lib/api/generated/statistics.generated.remote.js";
+  import { formatLocale } from "#lib/utils/formatting.js";
 
   interface Props {
     /** ISO start of the confirmed range, or undefined. */

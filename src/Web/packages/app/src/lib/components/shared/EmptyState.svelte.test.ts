@@ -4,11 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRawSnippet } from "svelte";
 import { Clock } from "lucide";
 import { resetCapabilitiesCache, type IconArtworkSource } from "water-ui";
-import { releaseWatercolour, resetWatercolour } from "$lib/test-stubs/watercolour-deferral.svelte";
-import { illustrations } from "$lib/stores/illustrations.svelte";
+import { releaseWatercolour, resetWatercolour } from "#lib/test-stubs/watercolour-deferral.svelte.js";
+import { illustrations } from "#lib/stores/illustrations.svelte.js";
 import EmptyState from "./EmptyState.svelte";
 
-vi.mock("$lib/watercolour-deferral.svelte", () => import("$lib/test-stubs/watercolour-deferral.svelte"));
+vi.mock("#lib/watercolour-deferral.svelte.js", () => import("#lib/test-stubs/watercolour-deferral.svelte.js"));
 
 // No `lucide-hourglass-test` set is baked, so without a GPU this can only reach the plain-SVG rung.
 const unbakedIcon = { icon: Clock, name: "hourglass-test" } satisfies IconArtworkSource;

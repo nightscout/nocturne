@@ -4,8 +4,8 @@
  */
 // Type-only so the generated client is not loaded at runtime; this module is imported by
 // code whose tests run without codegen.
-import type { ChartColor } from '$api-clients';
-import type { ChartThresholds } from '$lib/constants/glucose-thresholds';
+import type { ChartColor } from '#lib/api/generated/nocturne-api-client.js';
+import type { ChartThresholds } from '#lib/constants/glucose-thresholds.js';
 
 /**
  * Resolve a ChartColor enum value to a CSS variable reference

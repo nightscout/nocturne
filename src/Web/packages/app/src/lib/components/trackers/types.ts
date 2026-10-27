@@ -1,4 +1,4 @@
-import type { NotificationUrgency } from "$api";
+import type { NotificationUrgency } from "#lib/api/index.js";
 
 export interface TrackerNotification {
   id?: string; // For existing thresholds (from API)

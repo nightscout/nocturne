@@ -1,6 +1,6 @@
 <script lang="ts">
   import FlaskConical from "@lucide/svelte/icons/flask-conical";
-  import { Banner } from "$lib/components/ui/banner";
+  import { Banner } from "#lib/components/ui/banner/index.js";
 
   interface Props {
     nextResetAt: string | null;

@@ -1,16 +1,16 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     previewAlarmSound,
     stopPreview,
     subscribeToPreviewState,
     type PreviewState,
-  } from "$lib/audio/alarm-sounds";
+  } from "#lib/audio/alarm-sounds.js";
   import type {
     AlarmProfileConfiguration,
     EmergencyContactConfig,
-  } from "$lib/types/alarm-profile";
+  } from "#lib/types/alarm-profile.js";
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import VolumeX from "@lucide/svelte/icons/volume-x";
   import Square from "@lucide/svelte/icons/square";

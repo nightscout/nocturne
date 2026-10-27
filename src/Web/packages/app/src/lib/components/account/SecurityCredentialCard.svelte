@@ -1,12 +1,12 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Clock from "@lucide/svelte/icons/clock";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
 
   interface Credential {
     id: string;

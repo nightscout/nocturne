@@ -7,10 +7,10 @@
   import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
   import { setGlucoseChartContext } from "./chart-context.svelte";
   import { computeTrackLayout } from "./engine/track-layout";
-  import { formatWeekdayDate, hourLabel } from "$lib/utils/formatting";
+  import { formatWeekdayDate, hourLabel } from "#lib/utils/formatting.js";
   import { hourTicks } from "./engine/axis-ticks";
-  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { PrintMode } from "#lib/components/charts/print/print-mode.svelte.js";
 
   interface Props {
     engine: ChartDataEngine;

@@ -2,9 +2,9 @@
   import Syringe from "@lucide/svelte/icons/syringe";
   import Apple from "@lucide/svelte/icons/apple";
   import Utensils from "@lucide/svelte/icons/utensils";
-  import { formatCarbDisplay, formatInsulinDisplay, formatShortDate } from "$lib/utils/formatting";
+  import { formatCarbDisplay, formatInsulinDisplay, formatShortDate } from "#lib/utils/formatting.js";
   import type { DayToDayDailyData } from "./types";
-  import type { TreatmentSummary } from "$lib/api";
+  import type { TreatmentSummary } from "#lib/api/index.js";
 
   interface Props {
     dailyDataPoints: DayToDayDailyData[];

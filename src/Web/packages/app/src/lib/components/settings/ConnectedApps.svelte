@@ -1,10 +1,10 @@
 <script lang="ts">
-  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
+  import SuccessBanner from "#lib/forms/SuccessBanner.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { ConfirmDialog } from "#lib/components/ui/confirm-dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -13,12 +13,12 @@
   import Plus from "@lucide/svelte/icons/plus";
   import BadgeCheck from "@lucide/svelte/icons/badge-check";
   import ExternalLink from "@lucide/svelte/icons/external-link";
-  import { EmptyState } from "$lib/components/shared";
-  import { formatMediumDateTime } from "$lib/utils/formatting";
-  import { list, revoke } from "$lib/api/generated/connectedApps.generated.remote";
-  import { OAuthClientIdentity } from "$api-clients";
-  import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { formatMediumDateTime } from "#lib/utils/formatting.js";
+  import { list, revoke } from "#lib/api/generated/connectedApps.generated.remote.js";
+  import { OAuthClientIdentity } from "#lib/api/generated/nocturne-api-client.js";
+  import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
 
   // Remote queries
   const appsQuery = list();

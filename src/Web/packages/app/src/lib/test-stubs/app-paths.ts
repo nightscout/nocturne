@@ -1,23 +1,20 @@
 /**
- * `$app/paths` for the browser test environment. The standalone vitest config
- * has only the Svelte plugin, not SvelteKit's, so this module is aliased in to
- * stand in for the framework's. `resolve` echoes the route id it is given,
- * which is what the app deployed at the root would resolve to.
+ * `$app/paths` for the test environments, as the app deployed at the root resolves: a route id
+ * (leading `/`) has its params filled in, and a path (no leading `/`) gains one. The standalone
+ * vitest configs have only the Svelte plugin, not SvelteKit's, so this module stands in for the
+ * framework's.
  */
-export const base = "";
-export const assets = "";
-
-export function resolve(pathname: string): string {
-  return pathname;
+export function resolve(id: string, params?: Record<string, string>): string {
+  if (!id.startsWith("/")) return `/${id}`;
+  if (!params) return id;
+  return Object.entries(params).reduce<string>((acc, [key, value]) => acc.replace(`[${key}]`, value), id);
 }
 
-export function resolveRoute(
-  id: string,
-  params?: Record<string, string>
-): string {
-  if (!params) return id;
-  return Object.entries(params).reduce(
-    (acc, [key, value]) => acc.replace(`[${key}]`, value),
-    id
-  );
+/** Every path is a page of the app here; a test that needs otherwise mocks `$app/paths`. */
+export async function match(url: URL | string): Promise<{ id: string; params: Record<string, string> }> {
+  return { id: new URL(url, "http://localhost").pathname, params: {} };
+}
+
+export function asset(file: string): string {
+  return `/${file}`;
 }

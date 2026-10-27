@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { copyToClipboard } from "$lib/utils";
+import { copyToClipboard } from "#lib/utils/index.js";
 import { toast } from "svelte-sonner";
 import { createCopyFeedback, type CopyFeedback } from "./copy-feedback.svelte";
 
-vi.mock("$lib/utils", () => ({ copyToClipboard: vi.fn() }));
+vi.mock("#lib/utils/index.js", () => ({ copyToClipboard: vi.fn() }));
 vi.mock("svelte-sonner", () => ({ toast: { error: vi.fn() } }));
 
 const FAILURE_MESSAGE =

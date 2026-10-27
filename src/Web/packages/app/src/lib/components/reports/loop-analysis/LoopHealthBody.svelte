@@ -1,8 +1,3 @@
-<!--
-  The Loop health page body: how the loop ran, as the API measured it, in tiles for the range and strips
-  for each hour of the day, with the gaps it found listed and linked to Day in Review. A figure the
-  API could not measure reads as unknown, never as zero.
--->
 <script lang="ts">
   import { resolve } from "$app/paths";
   import { Rule } from "layerchart";
@@ -14,19 +9,19 @@
     type LoopHealthResponse,
     type LoopHealthShare,
     type LoopHealthUnknown,
-  } from "$lib/api";
-  import FigureStrip, { type Figure } from "$lib/components/reports/FigureStrip.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { plural } from "$lib/utils/plural";
-  import { startOfDay } from "$lib/utils/date-range";
-  import { formatMediumDate, formatWeekdayDate, hourLabel, time } from "$lib/utils/formatting";
+  } from "#lib/api/index.js";
+  import FigureStrip, { type Figure } from "#lib/components/reports/FigureStrip.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { plural } from "#lib/utils/plural.js";
+  import { startOfDay } from "#lib/utils/date-range.js";
+  import { formatMediumDate, formatWeekdayDate, hourLabel, time } from "#lib/utils/formatting.js";
   import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import TimeOfDayPanel from "./TimeOfDayPanel.svelte";
   import HourBars from "./HourBars.svelte";
   import HourBands from "./HourBands.svelte";
   import StripKey, { type StripKeyItem } from "./StripKey.svelte";
-  import NoTimeZone from "$lib/components/reports/NoTimeZone.svelte";
+  import NoTimeZone from "#lib/components/reports/NoTimeZone.svelte";
   import { loopAnalysisTimeZoneNeed } from "./time-zone-need.svelte";
   import IgnoredFiltersNotice from "./IgnoredFiltersNotice.svelte";
   import HistoryClampNote from "./HistoryClampNote.svelte";
@@ -66,10 +61,10 @@
   const hasData = $derived(analysed(primary));
   const everythingHidden = $derived(
     [
-      LoopAnalysisSeries.LoopActivity,
-      LoopAnalysisSeries.CgmActivity,
-      LoopAnalysisSeries.ZeroDelivery,
-      LoopAnalysisSeries.AutomaticBoluses,
+    LoopAnalysisSeries.LoopActivity,
+    LoopAnalysisSeries.CgmActivity,
+    LoopAnalysisSeries.ZeroDelivery,
+    LoopAnalysisSeries.AutomaticBoluses,
       LoopAnalysisSeries.SensitivityRatio,
     ].every(hidden)
   );
@@ -97,10 +92,10 @@
   const unknown = (key: keyof LoopHealthUnknown) => reasonText(primary?.unknown?.[key]);
 
   const pct = (v: number) => `${v.toFixed(1)}%`;
-  const maybePct = (v: number | null | undefined) => (v == null ? "–" : pct(v));
+  const maybePct = (v: number | null | undefined) => v == null ? "–" : pct(v);
   const u1 = (v: number) => v.toFixed(1);
   const u2 = (v: number) => v.toFixed(2);
-  const daysCounted = (n: number | null | undefined) => (n == null ? "–" : plural(n, ["# day", "# days"]));
+  const daysCounted = (n: number | null | undefined) => n == null ? "–" : plural(n, ["# day", "# days"]);
 
   function duration(minutes: number | null | undefined): string {
     if (minutes == null) return "–";
@@ -134,7 +129,7 @@
     if (value == null) return { label, value: "–", note: noted("Nothing measured in this range", maybeComparedPct(compared)) };
     return { label, value: pct(value), note: noted(note, maybeComparedPct(compared)) };
   }
-  const maybeComparedPct = (v: number | null | undefined) => (v == null ? null : pct(v));
+  const maybeComparedPct = (v: number | null | undefined) => v == null ? null : pct(v);
 
   function gapsFigure(
     label: string,
@@ -165,33 +160,23 @@
 
     list.push(
       hidden(LoopAnalysisSeries.LoopActivity)
-        ? hiddenFigure("Closed loop")
+      ? hiddenFigure("Closed loop")
         : shareFigure("Closed loop", (r) => r?.activity?.closedLoop, "Percent of the analyzed time when the loop controlled basal delivery")
     );
     list.push(
       hidden(LoopAnalysisSeries.CgmActivity)
-        ? hiddenFigure("CGM active")
+      ? hiddenFigure("CGM active")
         : shareFigure("CGM active", (r) => r?.activity?.cgm, "Percent of the analyzed time when glucose readings arrived")
     );
     list.push(
       hidden(LoopAnalysisSeries.LoopActivity)
-        ? hiddenFigure("Pump active")
-        : shareFigure("Pump active", (r) => r?.activity?.pump, "Percent of the analyzed time when the loop uploaded a cycle. If there are no cycles, the report uses the delivery records.")
-    );
-    list.push(
-      gapsFigure("Loop gaps", LoopAnalysisSeries.LoopGaps, "loopGaps", `No gap of more than ${gapThreshold} between loop cycles`)
-    );
-    list.push(
-      gapsFigure(
-        "Unrecorded delivery",
-        LoopAnalysisSeries.UnrecordedDelivery,
-        "unrecordedDelivery",
-        "The pump records show the delivery for all the time that the loop ran"
-      )
-    );
+      ? hiddenFigure("Pump active")
+      : shareFigure("Pump active", (r) => r?.activity?.pump, "Percent of the analyzed time when the loop uploaded a cycle. If there are no cycles, the report uses the delivery records."));
 
-    if (hidden(LoopAnalysisSeries.ZeroDelivery)) list.push(hiddenFigure("Algorithm zero temps"));
-    else {
+    list.push(gapsFigure("Loop gaps", LoopAnalysisSeries.LoopGaps, "loopGaps", `No gap of more than ${gapThreshold} between loop cycles`));
+    list.push(gapsFigure("Unrecorded delivery", LoopAnalysisSeries.UnrecordedDelivery, "unrecordedDelivery", "The pump records show the delivery for all the time that the loop ran"));
+
+    if (hidden(LoopAnalysisSeries.ZeroDelivery)) list.push(hiddenFigure("Algorithm zero temps")); else {
       const zero = primary?.zeroDelivery;
       const value = zero?.algorithmZeroTemp?.percent;
       list.push({
@@ -363,8 +348,16 @@
 
   function barKey(color: string, label: string, bars: HourBar[]): StripKeyItem[] {
     return [
-      ...(comparing ? [{ mark: "bar" as const, label, color }, { mark: "compared" as const, label: "Compared range" }] : []),
-      ...(bars.some((b) => b.sparse) ? [{ mark: "sparse" as const, label: "Too few days", color }] : []),
+      ...comparing
+        ? [
+          { mark: "bar" as const, label, color },
+          { mark: "compared" as const, label: "Compared range" }
+        ]
+        : [],
+
+      ...bars.some((b) => b.sparse)
+        ? [{ mark: "sparse" as const, label: "Too few days", color }]
+        : []
     ];
   }
 
@@ -423,6 +416,12 @@
   const pickedCount = $derived(gapLists.filter((l) => !hidden(l.series)).reduce((sum, l) => sum + l.all.length, 0));
 </script>
 
+<!--
+  The Loop health page body: how the loop ran, as the API measured it, in tiles for the range and strips
+  for each hour of the day, with the gaps it found listed and linked to Day in Review. A figure the
+  API could not measure reads as unknown, never as zero.
+-->
+
 {#snippet shareReadout(share: LoopHealthShare | null | undefined, compared: LoopHealthShare | null | undefined, slot: number)}
   {@const hour = shareHour(share, hourOfSlot(slot))}
   {@const other = shareHour(compared, hourOfSlot(slot))}
@@ -453,7 +452,7 @@
   <NoTimeZone reason={response.timeZoneUnavailableReason}>{loopAnalysisTimeZoneNeed()}</NoTimeZone>
 {:else}
   <div class="space-y-6">
-    <HistoryClampNote {response}>Each hour of the day uses data from one day at most.</HistoryClampNote>
+    <HistoryClampNote response={response}>Each hour of the day uses data from one day at most.</HistoryClampNote>
 
     <IgnoredFiltersNotice ignored={response.ignoredFilters} />
 
@@ -467,9 +466,9 @@
         {/if}
       </div>
     {:else}
-      <div {@attach loopAnalysisMark("loop-analysis-loop-health.tiles")}>
-        <FigureStrip {figures} />
-      </div>
+      <div
+        {@attach loopAnalysisMark("loop-analysis-loop-health.tiles")}
+      ><FigureStrip figures={figures} /></div>
 
       <div
         class="space-y-5 rounded-lg border bg-card p-3 @md:p-4"
@@ -483,8 +482,8 @@
               id={strip.id}
               title={strip.title}
               unit="Share of analyzed time, %"
-              {cursor}
-              {pickHelp}
+              cursor={cursor}
+              pickHelp={pickHelp}
               yDomain={[0, 100]}
               heightClass="h-24"
               describe={(slot) => describeShare(strip.pick(primary), slot)}
@@ -509,8 +508,8 @@
             id="zero-delivery"
             title="Algorithm zero temps by hour"
             unit="Share of time with known delivery, %"
-            {cursor}
-            {pickHelp}
+            cursor={cursor}
+            pickHelp={pickHelp}
             yDomain={zeroDomain}
             heightClass="h-28"
             describe={(slot) => describeShare(primary?.zeroDelivery?.algorithmZeroTemp, slot)}
@@ -541,8 +540,8 @@
             id="max-basal"
             title="At max basal by hour"
             unit="Share of algorithm temp basal time with a known max basal, %"
-            {cursor}
-            {pickHelp}
+            cursor={cursor}
+            pickHelp={pickHelp}
             yDomain={capDomain}
             heightClass="h-28"
             describe={(slot) => describeShare(primary?.maxBasal?.atCap, slot)}
@@ -570,8 +569,8 @@
             id="sensitivity"
             title="Sensitivity ratio by hour"
             unit="Autosens or dynamic ISF. Above 1 means that the loop calculated a need for more insulin."
-            {cursor}
-            {pickHelp}
+            cursor={cursor}
+            pickHelp={pickHelp}
             yDomain={sensitivityDomain}
             yFormat={sensitivityTick}
             heightClass="h-32"
@@ -605,10 +604,20 @@
                 { mark: "band", label: "25–75%", color: SENSITIVITY },
                 { mark: "line", label: "Median", color: SENSITIVITY },
                 { mark: "reference", label: "1.0 = usual sensitivity" },
-                ...(comparing ? [{ mark: "compared" as const, label: "Compared range" }] : []),
-                ...(sensitivityHours.some((h) => h.value != null && (h.value.sparse ?? true))
-                  ? [{ mark: "sparse" as const, label: "Too few days", color: SENSITIVITY, fill: SPARSE_BAND_FILL }]
-                  : []),
+                ...comparing
+                  ? [{ mark: "compared" as const, label: "Compared range" }]
+                  : [],
+
+                ...sensitivityHours.some((h) => h.value != null && (h.value.sparse ?? true))
+                  ? [
+                    {
+                      mark: "sparse" as const,
+                      label: "Too few days",
+                      color: SENSITIVITY,
+                      fill: SPARSE_BAND_FILL
+                    }
+                  ]
+                  : []
               ]}
             />
           {/if}
@@ -626,7 +635,12 @@
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <h3 id="loop-health-gaps" class="font-medium">Gaps, longest first</h3>
           {#if pickedHour != null}
-            <Button variant="link" size="inline" class="print:hidden" onclick={() => (cursor.selected = null)}>Show all hours</Button>
+            <Button
+              variant="link"
+              size="inline"
+              class="print:hidden"
+              onclick={() => cursor.selected = null}
+            >Show all hours</Button>
           {/if}
         </div>
         {#if pickedHour != null}
@@ -652,7 +666,7 @@
                   {#each list.shown as gap, i (`${gap.start}${i}`)}
                     <li>
                       <a
-                        href={resolve(`/reports/day-in-review?${dayInReviewSearch(gap)}`)}
+                        href={resolve(`reports/day-in-review?${dayInReviewSearch(gap)}`)}
                         class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm hover:bg-muted/50"
                       >
                         <span class="min-w-24 font-medium @md:min-w-32">{gapDate(gap)}</span><span class="sr-only">, </span>
@@ -671,7 +685,7 @@
                     class="print:hidden"
                     aria-expanded={expanded[list.key] ?? false}
                     aria-controls={`${list.key}-list`}
-                    onclick={() => (expanded = { ...expanded, [list.key]: !expanded[list.key] })}
+                    onclick={() => expanded = { ...expanded, [list.key]: !expanded[list.key] }}
                   >
                     {expanded[list.key]
                       ? plural(LIST_LENGTH, ["Show the longest #", "Show the longest #"])

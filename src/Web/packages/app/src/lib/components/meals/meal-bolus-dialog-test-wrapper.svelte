@@ -1,8 +1,8 @@
 <script lang="ts">
   // Test-only wrapper: puts a realtime store in context above the dialog.
-  import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import type { RealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import type { MealEvent } from "$lib/api";
+  import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import type { RealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import type { MealEvent } from "#lib/api/index.js";
   import MealBolusDialog from "./MealBolusDialog.svelte";
 
   let {

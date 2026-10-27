@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import { resolve } from "$app/paths";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import { ConfirmationBackground, DropGroup } from "water-ui";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { getSetupHub } from "$api/generated/setupHubs.generated.remote";
-  import { getPatientRelationship } from "$api/generated/tenantSettings.generated.remote";
-  import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
-  import { hubPaintingStop, HUB_PAINTING_STOPS } from "$lib/setup-hub/items.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { getSetupHub } from "#lib/api/generated/setupHubs.generated.remote.js";
+  import { getPatientRelationship } from "#lib/api/generated/tenantSettings.generated.remote.js";
+  import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+  import { hubPaintingStop, HUB_PAINTING_STOPS } from "#lib/setup-hub/items.svelte.js";
   import SetupChrome from "../SetupChrome.svelte";
   import HubPainting from "./HubPainting.svelte";
   import HubItemRow from "./HubItemRow.svelte";
@@ -94,7 +94,7 @@
 
 <SetupChrome>
   {#snippet actions()}
-    <Button variant="ghost-muted" size="xs" href={resolve("/")}>Go to dashboard</Button>
+    <Button variant="ghost-muted" size="xs" href={resolve("")}>Go to dashboard</Button>
   {/snippet}
 
   <div class="mx-auto flex w-full max-w-3xl flex-col gap-6">
@@ -139,7 +139,7 @@
               helps, and mark the rest "not for me".
             </p>
           {:else}
-            <Skeleton class="h-4 w-64" />
+            <Skeleton class="h-4 w-64 max-w-full" />
           {/if}
         </div>
       </Card.Root>
@@ -166,7 +166,7 @@
     <HubBasics {voice} />
 
     <div class="flex justify-end">
-      <Button variant="outline" href={resolve("/")}>
+      <Button variant="outline" href={resolve("")}>
         Go to dashboard
         <ArrowRight class="h-4 w-4" />
       </Button>

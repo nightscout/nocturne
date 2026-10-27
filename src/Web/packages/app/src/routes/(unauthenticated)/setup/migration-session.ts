@@ -1,6 +1,7 @@
-import { MigrationJobState } from "$api";
-import type { MigrationJobInfo } from "$api";
-import * as migrationRemote from "$api/generated/migrations.generated.remote";
+import { MigrationJobState } from "#lib/api/index.js";
+import type { MigrationJobInfo } from "#lib/api/index.js";
+import * as migrationRemote from "#lib/api/generated/migrations.generated.remote.js";
+import { fresh } from "#lib/api/fresh-query.js";
 
 // sessionStorage outlives a reload but not a new tab or a later visit. That is the lifetime
 // wanted here: one pass through setup.
@@ -63,7 +64,7 @@ export function findSessionJob(
 export async function startOrResumeMigration(
   connectorName: string
 ): Promise<string | undefined> {
-  const history = await migrationRemote.getHistory().run();
+  const history = await fresh(migrationRemote.getHistory());
 
   const existing = findSessionJob(history);
   if (existing) return existing;

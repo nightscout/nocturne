@@ -1,13 +1,12 @@
-<!-- The days behind one picked slot, read from each day's coverage bitmaps, each linking to Day in Review. -->
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import type { DailyProfileRange } from "$lib/api";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
+  import type { DailyProfileRange } from "#lib/api/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import X from "@lucide/svelte/icons/x";
   import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
-  import { formatWeekdayDate, time } from "$lib/utils/formatting";
-  import { startOfDay } from "$lib/utils/date-range";
+  import { formatWeekdayDate, time } from "#lib/utils/formatting.js";
+  import { startOfDay } from "#lib/utils/date-range.js";
   import {
     atMinute,
     clockTime,
@@ -29,18 +28,24 @@
   let { slot, primary, comparison = null, focusOnPick = false, onclose }: Props = $props();
 
   const minute = $derived(slot * SLOT_MINUTES);
-  const groups = $derived(
-    [
-      { key: "primary", label: "This range", days: contributingDays(primary, slot) },
-      ...(comparison
-        ? [{
-            key: "comparison",
-            label: "Comparison range",
-            days: contributingDays(comparison, slot),
-          }]
-        : []),
-    ]
-  );
+
+  const groups = $derived([
+    {
+      key: "primary",
+      label: "This range",
+      days: contributingDays(primary, slot)
+    },
+
+    ...comparison
+      ? [
+        {
+          key: "comparison",
+          label: "Comparison range",
+          days: contributingDays(comparison, slot)
+        }
+      ]
+      : []
+  ]);
 
   let section = $state<HTMLElement | null>(null);
   let heading = $state<HTMLElement | null>(null);
@@ -67,7 +72,8 @@
   });
 </script>
 
-<svelte:window {onkeydown} />
+<!-- The days behind one picked slot, read from each day's coverage bitmaps, each linking to Day in Review. -->
+<svelte:window onkeydown={onkeydown}></svelte:window>
 
 <section
   bind:this={section}
@@ -76,10 +82,13 @@
 >
   <div class="flex items-start justify-between gap-2">
     <div>
-      <h3 id="slot-days-heading" bind:this={heading} tabindex="-1" class="font-medium outline-none">
+      <h3
+        id="slot-days-heading"
+        bind:this={heading}
+        tabindex="-1"
+        class="font-medium outline-none"
+      >Days for {time(atMinute(minute))}–{time(atMinute(minute + SLOT_MINUTES))}</h3>
 
-        Days for {time(atMinute(minute))}–{time(atMinute(minute + SLOT_MINUTES))}
-      </h3>
       <p class="text-sm text-muted-foreground">
         These are the days that give the data for this time. Open a day to see it in Day in review at this
         time. Press Escape to go back to the chart.
@@ -102,7 +111,7 @@
           {#each group.days as entry (entry.day.date)}
             <li>
               <a
-                href={resolve(`/reports/day-in-review?date=${entry.day.date}&time=${clockTime(minute)}`)}
+                href={resolve(`reports/day-in-review?date=${entry.day.date}&time=${clockTime(minute)}`)}
                 class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm hover:bg-muted/50"
               >
                 <span class="min-w-32 font-medium">{formatWeekdayDate(startOfDay(entry.day.date ?? ""))}</span>

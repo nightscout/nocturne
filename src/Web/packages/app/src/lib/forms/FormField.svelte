@@ -15,8 +15,8 @@
 
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { Label, type LabelVariant } from "$lib/components/ui/label";
-  import { cn } from "$lib/utils";
+  import { Label, type LabelVariant } from "#lib/components/ui/label/index.js";
+  import { cn } from "#lib/utils/index.js";
   import { fieldMessages, type FieldIssues } from "./field-messages";
 
   interface Props {
@@ -24,6 +24,8 @@
     /** Control id. Generated when omitted. */
     id?: string;
     required?: boolean;
+    /** The guarded field's key; the form's guard shows this field's issues once it is left. */
+    name?: string;
     /** Guidance shown below the control while the field has no error. */
     description?: string;
     /** Replaces {@link description} when a live status line is needed. */
@@ -39,6 +41,7 @@
     label,
     id,
     required = false,
+    name,
     description,
     hint,
     issues,
@@ -63,7 +66,7 @@
   });
 </script>
 
-<div class={cn("space-y-2", className)}>
+<div class={cn("space-y-2", className)} data-field={name}>
   <Label for={controlId} variant={labelVariant}>
     {label}
     {#if required}

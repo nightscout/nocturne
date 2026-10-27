@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { createReportPrintContext } from "$lib/components/reports/print/report-print.svelte";
+  import { createReportPrintContext } from "#lib/components/reports/print/report-print.svelte.js";
   import YearOverview from "./+page.svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   const print = createReportPrintContext();
   let { settle }: { settle?: () => Promise<void> } = $props();
   let prepared = $state(false);

@@ -1,9 +1,9 @@
 import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
-import { SettingsEvidenceConfidence, SettingsEvidenceWithheldReason, TimeZoneUnavailableReason } from "$lib/api";
-import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-import WithTooltipProvider from "$lib/test-stubs/WithTooltipProvider.test-stub.svelte";
+import { SettingsEvidenceConfidence, SettingsEvidenceWithheldReason, TimeZoneUnavailableReason } from "#lib/api/index.js";
+import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+import WithTooltipProvider from "#lib/test-stubs/WithTooltipProvider.test-stub.svelte";
 import SettingsEvidenceBody from "./SettingsEvidenceBody.svelte";
 import {
   settingsEvidenceRange,

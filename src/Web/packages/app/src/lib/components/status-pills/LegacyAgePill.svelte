@@ -1,24 +1,24 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { page } from "$app/state";
-  import * as Popover from "$lib/components/ui/popover";
-  import { Button } from "$lib/components/ui/button";
-  import { TrackerCategory, type LegacyConsumableKind, type LegacyFallbackDto } from "$lib/api";
-  import { satisfiesScope } from "$lib/authorization/scopes";
-  import { hiddenLegacyFallbacks } from "$lib/stores/appearance-store.svelte";
-  import { formatLocale } from "$lib/utils/formatting";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { TrackerCategory, type LegacyConsumableKind, type LegacyFallbackDto } from "#lib/api/index.js";
+  import { satisfiesScope } from "#lib/authorization/scopes.js";
+  import { hiddenLegacyFallbacks } from "#lib/stores/appearance-store.svelte.js";
+  import { formatLocale } from "#lib/utils/formatting.js";
   import Clock from "@lucide/svelte/icons/clock";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import Plus from "@lucide/svelte/icons/plus";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-  import { TrackerCategoryIcon } from "$lib/components/icons";
-  import { reachedUrgency } from "$lib/components/trackers/schedule";
+  import { TrackerCategoryIcon } from "#lib/components/icons/index.js";
+  import { reachedUrgency } from "#lib/components/trackers/schedule.js";
   import {
     ageHoursSince,
     formatAge,
     formatLifespan,
-  } from "$lib/components/trackers/age.svelte";
-  import { legacyKindLabel } from "$lib/components/trackers/legacy-kind-label.svelte";
+  } from "#lib/components/trackers/age.svelte.js";
+  import { legacyKindLabel } from "#lib/components/trackers/legacy-kind-label.svelte.js";
   import {
     VALUE_TONE,
     alertLevel,

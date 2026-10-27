@@ -6,12 +6,12 @@
     LegacyFallbackDto,
     TrackerInstanceDto,
     TrackerDefinitionDto,
-  } from "$lib/api";
-  import { TrackerCategory } from "$lib/api";
-  import { cn } from "$lib/utils";
+  } from "#lib/api/index.js";
+  import { TrackerCategory } from "#lib/api/index.js";
+  import { cn } from "#lib/utils/index.js";
   import { coachmark } from "@nocturne/coach";
-  import { coachFor } from "$lib/coach-marks/copy.svelte";
-  import { toured, whileShown } from "$lib/coach-marks/attach";
+  import { coachFor } from "#lib/coach-marks/copy.svelte.js";
+  import { toured, whileShown } from "#lib/coach-marks/attach.js";
   import {
     trackerDefinition,
     visibleTrackerInstances,

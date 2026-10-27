@@ -15,7 +15,7 @@
   import Activity from "@lucide/svelte/icons/activity";
   import CheckCircle2 from "@lucide/svelte/icons/circle-check";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import { commandErrorMessage } from "$lib/command-error";
+  import { commandErrorMessage } from "#lib/command-error.js";
 
   // Matches the camelCase DeviceFlowInfo returned by the `companion_link_start` Rust command.
   type DeviceFlowInfo = {

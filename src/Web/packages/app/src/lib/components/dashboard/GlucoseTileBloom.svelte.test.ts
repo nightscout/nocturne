@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import type { PlayerState } from "water-ui";
-import { engine } from "$lib/test-stubs/Watercolour.test-stub.svelte";
+import { engine } from "#lib/test-stubs/Watercolour.test-stub.svelte";
 import GlucoseTileBloom from "./GlucoseTileBloom.svelte";
 
 vi.mock("water-ui", async () => {
-  const fake = await import("$lib/test-stubs/Watercolour.test-stub.svelte");
+  const fake = await import("#lib/test-stubs/Watercolour.test-stub.svelte");
   return { mountPlayer: fake.mountPlayer, bloomScene: fake.bloomScene };
 });
 

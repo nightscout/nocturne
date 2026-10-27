@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { TrackerMode } from "$lib/api";
-  import { Input } from "$lib/components/ui/input";
-  import { Button } from "$lib/components/ui/button";
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import { TrackerMode } from "#lib/api/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils/index.js";
 
   interface Props {
     /** The computed hours value (bindable) */

@@ -2,7 +2,7 @@
   // Mounts a real chart component so the props-to-engine wiring under test is the
   // production one. A harness that built the engine itself would pass whether or
   // not the component keeps its `dateRange` prop reactive.
-  import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { createRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import GlucoseChart from "./GlucoseChart.svelte";
   import GlucoseChartCard from "./GlucoseChartCard.svelte";
 

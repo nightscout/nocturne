@@ -201,6 +201,190 @@ public class CompressionLowServiceTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    private CompressionLowSuggestion StoredSuggestion(
+        CompressionLowStatus status,
+        long startMills = 1_760_000_000_000,
+        Guid? stateSpanId = null)
+    {
+        var suggestion = new CompressionLowSuggestion
+        {
+            Id = Guid.NewGuid(),
+            NightOf = NightOf,
+            Status = status,
+            StartMills = startMills,
+            EndMills = startMills + 900_000,
+            StateSpanId = stateSpanId,
+        };
+        _repository
+            .Setup(r => r.GetByIdAsync(suggestion.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(suggestion);
+        return suggestion;
+    }
+
+    private static CompressionLowBatchItem Item(CompressionLowSuggestion suggestion) =>
+        new() { Id = suggestion.Id };
+
+    private void VerifyNothingWritten()
+    {
+        _repository.Verify(r => r.UpdateAsync(It.IsAny<CompressionLowSuggestion>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repository.Verify(r => r.DeleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _stateSpanService.Verify(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()), Times.Never);
+        _stateSpanService.Verify(s => s.DeleteStateSpanAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ApplyBatchAsync_WhenOneItemIsNotPending_WritesNothing()
+    {
+        var pending = StoredSuggestion(CompressionLowStatus.Pending);
+        var accepted = StoredSuggestion(CompressionLowStatus.Accepted);
+
+        await _sut.Invoking(s => s.ApplyBatchAsync(
+                CompressionLowBatchAction.Dismiss, [Item(pending), Item(accepted)]))
+            .Should()
+            .ThrowAsync<InvalidOperationException>();
+
+        pending.Status.Should().Be(CompressionLowStatus.Pending);
+        VerifyNothingWritten();
+    }
+
+    [Theory]
+    [InlineData(CompressionLowBatchAction.Accept)]
+    [InlineData(CompressionLowBatchAction.Dismiss)]
+    public async Task ApplyBatchAsync_WhenAnItemIsNotFound_WritesNothing(
+        CompressionLowBatchAction action)
+    {
+        var own = StoredSuggestion(CompressionLowStatus.Pending);
+        var otherTenants = new CompressionLowSuggestion { Id = Guid.NewGuid(), NightOf = NightOf };
+        _repository
+            .Setup(r => r.GetByIdAsync(otherTenants.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CompressionLowSuggestion?)null);
+
+        await _sut.Invoking(s => s.ApplyBatchAsync(action, [Item(own), Item(otherTenants)]))
+            .Should()
+            .ThrowAsync<InvalidOperationException>();
+
+        own.Status.Should().Be(CompressionLowStatus.Pending);
+        VerifyNothingWritten();
+    }
+
+    [Theory]
+    [InlineData(7)]
+    [InlineData(-1)]
+    public async Task ApplyBatchAsync_WhenTheActionIsUnknown_WritesNothing(int action)
+    {
+        var pending = StoredSuggestion(CompressionLowStatus.Pending);
+
+        await _sut.Invoking(s => s.ApplyBatchAsync((CompressionLowBatchAction)action, [Item(pending)]))
+            .Should()
+            .ThrowAsync<InvalidOperationException>();
+
+        VerifyNothingWritten();
+    }
+
+    [Fact]
+    public async Task ApplyBatchAsync_Accept_WritesOneSpanPerSuggestionOnTheBoundsGiven()
+    {
+        var adjusted = StoredSuggestion(CompressionLowStatus.Pending, startMills: 1_760_000_000_000);
+        var detected = StoredSuggestion(CompressionLowStatus.Pending, startMills: 1_760_100_000_000);
+        var spans = new List<StateSpan>();
+        _stateSpanService
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .Callback<StateSpan, CancellationToken>((span, _) => spans.Add(span))
+            .ReturnsAsync((StateSpan span, CancellationToken _) =>
+            {
+                span.Id = Guid.NewGuid().ToString();
+                return span;
+            });
+
+        await _sut.ApplyBatchAsync(
+            CompressionLowBatchAction.Accept,
+            [
+                new CompressionLowBatchItem
+                {
+                    Id = adjusted.Id,
+                    StartMills = adjusted.StartMills + 60_000,
+                    EndMills = adjusted.EndMills - 60_000,
+                },
+                Item(detected),
+            ]);
+
+        adjusted.Status.Should().Be(CompressionLowStatus.Accepted);
+        detected.Status.Should().Be(CompressionLowStatus.Accepted);
+        spans.Should().HaveCount(2);
+        spans[0].StartTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(adjusted.StartMills + 60_000).UtcDateTime);
+        spans[0].EndTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(adjusted.EndMills - 60_000).UtcDateTime);
+        spans[1].StartTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(detected.StartMills).UtcDateTime);
+        spans[1].EndTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(detected.EndMills).UtcDateTime);
+    }
+
+    [Fact]
+    public async Task ApplyBatchAsync_SkipsSuggestionsAlreadyInTheStateTheActionLeavesThem()
+    {
+        var accepted = StoredSuggestion(CompressionLowStatus.Accepted);
+        var dismissed = StoredSuggestion(CompressionLowStatus.Dismissed);
+
+        await _sut.ApplyBatchAsync(CompressionLowBatchAction.Accept, [Item(accepted)]);
+        await _sut.ApplyBatchAsync(CompressionLowBatchAction.Dismiss, [Item(dismissed)]);
+
+        VerifyNothingWritten();
+    }
+
+    [Fact]
+    public async Task ApplyBatchAsync_ARetryAfterAMidBatchFailureFinishesTheRest()
+    {
+        var first = StoredSuggestion(CompressionLowStatus.Pending);
+        var second = StoredSuggestion(CompressionLowStatus.Pending);
+        var calls = 0;
+        _repository
+            .Setup(r => r.UpdateAsync(It.IsAny<CompressionLowSuggestion>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CompressionLowSuggestion s, CancellationToken _) =>
+                ++calls == 2 ? throw new TimeoutException() : s);
+
+        await _sut.Invoking(s => s.ApplyBatchAsync(
+                CompressionLowBatchAction.Dismiss, [Item(first), Item(second)]))
+            .Should()
+            .ThrowAsync<TimeoutException>();
+        // The mock hands out one object, so undo the status the write that threw set on it.
+        second.Status = CompressionLowStatus.Pending;
+        await _sut.ApplyBatchAsync(CompressionLowBatchAction.Dismiss, [Item(first), Item(second)]);
+
+        first.Status.Should().Be(CompressionLowStatus.Dismissed);
+        second.Status.Should().Be(CompressionLowStatus.Dismissed);
+        _repository.Verify(r => r.UpdateAsync(first, It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.UpdateAsync(second, It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task ApplyBatchAsync_Delete_IgnoresASuggestionThatVanishesBeforeItsTurn()
+    {
+        var vanishing = StoredSuggestion(CompressionLowStatus.Pending);
+        var reads = 0;
+        _repository
+            .Setup(r => r.GetByIdAsync(vanishing.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => ++reads == 1 ? vanishing : null);
+
+        await _sut.ApplyBatchAsync(CompressionLowBatchAction.Delete, [Item(vanishing)]);
+
+        VerifyNothingWritten();
+    }
+
+    [Fact]
+    public async Task ApplyBatchAsync_Delete_RemovesTheSpanOfAnAcceptedSuggestionAndIgnoresOnesAlreadyGone()
+    {
+        var spanId = Guid.NewGuid();
+        var accepted = StoredSuggestion(CompressionLowStatus.Accepted, stateSpanId: spanId);
+        var gone = new CompressionLowSuggestion { Id = Guid.NewGuid(), NightOf = NightOf };
+        _repository
+            .Setup(r => r.GetByIdAsync(gone.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CompressionLowSuggestion?)null);
+
+        await _sut.ApplyBatchAsync(CompressionLowBatchAction.Delete, [Item(accepted), Item(gone)]);
+
+        _stateSpanService.Verify(s => s.DeleteStateSpanAsync(spanId.ToString(), It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.DeleteAsync(accepted.Id, It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.DeleteAsync(gone.Id, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task DismissSuggestionAsync_WhenTenantHasNoOwner_LeavesNotificationActive()
     {

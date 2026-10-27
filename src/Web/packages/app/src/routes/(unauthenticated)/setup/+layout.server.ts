@@ -1,5 +1,5 @@
 import type { LayoutServerLoad } from "./$types";
-import { invalidateOnboardingCache } from "$lib/server/onboarding-check";
+import { invalidateOnboardingCache } from "#lib/server/onboarding-check.js";
 
 /**
  * Setup wizard layout server load.

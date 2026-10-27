@@ -10,17 +10,17 @@
     PredictionCurve,
     type PredictionAccuracyResponse,
     type PredictionCurveAccuracy,
-  } from "$lib/api";
-  import * as Alert from "$lib/components/ui/alert";
+  } from "#lib/api/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
   import HistoryClampNote from "./HistoryClampNote.svelte";
   import { hoursText } from "./settings-evidence-labels.svelte";
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
-  import FigureStrip, { type Figure } from "$lib/components/reports/FigureStrip.svelte";
-  import ChartKey, { type ChartKeyItem } from "$lib/components/charts/print/ChartKey.svelte";
-  import { aidAlgorithmLabels } from "$lib/components/patient/labels";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { bgDelta, bgLabel, convertToDisplayUnits } from "$lib/utils/formatting";
-  import { plural } from "$lib/utils/plural";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import FigureStrip, { type Figure } from "#lib/components/reports/FigureStrip.svelte";
+  import ChartKey, { type ChartKeyItem } from "#lib/components/charts/print/ChartKey.svelte";
+  import { aidAlgorithmLabels } from "#lib/components/patient/labels.js";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { bgDelta, bgLabel, convertToDisplayUnits } from "#lib/utils/formatting.js";
+  import { plural } from "#lib/utils/plural.js";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import Info from "@lucide/svelte/icons/info";
   import Lock from "@lucide/svelte/icons/lock";
@@ -28,7 +28,7 @@
   import PredictionBiasHeatmap from "./PredictionBiasHeatmap.svelte";
   import PredictionContextTable from "./PredictionContextTable.svelte";
   import IgnoredFiltersNotice from "./IgnoredFiltersNotice.svelte";
-  import NoTimeZone from "$lib/components/reports/NoTimeZone.svelte";
+  import NoTimeZone from "#lib/components/reports/NoTimeZone.svelte";
   import { loopAnalysisTimeZoneNeed } from "./time-zone-need.svelte";
   import { axisEnd } from "./daily-profile-view";
   import { curveLabel, horizonList } from "./prediction-labels.svelte";

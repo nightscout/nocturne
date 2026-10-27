@@ -175,6 +175,7 @@ static EnvVarGroups ParseAspireEnv(string aspireEnvPath, EnvVarMeta[] metadata)
         "RESEND_FROM_ADDRESS",
         "RESEND_FROM_NAME",
         "RESEND_WEBHOOK_SECRET",
+        "WATCHTOWER_API_TOKEN",
     };
 
     var seen = new HashSet<string>();
@@ -242,8 +243,13 @@ static string GenerateEnvExample(EnvVarGroups groups, EnvVarMeta[] metadata)
     sb.AppendLine("# Nocturne Production Environment");
     sb.AppendLine("# See: https://github.com/nightscout/nocturne/releases");
     sb.AppendLine("#");
-    sb.AppendLine("# Copy this file to .env and fill in the required values.");
-    sb.AppendLine("# Passwords are only used on first database initialization.");
+    sb.AppendLine("# Copy this file to .env and fill in the required values. The install guide can make");
+    sb.AppendLine("# the file for you: https://getnocturne.dev/docs/installation/docker-compose?utm_source=docker-compose&utm_medium=config");
+    sb.AppendLine("#");
+    sb.AppendLine("# Keep a copy of this file somewhere other than this server. If you lose INSTANCE_KEY,");
+    sb.AppendLine("# Nocturne cannot read the connector passwords and other secrets that it stores.");
+    sb.AppendLine("# The database takes its passwords from this file at its first start. Changing them");
+    sb.AppendLine("# here later does not change them in the database.");
     sb.AppendLine();
     sb.AppendLine("# -- Required (set these before first run) ----------------------");
     sb.AppendLine();

@@ -5,23 +5,23 @@
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
-  import { Button } from "$lib/components/ui/button";
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Item } from "#lib/components/ui/item/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     WidgetPlacement,
     type WidgetId,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { getWidgetDefinitions } from "$api/generated/metadatas.generated.remote";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { getWidgetDefinitions } from "#lib/api/generated/metadatas.generated.remote.js";
   import {
     TOP_WIDGET_IDS,
     isTopWidgetId,
     knownTopWidgets,
     type TopWidgetId,
-  } from "$lib/components/dashboard/widget-registry";
-  import { WIDGET_ICONS } from "$lib/types/dashboard-widgets";
+  } from "#lib/components/dashboard/widget-registry.js";
+  import { WIDGET_ICONS } from "#lib/types/dashboard-widgets.js";
   import GripVertical from "@lucide/svelte/icons/grip-vertical";
   import LayoutGrid from "@lucide/svelte/icons/layout-grid";
   import Plus from "@lucide/svelte/icons/plus";

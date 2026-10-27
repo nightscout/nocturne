@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { items, paletteItemsFor } from "./command-palette-items";
-import { isTenantlessRoute } from "$lib/navigation/tenantless-navigation";
+import { isTenantlessRoute } from "#lib/navigation/tenantless-navigation.js";
 import {
   reportCategories,
   reportTitle,
   visibleReportCategories,
   type ReportViewer,
-} from "$lib/navigation/report-navigation.svelte";
+} from "#lib/navigation/report-navigation.svelte.js";
 
 const OWNER: ReportViewer = { grantedScopes: ["*"], anonymous: false };
 const GLUCOSE_ONLY: ReportViewer = {

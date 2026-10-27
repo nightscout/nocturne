@@ -1,6 +1,6 @@
 <script lang="ts">
   import BasalAnalysisContent from "./BasalAnalysisContent.svelte";
-  import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
+  import { requireDateParamsContext } from "#lib/hooks/date-params.svelte.js";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days for basal pattern analysis

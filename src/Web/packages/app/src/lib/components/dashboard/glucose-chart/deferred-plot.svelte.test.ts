@@ -7,10 +7,10 @@ const predictionStatus = vi.hoisted(() => ({
 }));
 const unavailable = predictionStatus.next;
 
-vi.mock("$api/chart-data.remote", () => ({
-  getChartData: vi.fn(async () => (await import("$lib/utils/chart-data-transform")).transformChartData({})),
+vi.mock("#lib/api/chart-data.remote.js", () => ({
+  getChartData: vi.fn(async () => (await import("#lib/utils/chart-data-transform.js")).transformChartData({})),
 }));
-vi.mock("$api/predictions.remote", () => ({
+vi.mock("#lib/api/predictions.remote.js", () => ({
   getPredictions: vi.fn(async () => null),
   getPredictionStatus: vi.fn(() => predictionStatus.next),
 }));

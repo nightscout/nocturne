@@ -5,7 +5,7 @@
  */
 import { getRequestEvent, query } from "$app/server";
 import { DateRangeSchema, resolveReportRange } from "./report-range";
-import { readable } from "$lib/server/patient-timezone";
+import { readable } from "#lib/server/patient-timezone.js";
 
 export type { DateRangeInput } from "./report-range";
 

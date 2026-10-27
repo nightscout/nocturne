@@ -416,7 +416,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         {
             await _dataHubContext
                 .Clients.Group(TenantGroup(collectionName))
-                .SendCoreAsync("create", new[] { data });
+                .SendCoreAsync("create", new[] { WithWireDocument(data) });
         }
         catch (Exception ex)
         {
@@ -439,7 +439,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             );
             await _dataHubContext
                 .Clients.Group(TenantGroup(collectionName))
-                .SendCoreAsync("update", new[] { data });
+                .SendCoreAsync("update", new[] { WithWireDocument(data) });
         }
         catch (Exception ex)
         {
@@ -473,6 +473,15 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             );
         }
     }
+
+    /// <summary>
+    /// Resolves a <see cref="StorageDocumentEvent"/> against the payload serializer this hub sends
+    /// with. Any other payload passes through.
+    /// </summary>
+    private object WithWireDocument(object data) =>
+        data is StorageDocumentEvent document
+            ? document.OnWire(_hubProtocolOptions.Value.PayloadSerializerOptions)
+            : data;
 
     /// <summary>
     /// Resolves a <see cref="StorageDeleteEvent"/> against the payload serializer this hub sends with,

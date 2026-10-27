@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
-import type { SiteChangeImpactAnalysis } from "$lib/api";
+import type { SiteChangeImpactAnalysis } from "#lib/api/index.js";
 import Harness from "./SiteChangeImpactNarrowHarness.test.svelte";
 
 const analysis = (hoursBefore: number, hoursAfter: number): SiteChangeImpactAnalysis => ({

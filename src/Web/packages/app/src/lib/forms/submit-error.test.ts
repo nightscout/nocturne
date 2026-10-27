@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { transformWithEsbuild } from "vite";
 import { error } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
-import { parseErrorBody } from "$lib/api/error-body";
+import { parseErrorBody } from "#lib/api/error-body.js";
 import {
   describeRemoteError,
   describeSubmitError,
@@ -13,7 +13,7 @@ import {
   PERMISSION_GATED_MUTATION,
   RATE_LIMITED_ERROR,
 } from "./submit-error";
-import { remoteErrorMessage } from "$lib/api/remote-error";
+import { remoteErrorMessage } from "#lib/api/remote-error.js";
 
 /**
  * What a 403 looks like by the time a page sees it: the thrown value put
@@ -26,7 +26,7 @@ import { remoteErrorMessage } from "$lib/api/remote-error";
 type ForbidArm = (
   err: unknown,
   error: typeof import("@sveltejs/kit").error,
-  parseErrorBody: typeof import("$lib/api/error-body").parseErrorBody
+  parseErrorBody: typeof import("#lib/api/error-body.js").parseErrorBody
 ) => never;
 
 function compileArm(source: string): ForbidArm {
@@ -92,6 +92,20 @@ describe("a thrown HttpError", () => {
     expect(thrown).not.toBeInstanceOf(Error);
     expect(thrown).not.toHaveProperty("message");
     expect(errorMessage(thrown)).toBe("We couldn't load your settings.");
+  });
+});
+
+describe("a query's error", () => {
+  it("is read unwrapped, as SvelteKit 3 hands it over", () => {
+    const error = { status: 400, message: "Date range must not exceed 365 days.", issues: undefined };
+
+    expect(errorMessage(error)).toBe("Date range must not exceed 365 days.");
+  });
+
+  it("is not confused with an Error that happens to carry a status", () => {
+    const thrown = Object.assign(new Error("fetch failed"), { status: 500 });
+
+    expect(errorMessage(thrown)).toBeUndefined();
   });
 });
 
@@ -193,7 +207,7 @@ describe("describeSubmitError", () => {
   });
 
   it("shows a refusal the server worded on a status the operation never declared", async () => {
-    // The reason exists only as raw text on `response`; see `$lib/api/error-body`.
+    // The reason exists only as raw text on `response`; see `#lib/api/error-body.js`.
     const crossed = await crossThe403Arm(
       nswagApiException(
         403,

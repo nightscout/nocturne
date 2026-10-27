@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "svelte/server";
-import SidebarContextProbe from "$lib/test-fixtures/SidebarContextProbe.svelte";
+import SidebarContextProbe from "#lib/test-fixtures/SidebarContextProbe.svelte";
 
 /**
  * Context set from a top-level initialiser has to survive the translation

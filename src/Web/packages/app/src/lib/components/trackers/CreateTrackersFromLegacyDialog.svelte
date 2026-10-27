@@ -1,20 +1,20 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { getCoachMarkContext } from "@nocturne/coach";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Label } from "$lib/components/ui/label";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import {
     TrackerCategory,
     type LegacyConsumableKind,
     type LegacyConversionDto,
     type LegacyFallbackDto,
-  } from "$lib/api";
-  import { createFromLegacy } from "$api/generated/trackerLegacyFallbacks.generated.remote";
-  import { TrackerCategoryIcon } from "$lib/components/icons";
-  import { describeSubmitError } from "$lib/forms/submit-error";
-  import { formatLocale } from "$lib/utils/formatting";
+  } from "#lib/api/index.js";
+  import { createFromLegacy } from "#lib/api/generated/trackerLegacyFallbacks.generated.remote.js";
+  import { TrackerCategoryIcon } from "#lib/components/icons/index.js";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { formatLocale } from "#lib/utils/formatting.js";
   import { formatLifespan } from "./age.svelte";
   import { legacyKindLabel } from "./legacy-kind-label.svelte";
   import Check from "@lucide/svelte/icons/check";

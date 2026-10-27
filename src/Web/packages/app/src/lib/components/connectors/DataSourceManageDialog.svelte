@@ -1,27 +1,27 @@
 <script lang="ts">
-  import type { DataSourceInfo } from "$lib/api/generated/nocturne-api-client";
-  import { deleteDataSourceData as deleteDataSourceDataRemote } from "$api/generated/services.generated.remote";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Separator } from "$lib/components/ui/separator";
+  import type { DataSourceInfo } from "#lib/api/generated/nocturne-api-client.js";
+  import { deleteDataSourceData as deleteDataSourceDataRemote } from "#lib/api/generated/services.generated.remote.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import { describeSubmitError, errorStatus } from "$lib/forms";
-  import { canManageConnectors } from "$lib/authorization/connector-management";
+  import { describeSubmitError, errorStatus } from "#lib/forms/index.js";
+  import { canManageConnectors } from "#lib/authorization/connector-management.js";
   import { page } from "$app/state";
-  import { getCategoryIcon } from "$lib/utils/connector-display";
+  import { getCategoryIcon } from "#lib/utils/connector-display.js";
   import {
     formatNumber,
     relativeAge,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
 
   interface Props {
     open: boolean;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import ThresholdRule from "./ThresholdRule.svelte";
   import { getGlucoseChartContext } from "../chart-context.svelte";
-  import { dashOf } from "$lib/components/charts/print/chart-print-patterns";
+  import { dashOf } from "#lib/components/charts/print/chart-print-patterns.js";
 
   const ctx = getGlucoseChartContext();
   const targetLow = $derived(ctx.engine.thresholds.targetLow);

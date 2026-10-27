@@ -1,4 +1,4 @@
-import type { RustValidationIssue } from "$api-clients";
+import type { RustValidationIssue } from "#lib/api/generated/nocturne-api-client.js";
 
 /** The fields of an error body a status arm can route on. */
 export interface ParsedErrorBody {

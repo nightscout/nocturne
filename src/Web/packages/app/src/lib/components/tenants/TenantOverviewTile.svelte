@@ -1,14 +1,14 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import {
     AlertRuleSeverity,
     type TenantOverviewItem,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { getGlucoseStatusClass } from "$lib/utils/glucose-status";
-  import { bg, bgDelta, relativeAge, toDate } from "$lib/utils/formatting";
-  import { getDirectionInfo } from "$lib/utils";
-  import { tenantUrl } from "$lib/utils/tenant-host";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { getGlucoseStatusClass } from "#lib/utils/glucose-status.js";
+  import { bg, bgDelta, relativeAge, toDate } from "#lib/utils/formatting.js";
+  import { getDirectionInfo } from "#lib/utils/index.js";
+  import { tenantUrl } from "#lib/utils/tenant-host.js";
   import Bell from "@lucide/svelte/icons/bell";
 
   interface Props {

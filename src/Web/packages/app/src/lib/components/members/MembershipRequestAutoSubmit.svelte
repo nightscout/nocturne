@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import { onMount } from "svelte";
-  import { createRequest } from "$lib/api/generated/membershipRequests.generated.remote";
-  import { membershipRequestStorageKey } from "$lib/membership-request-storage";
+  import { createRequest } from "#lib/api/generated/membershipRequests.generated.remote.js";
+  import { membershipRequestStorageKey } from "#lib/membership-request-storage.js";
 
   interface Props {
     isAuthenticated: boolean;

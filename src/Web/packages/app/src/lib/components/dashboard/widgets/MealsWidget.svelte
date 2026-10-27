@@ -1,9 +1,9 @@
 <script lang="ts">
   import WidgetCard from "./WidgetCard.svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { time } from "$lib/utils/formatting";
-  import { EmptyState } from "$lib/components/shared";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { time } from "#lib/utils/formatting.js";
+  import { EmptyState } from "#lib/components/shared/index.js";
 
   const realtimeStore = getRealtimeStore();
 

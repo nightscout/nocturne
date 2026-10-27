@@ -10,9 +10,9 @@
   } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3";
-  import type { PredictionData } from "$api/predictions.remote";
-  import { bg, time } from "$lib/utils/formatting";
-  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import type { PredictionData } from "#lib/api/predictions.remote.js";
+  import { bg, time } from "#lib/utils/formatting.js";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 
   interface GlucoseDataPoint {
     time: Date;

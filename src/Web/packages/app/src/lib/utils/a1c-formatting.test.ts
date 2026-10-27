@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("$app/environment", () => ({ browser: false, dev: false }));
+vi.mock("$app/env", () => ({ browser: false, dev: false }));
 vi.mock("mode-watcher", () => ({
   setMode: vi.fn(),
   mode: { current: "light" },
@@ -8,7 +8,7 @@ vi.mock("mode-watcher", () => ({
 }));
 
 const { applyPreferences } =
-  await import("$lib/stores/appearance-store.svelte");
+  await import("#lib/stores/appearance-store.svelte.js");
 const { a1cLabel, formatA1c, formatA1cNumber } =
   await import("./a1c-formatting");
 

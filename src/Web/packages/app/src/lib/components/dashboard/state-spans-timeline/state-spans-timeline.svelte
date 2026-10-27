@@ -1,14 +1,14 @@
 <script lang="ts">
   import { Chart, Svg, Axis, Group, Rect } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
-  import { PumpModeIcon, ActivityCategoryIcon } from "$lib/components/icons";
-  import { BasalRateTrack } from "$lib/components/charts";
+  import { PumpModeIcon, ActivityCategoryIcon } from "#lib/components/icons/index.js";
+  import { BasalRateTrack } from "#lib/components/charts/index.js";
   import type { ProcessedSpan } from "../../../../routes/(authenticated)/time-spans/data.remote";
-  import { BasalDeliveryOrigin, type BasalDeliverySpanDto } from "$lib/api";
-  import { randomUUID } from "$lib/utils";
-  import { resolveChartColor } from "$lib/utils/chart-colors";
-  import { formatDateTimeCompact } from "$lib/utils/formatting";
-  import { formatElapsedDuration } from "$lib/utils/duration";
+  import { BasalDeliveryOrigin, type BasalDeliverySpanDto } from "#lib/api/index.js";
+  import { randomUUID } from "#lib/utils/index.js";
+  import { resolveChartColor } from "#lib/utils/chart-colors.js";
+  import { formatDateTimeCompact } from "#lib/utils/formatting.js";
+  import { formatElapsedDuration } from "#lib/utils/duration.js";
 
   interface BasalDeliveryChartData {
     id: string;

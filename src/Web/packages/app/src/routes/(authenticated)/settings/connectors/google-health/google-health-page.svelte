@@ -1,28 +1,23 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { docsUrl } from "$lib/docs-url";
+  import { docsUrl } from "#lib/docs-url.js";
   import { resolve } from "$app/paths";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Unplug from "@lucide/svelte/icons/unplug";
-  import { GoogleHealthConnectionState, type GoogleHealthStatus } from "$lib/api";
-  import { Input } from "$lib/components/ui/input";
-  import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import ConfirmDialog from "$lib/components/ui/confirm-dialog/confirm-dialog.svelte";
-  import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-  } from "$lib/components/ui/card";
+  import { GoogleHealthConnectionState, type GoogleHealthStatus } from "#lib/api/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import ConfirmDialog from "#lib/components/ui/confirm-dialog/confirm-dialog.svelte";
+  import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#lib/components/ui/card/index.js";
+
   import {
     describeGoogleHealthError,
     isGoogleHealthAlreadyRunningError,
     type GoogleHealthOperation,
-  } from "$lib/connectors/google-health-error.svelte";
+  } from "#lib/connectors/google-health-error.svelte.js";
   import {
     getGoogleHealth,
     saveGoogleHealth,
@@ -31,7 +26,7 @@
     syncGoogleHealth,
     previewGoogleHealth,
     purgeGoogleHealth,
-  } from "$lib/api/generated/googleHealths.generated.remote";
+  } from "#lib/api/generated/googleHealths.generated.remote.js";
   import {
     connectionOutcome,
     errorMessage,
@@ -42,6 +37,7 @@
   } from "./google-health-copy.svelte";
   import GoogleHealthCategoryTable from "./GoogleHealthCategoryTable.svelte";
   import GoogleHealthSyncProgress from "./GoogleHealthSyncProgress.svelte";
+  import { fresh } from "#lib/api/fresh-query.js";
 
   let status = $state<GoogleHealthStatus | null>(null);
   let importFrom = $state(""),
@@ -90,8 +86,8 @@
   }
 
   async function refresh() {
-    status = await getGoogleHealth().run();
-    selected = status.configured ? (status.selectedTypes ?? []) : selected;
+    status = await fresh(getGoogleHealth());
+    selected = status.configured ? status.selectedTypes ?? [] : selected;
     historyDays = status.historyDays ?? 7;
     importFrom = day(status.importFrom);
   }
@@ -117,8 +113,8 @@
   }
 
   async function connect() {
-    if (!status?.configured && !(await run("save", () => saveGoogleHealth(options(true)))))
-      return;
+    if (!status?.configured && !await run("save", () => saveGoogleHealth(options(true)))) return;
+
     await run("signin", async () => {
       const auth = await startGoogleHealth();
       if (auth.url) location.assign(auth.url);
@@ -147,7 +143,7 @@
 
   async function saveSettings(sync: boolean) {
     notice = null;
-    if (!(await run("save", () => saveGoogleHealth(options(false))))) return;
+    if (!await run("save", () => saveGoogleHealth(options(false)))) return;
     if (!sync || selected.length === 0) {
       if (await run("status", refresh))
         notice =
@@ -160,7 +156,7 @@
                 : "settingsSaved";
       return;
     }
-    if (!(await run("sync", syncNow))) await refresh().catch(() => {});
+    if (!await run("sync", syncNow)) await refresh().catch(() => {});
   }
 
   async function disconnect() {
@@ -184,7 +180,7 @@
         if (!busy || localDisconnecting) {
           const wasSyncing = status?.isSyncing;
           const previousImportFrom = status?.importFrom;
-          const next = await getGoogleHealth().run();
+          const next = await fresh(getGoogleHealth());
           if (disposed) return;
           status = next;
           if (wasSyncing && !next.isSyncing && importFrom === day(previousImportFrom))
@@ -220,10 +216,9 @@
 <section class="mx-auto max-w-5xl space-y-6 p-6">
   <a
     class="inline-flex items-center gap-2 text-sm text-muted-foreground"
-    href={resolve("/settings/connectors")}
-  >
-    <ArrowLeft class="h-4 w-4" />Connectors & apps
-  </a>
+    href={resolve('settings/connectors')}
+  ><ArrowLeft class="h-4 w-4" />Connectors & apps</a>
+
   <header class="flex items-start justify-between gap-4">
     <div class="flex items-center gap-3">
       <div class="rounded-lg bg-primary/10 p-3">
@@ -265,7 +260,7 @@
     </div>
   {/if}
   {#if status?.isSyncing}
-    <GoogleHealthSyncProgress {status} />
+    <GoogleHealthSyncProgress status={status} />
   {/if}
 
   {#if status?.connected && status.backfillSyncedThrough}
@@ -357,10 +352,8 @@
           </p>
           <a
             class="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium underline-offset-4 hover:underline"
-            href={resolve("/settings/admin/connector-cursors")}
-          >
-            Open connector reset
-          </a>
+            href={resolve('settings/admin/connector-cursors')}
+          >Open connector reset</a>
         </div>
       {/if}
     </CardContent>
@@ -424,7 +417,7 @@
             <div class="space-y-3">
               {#each status.categories as category (category.kind)}
                 <GoogleHealthCategoryTable
-                  {category}
+                  category={category}
                   bind:selected
                   disabled={busy || disconnecting || !!status.isSyncing}
                 />
@@ -461,14 +454,14 @@
                 : "Refresh inventory"}
             </Button>
           </div>
-          <ul class="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+
+          <ul
+            class="list-disc space-y-1 pl-5 text-sm text-muted-foreground"
+          >
+            <li>Save selection and import: confirms the selection and requests an import now.</li>
+
             <li>
-              Save selection and import: confirms the selection and requests an
-              import now.
-            </li>
-            <li>
-              Save import settings: confirms the selection without requesting an
-              import. {paused
+              Save import settings: confirms the selection without requesting an import. {paused
                 ? "Imports resume when your Nocturne operator turns Google Health back on."
                 : "Automatic sync imports it on its next scheduled run."}
             </li>
@@ -484,13 +477,12 @@
       title="Delete imported Google Health data?"
       confirmLabel="Delete imported data"
       destructive
-      {busy}
-      onConfirm={() =>
-        void run("purge", async () => {
-          await purgeGoogleHealth();
-          purgeDialogOpen = false;
-          await refresh();
-        })}
+      busy={busy}
+      onConfirm={() => void run("purge", async () => {
+        await purgeGoogleHealth();
+        purgeDialogOpen = false;
+        await refresh();
+      })}
     >
       {#snippet description()}
         Measurements imported through Google Health will be deleted from

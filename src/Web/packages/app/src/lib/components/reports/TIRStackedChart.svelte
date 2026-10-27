@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { GlucoseRange } from "$lib/components/charts/print/chart-print-patterns";
+  import type { GlucoseRange } from "#lib/components/charts/print/chart-print-patterns.js";
 
   type BandKey = "veryLow" | "low" | "target" | "high" | "veryHigh";
 
@@ -25,11 +25,11 @@
 <script lang="ts">
   import { Chart, Svg, Bars, Bar, Line, Rect, Tooltip } from "layerchart";
   import { scaleBand, scaleLinear } from "d3-scale";
-  import { bandScale as toBandScale, numericScale } from "$lib/components/charts/scale-guards";
-  import { bgRange } from "$lib/utils/formatting";
-  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
-  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
-  import type { TimeInRangePercentages } from "$api-clients";
+  import { bandScale as toBandScale, numericScale } from "#lib/components/charts/scale-guards.js";
+  import { bgRange } from "#lib/utils/formatting.js";
+  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
+  import type { TimeInRangePercentages } from "#lib/api/generated/nocturne-api-client.js";
 
   interface Props {
     /** Pre-computed percentages - required to avoid reactive API calls */

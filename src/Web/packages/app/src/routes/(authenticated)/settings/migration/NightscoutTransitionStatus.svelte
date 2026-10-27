@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { formatMediumDateTime, formatNumber } from "$lib/utils/formatting";
+  import { formatMediumDateTime, formatNumber } from "#lib/utils/formatting.js";
   import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
-  } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { Separator } from "$lib/components/ui/separator";
-  import * as Alert from "$lib/components/ui/alert";
+  } from "#lib/components/ui/card/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
   import ArrowRightLeft from "@lucide/svelte/icons/arrow-right-left";
   import Activity from "@lucide/svelte/icons/activity";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
@@ -22,10 +22,10 @@
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import Clock from "@lucide/svelte/icons/clock";
   import BarChart3 from "@lucide/svelte/icons/chart-column";
-  import { EmptyState } from "$lib/components/shared";
-  import { databaseArtwork } from "$lib/watercolour-icons";
+  import { EmptyState } from "#lib/components/shared/index.js";
+  import { databaseArtwork } from "#lib/watercolour-icons.js";
   import { resolve } from "$app/paths";
-  import { getTransitionStatus } from "$api/generated/nightscoutTransitions.generated.remote";
+  import { getTransitionStatus } from "#lib/api/generated/nightscoutTransitions.generated.remote.js";
 
   const statusQuery = getTransitionStatus();
   const status = $derived(statusQuery.current ?? null);
@@ -290,7 +290,7 @@
 
         {#if status.recommendation?.status === "safe"}
           <Separator />
-          <Button variant="outline" href={resolve("/settings/connectors")}>
+          <Button variant="outline" href={resolve("settings/connectors")}>
             Go to connector settings
             <ArrowRightLeft class="h-4 w-4 ml-2" />
           </Button>

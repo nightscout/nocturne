@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import { LegacyConsumableKind, RailItemId } from "$lib/api/generated/nocturne-api-client";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { LegacyConsumableKind, RailItemId } from "#lib/api/generated/nocturne-api-client.js";
 
 const { now, store, settings } = vi.hoisted(() => {
   const now = Date.UTC(2026, 5, 14, 9, 30, 0);
@@ -30,17 +30,17 @@ const { now, store, settings } = vi.hoisted(() => {
   };
 });
 
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
+vi.mock("#lib/stores/realtime-store.svelte.js", () => ({
   getRealtimeStore: () => store,
   tryGetRealtimeStore: () => store,
 }));
 
-vi.mock("$api/ui-settings.remote", () => ({
+vi.mock("#lib/api/ui-settings.remote.js", () => ({
   getUiSettings: () => remoteQuery(() => settings),
 }));
 
-import { dashboardRail, hiddenLegacyFallbacks } from "$lib/stores/appearance-store.svelte";
-import CurrentBGDisplay from "$lib/components/dashboard/current-bg-display-test-wrapper.svelte";
+import { dashboardRail, hiddenLegacyFallbacks } from "#lib/stores/appearance-store.svelte.js";
+import CurrentBGDisplay from "#lib/components/dashboard/current-bg-display-test-wrapper.svelte";
 
 const SENSOR_DEFINITION = {
   id: "def-1",

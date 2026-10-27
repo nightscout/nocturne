@@ -1,15 +1,15 @@
 <script lang="ts">
-  import * as Command from "$lib/components/ui/command";
-  import * as Popover from "$lib/components/ui/popover";
-  import { Button } from "$lib/components/ui/button";
+  import * as Command from "#lib/components/ui/command/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Check from "@lucide/svelte/icons/check";
   import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
   import Plus from "@lucide/svelte/icons/plus";
   import {
     getEventTypeStyle,
     TREATMENT_CATEGORIES,
-  } from "$lib/constants/treatment-categories";
-  import { cn } from "$lib/utils";
+  } from "#lib/constants/treatment-categories.js";
+  import { cn } from "#lib/utils/index.js";
 
   interface Props {
     /** Currently selected event type */

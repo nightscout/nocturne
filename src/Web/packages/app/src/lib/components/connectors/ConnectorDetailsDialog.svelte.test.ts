@@ -3,13 +3,13 @@ import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { error } from "@sveltejs/kit";
 import { page as pageState } from "$app/state";
-import { ApiException, type SyncResult } from "$api-clients";
-import { SyncRequestSchema } from "$lib/api/generated/schemas";
+import { ApiException, type SyncResult } from "#lib/api/generated/nocturne-api-client.js";
+import { SyncRequestSchema } from "#lib/api/generated/schemas.js";
 
 let syncImpl: () => Promise<SyncResult>;
 let sentRequest: unknown;
 
-vi.mock("$api/generated/services.generated.remote", () => ({
+vi.mock("#lib/api/generated/services.generated.remote.js", () => ({
   triggerConnectorSync: (payload: { request: unknown }) => {
     sentRequest = payload.request;
     return syncImpl();

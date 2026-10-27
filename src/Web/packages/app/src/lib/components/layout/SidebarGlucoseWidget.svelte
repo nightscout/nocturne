@@ -1,24 +1,24 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
-  import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { GLUCOSE_WINDOW_HOURS } from "$lib/stores/initial-reads";
-  import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
+  import { tryGetRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
+  import { GLUCOSE_WINDOW_HOURS } from "#lib/stores/initial-reads.js";
+  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
-  } from "$lib/utils/formatting";
+  } from "#lib/utils/formatting.js";
   import { deltaColorClass, trendAngle } from "@nocturne/ui/glucose";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { GlucoseValueIndicator } from "$lib/components/shared";
-  import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
-  import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
-  import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
-  import ThresholdRules from "$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
+  import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
+  import { GlucoseValueIndicator } from "#lib/components/shared/index.js";
+  import { createChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.js";
+  import GlucoseChartShell from "#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
+  import GlucoseTrack from "#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
+  import ThresholdRules from "#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
   import { Tween, prefersReducedMotion } from "svelte/motion";
   import { cubicOut } from "svelte/easing";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
-  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
-  import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
+  import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
+  import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
 
   const realtimeStore = tryGetRealtimeStore();
 
@@ -115,7 +115,7 @@
     <div
       class="px-2 border border-sidebar-border hover:border-sidebar-ring rounded"
     >
-      <a href={resolve("/")}>
+      <a href={resolve("")}>
         <GlucoseChartShell
           engine={sidebarEngine}
           legend={sidebarLegend}

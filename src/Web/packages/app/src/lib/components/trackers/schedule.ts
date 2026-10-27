@@ -3,7 +3,7 @@ import {
   type LegacyFallbackDto,
   type TrackerInstanceDto,
   type TrackerThresholdTimeDto,
-} from "$api";
+} from "#lib/api/index.js";
 
 const URGENCY_RANK: Record<NotificationUrgency, number> = {
   [NotificationUrgency.Info]: 0,

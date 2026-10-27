@@ -5,27 +5,28 @@ import { beforeEach, describe, it, expect, vi } from "vitest";
 let tenantsImpl: () => Promise<unknown>;
 let connectorsResult: unknown = null;
 
-vi.mock("$api/generated/tenants.generated.remote", () => ({
-  getAll: () => ({ run: () => tenantsImpl() }),
+vi.mock("#lib/api/generated/tenants.generated.remote.js", () => ({
+  getAll: () => createQueryResource(() => tenantsImpl()),
 }));
 
-vi.mock("$api/generated/connectorAdmins.generated.remote", () => ({
-  getTenantConnectors: () => ({ run: () => Promise.resolve(connectorsResult) }),
+vi.mock("#lib/api/generated/connectorAdmins.generated.remote.js", () => ({
+  getTenantConnectors: () => createQueryResource(() => Promise.resolve(connectorsResult)),
   resetTenantCursors: () => Promise.resolve({ jobId: "reset-job" }),
-  getResetJobStatus: () => ({
-    run: () =>
+  getResetJobStatus: () =>
+    createQueryResource(() =>
       Promise.resolve({
         state: "Failed",
         errorMessage: "connector_reset_failed",
         connectors: [],
         completedConnectors: 1,
         totalConnectors: 1,
-      }),
-  }),
+      })
+    ),
   cancelResetJob: () => Promise.resolve(),
 }));
 
 import ConnectorCursorsPage from "./+page.svelte";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 function rejection(status: number, message: string) {
   return Promise.reject({ status, body: { message } });

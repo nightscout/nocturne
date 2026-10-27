@@ -5,15 +5,15 @@
     UploaderSetupResponse,
     DataSourceInfo,
     ScopeDeletionAccess,
-  } from "$lib/api/generated/nocturne-api-client";
-  import { getUploaderName, getUploaderDescription } from "$lib/utils/uploader-labels";
-  import { getActiveDataSources } from "$api/generated/services.generated.remote";
-  import { create as createGrant } from "$lib/api/generated/directGrants.generated.remote";
-  import { getDeviceInfo } from "$routes/(authenticated)/oauth/oauth.remote";
-  import { deviceApprove } from "$api/generated/oAuths.generated.remote";
-  import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
-  import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/api/generated/nocturne-api-client.js";
+  import { getUploaderName, getUploaderDescription } from "#lib/utils/uploader-labels.js";
+  import { getActiveDataSources } from "#lib/api/generated/services.generated.remote.js";
+  import { create as createGrant } from "#lib/api/generated/directGrants.generated.remote.js";
+  import { getDeviceInfo } from "#routes/(authenticated)/oauth/oauth.remote.js";
+  import { deviceApprove } from "#lib/api/generated/oAuths.generated.remote.js";
+  import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
@@ -24,15 +24,16 @@
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import X from "@lucide/svelte/icons/x";
   import Shield from "@lucide/svelte/icons/shield";
-  import { Input } from "$lib/components/ui/input";
-  import { Separator } from "$lib/components/ui/separator";
-  import DeviceAppClaimNotice from "$lib/components/auth/DeviceAppClaimNotice.svelte";
-  import DeletionDisclosure from "$lib/components/auth/DeletionDisclosure.svelte";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
+  import DeviceAppClaimNotice from "#lib/components/auth/DeviceAppClaimNotice.svelte";
+  import DeletionDisclosure from "#lib/components/auth/DeletionDisclosure.svelte";
   import QRCode from "qrcode";
 
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import { createCopyFeedback } from "#lib/hooks/copy-feedback.svelte.js";
 
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { describeSubmitError } from "#lib/forms/submit-error.js";
+  import { fresh } from "#lib/api/fresh-query.js";
   interface Props {
     app: UploaderApp | null;
     setupResponse: UploaderSetupResponse | null;
@@ -126,7 +127,7 @@
     deviceLookupError = null;
 
     try {
-      const info = await getDeviceInfo({ userCode: code }).run();
+      const info = await fresh(getDeviceInfo({ userCode: code }));
       if (!info) {
         deviceLookupError = "Invalid or expired device code.";
         return;

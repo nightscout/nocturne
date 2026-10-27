@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { scaleTime } from "d3-scale";
 import { hourTicks } from "./axis-ticks";
-import { hourLabel } from "$lib/utils/formatting";
+import { hourLabel } from "#lib/utils/formatting.js";
 
 // The dashboard's blocking window; see the page loader's INITIAL_HOURS.
 function window(hours: number, width = 960) {

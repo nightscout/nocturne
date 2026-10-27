@@ -1,8 +1,8 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MigrationJobState, MigrationMode, PatientRelationship } from "$api";
-import type { MigrationJobInfo, MigrationJobStatus } from "$api";
+import { MigrationJobState, MigrationMode, PatientRelationship } from "#lib/api/index.js";
+import type { MigrationJobInfo, MigrationJobStatus } from "#lib/api/index.js";
 
 let status: MigrationJobStatus;
 let history: MigrationJobInfo[] = [];
@@ -11,19 +11,19 @@ const statusSpy = vi.fn();
 
 // The factory is hoisted above every declaration here, so it may only reach the bindings
 // below from inside the functions it returns.
-vi.mock("$api/generated/migrations.generated.remote", () => ({
+vi.mock("#lib/api/generated/migrations.generated.remote.js", () => ({
   getStatus: (jobId: string) => {
     statusSpy(jobId);
-    return {
-      run: () =>
-        statusUnreachable ? Promise.reject(new Error("unreachable")) : Promise.resolve(status),
-    };
+    return createQueryResource(() =>
+      statusUnreachable ? Promise.reject(new Error("unreachable")) : Promise.resolve(status)
+    );
   },
-  getHistory: () => ({ run: () => Promise.resolve(history) }),
+  getHistory: () => createQueryResource(() => Promise.resolve(history)),
 }));
 
 import ImportProgress from "./ImportProgress.svelte";
-import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
+import { patientVoice } from "#lib/onboarding/patient-voice.svelte.js";
+import { createQueryResource } from "#lib/test-stubs/remote-resource.js";
 
 const voice = patientVoice({ relationship: PatientRelationship.Self });
 

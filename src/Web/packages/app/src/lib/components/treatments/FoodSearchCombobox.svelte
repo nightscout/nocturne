@@ -1,14 +1,14 @@
 <script lang="ts">
-  import * as Command from "$lib/components/ui/command";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Label } from "$lib/components/ui/label";
+  import * as Command from "#lib/components/ui/command/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import Check from "@lucide/svelte/icons/check";
   import Plus from "@lucide/svelte/icons/plus";
   import Star from "@lucide/svelte/icons/star";
   import Clock from "@lucide/svelte/icons/clock";
   import FileText from "@lucide/svelte/icons/file-text";
-  import { cn } from "$lib/utils";
-  import type { Food } from "$lib/api";
+  import { cn } from "#lib/utils/index.js";
+  import type { Food } from "#lib/api/index.js";
 
   interface Props {
     allFoods: Food[];

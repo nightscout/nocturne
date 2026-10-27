@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { DEFAULT_PROFILE_NAME } from "$lib/constants/profile-names";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Badge } from "$lib/components/ui/badge";
+  import { DEFAULT_PROFILE_NAME } from "#lib/constants/profile-names.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import Activity from "@lucide/svelte/icons/activity";
   import Syringe from "@lucide/svelte/icons/syringe";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import { BasalDeliveryOrigin } from "$lib/api";
-  import { bg, bgLabel, formatLocale, time } from "$lib/utils/formatting";
-  import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
+  import { BasalDeliveryOrigin } from "#lib/api/index.js";
+  import { bg, bgLabel, formatLocale, time } from "#lib/utils/formatting.js";
+  import { getDataSourceDisplayName } from "#lib/utils/data-source-display.js";
   import { useApsPrediction } from "./aps-prediction.svelte";
   import InspectionChart from "./InspectionChart.svelte";
-  import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import InspectionFooter from "./InspectionFooter.svelte";
 
   interface Props {

@@ -3,9 +3,10 @@
  *
  * Only contains server-side logic that can't be covered by the generated
  * chatidentities remote functions (process.env access, apex detection).
- * For API calls, use $lib/api/generated/chatIdentities.generated.remote.ts.
+ * For API calls, use #lib/api/generated/chatIdentities.generated.remote.ts.
  */
 import { getRequestEvent, query } from "$app/server";
+import { getOriginalHost } from "#lib/server/request-host.js";
 import { z } from "zod";
 
 /**
@@ -13,11 +14,11 @@ import { z } from "zod";
  * domain (slug-prompt mode) or a tenant subdomain.
  */
 export const getBotAuthorizeContext = query(async () => {
-  const { url, locals } = getRequestEvent();
+  const { request, locals } = getRequestEvent();
 
   const baseDomain = process.env.BASE_DOMAIN;
   if (baseDomain) {
-    const currentHost = url.host.toLowerCase();
+    const currentHost = (getOriginalHost(request) ?? "").toLowerCase();
     const expectedApex = baseDomain.toLowerCase();
     if (currentHost === expectedApex) {
       return {

@@ -1,25 +1,25 @@
 <script lang="ts">
-  import { Input } from "$lib/components/ui/input";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "$lib/components/ui/label";
-  import { Separator } from "$lib/components/ui/separator";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Separator } from "#lib/components/ui/separator/index.js";
   import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
-  } from "$lib/components/ui/select";
+  } from "#lib/components/ui/select/index.js";
   import Timer from "@lucide/svelte/icons/timer";
-  import { AlarmTriggerType } from "$lib/api";
+  import { AlarmTriggerType } from "#lib/api/index.js";
   import type {
     AlarmProfileConfiguration,
     AlarmPriority,
-  } from "$lib/types/alarm-profile";
+  } from "#lib/types/alarm-profile.js";
   import {
     ALARM_TYPE_LABELS,
     normalizeAlarmType,
     PRIORITY_LABELS,
-  } from "$lib/types/alarm-profile";
+  } from "#lib/types/alarm-profile.js";
 
   interface Props {
     profile: AlarmProfileConfiguration;

@@ -1,7 +1,7 @@
-import { env } from "$env/dynamic/private";
-import { env as publicEnv } from "$env/dynamic/public";
-import { ApiClient } from "$lib/api/api-client.generated";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { NOCTURNE_API_URL } from "$app/env/private";
+import { PUBLIC_API_URL } from "$app/env/public";
+import { ApiClient } from "#lib/api/api-client.generated.js";
+import { AUTH_COOKIE_NAMES } from "#lib/config/auth-cookies.js";
 import {
   INSTANCE_KEY_HEADER,
   INSTANCE_SERVICE_HEADER,
@@ -16,7 +16,7 @@ import {
  * Helper to get the API base URL (server-side internal or public).
  */
 export function getApiBaseUrl(): string | null {
-  return env.NOCTURNE_API_URL || publicEnv.PUBLIC_API_URL || null;
+  return NOCTURNE_API_URL || PUBLIC_API_URL || null;
 }
 
 export interface ServerHttpClientOptions {

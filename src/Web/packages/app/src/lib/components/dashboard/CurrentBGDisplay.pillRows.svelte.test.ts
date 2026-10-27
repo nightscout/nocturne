@@ -1,17 +1,17 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { reactiveFields } from "$lib/test-stubs/reactive-fields.svelte";
-import { remoteQuery } from "$lib/test-stubs/remote-resource";
-import { WidgetId } from "$lib/api/generated/nocturne-api-client";
-import { dashboardTopWidgets } from "$lib/stores/appearance-store.svelte";
+import { reactiveFields } from "#lib/test-stubs/reactive-fields.svelte.js";
+import { remoteQuery } from "#lib/test-stubs/remote-resource.js";
+import { WidgetId } from "#lib/api/generated/nocturne-api-client.js";
+import { dashboardTopWidgets } from "#lib/stores/appearance-store.svelte.js";
 import type {
   BasalPillData,
   COBPillData,
   IOBPillData,
   LoopPillData,
   PillInfoItem,
-} from "$lib/types/status-pills";
+} from "#lib/types/status-pills.js";
 
 const now = Date.UTC(2026, 5, 14, 9, 30, 0);
 const store = reactiveFields({
@@ -32,11 +32,11 @@ const store = reactiveFields({
   isReady: false,
 });
 
-vi.mock("$lib/stores/realtime-store.svelte", () => ({
+vi.mock("#lib/stores/realtime-store.svelte.js", () => ({
   getRealtimeStore: () => store,
   tryGetRealtimeStore: () => store,
 }));
-vi.mock("$api/ui-settings.remote", () => ({
+vi.mock("#lib/api/ui-settings.remote.js", () => ({
   getUiSettings: () => remoteQuery(() => ({ features: { trackerPills: { enabled: false } } })),
 }));
 

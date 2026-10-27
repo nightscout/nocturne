@@ -805,6 +805,7 @@ msgstr ""
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/members/RolesSection.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/forms/FormGuard.test-harness.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 msgid "Name"
@@ -868,6 +869,7 @@ msgstr ""
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/forms/FormActions.svelte
+#: src/lib/forms/FormGuard.test-harness.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
@@ -1886,7 +1888,6 @@ msgstr ""
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
-#: src/routes/(unauthenticated)/clock/[id]/+page@.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 msgid "<0/> Back"
 msgstr ""
@@ -2497,6 +2498,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/dialogs/InspectionFooter.svelte
 #: src/lib/components/members/MemberCard.svelte
 #: src/lib/components/members/RolesSection.svelte
+#: src/lib/components/notifications/ReleaseNotesDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
@@ -6813,6 +6815,7 @@ msgstr ""
 #~ msgid "Diagnostic Info"
 #~ msgstr ""
 
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "<0/> Copied"
@@ -8116,9 +8119,8 @@ msgstr ""
 msgid "{0} warning"
 msgstr ""
 
-#: src/routes/(authenticated)/notifications/+page.svelte
-msgid "<0/> Manage"
-msgstr ""
+#~ msgid "<0/> Manage"
+#~ msgstr ""
 
 #~ msgid "All caught up! No active tracker alerts."
 #~ msgstr ""
@@ -9064,7 +9066,7 @@ msgstr ""
 #~ msgid "Save & exit"
 #~ msgstr ""
 
-#. 0: String(activeIndex + 1).padStart(2, "0"); 1: String( activeSteps.length ).padStart(2, "0")
+#. 0: String(activeIndex + 1).padStart(2, "0"); 1: String(activeSteps.length).padStart(2, "0")
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 msgid "Step {0} / {1}"
 msgstr ""
@@ -11308,6 +11310,7 @@ msgstr ""
 #: ../portal/src/lib/components/features/AlarmsDemo.svelte
 #: src/lib/components/alerts/PlaybackStrip.svelte
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+#: src/lib/forms/FormGuard.test-harness.svelte
 #: src/routes/(authenticated)/reports/week-to-week/+page.svelte
 msgid "Reset"
 msgstr ""
@@ -11342,7 +11345,11 @@ msgstr ""
 msgid "Report generated from {0} records between {1} and {2}"
 msgstr ""
 
+#. 0: def.name
+#. 0: preset.name
 #. 0: getRowLabel(rowToDelete)
+#: src/lib/components/trackers/TrackerDefinitionsTab.svelte
+#: src/lib/components/trackers/TrackerPresetsTab.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Delete {0}"
 msgstr ""
@@ -16533,9 +16540,8 @@ msgstr ""
 msgid "Optionally create treatment events when this tracker starts or completes. This maintains compatibility with existing CAGE/SAGE pills."
 msgstr ""
 
-#: src/routes/(authenticated)/alerts/dnd/+page.svelte
-msgid "Scheduled windows are interpreted in your timezone, set on your <0>patient record</0>."
-msgstr ""
+#~ msgid "Scheduled windows are interpreted in your timezone, set on your <0>patient record</0>."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Recent fires"
@@ -18812,15 +18818,11 @@ msgstr ""
 #~ msgid "<0/> Join us on Discord"
 #~ msgstr ""
 
-#. 0: label
-#: ../portal/src/lib/components/docs/PasswordGenerator.svelte
-msgid "Generate new {0}"
-msgstr ""
+#~ msgid "Generate new {0}"
+#~ msgstr ""
 
-#. 0: label
-#: ../portal/src/lib/components/docs/PasswordGenerator.svelte
-msgid "Copy {0} to clipboard"
-msgstr ""
+#~ msgid "Copy {0} to clipboard"
+#~ msgstr ""
 
 #~ msgid "Generated locally in your browser — never sent anywhere."
 #~ msgstr ""
@@ -19742,9 +19744,8 @@ msgstr ""
 #~ msgid "Administration is only visible to a <0>platform admin</0>. That is a separate permission from a tenant's <1>owner</1> role, so being the owner of your instance is not enough on its own; opening <2/> without it sends you back to <3>Settings</3>. On a new install the permission goes to the owner of the first tenant, granted when that owner finishes setting up their passkey or sign-in provider. <4/><5/> If you set your instance up on an earlier version, the grant only ran while the API was starting, so the owner never received it. Restart the Nocturne API container once and sign in again. That works as long as nobody currently holds the permission; if someone does, have them grant it to you from <6>Settings > Administration</6>."
 #~ msgstr ""
 
-#: ../portal/src/lib/components/docs/PasswordGenerator.svelte
-msgid "Generated locally in your browser and never sent anywhere."
-msgstr ""
+#~ msgid "Generated locally in your browser and never sent anywhere."
+#~ msgstr ""
 
 #: ../portal/src/lib/components/docs/SupportNocturne.svelte
 msgid "Supporter"
@@ -20878,9 +20879,8 @@ msgstr ""
 msgid "No CGM data overlapped this session"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
-msgid "Discord accounts linked to <0>this Nocturne account</0>. Each one can be queried from Discord with <1/>."
-msgstr ""
+#~ msgid "Discord accounts linked to <0>this Nocturne account</0>. Each one can be queried from Discord with <1/>."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
 msgid "<0/> without a label goes to <1/> on another Nocturne account."
@@ -21084,9 +21084,8 @@ msgstr ""
 msgid "Start tour"
 msgstr ""
 
-#: src/lib/api/fake-remote-query.svelte.ts
-msgid "This query was not created in a reactive context and cannot be awaited. Use `.run()` to execute the query instead."
-msgstr ""
+#~ msgid "This query was not created in a reactive context and cannot be awaited. Use `.run()` to execute the query instead."
+#~ msgstr ""
 
 #: src/lib/coach-marks/OverlayContinuityHarness.test.svelte
 #: src/lib/coach-marks/OverlayContinuityHarness.test.svelte
@@ -21797,9 +21796,8 @@ msgstr ""
 #~ msgid "Draft save failed — edits retry on next change"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
-msgid "<0/> Clear drafts"
-msgstr ""
+#~ msgid "<0/> Clear drafts"
+#~ msgstr ""
 
 #. 0: drafts.size || ""; 1: drafts.size === 1 ? "" \\: "s"
 #: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
@@ -25279,9 +25277,8 @@ msgstr ""
 #~ msgid "Do Not Disturb is on. Only critical rules and rules allowed through Do Not Disturb will fire."
 #~ msgstr ""
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 32 characters). Use the generator below for each secret field."
-msgstr ""
+#~ msgid "Fill in the configuration form. Set a strong password for each PostgreSQL role and a unique <0/> (minimum 32 characters). Use the generator below for each secret field."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/oauth/consent/+page.svelte
 msgid "Approving sends access to <0/>"
@@ -29844,9 +29841,8 @@ msgstr ""
 msgid "Do not use <0/> during migration or rollback. It deletes named volumes. If the new database has accepted writes, it is no longer equivalent to the untouched original volume. Plan any rollback or restore before reopening the service to users."
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Edit <0/> and fill in your values. The required fields come first and are left blank. Optional bot integrations are commented out. Use the generator below for each password field and <1/>."
-msgstr ""
+#~ msgid "Edit <0/> and fill in your values. The required fields come first and are left blank. Optional bot integrations are commented out. Use the generator below for each password field and <1/>."
+#~ msgstr ""
 
 #~ msgid "Watchtower updates images, not the compose file. If you installed before the restart policy and log rotation below were added, download the new bundle and run <0/> to pick them up. That first run recreates the containers, which clears their old logs. Your database data is kept. If you installed before Caddy was excluded from Watchtower, set <1/> to <2/> on the <3/> service, or download the new bundle, then run <4/> to recreate it."
 #~ msgstr ""
@@ -31078,10 +31074,8 @@ msgstr ""
 msgid "{0} - Setup - Nocturne"
 msgstr ""
 
-#: src/routes/(unauthenticated)/setup/(guided)/+layout@.svelte
-#: src/routes/(unauthenticated)/setup/(guided)/+layout@.svelte
-msgid "<0/> Back to setup"
-msgstr ""
+#~ msgid "<0/> Back to setup"
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/(guided)/+layout@.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubItemRow.svelte
@@ -32771,9 +32765,8 @@ msgstr ""
 msgid "4. Your data and privacy"
 msgstr ""
 
-#: src/routes/(legal)/terms/+page.svelte
-msgid "For more details, see our <0>privacy policy</0>."
-msgstr ""
+#~ msgid "For more details, see our <0>privacy policy</0>."
+#~ msgstr ""
 
 #: src/routes/(legal)/terms/+page.svelte
 msgid "If you host Nocturne for others (family, friends, community), you are responsible for acceptable use by those users."
@@ -34046,9 +34039,8 @@ msgstr ""
 msgid "Remove demo data"
 msgstr ""
 
-#: src/lib/components/settings/DataMaintenanceCard.svelte
-msgid "<0/> Remove demo data"
-msgstr ""
+#~ msgid "<0/> Remove demo data"
+#~ msgstr ""
 
 #: src/lib/components/settings/DataMaintenanceCard.svelte
 #: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
@@ -36201,9 +36193,8 @@ msgstr ""
 msgid "Select <0>Deploy the stack</0>."
 msgstr ""
 
-#: ../portal/src/routes/docs/installation/portainer/+page.svelte
-msgid "Scroll to <0>Environment variables</0>. Select <1>Advanced mode</1>. Paste your values from <2/> in <3/> format."
-msgstr ""
+#~ msgid "Scroll to <0>Environment variables</0>. Select <1>Advanced mode</1>. Paste your values from <2/> in <3/> format."
+#~ msgstr ""
 
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "Select <0>Editor</0>"
@@ -36317,9 +36308,8 @@ msgstr ""
 msgid "Discord integration"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
-msgid "Discord OAuth2 is not configured on this instance. Ask the administrator to add the Application ID and Client Secret under Settings > Admin > Integrations. The administrator can also set <0/> and <1/>. Or run <2/> directly from Discord."
-msgstr ""
+#~ msgid "Discord OAuth2 is not configured on this instance. Ask the administrator to add the Application ID and Client Secret under Settings > Admin > Integrations. The administrator can also set <0/> and <1/>. Or run <2/> directly from Discord."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/clock/config/[id]/+page.svelte
 #: src/routes/(authenticated)/clock/config/[id]/+page.svelte
@@ -37740,4 +37730,309 @@ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/(guided)/devices/DeviceSetupItem.svelte
 msgid "Your devices do not report this change. Start the tracker in tracker settings when you replace the part."
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Failed to dismiss the link. Try again."
+msgstr ""
+
+#: src/lib/components/members/GuestLinksSection.svelte
+msgid "Failed to revoke the link. Try again."
+msgstr ""
+
+#: src/lib/components/layout/NotificationItem.svelte
+#: src/lib/components/notifications/ReleaseNotesDialog.svelte
+msgid "Version"
+msgstr ""
+
+#. 0: releaseVersion
+#. 0: version
+#: src/lib/components/layout/NotificationItem.svelte
+#: src/lib/components/notifications/ReleaseNotesDialog.svelte
+msgid "Nocturne {0} is available"
+msgstr ""
+
+#. 0: releaseVersion
+#. 0: version
+#: src/lib/components/layout/NotificationItem.svelte
+#: src/lib/components/notifications/ReleaseNotesDialog.svelte
+msgid "Nocturne is now on version {0}"
+msgstr ""
+
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "AutoUpdateMode"
+msgstr ""
+
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "NextCheckAt"
+msgstr ""
+
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "CheckIntervalSeconds"
+msgstr ""
+
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "See what changed in this version."
+msgstr ""
+
+#. 0: formatLongDate(release.publishedAt)
+#: src/lib/components/notifications/ReleaseNotesDialog.svelte
+msgid "Released on {0}."
+msgstr ""
+
+#: src/lib/components/notifications/ReleaseNotesDialog.svelte
+msgid "This update is installed."
+msgstr ""
+
+#: src/lib/components/notifications/ReleaseNotesDialog.svelte
+msgid "To install it, run this command in the folder that holds your compose file:"
+msgstr ""
+
+#: src/lib/components/notifications/ReleaseNotesDialog.svelte
+msgid "<0/> Loading the release notes"
+msgstr ""
+
+#: src/lib/components/notifications/ReleaseNotesDialog.svelte
+msgid "Could not load the release notes. Try again later."
+msgstr ""
+
+#: src/lib/components/notifications/ReleaseNotesDialog.svelte
+msgid "The release notes for this version are not available."
+msgstr ""
+
+#: src/lib/components/notifications/ReleaseNotesDialog.svelte
+msgid "<0/> Open on GitHub"
+msgstr ""
+
+#. 0: formatDayTime(upcoming)
+#: src/lib/components/notifications/InstallTiming.svelte
+msgid "Watchtower installs it automatically at about {0}."
+msgstr ""
+
+#: src/lib/components/notifications/InstallTiming.svelte
+msgid "Watchtower installs it automatically in the next hour."
+msgstr ""
+
+#. 0: hours
+#: src/lib/components/notifications/InstallTiming.svelte
+msgid "Watchtower installs it automatically in the next {0} hours."
+msgstr ""
+
+#: src/lib/components/notifications/InstallTiming.svelte
+msgid "Watchtower installs it automatically."
+msgstr ""
+
+#: src/lib/components/notifications/InstallTiming.svelte
+msgid "Watchtower is running. If it installs updates, it installs this one in the next hour."
+msgstr ""
+
+#. 0: hours
+#: src/lib/components/notifications/InstallTiming.svelte
+msgid "Watchtower is running. If it installs updates, it installs this one in the next {0} hours."
+msgstr ""
+
+#: src/lib/components/notifications/InstallTiming.svelte
+msgid "Watchtower is running. If it installs updates, it installs this one automatically."
+msgstr ""
+
+#: src/lib/components/notifications/InstallTiming.svelte
+msgid "Watchtower only reports updates. Install this update manually."
+msgstr ""
+
+#: src/lib/components/notifications/InstallTiming.svelte
+msgid "Install this update manually."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "When a new release is available, each tenant owner gets a notification with the release notes. To show the time that Watchtower installs the release, set <0/> in your <1/> file to a value from the generator. Then run <2/>. This setting is optional. If you installed before this setting was added, download the new bundle first."
+msgstr ""
+
+#: src/lib/forms/FormGuard.test-harness.svelte
+msgid "Name is too short"
+msgstr ""
+
+#: src/lib/forms/FormGuard.test-harness.svelte
+msgid "City is required"
+msgstr ""
+
+#: src/lib/forms/FormGuard.test-harness.svelte
+msgid "City"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "Keep a copy of this file"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "WARNING: Keep <0/>. Nocturne uses it to encrypt the passwords and secrets for your alert channels, webhooks and connectors. If you lose it, alerts stop at those channels and connectors stop until you enter each secret again."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "This page makes new values each time it loads. Do not make a new file for an installation that already runs. The database keeps the passwords from its first start."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "Enter only the domain name, for example example.com, without https:// or a path."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "Tenants use subdomains of this domain, for example family.example.com."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "Your domain"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "Your browser makes the values when the page loads."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "I saved a copy of this file in a location that is not this server, for example a password manager."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "<0/> Copy the file"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "Could not copy the file. Select the text above and copy it manually."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "Download the file first. Then you can copy it."
+msgstr ""
+
+#. 0: fileName
+#: ../portal/src/lib/components/docs/EnvFileGenerator.svelte
+msgid "<0/> Download {0}"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Alerts stop at Discord, webhooks and the other channels that use a secret, until you enter each secret again."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Connectors stop until you enter their passwords again."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Existing share links still work, but Nocturne cannot show them again. To see a link, make a new one."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Let PostgreSQL accept connections from inside its container without a password: <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Set the new passwords. Replace each value in angle brackets with the value from your new <0/>. If you changed <1/>, use that name in place of <2/>. <3/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Remove the line that you added in step 1, and start Nocturne with the new values: <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "This page made the file below in your browser, with a new random value for each key and password. The values do not leave your browser. Enter your domain, then download a copy of the file. Then copy the file to <0/> in the <1/> folder:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Optional bot integrations are commented out. To use one, remove the <0/> and add its value."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "If you lose the .env file"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Keep a copy of <0/> with your database backups. A database backup does not contain these values."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "<0/>: you cannot recover it. With a new key:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Your glucose data, treatments and settings stay in the database."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The database passwords: you can set new ones. Put new values in <0/>, then do these steps to set the same values in the database."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Base domain"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Instance key"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "PostgreSQL bootstrap password"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Migrator role password"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "App role password"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Web role password"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Fill in the configuration form. Copy each value from the file that you made above into its field."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Scroll to <0>Environment variables</0>. Select <1>Advanced mode</1>. Paste the file that you made above."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Make your keys and passwords"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "This page made the file below in your browser, with a new random value for each key and password. The values do not leave your browser. Enter your domain, then download a copy of the file. Both options below use these values."
+msgstr ""
+
+#: src/routes/(authenticated)/notifications/+page.svelte
+msgid "<0/>Manage"
+msgstr ""
+
+#: src/routes/(legal)/terms/+page.svelte
+msgid "For more details, see our <0>privacy policy</0> ."
+msgstr ""
+
+#: src/lib/components/settings/DataMaintenanceCard.svelte
+msgid "<0/>Remove demo data"
+msgstr ""
+
+#: src/routes/(authenticated)/alerts/dnd/+page.svelte
+msgid "Scheduled windows are interpreted in your timezone, set on your <0>patient record</0> ."
+msgstr ""
+
+#: src/routes/(unauthenticated)/clock/[id]/+page@.svelte
+msgid "<0/>Back"
+msgstr ""
+
+#: src/routes/(unauthenticated)/setup/(guided)/+layout@.svelte
+#: src/routes/(unauthenticated)/setup/(guided)/+layout@.svelte
+msgid "<0/>Back to setup"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
+msgid "Discord accounts linked to <0>this Nocturne account</0> . Each one can be queried from Discord with <1/> ."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
+msgid "Discord OAuth2 is not configured on this instance. Ask the administrator to add the Application ID and Client Secret under Settings > Admin > Integrations. The administrator can also set <0/> and <1/> . Or run <2/> directly from Discord."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+msgid "<0/>Clear drafts"
 msgstr ""

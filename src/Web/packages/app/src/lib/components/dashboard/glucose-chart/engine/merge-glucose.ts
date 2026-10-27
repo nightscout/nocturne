@@ -1,6 +1,6 @@
-import type { Entry } from "$lib/websocket/types";
-import type { TransformedChartData } from "$lib/utils/chart-data-transform";
-import { getGlucoseColor, type GlucoseThresholds } from "$lib/utils/chart-colors";
+import type { Entry } from "#lib/websocket/types.js";
+import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+import { getGlucoseColor, type GlucoseThresholds } from "#lib/utils/chart-colors.js";
 import type { GlucosePoint } from "./chart-data-view.svelte";
 
 /**

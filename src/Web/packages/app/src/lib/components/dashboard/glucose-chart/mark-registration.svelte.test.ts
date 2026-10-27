@@ -6,7 +6,7 @@ import {
 	CARB_LABEL_Y,
 	MARKER_HALF_WIDTH,
 	MARKER_HEIGHT,
-} from "$lib/components/icons/marker-shapes";
+} from "#lib/components/icons/marker-shapes.js";
 
 /**
  * Every layerchart component registers itself with the chart on mount, and
