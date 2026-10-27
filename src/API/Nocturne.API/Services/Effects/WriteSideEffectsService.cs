@@ -104,7 +104,7 @@ public class WriteSideEffectsService : IWriteSideEffects
             {
                 await _broadcast.BroadcastStorageCreateAsync(
                     collectionName,
-                    new { colName = collectionName, doc = record }
+                    new StorageDocumentEvent(collectionName, record)
                 );
             }
 
@@ -144,7 +144,7 @@ public class WriteSideEffectsService : IWriteSideEffects
         {
             await _broadcast.BroadcastStorageUpdateAsync(
                 collectionName,
-                new { colName = collectionName, doc = record }
+                new StorageDocumentEvent(collectionName, record)
             );
         }
         catch (Exception ex)

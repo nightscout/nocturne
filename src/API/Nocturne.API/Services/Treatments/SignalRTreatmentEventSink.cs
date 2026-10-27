@@ -43,7 +43,7 @@ public class SignalRTreatmentEventSink : IDataEventSink<Treatment>
         try
         {
             await _broadcast.BroadcastStorageCreateAsync(
-                Collection, new { colName = Collection, doc = treatment });
+                Collection, new StorageDocumentEvent(Collection, treatment));
         }
         catch (Exception ex)
         {
@@ -62,7 +62,7 @@ public class SignalRTreatmentEventSink : IDataEventSink<Treatment>
         try
         {
             await _broadcast.BroadcastStorageUpdateAsync(
-                Collection, new { colName = Collection, doc = treatment });
+                Collection, new StorageDocumentEvent(Collection, treatment));
         }
         catch (Exception ex)
         {
