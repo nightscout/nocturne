@@ -570,6 +570,8 @@ msgstr ""
 #: src/lib/components/ui/confirm-dialog/confirm-dialog.svelte
 #: src/lib/components/ui/danger-zone-dialog/danger-zone-dialog.svelte
 #: src/lib/forms/FormActions.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 #: src/routes/(authenticated)/food/InlineEditor.svelte
 #: src/routes/(authenticated)/food/InlineEditor.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
@@ -579,8 +581,6 @@ msgstr ""
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 #: src/routes/(authenticated)/trackers/+page.svelte
 #: src/routes/(unauthenticated)/setup/hub/HubBasics.svelte
 msgid "Cancel"
@@ -805,7 +805,7 @@ msgstr ""
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/forms/FormGuard.test-harness.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Name"
 msgstr ""
 
@@ -1606,7 +1606,7 @@ msgstr ""
 
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/auth/PasskeyRegistrationForm.svelte
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/AccountCreation.svelte
 msgid "Your name"
 msgstr ""
@@ -2532,6 +2532,7 @@ msgstr ""
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
+#: src/routes/(authenticated)/community/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -2539,7 +2540,6 @@ msgstr ""
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
-#: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Active"
 msgstr ""
 
@@ -2971,8 +2971,8 @@ msgstr ""
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/settings/ApiTokens.svelte
 #: src/lib/components/trackers/CreateTrackersFromLegacyDialog.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 #: src/routes/(unauthenticated)/setup/SetupWizard.svelte
 msgid "Done"
@@ -4258,6 +4258,7 @@ msgstr ""
 #: src/lib/components/layout/SidebarNotifications.svelte
 #: src/lib/components/settings/BrowserCapabilities.svelte
 #: src/lib/components/ui/dropdown-menu/nested-in-popover.test.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/notifications/+page.svelte
 msgid "Notifications"
 msgstr ""
@@ -9268,6 +9269,7 @@ msgstr ""
 #: src/lib/components/dashboard/widgets/TrackersWidget.svelte
 #: src/lib/components/settings/DashboardRailConfigurator.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/trackers/+page.svelte
 msgid "Trackers"
 msgstr ""
@@ -12466,7 +12468,7 @@ msgstr ""
 #~ msgid "GitHub Repository"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
+#: src/routes/(authenticated)/community/+page.svelte
 msgid "Source code, issues, and feature requests"
 msgstr ""
 
@@ -12476,24 +12478,24 @@ msgstr ""
 #~ msgid "Discord Community"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
+#: src/routes/(authenticated)/community/+page.svelte
 msgid "Chat with developers and other users"
 msgstr ""
 
 #: ../portal/src/lib/components/SiteFooter.svelte
-#: src/routes/(authenticated)/settings/support/+page.svelte
+#: src/routes/(authenticated)/community/+page.svelte
 msgid "Documentation"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
+#: src/routes/(authenticated)/community/+page.svelte
 msgid "Guides, tutorials, and API reference"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
+#: src/routes/(authenticated)/community/+page.svelte
 msgid "Nightscout Foundation"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
+#: src/routes/(authenticated)/community/+page.svelte
 msgid "The organization behind Nightscout"
 msgstr ""
 
@@ -12521,17 +12523,15 @@ msgstr ""
 #~ msgid "Support & Community - Settings - Nocturne"
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
-msgid "Get help, connect with the community, and share feedback"
-msgstr ""
+#~ msgid "Get help, connect with the community, and share feedback"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "<0/> Community"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
-msgid "Connect with the Nightscout community"
-msgstr ""
+#~ msgid "Connect with the Nightscout community"
+#~ msgstr ""
 
 #~ msgid "<0/> Get Support"
 #~ msgstr ""
@@ -14644,6 +14644,9 @@ msgid "Installation"
 msgstr ""
 
 #: ../portal/src/lib/components/SiteFooter.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
+#: src/lib/navigation/settings-navigation.svelte.ts
+#: src/routes/(authenticated)/community/+page.svelte
 msgid "Community"
 msgstr ""
 
@@ -15299,9 +15302,8 @@ msgstr ""
 msgid "Members, invitations, and public sharing."
 msgstr ""
 
-#: src/lib/navigation/settings-navigation.svelte.ts
-msgid "Get help and connect with the community."
-msgstr ""
+#~ msgid "Get help and connect with the community."
+#~ msgstr ""
 
 #~ msgid "Identity providers and integrations."
 #~ msgstr ""
@@ -18103,8 +18105,9 @@ msgstr ""
 msgid "Looping"
 msgstr ""
 
-#~ msgid "Legacy"
-#~ msgstr ""
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Legacy"
+msgstr ""
 
 #~ msgid "Notify"
 #~ msgstr ""
@@ -21736,45 +21739,40 @@ msgstr ""
 msgid "Afterwards"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/+page.svelte
-msgid "Translations - Settings"
-msgstr ""
+#~ msgid "Translations - Settings"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/+page.svelte
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/+page.svelte
 msgid "<0/> Translations"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/+page.svelte
-msgid "Translate Nocturne into your language. Drafts are saved to your account, and submissions are proposed to the Nocturne project as a pull request with your name attached."
-msgstr ""
+#~ msgid "Translate Nocturne into your language. Drafts are saved to your account, and submissions are proposed to the Nocturne project as a pull request with your name attached."
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Failed to load catalogs"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Some drafts failed to save. Try again."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Failed to submit the contribution."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Failed to clear drafts."
 msgstr ""
 
-#. 0: languageLabel
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
-msgid "Translate {0} - Settings"
-msgstr ""
+#~ msgid "Translate {0} - Settings"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Unknown locale."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Saving…"
 msgstr ""
 
@@ -21785,76 +21783,76 @@ msgstr ""
 #~ msgstr ""
 
 #. 0: drafts.size || ""; 1: drafts.size === 1 ? "" \\: "s"
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "<0/> Submit {0} draft{1}"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "<0/> Loading catalogs…"
 msgstr ""
 
 #. 0: submitResult.remaining; 1: submitResult.remaining === 1 ? "" \\: "s"
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "· {0} draft{1} kept"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Contribution submitted"
 msgstr ""
 
 #. 0: submitResult.applied; 1: submitResult.applied === 1 ? "" \\: "s"
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "{0} translation{1} proposed <0/>"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "View the pull request"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Submit translations"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Your drafts are proposed to the Nocturne project as a pull request. Your name appears in the commit credit."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "GitHub username (optional)"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Used for commit co-author credit."
 msgstr ""
 
 #: ../portal/src/routes/studio/+page.svelte
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Email (optional)"
 msgstr ""
 
 #: ../portal/src/routes/studio/+page.svelte
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Note to reviewers (optional)"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "<0/> Submit"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Clear all drafts?"
 msgstr ""
 
 #. 0: drafts.size; 1: drafts.size === 1 ? "" \\: "s"; 2: languageLabel
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "All {0} draft{1} for {2} will be deleted. This cannot be undone."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Clear drafts"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Failed to load the translation catalog source."
 msgstr ""
 
@@ -23630,9 +23628,8 @@ msgstr ""
 msgid "Tenants"
 msgstr ""
 
-#: src/lib/navigation/settings-navigation.svelte.ts
-msgid "Translations"
-msgstr ""
+#~ msgid "Translations"
+#~ msgstr ""
 
 #: src/lib/components/connectors/ConnectorSetup.svelte
 msgid "Only members who can manage this site's settings can configure or enable this connector."
@@ -29898,7 +29895,7 @@ msgstr ""
 msgid "A date requests a one-time import of older data shared with Google Health, back to that day. Choose an earlier date and save to request more history. The field clears once the requested history is complete. {0} Automatic sync does not re-import that period each time, and an empty field does not remove older records. Empty results are not errors. To pause imports, clear all selections and save. Data that was already imported is kept."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "Draft save failed. Edits retry on next change"
 msgstr ""
 
@@ -32350,9 +32347,8 @@ msgstr ""
 msgid "Time spans"
 msgstr ""
 
-#: src/lib/navigation/app-navigation.svelte.ts
-msgid "Dev tools"
-msgstr ""
+#~ msgid "Dev tools"
+#~ msgstr ""
 
 #: src/lib/navigation/app-navigation.svelte.ts
 msgid "Test endpoint compatibility"
@@ -32380,10 +32376,8 @@ msgstr ""
 msgid "Sharing & privacy"
 msgstr ""
 
-#: src/lib/navigation/settings-navigation.svelte.ts
-#: src/routes/(authenticated)/settings/support/+page.svelte
-msgid "Support & community"
-msgstr ""
+#~ msgid "Support & community"
+#~ msgstr ""
 
 #~ msgid "Tenant management"
 #~ msgstr ""
@@ -35473,15 +35467,15 @@ msgstr ""
 msgid "Clinical information"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
+#: src/routes/(authenticated)/community/+page.svelte
 msgid "GitHub repository"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
+#: src/routes/(authenticated)/community/+page.svelte
 msgid "Open source"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
+#: src/routes/(authenticated)/community/+page.svelte
 msgid "Discord community"
 msgstr ""
 
@@ -35493,9 +35487,8 @@ msgstr ""
 msgid "Request a feature"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/support/+page.svelte
-msgid "Support & community - Settings - Nocturne"
-msgstr ""
+#~ msgid "Support & community - Settings - Nocturne"
+#~ msgstr ""
 
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "<0/> Get support"
@@ -38002,7 +37995,7 @@ msgstr ""
 #~ msgid "Discord OAuth2 is not configured on this instance. Ask the administrator to add the Application ID and Client Secret under Settings > Admin > Integrations. The administrator can also set <0/> and <1/> . Or run <2/> directly from Discord."
 #~ msgstr ""
 
-#: src/routes/(authenticated)/settings/translations/[locale]/+page.svelte
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
 msgid "<0/>Clear drafts"
 msgstr ""
 
@@ -38101,9 +38094,8 @@ msgstr ""
 msgid "Sync a connector again from a time you select."
 msgstr ""
 
-#: src/lib/navigation/settings-navigation.svelte.ts
-msgid "Help translate Nocturne into your language."
-msgstr ""
+#~ msgid "Help translate Nocturne into your language."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/settings/+page.svelte
 msgid "Manage your account, this site, and how Nocturne works for you."
@@ -38121,6 +38113,7 @@ msgstr ""
 msgid "Each tracker's dashboard visibility is configured in <0>Trackers</0>"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Move from Nightscout"
@@ -38287,4 +38280,50 @@ msgstr ""
 
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
 msgid "Discord OAuth2 is not configured on this instance. Ask the administrator to add the Application ID and Client Secret under Platform > Administration > Integrations. The administrator can also set <0/> and <1/>. Or run <2/> directly from Discord."
+msgstr ""
+
+#: src/lib/navigation/settings-navigation.svelte.ts
+#: src/routes/(authenticated)/settings/support/+page.svelte
+msgid "Support"
+msgstr ""
+
+#: src/lib/navigation/settings-navigation.svelte.ts
+msgid "Get help, tutorials, and diagnostic logs."
+msgstr ""
+
+#: src/lib/navigation/settings-navigation.svelte.ts
+msgid "Project links, and help to translate Nocturne."
+msgstr ""
+
+#: src/routes/(authenticated)/community/+page.svelte
+msgid "Community - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/community/+page.svelte
+msgid "Connect with the Nightscout community and help make Nocturne better"
+msgstr ""
+
+#: src/routes/(authenticated)/community/+page.svelte
+msgid "<0/> Find us"
+msgstr ""
+
+#: src/routes/(authenticated)/community/+page.svelte
+msgid "Nocturne is made by people with diabetes, in the open"
+msgstr ""
+
+#: src/routes/(authenticated)/community/+page.svelte
+msgid "Translate Nocturne into your language. Drafts are saved to your account. When you submit, your work goes to the Nocturne project as a pull request with your name on it."
+msgstr ""
+
+#: src/routes/(authenticated)/settings/support/+page.svelte
+msgid "Support - Settings - Nocturne"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/support/+page.svelte
+msgid "Get help, report problems, and share feedback"
+msgstr ""
+
+#. 0: languageLabel
+#: src/routes/(authenticated)/community/translations/[locale]/+page.svelte
+msgid "Translate {0} - Community - Nocturne"
 msgstr ""

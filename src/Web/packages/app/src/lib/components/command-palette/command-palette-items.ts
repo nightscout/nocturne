@@ -25,6 +25,8 @@ import Plug from "@lucide/svelte/icons/plug";
 import Plus from "@lucide/svelte/icons/plus";
 import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Ruler from "@lucide/svelte/icons/ruler";
+import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
+import Languages from "@lucide/svelte/icons/languages";
 import Shield from "@lucide/svelte/icons/shield";
 import Stethoscope from "@lucide/svelte/icons/stethoscope";
 import Sun from "@lucide/svelte/icons/sun";
@@ -363,6 +365,22 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["support", "help", "contact"],
 		icon: LifeBuoy,
 		href: "/settings/support",
+	},
+	{
+		id: "page-community",
+		label: "Community",
+		group: "pages",
+		keywords: ["community", "github", "discord", "documentation", "foundation"],
+		icon: HeartHandshake,
+		href: "/community",
+	},
+	{
+		id: "page-translations",
+		label: "Translations",
+		group: "pages",
+		keywords: ["translations", "translate", "language", "locale"],
+		icon: Languages,
+		href: "/community",
 	},
 
 	// ─── Quick Settings ──────────────────────────────────────────────────
