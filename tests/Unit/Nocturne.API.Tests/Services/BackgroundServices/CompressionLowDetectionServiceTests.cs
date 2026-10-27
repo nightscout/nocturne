@@ -292,7 +292,7 @@ public class CompressionLowDetectionServiceTests
     }
 
     private static bool Accepted(double confidence) =>
-        confidence >= CompressionLowDetectionService.MinConfidenceThreshold;
+        confidence >= CompressionLowConfidence.MinThreshold;
 
     [Fact]
     public async Task ScoreCandidate_acceptsATextbookNightTimeVNearTheTopOfTheScale()

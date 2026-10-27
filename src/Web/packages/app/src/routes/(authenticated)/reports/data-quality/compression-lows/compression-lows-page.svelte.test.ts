@@ -14,6 +14,7 @@ const suggestion = {
   startMills: nightStart,
   endMills: nightStart + 45 * 60_000,
   confidence: 0.8,
+  confidenceBand: "High",
   status: "Pending",
   lowestGlucose: 52,
   dropRate: 3,
@@ -27,6 +28,8 @@ const otherSuggestion = {
   ...suggestion,
   id: "33333333-3333-3333-3333-333333333333",
   nightOf: "2026-03-04",
+  confidence: 0.7,
+  confidenceBand: "Medium",
 };
 const suggestionsQuery = remoteQuery(() => [suggestion]);
 
@@ -144,5 +147,29 @@ describe("compression-lows page", () => {
       action: "Dismiss",
       items: [{ id: suggestion.id }, { id: otherSuggestion.id }],
     });
+  });
+
+  it("labels each suggestion with the band the API served", async () => {
+    suggestionsQuery.set([suggestion, otherSuggestion]);
+
+    render(CompressionLowsPage, {});
+
+    const rows = page.getByRole("button", { name: /Pending review/ });
+    const high = rows.first().getByText("High", { exact: true });
+    const medium = rows.last().getByText("Medium", { exact: true });
+    await expect.element(high).toBeVisible();
+    await expect.element(medium).toBeVisible();
+    expect(high.element().className).toContain("bg-primary");
+    expect(medium.element().className).toContain("bg-secondary");
+  });
+
+  it("takes the label from the served band, not from the score", async () => {
+    suggestionsQuery.set([{ ...suggestion, confidence: 0.1, confidenceBand: "High" }]);
+
+    render(CompressionLowsPage, {});
+
+    await expect
+      .element(page.getByRole("button", { name: /Pending review/ }).getByText("High", { exact: true }))
+      .toBeVisible();
   });
 });

@@ -36,6 +36,12 @@ public class CompressionLowSuggestion
     [JsonPropertyName("confidence")]
     public double Confidence { get; set; }
 
+    /// <summary>
+    /// Band of <see cref="Confidence"/>, from <see cref="CompressionLowConfidence.BandOf"/>
+    /// </summary>
+    [JsonPropertyName("confidenceBand")]
+    public CompressionLowConfidenceBand ConfidenceBand => CompressionLowConfidence.BandOf(Confidence);
+
     [JsonPropertyName("status")]
     public CompressionLowStatus Status { get; set; }
 

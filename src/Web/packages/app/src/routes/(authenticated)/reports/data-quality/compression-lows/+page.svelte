@@ -43,6 +43,7 @@
 	import { bg, bgLabel, formatShortDate, time } from "#lib/utils/formatting.js";
 	import {
 		CompressionLowBatchAction,
+		CompressionLowConfidenceBand,
 		CompressionLowStatus,
 		type CompressionLowSuggestion
 	} from '#lib/api/index.js';
@@ -276,18 +277,13 @@
 		return mills == null ? '—' : time(mills);
 	}
 
-	function getConfidenceLabel(confidence: number): string {
-		if (confidence >= 0.75) return 'High';
-		if (confidence >= 0.6) return 'Medium';
-		return 'Low';
+	function getConfidenceLabel(band: CompressionLowConfidenceBand | undefined): string {
+		return band === CompressionLowConfidenceBand.High ? 'High' : 'Medium';
 	}
 
-	function getConfidenceVariant(confidence: number): 'default' | 'secondary' | 'outline' {
-		if (confidence >= 0.75) return 'default';
-		if (confidence >= 0.6) return 'secondary';
-		return 'outline';
+	function getConfidenceVariant(band: CompressionLowConfidenceBand | undefined): 'default' | 'secondary' {
+		return band === CompressionLowConfidenceBand.High ? 'default' : 'secondary';
 	}
-
 
 	function formatNightOf(nightOf: string | Date): string {
 		const date = nightDate(nightOf);
@@ -456,7 +452,7 @@
 								<Table.Cell class="text-right tabular-nums">
 									{suggestion.recoveryMinutes ?? '-'}
 								</Table.Cell>
-								<Table.Cell>{getConfidenceLabel(suggestion.confidence ?? 0)}</Table.Cell>
+								<Table.Cell>{getConfidenceLabel(suggestion.confidenceBand)}</Table.Cell>
 								<Table.Cell>{getStatusLabel(suggestion.status)}</Table.Cell>
 							</Table.Row>
 						{/each}
@@ -500,8 +496,8 @@
 										</p>
 									</div>
 								</div>
-								<Badge variant={getConfidenceVariant(suggestion.confidence ?? 0)}>
-									{getConfidenceLabel(suggestion.confidence ?? 0)}
+								<Badge variant={getConfidenceVariant(suggestion.confidenceBand)}>
+									{getConfidenceLabel(suggestion.confidenceBand)}
 								</Badge>
 							</div>
 						</button>

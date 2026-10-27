@@ -54,7 +54,6 @@ public class CompressionLowDetectionService : BackgroundService
     internal const double NadirThresholdMgDl = 70.0;
     internal const double RecoveryPercentage = 0.20;
     internal const int MaxRecoveryMinutes = 60;
-    internal const double MinConfidenceThreshold = 0.65;
     internal const double SharpnessWeight = 0.35;
     internal const double TimeOfNightWeight = 0.35;
     internal const double RecoveryWeight = 0.30;
@@ -277,7 +276,7 @@ public class CompressionLowDetectionService : BackgroundService
         {
             var confidence = await ScoreCandidateAsync(
                 candidate, window.TimeZone, window.BedtimeHour, window.WakeTimeHour, iobCobReader, sensitivityResolver, cancellationToken);
-            if (confidence >= MinConfidenceThreshold)
+            if (confidence >= CompressionLowConfidence.MinThreshold)
             {
                 var trimmedStartMills = candidate.StartMills + (StartTrimMinutes * 60 * 1000);
                 suggestions.Add(new CompressionLowSuggestion
