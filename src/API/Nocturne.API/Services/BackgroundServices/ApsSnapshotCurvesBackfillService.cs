@@ -16,17 +16,6 @@ internal sealed class ApsSnapshotCurvesBackfillService(
     IServiceProvider serviceProvider,
     ILogger<ApsSnapshotCurvesBackfillService> logger) : BackgroundService
 {
-    internal const int PageSize = 500;
-
-    /// <summary>The pause after a page that wrote, which leaves the database to live traffic.</summary>
-    internal static readonly TimeSpan PauseAfterWrite = TimeSpan.FromMilliseconds(250);
-
-    /// <summary>
-    /// The pause after a page that wrote nothing, which keeps a rewritten table's read on each
-    /// startup to a fraction of one backend.
-    /// </summary>
-    internal static readonly TimeSpan PauseAfterRead = TimeSpan.FromMilliseconds(50);
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Detach from the sequential hosted-service startup chain before touching anything.
@@ -52,7 +41,12 @@ internal sealed class ApsSnapshotCurvesBackfillService(
                 {
                     await using var db = await factory.CreateForTenantAsync(tenantId, stoppingToken);
                     var changed = await ApsSnapshotCurvesRewriter.RewriteTenantAsync(
-                        db, tenantId, PageSize, PauseAfterWrite, PauseAfterRead, stoppingToken);
+                        db,
+                        tenantId,
+                        TenantSweepPaging.PageSize,
+                        TenantSweepPaging.PauseAfterWrite,
+                        TenantSweepPaging.PauseAfterRead,
+                        stoppingToken);
                     changedTotal += changed;
                     if (changed > 0)
                     {

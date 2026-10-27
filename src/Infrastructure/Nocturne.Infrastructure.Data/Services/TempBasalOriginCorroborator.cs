@@ -187,8 +187,8 @@ public static class TempBasalOriginCorroborator
     /// <param name="tenantId">The tenant whose temp basals to judge.</param>
     /// <param name="settledBefore">Rows written at or after this are left for a later run.</param>
     /// <param name="pageSize">Temp basals read per page.</param>
-    /// <param name="pauseAfterWrite">The pause after a page that wrote.</param>
-    /// <param name="pauseAfterRead">The pause after a page that wrote nothing.</param>
+    /// <param name="pauseAfterWrite">The pause after a page that wrote; see <see cref="TenantSweepPaging.PauseAfterWrite"/>.</param>
+    /// <param name="pauseAfterRead">The pause after a page that wrote nothing; see <see cref="TenantSweepPaging.PauseAfterRead"/>.</param>
     /// <param name="ct">Cancellation token.</param>
     public static async Task<int> CorroborateTenantAsync(
         NocturneDbContext db,

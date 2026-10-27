@@ -87,8 +87,8 @@ public static class ApsSnapshotCurvesRewriter
     /// <param name="db">A context pinned to <paramref name="tenantId"/>.</param>
     /// <param name="tenantId">The tenant whose snapshots to rewrite.</param>
     /// <param name="pageSize">Rows read per page.</param>
-    /// <param name="pauseAfterWrite">The pause after a page that wrote, which leaves the database to live traffic.</param>
-    /// <param name="pauseAfterRead">The pause after a page that wrote nothing, so a rewritten table's read is throttled too.</param>
+    /// <param name="pauseAfterWrite">The pause after a page that wrote; see <see cref="TenantSweepPaging.PauseAfterWrite"/>.</param>
+    /// <param name="pauseAfterRead">The pause after a page that wrote nothing; see <see cref="TenantSweepPaging.PauseAfterRead"/>.</param>
     /// <param name="ct">Cancellation token.</param>
     public static async Task<int> RewriteTenantAsync(
         NocturneDbContext db,

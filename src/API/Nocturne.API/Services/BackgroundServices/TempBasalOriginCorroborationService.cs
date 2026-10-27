@@ -80,15 +80,15 @@ internal sealed class TempBasalOriginCorroborationService(
                             db,
                             tenant.Id,
                             _watermarks.Since(tenant.Id, timeProvider.GetUtcNow().UtcDateTime),
-                            ApsSnapshotCurvesBackfillService.PageSize,
+                            TenantSweepPaging.PageSize,
                             ct);
                         written = await TempBasalOriginCorroborator.CorroborateTenantAsync(
                             db,
                             tenant.Id,
                             settledBefore,
-                            ApsSnapshotCurvesBackfillService.PageSize,
-                            ApsSnapshotCurvesBackfillService.PauseAfterWrite,
-                            ApsSnapshotCurvesBackfillService.PauseAfterRead,
+                            TenantSweepPaging.PageSize,
+                            TenantSweepPaging.PauseAfterWrite,
+                            TenantSweepPaging.PauseAfterRead,
                             ct);
                     }
 
