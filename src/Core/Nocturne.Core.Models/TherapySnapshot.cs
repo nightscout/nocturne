@@ -6,7 +6,7 @@ namespace Nocturne.Core.Models;
 
 /// <summary>
 /// Frozen, request-scoped snapshot of a tenant's therapy state for a single profile segment.
-/// Captures DIA, peak, schedules, CCP adjustment, and timezone so per-tick chart-data
+/// Captures DIA, schedules, CCP adjustment, and timezone so per-tick chart-data
 /// computations can resolve sensitivity / carb ratio / basal rate via in-memory lookup
 /// instead of awaiting four nested async calls per evaluation.
 /// </summary>
@@ -43,7 +43,6 @@ public sealed class TherapySnapshot
 
     public TherapySnapshot(
         double dia,
-        int peakMinutes,
         double carbsPerHour,
         TimeZoneInfo? timezone,
         double? ccpPercentage,
@@ -54,7 +53,6 @@ public sealed class TherapySnapshot
     )
     {
         Dia = dia;
-        PeakMinutes = peakMinutes;
         CarbsPerHour = carbsPerHour;
         Timezone = timezone;
         CcpPercentage = ccpPercentage;
@@ -74,9 +72,6 @@ public sealed class TherapySnapshot
 
     /// <summary>Duration of Insulin Action (hours).</summary>
     public double Dia { get; }
-
-    /// <summary>Insulin peak time (minutes).</summary>
-    public int PeakMinutes { get; }
 
     /// <summary>Carb absorption rate (g/hr). Profile-level constant; no schedule variation.</summary>
     public double CarbsPerHour { get; }
@@ -133,7 +128,6 @@ public sealed class TherapySnapshot
     public void AppendFingerprint(StringBuilder sb)
     {
         sb.Append(Dia).Append(':')
-            .Append(PeakMinutes).Append(':')
             .Append(CarbsPerHour).Append(':')
             .Append(Timezone?.Id ?? "~").Append(':')
             .Append(CcpPercentage?.ToString() ?? "~").Append(':')

@@ -124,12 +124,6 @@ public static class LocalSlotBinning
     /// </summary>
     public static long LocalInstantMills(DateOnly day, int hour, TimeZoneInfo tz)
     {
-        var local = day.ToDateTime(new TimeOnly(hour, 0), DateTimeKind.Unspecified);
-        while (tz.IsInvalidTime(local))
-            local = local.AddMinutes(1);
-        var offset = tz.IsAmbiguousTime(local)
-            ? tz.GetAmbiguousTimeOffsets(local).Max()
-            : tz.GetUtcOffset(local);
-        return new DateTimeOffset(local, offset).ToUnixTimeMilliseconds();
+        return TimeZoneHelper.LocalToUtc(day.ToDateTime(new TimeOnly(hour, 0)), tz).ToMills();
     }
 }

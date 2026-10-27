@@ -1,7 +1,6 @@
-using System.Reflection;
 using FluentAssertions;
 using Nocturne.API.Controllers.V4.Identity;
-using OpenApi.Remote.Attributes;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Identity;
@@ -17,9 +16,8 @@ public class MembershipRequestInvalidationTests
     [Fact]
     public void ApprovingARequest_RefreshesTheMemberListByItsOperationId()
     {
-        var approve = typeof(MembershipRequestController)
-            .GetMethod(nameof(MembershipRequestController.ApproveRequest))!
-            .GetCustomAttribute<RemoteCommandAttribute>()!;
+        var approve = RemoteAttributes.Command<MembershipRequestController>(
+            nameof(MembershipRequestController.ApproveRequest));
 
         approve.Invalidates.Should().Contain(
         [
@@ -31,8 +29,7 @@ public class MembershipRequestInvalidationTests
     [Fact]
     public void TheMemberListApprovingRefreshes_IsAQueryTheCommandCanRefresh()
     {
-        typeof(MemberInviteController)
-            .GetMethod(nameof(MemberInviteController.GetMembers))!
-            .GetCustomAttribute<RemoteQueryAttribute>().Should().NotBeNull();
+        RemoteAttributes.Query<MemberInviteController>(nameof(MemberInviteController.GetMembers))
+            .Should().NotBeNull();
     }
 }

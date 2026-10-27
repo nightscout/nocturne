@@ -46,7 +46,7 @@ public class RetrospectiveControllerTests
     }
 
     private static TherapySnapshot FlatSchedule(double basalRate) => new(
-        3.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour, null, null, 0,
+        3.0, TherapySnapshot.DefaultCarbsPerHour, null, null, 0,
         [new ScheduleEntry { TimeAsSeconds = 0, Value = 95.0 }], null,
         [new ScheduleEntry { TimeAsSeconds = 0, Value = basalRate }]);
 

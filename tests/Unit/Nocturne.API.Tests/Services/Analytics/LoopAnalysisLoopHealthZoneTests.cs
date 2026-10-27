@@ -63,7 +63,7 @@ public class LoopAnalysisLoopHealthZoneTests
             .Setup(t => t.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TherapyTimeline([
                 new TherapySegment(0, long.MaxValue,
-                    new TherapySnapshot(1.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+                    new TherapySnapshot(1.0, TherapySnapshot.DefaultCarbsPerHour,
                         null, null, 0, null, null, null)),
             ]));
 

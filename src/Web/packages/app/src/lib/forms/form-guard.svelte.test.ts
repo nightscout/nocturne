@@ -41,3 +41,35 @@ describe("FormGuard touched", () => {
     }
   });
 });
+
+describe("FormGuard validation timing", () => {
+  it("revalidates in the same flush as a value change, with no timer", () => {
+    const values = $state({ name: "Alice", age: 30 });
+    const strict = z.object({ name: z.string().min(2), age: z.number() });
+    let guard!: FormGuard<{ name: string; age: number }>;
+    const cleanup = $effect.root(() => {
+      guard = new FormGuard({
+        form,
+        schema: strict,
+        el: () => null,
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => values,
+      });
+    });
+
+    try {
+      flushSync();
+      expect(guard.valid).toBe(true);
+
+      values.name = "A";
+      flushSync();
+      expect(guard.valid).toBe(false);
+
+      values.name = "Alice";
+      flushSync();
+      expect(guard.valid).toBe(true);
+    } finally {
+      cleanup();
+    }
+  });
+});

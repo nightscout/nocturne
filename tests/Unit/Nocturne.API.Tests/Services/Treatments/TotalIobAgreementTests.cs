@@ -115,7 +115,7 @@ public class TotalIobAgreementTests
             .ReturnsAsync([]);
 
         var snapshot = new TherapySnapshot(
-            3.0, 75, 30.0, null, null, 0,
+            3.0, 30.0, null, null, 0,
             [new ScheduleEntry { TimeAsSeconds = 0, Value = 95.0 }], null,
             [new ScheduleEntry { TimeAsSeconds = 0, Value = 1.0 }]);
         _timelines

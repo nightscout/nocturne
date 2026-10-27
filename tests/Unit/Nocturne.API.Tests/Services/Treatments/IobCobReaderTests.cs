@@ -242,7 +242,7 @@ public class IobCobReaderTests
         var read = await NewReader(out var iobCalculator).ReadTotalAsync(at, live: false);
 
         var snapshot = new TherapySnapshot(
-            dia: 4.0, peakMinutes: 75, carbsPerHour: 30.0, timezone: null, ccpPercentage: null, ccpTimeshiftMs: 0,
+            dia: 4.0, carbsPerHour: 30.0, timezone: null, ccpPercentage: null, ccpTimeshiftMs: 0,
             sensitivityEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 50.0 }],
             carbRatioEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 10.0 }],
             basalEntries: [new ScheduleEntry { TimeAsSeconds = 0, Value = 1.0 }]);

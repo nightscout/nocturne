@@ -146,9 +146,8 @@ public class IobCalculatorTests
     // A snapshot whose in-memory lookups return the same values as the mocked async resolvers
     // (DIA 3.0, sensitivity 95.0, basal rate 1.0), so the snapshot overloads must produce
     // numerically identical results to the legacy async-resolver path.
-    private static TherapySnapshot MatchingSnapshot(int peakMinutes = TherapySnapshot.DefaultPeakMinutes) => new(
+    private static TherapySnapshot MatchingSnapshot() => new(
         dia: DefaultDIA,
-        peakMinutes: peakMinutes,
         carbsPerHour: 30.0,
         timezone: null,
         ccpPercentage: null,
@@ -958,7 +957,7 @@ public class IobCalculatorTests
     }
 
     [Fact]
-    public void ARecordWithoutAPeak_KeepsTheIobJsCurve_WhateverTheSnapshotPeak()
+    public void ARecordWithoutAPeak_KeepsTheIobJsCurve_OnEveryPath()
     {
         // 30 minutes on DIA 3 h: f(30) = 0.922216, activity 95 * 30 / 6750.
         var bolus = BolusAt(Now - 30 * Minute, 1.0);
@@ -968,7 +967,7 @@ public class IobCalculatorTests
                  {
                      _calculator.CalcBolus(bolus, Now),
                      _calculator.CalcBolus(withoutAPeak, Now),
-                     _calculator.CalcBolus(bolus, MatchingSnapshot(peakMinutes: 55), Now),
+                     _calculator.CalcBolus(bolus, MatchingSnapshot(), Now),
                  })
         {
             Assert.Equal(0.922216, result.IobContrib, 12);

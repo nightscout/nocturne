@@ -87,7 +87,7 @@ public class LoopAnalysisServiceReadTests
             .Callback((long from, long _, string? _, CancellationToken _) => _timelineStarts.Add(from))
             .ReturnsAsync(new TherapyTimeline([
                 new TherapySegment(0, long.MaxValue,
-                    new TherapySnapshot(5.0, TherapySnapshot.DefaultPeakMinutes, TherapySnapshot.DefaultCarbsPerHour,
+                    new TherapySnapshot(5.0, TherapySnapshot.DefaultCarbsPerHour,
                         null, null, 0, null, null, null)),
             ]));
 

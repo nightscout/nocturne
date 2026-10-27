@@ -910,6 +910,60 @@ public class PropertiesServiceTests
             Assert.False(upbat.ContainsKey("level"));
     }
 
+    [Theory]
+    [InlineData(3.7, "3.700v")]
+    [InlineData(3700.0, "3.700v")]
+    public async Task GetAllPropertiesAsync_UpbatDisplay_ForZeroPercentWithVoltageIsTheVoltage(double voltage, string expected)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var ddata = CreateTestDData();
+        ddata.DeviceStatus = new List<DeviceStatus>
+        {
+            new DeviceStatus
+            {
+                Device = "phone-a",
+                Mills = now - 60_000,
+                Uploader = new UploaderStatus { Battery = 0, BatteryVoltage = voltage },
+            },
+        };
+
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ddata);
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        var upbat = Assert.IsType<Dictionary<string, object>>(result["upbat"]);
+        Assert.Equal(expected, upbat["display"]);
+        Assert.Equal($"Battery: {expected}", upbat["displayLine"]);
+    }
+
+    [Fact]
+    public async Task GetAllPropertiesAsync_UpbatDisplay_ForNonZeroPercentWithVoltageStaysPercent()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var ddata = CreateTestDData();
+        ddata.DeviceStatus = new List<DeviceStatus>
+        {
+            new DeviceStatus
+            {
+                Device = "phone-a",
+                Mills = now - 60_000,
+                Uploader = new UploaderStatus { Battery = 5, BatteryVoltage = 3.7 },
+            },
+        };
+
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ddata);
+
+        var result = await _service.GetAllPropertiesAsync(CancellationToken.None);
+
+        var upbat = Assert.IsType<Dictionary<string, object>>(result["upbat"]);
+        Assert.Equal("5%", upbat["display"]);
+        Assert.Equal("Battery: 5%", upbat["displayLine"]);
+    }
+
     [Fact]
     public async Task GetAllPropertiesAsync_OmitsUpbat_WhenNoUploaderStatusWithinThirtyMinutes()
     {

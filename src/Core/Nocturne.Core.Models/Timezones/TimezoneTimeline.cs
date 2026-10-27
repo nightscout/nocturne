@@ -82,7 +82,7 @@ public sealed class TimezoneTimeline
         }
 
         var tz = TimeZoneHelper.GetTimeZoneInfoFromId(entry.Timezone);
-        return LocalToUtc(wall, tz);
+        return TimeZoneHelper.LocalToUtc(wall, tz);
     }
 
     /// <summary>
@@ -178,29 +178,5 @@ public sealed class TimezoneTimeline
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// Converts an unspecified local wall-clock to UTC in the given zone, defensively handling the two
-    /// daylight-saving edge hours so a reading is never dropped:
-    /// <list type="bullet">
-    /// <item>Spring-forward gap (a local time that never existed): nudge forward past the gap.</item>
-    /// <item>Fall-back overlap (a local time that occurred twice): take the standard-time interpretation
-    /// (<see cref="TimeZoneInfo.ConvertTimeToUtc(DateTime, TimeZoneInfo)"/>'s default).</item>
-    /// </list>
-    /// </summary>
-    private static DateTime LocalToUtc(DateTime wall, TimeZoneInfo tz)
-    {
-        if (tz.IsInvalidTime(wall))
-        {
-            // The clock sprang forward over this local time; advance to the first instant that exists.
-            var nudged = wall;
-            for (var i = 0; i < 4 && tz.IsInvalidTime(nudged); i++)
-                nudged = nudged.AddHours(1);
-
-            wall = nudged;
-        }
-
-        return TimeZoneInfo.ConvertTimeToUtc(wall, tz);
     }
 }

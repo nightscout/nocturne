@@ -1,7 +1,7 @@
 using System.Reflection;
 using FluentAssertions;
 using Nocturne.API.Controllers.Authentication;
-using OpenApi.Remote.Attributes;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -21,7 +21,7 @@ public class OidcInvalidationTests
     [InlineData("Passkey_ListCredentials")]
     public void UnlinkingAnIdentity_RefreshesTheReadsThatReportIt(string read)
     {
-        Command(nameof(OidcController.UnlinkIdentity))
+        RemoteAttributes.Command<OidcController>(nameof(OidcController.UnlinkIdentity))
             .Invalidates.Should()
             .Contain(read);
     }
@@ -35,14 +35,15 @@ public class OidcInvalidationTests
     [Fact]
     public void EveryRefreshedRead_IsAQueryTheCommandCanName()
     {
-        var reads = Command(nameof(OidcController.UnlinkIdentity)).Invalidates;
+        var reads = RemoteAttributes.Command<OidcController>(nameof(OidcController.UnlinkIdentity)).Invalidates;
 
         reads.Should().NotBeEmpty();
 
         foreach (var read in reads)
         {
-            Resolve(read).Should().NotBeNull($"'{read}' should name a method on a controller");
-            Resolve(read)!.GetCustomAttribute<RemoteQueryAttribute>().Should()
+            var method = Resolve(read);
+            method.Should().NotBeNull($"'{read}' should name a method on a controller");
+            RemoteAttributes.Query(method!).Should()
                 .NotBeNull($"'{read}' should name a query, since only a query can be refreshed");
         }
     }
@@ -66,8 +67,4 @@ public class OidcInvalidationTests
 
         return controller?.GetMethod(read[(separator + 1)..]);
     }
-
-    private static RemoteCommandAttribute Command(string write) =>
-        typeof(OidcController).GetMethod(write)!
-            .GetCustomAttribute<RemoteCommandAttribute>()!;
 }

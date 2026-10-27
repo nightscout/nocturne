@@ -25,9 +25,7 @@ public class IobCalculator(
 ) : IIobCalculator
 {
     // Constants from legacy implementation (identical to IobService)
-    private const double DEFAULT_DIA = 3.0;
     private const double SCALE_FACTOR_BASE = 3.0;
-    private const double PEAK_MINUTES = 75.0;
     private const double MAX_IOB_MINUTES = 180.0;
     private const long NET_BASAL_CHUNK_MS = 5 * 60 * 1000;
 
@@ -152,7 +150,7 @@ public class IobCalculator(
     private static IobContribution CalcLegacyInsulin(
         double units, long deliveredMills, double dia, double sens, long currentTime)
     {
-        const double peak = PEAK_MINUTES;
+        const double peak = TherapySnapshot.DefaultPeakMinutes;
         var scaleFactor = SCALE_FACTOR_BASE / dia;
 
         var minAgo = (scaleFactor * (currentTime - deliveredMills)) / 1000.0 / 60.0;

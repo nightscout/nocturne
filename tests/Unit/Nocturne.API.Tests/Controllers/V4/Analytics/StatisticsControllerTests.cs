@@ -3242,6 +3242,7 @@ public partial class StatisticsControllerTests
             {
                 Date = dateStr,
                 Timestamp = dayStartMs,
+                EndTimestamp = dayEndMs + 1,
                 TotalReadings = totalReadings,
                 InRangeCount = (int)Math.Round(inRangePct / 100.0 * totalReadings),
                 VeryLowCount = (int)Math.Round(veryLowPct / 100.0 * totalReadings),

@@ -164,32 +164,7 @@ public record TenantAlertSettingsSnapshot(
 
             if (inWindow)
             {
-                // DST: on a spring-forward day the local "start" timestamp can fall in the
-                // skipped hour, in which case ConvertTimeToUtc throws. Treat that as
-                // "started at the DST transition boundary" by bumping forward by the gap —
-                // the practical impact on a `for_minutes` anchor is at most one hour and
-                // matches what the user perceives ("DND has been on since the schedule
-                // boundary"). Falling back to nowUtc would wipe the elapsed-time anchor
-                // entirely and is a worse failure mode.
-                var localStart = DateTime.SpecifyKind(windowStartedAtLocal, DateTimeKind.Unspecified);
-                if (tz.IsInvalidTime(localStart))
-                {
-                    var rule = tz.GetAdjustmentRules()
-                        .FirstOrDefault(r => r.DateStart <= localStart && localStart <= r.DateEnd);
-                    var delta = rule?.DaylightDelta ?? TimeSpan.FromHours(1);
-                    localStart = localStart + delta;
-                }
-                DateTime startedUtc;
-                try
-                {
-                    startedUtc = TimeZoneInfo.ConvertTimeToUtc(localStart, tz);
-                }
-                catch (ArgumentException)
-                {
-                    // Belt-and-braces: still throws on an ambiguous-time edge that
-                    // IsInvalidTime didn't flag. Fall back to nowUtc rather than failing.
-                    startedUtc = nowUtc;
-                }
+                var startedUtc = TimeZoneHelper.LocalToUtc(windowStartedAtLocal, tz);
                 return new ActiveProjection(startedUtc, "scheduled");
             }
         }

@@ -27,7 +27,7 @@ public class TherapySnapshotScheduleTests
     ];
 
     private static TherapySnapshot Snapshot(List<ScheduleEntry> entries) =>
-        new(3, 75, 30, null, null, 0, entries, entries, entries);
+        new(3, 30, null, null, 0, entries, entries, entries);
 
     private static string Fingerprint(TherapySnapshot snapshot)
     {

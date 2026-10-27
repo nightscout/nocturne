@@ -2,7 +2,7 @@ import { form, getRequestEvent } from "$app/server";
 import { invalid, redirect } from "@sveltejs/kit";
 import { z } from "zod";
 import { RATE_LIMITED_ERROR } from "#lib/forms/submit-error.js";
-import { safeReturnUrl } from "#lib/server/return-url.js";
+import { safeReturnUrl } from "#lib/navigation/safe-return-url.js";
 import { withWelcome } from "#lib/components/members/welcome.js";
 import {
   classifyActivationError,

@@ -29,7 +29,6 @@ public class IobCobSeriesTests
 
     private static TherapySnapshot Snapshot(double basalRate) => new(
         dia: 3.0,
-        peakMinutes: 75,
         carbsPerHour: 30.0,
         timezone: null,
         ccpPercentage: null,

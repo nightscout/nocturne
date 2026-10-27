@@ -1,7 +1,6 @@
-using System.Reflection;
 using FluentAssertions;
 using Nocturne.API.Controllers.Authentication;
-using OpenApi.Remote.Attributes;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -20,7 +19,7 @@ public class PasskeyInvalidationTests
     [InlineData(nameof(PasskeyController.ListCredentials))]
     public void RegeneratingRecoveryCodes_RefreshesTheReadsThatReportThem(string read)
     {
-        Command(nameof(PasskeyController.RegenerateRecoveryCodes))
+        RemoteAttributes.Command<PasskeyController>(nameof(PasskeyController.RegenerateRecoveryCodes))
             .Invalidates.Should()
             .Contain(read);
     }
@@ -28,7 +27,7 @@ public class PasskeyInvalidationTests
     [Fact]
     public void RegisteringAPasskey_RefreshesTheCredentialList()
     {
-        Command(nameof(PasskeyController.RegisterComplete))
+        RemoteAttributes.Command<PasskeyController>(nameof(PasskeyController.RegisterComplete))
             .Invalidates.Should()
             .Contain(nameof(PasskeyController.ListCredentials));
     }
@@ -38,11 +37,6 @@ public class PasskeyInvalidationTests
     [InlineData(nameof(PasskeyController.ListCredentials))]
     public void EveryRefreshedRead_IsAQueryTheCommandCanRefresh(string read)
     {
-        typeof(PasskeyController).GetMethod(read)!
-            .GetCustomAttribute<RemoteQueryAttribute>().Should().NotBeNull();
+        RemoteAttributes.Query<PasskeyController>(read).Should().NotBeNull();
     }
-
-    private static RemoteCommandAttribute Command(string write) =>
-        typeof(PasskeyController).GetMethod(write)!
-            .GetCustomAttribute<RemoteCommandAttribute>()!;
 }

@@ -133,7 +133,6 @@ public sealed record LoopSimulation
 
     public TherapyTimeline Therapy(long from, long to) => new([new TherapySegment(from, to, new TherapySnapshot(
         dia: ModelDiaSteps * StepHours,
-        peakMinutes: ModelPeakSteps * 5,
         carbsPerHour: 30,
         timezone: Zone,
         ccpPercentage: null,

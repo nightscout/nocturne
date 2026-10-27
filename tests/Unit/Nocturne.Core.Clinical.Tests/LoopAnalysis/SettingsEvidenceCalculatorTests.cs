@@ -36,7 +36,7 @@ public class SettingsEvidenceCalculatorTests
 
     private static TherapyTimeline Therapy(long from, long to, double isf = 40, double carbRatio = 10, double basal = 1, double dia = 4) =>
         new([new TherapySegment(from, to, new TherapySnapshot(
-            dia, 75, 30, Sydney, null, 0,
+            dia, 30, Sydney, null, 0,
             [new ScheduleEntry { TimeAsSeconds = 0, Value = isf }],
             [new ScheduleEntry { TimeAsSeconds = 0, Value = carbRatio }],
             [new ScheduleEntry { TimeAsSeconds = 0, Value = basal }]))]);

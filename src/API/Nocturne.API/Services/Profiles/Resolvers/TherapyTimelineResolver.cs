@@ -155,7 +155,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         {
             return new TherapySnapshot(
                 dia: await _therapySettings.GetDIAAsync(anchorMills, profileName, ct),
-                peakMinutes: TherapySnapshot.DefaultPeakMinutes,
                 carbsPerHour: TherapySnapshot.DefaultCarbsPerHour,
                 timezone: null,
                 ccpPercentage: null,
@@ -184,7 +183,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
         {
             return new TherapySnapshot(
                 dia: dia,
-                peakMinutes: TherapySnapshot.DefaultPeakMinutes,
                 carbsPerHour: carbsHr,
                 timezone: ResolveTimezone(timezoneId),
                 ccpPercentage: ccp?.Percentage,
@@ -201,7 +199,6 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
 
         return new TherapySnapshot(
             dia: dia,
-            peakMinutes: TherapySnapshot.DefaultPeakMinutes,
             carbsPerHour: carbsHr,
             timezone: ResolveTimezone(timezoneId),
             ccpPercentage: ccp?.Percentage,

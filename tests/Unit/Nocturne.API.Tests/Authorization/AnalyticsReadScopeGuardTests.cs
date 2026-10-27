@@ -416,7 +416,7 @@ public partial class AnalyticsReadScopeGuardTests
         timelines
             .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
-                new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(3.0, 75, 30.0, null, null, 0, null, null, null))]));
+                new TherapyTimeline([new TherapySegment(from, to, new TherapySnapshot(3.0, 30.0, null, null, 0, null, null, null))]));
 
         var controller = new RetrospectiveController(
             iob.Object, cob.Object, entries.Object, boluses.Object, carbs.Object,

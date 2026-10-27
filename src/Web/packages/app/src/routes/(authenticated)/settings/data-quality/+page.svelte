@@ -1,8 +1,10 @@
 <script lang="ts">
   import ShieldCheck from "@lucide/svelte/icons/shield-check";
 	import type { DataQualitySettings } from '#lib/api/generated/nocturne-api-client.js';
-	import { getUiSettings, saveDataQualitySettings } from '#lib/api/ui-settings.remote.js';
+	import { getUiSettings } from '#lib/api/ui-settings.remote.js';
+	import { saveDataQualitySettings } from '#lib/api/generated/uiSettings.generated.remote.js';
 	import { remoteErrorMessage } from '#lib/api/remote-error.js';
+	import { describeSubmitError } from '#lib/forms/submit-error.js';
 	import { SETTINGS_LOAD_FAILED } from '#lib/api/ui-settings-messages.js';
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#lib/components/ui/card/index.js';
 	import { Switch } from '#lib/components/ui/switch/index.js';
@@ -66,10 +68,10 @@
 					...patch.compressionLowDetection
 				}
 			});
-		} catch {
-			toast.error('Could not save. Check your connection and try again.');
-			await settingsQuery.refresh();
+		} catch (err) {
+			toast.error(describeSubmitError(err, 'Could not save. Check your connection and try again.'));
 		}
+		await settingsQuery.refresh();
 	}
 </script>
 

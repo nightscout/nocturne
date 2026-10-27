@@ -39,7 +39,7 @@ public class ScheduledBasalTests
 
     private static TherapyTimeline Therapy(double basal) =>
         new([new TherapySegment(From - Day, To + Day, new TherapySnapshot(
-            3, 75, 30, TimeZoneInfo.Utc, null, 0,
+            3, 30, TimeZoneInfo.Utc, null, 0,
             [new ScheduleEntry { TimeAsSeconds = 0, Value = 40 }],
             [new ScheduleEntry { TimeAsSeconds = 0, Value = 10 }],
             [new ScheduleEntry { TimeAsSeconds = 0, Value = basal }]))]);
@@ -136,13 +136,13 @@ public class ScheduledBasalTests
         var timeline = new TherapyTimeline(
         [
             new TherapySegment(From, From + Day, new TherapySnapshot(
-                3, 75, 30, sydney, 120, 2 * Hour, null, null,
+                3, 30, sydney, 120, 2 * Hour, null, null,
                 [
                     new ScheduleEntry { TimeAsSeconds = 0, Value = 0.8 },
                     new ScheduleEntry { TimeAsSeconds = 6 * 3600, Value = 1.2 },
                     new ScheduleEntry { TimeAsSeconds = 21 * 3600 + 1800, Value = 0.9 },
                 ])),
-            new TherapySegment(From + Day, To + Day, new TherapySnapshot(3, 75, 30, null, null, 0, null, null, null)),
+            new TherapySegment(From + Day, To + Day, new TherapySnapshot(3, 30, null, null, 0, null, null, null)),
         ]);
         var scheduled = new ScheduledBasal(timeline.BasalSegments(), []);
 

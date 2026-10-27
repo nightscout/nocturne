@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Profiles;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.API.Tests.TestDoubles;
@@ -208,6 +209,9 @@ public class CompressionLowDetectionServiceTests
         services.AddScoped(_ => settings.Object);
         services.AddScoped(_ => _repository.Object);
         services.AddScoped(_ => _entryService.Object);
+        services.AddScoped(_ => Mock.Of<ITherapySettingsResolver>());
+        services.AddScoped<ICompressionLowNightWindowResolver, CompressionLowNightWindowResolver>();
+        services.AddLogging();
         services.AddScoped(_ => TestIobCobReader.Empty());
         services.AddScoped(_ => Mock.Of<ISensitivityResolver>());
         services.AddScoped(_ => Mock.Of<IInAppNotificationService>());
@@ -676,6 +680,8 @@ public class CompressionLowDetectionServiceTests
             services.AddScoped(_ => Mock.Of<ISensitivityResolver>());
             services.AddScoped(_ => Mock.Of<IInAppNotificationService>());
             services.AddScoped(_ => Mock.Of<ITherapySettingsResolver>());
+            services.AddScoped<ICompressionLowNightWindowResolver, CompressionLowNightWindowResolver>();
+            services.AddLogging();
             var provider = services.BuildServiceProvider();
 
             var sut = new CompressionLowDetectionService(
@@ -742,6 +748,8 @@ public class CompressionLowDetectionServiceTests
         services.AddScoped(_ => Mock.Of<ISensitivityResolver>());
         services.AddScoped(_ => Mock.Of<IInAppNotificationService>());
         services.AddScoped(_ => Mock.Of<ITherapySettingsResolver>());
+        services.AddScoped<ICompressionLowNightWindowResolver, CompressionLowNightWindowResolver>();
+        services.AddLogging();
         services.AddScoped(_ => tenantAccessor.Object);
 
         return services.BuildServiceProvider();

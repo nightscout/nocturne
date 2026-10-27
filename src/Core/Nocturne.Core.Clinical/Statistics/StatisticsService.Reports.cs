@@ -188,7 +188,7 @@ public partial class StatisticsService
 
             var (dayStats, coveredMinutes) = PunchCardDayStatistics(
                 day,
-                windows[i].StartMs,
+                windows[i],
                 glucoseByDay[i],
                 bolusesByDay[i],
                 algorithmBolusesByDay[i],
@@ -228,7 +228,7 @@ public partial class StatisticsService
 
     private (PunchCardDay Day, double CoveredMinutes) PunchCardDayStatistics(
         DateTime day,
-        long dayStartMs,
+        PunchCardDayWindow window,
         IReadOnlyList<SensorGlucose> dayEntries,
         IReadOnlyList<Bolus> dayBoluses,
         IReadOnlyList<Bolus> dayAlgorithmBoluses,
@@ -267,7 +267,8 @@ public partial class StatisticsService
         var punchCardDay = new PunchCardDay
         {
             Date = dateStr,
-            Timestamp = dayStartMs,
+            Timestamp = window.StartMs,
+            EndTimestamp = window.EndMs + 1,
             TotalReadings = totalReadings,
             InRangeCount = ReadingsAt(inRangePct, totalReadings),
             VeryLowCount = ReadingsAt(veryLowPct, totalReadings),

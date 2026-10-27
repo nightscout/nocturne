@@ -44,4 +44,16 @@ describe("returning after sign-in", () => {
 
     expect(location.replace).toHaveBeenCalledWith("https://sleepy.nocturne.test/api/oauth/authorize?client_id=x");
   });
+
+  it("goes home instead of to an address that is not a same-origin path", async () => {
+    nav.match.mockResolvedValue({ id: "/(authenticated)", params: {} });
+
+    for (const returnUrl of ["https://evil.test/steal", "//evil.test/steal", "javascript:alert(1)"]) {
+      nav.goto.mockReset();
+      await goToReturnUrl(returnUrl, { replace: true });
+      expect(nav.goto).toHaveBeenCalledWith("/", { replace: true });
+    }
+    expect(location.replace).not.toHaveBeenCalled();
+    expect(location.assign).not.toHaveBeenCalled();
+  });
 });

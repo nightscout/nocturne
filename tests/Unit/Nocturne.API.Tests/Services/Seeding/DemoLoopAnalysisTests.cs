@@ -73,7 +73,7 @@ public class DemoLoopAnalysisTests(ITestOutputHelper output)
         static List<ScheduleEntry> Entries(IEnumerable<TimeValue> values) =>
             [.. values.Select(v => new ScheduleEntry { Time = v.Time, Value = v.Value, TimeAsSeconds = v.TimeAsSeconds })];
         var snapshot = new TherapySnapshot(
-            profile.Dia, (int)config.InsulinPeakMinutes, profile.CarbsHr, Zone, null, 0,
+            profile.Dia, profile.CarbsHr, Zone, null, 0,
             Entries(profile.Sens), Entries(profile.CarbRatio), Entries(profile.Basal));
         var timeline = new TherapyTimeline([new TherapySegment(from - DailyProfileCalculator.ActingMs, to + 1, snapshot)]);
 

@@ -1,7 +1,6 @@
-using System.Reflection;
 using FluentAssertions;
 using Nocturne.API.Controllers.V4.Analytics;
-using OpenApi.Remote.Attributes;
+using Nocturne.API.Tests.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Analytics;
@@ -31,7 +30,7 @@ public class StateSpanInvalidationTests
     [InlineData(nameof(StateSpansController.DeleteStateSpan))]
     public void EveryWrite_RefreshesTheGenericListAndEveryCategoryRead(string write)
     {
-        var invalidates = Command(write).Invalidates;
+        var invalidates = RemoteAttributes.Command<StateSpansController>(write).Invalidates;
 
         invalidates.Should().Contain(nameof(StateSpansController.GetStateSpans));
         invalidates.Should().Contain(CategoryReads);
@@ -46,7 +45,7 @@ public class StateSpanInvalidationTests
     [InlineData(nameof(StateSpansController.DeleteStateSpan))]
     public void AWriteToAnExistingSpan_RefreshesTheByIdRead(string write)
     {
-        Command(write).Invalidates.Should().Contain(nameof(StateSpansController.GetStateSpan));
+        RemoteAttributes.Command<StateSpansController>(write).Invalidates.Should().Contain(nameof(StateSpansController.GetStateSpan));
     }
 
     [Theory]
@@ -59,11 +58,6 @@ public class StateSpanInvalidationTests
     [InlineData(nameof(StateSpansController.GetTravel))]
     public void EveryCategoryRead_IsAQueryTheWritesCanRefresh(string read)
     {
-        typeof(StateSpansController).GetMethod(read)!
-            .GetCustomAttribute<RemoteQueryAttribute>().Should().NotBeNull();
+        RemoteAttributes.Query<StateSpansController>(read).Should().NotBeNull();
     }
-
-    private static RemoteCommandAttribute Command(string write) =>
-        typeof(StateSpansController).GetMethod(write)!
-            .GetCustomAttribute<RemoteCommandAttribute>()!;
 }
