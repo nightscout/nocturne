@@ -54,7 +54,8 @@
   } from "#lib/api/generated/glucoseProcessingSettings.generated.remote.js";
   import GlucoseSourceDefaultsDialog from "#lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
   import type { FeatureSettings } from "#lib/api/generated/nocturne-api-client.js";
-  import { getUiSettings, saveFeatureSettings } from "#lib/api/ui-settings.remote.js";
+  import { getUiSettings } from "#lib/api/ui-settings.remote.js";
+  import { saveFeatureSettings } from "#lib/api/generated/uiSettings.generated.remote.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
   import { SETTINGS_LOAD_FAILED } from "#lib/api/ui-settings-messages.js";
   import { toast } from "svelte-sonner";
@@ -190,8 +191,8 @@
       toast.error(
         describeSubmitError(err, "Could not save. Check your connection and try again.")
       );
-      await uiSettingsQuery?.refresh();
     }
+    await uiSettingsQuery?.refresh();
   }
 </script>
 

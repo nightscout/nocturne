@@ -17,8 +17,8 @@ namespace Nocturne.API.Tests.Controllers.V4.Profiles;
 public class UISettingsControllerSectionTests
 {
     /// <summary>
-    /// <c>saveUiSettingsSection</c> is a read-modify-write over this body, so a defaults document
-    /// served for a read that failed is written straight back over every section the tenant owns.
+    /// A client that saves the whole document writes a defaults document served for a read that
+    /// failed straight back over every section the tenant owns.
     /// The read refuses instead, and 503 is the retryable way to say so.
     /// </summary>
     [Fact]

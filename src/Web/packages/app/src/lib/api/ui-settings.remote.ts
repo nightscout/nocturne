@@ -1,18 +1,6 @@
-/**
- * Remote functions for the tenant's UI settings blob.
- *
- * The API takes and returns the whole UISettingsConfiguration document, so a
- * section update is a read-modify-write: fetch the stored document, replace one
- * section, save it back. Callers get the persisted value from getUiSettings()
- * rather than an in-memory copy, so nothing is lost on reload.
- */
-import { getRequestEvent, query, command } from "$app/server";
+/** Read of the tenant's UI settings blob. Sections save through generated commands. */
+import { getRequestEvent, query } from "$app/server";
 import { error, redirect } from "@sveltejs/kit";
-import type { UISettingsConfiguration } from "#lib/api/generated/nocturne-api-client.js";
-import {
-  DataQualitySettingsSchema,
-  FeatureSettingsSchema,
-} from "#lib/api/generated/schemas.js";
 import { errorStatus } from "#lib/forms/submit-error.js";
 import { SETTINGS_LOAD_FAILED } from "./ui-settings-messages";
 
@@ -33,39 +21,3 @@ export const getUiSettings = query(async () => {
     throw error(500, SETTINGS_LOAD_FAILED);
   }
 });
-
-async function saveUiSettingsSection(patch: Partial<UISettingsConfiguration>) {
-  const { locals } = getRequestEvent();
-  const { apiClient } = locals;
-
-  try {
-    const current = await apiClient.uiSettings.getUISettings();
-    const saved = await apiClient.uiSettings.saveUISettings({
-      ...current,
-      ...patch,
-    });
-    await getUiSettings().refresh();
-    return saved;
-  } catch (err) {
-    console.error("Error saving UI settings:", err);
-    throw error(500, "Failed to save settings");
-  }
-}
-
-/** Persists sleep schedule and compression-low detection. */
-export const saveDataQualitySettings = command(
-  DataQualitySettingsSchema,
-  async (dataQuality) =>
-    saveUiSettingsSection({
-      dataQuality,
-    })
-);
-
-/** Persists display preferences, dashboard widgets and tracker pills. */
-export const saveFeatureSettings = command(
-  FeatureSettingsSchema,
-  async (features) =>
-    saveUiSettingsSection({
-      features,
-    })
-);

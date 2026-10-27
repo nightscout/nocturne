@@ -4,7 +4,6 @@ import { errorMessage } from "#lib/forms/submit-error.js";
 
 let upstream: () => Promise<unknown>;
 let isShareHost: boolean;
-const save = vi.fn();
 
 vi.mock("$app/server", () => ({
   getRequestEvent: () => ({
@@ -13,7 +12,6 @@ vi.mock("$app/server", () => ({
       apiClient: {
         uiSettings: {
           getUISettings: () => upstream(),
-          saveUISettings: (body: unknown) => save(body),
         },
       },
     },
@@ -23,12 +21,9 @@ vi.mock("$app/server", () => ({
     },
   }),
   query: (fn: unknown) => fn,
-  command: (_schema: unknown, fn: unknown) => fn,
 }));
 
-const { getUiSettings, saveDataQualitySettings } = await import(
-  "./ui-settings.remote"
-);
+const { getUiSettings } = await import("./ui-settings.remote");
 
 /**
  * A reading surface forwards a server-written body verbatim, so this has to be
@@ -149,46 +144,5 @@ describe("a failed UI settings read", () => {
 
     expect(rejection).toMatchObject({ status: 401 });
     expect(rejection).not.toHaveProperty("location");
-  });
-});
-
-/**
- * Saving one section is a read-modify-write: the stored document is fetched,
- * one section replaced, the whole thing written back. Whatever the read hands
- * over is what the save persists over every other section, so a read that
- * refuses has to end the write with it.
- */
-describe("a section save whose read refuses", () => {
-  beforeEach(() => {
-    isShareHost = false;
-    save.mockClear();
-    vi.spyOn(console, "error").mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("writes nothing when the settings read is unavailable", async () => {
-    upstream = () =>
-      Promise.reject(
-        apiException(
-          "Service Unavailable",
-          503,
-          '{"title":"Settings Unavailable","status":503}'
-        )
-      );
-
-    await expect(
-      saveDataQualitySettings({
-        sleepSchedule: { bedtimeHour: 23, wakeTimeHour: 7, timezone: null },
-        compressionLowDetection: {
-          enabled: false,
-          excludeFromStatistics: true,
-        },
-      })
-    ).rejects.toBeDefined();
-
-    expect(save).not.toHaveBeenCalled();
   });
 });

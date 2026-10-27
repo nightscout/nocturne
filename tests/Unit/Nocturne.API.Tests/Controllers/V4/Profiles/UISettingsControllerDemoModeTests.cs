@@ -37,6 +37,18 @@ public class UISettingsControllerDemoModeTests
     }
 
     [Fact]
+    public async Task SaveFeatureSettings_inDemoMode_persistsNothing()
+    {
+        await PersistsNothing(c => c.SaveFeatureSettings(new FeatureSettings()));
+    }
+
+    [Fact]
+    public async Task SaveDataQualitySettings_inDemoMode_persistsNothing()
+    {
+        await PersistsNothing(c => c.SaveDataQualitySettings(new DataQualitySettings()));
+    }
+
+    [Fact]
     public async Task SaveAlarmConfiguration_inDemoMode_persistsNothing()
     {
         await PersistsNothing(c => c.SaveAlarmConfiguration(new UserAlarmConfiguration()));
