@@ -97,7 +97,10 @@
     return {
       source: day,
       date: day.date,
-      timestamp: day.timestamp,
+      day:
+        day.timestamp !== undefined && day.endTimestamp !== undefined
+          ? { startMills: day.timestamp, endMills: day.endTimestamp }
+          : undefined,
       totalReadings: day.totalReadings ?? 0,
       veryLowPercent: day.veryLowPercent ?? 0,
       lowPercent: day.lowPercent ?? 0,
@@ -196,7 +199,7 @@
             <div {...props} class="absolute inset-0">
               <DayGlucoseProfile
                 entries={stats.entries}
-                dayStartMills={stats.timestamp}
+                day={stats.day}
                 onclick={() => handleDayClick(stats.source)}
               />
             </div>

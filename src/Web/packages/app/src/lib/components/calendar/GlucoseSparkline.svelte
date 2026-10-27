@@ -23,13 +23,13 @@
   interface Props {
     /** Glucose entries for the day: { mills, mgdl } */
     entries: Array<{ mills: number; mgdl: number }>;
-    /** Unix milliseconds for the start of the calendar day */
-    dayStartMills?: number;
+    /** The calendar day in Unix milliseconds: its start and its exclusive end, the next local midnight */
+    day?: { startMills: number; endMills: number };
     /** Overrides the realtime store's tenant thresholds; the shared fallbacks apply when neither is present. */
     thresholds?: ChartThresholdsDto | null;
   }
 
-  let { entries, dayStartMills, thresholds: supplied }: Props = $props();
+  let { entries, day, thresholds: supplied }: Props = $props();
 
   const tenantThresholds = tenantChartThresholds();
   const thresholds = $derived(
@@ -46,10 +46,7 @@
   // Snap the x-domain to the calendar day, not the first/last reading.
   // Sparse days should show gaps instead of stretching partial data.
   const xDomain = $derived.by((): [Date, Date] | undefined => {
-    const start = dayStartMills;
-    if (start !== undefined) {
-      return [new Date(start), new Date(start + 24 * 60 * 60 * 1000 - 1)];
-    }
+    if (day) return [new Date(day.startMills), new Date(day.endMills - 1)];
 
     if (entries.length === 0) return undefined;
     const ref = new Date(entries[0].mills);
