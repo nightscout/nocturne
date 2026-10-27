@@ -95,6 +95,20 @@ describe("a thrown HttpError", () => {
   });
 });
 
+describe("a query's error", () => {
+  it("is read unwrapped, as SvelteKit 3 hands it over", () => {
+    const error = { status: 400, message: "Date range must not exceed 365 days.", issues: undefined };
+
+    expect(errorMessage(error)).toBe("Date range must not exceed 365 days.");
+  });
+
+  it("is not confused with an Error that happens to carry a status", () => {
+    const thrown = Object.assign(new Error("fetch failed"), { status: 500 });
+
+    expect(errorMessage(thrown)).toBeUndefined();
+  });
+});
+
 describe("errorIssues", () => {
   const issues = [
     { scope: "condition", path: "root", reason: "list_empty", field: null },

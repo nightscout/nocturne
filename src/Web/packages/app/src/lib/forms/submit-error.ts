@@ -27,19 +27,26 @@ export function errorStatus(err: unknown): number | undefined {
   return undefined;
 }
 
-/** The `body` a thrown `HttpError` carries, when it has one. */
+/**
+ * The `App.Error` behind a rejection: the `body` of a thrown `HttpError`, or the error itself where
+ * SvelteKit hands it over unwrapped, as a query's `error` does.
+ */
 function errorBody(err: unknown): object | undefined {
-  if (!err || typeof err !== "object" || !("body" in err)) return undefined;
+  if (!err || typeof err !== "object") return undefined;
 
-  const { body } = err;
-  if (!body || typeof body !== "object") return undefined;
+  if ("body" in err) {
+    const { body } = err;
+    return body && typeof body === "object" ? body : undefined;
+  }
 
-  return body;
+  if (!(err instanceof Error) && "status" in err && typeof err.status === "number") return err;
+
+  return undefined;
 }
 
 /**
  * The message a remote handler put in `error(status, message)`. SvelteKit
- * delivers it as `HttpError.body.message`.
+ * delivers it as `HttpError.body.message`, or as `message` on a query's `error`.
  */
 export function errorMessage(err: unknown): string | undefined {
   const body = errorBody(err);

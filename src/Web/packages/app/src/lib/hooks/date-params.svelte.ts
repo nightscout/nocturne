@@ -441,7 +441,10 @@ export function requireDateParamsContext(reportDefaultDays?: number): ReportsPar
 
   untrack(() => {
     if (reportDefaultDays === undefined) return;
-    if (params.isDefault && params.days !== reportDefaultDays) {
+    // A from/to with no day count is a range someone chose, a shared link among them, even
+    // where the URL leaves `isDefault` to the schema's default.
+    const chosenRange = params.days == null && params.from != null && params.to != null;
+    if (params.isDefault && !chosenRange && params.days !== reportDefaultDays) {
       // The user hasn't made a custom selection (isDefault=true), so we can adjust
       // to this report's preferred default range.
       params._setDefaultDayRange(reportDefaultDays);

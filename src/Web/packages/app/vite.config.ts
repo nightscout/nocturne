@@ -8,6 +8,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { setupBridge } from "@nocturne/bridge";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import manifest from "./package.json" with { type: "json" };
 
 // @resend/chat-sdk-adapter (via @nocturne/bot) renders email cards with React
 // (react-email). It declares react/react-dom as transitive peers, so pnpm
@@ -27,9 +28,7 @@ import { dirname } from "node:path";
 const require = createRequire(
   createRequire(import.meta.url).resolve("@nocturne/bot/package.json"),
 );
-const workspaceDependencies = Object.entries(
-  (createRequire(import.meta.url)("./package.json") as { dependencies: Record<string, string> }).dependencies,
-)
+const workspaceDependencies = Object.entries(manifest.dependencies)
   .filter(([, version]) => version.startsWith("workspace:"))
   .map(([name]) => name);
 
