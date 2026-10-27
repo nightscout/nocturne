@@ -1086,6 +1086,7 @@ public static class ServiceRegistrationExtensions
     {
         // Compression low detection
         services.AddScoped<ICompressionLowRepository, CompressionLowRepository>();
+        services.AddScoped<ICompressionLowNightWindowResolver, CompressionLowNightWindowResolver>();
         services.AddScoped<ICompressionLowService, CompressionLowService>();
         services.AddSingleton<CompressionLowDetectionService>();
         services.AddScoped<ICompressionLowDetectionService, CompressionLowDetection>();

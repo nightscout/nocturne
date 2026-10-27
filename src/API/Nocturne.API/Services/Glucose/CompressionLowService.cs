@@ -4,7 +4,6 @@ using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Profiles;
-using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
@@ -25,7 +24,7 @@ public class CompressionLowService : ICompressionLowService
     private readonly IEntryService _entryService;
     private readonly ITreatmentService _treatmentService;
     private readonly IInAppNotificationService _notificationService;
-    private readonly ITherapySettingsResolver _therapySettingsResolver;
+    private readonly ICompressionLowNightWindowResolver _nightWindowResolver;
     private readonly IUISettingsService _uiSettingsService;
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
     private readonly ITenantAccessor _tenantAccessor;
@@ -37,7 +36,7 @@ public class CompressionLowService : ICompressionLowService
         IEntryService entryService,
         ITreatmentService treatmentService,
         IInAppNotificationService notificationService,
-        ITherapySettingsResolver therapySettingsResolver,
+        ICompressionLowNightWindowResolver nightWindowResolver,
         IUISettingsService uiSettingsService,
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
@@ -48,7 +47,7 @@ public class CompressionLowService : ICompressionLowService
         _entryService = entryService;
         _treatmentService = treatmentService;
         _notificationService = notificationService;
-        _therapySettingsResolver = therapySettingsResolver;
+        _nightWindowResolver = nightWindowResolver;
         _uiSettingsService = uiSettingsService;
         _tenantOwnerResolver = tenantOwnerResolver;
         _tenantAccessor = tenantAccessor;
@@ -76,30 +75,20 @@ public class CompressionLowService : ICompressionLowService
         // <see cref="SettingsUnavailableException"/>.
         var settings = await _uiSettingsService.GetSettingsAsync(cancellationToken)
             ?? throw new SettingsUnavailableException("UI settings");
-        var sleepSchedule = settings.DataQuality.SleepSchedule;
 
-        // Get user's timezone: prefer UI settings, fall back to profile, then UTC
-        var userTimeZone = ResolveTimeZone(sleepSchedule.Timezone)
-            ?? await GetUserTimeZoneFromProfileAsync(suggestion.NightOf, cancellationToken)
-            ?? TimeZoneInfo.Utc;
-
-        // Get overnight window for entries in user's local time
-        var (windowStart, windowEnd) = TimeZoneHelper.GetOvernightWindow(
-            suggestion.NightOf,
-            userTimeZone,
-            sleepSchedule.BedtimeHour,
-            sleepSchedule.WakeTimeHour);
+        var window = await _nightWindowResolver.ResolveAsync(
+            suggestion.NightOf, settings.DataQuality.SleepSchedule, cancellationToken);
 
         // Get entries for the window
         var entries = await _entryService.GetEntriesAsync(
-            find: $"{{\"mills\":{{\"$gte\":{windowStart},\"$lte\":{windowEnd}}}}}",
+            find: $"{{\"mills\":{{\"$gte\":{window.WindowStart},\"$lte\":{window.WindowEnd}}}}}",
             count: 1000,
             skip: 0,
             cancellationToken: cancellationToken);
 
         // Get treatments for the window (boluses, temp basals, etc.)
         var treatments = await _treatmentService.GetTreatmentsAsync(
-            find: $"{{\"mills\":{{\"$gte\":{windowStart},\"$lte\":{windowEnd}}}}}",
+            find: $"{{\"mills\":{{\"$gte\":{window.WindowStart},\"$lte\":{window.WindowEnd}}}}}",
             cancellationToken: cancellationToken);
 
         return new CompressionLowSuggestionWithEntries
@@ -309,34 +298,6 @@ public class CompressionLowService : ICompressionLowService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to archive compression low notification for {NightOf}", nightOf);
-        }
-    }
-
-    private static TimeZoneInfo? ResolveTimeZone(string? timezoneId)
-    {
-        if (string.IsNullOrEmpty(timezoneId))
-            return null;
-
-        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(timezoneId);
-        if (tz == TimeZoneInfo.Utc && !timezoneId.Equals("UTC", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        return tz;
-    }
-
-    private async Task<TimeZoneInfo?> GetUserTimeZoneFromProfileAsync(
-        DateOnly nightOf,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var timezoneId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-            return ResolveTimeZone(timezoneId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get user timezone from profile for night {NightOf}", nightOf);
-            return null;
         }
     }
 }

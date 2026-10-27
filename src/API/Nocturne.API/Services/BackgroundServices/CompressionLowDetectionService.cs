@@ -146,11 +146,10 @@ public class CompressionLowDetectionService : BackgroundService
                 }
 
                 var sleepSchedule = settings.DataQuality.SleepSchedule;
-                var userTimeZone = await ResolveUserTimeZoneAsync(
-                    sleepSchedule,
-                    scope.ServiceProvider,
-                    DateOnly.FromDateTime(nowUtc.AddDays(-1)),
-                    cancellationToken);
+                var userTimeZone = (await scope.ServiceProvider
+                    .GetRequiredService<ICompressionLowNightWindowResolver>()
+                    .ResolveAsync(DateOnly.FromDateTime(nowUtc.AddDays(-1)), sleepSchedule, cancellationToken))
+                    .TimeZone;
 
                 var night = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(nowUtc, userTimeZone));
                 while (ReadyAtUtc(night, userTimeZone, sleepSchedule) > nowUtc)
@@ -205,22 +204,6 @@ public class CompressionLowDetectionService : BackgroundService
     }
 
     /// <summary>
-    /// Prefers the timezone in the sleep schedule, then the therapy profile's, then one inferred from
-    /// the UTC offsets of entries near <paramref name="nightOf"/>, then UTC.
-    /// </summary>
-    private async Task<TimeZoneInfo> ResolveUserTimeZoneAsync(
-        SleepScheduleSettings sleepSchedule,
-        IServiceProvider scopedProvider,
-        DateOnly nightOf,
-        CancellationToken cancellationToken) =>
-        ResolveTimeZone(sleepSchedule.Timezone)
-            ?? await GetUserTimeZoneFromProfileAsync(
-                scopedProvider.GetRequiredService<ITherapySettingsResolver>(), cancellationToken)
-            ?? await InferTimeZoneFromEntriesAsync(
-                scopedProvider.GetRequiredService<IEntryService>(), nightOf, cancellationToken)
-            ?? TimeZoneInfo.Utc;
-
-    /// <summary>
     /// Detects and saves the compression lows of the night of <paramref name="nightOf"/> for the tenant
     /// <paramref name="scopedProvider"/> reads as, and returns how many it saved.
     /// </summary>
@@ -258,11 +241,6 @@ public class CompressionLowDetectionService : BackgroundService
             return 0;
         }
 
-        // Get sleep schedule from settings
-        var sleepSchedule = settings.DataQuality.SleepSchedule;
-        var bedtimeHour = sleepSchedule.BedtimeHour;
-        var wakeTimeHour = sleepSchedule.WakeTimeHour;
-
         // Check if already processed (only active suggestions block re-detection)
         if (await repository.ActiveSuggestionsExistForNightAsync(nightOf, cancellationToken))
         {
@@ -270,14 +248,13 @@ public class CompressionLowDetectionService : BackgroundService
             return 0;
         }
 
-        var userTimeZone = await ResolveUserTimeZoneAsync(sleepSchedule, scopedProvider, nightOf, cancellationToken);
-
-        // Get overnight window in user's local time
-        var (windowStart, windowEnd) = TimeZoneHelper.GetOvernightWindow(nightOf, userTimeZone, bedtimeHour, wakeTimeHour);
+        var window = await scopedProvider
+            .GetRequiredService<ICompressionLowNightWindowResolver>()
+            .ResolveAsync(nightOf, settings.DataQuality.SleepSchedule, cancellationToken);
 
         // Get entries
         var entries = (await entryService.GetEntriesAsync(
-            find: $"{{\"mills\":{{\"$gte\":{windowStart},\"$lte\":{windowEnd}}}}}",
+            find: $"{{\"mills\":{{\"$gte\":{window.WindowStart},\"$lte\":{window.WindowEnd}}}}}",
             count: int.MaxValue,
             skip: 0,
             cancellationToken: cancellationToken))
@@ -299,7 +276,7 @@ public class CompressionLowDetectionService : BackgroundService
         foreach (var candidate in candidates)
         {
             var confidence = await ScoreCandidateAsync(
-                candidate, userTimeZone, bedtimeHour, wakeTimeHour, iobCobReader, sensitivityResolver, cancellationToken);
+                candidate, window.TimeZone, window.BedtimeHour, window.WakeTimeHour, iobCobReader, sensitivityResolver, cancellationToken);
             if (confidence >= MinConfidenceThreshold)
             {
                 var trimmedStartMills = candidate.StartMills + (StartTrimMinutes * 60 * 1000);
@@ -605,100 +582,6 @@ public class CompressionLowDetectionService : BackgroundService
                 ["NightOf"] = nightOf.ToString("yyyy-MM-dd")
             },
             cancellationToken: cancellationToken);
-    }
-
-    /// <summary>
-    /// Resolves a timezone ID string to a <see cref="TimeZoneInfo"/>, returning
-    /// <see langword="null"/> when the ID is empty or does not map to a known timezone.
-    /// </summary>
-    /// <param name="timezoneId">IANA or Windows timezone identifier string.</param>
-    /// <returns>The resolved <see cref="TimeZoneInfo"/>, or <see langword="null"/>.</returns>
-    private static TimeZoneInfo? ResolveTimeZone(string? timezoneId)
-    {
-        if (string.IsNullOrEmpty(timezoneId))
-            return null;
-
-        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(timezoneId);
-        // GetTimeZoneInfoFromId returns UTC as fallback for unknown IDs;
-        // only treat it as resolved if the input was explicitly "UTC"
-        if (tz == TimeZoneInfo.Utc && !timezoneId.Equals("UTC", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        return tz;
-    }
-
-    /// <summary>
-    /// Reads the user's timezone from the therapy settings.
-    /// Returns <see langword="null"/> when no timezone is configured.
-    /// </summary>
-    /// <param name="therapySettingsResolver">Resolver used to look up the timezone.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The user's <see cref="TimeZoneInfo"/>, or <see langword="null"/>.</returns>
-    private async Task<TimeZoneInfo?> GetUserTimeZoneFromProfileAsync(
-        ITherapySettingsResolver therapySettingsResolver,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var timezoneId = await therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-            return ResolveTimeZone(timezoneId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get user timezone from profile");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Infers the user's timezone from the <c>UtcOffset</c> field on CGM entries near the target night.
-    /// Returns <see langword="null"/> when no entries with a non-zero UTC offset are found.
-    /// </summary>
-    /// <param name="entryService">Service used to query recent CGM entries.</param>
-    /// <param name="nightOf">The target night date used to scope the entry query.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A custom-offset <see cref="TimeZoneInfo"/>, or <see langword="null"/>.</returns>
-    private async Task<TimeZoneInfo?> InferTimeZoneFromEntriesAsync(
-        IEntryService entryService,
-        DateOnly nightOf,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            // Query a small number of entries around midnight of the target night (in UTC)
-            var midnightUtcMills = nightOf.ToDateTime(TimeOnly.MinValue).ToMills();
-            var entries = await entryService.GetEntriesAsync(
-                find: $"{{\"mills\":{{\"$gte\":{midnightUtcMills - 12 * 3600000},\"$lte\":{midnightUtcMills + 12 * 3600000}}}}}",
-                count: 10,
-                skip: 0,
-                cancellationToken: cancellationToken);
-
-            var utcOffset = entries
-                .Where(e => e.UtcOffset.HasValue && e.UtcOffset.Value != 0)
-                .Select(e => e.UtcOffset!.Value)
-                .FirstOrDefault();
-
-            if (utcOffset == 0)
-                return null;
-
-            var offset = TimeSpan.FromMinutes(utcOffset);
-            var tz = TimeZoneInfo.CreateCustomTimeZone(
-                $"Entry-UTC{(offset >= TimeSpan.Zero ? "+" : "")}{offset.Hours:D2}:{offset.Minutes:D2}",
-                offset,
-                $"UTC{(offset >= TimeSpan.Zero ? "+" : "")}{offset.Hours}:{offset.Minutes:D2}",
-                $"UTC{(offset >= TimeSpan.Zero ? "+" : "")}{offset.Hours}:{offset.Minutes:D2}");
-
-            _logger.LogInformation(
-                "Inferred timezone UTC{Offset} from entry data for night {NightOf}",
-                (offset >= TimeSpan.Zero ? "+" : "") + $"{offset.Hours}:{offset.Minutes:D2}", nightOf);
-
-            return tz;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to infer timezone from entries for night {NightOf}", nightOf);
-            return null;
-        }
     }
 
     /// <summary>
