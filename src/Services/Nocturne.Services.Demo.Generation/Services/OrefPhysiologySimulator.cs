@@ -1,3 +1,4 @@
+using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
 
@@ -114,7 +115,7 @@ public class OrefPhysiologySimulator
             }
 
             // oref exponential model
-            var iobRemaining = CalculateExponentialIob(minutesSince, peakMinutes, diaMinutes);
+            var iobRemaining = ExponentialInsulinCurve.IobFraction(minutesSince, peakMinutes, diaMinutes);
             totalIob += dose.Units * iobRemaining;
         }
 
@@ -267,30 +268,6 @@ public class OrefPhysiologySimulator
         netChange = Math.Clamp(netChange, -20, 20);
 
         return currentGlucose + netChange;
-    }
-
-    /// <summary>
-    /// Exponential IOB model from oref0
-    /// Returns fraction of insulin still active (0-1)
-    /// </summary>
-    private static double CalculateExponentialIob(
-        double minutesSince,
-        double peakMinutes,
-        double diaMinutes
-    )
-    {
-        var tau = peakMinutes * (1 - peakMinutes / diaMinutes) / (1 - 2 * peakMinutes / diaMinutes);
-        var a = 2 * tau / diaMinutes;
-        var S = 1 / (1 - a + (1 + a) * Math.Exp(-diaMinutes / tau));
-
-        var t = minutesSince;
-        var iob =
-            1
-            - S
-                * (1 - a)
-                * ((t * t / (tau * diaMinutes * (1 - a)) - t / tau - 1) * Math.Exp(-t / tau) + 1);
-
-        return Math.Max(0, Math.Min(1, iob));
     }
 
     /// <summary>

@@ -14,8 +14,8 @@ namespace Nocturne.Core.Clinical.Tests.Treatments;
 
 /// <summary>
 /// Tests for the V4-native <see cref="IobCalculator"/> operating on <see cref="Bolus"/>
-/// and <see cref="TempBasal"/> records. Verifies the same two-phase exponential decay curve
-/// as <see cref="IobServiceTests"/> but via the <see cref="IIobCalculator"/> interface.
+/// and <see cref="TempBasal"/> records, on the iob.js curve for a record without its own peak and
+/// the oref0 exponential curve for one with it.
 /// </summary>
 public class IobCalculatorTests
 {
@@ -146,9 +146,9 @@ public class IobCalculatorTests
     // A snapshot whose in-memory lookups return the same values as the mocked async resolvers
     // (DIA 3.0, sensitivity 95.0, basal rate 1.0), so the snapshot overloads must produce
     // numerically identical results to the legacy async-resolver path.
-    private static TherapySnapshot MatchingSnapshot() => new(
+    private static TherapySnapshot MatchingSnapshot(int peakMinutes = TherapySnapshot.DefaultPeakMinutes) => new(
         dia: DefaultDIA,
-        peakMinutes: 75,
+        peakMinutes: peakMinutes,
         carbsPerHour: 30.0,
         timezone: null,
         ccpPercentage: null,
@@ -781,7 +781,7 @@ public class IobCalculatorTests
             });
 
     [Fact]
-    public void InsulinContextDia_OverridesTheProfile()
+    public void InsulinContextDiaWithoutAPeak_OverridesTheProfileOnTheIobJsCurve()
     {
         // 30 minutes at 1 U/h over the schedule, ended 30 minutes ago: six 1/12 U chunks, 60 to 35
         // minutes old. On DIA 5 h minutes scale by 3/5, to 36, 33, 30, 27, 24, 21:
@@ -791,7 +791,7 @@ public class IobCalculatorTests
         var temp = Temp(Now - 60 * Minute, Now - 30 * Minute, rate: 2.0);
         var withoutContext = NetBasal([temp]);
 
-        temp.InsulinContext = new TreatmentInsulinContext { Dia = 5.0, Peak = 75, Curve = "rapid-acting", Concentration = 100 };
+        temp.InsulinContext = new TreatmentInsulinContext { Dia = 5.0, Curve = "rapid-acting", Concentration = 100 };
         var withContext = NetBasal([temp]);
 
         Assert.Equal(0.405, withoutContext.BasalIob);
@@ -834,6 +834,146 @@ public class IobCalculatorTests
         Assert.Equal(0.089, viaAsync.Iob);
         Assert.Equal(0.0, viaAsync.BolusIob);
         Assert.Equal(viaSnapshot.Activity!.Value, viaAsync.Activity!.Value, 12);
+    }
+
+    #endregion
+
+    #region Insulin curves
+
+    private static Bolus BolusAt(long mills, double units, TreatmentInsulinContext? context = null) => new()
+    {
+        Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime,
+        Insulin = units,
+        InsulinContext = context,
+    };
+
+    private static Bolus BolusWithPeak(int peak, double dia) =>
+        BolusAt(Now, 1.0, new TreatmentInsulinContext { Dia = dia, Peak = peak });
+
+    private IobContribution MinutesAfter(Bolus bolus, double minutes) =>
+        _calculator.CalcBolus(bolus, MatchingSnapshot(), bolus.Mills + (long)Math.Round(minutes * Minute));
+
+    public static TheoryData<int, double> RecordPeaksAndDias()
+    {
+        var data = new TheoryData<int, double>();
+        for (var peak = 35; peak <= 120; peak += 5)
+        {
+            for (var dia = 3; dia <= 10; dia++)
+                data.Add(peak, dia);
+        }
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(RecordPeaksAndDias))]
+    public void ARecordPeak_GivesACurveWithNoStepThatEndsAtItsDia(int peak, double dia)
+    {
+        var bolus = BolusWithPeak(peak, dia);
+        var end = Math.Max(dia, 5) * 60;
+        var steepest = Enumerable.Range(0, (int)end * 10)
+            .Max(tenths => MinutesAfter(bolus, tenths / 10.0).ActivityContrib) / DefaultSensitivity;
+
+        Assert.Equal(1.0, MinutesAfter(bolus, 0).IobContrib, 9);
+        for (var minute = 0; minute < end + 30; minute++)
+        {
+            var step = MinutesAfter(bolus, minute).IobContrib - MinutesAfter(bolus, minute + 1).IobContrib;
+            Assert.InRange(step, 0, steepest * 1.001);
+        }
+        Assert.Equal(0.0, MinutesAfter(bolus, end).IobContrib);
+    }
+
+    [Theory]
+    [InlineData(55, 5.0)]
+    [InlineData(75, 3.0)]
+    [InlineData(120, 8.0)]
+    public void ARecordPeak_ActivityIsMinusTheSlopeOfIobTimesSensitivity(int peak, double dia)
+    {
+        var bolus = BolusWithPeak(peak, dia);
+
+        foreach (var minute in new[] { 10.0, 45, 90, 180, 280 })
+        {
+            var slope = MinutesAfter(bolus, minute - 0.5).IobContrib - MinutesAfter(bolus, minute + 0.5).IobContrib;
+            var activity = MinutesAfter(bolus, minute).ActivityContrib;
+
+            Assert.Equal(slope * DefaultSensitivity, activity, activity * 1e-3);
+        }
+    }
+
+    [Theory]
+    [InlineData(55, 5.0)]
+    [InlineData(55, 9.0)]
+    [InlineData(90, 6.0)]
+    public void ARecordPeak_IsInRealMinutes(int peak, double dia)
+    {
+        var bolus = BolusWithPeak(peak, dia);
+
+        var busiest = Enumerable.Range(0, (int)(dia * 60)).MaxBy(minute => MinutesAfter(bolus, minute).ActivityContrib);
+
+        Assert.Equal(peak, busiest);
+    }
+
+    [Theory]
+    [InlineData(10, 35)]
+    [InlineData(200, 120)]
+    public void ARecordPeak_IsHeldToOref0sLimits(int peak, int held)
+    {
+        foreach (var minute in new[] { 20.0, 60, 150 })
+        {
+            var expected = MinutesAfter(BolusWithPeak(held, 5.0), minute);
+            var actual = MinutesAfter(BolusWithPeak(peak, 5.0), minute);
+
+            Assert.Equal((expected.IobContrib, expected.ActivityContrib), (actual.IobContrib, actual.ActivityContrib));
+        }
+    }
+
+    [Fact]
+    public void ARecordPeak_RunsTheCurveForAtLeastFiveHours()
+    {
+        var bolus = BolusWithPeak(55, 3.0);
+
+        Assert.True(MinutesAfter(bolus, 240).IobContrib > 0);
+        Assert.Equal(0.0, MinutesAfter(bolus, 300).IobContrib);
+    }
+
+    [Fact]
+    public void ATempWithItsOwnPeak_IsOnBoardAsLongAsABolusOfItsChunks()
+    {
+        // 2 U/h on a 1 U/h schedule for 10 minutes, ended 4 h ago: two 1/12 U chunks, past the record's
+        // 3 h DIA but inside the curve's 5 h.
+        var context = new TreatmentInsulinContext { Dia = 3.0, Peak = 55 };
+        var temp = Temp(Now - 250 * Minute, Now - 240 * Minute, rate: 2.0);
+        temp.InsulinContext = context;
+        var chunks = new List<Bolus>
+        {
+            BolusAt(Now - 250 * Minute, 1.0 / 12, context),
+            BolusAt(Now - 245 * Minute, 1.0 / 12, context),
+        };
+
+        var basal = NetBasal([temp]);
+        var asBoluses = _calculator.FromBoluses(chunks, MatchingSnapshot(), Now);
+
+        Assert.True(basal.BasalIob > 0);
+        Assert.Equal(asBoluses.Iob, basal.BasalIob!.Value);
+        Assert.Equal(asBoluses.Activity!.Value, basal.Activity!.Value, 12);
+    }
+
+    [Fact]
+    public void ARecordWithoutAPeak_KeepsTheIobJsCurve_WhateverTheSnapshotPeak()
+    {
+        // 30 minutes on DIA 3 h: f(30) = 0.922216, activity 95 * 30 / 6750.
+        var bolus = BolusAt(Now - 30 * Minute, 1.0);
+        var withoutAPeak = BolusAt(Now - 30 * Minute, 1.0, new TreatmentInsulinContext { Dia = DefaultDIA });
+
+        foreach (var result in new[]
+                 {
+                     _calculator.CalcBolus(bolus, Now),
+                     _calculator.CalcBolus(withoutAPeak, Now),
+                     _calculator.CalcBolus(bolus, MatchingSnapshot(peakMinutes: 55), Now),
+                 })
+        {
+            Assert.Equal(0.922216, result.IobContrib, 12);
+            Assert.Equal(95.0 * 30 / 6750, result.ActivityContrib, 12);
+        }
     }
 
     #endregion

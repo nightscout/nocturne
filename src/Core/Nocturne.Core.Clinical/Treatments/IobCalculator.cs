@@ -11,12 +11,9 @@ namespace Nocturne.Core.Clinical.Treatments;
 
 /// <summary>
 /// V4-native IOB calculator operating on <see cref="Bolus"/> and <see cref="TempBasal"/> records.
-/// Implements the two-phase exponential decay curve, accepting V4 domain types directly.
+/// A record's own <see cref="TreatmentInsulinContext"/> overrides the profile DIA and chooses its
+/// insulin curve (<see cref="CalcInsulin"/>).
 /// </summary>
-/// <remarks>
-/// Per-bolus <see cref="TreatmentInsulinContext"/> overrides profile-level DIA and peak values
-/// when available, enabling accurate multi-insulin IOB calculations without data loss.
-/// </remarks>
 /// <seealso cref="IIobCalculator"/>
 public class IobCalculator(
     ITherapySettingsResolver therapySettings,
@@ -33,6 +30,15 @@ public class IobCalculator(
     private const double PEAK_MINUTES = 75.0;
     private const double MAX_IOB_MINUTES = 180.0;
     private const long NET_BASAL_CHUNK_MS = 5 * 60 * 1000;
+
+    // oref0's custom peak limits, 50-120 minutes rapid-acting and 35-100 ultra-rapid, joined because a
+    // record's Curve is not reliable: AAPS records are all stamped rapid-acting.
+    private const int MIN_RECORD_PEAK_MINUTES = 35;
+    private const int MAX_RECORD_PEAK_MINUTES = 120;
+
+    // oref0's minimum DIA for the exponential curves, also used by AAPS and Trio. The curve needs a peak
+    // under half the DIA, so some floor is required.
+    private const double MIN_EXPONENTIAL_DIA_HOURS = 5.0;
 
     // COB asks for the total at several instants over the same temps and cutoff, so the schedule
     // they read is the same and is read once.
@@ -92,14 +98,11 @@ public class IobCalculator(
 
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        // Per-bolus insulin context takes priority over profile DIA/peak
         var dia = bolus.InsulinContext?.Dia
             ?? therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult();
-        var peak = bolus.InsulinContext?.Peak
-            ?? PEAK_MINUTES;
         var sens = sensitivity.GetSensitivityAsync(currentTime, null).GetAwaiter().GetResult();
 
-        return CalcInsulinCore(bolus.Insulin, bolus.Mills, dia, peak, sens, currentTime);
+        return CalcInsulin(bolus.Insulin, bolus.Mills, bolus.InsulinContext, dia, sens, currentTime);
     }
 
     /// <inheritdoc />
@@ -110,23 +113,46 @@ public class IobCalculator(
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
 
-        // Same precedence as the async path: per-bolus insulin context wins, else the snapshot.
-        var dia = bolus.InsulinContext?.Dia ?? snapshot.Dia;
-        var peak = bolus.InsulinContext?.Peak ?? snapshot.PeakMinutes;
-        var sens = snapshot.SensitivityAt(time);
-
-        return CalcInsulinCore(bolus.Insulin, bolus.Mills, dia, peak, sens, time);
+        return CalcInsulin(bolus.Insulin, bolus.Mills, bolus.InsulinContext, snapshot.Dia, snapshot.SensitivityAt(time), time);
     }
 
     /// <summary>
-    /// The insulin curve: what remains of <paramref name="units"/> delivered at
-    /// <paramref name="deliveredMills"/>, and how fast it is acting. Negative units give negative
-    /// IOB and activity.
+    /// The DIA the curve of insulin carrying <paramref name="context"/> runs for: the record's own,
+    /// raised to <see cref="MIN_EXPONENTIAL_DIA_HOURS"/> on the exponential curve, else the profile's.
     /// </summary>
-    private static IobContribution CalcInsulinCore(
-        double units, long deliveredMills, double dia, double peak, double sens, long currentTime)
+    internal static double CurveDia(TreatmentInsulinContext? context, double profileDia) =>
+        context is { Peak: > 0 } ? Math.Max(context.Dia, MIN_EXPONENTIAL_DIA_HOURS) : context?.Dia ?? profileDia;
+
+    /// <summary>
+    /// What remains of <paramref name="units"/> delivered at <paramref name="deliveredMills"/>, and
+    /// how fast it is acting, in sensitivity units per minute. Insulin whose record has its own peak
+    /// follows <see cref="ExponentialInsulinCurve"/>, as AAPS and Trio do; other insulin follows the
+    /// iob.js curve (<see cref="CalcLegacyInsulin"/>). Negative units give negative IOB and activity.
+    /// </summary>
+    private static IobContribution CalcInsulin(
+        double units, long deliveredMills, TreatmentInsulinContext? context, double profileDia, double sens, long currentTime)
     {
-        // Exact legacy algorithm constants
+        var dia = CurveDia(context, profileDia);
+        if (context is not { Peak: > 0 })
+            return CalcLegacyInsulin(units, deliveredMills, dia, sens, currentTime);
+
+        var minutes = (currentTime - deliveredMills) / 60_000.0;
+        var peak = Math.Clamp(context.Peak, MIN_RECORD_PEAK_MINUTES, MAX_RECORD_PEAK_MINUTES);
+        return new IobContribution
+        {
+            IobContrib = units * ExponentialInsulinCurve.IobFraction(minutes, peak, dia * 60),
+            ActivityContrib = sens * units * ExponentialInsulinCurve.ActivityFraction(minutes, peak, dia * 60),
+        };
+    }
+
+    /// <summary>
+    /// The iob.js curve: two fitted polynomials meeting at a fixed 75-minute peak, on a time scaled
+    /// by <c>3 / DIA</c> so that it ends at DIA.
+    /// </summary>
+    private static IobContribution CalcLegacyInsulin(
+        double units, long deliveredMills, double dia, double sens, long currentTime)
+    {
+        const double peak = PEAK_MINUTES;
         var scaleFactor = SCALE_FACTOR_BASE / dia;
 
         var minAgo = (scaleFactor * (currentTime - deliveredMills)) / 1000.0 / 60.0;
@@ -184,11 +210,11 @@ public class IobCalculator(
 
         return FromBolusesCore(boluses, currentTime, bolus => bolus.Insulin <= 0
             ? new IobContribution { IobContrib = 0, ActivityContrib = 0 }
-            : CalcInsulinCore(
+            : CalcInsulin(
                 bolus.Insulin,
                 bolus.Mills,
+                bolus.InsulinContext,
                 bolus.InsulinContext?.Dia ?? profileDia.Value,
-                bolus.InsulinContext?.Peak ?? PEAK_MINUTES,
                 sens.Value,
                 currentTime));
     }
@@ -254,7 +280,6 @@ public class IobCalculator(
             time,
             Math.Min(deliveredUntil, time),
             snapshot.Dia,
-            snapshot.PeakMinutes,
             snapshot.SensitivityAt(time),
             scheduledUnder);
     }
@@ -265,14 +290,14 @@ public class IobCalculator(
         var pieces = StatisticsService.ClipOverlappingTempBasals(tempBasals, cutoff);
         if (pieces.Count == 0 || pieces[0].StartMills >= cutoff)
         {
-            return FromTempBasalsCore([], time, cutoff, 0, 0, 0, (_, _) => 0);
+            return FromTempBasalsCore([], time, cutoff, 0, 0, (_, _) => 0);
         }
 
         var scheduled = await ScheduledAsync(pieces[0].StartMills, cutoff, ct);
         var dia = await therapySettings.GetDIAAsync(time, null, ct);
         var sens = await sensitivity.GetSensitivityAsync(time, null, ct);
 
-        return FromTempBasalsCore(pieces, time, cutoff, dia, PEAK_MINUTES, sens, scheduled.Under);
+        return FromTempBasalsCore(pieces, time, cutoff, dia, sens, scheduled.Under);
     }
 
     private async Task<ScheduledBasal> ScheduledAsync(long from, long to, CancellationToken ct)
@@ -294,7 +319,6 @@ public class IobCalculator(
         long time,
         long cutoff,
         double profileDia,
-        double profilePeak,
         double sens,
         Func<TempBasal, long, double> scheduledUnder)
     {
@@ -309,8 +333,7 @@ public class IobCalculator(
             var contribution = CalcNetBasal(
                 piece,
                 Math.Min(piece.EndMills!.Value, cutoff),
-                piece.InsulinContext?.Dia ?? profileDia,
-                piece.InsulinContext?.Peak ?? profilePeak,
+                profileDia,
                 sens,
                 scheduledUnder,
                 time);
@@ -334,7 +357,7 @@ public class IobCalculator(
     /// AAPS and Trio share. The piece's rate less the scheduled rate under it
     /// (<see cref="ScheduledBasal.Under"/>) is delivered in <see cref="NET_BASAL_CHUNK_MS"/> chunks
     /// from its start, the last one partial, and each chunk decays from its own start on the same
-    /// insulin curve as a bolus (<see cref="CalcInsulinCore"/>).
+    /// insulin curve as a bolus (<see cref="CalcInsulin"/>).
     /// A temp below the schedule, or a suspend, withholds insulin, so its chunks are negative and so
     /// are the IOB and activity they give. Delivery stops at <paramref name="deliveryEnd"/>, the
     /// caller's cutoff at the latest; the curve is read at <paramref name="time"/>, which can be
@@ -343,8 +366,7 @@ public class IobCalculator(
     private static IobContribution CalcNetBasal(
         TempBasal piece,
         long deliveryEnd,
-        double dia,
-        double peak,
+        double profileDia,
         double sens,
         Func<TempBasal, long, double> scheduledUnder,
         long time)
@@ -359,7 +381,7 @@ public class IobCalculator(
 
         // Chunks delivered a full DIA ago have left the curve, so the walk starts at the first that has not.
         var firstChunkStart = piece.StartMills;
-        var expiredFor = time - dia * 3_600_000.0 - piece.StartMills;
+        var expiredFor = time - CurveDia(piece.InsulinContext, profileDia) * 3_600_000.0 - piece.StartMills;
         if (expiredFor >= 0)
             firstChunkStart += ((long)Math.Floor(expiredFor / NET_BASAL_CHUNK_MS) + 1) * NET_BASAL_CHUNK_MS;
 
@@ -369,7 +391,7 @@ public class IobCalculator(
 
             var units = (rate - scheduledUnder(piece, chunkStart)) * (chunkEnd - chunkStart) / 3_600_000.0;
 
-            var contribution = CalcInsulinCore(units, chunkStart, dia, peak, sens, time);
+            var contribution = CalcInsulin(units, chunkStart, piece.InsulinContext, profileDia, sens, time);
             iob += contribution.IobContrib;
             activity += contribution.ActivityContrib;
         }

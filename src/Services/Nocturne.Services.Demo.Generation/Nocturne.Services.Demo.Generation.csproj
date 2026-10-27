@@ -20,6 +20,7 @@
         <PackageReference Include="Microsoft.Extensions.Options"/>
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Clinical\Nocturne.Core.Clinical.csproj"/>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Contracts\Nocturne.Core.Contracts.csproj"/>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj"/>

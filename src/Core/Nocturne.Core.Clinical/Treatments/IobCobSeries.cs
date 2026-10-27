@@ -30,8 +30,8 @@ public readonly record struct IobCobTick(
 /// indices that advance with each tick: only boluses and temp basals within DIA hours of the tick
 /// contribute to IOB, and only carb intakes within 6 hours to COB, so the inner-loop work is
 /// O(ticks + active window) rather than O(ticks × treatments). The window is the longest DIA in
-/// play: the timeline's at <c>endTime</c> or any bolus's or temp basal's own
-/// <see cref="TreatmentInsulinContext.Dia"/>, which the calculator reads in preference. Temp basals count as delivered
+/// play: the timeline's at <c>endTime</c> or the DIA of any bolus's or temp basal's own curve
+/// (<see cref="IobCalculator.CurveDia"/>), which the calculator reads in preference. Temp basals count as delivered
 /// (<see cref="StatisticsService.ClipOverlappingTempBasals"/>), one still running up to now or the
 /// window's end, whichever comes first,
 /// and each tick takes their net basal IOB up to the tick on the model
@@ -76,11 +76,10 @@ public static class IobCobSeries
         var sortedTempBasals = tempBasals is null ? null : StatisticsService.ClipOverlappingTempBasals(tempBasals, Math.Min(endTime, nowMills));
 
         var diaHours = timeline.SnapshotAt(endTime).Dia;
-        foreach (var own in sortedBoluses.Select(b => b.InsulinContext?.Dia)
-                     .Concat(sortedTempBasals?.Select(p => p.InsulinContext?.Dia) ?? []))
+        foreach (var context in sortedBoluses.Select(b => b.InsulinContext)
+                     .Concat(sortedTempBasals?.Select(p => p.InsulinContext) ?? []))
         {
-            if (own > diaHours)
-                diaHours = own.Value;
+            diaHours = Math.Max(diaHours, IobCalculator.CurveDia(context, diaHours));
         }
         var diaMs = (long)(diaHours * 60 * 60 * 1000);
 
