@@ -51,8 +51,9 @@ vi.mock("#lib/api/generated/nutritions.generated.remote.js", () => ({
   updateCarbIntakeFood: remoteCommand(() => Promise.resolve()),
 }));
 
-vi.mock("#lib/api/generated/bolus.generated.remote.js", () => {
-  const form = () => ({ result: undefined, enhance: () => ({}) });
+vi.mock("#lib/api/generated/bolus.generated.remote.js", async () => {
+  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
+  const form = () => ({ result: undefined, enhance: () => ({}), fields: remoteFormFields() });
   return {
     create: form(),
     update: form(),

@@ -1,15 +1,15 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import { ArtworkHero } from "water-ui";
-  import { DOCS_HERO } from "$lib/data/docs-artwork";
+  import { DOCS_HERO } from "#lib/data/docs-artwork.js";
   import { Button } from "@nocturne/ui/ui/button";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import MapPin from "@lucide/svelte/icons/map-pin";
-  import SystemRequirements from "$lib/components/docs/SystemRequirements.svelte";
-  import PikaPodsVoteCard from "$lib/components/PikaPodsVoteCard.svelte";
-  import { campaignUrl, track } from "$lib/analytics";
+  import SystemRequirements from "#lib/components/docs/SystemRequirements.svelte";
+  import PikaPodsVoteCard from "#lib/components/PikaPodsVoteCard.svelte";
+  import { campaignUrl, track } from "#lib/analytics.js";
 
   let showListingRequirements = $state(false);
 
@@ -53,7 +53,7 @@
     },
     {
       id: "reverse-proxy",
-      href: resolve("/docs/installation/reverse-proxy"),
+      href: resolve("docs/installation/reverse-proxy"),
       logo: "/logos/nginx.svg",
       title: "Bring your own reverse proxy",
       desc: "Terminate TLS with nginx, Traefik, or an existing edge instead of the bundled Caddy. Covers the forwarded headers Nocturne requires.",

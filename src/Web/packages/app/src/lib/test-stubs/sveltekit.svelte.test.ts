@@ -35,23 +35,29 @@ describe("@sveltejs/kit stub", () => {
     expect(isHttpError(thrown, 500)).toBe(false);
   });
 
-  it("wraps a string body as the framework does", () => {
+  it("wraps a string message as the framework does", () => {
     const thrown = thrownBy(() => error(404, "Not found"));
 
     expect(thrown).toHaveProperty("status", 404);
-    expect(thrown).toHaveProperty("body", { message: "Not found" });
+    expect(thrown).toHaveProperty("body", { status: 404, message: "Not found" });
   });
 
-  it("passes an object body through untouched", () => {
+  it("carries the properties passed after the message", () => {
+    const thrown = thrownBy(() => error(400, "Bad", { details: "d" }));
+
+    expect(thrown).toHaveProperty("body", { status: 400, message: "Bad", details: "d" });
+  });
+
+  it("still takes the deprecated object body", () => {
     const thrown = thrownBy(() => error(400, { message: "Bad", details: "d" }));
 
-    expect(thrown).toHaveProperty("body", { message: "Bad", details: "d" });
+    expect(thrown).toHaveProperty("body", { status: 400, message: "Bad", details: "d" });
   });
 
-  it("names the status when there is no body", () => {
+  it("names the status when there is no message", () => {
     const thrown = thrownBy(() => error(500));
 
-    expect(thrown).toHaveProperty("body", { message: "Error: 500" });
+    expect(thrown).toHaveProperty("body", { status: 500, message: "Error: 500" });
   });
 
   it("throws a redirect that is not an Error", () => {

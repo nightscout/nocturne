@@ -1,4 +1,4 @@
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import { json, error } from '@sveltejs/kit';
 import { readdir, readFile } from 'node:fs/promises';
 import { resolve, basename } from 'node:path';

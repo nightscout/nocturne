@@ -3,7 +3,7 @@ title: Meals and events
 ---
 
 <script>
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Meals and events

@@ -4,8 +4,8 @@ title: Configuration Guide
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
-  import CodeBlock from '$lib/components/docs/CodeBlock.svelte';
-  import envExample from '$lib/release/docker-compose/default.env.example?raw';
+  import CodeBlock from '#lib/components/docs/CodeBlock.svelte';
+  import envExample from '#lib/release/docker-compose/default.env.example?raw';
 </script>
 
 # Configuration Guide

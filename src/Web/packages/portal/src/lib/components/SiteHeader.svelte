@@ -1,18 +1,18 @@
 <script lang="ts">
     import { page } from "$app/state";
     import { resolve } from "$app/paths";
-    import type { Pathname } from "$app/types";
+    import type { ResolvedPathname } from "$app/types";
     import { Button } from "@nocturne/ui/ui/button";
     import Menu from "@lucide/svelte/icons/menu";
     import X from "@lucide/svelte/icons/x";
     import {
         DEMO_ENABLED,
-    } from "$lib/config";
+    } from "#lib/config.js";
     import LanguageSelector from "./LanguageSelector.svelte";
 
     let mobileMenuOpen = $state(false);
 
-    type NavLink = { href: Pathname; label: string };
+    type NavLink = { href: ResolvedPathname; label: string };
 
     const baseNavLinks: NavLink[] = [
         { href: "/features", label: "Features" },
@@ -47,7 +47,7 @@
             <!-- Desktop Navigation -->
             <nav class="hidden md:flex items-center gap-1">
                 {#each navLinks as link (link.href)}
-                    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a Pathname from navLinks, checked against the route manifest -->
+                    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a ResolvedPathname from navLinks, checked against the route manifest -->
                     <a href={link.href}
                         class="px-4 py-2 text-sm font-medium rounded-md transition-colors {isActive(link.href)
                             ? 'text-foreground bg-muted'
@@ -87,7 +87,7 @@
             <nav class="md:hidden py-4 border-t border-border/40">
                 <div class="flex flex-col gap-1">
                     {#each navLinks as link (link.href)}
-                        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a Pathname from navLinks, checked against the route manifest -->
+                        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a ResolvedPathname from navLinks, checked against the route manifest -->
                         <a href={link.href}
                             class="px-4 py-3 text-sm font-medium rounded-md transition-colors {isActive(link.href)
                                 ? 'text-foreground bg-muted'

@@ -1,7 +1,7 @@
 <script lang="ts">
-    import { base } from "$app/paths";
+    import { syncedAsset } from "#lib/synced-asset.js";
     import videos from "@nocturne/video/manifest.json";
-    import { track } from "$lib/analytics";
+    import { track } from "#lib/analytics.js";
 
     interface Props {
         id: string;
@@ -48,7 +48,7 @@
         controls
         playsinline
         preload="none"
-        poster="{base}/videos/{entry.poster}"
+        poster={syncedAsset(`videos/${entry.poster}`)}
         width={entry.width}
         height={entry.height}
         aria-label={entry.title}
@@ -56,7 +56,7 @@
         {onplay}
         {onended}
     >
-        <source src="{base}/videos/{entry.video}" type="video/mp4" />
+        <source src={syncedAsset(`videos/${entry.video}`)} type="video/mp4" />
     </video>
     <details class="mt-3 rounded-lg border border-border/60 p-4">
         <summary class="cursor-pointer font-semibold">Transcript</summary>

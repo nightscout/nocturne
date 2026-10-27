@@ -186,16 +186,12 @@ describe("AlarmProfile", () => {
 
 Then implement one test at a time, removing `.skip` as you go. This prevents scope creep and ensures comprehensive coverage before writing any test logic.
 
-## Path Aliases
+## Path Imports
 
-All test configs share these aliases:
-
-| Alias | Path |
-|---|---|
-| `$lib` | `src/lib` |
-| `$api` | `src/lib/api` |
-| `$api-clients` | `src/lib/api-clients` |
-| `$routes` | `src/routes` |
+Source and tests import through `package.json` subpath imports, with the file's extension:
+`#lib/...` is `src/lib/...` and `#routes/...` is `src/routes/...`
+(`#lib/components/ui/button/index.js`, `#lib/stores/realtime-store.svelte.js`). A `vi.mock`
+specifier must match the import exactly, extension included.
 
 ## Checklist
 

@@ -9,7 +9,7 @@
     import { Label } from "@nocturne/ui/ui/label";
     import { copyToClipboard } from "@nocturne/ui/utils";
     import Callout from "@nocturne/cms/components/Callout.svelte";
-    import { track } from "$lib/analytics";
+    import { track } from "#lib/analytics.js";
 
     interface Props {
         /** The release's .env.example. */

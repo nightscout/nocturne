@@ -3,9 +3,9 @@
     import Play from "@lucide/svelte/icons/play";
     import { Artwork } from "water-ui";
     import { Button } from "@nocturne/ui/ui/button";
-    import FeaturePillars from "$lib/components/features/FeaturePillars.svelte";
-    import { DATA_SOURCES } from "$lib/data/connectors";
-    import { AVAILABLE_REPORT_COUNT } from "$lib/data/reports";
+    import FeaturePillars from "#lib/components/features/FeaturePillars.svelte";
+    import { DATA_SOURCES } from "#lib/data/connectors.js";
+    import { AVAILABLE_REPORT_COUNT } from "#lib/data/reports.js";
 
     const SUPPORTING = [
         {

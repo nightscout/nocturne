@@ -272,8 +272,38 @@ export function remoteCommand<T>(
  * nothing to report. An unrecognised property nests, so a path of any depth
  * answers.
  */
+/** The props kit's `as()` gives a control, without the form id it suffixes onto the name. */
+function fieldProps(name: string, type: string, value: unknown): Record<string, unknown> {
+  const prefix =
+    type === "number" || type === "range"
+      ? "n:"
+      : type === "checkbox" && typeof value !== "string"
+        ? "b:"
+        : (type === "hidden" || type === "submit") && typeof value === "number"
+          ? "n:"
+          : (type === "hidden" || type === "submit") && typeof value === "boolean"
+            ? "b:"
+            : "";
+  const props: Record<string, unknown> = { name: prefix + name, type };
+  if (type === "hidden" || type === "submit") {
+    props.value = typeof value === "boolean" ? (value ? "on" : "off") : value;
+  }
+  return props;
+}
+
+/**
+ * A remote form's `fields`, for a test that builds its own form stand-in: any path, each with
+ * `issues`, `allIssues`, `value`, `set` and `as`, the last answering the name kit would give it.
+ */
+export function remoteFormFields(): unknown {
+  return fieldProxy();
+}
+
 function fieldProxy(path: string[] = []): unknown {
-  const name = path.join(".");
+  // As kit builds it: an index is `[n]`, a key is `.key`.
+  const name = path
+    .map((key, i) => (/^\d+$/.test(key) ? `[${key}]` : i === 0 ? key : `.${key}`))
+    .join("");
 
   return new Proxy(() => undefined, {
     get(target, prop) {
@@ -281,7 +311,7 @@ function fieldProxy(path: string[] = []): unknown {
       if (prop === "issues" || prop === "allIssues") return () => undefined;
       if (prop === "value") return () => undefined;
       if (prop === "set") return (value: unknown) => value;
-      if (prop === "as") return (type: string) => ({ name, type });
+      if (prop === "as") return (type: string, value?: unknown) => fieldProps(name, type, value);
       return fieldProxy([...path, prop]);
     },
   });

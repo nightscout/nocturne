@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import ExternalLink from "@lucide/svelte/icons/external-link";
-    import { DEMO_ENABLED, DEMO_WEB_URL, SCALAR_API_URL } from "$lib/config";
+    import { DEMO_ENABLED, DEMO_WEB_URL, SCALAR_API_URL } from "#lib/config.js";
 
     // This embed is for reading. Sending a request needs a tenant to send it to and a
     // credential to send with it, and this page is on a different domain to any Nocturne

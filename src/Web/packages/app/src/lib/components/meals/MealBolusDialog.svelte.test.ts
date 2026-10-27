@@ -9,10 +9,12 @@ const saved = vi.hoisted(() => ({ result: true }));
 vi.mock("svelte-sonner", () => ({
   toast: { success: vi.fn(), error: toastError },
 }));
-vi.mock("#lib/api/generated/bolus.generated.remote.js", () => {
+vi.mock("#lib/api/generated/bolus.generated.remote.js", async () => {
+  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
   // The component spreads enhance()'s return onto its form; a submit handler here runs
   // the callback it was given, as kit's form does after a successful round trip.
   const form = () => ({
+    fields: remoteFormFields(),
     get result() {
       return saved.result ? { id: "new" } : undefined;
     },

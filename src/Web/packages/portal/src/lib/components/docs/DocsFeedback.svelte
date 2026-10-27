@@ -4,8 +4,8 @@
     import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
     import { page } from "$app/state";
     import { Button } from "@nocturne/ui/ui/button";
-    import { campaignUrl, track } from "$lib/analytics";
-    import { LINKS } from "$lib/data/links";
+    import { campaignUrl, track } from "#lib/analytics.js";
+    import { LINKS } from "#lib/data/links.js";
 
     let { class: className = "" }: { class?: string } = $props();
 

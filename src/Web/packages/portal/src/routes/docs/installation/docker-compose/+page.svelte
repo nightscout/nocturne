@@ -1,17 +1,17 @@
 <script lang="ts">
     import { ArtworkHero } from "water-ui";
-    import { DOCS_HERO } from "$lib/data/docs-artwork";
+    import { DOCS_HERO } from "#lib/data/docs-artwork.js";
     import { resolve } from "$app/paths";
-    import SystemRequirements from "$lib/components/docs/SystemRequirements.svelte";
-    import VerificationSteps from "$lib/components/docs/VerificationSteps.svelte";
-    import NextSteps from "$lib/components/docs/NextSteps.svelte";
-    import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
-    import EnvFileGenerator from "$lib/components/docs/EnvFileGenerator.svelte";
-    import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
+    import SystemRequirements from "#lib/components/docs/SystemRequirements.svelte";
+    import VerificationSteps from "#lib/components/docs/VerificationSteps.svelte";
+    import NextSteps from "#lib/components/docs/NextSteps.svelte";
+    import SupportNocturne from "#lib/components/docs/SupportNocturne.svelte";
+    import EnvFileGenerator from "#lib/components/docs/EnvFileGenerator.svelte";
+    import CodeBlock from "#lib/components/docs/CodeBlock.svelte";
     import Callout from "@nocturne/cms/components/Callout.svelte";
-    import envExample from "$lib/release/docker-compose/default.env.example?raw";
-    import dockerCompose from "$lib/release/docker-compose/docker-compose.yaml?raw";
-    import bindDataCompose from "$lib/release/docker-compose/docker-compose.bind-data.yaml?raw";
+    import envExample from "#lib/release/docker-compose/default.env.example?raw";
+    import dockerCompose from "#lib/release/docker-compose/docker-compose.yaml?raw";
+    import bindDataCompose from "#lib/release/docker-compose/docker-compose.bind-data.yaml?raw";
 
     const hero = DOCS_HERO["installation/docker-compose"];
 
@@ -236,7 +236,7 @@
         along with <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">X-Forwarded-Proto</code> and
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">X-Forwarded-Host</code>, or logins will
         fail with a 403. See
-        <a href={resolve("/docs/installation/reverse-proxy")} class="text-primary hover:underline">Bring your own reverse proxy</a>
+        <a href={resolve("docs/installation/reverse-proxy")} class="text-primary hover:underline">Bring your own reverse proxy</a>
         for worked nginx, Traefik, and Caddy configurations.
     </p>
 

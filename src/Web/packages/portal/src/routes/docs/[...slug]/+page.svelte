@@ -1,6 +1,6 @@
 <script lang="ts">
     import { ArtworkHero } from "water-ui";
-    import { DOCS_HERO } from "$lib/data/docs-artwork";
+    import { DOCS_HERO } from "#lib/data/docs-artwork.js";
 
     let { data } = $props();
 

@@ -1,4 +1,4 @@
-import { base } from "$app/paths";
+import { syncedAsset } from "#lib/synced-asset.js";
 import { wirePayload, type ReplayResult, type ReplayTick, type SimRule, type ValidationIssue } from "./wire";
 
 interface EngineModule {
@@ -17,7 +17,7 @@ let loading: Promise<EngineModule> | undefined;
  */
 export function loadEngine(): Promise<EngineModule> {
 	loading ??= (async () => {
-		const url = `${base}/alerts-engine/nocturne_alerts.js`;
+		const url = syncedAsset("alerts-engine/nocturne_alerts.js");
 		const engine: EngineModule = await import(/* @vite-ignore */ url);
 		await engine.default();
 		return engine;

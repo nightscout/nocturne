@@ -3,7 +3,7 @@ title: Heart Rate
 ---
 
 <script>
-  import Video from '$lib/components/docs/Video.svelte';
+  import Video from '#lib/components/docs/Video.svelte';
 </script>
 
 # Heart Rate

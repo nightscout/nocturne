@@ -19,10 +19,11 @@ const data = vi.hoisted(() => ({
   triggerEventTypes: [] as string[],
 }));
 
-vi.mock("#lib/api/generated/trackers.generated.remote.js", () => {
+vi.mock("#lib/api/generated/trackers.generated.remote.js", async () => {
+  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
   const query = (read: () => unknown) => () => ({ current: read(), refresh: async () => {} });
   const form = () => {
-    const instance = { result: undefined, pending: 0, enhance: () => ({}) };
+    const instance = { result: undefined, pending: 0, enhance: () => ({}), fields: remoteFormFields() };
     return { for: () => instance, ...instance };
   };
   return {
@@ -36,9 +37,10 @@ vi.mock("#lib/api/generated/trackers.generated.remote.js", () => {
     updateDefinition: form(),
   };
 });
-vi.mock("#lib/api/generated/deviceEvents.generated.remote.js", () => ({
-  create: { for: () => ({ result: undefined, enhance: () => ({}) }) },
-}));
+vi.mock("#lib/api/generated/deviceEvents.generated.remote.js", async () => {
+  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
+  return { create: { for: () => ({ result: undefined, enhance: () => ({}), fields: remoteFormFields() }) } };
+});
 vi.mock("#lib/api/generated/reservoirReports.generated.remote.js", () => ({ create: vi.fn() }));
 vi.mock("@nocturne/coach", () => ({ coachmark: () => () => {} }));
 

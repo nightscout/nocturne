@@ -7,25 +7,28 @@ const { formStub } = vi.hoisted(() => ({
   formStub: (result: unknown) => ({
     result,
     pending: 0,
-    fields: { allIssues: () => [] },
     enhance: () => ({}),
   }),
 }));
 
-vi.mock("../oauth.remote", () => ({
-  lookupDeviceForm: formStub({
-    deviceInfo: {
-      userCode: "BCDF-GHJK",
-      clientId: "0192f0e4-0000-7000-8000-000000000001",
-      displayName: "Trio",
-      scopes: ["glucose.read", "treatments.readwrite"],
-      isExpired: false,
-      deletionAccess: "ReadWrite",
-    },
-  }),
-  approveDeviceForm: formStub(undefined),
-  denyDeviceForm: formStub(undefined),
-}));
+vi.mock("../oauth.remote", async () => {
+  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
+  const form = (result: unknown) => ({ ...formStub(result), fields: remoteFormFields() });
+  return {
+    lookupDeviceForm: form({
+      deviceInfo: {
+        userCode: "BCDF-GHJK",
+        clientId: "0192f0e4-0000-7000-8000-000000000001",
+        displayName: "Trio",
+        scopes: ["glucose.read", "treatments.readwrite"],
+        isExpired: false,
+        deletionAccess: "ReadWrite",
+      },
+    }),
+    approveDeviceForm: form(undefined),
+    denyDeviceForm: form(undefined),
+  };
+});
 
 import DevicePage from "./+page.svelte";
 

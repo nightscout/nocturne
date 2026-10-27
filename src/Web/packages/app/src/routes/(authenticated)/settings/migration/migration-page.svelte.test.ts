@@ -20,8 +20,9 @@ const remote = vi.hoisted(() => ({
 
 // The factory is hoisted above every declaration in this file, so anything it evaluates eagerly
 // has to be built inside it; only the lazy `history` read may reach out.
-vi.mock("#lib/api/generated/migrations.generated.remote.js", () => {
-  const inertForm = { enhance: () => ({}), pending: 0, result: undefined };
+vi.mock("#lib/api/generated/migrations.generated.remote.js", async () => {
+  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
+  const inertForm = { enhance: () => ({}), pending: 0, result: undefined, fields: remoteFormFields() };
 
   return {
     getPendingConfig: () => createQueryResource(() => Promise.resolve({ hasPendingConfig: false })),
@@ -41,6 +42,7 @@ vi.mock("#lib/api/generated/migrations.generated.remote.js", () => {
       }),
     testConnection: inertForm,
     startMigration: {
+      fields: remoteFormFields(),
       pending: 0,
       get result() {
         return remote.startResult;

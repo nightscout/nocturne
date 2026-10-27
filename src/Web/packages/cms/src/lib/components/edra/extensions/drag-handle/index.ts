@@ -349,7 +349,7 @@ export function DragHandlePlugin(options: GlobalDragHandleOptions & { pluginKey:
 	});
 }
 
-const GlobalDragHandle = Extension.create({
+const GlobalDragHandle = Extension.create<GlobalDragHandleOptions>({
 	name: 'globalDragHandle',
 
 	addOptions() {

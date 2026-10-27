@@ -44,10 +44,13 @@ function submittingForm() {
   };
 }
 
-vi.mock("#lib/api/generated/patientRecords.generated.remote.js", () => ({
-  getPatientRecord: () => remoteQuery(() => state.record),
-  updatePatientRecord: submittingForm(),
-}));
+vi.mock("#lib/api/generated/patientRecords.generated.remote.js", async () => {
+  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
+  return {
+    getPatientRecord: () => remoteQuery(() => state.record),
+    updatePatientRecord: { ...submittingForm(), fields: remoteFormFields() },
+  };
+});
 vi.mock("#lib/api/generated/bodyWeights.generated.remote.js", () => ({
   getBodyWeights: () => remoteQuery(() => []),
   create: vi.fn(),

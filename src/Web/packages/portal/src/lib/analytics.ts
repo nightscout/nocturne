@@ -10,8 +10,8 @@
  * local build of the portal makes no request to anything.
  */
 import videos from '@nocturne/video/manifest.json';
-import { PLAUSIBLE_DOMAIN, PLAUSIBLE_HOST } from '$lib/config';
-import { DOCS_NAV_SECTIONS } from '$lib/data/docs-nav';
+import { PLAUSIBLE_DOMAIN, PLAUSIBLE_HOST } from '#lib/config.js';
+import { DOCS_NAV_SECTIONS } from '#lib/data/docs-nav.js';
 
 export const PLAUSIBLE_ENABLED = PLAUSIBLE_DOMAIN !== '';
 

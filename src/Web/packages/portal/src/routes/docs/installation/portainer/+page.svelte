@@ -1,13 +1,13 @@
 <script lang="ts">
     import { ArtworkHero } from "water-ui";
     import { resolve } from "$app/paths";
-    import NextSteps from "$lib/components/docs/NextSteps.svelte";
-    import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
-    import EnvFileGenerator from "$lib/components/docs/EnvFileGenerator.svelte";
-    import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
+    import NextSteps from "#lib/components/docs/NextSteps.svelte";
+    import SupportNocturne from "#lib/components/docs/SupportNocturne.svelte";
+    import EnvFileGenerator from "#lib/components/docs/EnvFileGenerator.svelte";
+    import CodeBlock from "#lib/components/docs/CodeBlock.svelte";
     import Callout from "@nocturne/cms/components/Callout.svelte";
-    import { DOCS_HERO } from "$lib/data/docs-artwork";
-    import envExample from "$lib/release/portainer/default.env.example?raw";
+    import { DOCS_HERO } from "#lib/data/docs-artwork.js";
+    import envExample from "#lib/release/portainer/default.env.example?raw";
 
     const hero = DOCS_HERO["installation/portainer"];
 

@@ -3,7 +3,7 @@ title: Quick Start
 ---
 
 <script>
-  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import Screenshot from '#lib/components/docs/Screenshot.svelte';
 </script>
 
 # Quick Start

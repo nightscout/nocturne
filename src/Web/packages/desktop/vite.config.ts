@@ -1,9 +1,18 @@
 import { sveltekit } from "@sveltejs/kit/vite";
+import adapter from "@sveltejs/adapter-static";
+import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
 
 export default defineConfig({
-  plugins: [tailwindcss(), sveltekit()],
+  plugins: [
+    tailwindcss(),
+    sveltekit({
+      preprocess: vitePreprocess(),
+      // Tauri serves the built frontend from disk; SPA fallback, no SSR.
+      adapter: adapter({ fallback: "index.html" }),
+    }),
+  ],
   // Tauri expects a fixed dev port (tauri.conf.json devUrl).
   server: {
     port: 1420,

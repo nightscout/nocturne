@@ -1,5 +1,5 @@
-import { dev } from '$app/environment';
-import { env } from '$env/dynamic/private';
+import { dev } from '$app/env';
+import { CONTENT_CONTRIBUTION_URL } from '$app/env/private';
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
@@ -27,7 +27,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 	const body = await request.json();
 	const slug = String(body.slug ?? '');
 
-	const target = env.CONTENT_CONTRIBUTION_URL || 'https://nocturne.run/api/v4/content/relay';
+	const target = CONTENT_CONTRIBUTION_URL || 'https://nocturne.run/api/v4/content/relay';
 	const response = await fetch(target, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },

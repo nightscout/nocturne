@@ -2,8 +2,8 @@
     import { ConfirmationBackground } from "water-ui";
     import { Button } from "@nocturne/ui/ui/button";
     import ExternalLink from "@lucide/svelte/icons/external-link";
-    import { DEMO_ENABLED, DEMO_WEB_URL } from "$lib/config";
-    import { track } from "$lib/analytics";
+    import { DEMO_ENABLED, DEMO_WEB_URL } from "#lib/config.js";
+    import { track } from "#lib/analytics.js";
 </script>
 
 <svelte:head>

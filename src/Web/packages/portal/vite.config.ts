@@ -1,4 +1,10 @@
 import { sveltekit } from '@sveltejs/kit/vite';
+import adapter from '@sveltejs/adapter-static';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { mdsvex } from 'mdsvex';
+import rehypeSlug from 'rehype-slug';
+import { remarkVars } from '@nocturne/cms/remark/vars';
+import { rehypeInstallSteps } from './src/lib/markdown/rehype-install-steps.js';
 import tailwindcss from '@tailwindcss/vite';
 import { wuchale } from 'wuchale/vite';
 import lingo from 'vite-plugin-lingo';
@@ -6,7 +12,6 @@ import { blogManifest } from '@nocturne/cms/blog/vite-plugin';
 import { resolve, sep } from 'node:path';
 import { cpSync, rmSync, existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { defineConfig, searchForWorkspaceRoot, type Plugin } from 'vite';
-import { appAliases } from './app-aliases';
 
 /**
  * pnpm's global virtual store (`enableGlobalVirtualStore` in pnpm-workspace.yaml) links every
@@ -22,6 +27,17 @@ function pnpmStoreRoots(): string[] {
   } catch {
     return [];
   }
+}
+
+/** `paths.base`: empty, or a path from the root. */
+function basePath(value: string | undefined): '' | `/${string}` {
+  if (!value) return '';
+  if (isRootPath(value)) return value;
+  throw new Error(`BASE_PATH must start with "/": ${value}`);
+}
+
+function isRootPath(value: string): value is `/${string}` {
+  return value.startsWith('/');
 }
 
 function sharedLogos(): Plugin {
@@ -125,7 +141,6 @@ function releaseAssets(): Plugin {
 
 export default defineConfig({
   plugins: [
-    appAliases(),
     sharedLogos(),
     sharedFonts(),
     releaseAssets(),
@@ -139,7 +154,28 @@ export default defineConfig({
       localesDir: '../../locales',
     }),
     blogManifest({ contentDir: resolve(__dirname, 'src/content/blog') }),
-    sveltekit()
+    sveltekit({
+      preprocess: [
+        vitePreprocess(),
+        mdsvex({ extensions: ['.svx'], remarkPlugins: [remarkVars], rehypePlugins: [rehypeSlug, rehypeInstallSteps] }),
+      ],
+      extensions: ['.svelte', '.svx'],
+      compilerOptions: { experimental: { async: true } },
+      adapter: adapter({
+        pages: 'build',
+        assets: 'build',
+        fallback: '404.html',
+      }),
+      paths: {
+        base: basePath(process.env.BASE_PATH),
+      },
+      prerender: {
+        handleHttpError: ({ path, message }) => {
+          if (path === '/setup') return;
+          throw new Error(message);
+        },
+      },
+    })
   ],
   server: {
     host: "0.0.0.0",

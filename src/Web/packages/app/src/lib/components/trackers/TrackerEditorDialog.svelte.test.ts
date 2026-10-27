@@ -34,7 +34,7 @@ function open(formCategory: TrackerCategory) {
 }
 
 const postedCovers = () =>
-  [...document.querySelectorAll<HTMLInputElement>('input[name="covers[]"]')].map((i) => i.value);
+  [...document.querySelectorAll<HTMLInputElement>('input[name^="covers["]')].map((i) => i.value);
 
 describe("TrackerEditorDialog covers", () => {
   it("offers what a pump part replaces, and a low reservoir alert once it replaces the insulin", async () => {
