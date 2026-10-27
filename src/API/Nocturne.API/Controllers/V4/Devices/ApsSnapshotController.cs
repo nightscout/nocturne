@@ -40,6 +40,9 @@ public class ApsSnapshotController(IApsSnapshotRepository repo, ILoopClosedLoopS
     /// insert. Validation failures reject the whole request with `400 Bad Request` before anything
     /// is persisted.
     ///
+    /// A curve a command carries in `predBGs` is moved into the matching `predicted*Json` field when
+    /// that field is empty, and a Loop status's `predicted.values` into `predictedDefaultJson`.
+    ///
     /// Device attribution is a deliberate scope cut: unlike the legacy decomposer path, records
     /// written here carry no Device/PatientDevice link (snapshots are not <c>IDeviceAttributed</c>,
     /// so the stamper can't take them). Reads that join by <c>correlationId</c> are unaffected.
@@ -56,6 +59,7 @@ public class ApsSnapshotController(IApsSnapshotRepository repo, ILoopClosedLoopS
             return invalid;
 
         var models = requests.Select(MapToModel).ToList();
+        models.ForEach(ApsSnapshotCurves.Normalize);
         var persisted = (await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct)).ToArray();
         await closedLoop.AfterSnapshotsWrittenAsync(persisted, ct);
         return StatusCode(201, persisted);
