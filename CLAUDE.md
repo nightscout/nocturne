@@ -121,6 +121,10 @@ aspire run --isolated
 
 To force persistent mode in a worktree (e.g. long-lived debugging): `NOCTURNE_DB_PERSISTENCE=persistent aspire run --isolated`.
 
+## Finishing work
+
+A branch that lives only in a local worktree is lost work: nobody sees it, and worktree cleanup deletes it. When a change is done and its checks pass, push the branch and open a PR without waiting to be asked. If something is still unresolved, open it as a draft and say what in the body. Never end a session with commits that are not on the remote, or with finished work left uncommitted. Do not merge unless told to.
+
 ## Architecture
 
 Nocturne follows Clean Architecture.

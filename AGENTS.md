@@ -43,6 +43,10 @@ cd src/Web && pnpm --recursive --no-bail run lint:ci
 
 Aspire orchestrates everything. The API build regenerates the NSwag client when it is missing or older than the API's public surface (controllers, DTOs, attributes); `dotnet watch` rebuilds skip it. Force a regen with `dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true`.
 
+## Finishing work
+
+A branch that lives only in a local worktree is lost work: nobody sees it, and worktree cleanup deletes it. When a change is done and its checks pass, push the branch and open a PR without waiting to be asked. If something is still unresolved, open it as a draft and say what in the body. Never end a session with commits that are not on the remote, or with finished work left uncommitted. Do not merge unless told to.
+
 ## Architecture
 
 Nocturne follows Clean Architecture. Frontend interfaces are also derived from the NSwag model (although due to NSwag peculiarities, models that need to be generated have to exist in an endpoint, which is what the metadata controller is for)
