@@ -36,8 +36,8 @@ importers:
         specifier: 7.0.0-dev.20260513.1
         version: 7.0.0-dev.20260513.1
       openapi-remote-codegen:
-        specifier: 0.9.0
-        version: 0.9.0(@sveltejs/kit@3.1.0(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))
+        specifier: 0.9.1
+        version: 0.9.1(@sveltejs/kit@3.1.0(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))
       prettier:
         specifier: ^3.7.2
         version: 3.7.2
@@ -5481,8 +5481,8 @@ packages:
     resolution: {integrity: sha512-YgBpdJHPyQ2UE5x+hlSXcnejzAvD0b22U2OuAP+8OnlJT+PjWPxtgmGqKKc+RgTM63U9gN0YzrYc71R2WT/hTA==}
     engines: {node: '>=18'}
 
-  openapi-remote-codegen@0.9.0:
-    resolution: {integrity: sha512-SswNPiUkFg9ytDHwPuq3E9kWsbgCvL6rAZgPABQwZBzbswqkJzChugTIcXCE50fiN1Yxa0ffAVfC9Ke9msMlOQ==}
+  openapi-remote-codegen@0.9.1:
+    resolution: {integrity: sha512-3QJNU/pThVbzxawX8DInna5jqF0RwsVL+S5l9aF5VaPQ2X9bo0nU5Mo60/3LRfo16z3dwsxIuDa48nIXuFZkvg==}
     hasBin: true
     peerDependencies:
       '@sveltejs/kit': ^2 || ^3
@@ -11789,7 +11789,7 @@ snapshots:
       is-inside-container: 1.0.0
       wsl-utils: 0.1.0
 
-  openapi-remote-codegen@0.9.0(@sveltejs/kit@3.1.0(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))):
+  openapi-remote-codegen@0.9.1(@sveltejs/kit@3.1.0(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))):
     dependencies:
       '@sveltejs/kit': 3.1.0(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@8.0.12(@types/node@24.10.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))
       openapi-types: 12.1.3

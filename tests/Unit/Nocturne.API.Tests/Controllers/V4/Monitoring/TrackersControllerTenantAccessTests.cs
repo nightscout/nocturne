@@ -59,6 +59,7 @@ public class TrackersControllerTenantAccessTests
             _alerts.Object,
             Mock.Of<ITenantAccessor>(),
             Mock.Of<IAlertAcknowledgementService>(),
+            TrackerEventRecorderStub.Create(),
             Mock.Of<ILogger<TrackersController>>()
         );
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };

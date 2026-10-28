@@ -1,5 +1,6 @@
 <script lang="ts">
   import { deferredArtwork } from "#lib/watercolour-deferral.svelte.js";
+  import { cn } from "#lib/utils/index.js";
 
   interface Props {
     /** Seeds the wash, so each report keeps its own. */
@@ -14,5 +15,6 @@
 </script>
 
 {#if wash.component}
-  <wash.component {name} position="absolute" class={className} />
+  <!-- It covers the whole header, page switcher included, so it must not take clicks. -->
+  <wash.component {name} position="absolute" class={cn("pointer-events-none", className)} />
 {/if}

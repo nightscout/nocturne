@@ -33,13 +33,10 @@ vi.mock("#lib/api/generated/trackers.generated.remote.js", async () => {
     getPresets: query(() => data.presets),
     getEndEventTypes: query(() => []),
     getTriggerEventTypes: query(() => data.triggerEventTypes),
+    getRecordableEventTypes: query(() => []),
     createDefinition: form(),
     updateDefinition: form(),
   };
-});
-vi.mock("#lib/api/generated/deviceEvents.generated.remote.js", async () => {
-  const { remoteFormFields } = await import("#lib/test-stubs/remote-resource.js");
-  return { create: { for: () => ({ result: undefined, enhance: () => ({}), fields: remoteFormFields() }) } };
 });
 vi.mock("#lib/api/generated/reservoirReports.generated.remote.js", () => ({ create: vi.fn() }));
 vi.mock("@nocturne/coach", () => ({ coachmark: () => () => {} }));

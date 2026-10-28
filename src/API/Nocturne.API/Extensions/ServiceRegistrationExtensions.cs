@@ -840,6 +840,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITrackerAlertRuleSyncService, TrackerAlertRuleSyncService>();
         services.AddHostedService<TrackerAlertRuleBackfillService>();
         services.AddScoped<ConsumableTrackerWriter>();
+        services.AddScoped<TrackerEventRecorder>();
         services.AddScoped<ILegacyFallbackService, LegacyFallbackService>();
         services.AddScoped<IDeviceAgeService, DeviceAgeService>();
         services.AddScoped<ISensorSessionInferenceService, SensorSessionInferenceService>();

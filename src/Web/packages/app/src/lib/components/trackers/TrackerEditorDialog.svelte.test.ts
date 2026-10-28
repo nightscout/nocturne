@@ -8,6 +8,7 @@ import WithTooltipProvider from "#lib/test-stubs/WithTooltipProvider.test-stub.s
 vi.mock("#lib/api/generated/trackers.generated.remote.js", () => ({
   getTriggerEventTypes: () => remoteQuery(() => ["Pod Change", "Pod Activated", "Site Change"]),
   getEndEventTypes: () => remoteQuery(() => ["Sensor Stop", "Pod Deactivated"]),
+  getRecordableEventTypes: () => remoteQuery(() => ["Sensor Start", "Sensor Stop"]),
   createDefinition: remoteForm(),
   updateDefinition: remoteForm(),
 }));
@@ -68,5 +69,22 @@ describe("TrackerEditorDialog covers", () => {
     await expect.element(page.getByTestId("tracker-ends")).toBeVisible();
     expect(document.querySelector('[data-testid="tracker-covers"]')).toBeNull();
     expect(postedCovers()).toEqual([""]);
+  });
+});
+
+const postedStartEvent = () =>
+  document.querySelector<HTMLInputElement>('input[name^="startEventType"]')?.value;
+
+describe("TrackerEditorDialog event integration", () => {
+  it("posts the picked start event, and a blank once None is picked again", async () => {
+    open(TrackerCategory.Sensor);
+
+    await page.getByTestId("startEventType-trigger").click();
+    await page.getByRole("option", { name: "Sensor Start" }).click();
+    expect(postedStartEvent()).toBe("Sensor Start");
+
+    await page.getByTestId("startEventType-trigger").click();
+    await page.getByRole("option", { name: "None - do not create event" }).click();
+    expect(postedStartEvent()).toBe(" ");
   });
 });
