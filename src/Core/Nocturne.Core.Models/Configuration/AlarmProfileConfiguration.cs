@@ -104,13 +104,13 @@ public class AlarmProfileConfiguration
     public int DisplayOrder { get; set; }
 
     [JsonPropertyName("createdAt")]
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? CreatedAt { get; set; }
 
     /// <summary>
     /// Timestamp when this profile was last modified
     /// </summary>
     [JsonPropertyName("updatedAt")]
-    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? UpdatedAt { get; set; }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -429,7 +429,7 @@ public class CustomSoundReference
     public int? DurationSeconds { get; set; }
 
     [JsonPropertyName("uploadedAt")]
-    public DateTimeOffset UploadedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? UploadedAt { get; set; }
 }
 
 /// <summary>

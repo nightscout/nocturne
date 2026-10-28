@@ -27,6 +27,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 
     private readonly INocturneDbContextFactory _contexts;
     private readonly IStateSpanRepository _stateSpanRepository;
+    private readonly TimeProvider _time;
     private readonly ILogger<ActivityDecomposer> _logger;
 
     /// <param name="stateSpanRepository">Repository for bulk-creating regular activities as StateSpans.</param>
@@ -34,10 +35,12 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     public ActivityDecomposer(
         INocturneDbContextFactory contexts,
         IStateSpanRepository stateSpanRepository,
+        TimeProvider timeProvider,
         ILogger<ActivityDecomposer> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _stateSpanRepository = stateSpanRepository;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -58,18 +61,27 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     }
 
     /// <summary>
-    /// Precedence is mills, <c>timestamp</c>, <c>timeStamp</c>, <c>created_at</c>. xDrip's
-    /// <c>timeStamp</c> is read from extension data because binding is case-sensitive, and it ranks
-    /// above <c>created_at</c>, which xDrip truncates to whole seconds.
+    /// Precedence is mills, <c>timestamp</c>, <c>timeStamp</c>, <c>created_at</c>, then
+    /// <paramref name="receivedAt"/>. xDrip's <c>timeStamp</c> is read from extension data because
+    /// binding is case-sensitive, and it ranks above <c>created_at</c>, which xDrip truncates to
+    /// whole seconds.
     /// </summary>
-    internal static void NormalizeMills(Activity activity)
+    internal static void NormalizeMills(Activity activity, DateTimeOffset receivedAt)
     {
         if (ApplyClientTimestamp(activity))
             return;
 
         if (DateTimeOffset.TryParse(activity.CreatedAt, System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.AssumeUniversal, out var createdAt))
+        {
             activity.Mills = createdAt.ToUnixTimeMilliseconds();
+            return;
+        }
+
+        // Dated by receipt, like a Nightscout upload with no created_at.
+        activity.Mills = receivedAt.ToUnixTimeMilliseconds();
+        activity.CreatedAt ??= receivedAt.UtcDateTime.ToString(
+            "yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -120,7 +132,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     {
         await using var db = await _contexts.CreateAsync(ct);
         var result = new DecompositionResult { CorrelationId = Guid.CreateVersion7() };
-        NormalizeMills(activity);
+        NormalizeMills(activity, _time.GetUtcNow());
 
         switch (Classify(activity))
         {
@@ -160,10 +172,11 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         var heartRateList = new List<HeartRate>();
         var stepCountList = new List<StepCount>();
         var regularActivities = new List<Activity>();
+        var receivedAt = _time.GetUtcNow();
 
         foreach (var activity in activities)
         {
-            NormalizeMills(activity);
+            NormalizeMills(activity, receivedAt);
 
             switch (Classify(activity))
             {

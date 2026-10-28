@@ -54,8 +54,7 @@ public class DeviceStatus : ProcessableDocumentBase
     /// ISO 8601 formatted creation timestamp
     /// </summary>
     [JsonPropertyName("created_at")]
-    public override string? CreatedAt { get; set; } =
-        DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+    public override string? CreatedAt { get; set; }
 
     /// <summary>
     /// Server-modified timestamp (Unix milliseconds). V3 compatibility field.

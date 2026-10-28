@@ -382,27 +382,6 @@ public class Treatment : ProcessableDocumentBase
     }
 
     /// <summary>
-    /// Calculates Mills from Created_at if Mills is not set - for API compatibility
-    /// </summary>
-    [JsonIgnore]
-    public long CalculatedMills
-    {
-        get
-        {
-            if (Mills > 0)
-                return Mills;
-
-            if (
-                !string.IsNullOrEmpty(Created_at)
-                && UploaderTimestamp.TryParse(Created_at, out var createdAtDate)
-            )
-                return createdAtDate.ToUnixTimeMilliseconds();
-
-            return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        }
-    }
-
-    /// <summary>
     /// Profile name that cut this treatment (used by duration processing)
     /// </summary>
     [JsonPropertyName("cuttedby")]
