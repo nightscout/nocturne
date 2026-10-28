@@ -52,17 +52,20 @@ public class GuestLinkService : IGuestLinkService
     private readonly GuestSessionCacheService _sessionCache;
     private readonly GrantRevocationService _grantRevocation;
     private readonly ILogger<GuestLinkService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public GuestLinkService(
         INocturneDbContextFactory contexts,
         GuestSessionCacheService sessionCache,
         GrantRevocationService grantRevocation,
-        ILogger<GuestLinkService> logger)
+        ILogger<GuestLinkService> logger,
+        TimeProvider timeProvider)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _sessionCache = sessionCache;
         _grantRevocation = grantRevocation;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -90,7 +93,7 @@ public class GuestLinkService : IGuestLinkService
 
         var code = GenerateCode();
         var hash = CredentialHash.GuestCode(code);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         var entity = new OAuthGrantEntity
         {
@@ -160,7 +163,7 @@ public class GuestLinkService : IGuestLinkService
         await using var db = await _contexts.CreateAsync(ct);
         var normalized = code.Replace("-", "").ToUpperInvariant();
         var hash = CredentialHash.GuestCode(normalized);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         var grant = await db.OAuthGrants
             .FirstOrDefaultAsync(g =>
@@ -198,7 +201,7 @@ public class GuestLinkService : IGuestLinkService
     public async Task<GuestSessionInfo?> ValidateSessionAsync(Guid grantId, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         var grant = await db.OAuthGrants
             .AsNoTracking()
@@ -272,7 +275,7 @@ public class GuestLinkService : IGuestLinkService
     public async Task<bool> DismissAsync(Guid grantId, Guid requestingSubjectId, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         var grant = await db.OAuthGrants
             .FirstOrDefaultAsync(g =>
@@ -312,7 +315,7 @@ public class GuestLinkService : IGuestLinkService
     public async Task<int> GetActiveCountAsync(Guid dataOwnerSubjectId, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         return await db.OAuthGrants
             .CountAsync(g =>
@@ -326,7 +329,7 @@ public class GuestLinkService : IGuestLinkService
     public async Task<bool> HasRedeemableCodeAsync(CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         return await db.OAuthGrants
             .AnyAsync(g =>
@@ -355,9 +358,9 @@ public class GuestLinkService : IGuestLinkService
         return $"{code[..3]}-{code[3..]}";
     }
 
-    private static GuestLinkInfo MapToInfo(OAuthGrantEntity entity)
+    private GuestLinkInfo MapToInfo(OAuthGrantEntity entity)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         var status = entity.RevokedAt.HasValue
             ? GuestLinkStatus.Revoked
             : entity.ExpiresAt <= now

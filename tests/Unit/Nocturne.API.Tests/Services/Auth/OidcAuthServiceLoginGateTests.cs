@@ -51,7 +51,8 @@ public class OidcAuthServiceLoginGateTests
             new EphemeralDataProtectionProvider(),
             options,
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
-            NullLogger<OidcAuthService>.Instance);
+            NullLogger<OidcAuthService>.Instance,
+            TimeProvider.System);
     }
 
     private static OidcAuthService.OidcStateData LoginState(string tenantSlug = "erik", string returnUrl = "/")

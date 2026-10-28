@@ -59,7 +59,8 @@ public class OidcAuthServiceRedirectUriTests
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
             Options.Create(baseDomainOptions),
-            NullLogger<OidcAuthService>.Instance);
+            NullLogger<OidcAuthService>.Instance,
+            TimeProvider.System);
     }
 
     [Fact]

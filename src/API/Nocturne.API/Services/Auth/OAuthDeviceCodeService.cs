@@ -31,6 +31,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     private readonly IOAuthClientService _clientService;
     private readonly IOAuthGrantService _grantService;
     private readonly ILogger<OAuthDeviceCodeService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initialises a new <see cref="OAuthDeviceCodeService"/>.
@@ -39,12 +40,14 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     /// <param name="clientService">Used to look up registered OAuth clients by ID.</param>
     /// <param name="grantService">Used to create or update grants when a device code is approved.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">The clock device codes expire against.</param>
     public OAuthDeviceCodeService(
         INocturneDbContextFactory contexts,
         IJwtService jwtService,
         IOAuthClientService clientService,
         IOAuthGrantService grantService,
-        ILogger<OAuthDeviceCodeService> logger
+        ILogger<OAuthDeviceCodeService> logger,
+        TimeProvider timeProvider
     )
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
@@ -52,6 +55,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
         _clientService = clientService;
         _grantService = grantService;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -106,7 +110,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             DeviceCodeHash = deviceCodeHash,
             UserCode = normalizedUserCode,
             Scopes = scopesList,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(DeviceCodeExpirationMinutes),
+            ExpiresAt = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(DeviceCodeExpirationMinutes),
             Interval = DefaultPollingInterval,
         };
 
@@ -154,10 +158,12 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return null;
         }
 
+        var isExpired = entity.IsExpiredAt(_timeProvider.GetUtcNow().UtcDateTime);
+
         _logger.LogInformation(
             "Found device code: id={Id}, expired={Expired}, approved={Approved}, denied={Denied}",
             entity.Id,
-            entity.IsExpired,
+            isExpired,
             entity.IsApproved,
             entity.IsDenied
         );
@@ -172,7 +178,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             ClientId = entity.ClientId,
             ClientDisplayName = client?.DisplayName,
             Scopes = entity.Scopes,
-            IsExpired = entity.IsExpired,
+            IsExpired = isExpired,
             IsApproved = entity.IsApproved,
             IsDenied = entity.IsDenied,
         };
@@ -204,7 +210,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        if (entity.IsExpired)
+        if (entity.IsExpiredAt(_timeProvider.GetUtcNow().UtcDateTime))
         {
             _logger.LogWarning("Attempted to approve expired device code {UserCode}", normalized);
             return false;
@@ -256,7 +262,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             ct: ct
         );
 
-        entity.ApprovedAt = DateTime.UtcNow;
+        entity.ApprovedAt = _timeProvider.GetUtcNow().UtcDateTime;
         entity.GrantId = grant.Id;
         entity.SubjectId = subjectId;
 
@@ -291,7 +297,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        if (entity.IsExpired)
+        if (entity.IsExpiredAt(_timeProvider.GetUtcNow().UtcDateTime))
         {
             _logger.LogWarning("Attempted to deny expired device code {UserCode}", normalized);
             return false;
@@ -315,7 +321,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        entity.DeniedAt = DateTime.UtcNow;
+        entity.DeniedAt = _timeProvider.GetUtcNow().UtcDateTime;
 
         await db.SaveChangesAsync(ct);
 

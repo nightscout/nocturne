@@ -30,6 +30,7 @@ public class RefreshTokenService : IRefreshTokenService
     private readonly IRotationSuccessorCache _successorCache;
     private readonly JwtOptions _options;
     private readonly ILogger<RefreshTokenService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="RefreshTokenService"/>.
@@ -39,18 +40,21 @@ public class RefreshTokenService : IRefreshTokenService
     /// <param name="successorCache">Grace-period store replaying a rotation's successor to concurrent requests.</param>
     /// <param name="options">JWT configuration options including refresh token lifetime settings.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="timeProvider">The clock token lifetimes and the rotation grace window are read against.</param>
     public RefreshTokenService(
         IFirstPartyTokenRepository repository,
         IJwtService jwtService,
         IRotationSuccessorCache successorCache,
         IOptions<JwtOptions> options,
-        ILogger<RefreshTokenService> logger)
+        ILogger<RefreshTokenService> logger,
+        TimeProvider timeProvider)
     {
         _repository = repository;
         _jwtService = jwtService;
         _successorCache = successorCache;
         _options = options.Value;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -72,8 +76,8 @@ public class RefreshTokenService : IRefreshTokenService
             DeviceDescription: deviceDescription,
             IpAddress: ipAddress,
             UserAgent: userAgent,
-            IssuedAt: DateTime.UtcNow,
-            ExpiresAt: DateTime.UtcNow.AddDays(_options.RefreshTokenLifetimeDays),
+            IssuedAt: _timeProvider.GetUtcNow().UtcDateTime,
+            ExpiresAt: _timeProvider.GetUtcNow().UtcDateTime.AddDays(_options.RefreshTokenLifetimeDays),
             RevokedAt: null,
             RevokedReason: null,
             ReplacedByTokenId: null,
@@ -107,7 +111,7 @@ public class RefreshTokenService : IRefreshTokenService
             return null;
         }
 
-        if (record.ExpiresAt < DateTime.UtcNow)
+        if (record.ExpiresAt < _timeProvider.GetUtcNow().UtcDateTime)
         {
             _logger.LogDebug("Refresh token {TokenId} has expired", record.Id);
             return null;
@@ -126,7 +130,7 @@ public class RefreshTokenService : IRefreshTokenService
 
         var oldRecord = await _repository.FindByHashAsync(tokenHash);
 
-        if (oldRecord == null || oldRecord.ExpiresAt < DateTime.UtcNow)
+        if (oldRecord == null || oldRecord.ExpiresAt < _timeProvider.GetUtcNow().UtcDateTime)
         {
             // Unknown or expired token — nothing to rotate.
             return null;
@@ -156,8 +160,8 @@ public class RefreshTokenService : IRefreshTokenService
             DeviceDescription: oldRecord.DeviceDescription,
             IpAddress: ipAddress ?? oldRecord.IpAddress,
             UserAgent: userAgent ?? oldRecord.UserAgent,
-            IssuedAt: DateTime.UtcNow,
-            ExpiresAt: DateTime.UtcNow.AddDays(_options.RefreshTokenLifetimeDays),
+            IssuedAt: _timeProvider.GetUtcNow().UtcDateTime,
+            ExpiresAt: _timeProvider.GetUtcNow().UtcDateTime.AddDays(_options.RefreshTokenLifetimeDays),
             RevokedAt: null,
             RevokedReason: null,
             ReplacedByTokenId: null,
@@ -213,7 +217,7 @@ public class RefreshTokenService : IRefreshTokenService
             return null;
         }
 
-        var timeSinceRevocation = DateTime.UtcNow - oldRecord.RevokedAt!.Value;
+        var timeSinceRevocation = _timeProvider.GetUtcNow().UtcDateTime - oldRecord.RevokedAt!.Value;
         if (timeSinceRevocation < RefreshTokenRotation.GracePeriod)
         {
             var successor = await _successorCache.GetAsync(oldRecord.TokenHash);
@@ -267,7 +271,7 @@ public class RefreshTokenService : IRefreshTokenService
     private async Task<string?> LiveOrNullAsync(string successor)
     {
         var record = await _repository.FindByHashAsync(_jwtService.HashRefreshToken(successor));
-        return record is { RevokedAt: null } && record.ExpiresAt >= DateTime.UtcNow ? successor : null;
+        return record is { RevokedAt: null } && record.ExpiresAt >= _timeProvider.GetUtcNow().UtcDateTime ? successor : null;
     }
 
     /// <inheritdoc />
@@ -381,7 +385,7 @@ public class RefreshTokenService : IRefreshTokenService
     /// <inheritdoc />
     public async Task<int> PruneExpiredRefreshTokensAsync(DateTime? olderThan = null)
     {
-        var cutoffDate = olderThan ?? DateTime.UtcNow.AddDays(-30);
+        var cutoffDate = olderThan ?? _timeProvider.GetUtcNow().UtcDateTime.AddDays(-30);
 
         var count = await _repository.PruneExpiredAsync(cutoffDate);
 

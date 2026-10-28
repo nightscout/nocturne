@@ -55,7 +55,8 @@ public class LoginHandoffControllerTests : IDisposable
                 _auditContext.AsFactory(),
                 new HttpContextAccessor { HttpContext = _httpContext },
                 new AuditContext(),
-                new Mock<ILogger<AuthAuditService>>().Object));
+                new Mock<ILogger<AuthAuditService>>().Object),
+            TimeProvider.System);
 
         _controller = new LoginHandoffController(
             _tenantContext.AsFactory(),

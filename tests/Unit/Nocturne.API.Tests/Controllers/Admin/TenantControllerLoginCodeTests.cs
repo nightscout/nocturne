@@ -70,7 +70,8 @@ public class TenantControllerLoginCodeTests : IDisposable
                 _auditContext.AsFactory(),
                 new HttpContextAccessor { HttpContext = httpContext },
                 new AuditContext(),
-                new Mock<ILogger<AuthAuditService>>().Object));
+                new Mock<ILogger<AuthAuditService>>().Object),
+            TimeProvider.System);
 
         _tenantService
             .Setup(s => s.GetByIdAsync(_tenantId, It.IsAny<CancellationToken>()))

@@ -15,6 +15,7 @@ public class RoleService : IRoleService
 {
     private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<RoleService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Default system roles with their permissions
@@ -70,10 +71,11 @@ public class RoleService : IRoleService
         ["denied"] = ("No access", Array.Empty<string>()),
     };
 
-    public RoleService(INocturneDbContextFactory contexts, ILogger<RoleService> logger)
+    public RoleService(INocturneDbContextFactory contexts, ILogger<RoleService> logger, TimeProvider timeProvider)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     public async Task<List<Role>> GetAllRolesAsync()
@@ -149,7 +151,7 @@ public class RoleService : IRoleService
         entity.Name = role.Name;
         entity.Description = role.Description;
         entity.Permissions = role.Permissions;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
 
         await db.SaveChangesAsync();
 
@@ -221,7 +223,7 @@ public class RoleService : IRoleService
                 {
                     existing.Permissions = permissions.ToList();
                     existing.Description = description;
-                    existing.UpdatedAt = DateTime.UtcNow;
+                    existing.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
                     _logger.LogInformation("Updated permissions for system role: {RoleName}", name);
                 }
             }

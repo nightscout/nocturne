@@ -25,17 +25,20 @@ public sealed class ShareTokenCacheService : IShareTokenResolver
     private readonly IMemoryCache _cache;
     private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly ILogger<ShareTokenCacheService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(2);
 
     public ShareTokenCacheService(
         IMemoryCache cache,
         INocturneDbContextFactory dbContextFactory,
-        ILogger<ShareTokenCacheService> logger)
+        ILogger<ShareTokenCacheService> logger,
+        TimeProvider timeProvider)
     {
         _cache = cache;
         _dbContextFactory = dbContextFactory;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -80,7 +83,7 @@ public sealed class ShareTokenCacheService : IShareTokenResolver
             {
                 await dbContext.Tenants
                     .Where(t => t.Id == tenant.Id)
-                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.ShareLastAccessedAt, DateTime.UtcNow), ct);
+                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.ShareLastAccessedAt, _timeProvider.GetUtcNow().UtcDateTime), ct);
             }
             catch (DbUpdateException ex)
             {

@@ -72,7 +72,8 @@ public sealed class AuthenticationMiddlewareShareAccessTests
     {
         var jwt = new JwtService(
             Options.Create(new JwtOptions { SecretKey = new string('k', 48) }),
-            NullLogger<JwtService>.Instance);
+            NullLogger<JwtService>.Instance,
+            TimeProvider.System);
 
         var token = jwt.GenerateAccessToken(
             new SubjectInfo { Id = TestDatabaseSeeder.TestSubjectId, Name = "owner" },

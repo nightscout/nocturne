@@ -57,21 +57,22 @@ public static class TotpHelper
     }
 
     /// <summary>
-    /// Verifies a TOTP code against the current time, accepting codes from the previous, current,
+    /// Verifies a TOTP code at <paramref name="now"/>, accepting codes from the previous, current,
     /// and next time step (a ±1 step / 90-second window). Uses constant-time comparison to prevent
     /// timing side-channel attacks.
     /// </summary>
     /// <param name="secret">The raw shared secret bytes.</param>
     /// <param name="code">The 6-digit code string provided by the user.</param>
+    /// <param name="now">The instant the code is checked at.</param>
     /// <returns><see langword="true"/> if the code matches any adjacent time step.</returns>
     /// <remarks>
     /// Applies no single-use floor, so it is only for verifications where no counter has been
     /// recorded yet (initial setup) and for the constant-time dummy verification. Verifying a
     /// stored credential uses <see cref="TryVerify"/> with the credential's recorded step.
     /// </remarks>
-    public static bool Verify(byte[] secret, string code)
+    public static bool Verify(byte[] secret, string code, DateTimeOffset now)
     {
-        return TryVerify(secret, code, lastUsedStep: null, out _);
+        return TryVerify(secret, code, lastUsedStep: null, now, out _);
     }
 
     /// <summary>
@@ -85,11 +86,12 @@ public static class TotpHelper
     /// none has been. The ±1 step window means one observed code stays computationally valid for
     /// about 90 seconds; recording and comparing the step makes each code usable once.
     /// </param>
+    /// <param name="now">The instant the code is checked at.</param>
     /// <param name="matchedStep">The matched time step, or 0 when the code is rejected.</param>
     /// <returns><see langword="true"/> if the code matches an unconsumed adjacent time step.</returns>
-    public static bool TryVerify(byte[] secret, string code, long? lastUsedStep, out long matchedStep)
+    public static bool TryVerify(byte[] secret, string code, long? lastUsedStep, DateTimeOffset now, out long matchedStep)
     {
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var unixTimeSeconds = now.ToUnixTimeSeconds();
         var codeBytes = Encoding.UTF8.GetBytes(code);
 
         var matched = false;
@@ -99,7 +101,7 @@ public static class TotpHelper
         // which step matched.
         for (var i = -1; i <= 1; i++)
         {
-            var candidateTime = now + i * TimeStep;
+            var candidateTime = unixTimeSeconds + i * TimeStep;
             var candidateBytes = Encoding.UTF8.GetBytes(ComputeTotp(secret, candidateTime));
 
             if (!CryptographicOperations.FixedTimeEquals(codeBytes, candidateBytes))

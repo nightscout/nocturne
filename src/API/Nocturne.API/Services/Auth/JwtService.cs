@@ -26,19 +26,22 @@ public class JwtService : IJwtService
     private readonly SymmetricSecurityKey _signingKey;
     private readonly JwtSecurityTokenHandler _tokenHandler;
     private readonly TokenValidationParameters _validationParameters;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="JwtService"/>.
     /// </summary>
     /// <param name="options">JWT configuration options including secret key, issuer, audience, and token lifetimes.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="timeProvider">The clock tokens are stamped and validated against.</param>
     /// <exception cref="InvalidOperationException">
     /// Thrown when <see cref="JwtOptions.SecretKey"/> is null, empty, or shorter than <see cref="InstanceKeyDigest.MinimumLength"/>.
     /// </exception>
-    public JwtService(IOptions<JwtOptions> options, ILogger<JwtService> logger)
+    public JwtService(IOptions<JwtOptions> options, ILogger<JwtService> logger, TimeProvider timeProvider)
     {
         _options = options.Value;
         _logger = logger;
+        _timeProvider = timeProvider;
 
         if (string.IsNullOrEmpty(_options.SecretKey) || _options.SecretKey.Length < InstanceKeyDigest.MinimumLength)
         {
@@ -58,7 +61,40 @@ public class JwtService : IJwtService
             ClockSkew = TimeSpan.FromSeconds(30),
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = _signingKey,
+            LifetimeValidator = CheckLifetime,
         };
+    }
+
+    /// <summary>
+    /// The library's default lifetime check, read against the injected clock: the default reads
+    /// the static one. Throws the exceptions the default throws, which
+    /// <see cref="ValidateAccessToken"/> maps to its errors.
+    /// </summary>
+    private bool CheckLifetime(
+        DateTime? notBefore,
+        DateTime? expires,
+        SecurityToken token,
+        TokenValidationParameters parameters)
+    {
+        if (!expires.HasValue)
+            throw new SecurityTokenNoExpirationException("The token has no expiration time.");
+
+        if (notBefore.HasValue && notBefore.Value > expires.Value)
+            throw new SecurityTokenInvalidLifetimeException("The token's not-before time is after its expiration time.")
+            {
+                NotBefore = notBefore,
+                Expires = expires,
+            };
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+        if (notBefore.HasValue && notBefore.Value > now.Add(parameters.ClockSkew))
+            throw new SecurityTokenNotYetValidException("The token is not yet valid.") { NotBefore = notBefore.Value };
+
+        if (expires.Value < now.Add(parameters.ClockSkew.Negate()))
+            throw new SecurityTokenExpiredException("The token has expired.") { Expires = expires.Value };
+
+        return true;
     }
 
     /// <inheritdoc />
@@ -70,7 +106,7 @@ public class JwtService : IJwtService
         TimeSpan? lifetime = null
     )
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var expires = now.Add(
             lifetime ?? TimeSpan.FromMinutes(_options.AccessTokenLifetimeMinutes)
         );
@@ -119,6 +155,8 @@ public class JwtService : IJwtService
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
+            IssuedAt = now.UtcDateTime,
+            NotBefore = now.UtcDateTime,
             Expires = expires.UtcDateTime,
             Issuer = _options.Issuer,
             Audience = _options.Audience,
@@ -146,7 +184,7 @@ public class JwtService : IJwtService
         Guid? grantId = null
     )
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var expires = now.Add(
             lifetime ?? TimeSpan.FromMinutes(_options.AccessTokenLifetimeMinutes)
         );
@@ -229,6 +267,8 @@ public class JwtService : IJwtService
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
+            IssuedAt = now.UtcDateTime,
+            NotBefore = now.UtcDateTime,
             Expires = expires.UtcDateTime,
             Issuer = _options.Issuer,
             Audience = _options.Audience,

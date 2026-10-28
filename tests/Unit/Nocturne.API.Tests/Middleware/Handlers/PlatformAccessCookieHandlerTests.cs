@@ -53,7 +53,7 @@ public class PlatformAccessCookieHandlerTests : IDisposable
             Audience = "nocturne-api",
             AccessTokenLifetimeMinutes = 15,
         });
-        _jwt = new JwtService(jwtOptions, NullLogger<JwtService>.Instance);
+        _jwt = new JwtService(jwtOptions, NullLogger<JwtService>.Instance, TimeProvider.System);
 
         _db = TestDbContextFactory.CreateSqlite();
         using (var ctx = _db.CreateContext())
@@ -68,7 +68,8 @@ public class PlatformAccessCookieHandlerTests : IDisposable
                 new MemoryCache(new MemoryCacheOptions()),
                 Options.Create(new CacheConfiguration()),
                 NullLogger<MemoryCacheService>.Instance),
-            NullLogger<OAuthTokenRevocationCache>.Instance);
+            NullLogger<OAuthTokenRevocationCache>.Instance,
+            TimeProvider.System);
 
         var services = new ServiceCollection();
         services.AddSingleton(_jwt);

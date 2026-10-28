@@ -12,6 +12,8 @@ public class TotpHelperTests
     // RFC 6238 Appendix B shared secret for SHA1 test vectors: ASCII "12345678901234567890"
     private static readonly byte[] RfcTestSecret = "12345678901234567890"u8.ToArray();
 
+    private static readonly DateTimeOffset Now = new(2026, 3, 14, 9, 26, 45, TimeSpan.Zero);
+
     [Theory]
     [Trait("Category", "Unit")]
     [InlineData(59, "287082")]
@@ -84,10 +86,10 @@ public class TotpHelperTests
     public void Verify_AcceptsCurrentTimeStepCode()
     {
         var secret = TotpHelper.GenerateSecret();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = Now.ToUnixTimeSeconds();
         var code = TotpHelper.ComputeTotp(secret, now);
 
-        var result = TotpHelper.Verify(secret, code);
+        var result = TotpHelper.Verify(secret, code, Now);
 
         result.Should().BeTrue();
     }
@@ -98,10 +100,10 @@ public class TotpHelperTests
     {
         var secret = TotpHelper.GenerateSecret();
         // Compute code for 30 seconds ago (previous time step)
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = Now.ToUnixTimeSeconds();
         var code = TotpHelper.ComputeTotp(secret, now - 30);
 
-        var result = TotpHelper.Verify(secret, code);
+        var result = TotpHelper.Verify(secret, code, Now);
 
         result.Should().BeTrue();
     }
@@ -112,10 +114,10 @@ public class TotpHelperTests
     {
         var secret = TotpHelper.GenerateSecret();
         // Compute code for 30 seconds in the future (next time step)
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = Now.ToUnixTimeSeconds();
         var code = TotpHelper.ComputeTotp(secret, now + 30);
 
-        var result = TotpHelper.Verify(secret, code);
+        var result = TotpHelper.Verify(secret, code, Now);
 
         result.Should().BeTrue();
     }
@@ -126,18 +128,18 @@ public class TotpHelperTests
     {
         var secret = TotpHelper.GenerateSecret();
 
-        var result = TotpHelper.Verify(secret, "000000");
+        var result = TotpHelper.Verify(secret, "000000", Now);
 
         // Extremely unlikely to be valid, but if it is, the test secret just happens to match.
         // We use a fixed known-bad approach instead:
         var knownSecret = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 };
         var wrongCode = "999999";
-        var currentCode = TotpHelper.ComputeTotp(knownSecret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var currentCode = TotpHelper.ComputeTotp(knownSecret, Now.ToUnixTimeSeconds());
 
         // Only assert if the wrong code is actually different from the current code
         if (wrongCode != currentCode)
         {
-            TotpHelper.Verify(knownSecret, wrongCode).Should().BeFalse();
+            TotpHelper.Verify(knownSecret, wrongCode, Now).Should().BeFalse();
         }
     }
 
@@ -147,9 +149,9 @@ public class TotpHelperTests
     {
         var secret = TotpHelper.GenerateSecret();
         // Code from 5 minutes in the future — well outside the +/- 1 step window
-        var futureCode = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 300);
+        var futureCode = TotpHelper.ComputeTotp(secret, Now.ToUnixTimeSeconds() + 300);
 
-        var result = TotpHelper.Verify(secret, futureCode);
+        var result = TotpHelper.Verify(secret, futureCode, Now);
 
         result.Should().BeFalse();
     }
@@ -159,10 +161,10 @@ public class TotpHelperTests
     public void TryVerify_ReportsTheMatchedTimeStep()
     {
         var secret = TotpHelper.GenerateSecret();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = Now.ToUnixTimeSeconds();
         var code = TotpHelper.ComputeTotp(secret, now);
 
-        var result = TotpHelper.TryVerify(secret, code, lastUsedStep: null, out var matchedStep);
+        var result = TotpHelper.TryVerify(secret, code, lastUsedStep: null, Now, out var matchedStep);
 
         result.Should().BeTrue();
         matchedStep.Should().Be(now / 30);
@@ -173,13 +175,13 @@ public class TotpHelperTests
     public void TryVerify_RejectsACodeWhoseStepWasAlreadyConsumed()
     {
         var secret = TotpHelper.GenerateSecret();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = Now.ToUnixTimeSeconds();
         var code = TotpHelper.ComputeTotp(secret, now);
 
-        TotpHelper.TryVerify(secret, code, lastUsedStep: null, out var consumedStep).Should().BeTrue();
+        TotpHelper.TryVerify(secret, code, lastUsedStep: null, Now, out var consumedStep).Should().BeTrue();
 
         // Replayed inside the same +/- 1 step window, which without the floor would still match.
-        var replay = TotpHelper.TryVerify(secret, code, consumedStep, out _);
+        var replay = TotpHelper.TryVerify(secret, code, consumedStep, Now, out _);
 
         replay.Should().BeFalse();
     }
@@ -189,14 +191,31 @@ public class TotpHelperTests
     public void TryVerify_AcceptsACodeFromAStepAfterTheConsumedOne()
     {
         var secret = TotpHelper.GenerateSecret();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = Now.ToUnixTimeSeconds();
         var code = TotpHelper.ComputeTotp(secret, now);
 
         // A step before the current one was consumed, so the current code is still usable.
-        var result = TotpHelper.TryVerify(secret, code, lastUsedStep: (now / 30) - 1, out var matchedStep);
+        var result = TotpHelper.TryVerify(secret, code, lastUsedStep: (now / 30) - 1, Now, out var matchedStep);
 
         result.Should().BeTrue();
         matchedStep.Should().Be(now / 30);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(0, -30, true)]
+    [InlineData(0, -31, false)]
+    [InlineData(29, 1, true)]
+    [InlineData(29, 31, false)]
+    [InlineData(0, 59, true)]
+    [InlineData(0, 60, false)]
+    public void Verify_AcceptsOnlyTheAdjacentTimeSteps(int secondsIntoStep, int codeOffsetSeconds, bool accepted)
+    {
+        var stepStart = DateTimeOffset.FromUnixTimeSeconds(Now.ToUnixTimeSeconds() / 30 * 30);
+        var at = stepStart.AddSeconds(secondsIntoStep);
+        var code = TotpHelper.ComputeTotp(RfcTestSecret, at.ToUnixTimeSeconds() + codeOffsetSeconds);
+
+        TotpHelper.Verify(RfcTestSecret, code, at).Should().Be(accepted);
     }
 
     [Fact]
@@ -204,7 +223,7 @@ public class TotpHelperTests
     public void ComputeTotp_AlwaysReturnsSixDigits()
     {
         var secret = TotpHelper.GenerateSecret();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = Now.ToUnixTimeSeconds();
 
         var code = TotpHelper.ComputeTotp(secret, now);
 

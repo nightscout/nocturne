@@ -42,7 +42,7 @@ public sealed class ShareTokenCacheServiceTests : IDisposable
     }
 
     private ShareTokenCacheService Service() =>
-        new(_cache, _factory.AsNocturneFactory(), Microsoft.Extensions.Logging.Abstractions.NullLogger<ShareTokenCacheService>.Instance);
+        new(_cache, _factory.AsNocturneFactory(), Microsoft.Extensions.Logging.Abstractions.NullLogger<ShareTokenCacheService>.Instance, TimeProvider.System);
 
     [Fact]
     public async Task ResolveByTokenAsync_returns_the_owning_tenant()

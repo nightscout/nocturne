@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.API.Services.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -24,6 +25,7 @@ public class TotpServiceTests : IDisposable
     private readonly NocturneDbContext _dbContext;
     private readonly IDataProtectionProvider _dataProtectionProvider;
     private readonly Guid _subjectId = Guid.CreateVersion7();
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 3, 14, 9, 26, 45, TimeSpan.Zero));
     private const string TestUsername = "testuser";
 
     public TotpServiceTests()
@@ -145,6 +147,7 @@ public class TotpServiceTests : IDisposable
     /// </remarks>
     [Theory]
     [InlineData(-1, true)]
+    [InlineData(0, false)]
     [InlineData(1, false)]
     [Trait("Category", "Unit")]
     public async Task CompleteSetupAsync_RefusesOnlyTheChallengeThatHasExpired(
@@ -159,11 +162,11 @@ public class TotpServiceTests : IDisposable
         {
             Secret = secret,
             SubjectId = _subjectId,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(minutesFromNow),
+            ExpiresAt = _clock.GetUtcNow().UtcDateTime.AddMinutes(minutesFromNow),
         }));
 
         // A code the verifier accepts, so the expiry is the only thing that can refuse.
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
         var act = () => service.CompleteSetupAsync(code, "Label", challenge);
 
         if (expectRefusal)
@@ -192,7 +195,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         SeedCredential(subject.Id, secret, "Test TOTP");
 
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
 
         var result = await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id, null, false), code);
 
@@ -214,7 +217,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         SeedCredential(subject.Id, secret, "Test TOTP");
         Guid? tenantId = forATenant ? Guid.CreateVersion7() : null;
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
 
         var result = await service.VerifyStepUpAsync(
             await service.CreateStepUpTokenAsync(subject.Id, tenantId, admittedByInvite), code);
@@ -233,7 +236,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         SeedCredential(subject.Id, secret, "Test TOTP");
 
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
 
         // A correct code is worthless without proof that a primary factor completed.
         var result = await service.VerifyStepUpAsync("not-a-real-token", code);
@@ -252,7 +255,7 @@ public class TotpServiceTests : IDisposable
         SeedCredential(subject.Id, secret, "Test TOTP");
         var otherSubject = SeedSubject("othersubject");
 
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
 
         var result = await service.VerifyStepUpAsync(
             await service.CreateStepUpTokenAsync(otherSubject.Id, null, false), code);
@@ -289,7 +292,7 @@ public class TotpServiceTests : IDisposable
         await _dbContext.Subjects.Where(s => s.Id == subject.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
 
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
         var result = await service.VerifyStepUpAsync(stepUpToken, code);
 
         result.Should().BeNull();
@@ -323,7 +326,7 @@ public class TotpServiceTests : IDisposable
         credential.LastUsedAt.Should().BeNull();
         credential.LastUsedStep.Should().BeNull();
 
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
         await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id, null, false), code);
 
         var updated = await _dbContext.TotpCredentials.AsNoTracking().FirstAsync(c => c.Id == credential.Id);
@@ -341,7 +344,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         var credential = SeedCredential(subject.Id, secret, "Test TOTP");
 
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
 
         var first = await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id, null, false), code);
         first.Should().NotBeNull();
@@ -352,7 +355,7 @@ public class TotpServiceTests : IDisposable
 
         // The code still matches an accepted time step, and it is the recorded one — so single use
         // is the only thing left that can refuse it, not a crossed step boundary.
-        TotpHelper.TryVerify(secret, code, lastUsedStep: null, out var stillMatchedStep).Should().BeTrue();
+        TotpHelper.TryVerify(secret, code, lastUsedStep: null, _clock.GetUtcNow(), out var stillMatchedStep).Should().BeTrue();
         stillMatchedStep.Should().Be(consumedStep!.Value);
 
         // Same code, still inside the ±1 step acceptance window, fresh step-up token.
@@ -384,7 +387,7 @@ public class TotpServiceTests : IDisposable
         var credential = SeedCredential(subject.Id, secret, "Test TOTP");
 
         var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = _clock.GetUtcNow().ToUnixTimeSeconds();
 
         var first = await service.VerifyStepUpAsync(
             stepUpToken, TotpHelper.ComputeTotp(secret, now));
@@ -398,7 +401,7 @@ public class TotpServiceTests : IDisposable
         // A different, still-valid code — asserted valid against the consumed step, so the reuse is
         // caught by the token rather than by a crossed step boundary.
         var nextCode = TotpHelper.ComputeTotp(secret, now + 30);
-        TotpHelper.TryVerify(secret, nextCode, consumedStep, out _).Should()
+        TotpHelper.TryVerify(secret, nextCode, consumedStep, _clock.GetUtcNow(), out _).Should()
             .BeTrue("the second attempt has to fail on the token, not on the code");
 
         var second = await service.VerifyStepUpAsync(stepUpToken, nextCode);
@@ -418,7 +421,7 @@ public class TotpServiceTests : IDisposable
         var subject = SeedSubject(TestUsername);
         SeedCredential(subject.Id, secret, "Test TOTP");
 
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
         await service.VerifyStepUpAsync(await service.CreateStepUpTokenAsync(subject.Id, null, false), code);
 
         var row = await _dbContext.TotpStepUpTokens.AsNoTracking()
@@ -444,7 +447,7 @@ public class TotpServiceTests : IDisposable
 
         (await service.VerifyStepUpAsync(stepUpToken, "000000")).Should().BeNull();
 
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
         var retried = await service.VerifyStepUpAsync(stepUpToken, code);
 
         retried.Should().NotBeNull();
@@ -467,7 +470,7 @@ public class TotpServiceTests : IDisposable
         var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
         await _dbContext.TotpStepUpTokens.Where(t => t.SubjectId == subject.Id).ExecuteDeleteAsync();
 
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
         var result = await service.VerifyStepUpAsync(stepUpToken, code);
 
         result.Should().BeNull();
@@ -486,12 +489,34 @@ public class TotpServiceTests : IDisposable
         var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
         await _dbContext.TotpStepUpTokens
             .Where(t => t.SubjectId == subject.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.ExpiresAt, DateTime.UtcNow.AddMinutes(-1)));
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.ExpiresAt, _clock.GetUtcNow().UtcDateTime.AddMinutes(-1)));
 
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
         var result = await service.VerifyStepUpAsync(stepUpToken, code);
 
         result.Should().BeNull("the row is the authority on expiry, not the token payload");
+    }
+
+    [Theory]
+    [InlineData(-1, true)]
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    [Trait("Category", "Unit")]
+    public async Task VerifyStepUpAsync_RedeemsTheTokenOnlyBeforeItExpires(long ticksFromExpiry, bool redeemed)
+    {
+        var service = CreateService();
+
+        var secret = TotpHelper.GenerateSecret();
+        var subject = SeedSubject(TestUsername);
+        SeedCredential(subject.Id, secret, "Test TOTP");
+
+        var stepUpToken = await service.CreateStepUpTokenAsync(subject.Id, null, false);
+        _clock.Advance(TotpService.StepUpExpiry + TimeSpan.FromTicks(ticksFromExpiry));
+
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
+        var result = await service.VerifyStepUpAsync(stepUpToken, code);
+
+        (result is not null).Should().Be(redeemed);
     }
 
     /// <summary>
@@ -523,7 +548,7 @@ public class TotpServiceTests : IDisposable
             row.ExpiresAt,
         }));
 
-        var code = TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var code = TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
         var result = await service.VerifyStepUpAsync(mintedUnderSetup, code);
 
         result.Should().BeNull();
@@ -663,7 +688,7 @@ public class TotpServiceTests : IDisposable
 
     private TotpService CreateService()
     {
-        return new TotpService(_dbContext.AsFactory(), _dataProtectionProvider, NullLogger<TotpService>.Instance);
+        return new TotpService(_dbContext.AsFactory(), _dataProtectionProvider, NullLogger<TotpService>.Instance, _clock);
     }
 
     private SubjectEntity SeedSubject(string username, Guid? subjectId = null)
@@ -695,7 +720,7 @@ public class TotpServiceTests : IDisposable
             SubjectId = subjectId,
             SecretKey = secret,
             Label = label,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = _clock.GetUtcNow().UtcDateTime,
         };
 
         _dbContext.TotpCredentials.Add(entity);
@@ -706,10 +731,10 @@ public class TotpServiceTests : IDisposable
     /// <summary>
     /// Decodes a base32 secret and computes a valid TOTP code for the current time.
     /// </summary>
-    private static string GenerateValidCode(string base32Secret)
+    private string GenerateValidCode(string base32Secret)
     {
         var secret = FromBase32(base32Secret);
-        return TotpHelper.ComputeTotp(secret, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        return TotpHelper.ComputeTotp(secret, _clock.GetUtcNow().ToUnixTimeSeconds());
     }
 
     /// <summary>

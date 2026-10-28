@@ -47,6 +47,8 @@ public class PasskeyControllerTests : IDisposable
     private readonly Mock<ITenantAccessor> _tenantAccessor;
     private readonly Mock<ITenantService> _tenantService;
     private readonly PasskeyController _controller;
+    private readonly LoginCodeService _loginCodeService =
+        new(Mock.Of<IJwtService>(), Mock.Of<IAuthAuditService>(), TimeProvider.System);
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _subjectId = Guid.CreateVersion7();
@@ -230,7 +232,7 @@ public class PasskeyControllerTests : IDisposable
         {
             AttestationResponseJson = "{}",
             ChallengeToken = "some-token",
-        });
+        }, _loginCodeService);
 
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         objectResult.StatusCode.Should().Be(401);
@@ -274,7 +276,7 @@ public class PasskeyControllerTests : IDisposable
         {
             AttestationResponseJson = "{}",
             ChallengeToken = "token-for-victim",
-        });
+        }, _loginCodeService);
 
         Assert.IsType<OkObjectResult>(result.Result);
         _passkeyService.Verify(
@@ -382,7 +384,7 @@ public class PasskeyControllerTests : IDisposable
         {
             AttestationResponseJson = "{}",
             ChallengeToken = "token",
-        });
+        }, _loginCodeService);
 
         Assert.IsType<OkObjectResult>(result.Result);
         _passkeyService.Verify(
@@ -407,7 +409,7 @@ public class PasskeyControllerTests : IDisposable
         {
             AttestationResponseJson = "{}",
             ChallengeToken = "token",
-        });
+        }, _loginCodeService);
 
         var setCookie = _controller.ControllerContext.HttpContext.Response.Headers.SetCookie
             .Single(header => header!.StartsWith(".Nocturne.RecoverySession=", StringComparison.Ordinal));
@@ -425,7 +427,7 @@ public class PasskeyControllerTests : IDisposable
             ChallengeToken = "",
         };
 
-        var result = await _controller.RegisterComplete(request);
+        var result = await _controller.RegisterComplete(request, _loginCodeService);
 
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(400, objectResult.StatusCode);
@@ -584,7 +586,7 @@ public class PasskeyControllerTests : IDisposable
         {
             AttestationResponseJson = "{}",
             ChallengeToken = "token",
-        });
+        }, _loginCodeService);
 
         result.Result.Should().BeOfType<OkObjectResult>();
 
@@ -618,7 +620,7 @@ public class PasskeyControllerTests : IDisposable
         {
             AttestationResponseJson = "{}",
             ChallengeToken = "token",
-        });
+        }, _loginCodeService);
 
         result.Result.Should().BeOfType<OkObjectResult>("the passkey was saved");
     }

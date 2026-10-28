@@ -62,6 +62,7 @@ public class GuestSessionHandlerTests
         services.AddDataServices();
         services.AddScoped<IGuestLinkService, GuestLinkService>();
         services.AddScoped<GrantRevocationService>();
+        services.AddSingleton(TimeProvider.System);
         var provider = services.BuildServiceProvider();
 
         _handler = new GuestSessionHandler(
@@ -191,7 +192,7 @@ public class GuestSessionHandlerTests
         await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _tenantId })
         {
             var service = new GuestLinkService(
-                ctx.AsFactory(), _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
+                ctx.AsFactory(), _sessionCache, new GrantRevocationService(_sessionCache, TimeProvider.System), NullLogger<GuestLinkService>.Instance, TimeProvider.System);
             (await service.RevokeAsync(grantId, _dataOwnerId)).Should().BeTrue();
         }
 
@@ -223,7 +224,7 @@ public class GuestSessionHandlerTests
     {
         await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = tenantId };
         var service = new GuestLinkService(
-            ctx.AsFactory(), _sessionCache, new GrantRevocationService(_sessionCache), NullLogger<GuestLinkService>.Instance);
+            ctx.AsFactory(), _sessionCache, new GrantRevocationService(_sessionCache, TimeProvider.System), NullLogger<GuestLinkService>.Instance, TimeProvider.System);
 
         var created = await service.CreateGuestLinkAsync(
             _dataOwnerId, _dataOwnerId, "Caregiver", "https://acme.example.test",

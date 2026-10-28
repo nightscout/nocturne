@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
@@ -18,6 +19,9 @@ public class RefreshTokenServiceTests
     private readonly Mock<IRotationSuccessorCache> _successorCache = new();
     private readonly JwtOptions _options = new() { RefreshTokenLifetimeDays = 7 };
     private readonly Guid _subjectId = Guid.CreateVersion7();
+    private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 3, 14, 9, 26, 45, TimeSpan.Zero));
+
+    private DateTime Now => _clock.GetUtcNow().UtcDateTime;
 
     private RefreshTokenService CreateService() =>
         new(
@@ -25,7 +29,8 @@ public class RefreshTokenServiceTests
             _jwtService.Object,
             _successorCache.Object,
             Options.Create(_options),
-            NullLogger<RefreshTokenService>.Instance);
+            NullLogger<RefreshTokenService>.Instance,
+            _clock);
 
     #region CreateRefreshTokenAsync
 
@@ -51,6 +56,20 @@ public class RefreshTokenServiceTests
             default));
     }
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CreateRefreshTokenAsync_IssuesNowAndExpiresAfterTheLifetime()
+    {
+        _jwtService.Setup(j => j.GenerateRefreshToken()).Returns("plaintext-token");
+        _jwtService.Setup(j => j.HashRefreshToken("plaintext-token")).Returns("hashed");
+
+        await CreateService().CreateRefreshTokenAsync(_subjectId);
+
+        _repository.Verify(r => r.CreateAsync(
+            It.Is<RefreshTokenRecord>(rec => rec.IssuedAt == Now && rec.ExpiresAt == Now.AddDays(7)),
+            default));
+    }
+
     #endregion
 
     #region ValidateRefreshTokenAsync
@@ -62,7 +81,7 @@ public class RefreshTokenServiceTests
         // Arrange
         _jwtService.Setup(j => j.HashRefreshToken("valid-token")).Returns("hash-valid");
         _repository.Setup(r => r.FindByHashAsync("hash-valid", default))
-            .ReturnsAsync(MakeRecord(revokedAt: null, expiresAt: DateTime.UtcNow.AddHours(1), oidcSessionId: "family"));
+            .ReturnsAsync(MakeRecord(revokedAt: null, expiresAt: Now.AddHours(1), oidcSessionId: "family"));
 
         var service = CreateService();
 
@@ -96,7 +115,7 @@ public class RefreshTokenServiceTests
         // Arrange
         _jwtService.Setup(j => j.HashRefreshToken("expired")).Returns("hash-expired");
         _repository.Setup(r => r.FindByHashAsync("hash-expired", default))
-            .ReturnsAsync(MakeRecord(revokedAt: null, expiresAt: DateTime.UtcNow.AddHours(-1)));
+            .ReturnsAsync(MakeRecord(revokedAt: null, expiresAt: Now.AddHours(-1)));
 
         var service = CreateService();
 
@@ -107,6 +126,22 @@ public class RefreshTokenServiceTests
         result.Should().BeNull();
     }
 
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(-1, false)]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    public async Task ValidateRefreshTokenAsync_AcceptsATokenUntilTheInstantAfterItExpires(long ticksFromNow, bool accepted)
+    {
+        _jwtService.Setup(j => j.HashRefreshToken("token")).Returns("hash-token");
+        _repository.Setup(r => r.FindByHashAsync("hash-token", default))
+            .ReturnsAsync(MakeRecord(revokedAt: null, expiresAt: Now.AddTicks(ticksFromNow)));
+
+        var result = await CreateService().ValidateRefreshTokenAsync("token");
+
+        (result is not null).Should().Be(accepted);
+    }
+
     [Fact]
     [Trait("Category", "Unit")]
     public async Task ValidateRefreshTokenAsync_RevokedToken_ReturnsNull()
@@ -114,7 +149,7 @@ public class RefreshTokenServiceTests
         // Arrange
         _jwtService.Setup(j => j.HashRefreshToken("revoked")).Returns("hash-revoked");
         _repository.Setup(r => r.FindByHashAsync("hash-revoked", default))
-            .ReturnsAsync(MakeRecord(revokedAt: DateTime.UtcNow.AddMinutes(-5), expiresAt: DateTime.UtcNow.AddHours(1)));
+            .ReturnsAsync(MakeRecord(revokedAt: Now.AddMinutes(-5), expiresAt: Now.AddHours(1)));
 
         var service = CreateService();
 
@@ -161,7 +196,7 @@ public class RefreshTokenServiceTests
             .ReturnsAsync(MakeRecord(
                 id: oldTokenId,
                 revokedAt: null,
-                expiresAt: DateTime.UtcNow.AddHours(1)));
+                expiresAt: Now.AddHours(1)));
 
         // This caller wins the atomic rotation claim.
         _repository.Setup(r => r.TryRotateAsync(oldTokenId, It.IsAny<RefreshTokenRecord>(), default))
@@ -223,6 +258,79 @@ public class RefreshTokenServiceTests
             default));
     }
 
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(-1, false)]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    public async Task RotateRefreshTokenAsync_RotatesATokenUntilTheInstantAfterItExpires(long ticksFromNow, bool rotated)
+    {
+        var oldTokenId = Guid.CreateVersion7();
+        _jwtService.Setup(j => j.HashRefreshToken("old-token")).Returns("hash-old");
+        _jwtService.Setup(j => j.GenerateRefreshToken()).Returns("new-token");
+        _jwtService.Setup(j => j.HashRefreshToken("new-token")).Returns("hash-new");
+        _repository.Setup(r => r.FindByHashAsync("hash-old", default))
+            .ReturnsAsync(MakeRecord(id: oldTokenId, revokedAt: null, expiresAt: Now.AddTicks(ticksFromNow)));
+        _repository.Setup(r => r.TryRotateAsync(oldTokenId, It.IsAny<RefreshTokenRecord>(), default))
+            .ReturnsAsync(true);
+
+        var result = await CreateService().RotateRefreshTokenAsync("old-token");
+
+        result.Should().Be(rotated ? "new-token" : null);
+        _repository.Verify(
+            r => r.TryRotateAsync(
+                oldTokenId,
+                It.Is<RefreshTokenRecord>(rec => rec.IssuedAt == Now && rec.ExpiresAt == Now.AddDays(7)),
+                default),
+            rotated ? Times.Once() : Times.Never());
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(-1, true)]
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    public async Task RotateRefreshTokenAsync_TreatsReuseAsARaceOnlyInsideTheGracePeriod(long ticksFromGraceEnd, bool race)
+    {
+        _jwtService.Setup(j => j.HashRefreshToken("rotated")).Returns("hash-rotated");
+        _repository.Setup(r => r.FindByHashAsync("hash-rotated", default))
+            .ReturnsAsync(MakeRecord(
+                revokedAt: Now - RefreshTokenRotation.GracePeriod - TimeSpan.FromTicks(ticksFromGraceEnd),
+                expiresAt: Now.AddHours(1),
+                replacedByTokenId: Guid.CreateVersion7(),
+                oidcSessionId: "session-a"));
+
+        var rotate = () => CreateService().RotateRefreshTokenAsync("rotated");
+
+        if (race)
+            await rotate.Should().ThrowAsync<TokenRotationRaceException>();
+        else
+            (await rotate()).Should().BeNull();
+        _repository.Verify(
+            r => r.RevokeByOidcSessionAsync("session-a", It.IsAny<string>(), default),
+            race ? Times.Never() : Times.Once());
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(-1, false)]
+    [InlineData(0, true)]
+    public async Task RotateRefreshTokenAsync_ReplaysASuccessorUntilTheInstantAfterItExpires(long ticksFromNow, bool replayed)
+    {
+        _jwtService.Setup(j => j.HashRefreshToken("raced")).Returns("hash-raced");
+        _repository.Setup(r => r.FindByHashAsync("hash-raced", default))
+            .ReturnsAsync(MakeRecord(
+                revokedAt: Now.AddSeconds(-2),
+                expiresAt: Now.AddHours(1),
+                replacedByTokenId: Guid.CreateVersion7()));
+        _successorCache.Setup(c => c.GetAsync("hash", default)).ReturnsAsync("winners-token");
+        SetupSuccessor("winners-token", revokedAt: null, expiresAt: Now.AddTicks(ticksFromNow));
+
+        var result = await CreateService().RotateRefreshTokenAsync("raced");
+
+        result.Should().Be(replayed ? "winners-token" : null);
+    }
+
     [Fact]
     [Trait("Category", "Unit")]
     public async Task RotateRefreshTokenAsync_LostAtomicClaim_ThrowsRaceWithoutForkingOrNuking()
@@ -240,7 +348,7 @@ public class RefreshTokenServiceTests
             .ReturnsAsync(MakeRecord(
                 id: oldTokenId,
                 revokedAt: null,
-                expiresAt: DateTime.UtcNow.AddHours(1)));
+                expiresAt: Now.AddHours(1)));
 
         _repository.Setup(r => r.TryRotateAsync(oldTokenId, It.IsAny<RefreshTokenRecord>(), default))
             .ReturnsAsync(false);
@@ -267,8 +375,8 @@ public class RefreshTokenServiceTests
 
         _repository.Setup(r => r.FindByHashAsync("hash-stolen", default))
             .ReturnsAsync(MakeRecord(
-                revokedAt: DateTime.UtcNow.AddMinutes(-5),
-                expiresAt: DateTime.UtcNow.AddHours(1),
+                revokedAt: Now.AddMinutes(-5),
+                expiresAt: Now.AddHours(1),
                 replacedByTokenId: Guid.CreateVersion7(),
                 oidcSessionId: "session-abc"));
 
@@ -297,8 +405,8 @@ public class RefreshTokenServiceTests
 
         _repository.Setup(r => r.FindByHashAsync("hash-stolen", default))
             .ReturnsAsync(MakeRecord(
-                revokedAt: DateTime.UtcNow.AddMinutes(-5),
-                expiresAt: DateTime.UtcNow.AddHours(1),
+                revokedAt: Now.AddMinutes(-5),
+                expiresAt: Now.AddHours(1),
                 replacedByTokenId: Guid.CreateVersion7()));
 
         var service = CreateService();
@@ -325,8 +433,8 @@ public class RefreshTokenServiceTests
 
         _repository.Setup(r => r.FindByHashAsync("hash-stolen", default))
             .ReturnsAsync(MakeRecord(
-                revokedAt: DateTime.UtcNow.AddMinutes(-5),
-                expiresAt: DateTime.UtcNow.AddHours(1),
+                revokedAt: Now.AddMinutes(-5),
+                expiresAt: Now.AddHours(1),
                 replacedByTokenId: Guid.CreateVersion7()));
 
         var service = CreateService();
@@ -347,8 +455,8 @@ public class RefreshTokenServiceTests
 
         _repository.Setup(r => r.FindByHashAsync("hash-raced", default))
             .ReturnsAsync(MakeRecord(
-                revokedAt: DateTime.UtcNow.AddSeconds(-2),
-                expiresAt: DateTime.UtcNow.AddHours(1),
+                revokedAt: Now.AddSeconds(-2),
+                expiresAt: Now.AddHours(1),
                 replacedByTokenId: Guid.CreateVersion7()));
 
         var service = CreateService();
@@ -373,13 +481,13 @@ public class RefreshTokenServiceTests
 
         _repository.Setup(r => r.FindByHashAsync("hash-raced", default))
             .ReturnsAsync(MakeRecord(
-                revokedAt: DateTime.UtcNow.AddSeconds(-2),
-                expiresAt: DateTime.UtcNow.AddHours(1),
+                revokedAt: Now.AddSeconds(-2),
+                expiresAt: Now.AddHours(1),
                 replacedByTokenId: Guid.CreateVersion7()));
 
         _successorCache.Setup(c => c.GetAsync("hash", default))
             .ReturnsAsync("winners-token");
-        SetupSuccessor("winners-token", revokedAt: null, expiresAt: DateTime.UtcNow.AddDays(7));
+        SetupSuccessor("winners-token", revokedAt: null, expiresAt: Now.AddDays(7));
 
         var service = CreateService();
 
@@ -414,14 +522,14 @@ public class RefreshTokenServiceTests
             .ReturnsAsync(MakeRecord(
                 id: oldTokenId,
                 revokedAt: null,
-                expiresAt: DateTime.UtcNow.AddHours(1)));
+                expiresAt: Now.AddHours(1)));
 
         _repository.Setup(r => r.TryRotateAsync(oldTokenId, It.IsAny<RefreshTokenRecord>(), default))
             .ReturnsAsync(false);
 
         _successorCache.Setup(c => c.GetAsync("hash-old", default))
             .ReturnsAsync("winners-token");
-        SetupSuccessor("winners-token", revokedAt: null, expiresAt: DateTime.UtcNow.AddDays(7));
+        SetupSuccessor("winners-token", revokedAt: null, expiresAt: Now.AddDays(7));
 
         var service = CreateService();
 
@@ -442,14 +550,14 @@ public class RefreshTokenServiceTests
         _jwtService.Setup(j => j.HashRefreshToken("raced")).Returns("hash-raced");
         _repository.Setup(r => r.FindByHashAsync("hash-raced", default))
             .ReturnsAsync(MakeRecord(
-                revokedAt: DateTime.UtcNow.AddSeconds(-2),
-                expiresAt: DateTime.UtcNow.AddHours(1),
+                revokedAt: Now.AddSeconds(-2),
+                expiresAt: Now.AddHours(1),
                 replacedByTokenId: Guid.CreateVersion7()));
         _successorCache.Setup(c => c.GetAsync("hash", default)).ReturnsAsync("winners-token");
         SetupSuccessor(
             "winners-token",
-            revokedAt: revoked ? DateTime.UtcNow.AddSeconds(-1) : null,
-            expiresAt: expired ? DateTime.UtcNow.AddSeconds(-1) : DateTime.UtcNow.AddDays(7));
+            revokedAt: revoked ? Now.AddSeconds(-1) : null,
+            expiresAt: expired ? Now.AddSeconds(-1) : Now.AddDays(7));
 
         var result = await CreateService().RotateRefreshTokenAsync("raced");
 
@@ -464,11 +572,11 @@ public class RefreshTokenServiceTests
         _jwtService.Setup(j => j.HashRefreshToken("old-token")).Returns("hash-old");
         _jwtService.Setup(j => j.GenerateRefreshToken()).Returns("would-be-fork");
         _repository.Setup(r => r.FindByHashAsync("hash-old", default))
-            .ReturnsAsync(MakeRecord(id: oldTokenId, revokedAt: null, expiresAt: DateTime.UtcNow.AddHours(1)));
+            .ReturnsAsync(MakeRecord(id: oldTokenId, revokedAt: null, expiresAt: Now.AddHours(1)));
         _repository.Setup(r => r.TryRotateAsync(oldTokenId, It.IsAny<RefreshTokenRecord>(), default))
             .ReturnsAsync(false);
         _successorCache.Setup(c => c.GetAsync("hash-old", default)).ReturnsAsync("winners-token");
-        SetupSuccessor("winners-token", revokedAt: DateTime.UtcNow, expiresAt: DateTime.UtcNow.AddDays(7));
+        SetupSuccessor("winners-token", revokedAt: Now, expiresAt: Now.AddDays(7));
 
         var result = await CreateService().RotateRefreshTokenAsync("old-token");
 
@@ -485,8 +593,8 @@ public class RefreshTokenServiceTests
 
         _repository.Setup(r => r.FindByHashAsync("hash-logged-out", default))
             .ReturnsAsync(MakeRecord(
-                revokedAt: DateTime.UtcNow.AddSeconds(-2),
-                expiresAt: DateTime.UtcNow.AddHours(1)));
+                revokedAt: Now.AddSeconds(-2),
+                expiresAt: Now.AddHours(1)));
 
         var service = CreateService();
 
@@ -508,18 +616,11 @@ public class RefreshTokenServiceTests
     [Trait("Category", "Unit")]
     public async Task PruneExpiredRefreshTokensAsync_DefaultCutoff_Uses30Days()
     {
-        // Arrange
-        var before = DateTime.UtcNow.AddDays(-30);
-
         var service = CreateService();
 
-        // Act
         await service.PruneExpiredRefreshTokensAsync(null);
 
-        // Assert — cutoff should be approximately 30 days ago
-        _repository.Verify(r => r.PruneExpiredAsync(
-            It.Is<DateTime>(d => d >= before.AddSeconds(-5) && d <= before.AddSeconds(5)),
-            default));
+        _repository.Verify(r => r.PruneExpiredAsync(Now.AddDays(-30), default));
     }
 
     #endregion
@@ -537,27 +638,27 @@ public class RefreshTokenServiceTests
             Id = Guid.CreateVersion7(),
             OidcSessionId = "session-a",
             DeviceDescription = "Windows",
-            IssuedAt = DateTime.UtcNow.AddHours(-2),
-            LastUsedAt = DateTime.UtcNow.AddHours(-1),
-            ExpiresAt = DateTime.UtcNow.AddDays(6),
+            IssuedAt = Now.AddHours(-2),
+            LastUsedAt = Now.AddHours(-1),
+            ExpiresAt = Now.AddDays(6),
         };
         var newer = new RefreshTokenInfo
         {
             Id = Guid.CreateVersion7(),
             OidcSessionId = "session-a",
             DeviceDescription = "Windows",
-            IssuedAt = DateTime.UtcNow.AddMinutes(-1),
+            IssuedAt = Now.AddMinutes(-1),
             LastUsedAt = null,
-            ExpiresAt = DateTime.UtcNow.AddDays(7),
+            ExpiresAt = Now.AddDays(7),
         };
         var other = new RefreshTokenInfo
         {
             Id = Guid.CreateVersion7(),
             OidcSessionId = "session-b",
             DeviceDescription = "iPhone",
-            IssuedAt = DateTime.UtcNow.AddDays(-1),
-            LastUsedAt = DateTime.UtcNow.AddDays(-1),
-            ExpiresAt = DateTime.UtcNow.AddDays(5),
+            IssuedAt = Now.AddDays(-1),
+            LastUsedAt = Now.AddDays(-1),
+            ExpiresAt = Now.AddDays(5),
         };
 
         _repository.Setup(r => r.GetActiveSessionsAsync(_subjectId, default))
@@ -586,8 +687,8 @@ public class RefreshTokenServiceTests
         {
             Id = Guid.CreateVersion7(),
             OidcSessionId = null,
-            IssuedAt = DateTime.UtcNow.AddHours(-3),
-            ExpiresAt = DateTime.UtcNow.AddDays(4),
+            IssuedAt = Now.AddHours(-3),
+            ExpiresAt = Now.AddDays(4),
         };
 
         _repository.Setup(r => r.GetActiveSessionsAsync(_subjectId, default))
@@ -646,7 +747,7 @@ public class RefreshTokenServiceTests
         _repository.Setup(r => r.FindByHashAsync("hash-rotated", default))
             .ReturnsAsync(MakeRecord(
                 oidcSessionId: "session-a",
-                revokedAt: DateTime.UtcNow.AddSeconds(-5),
+                revokedAt: Now.AddSeconds(-5),
                 replacedByTokenId: Guid.CreateVersion7()));
 
         (await CreateService().FindOwnerAsync("rotated"))
@@ -694,8 +795,8 @@ public class RefreshTokenServiceTests
             DeviceDescription: null,
             IpAddress: null,
             UserAgent: null,
-            IssuedAt: DateTime.UtcNow.AddHours(-1),
-            ExpiresAt: expiresAt ?? DateTime.UtcNow.AddHours(1),
+            IssuedAt: Now.AddHours(-1),
+            ExpiresAt: expiresAt ?? Now.AddHours(1),
             RevokedAt: revokedAt,
             RevokedReason: revokedAt.HasValue ? "test" : null,
             ReplacedByTokenId: replacedByTokenId,

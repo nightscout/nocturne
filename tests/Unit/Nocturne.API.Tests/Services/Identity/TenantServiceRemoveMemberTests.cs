@@ -56,7 +56,7 @@ public sealed class TenantServiceRemoveMemberTests : IDisposable
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
-        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())), TimeProvider.System),
         Mock.Of<ILogger<TenantService>>());
 
     /// <summary>Adds a membership, optionally carrying the owner role or being a system subject.</summary>

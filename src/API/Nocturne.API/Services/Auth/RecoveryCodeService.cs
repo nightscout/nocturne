@@ -32,19 +32,24 @@ public class RecoveryCodeService : IRecoveryCodeService
 
     private readonly INocturneDbContextFactory _contexts;
     private readonly Func<string, byte[], byte[]> _derive;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initialises a new <see cref="RecoveryCodeService"/>.
     /// </summary>
-    public RecoveryCodeService(INocturneDbContextFactory contexts)
-        : this(contexts, Derive)
+    public RecoveryCodeService(INocturneDbContextFactory contexts, TimeProvider timeProvider)
+        : this(contexts, Derive, timeProvider)
     {
     }
 
-    internal RecoveryCodeService(INocturneDbContextFactory contexts, Func<string, byte[], byte[]> derive)
+    internal RecoveryCodeService(
+        INocturneDbContextFactory contexts,
+        Func<string, byte[], byte[]> derive,
+        TimeProvider timeProvider)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _derive = derive;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -72,7 +77,7 @@ public class RecoveryCodeService : IRecoveryCodeService
                 Id = Guid.CreateVersion7(),
                 SubjectId = subjectId,
                 CodeHash = Hash(NormalizeCode(code)),
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = _timeProvider.GetUtcNow().UtcDateTime,
             });
         }
 
@@ -114,7 +119,7 @@ public class RecoveryCodeService : IRecoveryCodeService
 
         var consumed = await db.RecoveryCodes
             .Where(r => r.Id == matchedId && r.UsedAt == null && r.InvalidatedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(r => r.UsedAt, DateTime.UtcNow));
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.UsedAt, _timeProvider.GetUtcNow().UtcDateTime));
 
         return consumed == 1;
     }
@@ -125,7 +130,7 @@ public class RecoveryCodeService : IRecoveryCodeService
         await using var db = await _contexts.CreateAsync();
         await db.RecoveryCodes
             .Where(r => r.SubjectId == subjectId && r.UsedAt == null && r.InvalidatedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(r => r.InvalidatedAt, DateTime.UtcNow));
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.InvalidatedAt, _timeProvider.GetUtcNow().UtcDateTime));
     }
 
     /// <inheritdoc />

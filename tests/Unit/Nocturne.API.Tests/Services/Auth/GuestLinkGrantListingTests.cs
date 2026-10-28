@@ -63,10 +63,10 @@ public class GuestLinkGrantListingTests : IDisposable
     public async Task Both_listings_show_only_the_scopes_a_guest_can_hold()
     {
         var sessionCache = new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()));
-        var revocation = new GrantRevocationService(sessionCache);
+        var revocation = new GrantRevocationService(sessionCache, TimeProvider.System);
 
         var guestLinks = await new GuestLinkService(
-                _dbContext.AsFactory(), sessionCache, revocation, NullLogger<GuestLinkService>.Instance)
+                _dbContext.AsFactory(), sessionCache, revocation, NullLogger<GuestLinkService>.Instance, TimeProvider.System)
             .GetGuestLinksAsync(_dataOwnerId);
 
         var grantService = new OAuthGrantService(
@@ -74,7 +74,8 @@ public class GuestLinkGrantListingTests : IDisposable
             Mock.Of<IOAuthClientService>(),
             sessionCache,
             revocation,
-            NullLogger<OAuthGrantService>.Instance);
+            NullLogger<OAuthGrantService>.Instance,
+            TimeProvider.System);
         var result = await CreateController(grantService).GetGrants();
         var grants = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeOfType<OAuthGrantListResponse>().Subject.Grants;

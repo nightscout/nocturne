@@ -19,6 +19,7 @@ public class OAuthGrantService : IOAuthGrantService
     private readonly GuestSessionCacheService _guestSessionCache;
     private readonly GrantRevocationService _grantRevocation;
     private readonly ILogger<OAuthGrantService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initialises a new <see cref="OAuthGrantService"/>.
@@ -30,18 +31,21 @@ public class OAuthGrantService : IOAuthGrantService
     /// <param name="guestSessionCache">Cache evicted when a grant's scopes are narrowed.</param>
     /// <param name="grantRevocation">Applies the consequences of a revoke.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">The clock a grant's last use is stamped with.</param>
     public OAuthGrantService(
         INocturneDbContextFactory dbContextFactory,
         IOAuthClientService clientService,
         GuestSessionCacheService guestSessionCache,
         GrantRevocationService grantRevocation,
-        ILogger<OAuthGrantService> logger)
+        ILogger<OAuthGrantService> logger,
+        TimeProvider timeProvider)
     {
         _dbContextFactory = dbContextFactory;
         _clientService = clientService;
         _guestSessionCache = guestSessionCache;
         _grantRevocation = grantRevocation;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -233,7 +237,7 @@ public class OAuthGrantService : IOAuthGrantService
         await db.OAuthGrants
             .Where(g => g.Id == grantId)
             .ExecuteUpdateAsync(s => s
-                .SetProperty(g => g.LastUsedAt, DateTime.UtcNow)
+                .SetProperty(g => g.LastUsedAt, _timeProvider.GetUtcNow().UtcDateTime)
                 .SetProperty(g => g.LastUsedIp, ipAddress)
                 .SetProperty(g => g.LastUsedUserAgent, userAgent),
                 ct);

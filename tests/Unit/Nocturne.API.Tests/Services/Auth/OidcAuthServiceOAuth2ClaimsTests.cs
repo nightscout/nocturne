@@ -47,7 +47,8 @@ public class OidcAuthServiceOAuth2ClaimsTests
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
-            NullLogger<OidcAuthService>.Instance);
+            NullLogger<OidcAuthService>.Instance,
+            TimeProvider.System);
     }
 
     private static OidcProvider ProviderWith(OAuth2ProviderSettings settings) => new()

@@ -36,6 +36,7 @@ public class PasskeyService : IPasskeyService
     private readonly Fido2Configuration _fido2Config;
     private readonly ILogger<PasskeyService> _logger;
     private readonly IHostEnvironment _environment;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="PasskeyService"/>.
@@ -45,13 +46,15 @@ public class PasskeyService : IPasskeyService
     /// <param name="fido2Options">FIDO2 configuration options (rpId, rpName, allowed origins, attestation preference).</param>
     /// <param name="logger">The logger instance.</param>
     /// <param name="environment">The hosting environment used to adjust origin validation in development.</param>
+    /// <param name="timeProvider">The clock challenge tokens expire against.</param>
     public PasskeyService(
         INocturneDbContextFactory contexts,
         IFido2 fido2,
         IDataProtectionProvider dataProtectionProvider,
         Microsoft.Extensions.Options.IOptions<Fido2Configuration> fido2Options,
         ILogger<PasskeyService> logger,
-        IHostEnvironment environment)
+        IHostEnvironment environment,
+        TimeProvider timeProvider)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _fido2 = fido2;
@@ -59,6 +62,7 @@ public class PasskeyService : IPasskeyService
         _fido2Config = fido2Options.Value;
         _logger = logger;
         _environment = environment;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -220,7 +224,7 @@ public class PasskeyService : IPasskeyService
             Transports = credential.Transports?.Select(t => t.ToString()).ToList() ?? [],
             Label = string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
             // AaGuid is not directly exposed by Fido2NetLib v4 RegisteredPublicKeyCredential
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = _timeProvider.GetUtcNow().UtcDateTime,
         };
 
         db.PasskeyCredentials.Add(entity);
@@ -319,7 +323,7 @@ public class PasskeyService : IPasskeyService
 
         // Update sign count and last used
         storedCredential.SignCount = result.SignCount;
-        storedCredential.LastUsedAt = DateTime.UtcNow;
+        storedCredential.LastUsedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync();
 
         var subject = storedCredential.Subject
@@ -371,7 +375,7 @@ public class PasskeyService : IPasskeyService
             OptionsJson = optionsJson,
             SubjectId = subjectId,
             Purpose = purpose,
-            ExpiresAt = DateTime.UtcNow.Add(ChallengeExpiry),
+            ExpiresAt = _timeProvider.GetUtcNow().UtcDateTime.Add(ChallengeExpiry),
         };
 
         var json = JsonSerializer.Serialize(payload);
@@ -402,7 +406,7 @@ public class PasskeyService : IPasskeyService
             throw new InvalidOperationException("Challenge token was issued for a different ceremony.");
         }
 
-        if (payload.ExpiresAt < DateTime.UtcNow)
+        if (payload.ExpiresAt < _timeProvider.GetUtcNow().UtcDateTime)
         {
             throw new InvalidOperationException("Challenge token has expired. Please restart the authentication flow.");
         }

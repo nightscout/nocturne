@@ -42,8 +42,9 @@ public class GuestLinkControllerTests : IDisposable
         var service = new GuestLinkService(
             _dbContext.AsFactory(),
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
-            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
-            NullLogger<GuestLinkService>.Instance);
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())), TimeProvider.System),
+            NullLogger<GuestLinkService>.Instance,
+            TimeProvider.System);
 
         var handler = new GuestSessionHandler(
             new EphemeralDataProtectionProvider(),

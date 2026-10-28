@@ -91,8 +91,9 @@ public class GrantRevocationTests : IDisposable
                 var guestLinks = new GuestLinkService(
                     db.AsFactory(),
                     _sessionCache,
-                    new GrantRevocationService(_sessionCache),
-                    NullLogger<GuestLinkService>.Instance);
+                    new GrantRevocationService(_sessionCache, TimeProvider.System),
+                    NullLogger<GuestLinkService>.Instance,
+                    TimeProvider.System);
                 (await guestLinks.RevokeAsync(grantId, _ownerSubjectId)).Should().BeTrue();
                 break;
 
@@ -101,15 +102,16 @@ public class GrantRevocationTests : IDisposable
                     _db.ContextFactory.AsNocturneFactory(),
                     new Mock<IOAuthClientService>().Object,
                     _sessionCache,
-                    new GrantRevocationService(_sessionCache),
-                    NullLogger<OAuthGrantService>.Instance);
+                    new GrantRevocationService(_sessionCache, TimeProvider.System),
+                    NullLogger<OAuthGrantService>.Instance,
+                    TimeProvider.System);
                 await grants.RevokeGrantAsync(grantId);
                 break;
 
             default:
                 var directGrants = new DirectGrantService(
                     new Mock<IAuthAuditService>().Object,
-                    new GrantRevocationService(_sessionCache),
+                    new GrantRevocationService(_sessionCache, TimeProvider.System),
                     NullLogger<DirectGrantService>.Instance);
                 (await directGrants.RevokeAsync(
                     db, grantId, subjectId: null, ipAddress: null, userAgent: null)).Should().BeTrue();

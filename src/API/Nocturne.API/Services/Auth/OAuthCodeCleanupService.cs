@@ -24,6 +24,7 @@ public class OAuthCodeCleanupService : BackgroundService
 {
     private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<OAuthCodeCleanupService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Interval between cleanup runs (1 hour)
@@ -48,13 +49,16 @@ public class OAuthCodeCleanupService : BackgroundService
     /// </summary>
     /// <param name="contexts">Root-resolved, so each tenant's context is pinned explicitly.</param>
     /// <param name="logger">Logger</param>
+    /// <param name="timeProvider">The clock the retention cutoffs are read against.</param>
     public OAuthCodeCleanupService(
         INocturneDbContextFactory contexts,
-        ILogger<OAuthCodeCleanupService> logger
+        ILogger<OAuthCodeCleanupService> logger,
+        TimeProvider timeProvider
     )
     {
         _contexts = contexts;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -100,7 +104,7 @@ public class OAuthCodeCleanupService : BackgroundService
     /// </summary>
     internal async Task CleanupAsync(CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         var codeCutoff = now.Subtract(RetentionBuffer);
         var clientCutoff = now.Subtract(UnusedClientRetention);
 

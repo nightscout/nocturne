@@ -37,6 +37,7 @@ public class OidcAuthService : IOidcAuthService
     private readonly OidcOptions _options;
     private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<OidcAuthService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initialises a new <see cref="OidcAuthService"/>.
@@ -54,6 +55,7 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="options">OIDC session and state configuration options.</param>
     /// <param name="baseDomainOptions">Base domain configuration for building the public redirect URIs.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">The clock state, sessions and ID tokens are checked against.</param>
     public OidcAuthService(
         IOidcProviderService providerService,
         ISubjectService subjectService,
@@ -67,7 +69,8 @@ public class OidcAuthService : IOidcAuthService
         IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> options,
         IOptions<BaseDomainOptions> baseDomainOptions,
-        ILogger<OidcAuthService> logger
+        ILogger<OidcAuthService> logger,
+        TimeProvider timeProvider
     )
     {
         _providerService = providerService;
@@ -83,6 +86,7 @@ public class OidcAuthService : IOidcAuthService
         _options = options.Value;
         _baseDomain = baseDomainOptions.Value;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -126,8 +130,8 @@ public class OidcAuthService : IOidcAuthService
             ProviderId = provider.Id,
             ReturnUrl = returnUrl ?? "/",
             Nonce = GenerateRandomString(32),
-            CreatedAt = DateTimeOffset.UtcNow,
-            ExpiresAt = DateTimeOffset.UtcNow.Add(_options.State.Lifetime),
+            CreatedAt = _timeProvider.GetUtcNow(),
+            ExpiresAt = _timeProvider.GetUtcNow().Add(_options.State.Lifetime),
             Intent = "login",
             TenantSlug = tenantSlug,
         };
@@ -208,7 +212,7 @@ public class OidcAuthService : IOidcAuthService
             return CallbackParseResult.Fail("invalid_state", "Invalid state format");
         }
 
-        if (stateData.ExpiresAt < DateTimeOffset.UtcNow)
+        if (stateData.ExpiresAt < _timeProvider.GetUtcNow())
         {
             return CallbackParseResult.Fail("expired_state", "Authentication request has expired");
         }
@@ -253,7 +257,7 @@ public class OidcAuthService : IOidcAuthService
             else
             {
                 idTokenClaims = ParseIdToken(
-                    providerTokens.IdToken, provider, discoveryDoc.Issuer, DateTimeOffset.UtcNow);
+                    providerTokens.IdToken, provider, discoveryDoc.Issuer, _timeProvider.GetUtcNow());
 
                 // Required, not conditional: every state this service issues carries a nonce, so
                 // an absent one means the ID token cannot be bound to this authorization request.
@@ -392,7 +396,7 @@ public class OidcAuthService : IOidcAuthService
             TokenType = "Bearer",
             ExpiresIn = session.ExpiresInSeconds,
             RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
-            ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
+            ExpiresAt = _timeProvider.GetUtcNow().AddSeconds(session.ExpiresInSeconds),
             SubjectId = subject.Id,
         };
 
@@ -409,7 +413,7 @@ public class OidcAuthService : IOidcAuthService
             Roles = roles,
             Permissions = permissions,
             ProviderName = provider.Name,
-            LastLoginAt = DateTimeOffset.UtcNow,
+            LastLoginAt = _timeProvider.GetUtcNow(),
         };
 
         _logger.LogInformation(
@@ -503,7 +507,7 @@ public class OidcAuthService : IOidcAuthService
                 TokenType = "Bearer",
                 ExpiresIn = session.ExpiresInSeconds,
                 RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
-                ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
+                ExpiresAt = _timeProvider.GetUtcNow().AddSeconds(session.ExpiresInSeconds),
                 SubjectId = session.SubjectId,
             };
         }
@@ -534,7 +538,7 @@ public class OidcAuthService : IOidcAuthService
             TokenType = "Bearer",
             ExpiresIn = (int)accessTokenLifetime.TotalSeconds,
             RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
-            ExpiresAt = DateTimeOffset.UtcNow.Add(accessTokenLifetime),
+            ExpiresAt = _timeProvider.GetUtcNow().Add(accessTokenLifetime),
             SubjectId = subjectId,
         };
     }
@@ -638,8 +642,8 @@ public class OidcAuthService : IOidcAuthService
             ProviderId = provider.Id,
             ReturnUrl = returnUrl ?? "/",
             Nonce = GenerateRandomString(32),
-            CreatedAt = DateTimeOffset.UtcNow,
-            ExpiresAt = DateTimeOffset.UtcNow.Add(_options.State.Lifetime),
+            CreatedAt = _timeProvider.GetUtcNow(),
+            ExpiresAt = _timeProvider.GetUtcNow().Add(_options.State.Lifetime),
             Intent = "link",
             SubjectId = subjectId,
             TenantSlug = tenantSlug,
@@ -683,8 +687,8 @@ public class OidcAuthService : IOidcAuthService
             ProviderId = provider.Id,
             ReturnUrl = "/setup",
             Nonce = GenerateRandomString(32),
-            CreatedAt = DateTimeOffset.UtcNow,
-            ExpiresAt = DateTimeOffset.UtcNow.Add(_options.State.Lifetime),
+            CreatedAt = _timeProvider.GetUtcNow(),
+            ExpiresAt = _timeProvider.GetUtcNow().Add(_options.State.Lifetime),
             Intent = "setup",
             SubjectId = subjectId,
             TenantSlug = tenantSlug,
@@ -750,7 +754,7 @@ public class OidcAuthService : IOidcAuthService
             TokenType = "Bearer",
             ExpiresIn = session.ExpiresInSeconds,
             RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
-            ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
+            ExpiresAt = _timeProvider.GetUtcNow().AddSeconds(session.ExpiresInSeconds),
             SubjectId = subjectId,
         };
 

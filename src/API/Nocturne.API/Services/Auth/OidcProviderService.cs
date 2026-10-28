@@ -24,6 +24,7 @@ public class OidcProviderService : IOidcProviderService
     private readonly ILogger<OidcProviderService> _logger;
     private readonly IDataProtector _clientSecretProtector;
     private readonly OidcOptions _oidcOptions;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initialises a new <see cref="OidcProviderService"/>.
@@ -34,12 +35,14 @@ public class OidcProviderService : IOidcProviderService
     /// Used to create a scoped <see cref="IDataProtector"/> for encrypting client secrets at rest.
     /// </param>
     /// <param name="oidcOptions">Config-file OIDC provider definitions for config-managed mode.</param>
+    /// <param name="timeProvider">The clock the cached discovery document ages against.</param>
     public OidcProviderService(
         INocturneDbContextFactory contexts,
         IHttpClientFactory httpClientFactory,
         ILogger<OidcProviderService> logger,
         IDataProtectionProvider dataProtectionProvider,
-        IOptions<OidcOptions> oidcOptions
+        IOptions<OidcOptions> oidcOptions,
+        TimeProvider timeProvider
     )
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
@@ -49,6 +52,7 @@ public class OidcProviderService : IOidcProviderService
             "Nocturne.API.Services.Auth.OidcProviderService.ClientSecret.v1"
         );
         _oidcOptions = oidcOptions.Value;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -70,6 +74,7 @@ public class OidcProviderService : IOidcProviderService
         var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
         await using var db = await factory.CreatePlatformAsync();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<OidcProviderService>>();
+        var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime;
 
         var configuredIds = options.Providers.Select(p => CreateDeterministicGuid(p.IssuerUrl)).ToArray();
 
@@ -90,7 +95,7 @@ public class OidcProviderService : IOidcProviderService
                 existing.DefaultRoles = config.DefaultRoles;
                 existing.Icon = config.Icon;
                 existing.ButtonColor = config.ButtonColor;
-                existing.UpdatedAt = DateTime.UtcNow;
+                existing.UpdatedAt = now;
             }
             else
             {
@@ -118,7 +123,7 @@ public class OidcProviderService : IOidcProviderService
         foreach (var provider in stale)
         {
             provider.IsEnabled = false;
-            provider.UpdatedAt = DateTime.UtcNow;
+            provider.UpdatedAt = now;
         }
 
         await db.SaveChangesAsync();
@@ -246,7 +251,7 @@ public class OidcProviderService : IOidcProviderService
         entity.DefaultRoles = provider.DefaultRoles;
         entity.IsEnabled = provider.IsEnabled;
         entity.DisplayOrder = provider.DisplayOrder;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
 
         await db.SaveChangesAsync();
         return MapToModel(entity);
@@ -274,7 +279,7 @@ public class OidcProviderService : IOidcProviderService
             return false;
 
         entity.IsEnabled = true;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync();
         return true;
     }
@@ -288,7 +293,7 @@ public class OidcProviderService : IOidcProviderService
             return false;
 
         entity.IsEnabled = false;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync();
         return true;
     }
@@ -328,7 +333,7 @@ public class OidcProviderService : IOidcProviderService
             !forceRefresh
             && entity.DiscoveryDocumentJson != null
             && entity.DiscoveryCachedAt.HasValue
-            && entity.DiscoveryCachedAt.Value > DateTime.UtcNow.AddHours(-24)
+            && entity.DiscoveryCachedAt.Value > _timeProvider.GetUtcNow().UtcDateTime.AddHours(-24)
         )
         {
             try
@@ -348,7 +353,7 @@ public class OidcProviderService : IOidcProviderService
         if (document != null)
         {
             entity.DiscoveryDocumentJson = JsonSerializer.Serialize(document);
-            entity.DiscoveryCachedAt = DateTime.UtcNow;
+            entity.DiscoveryCachedAt = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync();
         }
 
@@ -424,7 +429,7 @@ public class OidcProviderService : IOidcProviderService
                 if (entity != null)
                 {
                     entity.DiscoveryDocumentJson = JsonSerializer.Serialize(document);
-                    entity.DiscoveryCachedAt = DateTime.UtcNow;
+                    entity.DiscoveryCachedAt = _timeProvider.GetUtcNow().UtcDateTime;
                     await db.SaveChangesAsync();
                 }
             }

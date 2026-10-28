@@ -29,7 +29,8 @@ public class SubjectServiceSignInMethodTests : IDisposable
             _db.AsFactory(),
             Mock.Of<IAuthAuditService>(),
             _recoveryCodes.Object,
-            NullLogger<SubjectService>.Instance
+            NullLogger<SubjectService>.Instance,
+            TimeProvider.System
         );
     }
 

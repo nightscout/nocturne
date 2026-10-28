@@ -26,6 +26,7 @@ public class SubjectService : ISubjectService
     private readonly IAuthAuditService _auditService;
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ILogger<SubjectService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="SubjectService"/>.
@@ -37,13 +38,15 @@ public class SubjectService : ISubjectService
         INocturneDbContextFactory contexts,
         IAuthAuditService auditService,
         IRecoveryCodeService recoveryCodeService,
-        ILogger<SubjectService> logger
+        ILogger<SubjectService> logger,
+        TimeProvider timeProvider
     )
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _auditService = auditService;
         _recoveryCodeService = recoveryCodeService;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -95,8 +98,8 @@ public class SubjectService : ISubjectService
             }
 
             // Always bump LastUsedAt on the identity row and the subject's UpdatedAt.
-            identity.LastUsedAt = DateTime.UtcNow;
-            entity.UpdatedAt = DateTime.UtcNow;
+            identity.LastUsedAt = _timeProvider.GetUtcNow().UtcDateTime;
+            entity.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync();
 
             _logger.LogDebug(
@@ -127,7 +130,7 @@ public class SubjectService : ISubjectService
             OidcSubjectId = oidcSubjectId,
             Issuer = issuer,
             Email = email,
-            LinkedAt = DateTime.UtcNow,
+            LinkedAt = _timeProvider.GetUtcNow().UtcDateTime,
         };
         db.SubjectOidcIdentities.Add(identityEntity);
 
@@ -150,7 +153,7 @@ public class SubjectService : ISubjectService
                         {
                             SubjectId = newEntity.Id,
                             RoleId = role.Id,
-                            AssignedAt = DateTime.UtcNow,
+                            AssignedAt = _timeProvider.GetUtcNow().UtcDateTime,
                         }
                     );
                 }
@@ -203,7 +206,7 @@ public class SubjectService : ISubjectService
                     {
                         SubjectId = entity.Id,
                         RoleId = roleEntity.Id,
-                        AssignedAt = DateTime.UtcNow,
+                        AssignedAt = _timeProvider.GetUtcNow().UtcDateTime,
                     }
                 );
             }
@@ -244,7 +247,7 @@ public class SubjectService : ISubjectService
         entity.Email = subject.Email;
         entity.Notes = subject.Notes;
         entity.IsActive = subject.IsActive;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
 
         await db.SaveChangesAsync();
 
@@ -322,7 +325,7 @@ public class SubjectService : ISubjectService
         var result = await db
             .Subjects.Where(s => s.Id == subjectId)
             .ExecuteUpdateAsync(s =>
-                s.SetProperty(e => e.IsActive, true).SetProperty(e => e.UpdatedAt, DateTime.UtcNow)
+                s.SetProperty(e => e.IsActive, true).SetProperty(e => e.UpdatedAt, _timeProvider.GetUtcNow().UtcDateTime)
             );
 
         return result > 0;
@@ -335,7 +338,7 @@ public class SubjectService : ISubjectService
         var result = await db
             .Subjects.Where(s => s.Id == subjectId)
             .ExecuteUpdateAsync(s =>
-                s.SetProperty(e => e.IsActive, false).SetProperty(e => e.UpdatedAt, DateTime.UtcNow)
+                s.SetProperty(e => e.IsActive, false).SetProperty(e => e.UpdatedAt, _timeProvider.GetUtcNow().UtcDateTime)
             );
 
         return result > 0;
@@ -411,7 +414,7 @@ public class SubjectService : ISubjectService
             {
                 SubjectId = subjectId,
                 RoleId = role.Id,
-                AssignedAt = DateTime.UtcNow,
+                AssignedAt = _timeProvider.GetUtcNow().UtcDateTime,
                 AssignedById = assignedBy,
             }
         );
@@ -546,8 +549,8 @@ public class SubjectService : ISubjectService
         await db
             .Subjects.Where(s => s.Id == subjectId)
             .ExecuteUpdateAsync(s =>
-                s.SetProperty(e => e.LastLoginAt, DateTime.UtcNow)
-                    .SetProperty(e => e.UpdatedAt, DateTime.UtcNow)
+                s.SetProperty(e => e.LastLoginAt, _timeProvider.GetUtcNow().UtcDateTime)
+                    .SetProperty(e => e.UpdatedAt, _timeProvider.GetUtcNow().UtcDateTime)
             );
     }
 
@@ -589,7 +592,7 @@ public class SubjectService : ISubjectService
         {
             if (existing.SubjectId == subjectId)
             {
-                existing.LastUsedAt = DateTime.UtcNow;
+                existing.LastUsedAt = _timeProvider.GetUtcNow().UtcDateTime;
                 if (!string.IsNullOrEmpty(email) && existing.Email != email)
                     existing.Email = email;
                 await db.SaveChangesAsync();
@@ -606,7 +609,7 @@ public class SubjectService : ISubjectService
             OidcSubjectId = oidcSubjectId,
             Issuer = issuer,
             Email = email,
-            LinkedAt = DateTime.UtcNow,
+            LinkedAt = _timeProvider.GetUtcNow().UtcDateTime,
         };
         db.SubjectOidcIdentities.Add(row);
         await db.SaveChangesAsync();
@@ -708,7 +711,7 @@ public class SubjectService : ISubjectService
         var row = await db.SubjectOidcIdentities.FindAsync(identityId);
         if (row != null)
         {
-            row.LastUsedAt = DateTime.UtcNow;
+            row.LastUsedAt = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync();
         }
     }

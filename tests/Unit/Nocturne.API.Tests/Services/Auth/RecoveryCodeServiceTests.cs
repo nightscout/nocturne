@@ -32,7 +32,7 @@ public class RecoveryCodeServiceTests : IDisposable
         });
         _dbContext.SaveChanges();
 
-        _service = new RecoveryCodeService(_dbContext.AsFactory(), CheapDerive);
+        _service = new RecoveryCodeService(_dbContext.AsFactory(), CheapDerive, TimeProvider.System);
     }
 
     /// <summary>
@@ -188,7 +188,7 @@ public class RecoveryCodeServiceTests : IDisposable
         {
             count++;
             return CheapDerive(code, salt);
-        });
+        }, TimeProvider.System);
         return (service, () => count);
     }
 
@@ -225,7 +225,7 @@ public class RecoveryCodeServiceTests : IDisposable
         RecoveryCodeService.Derive("AAAAABBBBB", salt).Should().Equal(
             Rfc2898DeriveBytes.Pbkdf2("AAAAABBBBB", salt, 100_000, HashAlgorithmName.SHA256, 32));
 
-        var service = new RecoveryCodeService(_dbContext.AsFactory());
+        var service = new RecoveryCodeService(_dbContext.AsFactory(), TimeProvider.System);
         var codes = await service.GenerateCodesAsync(_subjectId);
 
         (await service.VerifyAndConsumeAsync(_subjectId, codes[0].ToLowerInvariant())).Should().BeTrue();

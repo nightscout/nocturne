@@ -26,7 +26,7 @@ public sealed class TenantServiceValidateSlugTests : IDisposable
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
-        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())), TimeProvider.System),
         Mock.Of<ILogger<TenantService>>());
 
     [Theory]

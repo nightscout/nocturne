@@ -46,7 +46,8 @@ public class LegacyJwtHandlerTests
     {
         return new JwtService(
             Options.Create(new JwtOptions { SecretKey = secretKey }),
-            Mock.Of<ILogger<JwtService>>());
+            Mock.Of<ILogger<JwtService>>(),
+            TimeProvider.System);
     }
 
     private static DefaultHttpContext CreateHttpContext(string? bearerToken = null)

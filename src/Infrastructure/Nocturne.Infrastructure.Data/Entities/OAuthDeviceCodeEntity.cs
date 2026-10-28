@@ -113,7 +113,12 @@ public class OAuthDeviceCodeEntity : ITenantScoped, IEntityCreated
     /// Whether this device code has expired
     /// </summary>
     [NotMapped]
-    public bool IsExpired => DateTime.UtcNow >= ExpiresAt;
+    public bool IsExpired => IsExpiredAt(DateTime.UtcNow);
+
+    /// <summary>
+    /// Whether this device code has expired at <paramref name="now"/>
+    /// </summary>
+    public bool IsExpiredAt(DateTime now) => now >= ExpiresAt;
 
     /// <summary>
     /// Whether this device code has been approved

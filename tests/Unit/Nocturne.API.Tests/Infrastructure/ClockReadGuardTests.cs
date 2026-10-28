@@ -29,6 +29,7 @@ public class ClockReadGuardTests
         "src/API/Nocturne.API/Services/BackgroundServices",
         "src/API/Nocturne.API/Services/Migration",
         "src/API/Nocturne.API/Services/Alerts",
+        "src/API/Nocturne.API/Services/Auth",
     ];
 
     private static readonly HashSet<string> ClockTypes = [nameof(DateTime), nameof(DateTimeOffset)];

@@ -82,12 +82,13 @@ public sealed class ShareLinkServiceTests : IDisposable
             db.AsFactory(),
             new ShareTokenGenerator(),
             new ShareTokenCacheService(
-                new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<ShareTokenCacheService>.Instance),
+                new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<ShareTokenCacheService>.Instance, TimeProvider.System),
             new PublicAccessCacheService(
                 new MemoryCache(new MemoryCacheOptions()), factory.Object.AsNocturneFactory(), NullLogger<PublicAccessCacheService>.Instance),
             secrets,
             NullLogger<ShareLinkService>.Instance,
-            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }));
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }),
+            TimeProvider.System);
     }
 
     public void Dispose() => _db.Dispose();

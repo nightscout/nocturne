@@ -41,6 +41,7 @@ public abstract class TenantResolutionMiddlewareTestBase : IDisposable
         services.AddTransient<NocturneDbContextFactory>();
         services.AddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
         services.AddSingleton<ShareTokenCacheService>();
+        services.AddSingleton(TimeProvider.System);
         services.AddMemoryCache();
         services.AddLogging();
         ConfigureServices(services);

@@ -348,8 +348,9 @@ public class OAuthTokenServiceTests : IDisposable
             _db.ContextFactory.AsNocturneFactory(),
             Mock.Of<IOAuthClientService>(),
             guestSessionCache,
-            new GrantRevocationService(guestSessionCache),
-            Mock.Of<ILogger<OAuthGrantService>>());
+            new GrantRevocationService(guestSessionCache, TimeProvider.System),
+            Mock.Of<ILogger<OAuthGrantService>>(),
+            TimeProvider.System);
 
         var result = await CreateService(db, grantService).ExchangeAuthorizationCodeAsync(
             testCode, TestCodeVerifier, TestRedirectUri, TestClientId);
@@ -418,6 +419,32 @@ public class OAuthTokenServiceTests : IDisposable
         // An expired code was never redeemed, so there is nothing to revoke.
         _mockGrantService.Verify(g => g.RevokeGrantAsync(
             It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(-1, false)]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    public async Task ExchangeAuthorizationCodeAsync_RedeemsTheCodeOnlyBeforeItExpires(long ticksFromNow, bool redeemed)
+    {
+        const string testCode = "boundary-auth-code";
+        const string testCodeHash = "boundary-auth-code-hash";
+        _mockJwtService.Setup(j => j.HashRefreshToken(testCode)).Returns(testCodeHash);
+        var now = _clock.GetUtcNow().UtcDateTime;
+
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        await SeedAuthorizationCodeAsync(db, testCodeHash, expiresAt: now.AddTicks(ticksFromNow));
+        await SeedGrantAsync(db);
+
+        var result = await CreateService(db).ExchangeAuthorizationCodeAsync(
+            testCode, TestCodeVerifier, TestRedirectUri, TestClientId);
+
+        Assert.Equal(redeemed, result.Success);
+        using var verifyDb = CreateDbContext();
+        var code = await verifyDb.OAuthAuthorizationCodes.AsNoTracking().FirstAsync(c => c.CodeHash == testCodeHash);
+        Assert.Equal(redeemed ? now : null, code.RedeemedAt);
     }
 
     [Fact]

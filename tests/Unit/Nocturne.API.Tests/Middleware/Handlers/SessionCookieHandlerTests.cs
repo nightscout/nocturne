@@ -37,7 +37,7 @@ public class SessionCookieHandlerTests
             Audience = "nocturne-api",
             AccessTokenLifetimeMinutes = 15,
         });
-        _jwt = new JwtService(jwtOptions, NullLogger<JwtService>.Instance);
+        _jwt = new JwtService(jwtOptions, NullLogger<JwtService>.Instance, TimeProvider.System);
 
         var services = new ServiceCollection();
         services.AddSingleton(_jwt);

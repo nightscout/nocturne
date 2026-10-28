@@ -268,7 +268,8 @@ public class PasskeyController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<PasskeyRegisterCompleteResponse>> RegisterComplete(
-        [FromBody] PasskeyRegisterCompleteRequest request)
+        [FromBody] PasskeyRegisterCompleteRequest request,
+        [FromServices] ILoginCodeService loginCodeService)
     {
         var subjectId = ResolveRegistrationSubject();
         if (subjectId == null)
@@ -305,7 +306,7 @@ public class PasskeyController : ControllerBase
         try
         {
             await using var db = await _dbContextFactory.CreateAsync();
-            await LoginCodeService.VoidRecoveryCodesAsync(db, subjectId.Value, HttpContext.RequestAborted);
+            await loginCodeService.VoidRecoveryCodesAsync(db, subjectId.Value, HttpContext.RequestAborted);
         }
         catch (Exception ex)
         {

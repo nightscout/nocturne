@@ -45,7 +45,7 @@ public class SubjectServiceFactorRemovalPostgresTests(SubjectServiceFactorRemova
     }
 
     private static SubjectService CreateService(NocturneDbContext db) =>
-        new(db.AsFactory(), Mock.Of<IAuthAuditService>(), Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
+        new(db.AsFactory(), Mock.Of<IAuthAuditService>(), Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance, TimeProvider.System);
 
     private async Task<Guid> SeedSubjectAsync()
     {

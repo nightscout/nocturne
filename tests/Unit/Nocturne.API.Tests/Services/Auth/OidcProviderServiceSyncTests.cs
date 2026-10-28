@@ -30,6 +30,7 @@ public class OidcProviderServiceSyncTests
         services.AddDbContextFactory<NocturneDbContext>(options =>
             options.UseInMemoryDatabase(databaseName));
         services.AddDataServices();
+        services.AddSingleton(TimeProvider.System);
         return services.BuildServiceProvider();
     }
 

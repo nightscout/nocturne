@@ -24,7 +24,7 @@ public interface ILoginCodeService
     /// Mints a code for <paramref name="subjectId"/>. The plaintext is returned once and cannot
     /// be retrieved again. Consumed and expired codes on the same tenant are dropped here, which
     /// is the only thing that prunes the table. A recovery code replaces any the member already
-    /// had outstanding (<see cref="LoginCodeService.VoidRecoveryCodesAsync"/>).
+    /// had outstanding (<see cref="VoidRecoveryCodesAsync"/>).
     /// </summary>
     Task<LoginCode> IssueAsync(
         NocturneDbContext dbContext,
@@ -48,6 +48,13 @@ public interface ILoginCodeService
         string? ipAddress,
         string? userAgent,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Spends every outstanding recovery code for <paramref name="subjectId"/> on the context's
+    /// tenant. A recovery code is a bearer link that outlives the situation it was issued for, so
+    /// it stops working once the member enrols a passkey or a newer code replaces it.
+    /// </summary>
+    Task VoidRecoveryCodesAsync(NocturneDbContext dbContext, Guid subjectId, CancellationToken ct = default);
 }
 
 /// <summary>A minted login code and the moment it stops being redeemable.</summary>
@@ -70,26 +77,24 @@ public class LoginCodeService : ILoginCodeService
     public static readonly IReadOnlyList<LoginCodePurpose> RecoveryPurposes =
         [LoginCodePurpose.Recovery, LoginCodePurpose.OperatorRecovery];
 
-    /// <summary>
-    /// Spends every outstanding recovery code for <paramref name="subjectId"/> on the context's
-    /// tenant. A recovery code is a bearer link that outlives the situation it was issued for, so
-    /// it stops working once the member enrols a passkey or a newer code replaces it.
-    /// </summary>
-    public static Task VoidRecoveryCodesAsync(NocturneDbContext dbContext, Guid subjectId, CancellationToken ct = default)
-    {
-        var now = DateTime.UtcNow;
-        return dbContext.LoginCodes
-            .Where(c => c.SubjectId == subjectId && c.ConsumedAt == null && RecoveryPurposes.Contains(c.Purpose))
-            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedAt, now), ct);
-    }
-
     private readonly IJwtService _jwtService;
     private readonly IAuthAuditService _auditService;
+    private readonly TimeProvider _timeProvider;
 
-    public LoginCodeService(IJwtService jwtService, IAuthAuditService auditService)
+    public LoginCodeService(IJwtService jwtService, IAuthAuditService auditService, TimeProvider timeProvider)
     {
         _jwtService = jwtService;
         _auditService = auditService;
+        _timeProvider = timeProvider;
+    }
+
+    /// <inheritdoc />
+    public Task VoidRecoveryCodesAsync(NocturneDbContext dbContext, Guid subjectId, CancellationToken ct = default)
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        return dbContext.LoginCodes
+            .Where(c => c.SubjectId == subjectId && c.ConsumedAt == null && RecoveryPurposes.Contains(c.Purpose))
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedAt, now), ct);
     }
 
     /// <inheritdoc />
@@ -102,7 +107,7 @@ public class LoginCodeService : ILoginCodeService
         AuthAuditActor actor,
         CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         await dbContext.LoginCodes
             .Where(c => c.ConsumedAt != null || c.ExpiresAt <= now)
@@ -144,7 +149,7 @@ public class LoginCodeService : ILoginCodeService
         CancellationToken ct = default)
     {
         var codeHash = HashUtils.Sha256Hex(code);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         // Claiming and checking in one statement is what makes the code single-use: consumption
         // state is not a concurrency token, so a read-then-write would let two simultaneous

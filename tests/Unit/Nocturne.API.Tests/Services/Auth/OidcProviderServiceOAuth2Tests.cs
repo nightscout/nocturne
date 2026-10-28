@@ -29,7 +29,8 @@ public class OidcProviderServiceOAuth2Tests
             new Mock<IHttpClientFactory>().Object,
             NullLogger<OidcProviderService>.Instance,
             new EphemeralDataProtectionProvider(),
-            options);
+            options,
+            TimeProvider.System);
     }
 
     private static OidcProviderConfig OAuth2Config() => new()
