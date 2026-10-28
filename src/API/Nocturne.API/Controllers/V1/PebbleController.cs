@@ -59,7 +59,7 @@ public class PebbleController : ControllerBase
     /// <param name="appearanceReader">Reader of the owner's display preferences, for the default units.</param>
     /// <param name="tenantAccessor">Accessor for the current tenant.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">Clock for stamps and response headers.</param>
+    /// <param name="timeProvider">Clock for the current time.</param>
     public PebbleController(
         IEntryService entryService,
         IIobCobReader iobCobReader,

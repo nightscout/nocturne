@@ -36,7 +36,7 @@ public class ProfileController : ControllerBase
     /// <param name="projectionService">Service for reading legacy profile projections from V4 data.</param>
     /// <param name="writeService">Service for profile write operations.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">Clock for stamps and response headers.</param>
+    /// <param name="timeProvider">Clock for the current time.</param>
     public ProfileController(
         IProfileProjectionService projectionService,
         IProfileWriteService writeService,

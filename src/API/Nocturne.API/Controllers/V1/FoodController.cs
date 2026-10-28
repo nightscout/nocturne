@@ -32,7 +32,7 @@ public class FoodController : ControllerBase
     /// </summary>
     /// <param name="foodRepository">Repository for food records.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">Clock for stamps and response headers.</param>
+    /// <param name="timeProvider">Clock for the current time.</param>
     public FoodController(
         IFoodRepository foodRepository,
         ILogger<FoodController> logger,

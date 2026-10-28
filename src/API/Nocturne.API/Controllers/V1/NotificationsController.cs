@@ -35,7 +35,7 @@ public class NotificationsController : ControllerBase
     /// <param name="notificationService">Service handling legacy V1 notification operations.</param>
     /// <param name="ackHandler">Silences an acknowledged alarm.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">Clock for stamps and response headers.</param>
+    /// <param name="timeProvider">Clock for the current time.</param>
     public NotificationsController(
         INotificationV1Service notificationService,
         IAlarmAckHandler ackHandler,

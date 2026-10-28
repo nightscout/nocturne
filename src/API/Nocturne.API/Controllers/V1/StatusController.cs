@@ -41,7 +41,7 @@ public class StatusController : ControllerBase
     /// </summary>
     /// <param name="statusService">Service providing system status information.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">Clock for stamps and response headers.</param>
+    /// <param name="timeProvider">Clock for the current time.</param>
     public StatusController(
         IStatusService statusService,
         ILogger<StatusController> logger,

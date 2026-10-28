@@ -43,7 +43,7 @@ public class DDataController : ControllerBase
     /// <param name="ddataService">Service for assembling the combined DData response.</param>
     /// <param name="activityDecomposer">Classifier mapping each activity to its required read scope.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">Clock for stamps and response headers.</param>
+    /// <param name="timeProvider">Clock for the current time.</param>
     public DDataController(
         IDDataService ddataService,
         IActivityDecomposer activityDecomposer,

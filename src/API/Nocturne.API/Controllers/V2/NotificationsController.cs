@@ -33,7 +33,7 @@ public class NotificationsController : ControllerBase
     /// </summary>
     /// <param name="notificationService">Service handling V2 notification operations.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">Clock for stamps and response headers.</param>
+    /// <param name="timeProvider">Clock for the current time.</param>
     public NotificationsController(
         INotificationV2Service notificationService,
         ILogger<NotificationsController> logger,
