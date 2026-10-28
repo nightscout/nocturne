@@ -109,7 +109,8 @@ public class CompatibilityAnalysisDetailTests : IDisposable
     public async Task GetDiscrepancyAnalysis_ServesAnAnalysisOlderThanTheNewest()
     {
         var controller = new DiscrepancyController(
-            CreateRepository(), Mock.Of<ILogger<DiscrepancyController>>());
+            CreateRepository(), Mock.Of<ILogger<DiscrepancyController>>(),
+ TimeProvider.System);
 
         var result = await controller.GetDiscrepancyAnalysis(OlderAnalysisId);
 
@@ -123,7 +124,8 @@ public class CompatibilityAnalysisDetailTests : IDisposable
     public async Task GetDiscrepancyAnalysis_DoesNotServeAnotherTenantsAnalysis()
     {
         var controller = new DiscrepancyController(
-            CreateRepository(), Mock.Of<ILogger<DiscrepancyController>>());
+            CreateRepository(), Mock.Of<ILogger<DiscrepancyController>>(),
+ TimeProvider.System);
 
         var result = await controller.GetDiscrepancyAnalysis(OtherTenantAnalysisId);
 
@@ -143,7 +145,8 @@ public class CompatibilityAnalysisDetailTests : IDisposable
             Mock.Of<IDiscrepancyPersistenceService>(),
             CreateRepository(),
             Options.Create(new CompatibilityProxyConfiguration()),
-            Mock.Of<ILogger<CompatibilityController>>());
+            Mock.Of<ILogger<CompatibilityController>>(),
+            TimeProvider.System);
 
     private DiscrepancyAnalysisRepository CreateRepository() =>
         new(_db.CreateContext(_tenantId).AsFactory());

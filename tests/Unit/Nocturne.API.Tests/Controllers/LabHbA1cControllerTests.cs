@@ -20,7 +20,7 @@ public class LabHbA1cControllerTests
         LabHbA1cResult? saved = null;
         repository.Setup(r => r.CreateAsync(It.IsAny<LabHbA1cResult>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((LabHbA1cResult result, CancellationToken _) => { saved = result; return result; });
-        var controller = new LabHbA1cController(repository.Object);
+        var controller = new LabHbA1cController(repository.Object, TimeProvider.System);
         var response = await controller.Create(new CreateLabHbA1cResultRequest
         {
             Value = legacy ? null : value,
@@ -45,7 +45,7 @@ public class LabHbA1cControllerTests
     public async Task Create_rejects_ambiguous_invalid_and_out_of_range_values(double? value, double? legacy, string unit)
     {
         var repository = new Mock<ILabHbA1cResultRepository>();
-        var response = await new LabHbA1cController(repository.Object).Create(new CreateLabHbA1cResultRequest
+        var response = await new LabHbA1cController(repository.Object, TimeProvider.System).Create(new CreateLabHbA1cResultRequest
         {
             Value = value, ValuePercent = legacy, Unit = unit, MeasuredAt = new DateTime(2025, 1, 1),
         });

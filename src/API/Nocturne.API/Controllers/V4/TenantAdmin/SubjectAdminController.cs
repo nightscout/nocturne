@@ -24,8 +24,13 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 public class SubjectAdminController : ControllerBase
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly TimeProvider _timeProvider;
 
-    public SubjectAdminController(INocturneDbContextFactory contexts) => _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+    public SubjectAdminController(INocturneDbContextFactory contexts, TimeProvider timeProvider)
+    {
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _timeProvider = timeProvider;
+    }
 
     /// <summary>
     /// Grant or revoke platform admin for a subject.
@@ -53,7 +58,7 @@ public class SubjectAdminController : ControllerBase
         }
 
         subject.IsPlatformAdmin = request.IsPlatformAdmin;
-        subject.UpdatedAt = DateTime.UtcNow;
+        subject.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync();
 
         return NoContent();

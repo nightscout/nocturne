@@ -55,6 +55,7 @@ public class CompatibilityManualTestTests
             Mock.Of<IDiscrepancyAnalysisRepository>(),
             Options.Create(new CompatibilityProxyConfiguration()),
             logger,
+            TimeProvider.System,
             nightscoutConfig)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

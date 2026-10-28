@@ -28,6 +28,7 @@ public class ChatIdentityDirectoryController : ControllerBase
     private readonly INocturneDbContextFactory _contextFactory;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IAlertAcknowledgementService _acknowledgementService;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ChatIdentityDirectoryController"/>.
@@ -37,13 +38,16 @@ public class ChatIdentityDirectoryController : ControllerBase
     /// <param name="contextFactory">Factory for creating database context instances.</param>
     /// <param name="tenantAccessor">Accessor for the request's resolved tenant.</param>
     /// <param name="acknowledgementService">The one alert acknowledgement decision.</param>
+    /// <param name="timeProvider">The clock.</param>
     public ChatIdentityDirectoryController(
         ChatIdentityDirectoryService directory,
         ChatIdentityPendingLinkService pending,
         INocturneDbContextFactory contextFactory,
         ITenantAccessor tenantAccessor,
-        IAlertAcknowledgementService acknowledgementService)
+        IAlertAcknowledgementService acknowledgementService,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _directory = directory;
         _pending = pending;
         _contextFactory = contextFactory;
@@ -168,7 +172,7 @@ public class ChatIdentityDirectoryController : ControllerBase
         }
         else
         {
-            var now = DateTime.UtcNow;
+            var now = _timeProvider.GetUtcNow().UtcDateTime;
             excursionIds = await db.AlertExcursions.AsNoTracking()
                 .Where(e => e.EndedAt == null || e.EndedAt > now)
                 .Select(e => e.Id)
@@ -181,7 +185,7 @@ public class ChatIdentityDirectoryController : ControllerBase
             ? row.NocturneUserId.ToString()
             : body.AcknowledgedBy;
 
-        var startedAt = DateTime.UtcNow;
+        var startedAt = _timeProvider.GetUtcNow().UtcDateTime;
         var outcomes = new Dictionary<Guid, AlertAcknowledgementOutcome>(excursionIds.Count);
         foreach (var excursionId in excursionIds)
         {

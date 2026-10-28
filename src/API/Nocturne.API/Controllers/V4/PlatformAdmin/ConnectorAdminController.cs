@@ -27,13 +27,16 @@ public class ConnectorAdminController : ControllerBase
     private readonly IConnectorCursorResetService _cursorResetService;
     private readonly IConnectorCursorResetJobService _resetJobService;
     private readonly ILogger<ConnectorAdminController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>Initializes a new instance of <see cref="ConnectorAdminController"/>.</summary>
     public ConnectorAdminController(
         IConnectorCursorResetService cursorResetService,
         IConnectorCursorResetJobService resetJobService,
-        ILogger<ConnectorAdminController> logger)
+        ILogger<ConnectorAdminController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _cursorResetService = cursorResetService;
         _resetJobService = resetJobService;
         _logger = logger;
@@ -85,7 +88,7 @@ public class ConnectorAdminController : ControllerBase
         [FromBody] AdminResetCursorsRequest request,
         CancellationToken ct)
     {
-        if (new SyncRequest { From = request.From, To = DateTime.UtcNow }.WindowError() is { } windowError)
+        if (new SyncRequest { From = request.From, To = _timeProvider.GetUtcNow().UtcDateTime }.WindowError() is { } windowError)
             return Problem(detail: windowError, statusCode: 400, title: "Bad Request");
 
         _logger.LogInformation(

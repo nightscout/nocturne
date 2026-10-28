@@ -24,11 +24,14 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 public class LabHbA1cController : ControllerBase
 {
     private readonly ILabHbA1cResultRepository _repository;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>Initializes a new instance of <see cref="LabHbA1cController"/>.</summary>
     /// <param name="repository">The lab HbA1c result store.</param>
-    public LabHbA1cController(ILabHbA1cResultRepository repository)
+    /// <param name="timeProvider">The clock.</param>
+    public LabHbA1cController(ILabHbA1cResultRepository repository, TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _repository = repository;
     }
 
@@ -63,7 +66,7 @@ public class LabHbA1cController : ControllerBase
             : request.Value!.Value);
         if (!double.IsFinite(valuePercent) || valuePercent is < 3.0 or > 20.0)
             return Problem(detail: "Lab value must be equivalent to 3.0–20.0% (NGSP)", statusCode: 400, title: "Bad Request");
-        if (request.MeasuredAt.Date > DateTime.UtcNow.Date.AddDays(1))
+        if (request.MeasuredAt.Date > _timeProvider.GetUtcNow().UtcDateTime.Date.AddDays(1))
             return Problem(detail: "MeasuredAt cannot be in the future", statusCode: 400, title: "Bad Request");
 
         var created = await _repository.CreateAsync(

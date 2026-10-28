@@ -525,7 +525,8 @@ public class V4BulkValidationTests
             Mock.Of<IBolusRepository>(),
             Mock.Of<ITreatmentFoodService>(),
             Mock.Of<IDemoModeService>(),
-            contexts: Mock.Of<INocturneDbContextFactory>()));
+            contexts: Mock.Of<INocturneDbContextFactory>(),
+            timeProvider: TimeProvider.System));
 
     private static TempBasalController TempBasals() =>
         WithContext(new TempBasalController(Mock.Of<ITempBasalRepository>(), Mock.Of<IPatientDeviceStamper>()));

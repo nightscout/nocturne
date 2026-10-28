@@ -35,14 +35,17 @@ public class LoginHandoffController : ControllerBase
     private readonly ISessionService _sessionService;
     private readonly OidcOptions _oidcOptions;
     private readonly BaseDomainOptions _baseDomain;
+    private readonly TimeProvider _timeProvider;
 
     public LoginHandoffController(
         INocturneDbContextFactory contexts,
         ILoginCodeService loginCodeService,
         ISessionService sessionService,
         IOptions<OidcOptions> oidcOptions,
-        IOptions<BaseDomainOptions> baseDomainOptions)
+        IOptions<BaseDomainOptions> baseDomainOptions,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _loginCodeService = loginCodeService;
         _sessionService = sessionService;
@@ -86,7 +89,7 @@ public class LoginHandoffController : ControllerBase
                 DeviceDescription: "Login handoff", IpAddress: ipAddress, UserAgent: userAgent),
             ct);
 
-        Response.SetSessionCookies(session, _oidcOptions);
+        Response.SetSessionCookies(session, _oidcOptions, _timeProvider);
 
         var returnUrl = request.ReturnUrl is { Length: > 0 } requested
             && _baseDomain.IsValidReturnUrl(requested)

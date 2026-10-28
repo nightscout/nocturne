@@ -28,7 +28,8 @@ public class ServicesControllerResetCursorTests
             syncService,
             Mock.Of<ILogger<ServicesController>>(),
             Mock.Of<ITenantAccessor>(),
-            Options.Create(new BaseDomainOptions()));
+            Options.Create(new BaseDomainOptions()),
+            TimeProvider.System);
 
     [Fact]
     public async Task ResetConnectorCursor_SetsUpperBound_ToForceExplicitRangeRePull()

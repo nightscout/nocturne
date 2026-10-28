@@ -31,16 +31,20 @@ public class AlertCustomSoundsController : ControllerBase
 {
     private readonly INocturneDbContextFactory _contextFactory;
     private readonly ILogger<AlertCustomSoundsController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertCustomSoundsController"/>.
     /// </summary>
     /// <param name="contextFactory">Tenant-scoped factory for creating <see cref="NocturneDbContext"/> instances.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">The clock.</param>
     public AlertCustomSoundsController(
         INocturneDbContextFactory contextFactory,
-        ILogger<AlertCustomSoundsController> logger)
+        ILogger<AlertCustomSoundsController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _contextFactory = contextFactory;
         _logger = logger;
     }
@@ -77,7 +81,7 @@ public class AlertCustomSoundsController : ControllerBase
             MimeType = mimeType,
             Data = data,
             FileSize = data.Length,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = _timeProvider.GetUtcNow().UtcDateTime,
         };
 
         db.AlertCustomSounds.Add(entity);

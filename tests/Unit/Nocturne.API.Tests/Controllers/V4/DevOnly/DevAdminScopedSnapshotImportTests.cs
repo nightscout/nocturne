@@ -229,7 +229,8 @@ public class DevAdminScopedSnapshotImportTests : IDisposable
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ITenantService>(),
             new MemoryCache(new MemoryCacheOptions()),
-            NullLogger<DevAdminController>.Instance);
+            NullLogger<DevAdminController>.Instance,
+            TimeProvider.System);
 
     private sealed record MemberRoleLink(Guid Id, Guid MemberId, Guid RoleId);
 

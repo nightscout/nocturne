@@ -51,7 +51,8 @@ public class SessionCookieRefreshFailureTests
         return new SessionCookieHandler(
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<SessionCookieHandler>.Instance,
-            Options.Create(_oidc));
+            Options.Create(_oidc),
+            TimeProvider.System);
     }
 
     private DefaultHttpContext ContextWithExpiredAccessAndRefreshCookies()

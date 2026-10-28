@@ -107,7 +107,8 @@ public class RetrospectiveControllerTests
             Mock.Of<IPumpSnapshotRepository>(),
             new IobCobReader(_iobCalculatorMock.Object, _cobCalculatorMock.Object, _bolusRepoMock.Object,
                 _tempBasalRepoMock.Object, _carbIntakeRepoMock.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
-            _loggerMock.Object);
+            _loggerMock.Object,
+            TimeProvider.System);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = new HashSet<string> { Scope.FullAccess };

@@ -107,12 +107,13 @@ public static class SessionCookieExtensions
     /// path, security flags, and refresh-token lifetime.
     /// </summary>
     public static void SetSessionCookies(
-        this HttpResponse response, SessionTokenPair session, OidcOptions options) =>
+        this HttpResponse response, SessionTokenPair session, OidcOptions options, TimeProvider time) =>
         response.SetSessionCookies(
             session.AccessToken,
             session.RefreshToken,
-            DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
-            options);
+            time.GetUtcNow().AddSeconds(session.ExpiresInSeconds),
+            options,
+            time);
 
     /// <summary>
     /// The single session-cookie writer. Every auth flow (OIDC callback, passkey, TOTP, setup,
@@ -124,10 +125,11 @@ public static class SessionCookieExtensions
         string accessToken,
         string refreshToken,
         DateTimeOffset accessTokenExpiresAt,
-        OidcOptions options)
+        OidcOptions options,
+        TimeProvider time)
     {
         var sameSite = MapSameSiteMode(options.Cookie.SameSite);
-        var refreshExpiresAt = DateTimeOffset.UtcNow.Add(options.Session.RefreshTokenLifetime);
+        var refreshExpiresAt = time.GetUtcNow().Add(options.Session.RefreshTokenLifetime);
 
         // Order matters: Response.Cookies.Delete strips already-appended Set-Cookie headers that
         // match by path, so deleting after appending would cancel the write we just made.
@@ -175,13 +177,13 @@ public static class SessionCookieExtensions
     /// <paramref name="method"/> is one of <see cref="SignInMethods"/>; <paramref name="providerId"/>
     /// names the identity provider for <see cref="SignInMethods.Oidc"/>.
     /// <para>
-    /// Not folded into <see cref="SetSessionCookies(HttpResponse, string, string, DateTimeOffset, OidcOptions)"/>:
+    /// Not folded into <see cref="SetSessionCookies(HttpResponse, string, string, DateTimeOffset, OidcOptions, TimeProvider)"/>:
     /// a silent token refresh writes session cookies too and knows nothing about how the session
     /// began, so it would overwrite the hint with a guess. Deliberately not cleared on sign-out.
     /// </para>
     /// </remarks>
     public static void SetLastSignInCookie(
-        this HttpResponse response, string method, string? providerId, OidcOptions options)
+        this HttpResponse response, string method, string? providerId, OidcOptions options, TimeProvider time)
     {
         response.Cookies.Append(
             LastSignInCookieName,
@@ -194,7 +196,7 @@ public static class SessionCookieExtensions
                 Path = options.Cookie.Path,
                 Domain = options.Cookie.SessionDomain,
                 IsEssential = true,
-                Expires = DateTimeOffset.UtcNow.Add(LastSignInLifetime),
+                Expires = time.GetUtcNow().Add(LastSignInLifetime),
             });
     }
 
@@ -218,7 +220,7 @@ public static class SessionCookieExtensions
     }
 
     /// <summary>
-    /// Delete the session cookies, mirroring <see cref="SetSessionCookies(HttpResponse, string, string, DateTimeOffset, OidcOptions)"/>.
+    /// Delete the session cookies, mirroring <see cref="SetSessionCookies(HttpResponse, string, string, DateTimeOffset, OidcOptions, TimeProvider)"/>.
     /// A cookie is keyed by name, domain, and path, so sign-out must present the same
     /// <c>Domain</c> the write used or the browser keeps the session cookie.
     /// </summary>

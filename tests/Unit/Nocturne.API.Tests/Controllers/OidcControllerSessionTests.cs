@@ -66,7 +66,8 @@ public class OidcControllerSessionTests
             _tenantMemberService.Object,
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
-            NullLogger<OidcController>.Instance)
+            NullLogger<OidcController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

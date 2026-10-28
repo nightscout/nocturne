@@ -67,6 +67,7 @@ public class AlertRulesController : ControllerBase
     private readonly AlertRuleRearm _rearm;
     private readonly AlertRuleRetirement _retirement;
     private readonly ILogger<AlertRulesController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertRulesController"/>.
@@ -82,8 +83,10 @@ public class AlertRulesController : ControllerBase
         ISecretEncryptionService encryption,
         AlertRuleRearm rearm,
         AlertRuleRetirement retirement,
-        ILogger<AlertRulesController> logger)
+        ILogger<AlertRulesController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _contextFactory = contextFactory;
         _alerts = alerts;
         _tenantAccessor = tenantAccessor;
@@ -173,8 +176,8 @@ public class AlertRulesController : ControllerBase
             AutoResolveEnabled = request.AutoResolveEnabled,
             AutoResolveParams = trees.AutoResolveParams,
             ClientConfiguration = trees.ClientConfiguration ?? "{}",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = _timeProvider.GetUtcNow().UtcDateTime,
+            UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime,
         };
 
         if (request.Channels is { Count: > 0 })
@@ -263,7 +266,7 @@ public class AlertRulesController : ControllerBase
             rule.AutoResolveParams = trees.AutoResolveParams;
         rule.ClientConfiguration = trees.ClientConfiguration ?? "{}";
         rule.ReviewReason = null;
-        rule.UpdatedAt = DateTime.UtcNow;
+        rule.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
 
         if (request.Channels is not null)
         {
@@ -360,7 +363,7 @@ public class AlertRulesController : ControllerBase
 
         var wasEnabled = rule.IsEnabled;
         rule.IsEnabled = !rule.IsEnabled;
-        rule.UpdatedAt = DateTime.UtcNow;
+        rule.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await _rearm.SaveAndClearAsync(unit, id, ct);
         if (wasEnabled)
             await _retirement.CloseAsync([id], db.TenantId, CancellationToken.None);
@@ -384,7 +387,7 @@ public class AlertRulesController : ControllerBase
         var rule = await _alerts.GetRuleAsync(tenantId, id, ct);
         if (rule is null) return NotFound();
 
-        await _deliveryService.TestFireAsync(id, rule.Channels, BuildTestPayload(rule.Rule, tenantId), ct);
+        await _deliveryService.TestFireAsync(id, rule.Channels, BuildTestPayload(rule.Rule, tenantId, _timeProvider.GetUtcNow().UtcDateTime), ct);
         return Accepted();
     }
 
@@ -439,7 +442,7 @@ public class AlertRulesController : ControllerBase
             GlucoseValue = null,
             Trend = null,
             TrendRate = null,
-            ReadingTimestamp = DateTime.UtcNow,
+            ReadingTimestamp = _timeProvider.GetUtcNow().UtcDateTime,
             SubjectName = "Test fire",
             ExcursionId = Guid.Empty,
             InstanceId = Guid.Empty,
@@ -450,7 +453,7 @@ public class AlertRulesController : ControllerBase
         return Accepted();
     }
 
-    internal static AlertPayload BuildTestPayload(AlertRuleSnapshot rule, Guid tenantId) => new()
+    internal static AlertPayload BuildTestPayload(AlertRuleSnapshot rule, Guid tenantId, DateTime now) => new()
     {
         AlertType = rule.ConditionType,
         RuleName = $"[Test] {rule.Name}",
@@ -459,7 +462,7 @@ public class AlertRulesController : ControllerBase
         GlucoseValue = null,
         Trend = null,
         TrendRate = null,
-        ReadingTimestamp = DateTime.UtcNow,
+        ReadingTimestamp = now,
         SubjectName = "Test fire",
         ExcursionId = Guid.Empty,
         InstanceId = Guid.Empty,

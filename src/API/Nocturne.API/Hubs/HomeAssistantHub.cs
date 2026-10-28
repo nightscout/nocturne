@@ -23,7 +23,7 @@ namespace Nocturne.API.Hubs;
 // The hub endpoint is internet-reachable (the cloud gateway publishes /hubs/**), so authorization
 // happens per method in HubAuthorizationFilter.
 [AllowAnonymous]
-public class HomeAssistantHub(HomeAssistantConnections connections) : TenantAwareHub
+public class HomeAssistantHub(HomeAssistantConnections connections, TimeProvider timeProvider) : TenantAwareHub
 {
     private const string InstanceItemKey = "ha_instance_id";
 
@@ -123,7 +123,7 @@ public class HomeAssistantHub(HomeAssistantConnections connections) : TenantAwar
         var contextFactory = services.GetRequiredService<INocturneDbContextFactory>();
 
         await using var db = await contextFactory.CreateForTenantAsync(tenantId, ct);
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
         // Find failed HA deliveries for this instance that belong to open excursions and are
         // not under an AlertSnooze (the resume dispatch re-sends those once it lapses)
@@ -151,7 +151,7 @@ public class HomeAssistantHub(HomeAssistantConnections connections) : TenantAwar
 
                     // Mark as delivered
                     delivery.Status = "delivered";
-                    delivery.DeliveredAt = DateTime.UtcNow;
+                    delivery.DeliveredAt = timeProvider.GetUtcNow().UtcDateTime;
                 }
             }
             catch (JsonException)

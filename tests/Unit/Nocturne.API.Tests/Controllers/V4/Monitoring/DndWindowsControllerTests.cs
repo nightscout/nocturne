@@ -215,7 +215,8 @@ public class DndWindowsControllerTests
         }
 
         var controller = new DndWindowsController(
-            new TestNocturneDbContextFactory(sqlite.CreateContext(Tenant)));
+            new TestNocturneDbContextFactory(sqlite.CreateContext(Tenant)),
+            TimeProvider.System);
 
         var result = await controller.Create(Request(id, DndScope.Lows), CancellationToken.None);
 
@@ -406,7 +407,7 @@ public class DndWindowsControllerTests
             .Options;
         var seed = new NocturneDbContext(options) { TenantId = Tenant };
         var factory = new TestNocturneDbContextFactory(seed);
-        return (new DndWindowsController(factory), options);
+        return (new DndWindowsController(factory, TimeProvider.System), options);
     }
 
     private static List<DndWindowResponse> OkValue(ActionResult<List<DndWindowResponse>> result)

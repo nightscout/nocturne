@@ -89,7 +89,8 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         var handler = new SessionCookieHandler(
-            scopeFactory, NullLogger<SessionCookieHandler>.Instance, Options.Create(new OidcOptions()));
+            scopeFactory, NullLogger<SessionCookieHandler>.Instance, Options.Create(new OidcOptions()),
+ TimeProvider.System);
 
         return (handler, scopeFactory, token);
     }

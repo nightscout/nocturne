@@ -42,7 +42,8 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [ClearsTenantCache(TenantCacheFamily.Statistics)]
 public class BasalInjectionController(
     IBasalInjectionRepository repo,
-    IPatientInsulinRepository insulinRepo)
+    IPatientInsulinRepository insulinRepo,
+    TimeProvider timeProvider)
     : V4CrudControllerBase<BasalInjection, CreateBasalInjectionRequest, UpdateBasalInjectionRequest, IBasalInjectionRepository>(repo)
 {
     private const double UnitsHardCeiling = 500.0;
@@ -168,7 +169,7 @@ public class BasalInjectionController(
         if (units <= 0 || units > UnitsHardCeiling)
             return Problem(detail: "Units must be > 0 and <= 500.", statusCode: 400, title: "Bad Request");
 
-        if (timestamp > DateTimeOffset.UtcNow.AddMinutes(FutureToleranceMinutes))
+        if (timestamp > timeProvider.GetUtcNow().AddMinutes(FutureToleranceMinutes))
             return Problem(detail: "Timestamp cannot be more than 5 minutes in the future.", statusCode: 400, title: "Bad Request");
 
         return null;

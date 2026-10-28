@@ -30,6 +30,7 @@ public class CompatibilityController : ControllerBase
     private readonly CompatibilityProxyConfiguration _configuration;
     private readonly NightscoutConnectorConfiguration? _nightscoutConfig;
     private readonly ILogger<CompatibilityController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of the CompatibilityController class
@@ -39,9 +40,11 @@ public class CompatibilityController : ControllerBase
         IDiscrepancyAnalysisRepository repository,
         IOptions<CompatibilityProxyConfiguration> configuration,
         ILogger<CompatibilityController> logger,
+        TimeProvider timeProvider,
         NightscoutConnectorConfiguration? nightscoutConfig = null
     )
     {
+        _timeProvider = timeProvider;
         _persistenceService = persistenceService;
         _repository = repository;
 
@@ -300,7 +303,7 @@ public class CompatibilityController : ControllerBase
         {
             QueryPath = request.QueryPath,
             Method = request.Method ?? "GET",
-            Timestamp = DateTimeOffset.UtcNow,
+            Timestamp = _timeProvider.GetUtcNow(),
         };
 
         using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };

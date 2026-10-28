@@ -57,7 +57,8 @@ public class PatientRecordControllerTests
             _tenantAccessor.Object,
             _tenantCache.Object,
             TempBasalTestDeps.NoReresolution(),
-            NullLogger<PatientRecordController>.Instance)
+            NullLogger<PatientRecordController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

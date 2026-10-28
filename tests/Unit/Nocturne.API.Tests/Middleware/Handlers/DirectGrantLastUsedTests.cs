@@ -63,18 +63,20 @@ public class DirectGrantLastUsedTests : IDisposable
             .ReturnsAsync(() => _db.CreateContext(_tenantId));
     }
 
+    private static readonly DateTime UsedAt = new(2031, 5, 6, 7, 8, 9, DateTimeKind.Utc);
+
     public void Dispose() => _db.Dispose();
 
     [Fact]
     public async Task Records_when_where_and_by_what_the_grant_was_presented()
     {
         await DirectGrantTokenHandler.RecordLastUsedAsync(
-            _dbContextFactory.Object.AsNocturneFactory(), Mock.Of<ILogger>(), _grantId, _tenantId, "203.0.113.7", "xDrip4iOS");
+            _dbContextFactory.Object.AsNocturneFactory(), Mock.Of<ILogger>(), _grantId, _tenantId, UsedAt, "203.0.113.7", "xDrip4iOS");
 
         await using var ctx = _db.CreateContext(_tenantId);
         var grant = await ctx.OAuthGrants.AsNoTracking().FirstAsync(g => g.Id == _grantId);
 
-        grant.LastUsedAt.Should().NotBeNull();
+        grant.LastUsedAt.Should().Be(UsedAt);
         grant.LastUsedIp.Should().Be("203.0.113.7");
         grant.LastUsedUserAgent.Should().Be("xDrip4iOS");
     }
@@ -89,7 +91,7 @@ public class DirectGrantLastUsedTests : IDisposable
             .ThrowsAsync(new InvalidOperationException("no connection"));
 
         var record = async () => await DirectGrantTokenHandler.RecordLastUsedAsync(
-            brokenFactory.Object.AsNocturneFactory(), logger.Object, _grantId, _tenantId, null, null);
+            brokenFactory.Object.AsNocturneFactory(), logger.Object, _grantId, _tenantId, UsedAt, null, null);
 
         await record.Should().NotThrowAsync();
     }

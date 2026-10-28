@@ -88,7 +88,7 @@ public class AlarmHubTests
         clients.SetupGet(c => c.Caller).Returns(caller.Object);
         clients.Setup(c => c.Group(It.IsAny<string>())).Returns(Mock.Of<IClientProxy>());
 
-        return new AlarmHub(NullLogger<AlarmHub>.Instance, _tokenAuthorizer.Object, _ackHandler.Object, _relay.Object)
+        return new AlarmHub(NullLogger<AlarmHub>.Instance, _tokenAuthorizer.Object, _ackHandler.Object, _relay.Object, TimeProvider.System)
         {
             Context = context.Object,
             Groups = groups.Object,

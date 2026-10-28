@@ -38,7 +38,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// </list>
 ///
 /// On successful login or setup, the controller uses
-/// <see cref="SessionCookieExtensions.SetSessionCookies(HttpResponse, SessionTokenPair, OidcOptions)"/> to set session cookies.
+/// <see cref="SessionCookieExtensions.SetSessionCookies(HttpResponse, SessionTokenPair, OidcOptions, TimeProvider)"/> to set session cookies.
 ///
 /// Passkey deletion is guarded by <see cref="ISubjectService.TryRemovePasskeyCredentialAsync"/> which
 /// enforces an atomic last-factor check inside a serializable transaction.
@@ -90,6 +90,7 @@ public class PasskeyController : ControllerBase
     private readonly INocturneDbContextFactory _dbContextFactory;
     private readonly OidcOptions _oidcOptions;
     private readonly ILogger<PasskeyController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Creates a new instance of PasskeyController
@@ -107,8 +108,10 @@ public class PasskeyController : ControllerBase
         ITenantMemberService tenantMemberService,
         INocturneDbContextFactory dbContextFactory,
         IOptions<OidcOptions> oidcOptions,
-        ILogger<PasskeyController> logger)
+        ILogger<PasskeyController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _passkeyService = passkeyService;
         _totpService = totpService;
         _recoveryCodeService = recoveryCodeService;
@@ -534,7 +537,7 @@ public class PasskeyController : ControllerBase
                     userAgent: Request.Headers.UserAgent.ToString(),
                     detailsJson: JsonSerializer.Serialize(new { method = "passkey", secondFactorPending = true }));
                 Response.SetLastSignInCookie(
-                    SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
+                    SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions, _timeProvider);
 
                 return Ok(new PasskeyLoginCompleteResponse
                 {
@@ -552,9 +555,9 @@ public class PasskeyController : ControllerBase
                     IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                     UserAgent: Request.Headers.UserAgent.ToString()));
 
-            Response.SetSessionCookies(session, _oidcOptions);
+            Response.SetSessionCookies(session, _oidcOptions, _timeProvider);
             Response.SetLastSignInCookie(
-                SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions);
+                SessionCookieExtensions.SignInMethods.Passkey, providerId: null, _oidcOptions, _timeProvider);
 
             await _auditService.LogAsync(AuthAuditEventType.Login, assertionResult.SubjectId, success: true,
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
@@ -826,7 +829,7 @@ public class PasskeyController : ControllerBase
 
         if (tenant.OnboardingCompletedAt == null)
         {
-            tenant.OnboardingCompletedAt = DateTime.UtcNow;
+            tenant.OnboardingCompletedAt = _timeProvider.GetUtcNow().UtcDateTime;
             tenant.SetupHubEnrolledAt = tenant.OnboardingCompletedAt;
             await db.SaveChangesAsync();
         }
@@ -1148,7 +1151,7 @@ public class PasskeyController : ControllerBase
                     IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                     UserAgent: Request.Headers.UserAgent.ToString()));
 
-            Response.SetSessionCookies(session, _oidcOptions);
+            Response.SetSessionCookies(session, _oidcOptions, _timeProvider);
 
             _logger.LogInformation(
                 "Invite complete: subject {SubjectId} registered with passkey via invite",

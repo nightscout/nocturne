@@ -37,6 +37,7 @@ public class MemberInviteController : ControllerBase
     private readonly ITenantMemberService _tenantMemberService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly INocturneDbContextFactory _contexts;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="MemberInviteController"/>.
@@ -46,14 +47,17 @@ public class MemberInviteController : ControllerBase
     /// <param name="tenantRoleService">Service for member role assignment.</param>
     /// <param name="tenantMemberService">Service for membership lookups.</param>
     /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
+    /// <param name="timeProvider">The clock.</param>
     public MemberInviteController(
         IMemberInviteService memberInviteService,
         ITenantService tenantService,
         ITenantRoleService tenantRoleService,
         ITenantMemberService tenantMemberService,
         ITenantAccessor tenantAccessor,
-        INocturneDbContextFactory contexts)
+        INocturneDbContextFactory contexts,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _memberInviteService = memberInviteService;
         _tenantService = tenantService;
         _tenantRoleService = tenantRoleService;
@@ -348,7 +352,7 @@ public class MemberInviteController : ControllerBase
 
         db.TenantMemberRoles.RemoveRange(member.MemberRoles.Where(mr => removed.Contains(mr.TenantRoleId)));
 
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         foreach (var roleId in added)
         {
             db.TenantMemberRoles.Add(new TenantMemberRoleEntity
@@ -440,7 +444,7 @@ public class MemberInviteController : ControllerBase
             return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
         member.DirectPermissions = request.DirectPermissions;
-        member.SysUpdatedAt = DateTime.UtcNow;
+        member.SysUpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync(ct);
 
         if (member.Subject?.IsSystemSubject == true && member.Subject.Name == "Public")
@@ -519,7 +523,7 @@ public class MemberInviteController : ControllerBase
             return Problem(detail: MemberScopeResolver.ExemptFromHistoryClampDetail, statusCode: 400);
 
         member.LimitTo24Hours = request.LimitTo24Hours;
-        member.SysUpdatedAt = DateTime.UtcNow;
+        member.SysUpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync(ct);
 
         if (member.Subject?.IsSystemSubject == true && member.Subject.Name == "Public")

@@ -36,7 +36,8 @@ public class ServicesControllerDeleteFailureMappingTests
             Mock.Of<IConnectorSyncService>(),
             Mock.Of<ILogger<ServicesController>>(),
             Mock.Of<ITenantAccessor>(),
-            Options.Create(new BaseDomainOptions()))
+            Options.Create(new BaseDomainOptions()),
+            TimeProvider.System)
         {
             ProblemDetailsFactory = new EchoingProblemDetailsFactory(),
         };

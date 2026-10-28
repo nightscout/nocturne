@@ -70,7 +70,8 @@ public class OAuthControllerIntrospectTests
             Mock.Of<ISubjectService>(),
             _jwtService.Object,
             _revocationCache.Object,
-            NullLogger<OAuthController>.Instance
+            NullLogger<OAuthController>.Instance,
+            TimeProvider.System
         )
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

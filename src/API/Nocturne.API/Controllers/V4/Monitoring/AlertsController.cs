@@ -52,6 +52,7 @@ public class AlertsController : ControllerBase
     private readonly IAlertSnoozeService _snoozeService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<AlertsController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertsController"/>.
@@ -62,14 +63,17 @@ public class AlertsController : ControllerBase
     /// <param name="snoozeService">Service for snoozing alert instances.</param>
     /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">The clock.</param>
     public AlertsController(
         INocturneDbContextFactory contextFactory,
         IAlertAcknowledgementService acknowledgementService,
         IAlertDeliveryService deliveryService,
         IAlertSnoozeService snoozeService,
         ITenantAccessor tenantAccessor,
-        ILogger<AlertsController> logger)
+        ILogger<AlertsController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _contextFactory = contextFactory;
         _acknowledgementService = acknowledgementService;
         _deliveryService = deliveryService;
@@ -109,7 +113,7 @@ public class AlertsController : ControllerBase
         var namesAcknowledger = NamesMembers();
         var receipts = await AlertReceiptService.ReadAsync(
             db, excursions.Select(e => e.Id).ToList(), ReceiptsVisibleOnlyFor(), ct);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         var result = excursions.Select(e => new ActiveExcursionResponse
         {
             Id = e.Id,
@@ -173,7 +177,7 @@ public class AlertsController : ControllerBase
         // EndedAt <= now: history is completed excursions only. device_action test fires carry
         // a short future EndedAt (AlertDeliveryService.TestFireAsync) so they read as live in
         // the active-intents snapshot; they join history once that window lapses.
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         var query = db.AlertExcursions
             .AsNoTracking()
             .Include(e => e.AlertRule)

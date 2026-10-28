@@ -23,6 +23,7 @@ public class StatusController : ControllerBase
     private readonly IStatusService _statusService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<StatusController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="StatusController"/>.
@@ -30,11 +31,14 @@ public class StatusController : ControllerBase
     /// <param name="statusService">Service providing system status information.</param>
     /// <param name="tenantAccessor">Accessor for the tenant this request resolved to, if any.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">The clock.</param>
     public StatusController(
         IStatusService statusService,
         ITenantAccessor tenantAccessor,
-        ILogger<StatusController> logger)
+        ILogger<StatusController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _statusService = statusService;
         _tenantAccessor = tenantAccessor;
         _logger = logger;
@@ -80,7 +84,7 @@ public class StatusController : ControllerBase
                     Status = "error",
                     Name = "Nocturne",
                     Version = "unknown",
-                    ServerTime = DateTime.UtcNow,
+                    ServerTime = _timeProvider.GetUtcNow().UtcDateTime,
                     TenantSlug = _tenantAccessor.Context?.Slug,
                 }
             );
@@ -95,6 +99,6 @@ public class StatusController : ControllerBase
     [ProducesResponseType(typeof(object), 200)]
     public IActionResult GetHealthStatus()
     {
-        return Ok(new { status = "ok", timestamp = DateTimeOffset.UtcNow });
+        return Ok(new { status = "ok", timestamp = _timeProvider.GetUtcNow() });
     }
 }

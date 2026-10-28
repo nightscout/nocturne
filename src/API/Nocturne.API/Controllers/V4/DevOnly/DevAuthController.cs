@@ -35,14 +35,17 @@ public class DevAuthController : ControllerBase
     private readonly IOptions<OidcOptions> _oidcOptions;
     private readonly IOptions<BaseDomainOptions> _baseDomainOptions;
     private readonly ILogger<DevAuthController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public DevAuthController(
         INocturneDbContextFactory dbFactory,
         ISessionService sessionService,
         IOptions<OidcOptions> oidcOptions,
         IOptions<BaseDomainOptions> baseDomainOptions,
-        ILogger<DevAuthController> logger)
+        ILogger<DevAuthController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _dbFactory = dbFactory;
         _sessionService = sessionService;
         _oidcOptions = oidcOptions;
@@ -212,7 +215,7 @@ public class DevAuthController : ControllerBase
                 UserAgent: Request.Headers.UserAgent.FirstOrDefault()),
             ct);
 
-        Response.SetSessionCookies(session, _oidcOptions.Value);
+        Response.SetSessionCookies(session, _oidcOptions.Value, _timeProvider);
 
         _logger.LogInformation(
             "Dev login: subject {SubjectId} on tenant {Slug}", member.SubjectId, tenant.Slug);

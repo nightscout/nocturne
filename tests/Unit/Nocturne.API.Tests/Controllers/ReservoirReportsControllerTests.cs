@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Controllers.V4.Devices;
 using Nocturne.API.Models.Requests.V4;
@@ -17,6 +18,7 @@ public class ReservoirReportsControllerTests
 {
     private readonly Mock<IPumpSnapshotRepository> _pumpSnapshots = new();
     private readonly Mock<IDeviceEventRepository> _deviceEvents = new();
+    private static readonly DateTimeOffset Now = new(2031, 5, 6, 7, 8, 9, TimeSpan.Zero);
     private readonly ReservoirReportsController _controller;
 
     public ReservoirReportsControllerTests()
@@ -24,7 +26,7 @@ public class ReservoirReportsControllerTests
         _pumpSnapshots
             .Setup(r => r.CreateAsync(It.IsAny<PumpSnapshot>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
             .ReturnsAsync((PumpSnapshot model, WriteOrigin _, CancellationToken _) => model);
-        _controller = new ReservoirReportsController(_pumpSnapshots.Object, _deviceEvents.Object);
+        _controller = new ReservoirReportsController(_pumpSnapshots.Object, _deviceEvents.Object, new FakeTimeProvider(Now));
     }
 
     [Fact]
@@ -79,13 +81,12 @@ public class ReservoirReportsControllerTests
     [Fact]
     public async Task OmittedTimestamp_DefaultsToNow()
     {
-        var before = DateTime.UtcNow;
         var request = new CreateReservoirReportRequest { Units = 40, Kind = ReservoirReportKind.Reading };
 
         var result = await _controller.Create(request, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var snapshot = Assert.IsType<PumpSnapshot>(ok.Value);
-        snapshot.Timestamp.Should().BeOnOrAfter(before).And.BeOnOrBefore(DateTime.UtcNow);
+        snapshot.Timestamp.Should().Be(Now.UtcDateTime);
     }
 }

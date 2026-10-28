@@ -34,7 +34,7 @@ public class DataHubAuthorizeTests
     private static (DataHub hub, Mock<IGroupManager> groups, Mock<IHubTokenAuthorizer> authorizer) CreateHub()
     {
         var authorizer = new Mock<IHubTokenAuthorizer>();
-        var hub = new DataHub(NullLogger<DataHub>.Instance, authorizer.Object);
+        var hub = new DataHub(NullLogger<DataHub>.Instance, authorizer.Object, TimeProvider.System);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] =

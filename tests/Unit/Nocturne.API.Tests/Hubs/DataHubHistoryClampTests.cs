@@ -104,7 +104,7 @@ public class DataHubHistoryClampTests
         clients.SetupGet(c => c.Caller).Returns(Mock.Of<ISingleClientProxy>());
 
         var authorizer = new Mock<IHubTokenAuthorizer>();
-        var hub = new DataHub(NullLogger<DataHub>.Instance, authorizer.Object)
+        var hub = new DataHub(NullLogger<DataHub>.Instance, authorizer.Object, TimeProvider.System)
         {
             Context = callerContext.Object,
             Groups = Mock.Of<IGroupManager>(),

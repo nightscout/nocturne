@@ -37,7 +37,8 @@ public class AccessRequestController(
     ITenantRoleService tenantRoleService,
     ITenantAccessor tenantAccessor,
     IInAppNotificationService notificationService,
-    ILogger<AccessRequestController> logger) : ControllerBase
+    ILogger<AccessRequestController> logger,
+    TimeProvider timeProvider) : ControllerBase
 {
     [HttpGet]
     [RemoteQuery]
@@ -82,7 +83,7 @@ public class AccessRequestController(
 
         subject.ApprovalStatus = "Approved";
         subject.IsActive = true;
-        subject.UpdatedAt = DateTime.UtcNow;
+        subject.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync(ct);
 
         var tenantContext = tenantAccessor.Context;

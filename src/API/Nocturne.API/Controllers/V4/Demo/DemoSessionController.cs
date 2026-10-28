@@ -38,14 +38,17 @@ public class DemoSessionController : ControllerBase
     private readonly ISessionService _sessionService;
     private readonly IOptions<OidcOptions> _oidcOptions;
     private readonly ILogger<DemoSessionController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public DemoSessionController(
         DemoTenantService demoTenantService,
         ITenantAccessor tenantAccessor,
         ISessionService sessionService,
         IOptions<OidcOptions> oidcOptions,
-        ILogger<DemoSessionController> logger)
+        ILogger<DemoSessionController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _demoTenantService = demoTenantService;
         _tenantAccessor = tenantAccessor;
         _sessionService = sessionService;
@@ -86,7 +89,7 @@ public class DemoSessionController : ControllerBase
             new SessionContext(DeviceDescription: "demo-visitor"),
             ct);
 
-        Response.SetSessionCookies(session, _oidcOptions.Value);
+        Response.SetSessionCookies(session, _oidcOptions.Value, _timeProvider);
 
         if (string.Equals(format, "json", StringComparison.OrdinalIgnoreCase))
         {

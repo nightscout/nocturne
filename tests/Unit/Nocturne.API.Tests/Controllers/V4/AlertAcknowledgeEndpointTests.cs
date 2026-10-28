@@ -66,7 +66,8 @@ public class AlertAcknowledgeEndpointTests
             _deliveryServiceMock.Object,
             Mock.Of<IAlertSnoozeService>(),
             _tenantAccessorMock.Object,
-            _loggerMock.Object);
+            _loggerMock.Object,
+            TimeProvider.System);
 
         var httpContext = new DefaultHttpContext();
         httpContext.SetAuthContext(new AuthContext { IsAuthenticated = true, SubjectId = _subjectId });

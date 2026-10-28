@@ -35,7 +35,8 @@ public class OAuthControllerRegisterTests
             Mock.Of<ISubjectService>(),
             Mock.Of<IJwtService>(),
             Mock.Of<IOAuthTokenRevocationCache>(),
-            NullLogger<OAuthController>.Instance
+            NullLogger<OAuthController>.Instance,
+            TimeProvider.System
         )
         {
             ControllerContext = new ControllerContext

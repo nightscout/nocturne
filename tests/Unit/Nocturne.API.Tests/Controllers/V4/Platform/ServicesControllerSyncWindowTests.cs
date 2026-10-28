@@ -28,7 +28,8 @@ public class ServicesControllerSyncWindowTests
             _syncService.Object,
             Mock.Of<ILogger<ServicesController>>(),
             Mock.Of<ITenantAccessor>(),
-            Options.Create(new BaseDomainOptions()));
+            Options.Create(new BaseDomainOptions()),
+            TimeProvider.System);
 
     private static void ShouldBeBadRequestNamingFrom(ActionResult<SyncResult> result)
     {

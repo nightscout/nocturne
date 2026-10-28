@@ -60,6 +60,7 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             [new RecordingInvalidator(_invalidated)],
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 

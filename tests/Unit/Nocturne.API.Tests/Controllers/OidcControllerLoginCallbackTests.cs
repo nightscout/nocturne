@@ -40,7 +40,8 @@ public class OidcControllerLoginCallbackTests
             new Mock<ITenantMemberService>().Object,
             Options.Create(_options),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
-            NullLogger<OidcController>.Instance);
+            NullLogger<OidcController>.Instance,
+            TimeProvider.System);
 
         _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
         _controller.HttpContext.Request.Headers["Cookie"] = $"{_options.Cookie.StateCookieName}=state";

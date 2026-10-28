@@ -57,6 +57,7 @@ public class ConnectorConfigurationCasingTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             [],
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 

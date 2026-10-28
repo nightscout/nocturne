@@ -1,6 +1,8 @@
 using System.Globalization;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Time.Testing;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Configuration;
 using Xunit;
@@ -61,7 +63,8 @@ public sealed class SessionCookieExtensionsTests
         var (response, cookies) = NewResponse();
 
         response.SetSessionCookies("access", "refresh", DateTimeOffset.UtcNow.AddMinutes(5),
-            Options(".nocturne.run"));
+            Options(".nocturne.run"),
+            TimeProvider.System);
 
         foreach (var name in new[] { AccessName, RefreshName, FlagName })
         {
@@ -76,7 +79,8 @@ public sealed class SessionCookieExtensionsTests
         var (response, cookies) = NewResponse();
 
         response.SetSessionCookies("access", "refresh", DateTimeOffset.UtcNow.AddMinutes(5),
-            Options(".nocturne.run"));
+            Options(".nocturne.run"),
+            TimeProvider.System);
 
         foreach (var name in new[] { AccessName, RefreshName, FlagName })
         {
@@ -96,7 +100,8 @@ public sealed class SessionCookieExtensionsTests
         var (response, cookies) = NewResponse();
 
         response.SetSessionCookies("access", "refresh", DateTimeOffset.UtcNow.AddMinutes(5),
-            Options(null));
+            Options(null),
+            TimeProvider.System);
 
         foreach (var name in new[] { AccessName, RefreshName, FlagName })
         {
@@ -112,7 +117,8 @@ public sealed class SessionCookieExtensionsTests
         var (response, cookies) = NewResponse();
 
         response.SetSessionCookies("access", "refresh", DateTimeOffset.UtcNow.AddMinutes(5),
-            Options(".nocturne.run"));
+            Options(".nocturne.run"),
+            TimeProvider.System);
 
         // Widening the domain hands these cookies to every subdomain, including the anonymous
         // share hosts, so the attributes that keep them off script and off cross-site requests
@@ -139,10 +145,37 @@ public sealed class SessionCookieExtensionsTests
         var (response, cookies) = NewResponse();
         var expires = DateTimeOffset.UtcNow.AddMinutes(37);
 
-        response.SetSessionCookies("access", "refresh", expires, Options(".nocturne.run"));
+        response.SetSessionCookies("access", "refresh", expires, Options(".nocturne.run"), TimeProvider.System);
 
         Written(cookies(), AccessName).Should()
             .Contain(expires.ToString("ddd, dd MMM yyyy HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public void SetSessionCookies_expires_the_session_cookies_from_the_clock()
+    {
+        var (response, cookies) = NewResponse();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2030, 3, 4, 5, 6, 7, TimeSpan.Zero));
+        var options = Options(".nocturne.run");
+        options.Session.RefreshTokenLifetime = TimeSpan.FromDays(10);
+
+        response.SetSessionCookies(new SessionTokenPair("access", "refresh", 900, Guid.NewGuid()), options, clock);
+
+        Written(cookies(), AccessName).Should().Contain("expires=Mon, 04 Mar 2030 05:21:07");
+        Written(cookies(), RefreshName).Should().Contain("expires=Thu, 14 Mar 2030 05:06:07");
+    }
+
+    [Fact]
+    public void SetLastSignInCookie_expires_a_year_from_the_clock()
+    {
+        var (response, cookies) = NewResponse();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2030, 3, 4, 5, 6, 7, TimeSpan.Zero));
+
+        response.SetLastSignInCookie(
+            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, Options(".nocturne.run"), clock);
+
+        Written(cookies(), SessionCookieExtensions.LastSignInCookieName).Should()
+            .Contain("expires=Tue, 04 Mar 2031 05:06:07");
     }
 
     [Fact]
@@ -255,7 +288,7 @@ public sealed class SessionCookieExtensionsTests
         var (response, cookies) = NewResponse();
 
         response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, Options(".nocturne.run"));
+            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, Options(".nocturne.run"), TimeProvider.System);
 
         var written = Written(cookies(), SessionCookieExtensions.LastSignInCookieName);
 
@@ -279,7 +312,7 @@ public sealed class SessionCookieExtensionsTests
         var (response, cookies) = NewResponse();
 
         response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, Options(".nocturne.run"));
+            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, Options(".nocturne.run"), TimeProvider.System);
 
         ValueOf(Written(cookies(), SessionCookieExtensions.LastSignInCookieName))
             .Should().Be("passkey");
@@ -292,7 +325,7 @@ public sealed class SessionCookieExtensionsTests
         var providerId = Guid.Parse("2f6a4c9e-1d3b-4a58-9f27-8c0b5e6d1a44");
 
         response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Oidc, providerId.ToString(), Options(".nocturne.run"));
+            SessionCookieExtensions.SignInMethods.Oidc, providerId.ToString(), Options(".nocturne.run"), TimeProvider.System);
 
         // The web app's last-sign-in parser splits on the first colon; a shape change here
         // silently stops the badge ever matching a provider.
@@ -306,7 +339,7 @@ public sealed class SessionCookieExtensionsTests
         var (response, cookies) = NewResponse();
 
         response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, Options(null));
+            SessionCookieExtensions.SignInMethods.Passkey, providerId: null, Options(null), TimeProvider.System);
 
         Written(cookies(), SessionCookieExtensions.LastSignInCookieName).Should().NotContain("domain=");
     }
@@ -318,7 +351,8 @@ public sealed class SessionCookieExtensionsTests
 
         response.SetLastSignInCookie(
             SessionCookieExtensions.SignInMethods.Oidc, "2f6a4c9e-1d3b-4a58-9f27-8c0b5e6d1a44",
-            Options(".nocturne.run"));
+            Options(".nocturne.run"),
+            TimeProvider.System);
 
         // Readable by any script on any subdomain, including the anonymous share hosts.
         var value = ValueOf(Written(cookies(), SessionCookieExtensions.LastSignInCookieName));
@@ -343,7 +377,8 @@ public sealed class SessionCookieExtensionsTests
         var (response, cookies) = NewResponse();
 
         response.SetSessionCookies("access", "refresh", DateTimeOffset.UtcNow.AddMinutes(5),
-            Options(".nocturne.run"));
+            Options(".nocturne.run"),
+            TimeProvider.System);
 
         // A silent token refresh funnels through here and knows nothing about how the session
         // began, so folding the hint in would overwrite a true answer with a guess.

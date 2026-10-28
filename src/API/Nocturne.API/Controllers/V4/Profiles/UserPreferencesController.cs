@@ -22,6 +22,7 @@ public class UserPreferencesController : ControllerBase
 {
     private readonly INocturneDbContextFactory _contexts;
     private readonly ILogger<UserPreferencesController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     // Supported language codes - must match supportedLocales.json
     private static readonly HashSet<string> SupportedLanguages = new(StringComparer.OrdinalIgnoreCase)
@@ -33,10 +34,13 @@ public class UserPreferencesController : ControllerBase
     /// Initializes a new instance of <see cref="UserPreferencesController"/>.
     /// </summary>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">The clock.</param>
     public UserPreferencesController(
         INocturneDbContextFactory contexts,
-        ILogger<UserPreferencesController> logger)
+        ILogger<UserPreferencesController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _logger = logger;
     }
@@ -132,7 +136,7 @@ public class UserPreferencesController : ControllerBase
             subject.Preferences = merged.Serialize();
         }
 
-        subject.UpdatedAt = DateTime.UtcNow;
+        subject.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync();
 
         _logger.LogInformation(

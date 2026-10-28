@@ -27,17 +27,20 @@ public class DiscrepancyController : ControllerBase
     private readonly IDiscrepancyAnalysisRepository _discrepancyRepository;
 
     private readonly ILogger<DiscrepancyController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="DiscrepancyController"/>.
     /// </summary>
     /// <param name="discrepancyRepository">Repository for storing and querying discrepancy analysis records.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">The clock.</param>
     public DiscrepancyController(
         IDiscrepancyAnalysisRepository discrepancyRepository,
-        ILogger<DiscrepancyController> logger
-    )
+        ILogger<DiscrepancyController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _discrepancyRepository = discrepancyRepository;
 
         _logger = logger;
@@ -307,7 +310,7 @@ public class DiscrepancyController : ControllerBase
         try
         {
             // Get metrics for the last 24 hours
-            var last24Hours = DateTimeOffset.UtcNow.AddHours(-24);
+            var last24Hours = _timeProvider.GetUtcNow().AddHours(-24);
             var metrics = await _discrepancyRepository.GetCompatibilityMetricsAsync(
                 last24Hours,
                 null,
@@ -319,7 +322,7 @@ public class DiscrepancyController : ControllerBase
                 OverallScore = metrics.CompatibilityScore,
                 TotalRequests = metrics.TotalRequests,
                 HealthStatus = DetermineHealthStatus(metrics),
-                LastUpdated = DateTimeOffset.UtcNow,
+                LastUpdated = _timeProvider.GetUtcNow(),
                 CriticalIssues = metrics.CriticalDifferences,
                 MajorIssues = metrics.MajorDifferences,
                 MinorIssues = metrics.MinorDifferences,

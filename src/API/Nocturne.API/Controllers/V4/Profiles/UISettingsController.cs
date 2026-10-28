@@ -43,6 +43,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     private readonly IDemoModeService _demoMode;
     private readonly DemoUISettingsProxy _demoSettings;
     private readonly IUISettingsService _settingsService;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="UISettingsController"/>.
@@ -51,13 +52,15 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     /// <param name="demoMode">Owner of whether this deployment is a demo, and of the demo service URL.</param>
     /// <param name="demoSettings">The demo service's ui-settings, served in demo mode.</param>
     /// <param name="settingsService">Service for persisting and retrieving UI settings.</param>
+    /// <param name="timeProvider">The clock.</param>
     public UISettingsController(
         ILogger<UISettingsController> logger,
         IDemoModeService demoMode,
         DemoUISettingsProxy demoSettings,
-        IUISettingsService settingsService
-    )
+        IUISettingsService settingsService,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _logger = logger;
         _demoMode = demoMode;
         _demoSettings = demoSettings;
@@ -630,7 +633,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                         Type = "cgm",
                         Status = "connected",
                         Battery = 85,
-                        LastSync = DateTimeOffset.UtcNow.AddMinutes(-5),
+                        LastSync = _timeProvider.GetUtcNow().AddMinutes(-5),
                         SerialNumber = "SM12345678",
                     },
                     new()
@@ -640,7 +643,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                         Type = "pump",
                         Status = "connected",
                         Battery = 72,
-                        LastSync = DateTimeOffset.UtcNow.AddMinutes(-2),
+                        LastSync = _timeProvider.GetUtcNow().AddMinutes(-2),
                         SerialNumber = "POD98765432",
                     },
                 },
@@ -657,7 +660,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                         Type = "cgm",
                         Description = "Dexcom G7 - Share account",
                         Status = "connected",
-                        LastSync = DateTimeOffset.UtcNow.AddMinutes(-2),
+                        LastSync = _timeProvider.GetUtcNow().AddMinutes(-2),
                         Icon = "dexcom",
                         Configured = true,
                         Enabled = true,
@@ -669,7 +672,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
                         Type = "data",
                         Description = "yoursite.herokuapp.com",
                         Status = "connected",
-                        LastSync = DateTimeOffset.UtcNow.AddMinutes(-15),
+                        LastSync = _timeProvider.GetUtcNow().AddMinutes(-15),
                         Icon = "nightscout",
                         Configured = true,
                         Enabled = true,

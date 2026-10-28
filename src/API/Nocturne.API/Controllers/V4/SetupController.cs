@@ -50,6 +50,7 @@ public partial class SetupController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly PlatformAdminBootstrapService _platformAdminBootstrap;
     private readonly IInstanceSetupState _setupState;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<SetupController> _logger;
 
     public SetupController(
@@ -65,6 +66,7 @@ public partial class SetupController : ControllerBase
         IHttpClientFactory httpClientFactory,
         PlatformAdminBootstrapService platformAdminBootstrap,
         IInstanceSetupState setupState,
+        TimeProvider timeProvider,
         ILogger<SetupController> logger)
     {
         _tenantService = tenantService;
@@ -79,6 +81,7 @@ public partial class SetupController : ControllerBase
         _httpClientFactory = httpClientFactory;
         _platformAdminBootstrap = platformAdminBootstrap;
         _setupState = setupState;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -256,7 +259,7 @@ public partial class SetupController : ControllerBase
                     IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                     UserAgent: Request.Headers.UserAgent.ToString()));
 
-            Response.SetSessionCookies(session, _oidcOptions);
+            Response.SetSessionCookies(session, _oidcOptions, _timeProvider);
 
             _logger.LogInformation(
                 "Setup complete: first owner {SubjectId} registered with passkey for tenant {TenantId}",
@@ -401,7 +404,7 @@ public partial class SetupController : ControllerBase
             result.Tokens.RefreshToken,
             result.Tokens.ExpiresIn,
             result.Tokens.SubjectId);
-        Response.SetSessionCookies(sessionPair, _oidcOptions);
+        Response.SetSessionCookies(sessionPair, _oidcOptions, _timeProvider);
 
         return Redirect(result.ReturnUrl ?? "/setup");
     }

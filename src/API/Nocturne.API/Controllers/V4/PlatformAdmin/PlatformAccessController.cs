@@ -50,7 +50,8 @@ public class PlatformAccessController(
     IAuthAuditService authAudit,
     IOptions<OidcOptions> oidcOptions,
     IOptions<BaseDomainOptions> baseDomainOptions,
-    ILogger<PlatformAccessController> logger) : ControllerBase
+    ILogger<PlatformAccessController> logger,
+    TimeProvider timeProvider) : ControllerBase
 {
     /// <summary>Lifetime of a platform-access grant. A time-boxed "visit", not a standing credential.</summary>
     private static readonly TimeSpan GrantLifetime = TimeSpan.FromMinutes(30);
@@ -128,7 +129,7 @@ public class PlatformAccessController(
             Path = cookie.Path,
             Domain = cookie.Domain,
             IsEssential = true,
-            Expires = DateTimeOffset.UtcNow.Add(GrantLifetime),
+            Expires = timeProvider.GetUtcNow().Add(GrantLifetime),
         });
 
         await authAudit.LogAsync(AuthAuditEventType.PlatformAdminTenantAccess, auth.SubjectId, success: true,

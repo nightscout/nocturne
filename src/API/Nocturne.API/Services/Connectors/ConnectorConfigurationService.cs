@@ -37,6 +37,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     private readonly IConfiguration _configuration;
     private readonly IHostEnvironment _environment;
     private readonly IEnumerable<IConnectorCacheInvalidator> _cacheInvalidators;
+    private readonly TimeProvider _time;
     private readonly ILogger<ConnectorConfigurationService> _logger;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -52,6 +53,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         IConfiguration configuration,
         IHostEnvironment environment,
         IEnumerable<IConnectorCacheInvalidator> cacheInvalidators,
+        TimeProvider timeProvider,
         ILogger<ConnectorConfigurationService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
@@ -61,6 +63,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         _configuration = configuration;
         _environment = environment;
         _cacheInvalidators = cacheInvalidators;
+        _time = timeProvider;
         _logger = logger;
     }
 
@@ -192,6 +195,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         // Broadcast configuration change
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
         {
+            Timestamp = _time.GetUtcNow(),
             ConnectorName = canonicalName,
             ChangeType = "updated",
             ModifiedBy = modifiedBy
@@ -261,6 +265,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         // Broadcast secrets update (note: doesn't reveal actual secrets)
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
         {
+            Timestamp = _time.GetUtcNow(),
             ConnectorName = canonicalName,
             ChangeType = "secrets_updated",
             ModifiedBy = modifiedBy
@@ -488,6 +493,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         // Broadcast enable/disable change
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
         {
+            Timestamp = _time.GetUtcNow(),
             ConnectorName = canonicalName,
             ChangeType = isActive ? "enabled" : "disabled",
             ModifiedBy = modifiedBy
@@ -550,6 +556,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         // Broadcast deletion
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
         {
+            Timestamp = _time.GetUtcNow(),
             ConnectorName = canonicalName,
             ChangeType = "deleted"
         });

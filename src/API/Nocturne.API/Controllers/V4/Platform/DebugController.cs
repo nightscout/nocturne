@@ -19,17 +19,20 @@ public class DebugController : ControllerBase
 {
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<DebugController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of the DebugController
     /// </summary>
     /// <param name="environment">Web host environment</param>
     /// <param name="logger">Logger instance</param>
+    /// <param name="timeProvider">The clock.</param>
     public DebugController(
         IWebHostEnvironment environment,
-        ILogger<DebugController> logger
-    )
+        ILogger<DebugController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -161,7 +164,7 @@ public class DebugController : ControllerBase
                     spec = spec,
                 },
                 storage = echo,
-                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                timestamp = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                 queryString = Request.QueryString.ToString(),
             };
 
@@ -277,7 +280,7 @@ public class DebugController : ControllerBase
                         entry = entry,
                         validation = validation,
                         preview = true,
-                        timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        timestamp = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                     }
                 );
             }
@@ -292,7 +295,7 @@ public class DebugController : ControllerBase
                     validEntries = validationResults.Count(v => ((dynamic)v).validation.isValid),
                     invalidEntries = validationResults.Count(v => !((dynamic)v).validation.isValid),
                     preview = true,
-                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    timestamp = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                 },
             };
 

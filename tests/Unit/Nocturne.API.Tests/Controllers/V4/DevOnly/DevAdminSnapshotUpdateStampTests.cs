@@ -108,7 +108,8 @@ public class DevAdminSnapshotUpdateStampTests : IDisposable
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ITenantService>(),
             new MemoryCache(new MemoryCacheOptions()),
-            NullLogger<DevAdminController>.Instance);
+            NullLogger<DevAdminController>.Instance,
+            TimeProvider.System);
 
     private static TenantEntityDto TenantDto(Guid id, string slug) =>
         new() { Id = id, Slug = slug, DisplayName = slug, IsActive = true, AllowAccessRequests = true, SysCreatedAt = Stale, SysUpdatedAt = Stale };

@@ -58,7 +58,8 @@ public class AuditControllerTests : IDisposable
             factoryMock.Object.AsNocturneFactory(),
             _tenantAccessor.Object,
             _configCache.Object,
-            configuration);
+            configuration,
+            TimeProvider.System);
 
         var httpContext = new DefaultHttpContext();
         if (scopes != null)

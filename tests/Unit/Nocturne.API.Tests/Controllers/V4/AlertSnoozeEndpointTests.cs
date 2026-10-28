@@ -75,7 +75,8 @@ public class AlertSnoozeEndpointTests
             Mock.Of<IAlertDeliveryService>(),
             snoozeService,
             tenantAccessor.Object,
-            Mock.Of<ILogger<AlertsController>>())
+            Mock.Of<ILogger<AlertsController>>(),
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

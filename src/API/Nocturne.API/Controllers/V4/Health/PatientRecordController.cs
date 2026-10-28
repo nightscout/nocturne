@@ -56,6 +56,7 @@ public class PatientRecordController : ControllerBase
     private readonly ITenantCache _tenantCache;
     private readonly ITempBasalRateReresolver _tempBasalRates;
     private readonly ILogger<PatientRecordController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public PatientRecordController(
         IPatientRecordRepository recordRepo,
@@ -69,8 +70,10 @@ public class PatientRecordController : ControllerBase
         ITenantAccessor tenantAccessor,
         ITenantCache tenantCache,
         ITempBasalRateReresolver tempBasalRates,
-        ILogger<PatientRecordController> logger)
+        ILogger<PatientRecordController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _recordRepo = recordRepo;
         _deviceRepo = deviceRepo;
         _insulinRepo = insulinRepo;
@@ -171,7 +174,7 @@ public class PatientRecordController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<DiscoveredSource>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<DiscoveredSource>>> GetDiscoveredSources(CancellationToken cancellationToken = default)
     {
-        var since = DateTime.UtcNow - DiscoveredSourceWindow;
+        var since = _timeProvider.GetUtcNow().UtcDateTime - DiscoveredSourceWindow;
         var sources = await _sensorGlucoseRepo.GetDiscoveredSourcesAsync(since, cancellationToken);
         return Ok(sources);
     }
@@ -299,7 +302,7 @@ public class PatientRecordController : ControllerBase
                 model.DeviceCategory,
                 model.Manufacturer + " " + model.Model,
                 model.SerialNumber,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                 ct);
         }
     }

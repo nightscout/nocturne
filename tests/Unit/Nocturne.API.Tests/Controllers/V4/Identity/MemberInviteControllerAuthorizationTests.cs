@@ -70,7 +70,8 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 == Task.FromResult(new List<string>())),
             _tenantMemberService.Object,
             tenantAccessor.Object,
-            _dbContext.AsFactory())
+            _dbContext.AsFactory(),
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

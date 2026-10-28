@@ -234,7 +234,7 @@ public class AlertSetupService(
             rule.ConditionParams, rule.Severity, rule.ClientConfiguration, rule.SortOrder,
             rule.AutoResolveEnabled, rule.AutoResolveParams, rule.AllowThroughDnd, rule.ScopeClass);
         var instanceId = await delivery.TestFireAsync(
-            rule.Id, channels, AlertRulesController.BuildTestPayload(snapshot, db.TenantId), ct);
+            rule.Id, channels, AlertRulesController.BuildTestPayload(snapshot, db.TenantId, DateTime.UtcNow), ct);
 
         return await GetTestAsync(instanceId, ct);
     }

@@ -35,6 +35,7 @@ public class ServicesController : ControllerBase
     private readonly ILogger<ServicesController> _logger;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly BaseDomainOptions _baseDomain;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ServicesController"/>.
@@ -45,15 +46,17 @@ public class ServicesController : ControllerBase
     /// <param name="logger">Logger instance.</param>
     /// <param name="tenantAccessor">Resolved tenant context, used to build the tenant's subdomain base URL.</param>
     /// <param name="baseDomain">Platform base-domain options used to construct the tenant subdomain.</param>
+    /// <param name="timeProvider">The clock.</param>
     public ServicesController(
         IDataSourceService dataSourceService,
         IConnectorHealthService connectorHealthService,
         IConnectorSyncService connectorSyncService,
         ILogger<ServicesController> logger,
         ITenantAccessor tenantAccessor,
-        IOptions<BaseDomainOptions> baseDomain
-    )
+        IOptions<BaseDomainOptions> baseDomain,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _dataSourceService = dataSourceService;
         _connectorHealthService = connectorHealthService;
         _connectorSyncService = connectorSyncService;
@@ -541,7 +544,7 @@ public class ServicesController : ControllerBase
         var syncRequest = new Nocturne.Connectors.Core.Models.SyncRequest
         {
             From = request.From,
-            To = DateTime.UtcNow,
+            To = _timeProvider.GetUtcNow().UtcDateTime,
             DataTypes = request.DataTypes ?? [],
         };
 
@@ -626,7 +629,7 @@ public class ServicesController : ControllerBase
                     State = connectorStatus?.State ?? "Unknown",
                     StateMessage = connectorStatus?.StateMessage,
                     IsHealthy = connectorStatus?.IsHealthy ?? false,
-                    QueriedAt = DateTime.UtcNow,
+                    QueriedAt = _timeProvider.GetUtcNow().UtcDateTime,
                 }
             );
         }

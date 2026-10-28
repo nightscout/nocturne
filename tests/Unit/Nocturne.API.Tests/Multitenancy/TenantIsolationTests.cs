@@ -440,7 +440,8 @@ public class TenantIsolationTests
         var change = new ConfigurationChangeEvent
         {
             ConnectorName = "Dexcom",
-            ChangeType = "updated"
+            ChangeType = "updated",
+            Timestamp = DateTimeOffset.UnixEpoch
         };
 
         await service.BroadcastConfigChangeAsync(change);
@@ -931,7 +932,7 @@ public class TenantIsolationTests
     {
         var mockLogger = new Mock<ILogger<DataHub>>();
         var mockTokenAuthorizer = new Mock<Nocturne.API.Services.Identity.IHubTokenAuthorizer>();
-        var hub = new DataHub(mockLogger.Object, mockTokenAuthorizer.Object);
+        var hub = new DataHub(mockLogger.Object, mockTokenAuthorizer.Object, TimeProvider.System);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] = tenantContext;
@@ -1004,7 +1005,8 @@ public class TenantIsolationTests
         var mockLogger = new Mock<ILogger<AlarmHub>>();
         var mockAuthorizer = new Mock<Nocturne.API.Services.Identity.IHubTokenAuthorizer>();
         var hub = new AlarmHub(
-            mockLogger.Object, mockAuthorizer.Object, Mock.Of<IAlarmAckHandler>(), Mock.Of<IEngineAlarmRelay>());
+            mockLogger.Object, mockAuthorizer.Object, Mock.Of<IAlarmAckHandler>(), Mock.Of<IEngineAlarmRelay>(),
+ TimeProvider.System);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] = tenantContext;

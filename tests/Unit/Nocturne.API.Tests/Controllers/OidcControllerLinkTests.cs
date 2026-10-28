@@ -46,7 +46,8 @@ public class OidcControllerLinkTests
             _tenantMemberService.Object,
             Options.Create(_options),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.example.com" }),
-            NullLogger<OidcController>.Instance);
+            NullLogger<OidcController>.Instance,
+            TimeProvider.System);
 
         _controller.ControllerContext = new ControllerContext
         {

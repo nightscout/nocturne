@@ -31,6 +31,7 @@ public class MemberScopeMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly INocturneDbContextFactory _detachedContexts;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<MemberScopeMiddleware> _logger;
 
     /// <summary>
@@ -41,14 +42,17 @@ public class MemberScopeMiddleware
     /// Resolved from the root with the middleware, so its contexts read no request's state; used for
     /// the last-used write that outlives the request.
     /// </param>
+    /// <param name="timeProvider">The clock the last-used stamp reads.</param>
     /// <param name="logger">Logger for membership resolution diagnostics.</param>
     public MemberScopeMiddleware(
         RequestDelegate next,
         INocturneDbContextFactory detachedContexts,
+        TimeProvider timeProvider,
         ILogger<MemberScopeMiddleware> logger)
     {
         _next = next;
         _detachedContexts = detachedContexts;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -145,6 +149,8 @@ public class MemberScopeMiddleware
             "Member {SubjectId} on tenant {TenantId} resolved with {PermCount} effective permissions (LimitTo24Hours={LimitTo24Hours})",
             authContext.SubjectId, authContext.TenantId, effectivePermissions.Count, membership.Access.LimitTo24Hours);
 
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+
         // Fire-and-forget LastUsedAt update, debounced by LastUsedStamp.
         // Skipped for AuthType.ApiKey. These columns back the "Last active" line on the
         // member card, which reports when the person was last active and from where; an uploader
@@ -152,7 +158,7 @@ public class MemberScopeMiddleware
         // that with the uploader's IP and user-agent. The grant row has its own LastUsedAt,
         // maintained by ApiKeyHandler, which is where key activity belongs.
         if (authContext.AuthType is not AuthType.ApiKey
-            && LastUsedStamp.IsDue(membership.LastUsedAt, DateTime.UtcNow))
+            && LastUsedStamp.IsDue(membership.LastUsedAt, now))
         {
             var membershipId = membership.Id;
             var ip = context.Connection.RemoteIpAddress?.ToString();
@@ -169,7 +175,7 @@ public class MemberScopeMiddleware
                     await db.TenantMembers
                         .Where(tm => tm.Id == membershipId && tm.TenantId == tenantId)
                         .ExecuteUpdateAsync(s => s
-                            .SetProperty(tm => tm.LastUsedAt, DateTime.UtcNow)
+                            .SetProperty(tm => tm.LastUsedAt, now)
                             .SetProperty(tm => tm.LastUsedIp, ip)
                             .SetProperty(tm => tm.LastUsedUserAgent, userAgent));
                 }

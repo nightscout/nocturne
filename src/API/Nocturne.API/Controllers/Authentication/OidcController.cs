@@ -48,6 +48,7 @@ public class OidcController : ControllerBase
     private readonly OidcOptions _options;
     private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<OidcController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Creates a new instance of OidcController
@@ -60,9 +61,10 @@ public class OidcController : ControllerBase
         ITenantMemberService tenantMemberService,
         IOptions<OidcOptions> options,
         IOptions<BaseDomainOptions> baseDomainOptions,
-        ILogger<OidcController> logger
-    )
+        ILogger<OidcController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _authService = authService;
         _providerService = providerService;
         _subjectService = subjectService;
@@ -694,13 +696,13 @@ public class OidcController : ControllerBase
 
     private void SetSessionCookies(OidcTokenResponse tokens) =>
         Response.SetSessionCookies(
-            tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
+            tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options, _timeProvider);
 
     private void ClearSessionCookies() => Response.ClearSessionCookies(_options);
 
     private void SetLastSignInCookie(Guid? providerId) =>
         Response.SetLastSignInCookie(
-            SessionCookieExtensions.SignInMethods.Oidc, providerId?.ToString(), _options);
+            SessionCookieExtensions.SignInMethods.Oidc, providerId?.ToString(), _options, _timeProvider);
 
     /// <summary>
     /// Get the refresh token from cookie or request body

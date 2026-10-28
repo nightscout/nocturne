@@ -68,7 +68,8 @@ public class ConnectorAdminControllerTests
         IConnectorCursorResetService service,
         IConnectorCursorResetJobService? jobService = null) =>
         new(service, jobService ?? Mock.Of<IConnectorCursorResetJobService>(),
-            Mock.Of<ILogger<ConnectorAdminController>>());
+            Mock.Of<ILogger<ConnectorAdminController>>(),
+            TimeProvider.System);
 
     private static ConnectorCursorResetService Engine(NocturneDbContext db) =>
         new(new TestNocturneDbContextFactory(db), Mock.Of<IConnectorSyncService>(), Mock.Of<ITenantAccessor>(),

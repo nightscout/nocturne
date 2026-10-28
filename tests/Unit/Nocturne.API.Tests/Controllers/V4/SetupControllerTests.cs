@@ -111,6 +111,7 @@ public class SetupControllerTests : IDisposable
             httpClientFactory,
             _platformAdminBootstrap,
             new InstanceSetupState(_dbFactory.Object.AsNocturneFactory()),
+            TimeProvider.System,
             logger)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },

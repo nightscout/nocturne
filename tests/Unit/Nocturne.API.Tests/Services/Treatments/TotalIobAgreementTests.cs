@@ -577,7 +577,8 @@ public class TotalIobAgreementTests
         var controller = new RetrospectiveController(
             _calculator, _cob.Object, entries.Object, Boluses(ReadingMills), _carbs.Object, TempBasals(ReadingMills),
             projection, _timelines.Object, MockStateSpans.Empty().Object, _aps.Object, _pump.Object, Reader(ReadingMills),
-            NullLogger<RetrospectiveController>.Instance);
+            NullLogger<RetrospectiveController>.Instance,
+            TimeProvider.System);
         var http = new DefaultHttpContext();
         http.Items["GrantedScopes"] = new HashSet<string> { Scope.GlucoseRead, Scope.TreatmentsRead };
         controller.ControllerContext = new ControllerContext { HttpContext = http };

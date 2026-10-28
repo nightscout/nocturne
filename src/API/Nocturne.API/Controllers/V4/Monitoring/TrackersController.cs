@@ -66,7 +66,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// <param name="acknowledgementService">Acknowledges alert excursions when a tracker is acked.</param>
     /// <param name="deviceEvents">Records a definition's start and completion device events.</param>
     /// <param name="logger">Logger instance.</param>
-    /// <param name="timeProvider">The clock a start or a range defaults from; the system clock when null.</param>
+    /// <param name="timeProvider">The clock a start or a range defaults from.</param>
     public TrackersController(
         ITrackerRepository repository,
         ISignalRBroadcastService broadcast,
@@ -76,10 +76,10 @@ public class TrackersController : ControllerBase, IWriteScopedController
         IAlertAcknowledgementService acknowledgementService,
         TrackerDeviceEventWriter deviceEvents,
         ILogger<TrackersController> logger,
-        TimeProvider? timeProvider = null
+        TimeProvider timeProvider
     )
     {
-        _time = timeProvider ?? TimeProvider.System;
+        _time = timeProvider;
         _repository = repository;
         _broadcast = broadcast;
         _ruleSync = ruleSync;

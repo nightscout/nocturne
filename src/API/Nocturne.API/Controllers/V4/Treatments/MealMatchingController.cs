@@ -43,13 +43,16 @@ public class MealMatchingController : ControllerBase
     private readonly IConnectorFoodEntryRepository _foodEntryRepository;
     private readonly IInAppNotificationService _notificationService;
     private readonly ILogger<MealMatchingController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public MealMatchingController(
         IMealMatchingService mealMatchingService,
         IConnectorFoodEntryRepository foodEntryRepository,
         IInAppNotificationService notificationService,
-        ILogger<MealMatchingController> logger)
+        ILogger<MealMatchingController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _mealMatchingService = mealMatchingService;
         _foodEntryRepository = foodEntryRepository;
         _notificationService = notificationService;
@@ -86,8 +89,8 @@ public class MealMatchingController : ControllerBase
         [FromQuery] DateTimeOffset? from,
         [FromQuery] DateTimeOffset? to)
     {
-        var fromDate = from ?? DateTimeOffset.UtcNow.AddDays(-1);
-        var toDate = to ?? DateTimeOffset.UtcNow;
+        var fromDate = from ?? _timeProvider.GetUtcNow().AddDays(-1);
+        var toDate = to ?? _timeProvider.GetUtcNow();
 
         IReadOnlyList<SuggestedMealMatchResult> suggestions;
         try

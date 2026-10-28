@@ -31,16 +31,20 @@ public class AlertInvitesController : ControllerBase
 {
     private readonly INocturneDbContextFactory _contextFactory;
     private readonly ILogger<AlertInvitesController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertInvitesController"/>.
     /// </summary>
     /// <param name="contextFactory">Tenant-scoped factory for creating <see cref="NocturneDbContext"/> instances.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">The clock.</param>
     public AlertInvitesController(
         INocturneDbContextFactory contextFactory,
-        ILogger<AlertInvitesController> logger)
+        ILogger<AlertInvitesController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _contextFactory = contextFactory;
         _logger = logger;
     }
@@ -85,8 +89,8 @@ public class AlertInvitesController : ControllerBase
             AlertRuleChannelId = request.AlertRuleChannelId,
             PermissionScope = request.PermissionScope ?? "view_acknowledge",
             IsUsed = false,
-            ExpiresAt = DateTime.UtcNow.AddDays(7),
-            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = _timeProvider.GetUtcNow().UtcDateTime.AddDays(7),
+            CreatedAt = _timeProvider.GetUtcNow().UtcDateTime,
         };
 
         db.AlertInvites.Add(invite);
@@ -128,7 +132,7 @@ public class AlertInvitesController : ControllerBase
         if (invite.IsUsed)
             return Problem(detail: "Invite has already been redeemed", statusCode: 410, title: "Gone");
 
-        if (invite.ExpiresAt < DateTime.UtcNow)
+        if (invite.ExpiresAt < _timeProvider.GetUtcNow().UtcDateTime)
             return Problem(detail: "Invite has expired", statusCode: 410, title: "Gone");
 
         return Ok(new AlertInviteResponse
@@ -166,7 +170,7 @@ public class AlertInvitesController : ControllerBase
         if (invite.IsUsed)
             return Problem(detail: "Invite has already been redeemed", statusCode: 410, title: "Gone");
 
-        if (invite.ExpiresAt < DateTime.UtcNow)
+        if (invite.ExpiresAt < _timeProvider.GetUtcNow().UtcDateTime)
             return Problem(detail: "Invite has expired", statusCode: 410, title: "Gone");
 
         var subjectId = HttpContext.GetSubjectId();

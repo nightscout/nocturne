@@ -66,14 +66,17 @@ public class NutritionController : ControllerBase, IWriteScopedController
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IDemoModeService _demoModeService;
     private readonly INocturneDbContextFactory _contexts;
+    private readonly TimeProvider _timeProvider;
 
     public NutritionController(
         ICarbIntakeRepository carbIntakeRepo,
         IBolusRepository bolusRepo,
         ITreatmentFoodService treatmentFoodService,
         IDemoModeService demoModeService,
-        INocturneDbContextFactory contexts)
+        INocturneDbContextFactory contexts,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _carbIntakeRepo = carbIntakeRepo;
         _bolusRepo = bolusRepo;
         _treatmentFoodService = treatmentFoodService;
@@ -527,8 +530,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
         CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        var fromTimestamp = from ?? DateTime.UtcNow.Date;
-        var toTimestamp = to ?? DateTime.UtcNow.Date.AddDays(1);
+        var fromTimestamp = from ?? _timeProvider.GetUtcNow().UtcDateTime.Date;
+        var toTimestamp = to ?? _timeProvider.GetUtcNow().UtcDateTime.Date.AddDays(1);
 
         var query = db.Set<CarbIntakeEntity>()
             .AsNoTracking()

@@ -47,10 +47,12 @@ public class DndWindowsController : ControllerBase
     public const string SupersededBy = "system:superseded";
 
     private readonly INocturneDbContextFactory _contextFactory;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>Initializes a new instance of <see cref="DndWindowsController"/>.</summary>
-    public DndWindowsController(INocturneDbContextFactory contextFactory)
+    public DndWindowsController(INocturneDbContextFactory contextFactory, TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _contextFactory = contextFactory;
     }
 
@@ -64,7 +66,7 @@ public class DndWindowsController : ControllerBase
     public async Task<ActionResult<List<DndWindowResponse>>> GetActive(CancellationToken ct)
     {
         await using var db = await _contextFactory.CreateAsync(ct);
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         var active = await db.DndWindows
             .AsNoTracking()
@@ -128,7 +130,7 @@ public class DndWindowsController : ControllerBase
         //  - one that starts at or after this window's start is wholly covered, so it is cleared.
         //
         // A null EndsAt is an open-ended span, so [started, ∞).
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         var overlapping = await db.DndWindows
             .Where(w => w.Scope == scope && w.ClearedAt == null
                         && (w.EndsAt == null || w.EndsAt > startedAt)
@@ -201,7 +203,7 @@ public class DndWindowsController : ControllerBase
         // First-writer-wins: don't clobber an existing clear (user-clear or supersede).
         if (window.ClearedAt is null)
         {
-            window.ClearedAt = DateTime.UtcNow;
+            window.ClearedAt = _timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync(ct);
         }
 

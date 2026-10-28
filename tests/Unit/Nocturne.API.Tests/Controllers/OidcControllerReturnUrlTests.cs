@@ -58,7 +58,8 @@ public class OidcControllerReturnUrlTests
             new Mock<ITenantMemberService>().Object,
             Options.Create(options),
             Options.Create(new BaseDomainOptions { BaseDomain = "cgm.example.com" }),
-            NullLogger<OidcController>.Instance)
+            NullLogger<OidcController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext
             {
@@ -110,7 +111,8 @@ public class OidcControllerReturnUrlTests
             new Mock<ITenantMemberService>().Object,
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions()),
-            NullLogger<OidcController>.Instance)
+            NullLogger<OidcController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext
             {

@@ -317,7 +317,7 @@ public class HubCredentialKindTests
             .Returns(authorization);
 
         var groups = new Mock<IGroupManager>();
-        var hub = new DataHub(Mock.Of<ILogger<DataHub>>(), authorizer.Object)
+        var hub = new DataHub(Mock.Of<ILogger<DataHub>>(), authorizer.Object, TimeProvider.System)
         {
             Context = callerContext.Object,
             Groups = groups.Object,

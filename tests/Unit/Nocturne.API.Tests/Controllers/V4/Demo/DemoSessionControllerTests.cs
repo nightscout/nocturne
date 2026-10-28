@@ -236,7 +236,8 @@ public class DemoSessionControllerTests : IDisposable
                     Secure = true,
                 },
             }),
-            new Mock<ILogger<DemoSessionController>>().Object);
+            new Mock<ILogger<DemoSessionController>>().Object,
+            TimeProvider.System);
 
         var httpContext = new DefaultHttpContext();
         if (shareAccess)

@@ -43,7 +43,8 @@ public class TotpControllerLoginGateTests
             _tenantMemberService.Object,
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions { BaseDomain = Apex }),
-            NullLogger<TotpController>.Instance)
+            NullLogger<TotpController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext
             {

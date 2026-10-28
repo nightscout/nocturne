@@ -36,7 +36,8 @@ namespace Nocturne.API.Controllers.V4.Devices;
 [Produces("application/json")]
 public class ReservoirReportsController(
     IPumpSnapshotRepository pumpSnapshots,
-    IDeviceEventRepository deviceEvents) : ControllerBase
+    IDeviceEventRepository deviceEvents,
+    TimeProvider timeProvider) : ControllerBase
 {
     /// <summary>
     /// Report a known reservoir value: a spot reading of the pump's current level,
@@ -60,7 +61,7 @@ public class ReservoirReportsController(
         [FromBody] CreateReservoirReportRequest request,
         CancellationToken ct = default)
     {
-        var timestamp = (request.Timestamp ?? DateTimeOffset.UtcNow).UtcDateTime;
+        var timestamp = (request.Timestamp ?? timeProvider.GetUtcNow()).UtcDateTime;
 
         var snapshot = await pumpSnapshots.CreateAsync(new PumpSnapshot
         {

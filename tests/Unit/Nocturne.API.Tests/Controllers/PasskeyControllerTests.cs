@@ -96,7 +96,8 @@ public class PasskeyControllerTests : IDisposable
             new TenantMemberService((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
             (new SharedSqliteFactory(_db.Options)).AsNocturneFactory(),
             oidcOptions,
-            logger.Object);
+            logger.Object,
+            TimeProvider.System);
 
         // Set up HttpContext with response cookies
         var httpContext = new DefaultHttpContext();
@@ -575,7 +576,8 @@ public class PasskeyControllerTests : IDisposable
             _passkeyService.Object, _totpService.Object, _recoveryCodeService.Object, _jwtService.Object,
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
             _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(tenantContexts),
-            tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
+            tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object,
+ TimeProvider.System)
         {
             ControllerContext = _controller.ControllerContext,
         };
@@ -609,7 +611,8 @@ public class PasskeyControllerTests : IDisposable
             _passkeyService.Object, _totpService.Object, _recoveryCodeService.Object, _jwtService.Object,
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
             _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(failingContexts.Object),
-            failingContexts.Object, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
+            failingContexts.Object, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object,
+ TimeProvider.System)
         {
             ControllerContext = _controller.ControllerContext,
         };

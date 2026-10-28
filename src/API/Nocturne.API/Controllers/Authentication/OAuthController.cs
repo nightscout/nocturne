@@ -60,6 +60,7 @@ public class OAuthController : ControllerBase
     private readonly IJwtService _jwtService;
     private readonly IOAuthTokenRevocationCache _revocationCache;
     private readonly ILogger<OAuthController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="OAuthController"/> class.
@@ -72,9 +73,10 @@ public class OAuthController : ControllerBase
         ISubjectService subjectService,
         IJwtService jwtService,
         IOAuthTokenRevocationCache revocationCache,
-        ILogger<OAuthController> logger
-    )
+        ILogger<OAuthController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _clientService = clientService;
         _grantService = grantService;
         _tokenService = tokenService;
@@ -1056,7 +1058,7 @@ public class OAuthController : ControllerBase
         var response = new ClientRegistrationResponse
         {
             ClientId = client.ClientId,
-            ClientIdIssuedAt = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds(),
+            ClientIdIssuedAt = _timeProvider.GetUtcNow().ToUnixTimeSeconds(),
             ClientName = client.DisplayName,
             RedirectUris = client.RedirectUris,
             Scope = request.Scope,

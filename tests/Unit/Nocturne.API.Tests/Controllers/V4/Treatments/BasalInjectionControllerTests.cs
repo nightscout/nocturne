@@ -19,7 +19,7 @@ public class BasalInjectionControllerTests
 
     private BasalInjectionController CreateController()
     {
-        var controller = new BasalInjectionController(_repoMock.Object, _insulinRepoMock.Object);
+        var controller = new BasalInjectionController(_repoMock.Object, _insulinRepoMock.Object, TimeProvider.System);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext()

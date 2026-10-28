@@ -100,7 +100,8 @@ internal static class UISettingsControllerHarness
                 TimeProvider.System,
                 NullLogger<DemoUISettingsProxy>.Instance
             ),
-            settingsService
+            settingsService,
+            TimeProvider.System
         )
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

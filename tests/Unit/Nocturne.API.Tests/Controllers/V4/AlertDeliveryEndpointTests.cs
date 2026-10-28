@@ -35,7 +35,8 @@ public class AlertDeliveryEndpointTests
             _deliveryServiceMock.Object,
             Mock.Of<IAlertSnoozeService>(),
             _tenantAccessorMock.Object,
-            _loggerMock.Object);
+            _loggerMock.Object,
+            TimeProvider.System);
 
         controller.ControllerContext = new ControllerContext
         {

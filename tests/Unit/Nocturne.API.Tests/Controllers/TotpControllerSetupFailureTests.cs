@@ -48,7 +48,8 @@ public class TotpControllerSetupFailureTests
             _tenantMemberService.Object,
             Options.Create(new OidcOptions()),
             Options.Create(new BaseDomainOptions()),
-            NullLogger<TotpController>.Instance)
+            NullLogger<TotpController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext }
         };

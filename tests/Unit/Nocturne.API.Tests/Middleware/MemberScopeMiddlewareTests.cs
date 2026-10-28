@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware;
@@ -425,7 +426,7 @@ public class MemberScopeMiddlewareTests
         var publicScopes = (IReadOnlySet<string>)new HashSet<string> { Scope.GlucoseRead };
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, Mock.Of<INocturneDbContextFactory>(), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, Mock.Of<INocturneDbContextFactory>(), TimeProvider.System, NullLogger<MemberScopeMiddleware>.Instance);
         var context = new DefaultHttpContext();
         context.Items["AuthContext"] = new AuthContext
         {
@@ -675,8 +676,9 @@ public class MemberScopeMiddlewareTests
         await using var provider = services.BuildServiceProvider();
 
         var detached = new GatedFactory(provider.GetRequiredService<INocturneDbContextFactory>());
+        var clock = new FakeTimeProvider(new DateTimeOffset(2031, 5, 6, 7, 8, 9, TimeSpan.Zero));
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, detached, NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, detached, clock, NullLogger<MemberScopeMiddleware>.Instance);
 
         await using (var request = provider.CreateAsyncScope())
         {
@@ -719,6 +721,7 @@ public class MemberScopeMiddlewareTests
         }
 
         lastUsed.Should().NotBeNull("the write lands after the request's scope is gone");
+        lastUsed.Should().Be(new DateTime(2031, 5, 6, 7, 8, 9), "the stamp is the clock's instant, not the wall clock");
     }
 
     /// <summary>
@@ -789,7 +792,7 @@ public class MemberScopeMiddlewareTests
         await StoreMembershipAsync(context, db.ContextFactory.AsNocturneFactory(), subjectId);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, db.ContextFactory.AsNocturneFactory(), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, db.ContextFactory.AsNocturneFactory(), TimeProvider.System, NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return (category, scoped);
@@ -839,7 +842,7 @@ public class MemberScopeMiddlewareTests
         await StoreMembershipAsync(context, db.ContextFactory.AsNocturneFactory(), subjectId);
 
         var middleware = new MemberScopeMiddleware(
-            _ => Task.CompletedTask, db.ContextFactory.AsNocturneFactory(), NullLogger<MemberScopeMiddleware>.Instance);
+            _ => Task.CompletedTask, db.ContextFactory.AsNocturneFactory(), TimeProvider.System, NullLogger<MemberScopeMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         return context;
@@ -919,7 +922,7 @@ public class MemberScopeMiddlewareTests
         RequestDelegate next = _ => Task.CompletedTask;
 
         var middleware = new MemberScopeMiddleware(
-            next, Mock.Of<INocturneDbContextFactory>(), NullLogger<MemberScopeMiddleware>.Instance);
+            next, Mock.Of<INocturneDbContextFactory>(), TimeProvider.System, NullLogger<MemberScopeMiddleware>.Instance);
 
         var context = new DefaultHttpContext();
         context.Items["AuthContext"] = authContext;

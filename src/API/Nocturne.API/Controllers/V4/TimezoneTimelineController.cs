@@ -38,12 +38,15 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
     private readonly ITimezoneTimelineService _timeline;
     private readonly IConnectorSyncService _syncService;
     private readonly ILogger<TimezoneTimelineController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public TimezoneTimelineController(
         ITimezoneTimelineService timeline,
         IConnectorSyncService syncService,
-        ILogger<TimezoneTimelineController> logger)
+        ILogger<TimezoneTimelineController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _timeline = timeline;
         _syncService = syncService;
         _logger = logger;
@@ -113,7 +116,7 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
         var syncRequest = new SyncRequest
         {
             From = request.From,
-            To = DateTime.UtcNow,
+            To = _timeProvider.GetUtcNow().UtcDateTime,
             DataTypes = [],
         };
 

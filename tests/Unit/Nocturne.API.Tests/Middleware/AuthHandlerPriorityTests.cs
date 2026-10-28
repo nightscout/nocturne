@@ -42,7 +42,8 @@ public class AuthHandlerPriorityTests
         var sessionCookieHandler = new SessionCookieHandler(
             Mock.Of<IServiceScopeFactory>(),
             NullLogger<SessionCookieHandler>.Instance,
-            Options.Create(new OidcOptions()));
+            Options.Create(new OidcOptions()),
+            TimeProvider.System);
 
         instanceKeyHandler.Priority.Should().BeGreaterThan(
             sessionCookieHandler.Priority,

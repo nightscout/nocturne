@@ -59,6 +59,7 @@ public class RetrospectiveController : ControllerBase
     private readonly IPumpSnapshotRepository _pumpSnapshotRepository;
     private readonly IIobCobReader _iobCobReader;
     private readonly ILogger<RetrospectiveController> _logger;
+    private readonly TimeProvider _timeProvider;
     public RetrospectiveController(
         IIobCalculator iobCalculator,
         ICobCalculator cobCalculator,
@@ -72,9 +73,10 @@ public class RetrospectiveController : ControllerBase
         IApsSnapshotRepository apsSnapshotRepository,
         IPumpSnapshotRepository pumpSnapshotRepository,
         IIobCobReader iobCobReader,
-        ILogger<RetrospectiveController> logger
-    )
+        ILogger<RetrospectiveController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _iobCalculator = iobCalculator;
         _cobCalculator = cobCalculator;
         _entryService = entryService;
@@ -136,7 +138,7 @@ public class RetrospectiveController : ControllerBase
         // Get basal rate at the specified time
         var scheduledAtTime = await ScheduledBasalAsync(time, time + 1, cancellationToken);
         var basalData = GetBasalRateAtTime(
-            StatisticsService.ClipOverlappingTempBasals(tempBasals, Math.Min(time + 1, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())),
+            StatisticsService.ClipOverlappingTempBasals(tempBasals, Math.Min(time + 1, _timeProvider.GetUtcNow().ToUnixTimeMilliseconds())),
             time,
             scheduledAtTime.At);
         // Get recent treatments as summary data (boluses and carb intakes within 30 minutes)
@@ -259,7 +261,7 @@ public class RetrospectiveController : ControllerBase
             .ToList() ?? new List<DeviceStatus>();
         // Calculate data points at each interval
         var delivered = StatisticsService.ClipOverlappingTempBasals(
-            tempBasals, Math.Min(endMills, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+            tempBasals, Math.Min(endMills, _timeProvider.GetUtcNow().ToUnixTimeMilliseconds()));
         var dataPoints = new List<RetrospectiveDataPoint>();
         var totalIntervals = (24 * 60) / intervalMinutes;
         var intervalMs = intervalMinutes * 60 * 1000L;
@@ -277,7 +279,7 @@ public class RetrospectiveController : ControllerBase
             await _pumpSnapshotRepository.GetIobPointsAsync(deviceFrom, deviceTo, cancellationToken));
         var ticks = IobCobSeries.Build(
             _iobCalculator, _cobCalculator, boluses, carbIntakes, tempBasals, timeline, scheduled, devices,
-            startMills, lastPoint, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), intervalMs,
+            startMills, lastPoint, _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), intervalMs,
             cancellationToken);
         foreach (var tick in ticks)
         {
@@ -350,7 +352,7 @@ public class RetrospectiveController : ControllerBase
             limit: int.MaxValue, offset: 0, descending: false, ct: cancellationToken
         )).ToList();
         var delivered = StatisticsService.ClipOverlappingTempBasals(
-            tempBasals, Math.Min(endMills, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+            tempBasals, Math.Min(endMills, _timeProvider.GetUtcNow().ToUnixTimeMilliseconds()));
         // Generate basal timeline
         var scheduled = await ScheduledBasalAsync(startMills, endMills, cancellationToken);
         var dataPoints = new List<BasalDataPoint>();

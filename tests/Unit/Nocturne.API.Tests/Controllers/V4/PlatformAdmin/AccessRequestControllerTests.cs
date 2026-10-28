@@ -48,7 +48,8 @@ public sealed class AccessRequestControllerTests : IDisposable
             roleService.Object,
             MockTenantAccessor.Create(_tenantId).Object,
             _notifications.Object,
-            NullLogger<AccessRequestController>.Instance)
+            NullLogger<AccessRequestController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

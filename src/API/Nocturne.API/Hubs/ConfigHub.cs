@@ -124,7 +124,7 @@ public class ConfigurationChangeEvent
     /// <summary>
     /// When the change occurred.
     /// </summary>
-    public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.UtcNow;
+    public required DateTimeOffset Timestamp { get; set; }
 
     /// <summary>
     /// Who made the change.

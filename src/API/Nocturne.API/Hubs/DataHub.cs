@@ -23,11 +23,13 @@ public class DataHub : TenantAwareHub
 {
     private readonly ILogger<DataHub> _logger;
     private readonly IHubTokenAuthorizer _tokenAuthorizer;
+    private readonly TimeProvider _timeProvider;
 
-    public DataHub(ILogger<DataHub> logger, IHubTokenAuthorizer tokenAuthorizer)
+    public DataHub(ILogger<DataHub> logger, IHubTokenAuthorizer tokenAuthorizer, TimeProvider timeProvider)
     {
         _logger = logger;
         _tokenAuthorizer = tokenAuthorizer;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -188,7 +190,7 @@ public class DataHub : TenantAwareHub
                     new
                     {
                         error = "Services unavailable",
-                        timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        timestamp = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                     }
                 );
                 return;
@@ -232,7 +234,7 @@ public class DataHub : TenantAwareHub
                 entries = entries.ToArray(),
                 treatments = treatments.ToArray(),
                 devicestatus = deviceStatuses.ToArray(),
-                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                timestamp = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                 range = new { start = startTime, end = endTime },
             };
 
@@ -260,7 +262,7 @@ public class DataHub : TenantAwareHub
                 new
                 {
                     error = "Failed to load retro data",
-                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    timestamp = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                 }
             );
         }

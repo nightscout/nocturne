@@ -37,7 +37,8 @@ public class CurrentTherapyStateControllerTests
             _sensitivityResolver.Object,
             _pumpSnapshotRepository.Object,
             _therapySettingsResolver.Object,
-            _targetRangeResolver.Object)
+            _targetRangeResolver.Object,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

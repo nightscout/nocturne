@@ -28,7 +28,8 @@ public class DebugControllerTests
         _mockLogger = new Mock<ILogger<DebugController>>();
         _controller = new DebugController(
             _mockEnvironment.Object,
-            _mockLogger.Object
+            _mockLogger.Object,
+            TimeProvider.System
         );
 
         // Set up HttpContext for the controller

@@ -30,14 +30,17 @@ public class CurrentTherapyStateController : ControllerBase
     private readonly IPumpSnapshotRepository _pumpSnapshotRepository;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly ITargetRangeResolver _targetRangeResolver;
+    private readonly TimeProvider _timeProvider;
 
     public CurrentTherapyStateController(
         IStateSpanService stateSpanService,
         ISensitivityResolver sensitivityResolver,
         IPumpSnapshotRepository pumpSnapshotRepository,
         ITherapySettingsResolver therapySettingsResolver,
-        ITargetRangeResolver targetRangeResolver)
+        ITargetRangeResolver targetRangeResolver,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _stateSpanService = stateSpanService;
         _sensitivityResolver = sensitivityResolver;
         _pumpSnapshotRepository = pumpSnapshotRepository;
@@ -62,7 +65,7 @@ public class CurrentTherapyStateController : ControllerBase
         var thresholds = await ChartThresholdsBuilder.BuildAsync(
             _targetRangeResolver,
             await _therapySettingsResolver.HasDataAsync(cancellationToken),
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
             cancellationToken);
         return Ok(CurrentTherapyStateReadScopeGuard.Redact(
             new CurrentTherapyStateResponse

@@ -89,7 +89,8 @@ public class AlertRulesControllerDisableTests
             Mock.Of<ISecretEncryptionService>(),
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(tracker.Object, handler.Object),
-            Mock.Of<ILogger<AlertRulesController>>());
+            Mock.Of<ILogger<AlertRulesController>>(),
+            TimeProvider.System);
 
         return (controller, excursionId, tracker, handler, () => ruleExistedAtClose);
     }

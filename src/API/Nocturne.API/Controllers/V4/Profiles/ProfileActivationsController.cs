@@ -33,12 +33,15 @@ public class ProfileActivationsController : ControllerBase
     private readonly IProfileActivationRepository _activations;
     private readonly IProfileActivationResolver _resolver;
     private readonly NativeProfileSwitches _native;
+    private readonly TimeProvider _timeProvider;
 
     public ProfileActivationsController(
         IProfileActivationRepository activations,
         IProfileActivationResolver resolver,
-        NativeProfileSwitches native)
+        NativeProfileSwitches native,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _activations = activations;
         _resolver = resolver;
         _native = native;
@@ -65,7 +68,7 @@ public class ProfileActivationsController : ControllerBase
         [FromQuery] bool applied = false,
         CancellationToken ct = default)
     {
-        var end = to?.AsUtc() ?? DateTime.UtcNow;
+        var end = to?.AsUtc() ?? _timeProvider.GetUtcNow().UtcDateTime;
         var start = from?.AsUtc() ?? end - DefaultWindow;
         if (start > end)
             return BadRequest("from must not be after to");
@@ -96,7 +99,7 @@ public class ProfileActivationsController : ControllerBase
         [FromQuery] DateTime? at = null,
         CancellationToken ct = default)
     {
-        var moment = (at ?? DateTime.UtcNow).ToMills();
+        var moment = (at ?? _timeProvider.GetUtcNow().UtcDateTime).ToMills();
         return await _resolver.GetAtAsync(moment, ct) is { } active
             ? Ok(ProfileActivationDto.From(active.Activation))
             : NoContent();

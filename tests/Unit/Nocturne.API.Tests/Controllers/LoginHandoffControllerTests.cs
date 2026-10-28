@@ -62,7 +62,8 @@ public class LoginHandoffControllerTests : IDisposable
             loginCodeService,
             _sessionService.Object,
             Options.Create(new OidcOptions { Cookie = new CookieSettings { Secure = true } }),
-            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }))
+            Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }),
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = _httpContext },
         };

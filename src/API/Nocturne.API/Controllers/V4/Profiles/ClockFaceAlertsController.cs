@@ -34,7 +34,8 @@ public class ClockFaceAlertsController(
     INocturneDbContextFactory contexts,
     AlertReceiptService receipts,
     ITenantMemberService members,
-    ITenantAccessor tenant) : ControllerBase
+    ITenantAccessor tenant,
+    TimeProvider timeProvider) : ControllerBase
 {
     /// <summary>The alarms firing now, or none when the face does not show alerts.</summary>
     [HttpGet]
@@ -52,7 +53,7 @@ public class ClockFaceAlertsController(
             return Ok(Array.Empty<ClockAlertDto>());
 
         await using var db = await contexts.CreateAsync(ct);
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var excursions = await db.AlertExcursions
             .AsNoTracking()
             .Include(e => e.AlertRule)

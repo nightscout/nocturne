@@ -90,7 +90,7 @@ public class DirectGrantTokenHandler : IAuthHandler
         if (LastUsedStamp.IsDue(grant.LastUsedAt, now))
         {
             _ = RecordLastUsedAsync(
-                _dbContextFactory, _logger, grant.Id, tenantCtx.TenantId,
+                _dbContextFactory, _logger, grant.Id, tenantCtx.TenantId, now,
                 context.Connection.RemoteIpAddress?.ToString(),
                 context.Request.Headers.UserAgent.FirstOrDefault());
         }
@@ -264,6 +264,7 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// <param name="logger">Where a failure is reported.</param>
     /// <param name="grantId">The grant that was presented.</param>
     /// <param name="tenantId">The tenant the grant belongs to.</param>
+    /// <param name="usedAt">When the grant was presented.</param>
     /// <param name="ipAddress">The caller's address, when the connection has one.</param>
     /// <param name="userAgent">The caller's user-agent, when it sent one.</param>
     internal static async Task RecordLastUsedAsync(
@@ -271,6 +272,7 @@ public class DirectGrantTokenHandler : IAuthHandler
         ILogger logger,
         Guid grantId,
         Guid tenantId,
+        DateTime usedAt,
         string? ipAddress,
         string? userAgent)
     {
@@ -281,7 +283,7 @@ public class DirectGrantTokenHandler : IAuthHandler
                 .IgnoreQueryFilters()
                 .Where(g => g.Id == grantId)
                 .ExecuteUpdateAsync(s => s
-                    .SetProperty(g => g.LastUsedAt, DateTime.UtcNow)
+                    .SetProperty(g => g.LastUsedAt, usedAt)
                     .SetProperty(g => g.LastUsedIp, ipAddress)
                     .SetProperty(g => g.LastUsedUserAgent, userAgent));
         }

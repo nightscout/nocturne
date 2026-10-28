@@ -113,7 +113,7 @@ public class ApiKeyHandler : IAuthHandler
         if (LastUsedStamp.IsDue(grant.LastUsedAt, now))
         {
             _ = DirectGrantTokenHandler.RecordLastUsedAsync(
-                _dbContextFactory, _logger, grant.Id, tenantCtx.TenantId,
+                _dbContextFactory, _logger, grant.Id, tenantCtx.TenantId, now,
                 context.Connection.RemoteIpAddress?.ToString(),
                 context.Request.Headers.UserAgent.FirstOrDefault());
         }

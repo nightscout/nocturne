@@ -59,6 +59,7 @@ public class TotpController : ControllerBase
     private readonly OidcOptions _oidcOptions;
     private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<TotpController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Creates a new instance of TotpController
@@ -72,8 +73,10 @@ public class TotpController : ControllerBase
         ITenantMemberService tenantMemberService,
         IOptions<OidcOptions> oidcOptions,
         IOptions<BaseDomainOptions> baseDomainOptions,
-        ILogger<TotpController> logger)
+        ILogger<TotpController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _totpService = totpService;
         _sessionService = sessionService;
         _subjectService = subjectService;
@@ -296,7 +299,7 @@ public class TotpController : ControllerBase
                 UserAgent: Request.Headers.UserAgent.ToString()));
 
         // The sign-in hint names the primary factor, which wrote it when it minted the step-up token.
-        Response.SetSessionCookies(session, _oidcOptions);
+        Response.SetSessionCookies(session, _oidcOptions, _timeProvider);
 
         await _subjectService.UpdateLastLoginAsync(result.SubjectId);
 

@@ -30,13 +30,16 @@ public class AuditController : ControllerBase
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantAuditConfigCache _configCache;
     private readonly IConfiguration _configuration;
+    private readonly TimeProvider _timeProvider;
 
     public AuditController(
         INocturneDbContextFactory contextFactory,
         ITenantAccessor tenantAccessor,
         ITenantAuditConfigCache configCache,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _contextFactory = contextFactory;
         _tenantAccessor = tenantAccessor;
         _configCache = configCache;
@@ -271,7 +274,7 @@ public class AuditController : ControllerBase
         var entity = await db.TenantAuditConfig
             .FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);
 
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         if (entity == null)
         {

@@ -502,7 +502,8 @@ public class V4ReadLimitClampTests
             Mock.Of<IDiscrepancyPersistenceService>(),
             repo.Object,
             Options.Create(new CompatibilityProxyConfiguration()),
-            Mock.Of<ILogger<CompatibilityController>>());
+            Mock.Of<ILogger<CompatibilityController>>(),
+            TimeProvider.System);
 
     // ── Discrepancy analyses ────────────────────────────────────────
 
@@ -510,7 +511,7 @@ public class V4ReadLimitClampTests
     public async Task DiscrepancyAnalyses_CountAtCeiling_ReachesRepositoryUnchanged()
     {
         var repo = new Mock<IDiscrepancyAnalysisRepository>();
-        var controller = new DiscrepancyController(repo.Object, Mock.Of<ILogger<DiscrepancyController>>());
+        var controller = new DiscrepancyController(repo.Object, Mock.Of<ILogger<DiscrepancyController>>(), TimeProvider.System);
 
         var result = await controller.GetDiscrepancyAnalyses(count: Ceiling, skip: 0);
 
@@ -522,7 +523,7 @@ public class V4ReadLimitClampTests
     public async Task DiscrepancyAnalyses_CountAboveCeiling_IsClamped()
     {
         var repo = new Mock<IDiscrepancyAnalysisRepository>();
-        var controller = new DiscrepancyController(repo.Object, Mock.Of<ILogger<DiscrepancyController>>());
+        var controller = new DiscrepancyController(repo.Object, Mock.Of<ILogger<DiscrepancyController>>(), TimeProvider.System);
 
         var result = await controller.GetDiscrepancyAnalyses(count: AboveCeiling, skip: 0);
 
@@ -593,7 +594,8 @@ public class V4ReadLimitClampTests
                 Mock.Of<IDeviceEventRepository>(),
                 Mock.Of<IPatientDeviceStamper>(),
                 Mock.Of<ILogger<TrackerDeviceEventWriter>>()),
-            Mock.Of<ILogger<TrackersController>>())
+            Mock.Of<ILogger<TrackersController>>(),
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext
             {

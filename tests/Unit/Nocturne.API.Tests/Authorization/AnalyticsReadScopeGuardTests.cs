@@ -422,7 +422,8 @@ public partial class AnalyticsReadScopeGuardTests
             iob.Object, cob.Object, entries.Object, boluses.Object, carbs.Object,
             tempBasals.Object, projectionService: null!, timelines.Object, MockStateSpans.Empty().Object, Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IPumpSnapshotRepository>(), new IobCobReader(iob.Object, cob.Object, boluses.Object, tempBasals.Object, carbs.Object, TestTenantCache.Create(partition: null), NullLogger<IobCobReader>.Instance),
-            NullLogger<RetrospectiveController>.Instance)
+            NullLogger<RetrospectiveController>.Instance,
+            timeProvider: TimeProvider.System)
         {
             ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),
         };
@@ -784,7 +785,8 @@ public partial class AnalyticsReadScopeGuardTests
 
         var controller = new CurrentTherapyStateController(
             stateSpans.Object, sensitivity.Object, pumps.Object,
-            Mock.Of<ITherapySettingsResolver>(), Mock.Of<ITargetRangeResolver>())
+            Mock.Of<ITherapySettingsResolver>(), Mock.Of<ITargetRangeResolver>(),
+ TimeProvider.System)
         {
             ControllerContext = ContextWith(Granted(Scope.TherapyRead)),
         };
@@ -815,7 +817,8 @@ public partial class AnalyticsReadScopeGuardTests
 
         var controller = new CurrentTherapyStateController(
             stateSpans.Object, sensitivity.Object, pumps.Object,
-            Mock.Of<ITherapySettingsResolver>(), Mock.Of<ITargetRangeResolver>())
+            Mock.Of<ITherapySettingsResolver>(), Mock.Of<ITargetRangeResolver>(),
+ TimeProvider.System)
         {
             ControllerContext = ContextWith(Granted(Scope.GlucoseRead)),
         };

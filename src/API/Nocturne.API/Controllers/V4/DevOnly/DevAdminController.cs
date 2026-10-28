@@ -39,6 +39,7 @@ public class DevAdminController : ControllerBase
     private readonly ITenantService _tenantService;
     private readonly IMemoryCache _cache;
     private readonly ILogger<DevAdminController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -52,14 +53,16 @@ public class DevAdminController : ControllerBase
     /// <param name="tenantService">Service for tenant lifecycle management.</param>
     /// <param name="cache">Tenant-resolution cache, which a restored snapshot invalidates.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">The clock.</param>
     public DevAdminController(
         INocturneDbContextFactory contexts,
         ISecretEncryptionService encryption,
         ITenantService tenantService,
         IMemoryCache cache,
-        ILogger<DevAdminController> logger
-    )
+        ILogger<DevAdminController> logger,
+        TimeProvider timeProvider)
     {
+        _timeProvider = timeProvider;
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _encryption = encryption;
         _tenantService = tenantService;
@@ -265,7 +268,7 @@ public class DevAdminController : ControllerBase
 
         var snapshot = new DevSnapshotDto
         {
-            ExportedAt = DateTime.UtcNow,
+            ExportedAt = _timeProvider.GetUtcNow().UtcDateTime,
             Tenants = tenantSnapshots,
         };
 
@@ -1033,7 +1036,7 @@ public class DevAdminController : ControllerBase
             Name = request.OwnerUsername,
             Type = SubjectType.User,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = _timeProvider.GetUtcNow().UtcDateTime,
         });
 
         // 3. Synthetic passkey credential. TenantSetupMiddleware returns 503 until a
@@ -1077,7 +1080,7 @@ public class DevAdminController : ControllerBase
         // /setup until Tenant.OnboardingCompletedAt is set; a seeded dev tenant
         // has nothing left to onboard.
         var tenantEntity = await db.Tenants.FirstAsync(t => t.Id == tenant.Id, ct);
-        tenantEntity.OnboardingCompletedAt = DateTime.UtcNow;
+        tenantEntity.OnboardingCompletedAt = _timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync(ct);
 
         // 7. Sample data
@@ -1233,7 +1236,7 @@ public class DevAdminController : ControllerBase
                 Name = "recovery-keeper",
                 Type = SubjectType.User,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = _timeProvider.GetUtcNow().UtcDateTime,
             });
             keeperSubjectId = keeper.Subject.Id;
 

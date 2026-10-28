@@ -220,7 +220,8 @@ public class AlertRulesControllerWebhookSecretTests
             encryption,
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
-            Mock.Of<ILogger<AlertRulesController>>());
+            Mock.Of<ILogger<AlertRulesController>>(),
+            TimeProvider.System);
 
         return (controller, ctx, encryption);
     }

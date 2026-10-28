@@ -20,17 +20,20 @@ public class AlarmHub : TenantAwareHub
     private readonly IHubTokenAuthorizer _tokenAuthorizer;
     private readonly IAlarmAckHandler _ackHandler;
     private readonly IEngineAlarmRelay _alarmRelay;
+    private readonly TimeProvider _timeProvider;
 
     public AlarmHub(
         ILogger<AlarmHub> logger,
         IHubTokenAuthorizer tokenAuthorizer,
         IAlarmAckHandler ackHandler,
-        IEngineAlarmRelay alarmRelay)
+        IEngineAlarmRelay alarmRelay,
+        TimeProvider timeProvider)
     {
         _logger = logger;
         _tokenAuthorizer = tokenAuthorizer;
         _ackHandler = ackHandler;
         _alarmRelay = alarmRelay;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -212,7 +215,7 @@ public class AlarmHub : TenantAwareHub
                     level = level,
                     group = group,
                     message = "Internal error processing acknowledgment",
-                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    timestamp = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                 }
             );
         }

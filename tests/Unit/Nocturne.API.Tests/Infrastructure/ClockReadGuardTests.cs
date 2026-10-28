@@ -10,7 +10,7 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// A subsystem that reads its clock through an injected <see cref="TimeProvider"/> never reads a
 /// static clock and never reaches for <c>TimeProvider.System</c>.
 /// The API project is too large for a project-wide ban, so each migrated subsystem's folder is listed
-/// in <see cref="Folders"/>.
+/// in <see cref="Folders"/>. The one system clock is registered in <see cref="CompositionRoot"/>.
 /// </summary>
 [Trait("Category", "Unit")]
 public class ClockReadGuardTests
@@ -29,7 +29,14 @@ public class ClockReadGuardTests
         "src/API/Nocturne.API/Services/BackgroundServices",
         "src/API/Nocturne.API/Services/Migration",
         "src/API/Nocturne.API/Services/Alerts",
+        "src/API/Nocturne.API/Controllers/V4",
+        "src/API/Nocturne.API/Controllers/Authentication",
+        "src/API/Nocturne.API/Hubs",
+        "src/API/Nocturne.API/Middleware",
+        "src/API/Nocturne.API/Extensions",
     ];
+
+    private const string CompositionRoot = "src/API/Nocturne.API/Extensions/ServiceRegistrationExtensions.cs";
 
     private static readonly HashSet<string> ClockTypes = [nameof(DateTime), nameof(DateTimeOffset)];
 
@@ -50,7 +57,9 @@ public class ClockReadGuardTests
             foreach (var path in Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
             {
                 var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-                reads.AddRange(Violations(File.ReadAllText(path)).Select(v => $"{relative}:{v}"));
+                reads.AddRange(
+                    Violations(File.ReadAllText(path), allowSystemClock: relative == CompositionRoot)
+                        .Select(v => $"{relative}:{v}"));
             }
         }
 
@@ -80,7 +89,16 @@ public class ClockReadGuardTests
         Violations(source).Should().HaveCount(expected);
     }
 
-    private static List<string> Violations(string source)
+    [Fact]
+    public void The_composition_root_may_register_the_system_clock_but_not_read_a_static_one()
+    {
+        Violations("class C { void M(IServiceCollection s) { s.AddSingleton(TimeProvider.System); } }", allowSystemClock: true)
+            .Should().BeEmpty();
+        Violations("class C { void M() { var t = DateTime.UtcNow; } }", allowSystemClock: true)
+            .Should().HaveCount(1);
+    }
+
+    private static List<string> Violations(string source, bool allowSystemClock = false)
     {
         var tree = CSharpSyntaxTree.ParseText(source);
         var root = tree.GetRoot();
@@ -107,7 +125,7 @@ public class ClockReadGuardTests
             var type = LastName(access.Expression);
             var member = access.Name.Identifier.ValueText;
             if ((clockTypes.Contains(type) && StaticClockMembers.Contains(member))
-                || (type == nameof(TimeProvider) && member == nameof(TimeProvider.System)))
+                || (!allowSystemClock && type == nameof(TimeProvider) && member == nameof(TimeProvider.System)))
                 Report(access);
         }
 

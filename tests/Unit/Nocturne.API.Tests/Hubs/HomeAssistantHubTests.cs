@@ -107,7 +107,7 @@ public class HomeAssistantHubTests
         var clients = new Mock<IHubCallerClients>();
         clients.SetupGet(c => c.Caller).Returns(caller.Object);
 
-        var hub = new HomeAssistantHub(_connections)
+        var hub = new HomeAssistantHub(_connections, TimeProvider.System)
         {
             Context = callerContext.Object,
             Groups = groups.Object,

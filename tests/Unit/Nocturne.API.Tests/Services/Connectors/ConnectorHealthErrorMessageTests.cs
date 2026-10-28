@@ -68,6 +68,7 @@ public class ConnectorHealthErrorMessageTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             Enumerable.Empty<IConnectorCacheInvalidator>(),
+            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 

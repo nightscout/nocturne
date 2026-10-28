@@ -66,7 +66,8 @@ public class TrackersControllerTenantAccessTests
                 Mock.Of<IDeviceEventRepository>(),
                 Mock.Of<IPatientDeviceStamper>(),
                 NullLogger<TrackerDeviceEventWriter>.Instance),
-            Mock.Of<ILogger<TrackersController>>()
+            Mock.Of<ILogger<TrackersController>>(),
+            TimeProvider.System
         );
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
         return controller;

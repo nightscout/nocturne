@@ -66,7 +66,8 @@ public class ChatAcknowledgeEndpointTests : IDisposable
                 _db.ContextFactory.AsNocturneFactory(), Mock.Of<ILogger<ChatIdentityPendingLinkService>>()),
             tenantFactory.Object,
             _tenantAccessor.Object,
-            _ackService.Object);
+            _ackService.Object,
+            TimeProvider.System);
     }
 
     private Guid NewTenant()

@@ -73,6 +73,7 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
             configuration,
             environment,
             Enumerable.Empty<IConnectorCacheInvalidator>(),
+            TimeProvider.System,
             logger);
     }
 

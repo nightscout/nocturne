@@ -46,7 +46,8 @@ public class SessionCookieHandlerTests
         _handler = new SessionCookieHandler(
             provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<SessionCookieHandler>.Instance,
-            Options.Create(_oidc));
+            Options.Create(_oidc),
+            TimeProvider.System);
     }
 
     [Fact]

@@ -27,6 +27,7 @@ public class SessionCookieHandler : IAuthHandler
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SessionCookieHandler> _logger;
     private readonly OidcOptions _options;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Creates a new instance of SessionCookieHandler
@@ -34,12 +35,14 @@ public class SessionCookieHandler : IAuthHandler
     public SessionCookieHandler(
         IServiceScopeFactory scopeFactory,
         ILogger<SessionCookieHandler> logger,
-        IOptions<OidcOptions> options
+        IOptions<OidcOptions> options,
+        TimeProvider timeProvider
     )
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _options = options.Value;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -234,7 +237,7 @@ public class SessionCookieHandler : IAuthHandler
 
     private void SetSessionCookies(HttpContext context, OidcTokenResponse tokens) =>
         context.Response.SetSessionCookies(
-            tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options);
+            tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, _options, _timeProvider);
 
     /// <summary>
     /// Get client IP address

@@ -56,7 +56,8 @@ public class AlertRulesControllerChannelDestinationTests
             Mock.Of<ISecretEncryptionService>(),
             new AlertRuleRearm(new AlertRuleEvaluationGate()),
             new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
-            Mock.Of<ILogger<AlertRulesController>>());
+            Mock.Of<ILogger<AlertRulesController>>(),
+            TimeProvider.System);
 
         var http = new DefaultHttpContext();
         http.Items["AuthContext"] = new AuthContext
