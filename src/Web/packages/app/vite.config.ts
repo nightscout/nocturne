@@ -38,7 +38,13 @@ export default defineConfig(({ mode }) => {
   return {
     assetsInclude: ["**/*.jpg", "**/*.png", "**/*.gif"],
     resolve: {
-      alias: reactAliases,
+      // TEMP spike: LAYERCHART_DIST points the build at a local LayerChart build to measure it.
+      alias: [
+        ...Object.entries(reactAliases).map(([find, replacement]) => ({ find, replacement })),
+        ...(process.env.LAYERCHART_DIST
+          ? [{ find: /^layerchart$/, replacement: `${process.env.LAYERCHART_DIST}/index.js` }]
+          : []),
+      ],
       // Force a single copy of @internationalized/date and bits-ui into the
       // bundle. The app and @nocturne/ui resolve bits-ui 2.18.1 against
       // different peers (vite, typescript), so pnpm installs it twice. A date
@@ -46,7 +52,7 @@ export default defineConfig(({ mode }) => {
       // RangeCalendar throw "Unknown date type" (reports filter, date pickers).
       // tailwind-variants is installed once per tailwindcss peer; tailwind-merge
       // is listed so a workspace pin drifting again still bundles one copy.
-      dedupe: ["@internationalized/date", "bits-ui", "tailwind-merge", "tailwind-variants"],
+      dedupe: ["@internationalized/date", "bits-ui", "tailwind-merge", "tailwind-variants", ...(process.env.LAYERCHART_DIST ? ["svelte", "runed"] : [])],
     },
     ssr: {
       // Bundle the Resend adapter (and its React deps) into the SSR output so
@@ -131,6 +137,8 @@ export default defineConfig(({ mode }) => {
       },
     ],
     build: {
+      // TEMP spike: readable names for profiling
+      ...(process.env.NO_MINIFY ? { minify: false } : {}),
       rollupOptions: {
         // Native modules from @nocturne/bot's Discord.js dependency chain
         // that cannot be bundled by Rollup
