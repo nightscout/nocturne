@@ -1,3 +1,5 @@
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests;
@@ -42,5 +44,20 @@ public class ClockReadGuardTests
         Allowed.Where(a => reads.Count(r => r.File == a.File && r.Read == a.Read) != 1)
             .Select(a => $"{a.File}: {a.Read}")
             .Should().BeEmpty("each allowed read is pinned to exactly one occurrence");
+    }
+
+    [Fact]
+    public void A_migrated_folder_stamps_through_the_context_clock()
+    {
+        var root = RepositoryPaths.Root();
+        var calls = Folders
+            .SelectMany(folder => Directory.EnumerateFiles(Path.Combine(root, folder), "*.cs", SearchOption.AllDirectories))
+            .SelectMany(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path)).GetRoot()
+                .DescendantNodes().OfType<MemberAccessExpressionSyntax>()
+                .Where(m => m.Name.Identifier.ValueText == nameof(NocturneDbContext.UtcNowAtStoredPrecision))
+                .Select(m => $"{Path.GetRelativePath(root, path).Replace('\\', '/')}: {m}"));
+
+        calls.Should().BeEmpty(
+            "UtcNowAtStoredPrecision reads the static clock; stamp with the context's NowAtStoredPrecision instead");
     }
 }

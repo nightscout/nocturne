@@ -25,7 +25,7 @@ internal static class StateSpanSupersessionExtensions
             return 0;
 
         var ids = deletedIds.Select(id => (Guid?)id).ToArray();
-        var touchedAt = NocturneDbContext.UtcNowAtStoredPrecision();
+        var touchedAt = ctx.NowAtStoredPrecision();
         return await ctx.WriteWithHistoryClampLiftedAsync(
             token => ctx.StateSpans
                 .Where(s => ids.Contains(s.SupersededById))

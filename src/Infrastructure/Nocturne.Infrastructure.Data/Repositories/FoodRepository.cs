@@ -351,7 +351,7 @@ public class FoodRepository : IFoodRepository
                 .Where(f => ids.Contains(f.FoodId))
                 .ExecuteDeleteAsync(ct);
 
-            var deletedAt = NocturneDbContext.UtcNowAtStoredPrecision();
+            var deletedAt = db.NowAtStoredPrecision();
             foreach (var entity in entities)
                 entity.DeletedAt = deletedAt;
 

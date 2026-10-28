@@ -30,7 +30,7 @@ public static class StaticClockReads
     /// <exception cref="DirectoryNotFoundException">A folder does not exist.</exception>
     public static List<StaticClockRead> InFolders(IEnumerable<string> folders)
     {
-        var root = RepositoryRoot();
+        var root = RepositoryPaths.Root();
         var reads = new List<StaticClockRead>();
 
         foreach (var folder in folders)
@@ -92,19 +92,4 @@ public static class StaticClockReads
         MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
         _ => string.Empty,
     };
-
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "tests", "Unit")))
-                return directory.FullName;
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException($"No tests/Unit directory above {AppContext.BaseDirectory}.");
-    }
 }

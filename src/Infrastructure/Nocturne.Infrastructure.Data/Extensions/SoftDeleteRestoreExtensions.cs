@@ -177,7 +177,7 @@ public static class SoftDeleteRestoreExtensions
             IReadOnlyList<Guid> promoted = dedup is { } restoredType && restoring.Count > 0
                 ? await DuplicateGroupPrimaries.RepointHeadlessGroupsAsync(
                     ctx, restoredType, [.. restoring.Concat(copies).Select(ctx.IdOf)],
-                    NocturneDbContext.UtcNowAtStoredPrecision(), token)
+                    ctx.NowAtStoredPrecision(), token)
                 : [];
 
             return new GroupRestore<TEntity>(restoring, conflicts, copies, promoted);

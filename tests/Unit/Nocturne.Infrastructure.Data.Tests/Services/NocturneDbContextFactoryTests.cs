@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -31,6 +32,38 @@ public class NocturneDbContextFactoryTests : IAsyncDisposable
     }
 
     public ValueTask DisposeAsync() => _provider.DisposeAsync();
+
+    [Fact]
+    public async Task EveryEntryPoint_StampsWithTheRegisteredClock()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2023, 4, 5, 6, 7, 8, TimeSpan.Zero).AddTicks(1234567));
+        var services = new ServiceCollection();
+        var database = Guid.NewGuid().ToString();
+        services.AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(database));
+        services.AddSingleton<TimeProvider>(time);
+        services.AddDataServices();
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
+
+        NocturneDbContext[] contexts =
+        [
+            await factory.CreateAsync(),
+            await factory.CreateForTenantAsync(ScopeTenant),
+            await factory.CreateForSubjectAsync(Guid.NewGuid()),
+            await factory.CreatePlatformAsync(),
+            await factory.CreateSystemPinnedAsync(ScopeTenant),
+            await provider.GetRequiredService<INocturneDbContextFactory>().CreateAsync(),
+        ];
+
+        foreach (var context in contexts)
+        {
+            await using var _ = context;
+            context.Clock.Should().BeSameAs(time);
+            context.NowAtStoredPrecision().Should().Be(new DateTime(2023, 4, 5, 6, 7, 8, DateTimeKind.Utc).AddTicks(1234560),
+                "a stamp is the clock's instant truncated to the microsecond Postgres stores");
+        }
+    }
 
     [Fact]
     public async Task RootResolvedFactory_ReadsFailClosedDefaults_WhateverAnyScopeHolds()
