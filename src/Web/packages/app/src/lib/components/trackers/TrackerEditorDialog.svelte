@@ -7,7 +7,6 @@
   import * as Select from "#lib/components/ui/select/index.js";
   import { DurationInput } from "#lib/components/ui/duration-input/index.js";
   import { TrackerNotificationEditor, type TrackerNotification } from "#lib/components/trackers/index.js";
-  import EventTypeCombobox from "#lib/components/treatments/EventTypeCombobox.svelte";
   import { Artwork } from "water-ui";
   import { batteryArtwork } from "#lib/watercolour-icons.js";
   import * as trackersRemote from "#lib/api/generated/trackers.generated.remote.js";
@@ -88,6 +87,13 @@
       ? [...formTriggerEventTypes, eventType]
       : formTriggerEventTypes.filter((t) => t !== eventType);
   }
+
+  const recordableEventTypesQuery = trackersRemote.getRecordableEventTypes();
+  const recordableEventTypes = $derived(recordableEventTypesQuery.current ?? []);
+
+  // "None" is posted as a single space: the form layer drops an empty value, and no field at all
+  // means "leave the stored event type as it is". The server reads a blank as none.
+  const NO_EVENT = " ";
 
   const endEventTypesQuery = trackersRemote.getEndEventTypes();
   const endEventTypes = $derived(endEventTypesQuery.current ?? []);
@@ -450,12 +456,8 @@
     <input {...fields.isFavorite.as("hidden", true)} />
   {/if}
   <input {...fields.icon.as("hidden", formIcon)} />
-  {#if formStartEventType}
-    <input {...fields.startEventType.as("hidden", formStartEventType)} />
-  {/if}
-  {#if formCompletionEventType}
-    <input {...fields.completionEventType.as("hidden", formCompletionEventType)} />
-  {/if}
+  <input {...fields.startEventType.as("hidden", formStartEventType || NO_EVENT)} />
+  <input {...fields.completionEventType.as("hidden", formCompletionEventType || NO_EVENT)} />
 
   <div class="space-y-2">
     <Label for="dashboardVisibility">Dashboard visibility</Label>
@@ -519,24 +521,34 @@
 
     <div class="space-y-2">
       <Label for="startEventType" size="sm">Create event on start</Label>
-      <EventTypeCombobox
-        bind:value={formStartEventType}
-        onSelect={(type) => (formStartEventType = type)}
-        placeholder="None - do not create event"
-      />
+      {@render eventTypeSelect("startEventType", formStartEventType, (type) => (formStartEventType = type))}
     </div>
 
     <div class="space-y-2">
       <Label for="completionEventType" size="sm">
         Create event on completion
       </Label>
-      <EventTypeCombobox
-        bind:value={formCompletionEventType}
-        onSelect={(type) => (formCompletionEventType = type)}
-        placeholder="None - do not create event"
-      />
+      {@render eventTypeSelect("completionEventType", formCompletionEventType, (type) => (formCompletionEventType = type))}
     </div>
   </div>
+{/snippet}
+
+{#snippet eventTypeSelect(id: string, value: string | undefined, onchange: (type: string | undefined) => void)}
+  <Select.Root
+    type="single"
+    value={value || NO_EVENT}
+    onValueChange={(type) => onchange(type === NO_EVENT ? undefined : type)}
+  >
+    <Select.Trigger {id} data-testid="{id}-trigger">
+      {value || "None - do not create event"}
+    </Select.Trigger>
+    <Select.Content>
+      <Select.Item value={NO_EVENT} label="None - do not create event" />
+      {#each recordableEventTypes as eventType (eventType)}
+        <Select.Item value={eventType} label={eventType} />
+      {/each}
+    </Select.Content>
+  </Select.Root>
 {/snippet}
 
 <Dialog.Root bind:open>

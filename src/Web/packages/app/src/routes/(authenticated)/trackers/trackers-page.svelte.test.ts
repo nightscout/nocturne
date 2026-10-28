@@ -38,6 +38,7 @@ vi.mock("#lib/api/generated/trackers.generated.remote.js", () => ({
   getPresets: () => remoteQuery(() => presets),
   getEndEventTypes: () => remoteQuery(() => []),
   getTriggerEventTypes: () => remoteQuery(() => []),
+  getRecordableEventTypes: () => remoteQuery(() => []),
   deleteDefinition: remoteCommand(() => server.deleteAnswer()),
   deleteInstance: remoteCommand(() => Promise.resolve()),
   deletePreset: remoteCommand(() => Promise.resolve()),

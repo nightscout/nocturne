@@ -589,6 +589,7 @@ public class V4ReadLimitClampTests
             Mock.Of<IAlertRepository>(),
             Mock.Of<ITenantAccessor>(),
             Mock.Of<IAlertAcknowledgementService>(),
+            Monitoring.TrackerEventRecorderStub.Create(),
             Mock.Of<ILogger<TrackersController>>())
         {
             ControllerContext = new ControllerContext

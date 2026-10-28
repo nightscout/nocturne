@@ -48,6 +48,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     private readonly IAlertRepository _alerts;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IAlertAcknowledgementService _acknowledgementService;
+    private readonly TrackerEventRecorder _events;
     private readonly ILogger<TrackersController> _logger;
     private readonly TimeProvider _time;
 
@@ -62,6 +63,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// <param name="alerts">Finds the open excursions of a definition's managed rules.</param>
     /// <param name="tenantAccessor">The request's tenant.</param>
     /// <param name="acknowledgementService">Acknowledges alert excursions when a tracker is acked.</param>
+    /// <param name="events">Records the device event a definition names for a start or completion.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="timeProvider">The clock a start or a range defaults from; the system clock when null.</param>
     public TrackersController(
@@ -71,6 +73,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
         IAlertRepository alerts,
         ITenantAccessor tenantAccessor,
         IAlertAcknowledgementService acknowledgementService,
+        TrackerEventRecorder events,
         ILogger<TrackersController> logger,
         TimeProvider? timeProvider = null
     )
@@ -82,6 +85,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
         _alerts = alerts;
         _tenantAccessor = tenantAccessor;
         _acknowledgementService = acknowledgementService;
+        _events = events;
         _logger = logger;
     }
 
@@ -92,23 +96,28 @@ public class TrackersController : ControllerBase, IWriteScopedController
 
     /// <summary>
     /// A manual start replaces the running instance, as a device-event start does; see
-    /// <see cref="TrackerSuccession"/>.
+    /// <see cref="TrackerSuccession"/>. A start with no treatment of its own records the definition's
+    /// start event once the instance is written (<see cref="TrackerEventRecorder"/>).
     /// </summary>
-    private Task<TrackerSuccessionResult> StartSuccessorAsync(
+    private async Task<TrackerSuccessionResult> StartSuccessorAsync(
         TrackerDefinitionEntity definition,
         string userId,
         string? startNotes,
         string? startTreatmentId,
         DateTime startedAt,
-        DateTime? scheduledAt) =>
-        TrackerSuccession.StartAsync(
+        DateTime? scheduledAt)
+    {
+        var startEvent = startTreatmentId is null ? PlanEvent(definition.StartEventType, startedAt, startNotes) : null;
+        startTreatmentId ??= startEvent?.Id.ToString();
+
+        var succession = await TrackerSuccession.StartAsync(
             _repository,
             _broadcast,
             _logger,
             definition,
             startedAt,
             completionNotes: null,
-            completeTreatmentId: null,
+            completeTreatmentId: startEvent?.Id.ToString(),
             (tx, ct) => tx.StartInstanceAsync(
                 definition.Id,
                 userId,
@@ -120,6 +129,27 @@ public class TrackersController : ControllerBase, IWriteScopedController
             ),
             HttpContext.RequestAborted
         );
+
+        if (succession.Started is not null && startEvent is not null)
+            await _events.RecordAsync(startEvent, HttpContext.RequestAborted);
+        return succession;
+    }
+
+    /// <summary>
+    /// The device event <paramref name="eventType"/> names, or null. Writing it takes the device-event
+    /// write scope, so a caller without that scope records none.
+    /// </summary>
+    private DeviceEvent? PlanEvent(string? eventType, DateTime at, string? notes) =>
+        HttpContext.HasScope(Scope.DevicesReadWrite) ? TrackerEventRecorder.Plan(eventType, at, notes) : null;
+
+    /// <summary>
+    /// Refuses a completion event the definition also restarts on: recording it would start the run
+    /// the user just completed again.
+    /// </summary>
+    private static string? CompletionRestartsError(string? completionEventType, IEnumerable<string> triggers) =>
+        completionEventType is not null && triggers.Contains(completionEventType, StringComparer.OrdinalIgnoreCase)
+            ? $"This tracker restarts on \"{completionEventType}\", so it cannot record that event when it completes."
+            : null;
 
     private static string? NullIfBlank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -245,6 +275,15 @@ public class TrackersController : ControllerBase, IWriteScopedController
         Ok(TrackerTriggerService.EndingEventTypes.ToArray());
 
     /// <summary>
+    /// The device event types a tracker can record when it starts or completes.
+    /// </summary>
+    [HttpGet("recordable-event-types")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(string[]), StatusCodes.Status200OK)]
+    public ActionResult<string[]> GetRecordableEventTypes() =>
+        Ok(TrackerEventRecorder.RecordableEventTypes.ToArray());
+
+    /// <summary>
     /// Get a specific tracker definition
     /// </summary>
     [HttpGet("definitions/{id:guid}")]
@@ -303,6 +342,15 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (!TrackerTriggerService.TryNormaliseEnds(request.EndEventTypes, out var ends, out var endError))
             return Problem(detail: endError, statusCode: 400, title: "Bad Request");
 
+        if (!TrackerEventRecorder.TryNormalise(request.StartEventType, out var startEventType, out var startEventError))
+            return Problem(detail: startEventError, statusCode: 400, title: "Bad Request");
+
+        if (!TrackerEventRecorder.TryNormalise(request.CompletionEventType, out var completionEventType, out var completionEventError))
+            return Problem(detail: completionEventError, statusCode: 400, title: "Bad Request");
+
+        if (CompletionRestartsError(completionEventType, triggers ?? []) is { } restartsError)
+            return Problem(detail: restartsError, statusCode: 400, title: "Bad Request");
+
         var entity = new TrackerDefinitionEntity
         {
             CreatedBy = userId,
@@ -319,8 +367,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
             LowReservoirUrgency = request.LowReservoirUrgency,
             IsFavorite = request.IsFavorite,
             DashboardVisibility = request.DashboardVisibility,
-            StartEventType = request.StartEventType,
-            CompletionEventType = request.CompletionEventType,
+            StartEventType = startEventType,
+            CompletionEventType = completionEventType,
             Mode = request.Mode,
         };
 
@@ -407,6 +455,17 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (!TrackerTriggerService.TryNormaliseEnds(request.EndEventTypes, out var ends, out var endError))
             return Problem(detail: endError, statusCode: 400, title: "Bad Request");
 
+        if (!TrackerEventRecorder.TryNormalise(request.StartEventType, out var startEventType, out var startEventError))
+            return Problem(detail: startEventError, statusCode: 400, title: "Bad Request");
+
+        if (!TrackerEventRecorder.TryNormalise(request.CompletionEventType, out var completionEventType, out var completionEventError))
+            return Problem(detail: completionEventError, statusCode: 400, title: "Bad Request");
+
+        if (CompletionRestartsError(
+                request.CompletionEventType is null ? existing.CompletionEventType : completionEventType,
+                triggers ?? TrackerDefinitionDto.FromEntity(existing).TriggerEventTypes) is { } restartsError)
+            return Problem(detail: restartsError, statusCode: 400, title: "Bad Request");
+
         existing.Name = request.Name ?? existing.Name;
         existing.Description = request.Description ?? existing.Description;
         existing.Category = request.Category ?? existing.Category;
@@ -435,8 +494,10 @@ public class TrackersController : ControllerBase, IWriteScopedController
         existing.LowReservoirUrgency = request.LowReservoirUrgency ?? existing.LowReservoirUrgency;
         existing.IsFavorite = request.IsFavorite ?? existing.IsFavorite;
         existing.DashboardVisibility = request.DashboardVisibility ?? existing.DashboardVisibility;
-        existing.StartEventType = request.StartEventType ?? existing.StartEventType;
-        existing.CompletionEventType = request.CompletionEventType ?? existing.CompletionEventType;
+        if (request.StartEventType is not null)
+            existing.StartEventType = startEventType;
+        if (request.CompletionEventType is not null)
+            existing.CompletionEventType = completionEventType;
         existing.Mode = request.Mode ?? existing.Mode;
 
         // Handle notification thresholds update (replaces all existing if provided)
@@ -640,16 +701,24 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (existing.CompletedAt != null)
             return AlreadyCompleted();
 
+        var completedAt = request.CompletedAt ?? UtcNow;
+        var completionEvent = request.CompleteTreatmentId is null
+            ? PlanEvent(existing.Definition?.CompletionEventType, completedAt, request.CompletionNotes)
+            : null;
+
         var completed = await _repository.CompleteInstanceAsync(
             id,
             request.Reason,
             request.CompletionNotes,
-            request.CompleteTreatmentId,
-            request.CompletedAt,
+            request.CompleteTreatmentId ?? completionEvent?.Id.ToString(),
+            completedAt,
             HttpContext.RequestAborted
         );
         if (completed is null)
             return AlreadyCompleted();
+
+        if (completionEvent is not null)
+            await _events.RecordAsync(completionEvent, HttpContext.RequestAborted);
 
         _logger.LogInformation(
             "Completed tracker instance {Id} with reason {Reason}",
@@ -954,6 +1023,13 @@ public class TrackerDefinitionDto
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
+    /// <summary>
+    /// A stored start or completion event type as the editor can post it back: a definition saved
+    /// before the type was checked may hold a treatment type that is no device event.
+    /// </summary>
+    private static string? RecordableOrNull(string? eventType) =>
+        TrackerEventRecorder.TryNormalise(eventType, out var normalised, out _) ? normalised : null;
+
     public static TrackerDefinitionDto FromEntity(TrackerDefinitionEntity entity) =>
         new()
         {
@@ -988,8 +1064,8 @@ public class TrackerDefinitionDto
                     .ToList() ?? [],
             IsFavorite = entity.IsFavorite,
             DashboardVisibility = entity.DashboardVisibility,
-            StartEventType = entity.StartEventType,
-            CompletionEventType = entity.CompletionEventType,
+            StartEventType = RecordableOrNull(entity.StartEventType),
+            CompletionEventType = RecordableOrNull(entity.CompletionEventType),
             Mode = entity.Mode,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,

@@ -261,4 +261,83 @@ public class TrackerIntegrationTests : ApiIntegrationTestBase
         instances.ValueKind.Should().Be(JsonValueKind.Array);
         instances.GetArrayLength().Should().BeGreaterThanOrEqualTo(1);
     }
+
+    // A definition that restarts on the very event it records: the run the start writes must be the
+    // only run, not one replaced at once by a second the recorded event starts.
+    [Fact]
+    public async Task StartAndComplete_RecordTheDefinitionsEvents_WithoutADuplicateRun()
+    {
+        using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+        var created = await client.PostAsJsonAsync("/api/v4/trackers/definitions", new
+        {
+            name = "G7",
+            category = "Sensor",
+            lifespanHours = 240,
+            mode = "Duration",
+            triggerEventTypes = new[] { "Sensor Start" },
+            startEventType = "Sensor Start",
+            completionEventType = "Sensor Stop",
+        });
+        created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        var definitionId = JsonSerializer.Deserialize<JsonElement>(await created.Content.ReadAsStringAsync())
+            .GetProperty("id").GetString()!;
+
+        var instanceId = await StartInstanceAndGetIdAsync(client, definitionId);
+
+        var running = (await RunsAsync(client, "/api/v4/trackers/instances", definitionId)).ToList();
+        running.Should().ContainSingle().Which.GetProperty("id").GetString().Should().Be(instanceId);
+
+        var completed = await client.PutAsJsonAsync(
+            $"/api/v4/trackers/instances/{instanceId}/complete", new { reason = "Completed" });
+        completed.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await RunsAsync(client, "/api/v4/trackers/instances", definitionId)).Should().BeEmpty();
+        (await RunsAsync(client, "/api/v4/trackers/instances/history", definitionId)).Should().ContainSingle();
+
+        var events = await client.GetFromJsonAsync<JsonElement>("/api/v4/observations/device-events?limit=100");
+        events.GetProperty("data").EnumerateArray()
+            .Where(e => e.GetProperty("app").GetString() == "Nocturne Tracker")
+            .Select(e => e.GetProperty("eventType").GetString())
+            .Should().BeEquivalentTo(["SensorStart", "SensorStop"]);
+    }
+
+    private static async Task<IEnumerable<JsonElement>> RunsAsync(HttpClient client, string path, string definitionId)
+    {
+        var runs = await client.GetFromJsonAsync<JsonElement>(path);
+        return runs.EnumerateArray().Where(r => r.GetProperty("definitionId").GetString() == definitionId).ToList();
+    }
+
+    [Fact]
+    public async Task DeletingARecordedStartEvent_ResumesTheRunItReplaced()
+    {
+        using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+        var created = await client.PostAsJsonAsync("/api/v4/trackers/definitions", new
+        {
+            name = "Site",
+            category = "Cannula",
+            lifespanHours = 72,
+            mode = "Duration",
+            startEventType = "Site Change",
+        });
+        created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        var definitionId = JsonSerializer.Deserialize<JsonElement>(await created.Content.ReadAsStringAsync())
+            .GetProperty("id").GetString()!;
+
+        var first = await client.PostAsJsonAsync("/api/v4/trackers/instances",
+            new { definitionId, startedAt = DateTime.UtcNow.AddDays(-2) });
+        first.StatusCode.Should().Be(HttpStatusCode.Created);
+        var firstId = JsonSerializer.Deserialize<JsonElement>(await first.Content.ReadAsStringAsync())
+            .GetProperty("id").GetString()!;
+        await StartInstanceAndGetIdAsync(client, definitionId);
+
+        var events = await client.GetFromJsonAsync<JsonElement>("/api/v4/observations/device-events?limit=100");
+        var latest = events.GetProperty("data").EnumerateArray()
+            .Where(e => e.GetProperty("app").GetString() == "Nocturne Tracker")
+            .MaxBy(e => e.GetProperty("timestamp").GetDateTime());
+        var deleted = await client.DeleteAsync($"/api/v4/observations/device-events/{latest.GetProperty("id").GetString()}");
+        deleted.IsSuccessStatusCode.Should().BeTrue(await deleted.Content.ReadAsStringAsync());
+
+        (await RunsAsync(client, "/api/v4/trackers/instances", definitionId))
+            .Should().ContainSingle().Which.GetProperty("id").GetString().Should().Be(firstId);
+    }
 }
