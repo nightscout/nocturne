@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -34,6 +35,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     private readonly IDeviceService _deviceService;
     private readonly IAuditContext _auditContext;
     private readonly ILoopClosedLoopStamper _closedLoop;
+    private readonly TimeProvider _time;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -50,6 +52,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         IDeviceService deviceService,
         IAuditContext auditContext,
         ILoopClosedLoopStamper closedLoop,
+        TimeProvider timeProvider,
         ILogger<DeviceStatusDecomposer> logger)
         : base(logger)
     {
@@ -61,6 +64,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         _deviceService = deviceService;
         _auditContext = auditContext;
         _closedLoop = closedLoop;
+        _time = timeProvider;
     }
 
     /// <summary>
@@ -170,11 +174,16 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         => ds.Pump != null || ds.OpenAps != null || ds.Loop != null
             || ds.Uploader != null || ds.UploaderBattery.HasValue;
 
-    /// <summary>AAPS sends <c>date</c> instead of <c>mills</c>; normalize before decomposition.</summary>
-    private static void NormalizeMills(DeviceStatus ds)
+    /// <summary>
+    /// AAPS sends <c>date</c> instead of <c>mills</c>. A status without <c>created_at</c> is dated
+    /// by its receipt; see <see cref="ResolveTimestamp"/>.
+    /// </summary>
+    private void NormalizeMills(DeviceStatus ds)
     {
         if (ds.Mills == 0 && ds.Date is > 0)
             ds.Mills = ds.Date.Value;
+
+        ds.CreatedAt ??= _time.GetUtcNow().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
     }
 
     #region APS Decomposition
@@ -1196,7 +1205,9 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     /// Resolves the best available timestamp for a device status record.
     /// Priority: Mills (already normalized from date) > OpenAPS IOB time >
     /// <see cref="ApsSnapshotCurves.FreshestOpenApsCommand"/> timestamp > Loop timestamp > Pump clock > CreatedAt >
-    /// Loop predicted start date > now.
+    /// Loop predicted start date > now. <see cref="NormalizeMills"/> sets CreatedAt to the receipt time
+    /// when the upload has none, as Nightscout does, so the last two are reached only when CreatedAt
+    /// does not parse.
     /// </summary>
     internal static DateTime ResolveTimestamp(DeviceStatus ds)
     {

@@ -587,7 +587,7 @@ public class AlertTrackerState
     /// <summary>
     /// Timestamp of the last evaluation.
     /// </summary>
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; }
 
     /// <summary>
     /// When the active excursion entered hysteresis; set only in the "hysteresis" state.
@@ -650,10 +650,10 @@ public class AlertRule
     /// <summary>JSON-serialized auto-resolve parameters (e.g. delay, mode), or null if unused.</summary>
     public string? AutoResolveParams { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 
     /// <summary>When this rule was last modified.</summary>
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; }
 }
 
 /// <summary>

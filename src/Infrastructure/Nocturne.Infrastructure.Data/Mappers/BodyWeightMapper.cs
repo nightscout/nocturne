@@ -63,7 +63,7 @@ public static class BodyWeightMapper
         entity.LeanMassKg = bodyWeight.LeanMassKg;
         entity.Device = bodyWeight.Device;
         entity.EnteredBy = bodyWeight.EnteredBy;
-        entity.CreatedAt = bodyWeight.CreatedAt;
+        entity.CreatedAt = bodyWeight.CreatedAt ?? entity.CreatedAt;
         entity.UtcOffset = bodyWeight.UtcOffset;
         entity.DataSource = bodyWeight.DataSource;
         entity.SyncIdentifier = bodyWeight.SyncIdentifier;

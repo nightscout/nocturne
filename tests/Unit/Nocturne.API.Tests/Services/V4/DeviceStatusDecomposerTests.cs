@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.V4;
@@ -26,6 +27,8 @@ namespace Nocturne.API.Tests.Services.V4;
 
 public class DeviceStatusDecomposerTests : IDisposable
 {
+    private static readonly DateTimeOffset ReceivedAt = new(2026, 10, 29, 3, 4, 5, 678, TimeSpan.Zero);
+
     private readonly NocturneDbContext _context;
     private readonly Mock<IStateSpanService> _stateSpanServiceMock;
     private readonly Mock<IDeviceService> _deviceServiceMock;
@@ -51,6 +54,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             _deviceServiceMock.Object,
             Mock.Of<IAuditContext>(),
             Mock.Of<ILoopClosedLoopStamper>(),
+            new FakeTimeProvider(ReceivedAt),
             NullLogger<DeviceStatusDecomposer>.Instance);
     }
 
@@ -971,6 +975,47 @@ public class DeviceStatusDecomposerTests : IDisposable
         DeviceStatusDecomposer.ResolveTimestamp(withIobTime)
             .Should().Be(new DateTime(2026, 10, 4, 23, 19, 0, DateTimeKind.Utc));
     }
+
+    [Fact]
+    public async Task DecomposeAsync_UploadWithoutCreatedAt_IsDatedByReceiptAheadOfThePredictionStart()
+    {
+        var ds = JsonSerializer.Deserialize<DeviceStatus>("""
+            {"_id":"loop-no-created-at","device":"Loop/3.0",
+             "loop":{"iob":{"iob":1.8},"predicted":{"values":[130,125],"startDate":"2026-10-04T22:00:00Z"}}}
+            """)!;
+
+        var aps = await DecomposeApsAsync(ds);
+
+        ds.CreatedAt.Should().Be("2026-10-29T03:04:05.678Z");
+        aps.Timestamp.Should().Be(ReceivedAt.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_CreatedAtSent_KeepsIt()
+    {
+        var ds = LoopStatusWithOnlyAPredictionStart("loop-with-created-at");
+        ds.CreatedAt = "2026-10-04T23:18:55.000Z";
+
+        var aps = await DecomposeApsAsync(ds);
+
+        ds.CreatedAt.Should().Be("2026-10-04T23:18:55.000Z");
+        aps.Timestamp.Should().Be(new DateTime(2026, 10, 4, 23, 18, 55, DateTimeKind.Utc));
+    }
+
+    private static DeviceStatus LoopStatusWithOnlyAPredictionStart(string id) => new()
+    {
+        Id = id,
+        Device = "Loop/3.0",
+        Loop = new LoopStatus
+        {
+            Iob = new LoopIob { Iob = 1.8 },
+            Predicted = new LoopPredicted
+            {
+                Values = [130, 125],
+                StartDate = "2026-10-04T22:00:00Z",
+            },
+        },
+    };
 
     #endregion
 
@@ -2067,6 +2112,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, MockTenantAccessor.Create().Object, DeviceDateClockDoubles.Utc()),
             Mock.Of<IAuditContext>(),
             Mock.Of<ILoopClosedLoopStamper>(),
+            TimeProvider.System,
             NullLogger<DeviceStatusDecomposer>.Instance);
     }
 
@@ -2296,9 +2342,9 @@ public class DeviceStatusDecomposerTests : IDisposable
     [InlineData("2026-04-12T09:35:00Z", "2026-04-12T09:33:00Z", "2026-04-12T09:36:00.000Z", 35)]
     [InlineData(null, "2026-04-12T09:33:00Z", "2026-04-12T09:36:00.000Z", 33)]
     [InlineData(null, null, "2026-04-12T09:36:00.000Z", 36)]
-    [InlineData(null, null, null, 30)]
+    [InlineData(null, null, null, null)]
     public async Task DecomposeAsync_LoopWithMillsZero_PrefersTheLoopCycleTimeToThePredictionStart(
-        string? loopTimestamp, string? pumpClock, string? createdAt, int expectedMinute)
+        string? loopTimestamp, string? pumpClock, string? createdAt, int? expectedMinute)
     {
         var ds = new DeviceStatus
         {
@@ -2317,7 +2363,9 @@ public class DeviceStatusDecomposerTests : IDisposable
         _stateSpanServiceMock
             .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((StateSpan span, CancellationToken _) => span);
-        var expected = new DateTime(2026, 4, 12, 9, expectedMinute, 0, DateTimeKind.Utc);
+        var expected = expectedMinute is { } minute
+            ? new DateTime(2026, 4, 12, 9, minute, 0, DateTimeKind.Utc)
+            : ReceivedAt.UtcDateTime;
 
         var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 

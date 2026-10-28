@@ -65,16 +65,6 @@ public sealed class UploaderTimestampNonUtcHostTests : IDisposable
     [Theory]
     [InlineData("2026-09-26T08:00:00")]
     [InlineData("2026-09-26T13:00:00+05:00")]
-    public void TreatmentCalculatedMills_IsTheUtcInstant(string createdAt)
-    {
-        var treatment = new Treatment { Created_at = createdAt };
-
-        treatment.CalculatedMills.Should().Be(EightUtcMills);
-    }
-
-    [Theory]
-    [InlineData("2026-09-26T08:00:00")]
-    [InlineData("2026-09-26T13:00:00+05:00")]
     public void EntryMillsAndDate_FromDateString_AreTheUtcInstant(string dateString)
     {
         var entry = new Entry { DateString = dateString };

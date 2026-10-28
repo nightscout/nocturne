@@ -50,6 +50,7 @@ public class DeviceStatusDecomposerOverrideSpanTests : IDisposable
             Mock.Of<IDeviceService>(),
             Mock.Of<IAuditContext>(),
             Mock.Of<ILoopClosedLoopStamper>(),
+            TimeProvider.System,
             NullLogger<DeviceStatusDecomposer>.Instance);
     }
 
