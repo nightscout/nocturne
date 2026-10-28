@@ -63,7 +63,8 @@ public class V3FoodRegexFilterTests
         var controller = new FoodController(
             foods.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<FoodController>.Instance)
+            NullLogger<FoodController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext
             {

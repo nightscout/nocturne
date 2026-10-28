@@ -23,7 +23,8 @@ public class NotificationsControllerTests
         _mockLogger = new Mock<ILogger<NotificationsController>>();
         _controller = new NotificationsController(
             _mockNotificationService.Object,
-            _mockLogger.Object
+            _mockLogger.Object,
+            TimeProvider.System
         );
     }
 

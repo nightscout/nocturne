@@ -27,7 +27,8 @@ public class NotificationsControllerTests
         _controller = new NotificationsController(
             _mockNotificationService.Object,
             _mockAckHandler.Object,
-            _mockLogger.Object
+            _mockLogger.Object,
+            TimeProvider.System
         );
 
         // Setup HttpContext for remote IP address

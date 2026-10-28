@@ -55,7 +55,8 @@ public class V3FilterOperatorMergeTests
             Mock.Of<IDocumentProcessingService>(),
             entries.Object,
             Mock.Of<ICanonicalAlertEvaluator>(),
-            NullLogger<EntriesController>.Instance)
+            NullLogger<EntriesController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };
@@ -103,7 +104,8 @@ public class V3FilterOperatorMergeTests
         var controller = new TreatmentsController(
             Mock.Of<IDocumentProcessingService>(),
             treatments.Object,
-            NullLogger<TreatmentsController>.Instance)
+            NullLogger<TreatmentsController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };
@@ -180,7 +182,8 @@ public class V3FilterOperatorMergeTests
             Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDataEventSink<DeviceStatus>>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<DeviceStatusController>.Instance)
+            NullLogger<DeviceStatusController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };
@@ -207,7 +210,8 @@ public class V3FilterOperatorMergeTests
             Mock.Of<IDocumentProcessingService>(),
             entries.Object,
             Mock.Of<ICanonicalAlertEvaluator>(),
-            NullLogger<EntriesController>.Instance)
+            NullLogger<EntriesController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };

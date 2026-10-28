@@ -23,6 +23,7 @@ public class StatusController : ControllerBase
 {
     private readonly IStatusService _statusService;
     private readonly ILogger<StatusController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// JSON serializer options configured for Nightscout-compatible camelCase responses
@@ -40,10 +41,16 @@ public class StatusController : ControllerBase
     /// </summary>
     /// <param name="statusService">Service providing system status information.</param>
     /// <param name="logger">Logger instance.</param>
-    public StatusController(IStatusService statusService, ILogger<StatusController> logger)
+    /// <param name="timeProvider">Clock for stamps and response headers.</param>
+    public StatusController(
+        IStatusService statusService,
+        ILogger<StatusController> logger,
+        TimeProvider timeProvider
+    )
     {
         _statusService = statusService;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -93,7 +100,7 @@ public class StatusController : ControllerBase
                         Status = "error",
                         Name = "Nocturne",
                         Version = "unknown",
-                        ServerTime = DateTime.UtcNow,
+                        ServerTime = _timeProvider.GetUtcNow().UtcDateTime,
                     },
                     NightscoutJsonOptions
                 ) { ContentType = "application/json" };

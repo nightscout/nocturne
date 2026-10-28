@@ -28,6 +28,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
 {
     protected readonly IDocumentProcessingService _documentProcessingService;
     protected readonly ILogger _logger;
+    protected readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// The most documents a V3 search returns, and the page size when no <c>limit</c> is given,
@@ -42,13 +43,16 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// </summary>
     /// <param name="documentProcessingService">Service for processing incoming documents (entries, treatments, etc.).</param>
     /// <param name="logger">Logger instance for the derived controller.</param>
+    /// <param name="timeProvider">Clock for write stamps and response headers.</param>
     protected BaseV3Controller(
         IDocumentProcessingService documentProcessingService,
-        ILogger logger
+        ILogger logger,
+        TimeProvider timeProvider
     )
     {
         _documentProcessingService = documentProcessingService;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -335,7 +339,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
         // Cursor-style ETag from the newest record; falls back to the current time for
         // collections whose items carry no recognizable timestamp.
         var effectiveLastModified =
-            lastModified ?? GetLastModified(data.Cast<object>()) ?? DateTimeOffset.UtcNow;
+            lastModified ?? GetLastModified(data.Cast<object>()) ?? _timeProvider.GetUtcNow();
         Response.Headers["ETag"] = FormatCursorETag(
             effectiveLastModified.ToUnixTimeMilliseconds()
         );
@@ -493,7 +497,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// </summary>
     protected ActionResult V3Inserted(string getAction, string? identifier)
     {
-        var lastModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var lastModified = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
         return CreatedAtAction(
             getAction,
@@ -508,7 +512,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// </summary>
     protected ActionResult V3Replaced()
     {
-        var lastModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var lastModified = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
         return Ok(new { status = 200, lastModified });
     }
@@ -558,7 +562,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <param name="srvModified">The existing document's <c>srvModified</c>, in Unix milliseconds.</param>
     protected ActionResult V3Deduplicated(string? storedId, long? srvModified)
     {
-        var lastModified = srvModified ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var lastModified = srvModified ?? _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         Response.Headers["Last-Modified"] = FormatHttpDate(lastModified);
         return Ok(
             new V3CreateResponse
@@ -833,7 +837,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
             Meta = new V3ResponseMetadata
             {
                 TotalCount = (int)(totalCount ?? 0),
-                Timestamp = lastModified ?? DateTimeOffset.UtcNow,
+                Timestamp = lastModified ?? _timeProvider.GetUtcNow(),
             },
         };
 

@@ -32,7 +32,8 @@ public class DDataControllerTests
         _controller = new DDataController(
             _mockDDataService.Object,
             _mockDecomposer.Object,
-            _mockLogger.Object
+            _mockLogger.Object,
+            TimeProvider.System
         );
         Grant();
     }

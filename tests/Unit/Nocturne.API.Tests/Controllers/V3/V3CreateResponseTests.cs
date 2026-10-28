@@ -45,7 +45,8 @@ public class V3CreateResponseTests
             Mock.Of<IProfileProjectionService>(),
             writer.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<ProfileController>.Instance));
+            NullLogger<ProfileController>.Instance,
+            TimeProvider.System));
 
         var result = await controller.CreateProfile(Json("""{"defaultProfile":"Default","startDate":"2024-09-30T00:00:00.000Z"}"""));
 
@@ -63,7 +64,8 @@ public class V3CreateResponseTests
         var controller = WithContext(new FoodController(
             repository.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<FoodController>.Instance));
+            NullLogger<FoodController>.Instance,
+            TimeProvider.System));
 
         var result = await controller.CreateFood(Json("""{"name":"Apple","carbs":12,"date":1727654400000}"""));
 
@@ -92,7 +94,8 @@ public class V3CreateResponseTests
             Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDataEventSink<DeviceStatus>>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<DeviceStatusController>.Instance));
+            NullLogger<DeviceStatusController>.Instance,
+            TimeProvider.System));
 
         var result = await controller.CreateDeviceStatus(
             Json($$"""{"_id":"{{StoredId}}","device":"openaps://phone","app":"AAPS","mills":{{SrvModified}}}"""));
@@ -159,7 +162,8 @@ public class V3CreateResponseTests
             Mock.Of<IProfileProjectionService>(),
             writer.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<ProfileController>.Instance));
+            NullLogger<ProfileController>.Instance,
+            TimeProvider.System));
 
         var result = await controller.CreateProfile(Json("""[{"defaultProfile":"A"},{"defaultProfile":"B"}]"""));
 
@@ -183,7 +187,8 @@ public class V3CreateResponseTests
             processing.Object,
             service.Object,
             Mock.Of<ICanonicalAlertEvaluator>(),
-            NullLogger<EntriesController>.Instance));
+            NullLogger<EntriesController>.Instance,
+            TimeProvider.System));
         return (controller, service);
     }
 
@@ -202,7 +207,8 @@ public class V3CreateResponseTests
         var controller = WithContext(new TreatmentsController(
             processing.Object,
             service.Object,
-            NullLogger<TreatmentsController>.Instance));
+            NullLogger<TreatmentsController>.Instance,
+            TimeProvider.System));
         return (controller, service);
     }
 

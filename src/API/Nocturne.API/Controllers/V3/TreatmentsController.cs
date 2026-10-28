@@ -30,9 +30,10 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     public TreatmentsController(
         IDocumentProcessingService documentProcessingService,
         ITreatmentService treatmentService,
-        ILogger<TreatmentsController> logger
+        ILogger<TreatmentsController> logger,
+        TimeProvider timeProvider
     )
-        : base(documentProcessingService, logger)
+        : base(documentProcessingService, logger, timeProvider)
     {
         _treatmentService = treatmentService;
     }
@@ -518,13 +519,13 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     private DateTimeOffset GetLastModified(List<Treatment> treatments)
     {
         if (treatments.Count == 0)
-            return DateTimeOffset.UtcNow;
+            return _timeProvider.GetUtcNow();
 
         // Use the most recent treatment's created_at as last modified
         var latestCreatedAt = treatments
             .Select(t => UploaderTimestamp.ParseUtcDateTime(t.CreatedAt))
             .OfType<DateTime>()
-            .DefaultIfEmpty(DateTime.UtcNow)
+            .DefaultIfEmpty(_timeProvider.GetUtcNow().UtcDateTime)
             .Max();
 
         return new DateTimeOffset(latestCreatedAt, TimeSpan.Zero);

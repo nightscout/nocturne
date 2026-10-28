@@ -53,7 +53,8 @@ public class V3SortTests
             Mock.Of<IDocumentProcessingService>(),
             entries.Object,
             Mock.Of<ICanonicalAlertEvaluator>(),
-            NullLogger<EntriesController>.Instance)
+            NullLogger<EntriesController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };
@@ -62,7 +63,8 @@ public class V3SortTests
         new(
             Mock.Of<IDocumentProcessingService>(),
             treatments.Object,
-            NullLogger<TreatmentsController>.Instance)
+            NullLogger<TreatmentsController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };
@@ -72,7 +74,8 @@ public class V3SortTests
             profiles.Object,
             Mock.Of<IProfileWriteService>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<ProfileController>.Instance)
+            NullLogger<ProfileController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };
@@ -81,7 +84,8 @@ public class V3SortTests
         new(
             foods.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<FoodController>.Instance)
+            NullLogger<FoodController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };
@@ -102,7 +106,8 @@ public class V3SortTests
             Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDataEventSink<DeviceStatus>>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<DeviceStatusController>.Instance)
+            NullLogger<DeviceStatusController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };

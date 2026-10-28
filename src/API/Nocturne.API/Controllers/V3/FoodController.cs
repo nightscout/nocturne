@@ -30,9 +30,10 @@ public class FoodController : BaseV3Controller<Food>
     public FoodController(
         IFoodRepository foods,
         IDocumentProcessingService documentProcessingService,
-        ILogger<FoodController> logger
+        ILogger<FoodController> logger,
+        TimeProvider timeProvider
     )
-        : base(documentProcessingService, logger)
+        : base(documentProcessingService, logger, timeProvider)
     {
         _foods = foods;
     }
@@ -639,7 +640,7 @@ public class FoodController : BaseV3Controller<Food>
         }
 
         // Add timestamp for uniqueness
-        identifierParts.Add(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+        identifierParts.Add(_timeProvider.GetUtcNow().UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
 
         // If we have identifying parts, create a hash-based identifier
         if (identifierParts.Any())

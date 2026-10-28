@@ -60,7 +60,8 @@ public class UploaderIdBindingTests
             Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDataEventSink<DeviceStatus>>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<DeviceStatusController>.Instance));
+            NullLogger<DeviceStatusController>.Instance,
+            TimeProvider.System));
 
         await controller.CreateDeviceStatus(Body(ids, """ "app":"AAPS","device":"openaps://phone" """));
 
@@ -82,7 +83,8 @@ public class UploaderIdBindingTests
         var controller = WithContext(new SettingsController(
             repository.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<SettingsController>.Instance));
+            NullLogger<SettingsController>.Instance,
+            TimeProvider.System));
 
         await controller.CreateSettings(Body(ids, """ "key":"units" """));
 
@@ -103,7 +105,8 @@ public class UploaderIdBindingTests
             Mock.Of<IProfileProjectionService>(),
             writeService.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<ProfileController>.Instance));
+            NullLogger<ProfileController>.Instance,
+            TimeProvider.System));
 
         await controller.CreateProfile(Body(ids, """ "defaultProfile":"Default" """));
 

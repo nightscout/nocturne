@@ -32,9 +32,10 @@ public class SettingsController : BaseV3Controller<Settings>
     public SettingsController(
         ISettingsRepository settings,
         IDocumentProcessingService documentProcessingService,
-        ILogger<SettingsController> logger
+        ILogger<SettingsController> logger,
+        TimeProvider timeProvider
     )
-        : base(documentProcessingService, logger)
+        : base(documentProcessingService, logger, timeProvider)
     {
         _settings = settings;
     }
@@ -282,7 +283,7 @@ public class SettingsController : BaseV3Controller<Settings>
             return CreateV3ErrorResponse(400, "Invalid request data", $"Settings key '{id}' is reserved.");
         }
 
-        settings.SrvModified = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        settings.SrvModified = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         if (!await _settings.PutSettingsAsync(id, settings, cancellationToken))
         {
             _logger.LogDebug("Replaced settings with ID {Id}", id);
@@ -389,7 +390,7 @@ public class SettingsController : BaseV3Controller<Settings>
         // Unlike other collections, settings collection in legacy API doesn't use fallbackGetDate
 
         // Set server timestamps if not present
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var now = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
 
         if (!settings.SrvModified.HasValue)
         {
@@ -432,7 +433,7 @@ public class SettingsController : BaseV3Controller<Settings>
         {
             // Use key as base for identifier, ensuring it's unique
             var cleanKey = settings.Key.Replace(" ", "-").ToLowerInvariant();
-            return $"settings-{cleanKey}-{DateTimeOffset.UtcNow.Ticks:X}";
+            return $"settings-{cleanKey}-{_timeProvider.GetUtcNow().Ticks:X}";
         }
 
         // Fallback to GUID for unique identification

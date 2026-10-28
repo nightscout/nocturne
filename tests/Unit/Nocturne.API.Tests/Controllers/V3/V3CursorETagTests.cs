@@ -32,7 +32,8 @@ public class V3CursorETagTests
             projectionService.Object,
             Mock.Of<IProfileWriteService>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<ProfileController>.Instance)
+            NullLogger<ProfileController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext
             {
@@ -46,7 +47,8 @@ public class V3CursorETagTests
         return new FoodController(
             foods.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<FoodController>.Instance)
+            NullLogger<FoodController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext
             {
@@ -218,7 +220,8 @@ public class V3CursorETagTests
         var controller = new TreatmentsController(
             Mock.Of<IDocumentProcessingService>(),
             treatmentService.Object,
-            NullLogger<TreatmentsController>.Instance)
+            NullLogger<TreatmentsController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext
             {

@@ -340,7 +340,7 @@ public class EntriesController : ControllerBase
         var lastModified =
             entries.Length > 0
                 ? DateTimeOffset.FromUnixTimeMilliseconds(entries[0].Mills)
-                : DateTimeOffset.UtcNow;
+                : _timeProvider.GetUtcNow();
         Response.Headers["Last-Modified"] = lastModified.ToString("R");
 
         if (

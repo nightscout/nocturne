@@ -112,7 +112,7 @@ public class TreatmentsController : ControllerBase
 
             // Set response headers for caching
             Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+            Response.Headers["Last-Modified"] = _timeProvider.GetUtcNow().ToString("R");
 
             return Ok(treatmentArray);
         }
@@ -167,7 +167,7 @@ public class TreatmentsController : ControllerBase
 
             // Set response headers for caching
             Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+            Response.Headers["Last-Modified"] = _timeProvider.GetUtcNow().ToString("R");
 
             return Ok(treatment);
         }

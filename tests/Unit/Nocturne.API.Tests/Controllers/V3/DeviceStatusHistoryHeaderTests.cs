@@ -94,7 +94,8 @@ public class DeviceStatusHistoryHeaderTests
             Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDataEventSink<DeviceStatus>>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<DeviceStatusController>.Instance)
+            NullLogger<DeviceStatusController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

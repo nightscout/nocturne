@@ -374,7 +374,8 @@ public class TotalIobAgreementTests
             .ReturnsAsync([]);
         var controller = new PebbleController(
             entries.Object, Reader(now), Mock.Of<IUploaderSnapshotRepository>(),
-            Mock.Of<ITenantAppearanceReader>(), Mock.Of<ITenantAccessor>(), NullLogger<PebbleController>.Instance)
+            Mock.Of<ITenantAppearanceReader>(), Mock.Of<ITenantAccessor>(), NullLogger<PebbleController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

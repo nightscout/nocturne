@@ -26,19 +26,23 @@ public class NotificationsController : ControllerBase
 {
     private readonly INotificationV2Service _notificationService;
     private readonly ILogger<NotificationsController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="NotificationsController"/>.
     /// </summary>
     /// <param name="notificationService">Service handling V2 notification operations.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">Clock for stamps and response headers.</param>
     public NotificationsController(
         INotificationV2Service notificationService,
-        ILogger<NotificationsController> logger
+        ILogger<NotificationsController> logger,
+        TimeProvider timeProvider
     )
     {
         _notificationService = notificationService;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -155,7 +159,7 @@ public class NotificationsController : ControllerBase
                     {
                         Success = false,
                         Message = "Request body is required",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Timestamp = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                     }
                 );
             }
@@ -194,7 +198,7 @@ public class NotificationsController : ControllerBase
                 {
                     Success = false,
                     Message = "Internal server error processing notification",
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Timestamp = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                 }
             );
         }
@@ -247,7 +251,7 @@ public class NotificationsController : ControllerBase
                 new
                 {
                     error = "Internal server error retrieving notification status",
-                    timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    timestamp = _timeProvider.GetUtcNow().ToString("O"),
                 }
             );
         }

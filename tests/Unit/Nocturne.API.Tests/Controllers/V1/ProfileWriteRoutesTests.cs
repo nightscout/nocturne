@@ -179,7 +179,8 @@ public class ProfileWriteRoutesTests
         var httpContext = new DefaultHttpContext();
         httpContext.Request.QueryString = new QueryString(queryString);
         return new ProfileController(
-            Mock.Of<IProfileProjectionService>(), service, NullLogger<ProfileController>.Instance)
+            Mock.Of<IProfileProjectionService>(), service, NullLogger<ProfileController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

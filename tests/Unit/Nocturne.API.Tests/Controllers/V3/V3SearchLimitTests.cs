@@ -49,7 +49,8 @@ public class V3SearchLimitTests
             Mock.Of<IDocumentProcessingService>(),
             entries.Object,
             Mock.Of<ICanonicalAlertEvaluator>(),
-            NullLogger<EntriesController>.Instance)
+            NullLogger<EntriesController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };
@@ -74,7 +75,8 @@ public class V3SearchLimitTests
         var controller = new TreatmentsController(
             Mock.Of<IDocumentProcessingService>(),
             treatments.Object,
-            NullLogger<TreatmentsController>.Instance)
+            NullLogger<TreatmentsController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };
@@ -98,7 +100,8 @@ public class V3SearchLimitTests
             profiles.Object,
             Mock.Of<IProfileWriteService>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<ProfileController>.Instance)
+            NullLogger<ProfileController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };
@@ -124,7 +127,8 @@ public class V3SearchLimitTests
         var controller = new SettingsController(
             settings.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<SettingsController>.Instance)
+            NullLogger<SettingsController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };
@@ -152,7 +156,8 @@ public class V3SearchLimitTests
         var controller = new FoodController(
             repository.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<FoodController>.Instance)
+            NullLogger<FoodController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };

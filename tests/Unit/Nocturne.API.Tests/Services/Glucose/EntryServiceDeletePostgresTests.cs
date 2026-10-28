@@ -138,7 +138,8 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         };
 
         var v3Controller = new V3EntriesController(
-            documents.Object, service, Mock.Of<ICanonicalAlertEvaluator>(), NullLogger<V3EntriesController>.Instance)
+            documents.Object, service, Mock.Of<ICanonicalAlertEvaluator>(), NullLogger<V3EntriesController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

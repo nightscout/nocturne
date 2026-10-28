@@ -21,11 +21,17 @@ public class StatusController : ControllerBase
 {
     private readonly IStatusService _statusService;
     private readonly ILogger<StatusController> _logger;
+    private readonly TimeProvider _timeProvider;
 
-    public StatusController(IStatusService statusService, ILogger<StatusController> logger)
+    public StatusController(
+        IStatusService statusService,
+        ILogger<StatusController> logger,
+        TimeProvider timeProvider
+    )
     {
         _statusService = statusService;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -70,7 +76,7 @@ public class StatusController : ControllerBase
                         Name = "Nocturne",
                         Version = AppVersion.Current,
                         ApiVersion = ApplicationConstants.NightscoutApi.V3Version,
-                        ServerTime = DateTime.UtcNow,
+                        ServerTime = _timeProvider.GetUtcNow().UtcDateTime,
                         Extended = new ExtendedStatusInfo
                         {
                             Authorization = new AuthorizationInfo

@@ -35,7 +35,8 @@ public class EntriesHistoryCursorTests
             Mock.Of<IDocumentProcessingService>(),
             entryService.Object,
             Mock.Of<ICanonicalAlertEvaluator>(),
-            NullLogger<EntriesController>.Instance)
+            NullLogger<EntriesController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

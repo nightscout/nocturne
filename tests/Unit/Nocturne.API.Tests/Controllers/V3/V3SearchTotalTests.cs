@@ -55,7 +55,8 @@ public class V3SearchTotalTests
             Mock.Of<IWriteSideEffects>(),
             Mock.Of<IDataEventSink<DeviceStatus>>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<DeviceStatusController>.Instance)
+            NullLogger<DeviceStatusController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context("?limit=1"),
         };
@@ -79,7 +80,8 @@ public class V3SearchTotalTests
             profiles.Object,
             Mock.Of<IProfileWriteService>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<ProfileController>.Instance)
+            NullLogger<ProfileController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context("?limit=1"),
         };
@@ -101,7 +103,8 @@ public class V3SearchTotalTests
         var controller = new SettingsController(
             settings.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<SettingsController>.Instance)
+            NullLogger<SettingsController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context("?limit=1"),
         };
@@ -126,7 +129,8 @@ public class V3SearchTotalTests
         var controller = new TreatmentsController(
             Mock.Of<IDocumentProcessingService>(),
             treatments.Object,
-            NullLogger<TreatmentsController>.Instance)
+            NullLogger<TreatmentsController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(queryString),
         };

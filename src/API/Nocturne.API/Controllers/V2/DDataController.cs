@@ -35,6 +35,7 @@ public class DDataController : ControllerBase
     private readonly IDDataService _ddataService;
     private readonly IActivityDecomposer _activityDecomposer;
     private readonly ILogger<DDataController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="DDataController"/>.
@@ -42,15 +43,18 @@ public class DDataController : ControllerBase
     /// <param name="ddataService">Service for assembling the combined DData response.</param>
     /// <param name="activityDecomposer">Classifier mapping each activity to its required read scope.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">Clock for stamps and response headers.</param>
     public DDataController(
         IDDataService ddataService,
         IActivityDecomposer activityDecomposer,
-        ILogger<DDataController> logger
+        ILogger<DDataController> logger,
+        TimeProvider timeProvider
     )
     {
         _ddataService = ddataService;
         _activityDecomposer = activityDecomposer;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -71,7 +75,7 @@ public class DDataController : ControllerBase
     {
         try
         {
-            var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var currentTime = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
             var result = await _ddataService.GetDDataWithRecentStatusesAsync(
                 currentTime,
                 cancellationToken
@@ -168,12 +172,12 @@ public class DDataController : ControllerBase
         return ddata;
     }
 
-    private static bool TryResolveTimestamp(string? timestamp, out long unixTimestamp, out object? error)
+    private bool TryResolveTimestamp(string? timestamp, out long unixTimestamp, out object? error)
     {
         error = null;
         if (string.IsNullOrEmpty(timestamp))
         {
-            unixTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            unixTimestamp = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
             return true;
         }
 
@@ -182,7 +186,7 @@ public class DDataController : ControllerBase
             if (
                 unixTimestamp < 0
                 || unixTimestamp
-                    > DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + (365L * 24 * 60 * 60 * 1000)
+                    > _timeProvider.GetUtcNow().ToUnixTimeMilliseconds() + (365L * 24 * 60 * 60 * 1000)
             )
             {
                 error = new { error = "Timestamp out of valid range" };

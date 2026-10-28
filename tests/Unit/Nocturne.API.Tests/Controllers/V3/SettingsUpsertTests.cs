@@ -41,7 +41,8 @@ public class SettingsUpsertTests : IDisposable
         _controller = new SettingsController(
             new SettingsRepository(_context.AsFactory()),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<SettingsController>.Instance)
+            NullLogger<SettingsController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

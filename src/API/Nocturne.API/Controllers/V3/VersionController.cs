@@ -22,11 +22,17 @@ public class VersionController : ControllerBase
 {
     private readonly IStatusService _statusService;
     private readonly ILogger<VersionController> _logger;
+    private readonly TimeProvider _timeProvider;
 
-    public VersionController(IStatusService statusService, ILogger<VersionController> logger)
+    public VersionController(
+        IStatusService statusService,
+        ILogger<VersionController> logger,
+        TimeProvider timeProvider
+    )
     {
         _statusService = statusService;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -79,7 +85,7 @@ public class VersionController : ControllerBase
                     {
                         Version = AppVersion.Current,
                         ApiVersion = ApplicationConstants.NightscoutApi.V3Version,
-                        SrvDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        SrvDate = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
                         Storage = new StorageInfo { Version = "unknown" },
                     },
                 }

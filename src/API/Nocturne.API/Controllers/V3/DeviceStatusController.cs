@@ -46,9 +46,10 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         IWriteSideEffects sideEffects,
         IDataEventSink<DeviceStatus> events,
         IDocumentProcessingService documentProcessingService,
-        ILogger<DeviceStatusController> logger
+        ILogger<DeviceStatusController> logger,
+        TimeProvider timeProvider
     )
-        : base(documentProcessingService, logger)
+        : base(documentProcessingService, logger, timeProvider)
     {
         _projection = projection;
         _decomposer = decomposer;
@@ -353,7 +354,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
         if (string.IsNullOrEmpty(deviceStatus.CreatedAt))
         {
-            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            deviceStatus.CreatedAt = _timeProvider.GetUtcNow().UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
         }
 
         // The path's wire form may only resolve to the stored id, which is what the stored
@@ -494,7 +495,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         // Ensure DeviceStatus has required properties for V3 compatibility
         if (string.IsNullOrEmpty(deviceStatus.CreatedAt))
         {
-            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            deviceStatus.CreatedAt = _timeProvider.GetUtcNow().UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
         }
     }
 

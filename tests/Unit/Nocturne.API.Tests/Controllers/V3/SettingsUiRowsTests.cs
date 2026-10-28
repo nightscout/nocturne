@@ -49,7 +49,8 @@ public class SettingsUiRowsTests : IDisposable
         _controller = new SettingsController(
             _repository,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<SettingsController>.Instance)
+            NullLogger<SettingsController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

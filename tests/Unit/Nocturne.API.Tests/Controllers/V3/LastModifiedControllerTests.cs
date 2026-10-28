@@ -23,7 +23,7 @@ public class LastModifiedControllerTests
 {
     private static LastModifiedController CreateController(Mock<IStatusService> statusService)
     {
-        return new LastModifiedController(statusService.Object, NullLogger<LastModifiedController>.Instance)
+        return new LastModifiedController(statusService.Object, NullLogger<LastModifiedController>.Instance, TimeProvider.System)
         {
             ControllerContext = new ControllerContext
             {

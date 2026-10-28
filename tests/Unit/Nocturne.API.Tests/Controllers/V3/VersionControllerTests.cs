@@ -22,7 +22,7 @@ public class VersionControllerTests
 {
     private static VersionController CreateController(Mock<IStatusService> statusService)
     {
-        return new VersionController(statusService.Object, NullLogger<VersionController>.Instance)
+        return new VersionController(statusService.Object, NullLogger<VersionController>.Instance, TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

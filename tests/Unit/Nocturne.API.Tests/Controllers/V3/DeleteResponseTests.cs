@@ -35,7 +35,7 @@ public class DeleteResponseTests
         var foods = new Mock<IFoodRepository>();
         foods.Setup(f => f.DeleteFoodAsync("abc", It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var controller = WithContext(
-            new FoodController(foods.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<FoodController>.Instance));
+            new FoodController(foods.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<FoodController>.Instance, TimeProvider.System));
 
         AssertStatusEnvelope(await controller.DeleteFood("abc"));
     }
@@ -50,7 +50,8 @@ public class DeleteResponseTests
                 Mock.Of<IProfileProjectionService>(),
                 writes.Object,
                 Mock.Of<IDocumentProcessingService>(),
-                NullLogger<ProfileController>.Instance));
+                NullLogger<ProfileController>.Instance,
+                TimeProvider.System));
 
         AssertStatusEnvelope(await controller.DeleteProfile("abc"));
     }
@@ -61,7 +62,7 @@ public class DeleteResponseTests
         var settings = new Mock<ISettingsRepository>();
         settings.Setup(s => s.DeleteSettingsAsync("abc", It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var controller = WithContext(
-            new SettingsController(settings.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<SettingsController>.Instance));
+            new SettingsController(settings.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<SettingsController>.Instance, TimeProvider.System));
 
         AssertStatusEnvelope(await controller.DeleteSettings("abc"));
     }

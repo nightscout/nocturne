@@ -24,7 +24,8 @@ public class TreatmentsHistoryHeaderTests
         return new TreatmentsController(
             Mock.Of<IDocumentProcessingService>(),
             treatmentService.Object,
-            NullLogger<TreatmentsController>.Instance)
+            NullLogger<TreatmentsController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext
             {

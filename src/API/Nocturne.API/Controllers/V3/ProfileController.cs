@@ -32,9 +32,10 @@ public class ProfileController : BaseV3Controller<Profile>
         IProfileProjectionService projectionService,
         IProfileWriteService writeService,
         IDocumentProcessingService documentProcessingService,
-        ILogger<ProfileController> logger
+        ILogger<ProfileController> logger,
+        TimeProvider timeProvider
     )
-        : base(documentProcessingService, logger)
+        : base(documentProcessingService, logger, timeProvider)
     {
         _projectionService = projectionService;
         _writeService = writeService;
@@ -380,7 +381,7 @@ public class ProfileController : BaseV3Controller<Profile>
         // Ensure profile has required properties for V3 compatibility
         if (string.IsNullOrEmpty(profile.CreatedAt))
         {
-            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            profile.CreatedAt = _timeProvider.GetUtcNow().UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
         }
 
         // Validate profile structure

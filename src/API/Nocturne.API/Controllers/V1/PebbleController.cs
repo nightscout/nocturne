@@ -41,6 +41,7 @@ public class PebbleController : ControllerBase
     private readonly ITenantAppearanceReader _appearanceReader;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<PebbleController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Largest <c>count</c> honoured: 24 hours of readings at 5 minute intervals.
@@ -58,13 +59,15 @@ public class PebbleController : ControllerBase
     /// <param name="appearanceReader">Reader of the owner's display preferences, for the default units.</param>
     /// <param name="tenantAccessor">Accessor for the current tenant.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">Clock for stamps and response headers.</param>
     public PebbleController(
         IEntryService entryService,
         IIobCobReader iobCobReader,
         IUploaderSnapshotRepository uploaderSnapshots,
         ITenantAppearanceReader appearanceReader,
         ITenantAccessor tenantAccessor,
-        ILogger<PebbleController> logger
+        ILogger<PebbleController> logger,
+        TimeProvider timeProvider
     )
     {
         _entryService = entryService;
@@ -73,6 +76,7 @@ public class PebbleController : ControllerBase
         _appearanceReader = appearanceReader;
         _tenantAccessor = tenantAccessor;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -161,7 +165,7 @@ public class PebbleController : ControllerBase
             {
                 Status = new List<PebbleStatus>
                 {
-                    new() { Now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }
+                    new() { Now = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds() }
                 },
                 Bgs = bgs,
                 Cals = calibrations
@@ -176,7 +180,7 @@ public class PebbleController : ControllerBase
             {
                 Status = new List<PebbleStatus>
                 {
-                    new() { Now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }
+                    new() { Now = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds() }
                 },
                 Bgs = new List<PebbleBg>(),
                 Cals = new List<PebbleCal>()
@@ -189,7 +193,7 @@ public class PebbleController : ControllerBase
         try
         {
             return await _iobCobReader.ReadTotalAsync(
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), live: true, cancellationToken);
+                _timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), live: true, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

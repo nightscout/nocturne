@@ -63,7 +63,8 @@ public class DeviceStatusCreateIdentityTests
         Mock.Of<IWriteSideEffects>(),
         Mock.Of<IDataEventSink<DeviceStatus>>(),
         Mock.Of<IDocumentProcessingService>(),
-        NullLogger<V3DeviceStatusController>.Instance));
+        NullLogger<V3DeviceStatusController>.Instance,
+        TimeProvider.System));
 
     [Fact]
     public async Task V1_create_without_an_id_stores_each_status_under_its_own_object_id()

@@ -55,7 +55,8 @@ public class V3CacheControlTests
             projection.Object,
             Mock.Of<IProfileWriteService>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<ProfileController>.Instance)
+            NullLogger<ProfileController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(),
         };
@@ -79,7 +80,8 @@ public class V3CacheControlTests
         var controller = new FoodController(
             foods.Object,
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<FoodController>.Instance)
+            NullLogger<FoodController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(),
         };
@@ -102,7 +104,8 @@ public class V3CacheControlTests
             Mock.Of<IDocumentProcessingService>(),
             entries.Object,
             Mock.Of<ICanonicalAlertEvaluator>(),
-            NullLogger<EntriesController>.Instance)
+            NullLogger<EntriesController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(),
         };
@@ -124,7 +127,8 @@ public class V3CacheControlTests
         var controller = new TreatmentsController(
             Mock.Of<IDocumentProcessingService>(),
             treatments.Object,
-            NullLogger<TreatmentsController>.Instance)
+            NullLogger<TreatmentsController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = Context(),
         };

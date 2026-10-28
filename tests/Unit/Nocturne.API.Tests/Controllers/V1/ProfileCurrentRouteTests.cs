@@ -44,7 +44,7 @@ public class ProfileCurrentRouteTests
     }
 
     private static ProfileController NewController(IProfileProjectionService projection) =>
-        new(projection, Mock.Of<IProfileWriteService>(), NullLogger<ProfileController>.Instance)
+        new(projection, Mock.Of<IProfileWriteService>(), NullLogger<ProfileController>.Instance, TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

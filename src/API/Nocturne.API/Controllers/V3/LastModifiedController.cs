@@ -19,14 +19,17 @@ public class LastModifiedController : ControllerBase
 {
     private readonly IStatusService _statusService;
     private readonly ILogger<LastModifiedController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public LastModifiedController(
         IStatusService statusService,
-        ILogger<LastModifiedController> logger
+        ILogger<LastModifiedController> logger,
+        TimeProvider timeProvider
     )
     {
         _statusService = statusService;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -63,7 +66,7 @@ public class LastModifiedController : ControllerBase
 
             // Return the envelope even on error to maintain compatibility with clients
             // (e.g. AAPS) that depend on this endpoint always returning the V3 shape.
-            return Ok(ToV3Envelope(new LastModifiedResponse { ServerTime = DateTime.UtcNow }));
+            return Ok(ToV3Envelope(new LastModifiedResponse { ServerTime = _timeProvider.GetUtcNow().UtcDateTime }));
         }
     }
 

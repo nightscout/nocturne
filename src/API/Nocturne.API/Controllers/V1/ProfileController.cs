@@ -28,6 +28,7 @@ public class ProfileController : ControllerBase
     private readonly IProfileProjectionService _projectionService;
     private readonly IProfileWriteService _writeService;
     private readonly ILogger<ProfileController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ProfileController"/>.
@@ -35,15 +36,18 @@ public class ProfileController : ControllerBase
     /// <param name="projectionService">Service for reading legacy profile projections from V4 data.</param>
     /// <param name="writeService">Service for profile write operations.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="timeProvider">Clock for stamps and response headers.</param>
     public ProfileController(
         IProfileProjectionService projectionService,
         IProfileWriteService writeService,
-        ILogger<ProfileController> logger
+        ILogger<ProfileController> logger,
+        TimeProvider timeProvider
     )
     {
         _projectionService = projectionService;
         _writeService = writeService;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -88,7 +92,7 @@ public class ProfileController : ControllerBase
             }
             else
             {
-                lastModified = DateTimeOffset.UtcNow.AddDays(-1); // Default fallback
+                lastModified = _timeProvider.GetUtcNow().AddDays(-1); // Default fallback
             }
 
             Response.Headers.LastModified = lastModified.ToString("R");
@@ -290,10 +294,10 @@ public class ProfileController : ControllerBase
     /// Gives a document posted without <c>created_at</c> the time it arrived, as Nightscout's create and
     /// save do, so one with no <c>startDate</c> or <c>mills</c> either starts then rather than at the epoch.
     /// </summary>
-    private static void StampCreatedAt(Profile profile)
+    private void StampCreatedAt(Profile profile)
     {
         if (string.IsNullOrEmpty(profile.CreatedAt))
-            profile.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            profile.CreatedAt = _timeProvider.GetUtcNow().UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
     }
 
     /// <summary>

@@ -31,7 +31,7 @@ public class V3FoodProfileIdentifierTests
     private readonly Mock<IProfileProjectionService> _profiles = new();
 
     private FoodController FoodController() =>
-        new(_foods.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<FoodController>.Instance)
+        new(_foods.Object, Mock.Of<IDocumentProcessingService>(), NullLogger<FoodController>.Instance, TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
@@ -41,7 +41,8 @@ public class V3FoodProfileIdentifierTests
             _profiles.Object,
             Mock.Of<IProfileWriteService>(),
             Mock.Of<IDocumentProcessingService>(),
-            NullLogger<ProfileController>.Instance)
+            NullLogger<ProfileController>.Instance,
+            TimeProvider.System)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };

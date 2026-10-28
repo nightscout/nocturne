@@ -35,9 +35,10 @@ public class EntriesController : BaseV3Controller<Entry>
         IDocumentProcessingService documentProcessingService,
         IEntryService entryService,
         ICanonicalAlertEvaluator alertEvaluator,
-        ILogger<EntriesController> logger
+        ILogger<EntriesController> logger,
+        TimeProvider timeProvider
     )
-        : base(documentProcessingService, logger)
+        : base(documentProcessingService, logger, timeProvider)
     {
         _entryService = entryService;
         _alertEvaluator = alertEvaluator;
@@ -524,7 +525,7 @@ public class EntriesController : BaseV3Controller<Entry>
     private DateTimeOffset GetLastModified(List<Entry> entries)
     {
         if (entries.Count == 0)
-            return DateTimeOffset.UtcNow;
+            return _timeProvider.GetUtcNow();
 
         // Use the most recent entry's date as last modified
         var latestMills = entries.Max(e => e.Mills);

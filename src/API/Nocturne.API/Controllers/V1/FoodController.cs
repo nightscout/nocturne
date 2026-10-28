@@ -25,16 +25,23 @@ public class FoodController : ControllerBase
 {
     private readonly IFoodRepository _foodRepository;
     private readonly ILogger<FoodController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of <see cref="FoodController"/>.
     /// </summary>
     /// <param name="foodRepository">Repository for food records.</param>
     /// <param name="logger">Logger instance.</param>
-    public FoodController(IFoodRepository foodRepository, ILogger<FoodController> logger)
+    /// <param name="timeProvider">Clock for stamps and response headers.</param>
+    public FoodController(
+        IFoodRepository foodRepository,
+        ILogger<FoodController> logger,
+        TimeProvider timeProvider
+    )
     {
         _foodRepository = foodRepository;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -70,7 +77,7 @@ public class FoodController : ControllerBase
 
             // Set response headers for caching
             Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+            Response.Headers["Last-Modified"] = _timeProvider.GetUtcNow().ToString("R");
 
             return Ok(foodList.ToArray());
         }
@@ -112,7 +119,7 @@ public class FoodController : ControllerBase
 
             // Set response headers for caching
             Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+            Response.Headers["Last-Modified"] = _timeProvider.GetUtcNow().ToString("R");
 
             return Ok(foodArray);
         }
@@ -162,7 +169,7 @@ public class FoodController : ControllerBase
 
             // Set response headers for caching
             Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+            Response.Headers["Last-Modified"] = _timeProvider.GetUtcNow().ToString("R");
 
             return Ok(foodArray);
         }
@@ -216,7 +223,7 @@ public class FoodController : ControllerBase
 
             // Set response headers for caching
             Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+            Response.Headers["Last-Modified"] = _timeProvider.GetUtcNow().ToString("R");
 
             return Ok(food);
         }
@@ -300,7 +307,7 @@ public class FoodController : ControllerBase
                 // Set created_at timestamp for parity with Nightscout
                 if (string.IsNullOrWhiteSpace(food.CreatedAt))
                 {
-                    food.CreatedAt = DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                    food.CreatedAt = _timeProvider.GetUtcNow().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
                 }
             }
 

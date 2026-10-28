@@ -58,7 +58,8 @@ public class PebbleControllerTests
             _uploaders.Object,
             _appearance.Object,
             tenantAccessor.Object,
-            Mock.Of<ILogger<PebbleController>>()
+            Mock.Of<ILogger<PebbleController>>(),
+            TimeProvider.System
         )
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
