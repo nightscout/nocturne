@@ -29,7 +29,7 @@ public class FoodHistoryTests : IDisposable
     public FoodHistoryTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-            TenantId, "test", new MutationAuditInterceptor());
+            TenantId, "test", new MutationAuditInterceptor(TimeProvider.System));
         _context = _db.CreateContext();
         _context.AttributedTo(new UserAuditContext());
         _foods = new FoodRepository(_context.AsFactory(), NullLogger<FoodRepository>.Instance);

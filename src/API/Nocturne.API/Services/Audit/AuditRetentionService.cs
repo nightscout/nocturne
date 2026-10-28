@@ -15,6 +15,7 @@ namespace Nocturne.API.Services.Audit;
 public class AuditRetentionService(
     INocturneDbContextFactory contextFactory,
     IConfiguration configuration,
+    TimeProvider time,
     ILogger<AuditRetentionService> logger) : BackgroundService
 {
     private static readonly TimeSpan InitialDelay = TimeSpan.FromMinutes(5);
@@ -143,7 +144,7 @@ public class AuditRetentionService(
     /// <returns>Total number of records deleted.</returns>
     internal virtual Task<int> PurgeBatchedAsync(
         Guid tenantId, string table, TimeSpan minAge, CancellationToken ct) =>
-        contextFactory.PurgeOlderThanAsync(tenantId, table, AgeColumn, minAge, BatchSize, ct);
+        contextFactory.PurgeOlderThanAsync(tenantId, table, AgeColumn, minAge, time, BatchSize, ct);
 
     /// <summary>Age column on both audit tables.</summary>
     internal const string AgeColumn = "created_at";

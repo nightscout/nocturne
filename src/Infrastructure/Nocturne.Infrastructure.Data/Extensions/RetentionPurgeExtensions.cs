@@ -55,6 +55,7 @@ public static partial class RetentionPurgeExtensions
     /// <param name="table">Table to purge. Must be a bare lowercase SQL identifier.</param>
     /// <param name="timestampColumn">Age column. Must be a bare lowercase SQL identifier.</param>
     /// <param name="minAge">Retention window. Rows strictly older than this are deleted.</param>
+    /// <param name="time">The clock the window is measured back from.</param>
     /// <param name="batchSize">Rows per statement. Must be at least 1.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Total number of rows deleted.</returns>
@@ -68,6 +69,7 @@ public static partial class RetentionPurgeExtensions
         string table,
         string timestampColumn,
         TimeSpan minAge,
+        TimeProvider time,
         int batchSize = DefaultBatchSize,
         CancellationToken ct = default)
     {
@@ -81,7 +83,7 @@ public static partial class RetentionPurgeExtensions
         // A LIMIT 0 deletes nothing, so the sweep would never make progress.
         ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
 
-        var cutoff = DateTime.UtcNow - minAge;
+        var cutoff = time.GetUtcNow().UtcDateTime - minAge;
 
         // Values are bound as parameters; only the validated identifiers and the batch size are
         // interpolated. The ctid sub-select keeps each statement to a bounded slice of the table.

@@ -13,13 +13,15 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class SystemEventRepository : ISystemEventRepository
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Initializes a new instance of the SystemEventRepository class
     /// </summary>
-    public SystemEventRepository(INocturneDbContextFactory contexts)
+    public SystemEventRepository(INocturneDbContextFactory contexts, TimeProvider time)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _time = time;
     }
 
     /// <summary>
@@ -156,7 +158,7 @@ public class SystemEventRepository : ISystemEventRepository
             }
             else
             {
-                entity = SystemEventMapper.ToEntity(systemEvent);
+                entity = SystemEventMapper.ToEntity(systemEvent, _time.GetUtcNow().UtcDateTime);
                 db.SystemEvents.Add(entity);
                 if (hasOriginalId)
                     existingByOriginalId[systemEvent.OriginalId!] = entity;

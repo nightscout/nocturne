@@ -87,8 +87,8 @@ public sealed class CrossTenantRecordIdTests(CrossTenantRecordIdFixture fixture)
     [MemberData(nameof(SharedIds))]
     public async Task Both_tenants_keep_a_system_event_with_the_same_id(string id)
     {
-        await new SystemEventRepository(Tenant(tenantA).AsFactory()).BulkUpsertAsync([Event(id, "a")]);
-        await new SystemEventRepository(Tenant(tenantB).AsFactory()).BulkUpsertAsync([Event(id, "b")]);
+        await new SystemEventRepository(Tenant(tenantA).AsFactory(), TimeProvider.System).BulkUpsertAsync([Event(id, "a")]);
+        await new SystemEventRepository(Tenant(tenantB).AsFactory(), TimeProvider.System).BulkUpsertAsync([Event(id, "b")]);
 
         Assert.Equal("a", (await Tenant(tenantA).SystemEvents.SingleAsync()).Code);
         Assert.Equal("b", (await Tenant(tenantB).SystemEvents.SingleAsync()).Code);
@@ -141,8 +141,8 @@ public sealed class CrossTenantRecordIdTests(CrossTenantRecordIdFixture fixture)
     [MemberData(nameof(SharedIds))]
     public async Task Both_tenants_keep_a_sleep_session_and_its_stages_with_the_same_id(string id)
     {
-        await new SleepSessionRepository(Tenant(tenantA).AsFactory()).UpsertSessionAsync(Sleep(id, SleepStageType.Deep));
-        await new SleepSessionRepository(Tenant(tenantB).AsFactory()).UpsertSessionAsync(Sleep(id, SleepStageType.Rem));
+        await new SleepSessionRepository(Tenant(tenantA).AsFactory(), TimeProvider.System).UpsertSessionAsync(Sleep(id, SleepStageType.Deep));
+        await new SleepSessionRepository(Tenant(tenantB).AsFactory(), TimeProvider.System).UpsertSessionAsync(Sleep(id, SleepStageType.Rem));
 
         foreach (var (tenant, stage) in new[] { (tenantA, SleepStageType.Deep), (tenantB, SleepStageType.Rem) })
         {
@@ -206,7 +206,7 @@ public sealed class CrossTenantRecordIdTests(CrossTenantRecordIdFixture fixture)
 
     private StateSpanRepository StateSpans(Guid tenant) => new(
         Tenant(tenant).AsFactory(), Mock.Of<IDeduplicationService>(), Mock.Of<IAuditContext>(),
-        NullLogger<StateSpanRepository>.Instance);
+        NullLogger<StateSpanRepository>.Instance, TimeProvider.System);
 
     private BodyWeightService BodyWeights(Guid tenant) => new(
         Tenant(tenant).AsFactory(), Processing<BodyWeight>(), Mock.Of<ISignalRBroadcastService>(),

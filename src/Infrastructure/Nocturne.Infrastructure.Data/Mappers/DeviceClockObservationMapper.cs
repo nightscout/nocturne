@@ -22,7 +22,7 @@ public static class DeviceClockObservationMapper
         AppliedAtUtc = entity.AppliedAt is { } applied ? DateTime.SpecifyKind(applied, DateTimeKind.Utc) : null,
     };
 
-    public static DeviceClockObservationEntity ToEntity(DeviceClockObservation model, Guid tenantId) => new()
+    public static DeviceClockObservationEntity ToEntity(DeviceClockObservation model, Guid tenantId, DateTime now) => new()
     {
         Id = Guid.CreateVersion7(),
         TenantId = tenantId,
@@ -34,6 +34,6 @@ public static class DeviceClockObservationMapper
         SampleCount = model.SampleCount,
         CoversFrom = model.CoversFromUtc is { } covers ? DateTime.SpecifyKind(covers, DateTimeKind.Utc) : null,
         DeclaredTimezone = model.DeclaredTimezone,
-        CreatedAt = DateTime.UtcNow,
+        CreatedAt = now,
     };
 }

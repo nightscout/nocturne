@@ -12,7 +12,7 @@ public static class SleepSessionMapper
     /// <summary>
     /// Convert domain model to database entity.
     /// </summary>
-    public static SleepSessionEntity ToEntity(SleepSession session, Guid tenantId)
+    public static SleepSessionEntity ToEntity(SleepSession session, Guid tenantId, DateTime now)
     {
         var entityId = MapperHelpers.ParseIdToGuid(session.Id);
 
@@ -48,8 +48,8 @@ public static class SleepSessionMapper
             MetadataJson = session.Metadata != null
                 ? JsonSerializer.Serialize(session.Metadata)
                 : null,
-            CreatedAt = session.CreatedAt ?? DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
+            CreatedAt = session.CreatedAt ?? now,
+            UpdatedAt = now,
         };
 
         if (session.Stages is { Count: > 0 })

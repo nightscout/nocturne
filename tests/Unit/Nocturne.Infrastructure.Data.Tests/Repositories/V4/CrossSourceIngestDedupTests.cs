@@ -45,14 +45,14 @@ public class CrossSourceIngestDedupTests : IDisposable
         var dedupContext = _db.CreateContext();
         dedupContext.TenantId = TestTenantId;
         _dedup = new DeduplicationService(
-            dedupContext.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+            dedupContext.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance, TimeProvider.System);
 
         var factory = new TestNocturneDbContextFactory(_context);
         var audit = new Mock<IAuditContext>().Object;
         _boluses = new BolusRepository(factory, _dedup, audit, NullLogger<BolusRepository>.Instance);
         _carbs = new CarbIntakeRepository(factory, _dedup, audit, NullLogger<CarbIntakeRepository>.Instance);
-        _glucose = new SensorGlucoseRepository(factory, _dedup, audit, NullLogger<SensorGlucoseRepository>.Instance);
-        _tempBasals = new TempBasalRepository(factory, _dedup, audit, NullLogger<TempBasalRepository>.Instance);
+        _glucose = new SensorGlucoseRepository(factory, _dedup, audit, NullLogger<SensorGlucoseRepository>.Instance, TimeProvider.System);
+        _tempBasals = new TempBasalRepository(factory, _dedup, audit, NullLogger<TempBasalRepository>.Instance, TimeProvider.System);
         _notes = new NoteRepository(factory, _dedup, audit, NullLogger<NoteRepository>.Instance);
     }
 

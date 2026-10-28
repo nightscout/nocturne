@@ -21,7 +21,7 @@ public class PatientInsulinRepositoryTests : IDisposable
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
         var factory = new TestNocturneDbContextFactory(_context);
         _repository = new PatientInsulinRepository(
-            factory, NullLogger<PatientInsulinRepository>.Instance);
+            factory, NullLogger<PatientInsulinRepository>.Instance, TimeProvider.System);
     }
 
     public void Dispose()

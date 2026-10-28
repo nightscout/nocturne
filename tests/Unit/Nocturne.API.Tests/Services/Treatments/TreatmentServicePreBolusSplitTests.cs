@@ -67,7 +67,7 @@ public class TreatmentServicePreBolusSplitTests : IDisposable
         var noteRepo = new NoteRepository(factory, dedup, caller, NullLogger<NoteRepository>.Instance);
         var deviceEventRepo = new DeviceEventRepository(factory, dedup, caller, NullLogger<DeviceEventRepository>.Instance);
         var bolusCalcRepo = new BolusCalculationRepository(factory, dedup, caller, NullLogger<BolusCalculationRepository>.Instance);
-        var tempBasalRepo = new TempBasalRepository(factory, dedup, caller, NullLogger<TempBasalRepository>.Instance);
+        var tempBasalRepo = new TempBasalRepository(factory, dedup, caller, NullLogger<TempBasalRepository>.Instance, TimeProvider.System);
 
         var foods = new Mock<ITreatmentFoodService>();
         foods

@@ -17,18 +17,22 @@ public class PatientDeviceRepository : IPatientDeviceRepository
 {
     private readonly INocturneDbContextFactory _contextFactory;
     private readonly ILogger<PatientDeviceRepository> _logger;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PatientDeviceRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="time">The clock that stamps a soft delete.</param>
     public PatientDeviceRepository(
         INocturneDbContextFactory contextFactory,
-        ILogger<PatientDeviceRepository> logger)
+        ILogger<PatientDeviceRepository> logger,
+        TimeProvider time)
     {
         _contextFactory = contextFactory;
         _logger = logger;
+        _time = time;
     }
 
     /// <summary>
@@ -164,7 +168,7 @@ public class PatientDeviceRepository : IPatientDeviceRepository
         var entity = await ctx.PatientDevices.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"PatientDevice {id} not found");
 
-        entity.DeletedAt = DateTime.UtcNow;
+        entity.DeletedAt = _time.GetUtcNow().UtcDateTime;
         await ctx.SaveChangesAsync(ct);
     }
 

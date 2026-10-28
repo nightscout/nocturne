@@ -37,7 +37,7 @@ public static class CredentialAtRestStartupTask
         var notifier = services.GetRequiredService<IShareLinkRotatedNotifier>();
         var tokenGenerator = services.GetRequiredService<IShareTokenGenerator>();
         var rotatedTenantIds = await CredentialAtRestInitializationExtensions.RotatePlaintextShareTokensAsync(
-            dataSource, tokenGenerator.Generate, logger, cancellationToken);
+            dataSource, tokenGenerator.Generate, services.GetRequiredService<TimeProvider>(), logger, cancellationToken);
 
         foreach (var tenantId in rotatedTenantIds)
         {

@@ -254,7 +254,7 @@ public class GoogleHealthTests : IDisposable
         var factory = new Mock<INocturneDbContextFactory>();
         factory.Setup(value => value.CreateAsync(It.IsAny<CancellationToken>()))
             .Returns(() => ValueTask.FromResult(new NocturneDbContext(options) { TenantId = tenantId }));
-        var repository = new SleepSessionRepository(factory.Object);
+        var repository = new SleepSessionRepository(factory.Object, TimeProvider.System);
         var sleepService = new Mock<ISleepService>();
         sleepService.Setup(value => value.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
             .Returns<SleepSession, CancellationToken>(repository.UpsertSessionAsync);
@@ -610,7 +610,7 @@ public class GoogleHealthTests : IDisposable
         var factory = new Mock<INocturneDbContextFactory>();
         factory.Setup(value => value.CreateAsync(It.IsAny<CancellationToken>()))
             .Returns(() => ValueTask.FromResult(new NocturneDbContext(options) { TenantId = tenantId }));
-        var repository = new SleepSessionRepository(factory.Object);
+        var repository = new SleepSessionRepository(factory.Object, TimeProvider.System);
         var sleepService = new Mock<ISleepService>();
         sleepService.Setup(value => value.UpsertSessionAsync(It.IsAny<SleepSession>(), It.IsAny<CancellationToken>()))
             .Returns<SleepSession, CancellationToken>(repository.UpsertSessionAsync);

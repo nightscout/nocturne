@@ -17,18 +17,22 @@ public class PatientInsulinRepository : IPatientInsulinRepository
 {
     private readonly INocturneDbContextFactory _contextFactory;
     private readonly ILogger<PatientInsulinRepository> _logger;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PatientInsulinRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="time">The clock that stamps a soft delete and a change of primary.</param>
     public PatientInsulinRepository(
         INocturneDbContextFactory contextFactory,
-        ILogger<PatientInsulinRepository> logger)
+        ILogger<PatientInsulinRepository> logger,
+        TimeProvider time)
     {
         _contextFactory = contextFactory;
         _logger = logger;
+        _time = time;
     }
 
     /// <summary>
@@ -115,7 +119,7 @@ public class PatientInsulinRepository : IPatientInsulinRepository
         var entity = await ctx.PatientInsulins.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"PatientInsulin {id} not found");
 
-        entity.DeletedAt = DateTime.UtcNow;
+        entity.DeletedAt = _time.GetUtcNow().UtcDateTime;
         await ctx.SaveChangesAsync(ct);
     }
 
@@ -204,14 +208,15 @@ public class PatientInsulinRepository : IPatientInsulinRepository
             .Where(e => e.Id != insulinId && e.IsPrimary && rolesToClear.Contains(e.Role))
             .ToListAsync(ct);
 
+        var now = _time.GetUtcNow().UtcDateTime;
         foreach (var entity in conflicting)
         {
             entity.IsPrimary = false;
-            entity.SysUpdatedAt = DateTime.UtcNow;
+            entity.SysUpdatedAt = now;
         }
 
         target.IsPrimary = true;
-        target.SysUpdatedAt = DateTime.UtcNow;
+        target.SysUpdatedAt = now;
 
         await ctx.SaveChangesAsync(ct);
     }

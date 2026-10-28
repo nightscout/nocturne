@@ -18,17 +18,17 @@ public class TrackerRepository : ITrackerRepository
     private readonly TimeProvider _time;
 
     /// <summary>A repository whose calls each open their own context.</summary>
-    public TrackerRepository(INocturneDbContextFactory contexts, TimeProvider? timeProvider = null)
+    public TrackerRepository(INocturneDbContextFactory contexts, TimeProvider time)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
-        _time = timeProvider ?? TimeProvider.System;
+        _time = time;
     }
 
     /// <summary>A repository whose calls run on <paramref name="unit"/>, which the caller owns.</summary>
-    public TrackerRepository(DbUnitOfWork unit, TimeProvider? timeProvider = null)
+    public TrackerRepository(DbUnitOfWork unit, TimeProvider time)
     {
         _unit = unit;
-        _time = timeProvider ?? TimeProvider.System;
+        _time = time;
     }
 
     private ValueTask<DbContextLease> OpenAsync(CancellationToken ct) => DbContextLease.OpenAsync(_unit, _contexts, ct);

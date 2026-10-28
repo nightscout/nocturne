@@ -35,7 +35,8 @@ public class V4ListSortIndexPlanTests(RlsCompletenessFixture fx)
                     factory,
                     new Mock<IDeduplicationService>().Object,
                     new Mock<IAuditContext>().Object,
-                    NullLogger<SensorGlucoseRepository>.Instance);
+                    NullLogger<SensorGlucoseRepository>.Instance,
+                    TimeProvider.System);
                 (await repository.GetAsync(null, null, null, null, Limit, 0, descending: true))
                     .Should().HaveCount(Limit);
             });

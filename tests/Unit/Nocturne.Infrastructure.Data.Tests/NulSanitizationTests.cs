@@ -33,7 +33,7 @@ public class NulSanitizationTests : IDisposable
         accessor.Setup(a => a.HttpContext).Returns((HttpContext)null!);
 
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-            _tenantId, "test", _recorder, new MutationAuditInterceptor());
+            _tenantId, "test", _recorder, new MutationAuditInterceptor(TimeProvider.System));
     }
 
     public void Dispose()

@@ -12,13 +12,15 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Initializes a new instance of the DiscrepancyAnalysisRepository class
     /// </summary>
-    public DiscrepancyAnalysisRepository(INocturneDbContextFactory contexts)
+    public DiscrepancyAnalysisRepository(INocturneDbContextFactory contexts, TimeProvider time)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _time = time;
     }
 
     /// <summary>
@@ -110,7 +112,7 @@ public class DiscrepancyAnalysisRepository : IDiscrepancyAnalysisRepository
                 NightscoutValue = discrepancy.NightscoutValue,
                 NocturneValue = discrepancy.NocturneValue,
                 Description = discrepancy.Description,
-                RecordedAt = DateTimeOffset.UtcNow,
+                RecordedAt = _time.GetUtcNow(),
             };
             db.DiscrepancyDetails.Add(detailEntity);
         }

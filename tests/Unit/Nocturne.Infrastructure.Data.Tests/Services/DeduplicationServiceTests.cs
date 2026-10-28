@@ -49,7 +49,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         // Create timestamps that straddle a 30-second bucket boundary
         // Bucket size is 30,000ms, so bucket boundaries are at multiples of 30,000
@@ -117,7 +117,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
@@ -170,7 +170,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var timestamp = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -220,7 +220,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var timestamp = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -263,7 +263,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var timestamp = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -305,7 +305,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var timestamp = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -347,7 +347,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var tempBasal = CreateTestTempBasalEntity(
             startTimestamp: new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc),
@@ -384,7 +384,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -423,7 +423,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -464,7 +464,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -525,7 +525,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
         var tb = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.2, origin: "Scheduled", dataSource: "test-connector");
@@ -568,7 +568,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -605,7 +605,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -641,7 +641,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -670,7 +670,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
 
@@ -729,7 +729,7 @@ public class DeduplicationServiceTests : IDisposable
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object);
+        var service = new DeduplicationService(context.AsFactory(), scopeFactory, logger.Object, TimeProvider.System);
 
         // Act
         var result = await service.DeduplicateBatchAsync(RecordType.TempBasal, new List<DeduplicationInput>());
@@ -1625,7 +1625,8 @@ public class DeduplicationServiceTests : IDisposable
     private DeduplicationService CreateService(NocturneDbContext context) =>
         new(context.AsFactory(),
             _serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            new Mock<ILogger<DeduplicationService>>().Object);
+            new Mock<ILogger<DeduplicationService>>().Object,
+            TimeProvider.System);
 
     private static DateTime ToUtc(long mills) =>
         DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;

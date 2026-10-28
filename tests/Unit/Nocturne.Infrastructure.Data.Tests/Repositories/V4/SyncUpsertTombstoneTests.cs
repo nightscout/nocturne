@@ -173,6 +173,7 @@ public class SyncUpsertTombstoneTests : IDisposable
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<SensorGlucoseRepository>.Instance,
+            TimeProvider.System,
             broadcaster);
 
         var result = await repo.BulkCreateAsync(

@@ -40,7 +40,8 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
             new TestNocturneDbContextFactory(_context),
             dedup.Object,
             new Mock<IAuditContext>().Object,
-            NullLogger<SensorGlucoseRepository>.Instance);
+            NullLogger<SensorGlucoseRepository>.Instance,
+            TimeProvider.System);
     }
 
     public void Dispose()

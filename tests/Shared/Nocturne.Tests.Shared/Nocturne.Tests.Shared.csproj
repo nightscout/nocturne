@@ -16,6 +16,8 @@
         <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3"/>
         <PackageReference Include="xunit"/>
         <PackageReference Include="xunit.abstractions"/>
+        <!-- Matches the parser the API tests pin; see the note on their reference. -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="5.0.0"/>
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Moq"/>

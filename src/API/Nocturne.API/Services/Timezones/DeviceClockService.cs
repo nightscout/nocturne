@@ -108,7 +108,7 @@ public class DeviceClockService : IDeviceClockService
                 continue;
             }
 
-            var entity = DeviceClockObservationMapper.ToEntity(observation, tenantId);
+            var entity = DeviceClockObservationMapper.ToEntity(observation, tenantId, _time.GetUtcNow().UtcDateTime);
             entity.Connector = connector;
             db.DeviceClockObservations.Add(entity);
             byKey[key] = entity;

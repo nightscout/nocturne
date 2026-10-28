@@ -29,6 +29,7 @@ public class DeduplicationService : IDeduplicationService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ICategoryReadContext? _categoryReadContext;
     private readonly ILogger<DeduplicationService> _logger;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// The ambient tenant of the scope this instance was resolved in. Null in hosts that do not
@@ -132,10 +133,10 @@ public class DeduplicationService : IDeduplicationService
     /// pruned singleton, event time within the optional bounds, each as a primary link of a group of
     /// its own that is not yet stored. A caller that puts one into a group stores it.
     /// </summary>
-    private static Task<List<LinkedRecordEntity>> UnlinkedAsync(
+    private Task<List<LinkedRecordEntity>> UnlinkedAsync(
         NocturneDbContext db, RecordType recordType, long? fromMills, long? toMills, CancellationToken ct) =>
         TypePhases.SingleOrDefault(p => p.RecordType == recordType) is { } phase
-            ? phase.Unlinked(db, fromMills, toMills, DateTime.UtcNow - SingletonLinkRetention, ct)
+            ? phase.Unlinked(db, fromMills, toMills, _time.GetUtcNow().UtcDateTime - SingletonLinkRetention, ct)
             : Task.FromResult(new List<LinkedRecordEntity>());
 
     /// <summary>
@@ -237,12 +238,14 @@ public class DeduplicationService : IDeduplicationService
         INocturneDbContextFactory contexts,
         IServiceScopeFactory scopeFactory,
         ILogger<DeduplicationService> logger,
+        TimeProvider time,
         ITenantAccessor? tenantAccessor = null,
         ICategoryReadContext? categoryReadContext = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _time = time;
         _tenantAccessor = tenantAccessor;
         _categoryReadContext = categoryReadContext;
     }
@@ -870,7 +873,7 @@ public class DeduplicationService : IDeduplicationService
         await using var db = await _contexts.CreateAsync(cancellationToken);
         return await UnderWriteLockAsync(db, async token =>
         {
-            var misplaced = await MisplacedStateSpanPrimaries(db, DateTime.UtcNow - StateSpanRepairHorizon)
+            var misplaced = await MisplacedStateSpanPrimaries(db, _time.GetUtcNow().UtcDateTime - StateSpanRepairHorizon)
                 .ToArrayAsync(token);
 
             return misplaced.Length == 0
@@ -1043,7 +1046,7 @@ public class DeduplicationService : IDeduplicationService
     /// The primaries <see cref="MergeDuplicateGroupsAsync"/> must see to decide every pair touching
     /// a candidate whose neighbour range is <paramref name="minTs"/> to <paramref name="maxTs"/>.
     /// </summary>
-    private static async Task<NeighbourPrimaries> LoadNeighbourPrimariesAsync(
+    private async Task<NeighbourPrimaries> LoadNeighbourPrimariesAsync(
         NocturneDbContext db, RecordType recordType, long minTs, long maxTs, CancellationToken ct) =>
         WithUnlinked(
             await LoadStoredNeighbourPrimariesAsync(db, recordType, minTs, maxTs, ct),
@@ -1506,7 +1509,7 @@ public class DeduplicationService : IDeduplicationService
         CancellationToken cancellationToken = default)
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
-        var horizon = DateTime.UtcNow - CommitVisibilityLag;
+        var horizon = _time.GetUtcNow().UtcDateTime - CommitVisibilityLag;
         var merged = 0;
 
         for (var batchNo = 0; batchNo < maxBatches; batchNo++)
@@ -1595,7 +1598,7 @@ public class DeduplicationService : IDeduplicationService
         if (await GetCursorAsync(db, cancellationToken) is not { } cursor)
             return 0;
 
-        var retained = DateTime.UtcNow - SingletonLinkRetention;
+        var retained = _time.GetUtcNow().UtcDateTime - SingletonLinkRetention;
         var createdBefore = cursor.CreatedAt < retained ? cursor.CreatedAt : retained;
 
         var pruned = 0;
@@ -1617,12 +1620,12 @@ public class DeduplicationService : IDeduplicationService
     /// advances the cursor to the page's last link.
     /// </summary>
     /// <returns>The links deleted and the links on the page.</returns>
-    private static async Task<(int Deleted, int Examined)> PruneNextPageAsync(
+    private async Task<(int Deleted, int Examined)> PruneNextPageAsync(
         NocturneDbContext db, int batchSize, DateTime createdBefore, CancellationToken ct)
     {
         var state = await db.DedupReconcileState.AsNoTracking().SingleAsync(s => s.TenantId == db.TenantId, ct);
 
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
         var restart = state.PruneCursorResetAt is not { } lastReset || lastReset <= now - SingletonLinkRetention;
         ReconcileCursor? after = !restart && state.PruneCursorCreatedAt is { } at
             ? new ReconcileCursor(at, state.PruneCursorId ?? Guid.Empty)
@@ -2266,7 +2269,7 @@ public class DeduplicationService : IDeduplicationService
         {
             JobId = jobId,
             State = DeduplicationJobState.Pending,
-            StartedAt = DateTime.UtcNow
+            StartedAt = _time.GetUtcNow().UtcDateTime
         };
 
         var reader = TenantReader.Of(
@@ -2303,7 +2306,7 @@ public class DeduplicationService : IDeduplicationService
                 _runningJobs[jobId] = _runningJobs[jobId] with
                 {
                     State = result.Success ? DeduplicationJobState.Completed : DeduplicationJobState.Failed,
-                    CompletedAt = DateTime.UtcNow,
+                    CompletedAt = _time.GetUtcNow().UtcDateTime,
                     Result = result
                 };
             }
@@ -2312,7 +2315,7 @@ public class DeduplicationService : IDeduplicationService
                 _runningJobs[jobId] = _runningJobs[jobId] with
                 {
                     State = DeduplicationJobState.Cancelled,
-                    CompletedAt = DateTime.UtcNow
+                    CompletedAt = _time.GetUtcNow().UtcDateTime
                 };
             }
             catch (Exception ex)
@@ -2321,7 +2324,7 @@ public class DeduplicationService : IDeduplicationService
                 _runningJobs[jobId] = _runningJobs[jobId] with
                 {
                     State = DeduplicationJobState.Failed,
-                    CompletedAt = DateTime.UtcNow,
+                    CompletedAt = _time.GetUtcNow().UtcDateTime,
                     Result = new DeduplicationResult
                     {
                         Success = false,

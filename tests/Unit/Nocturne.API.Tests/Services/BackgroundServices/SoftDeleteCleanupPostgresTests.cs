@@ -95,6 +95,7 @@ public class SoftDeleteCleanupPostgresTests(SoftDeleteCleanupPostgresTests.Datab
         var service = new SoftDeleteCleanupService(
             new Factory(Context),
             new ConfigurationBuilder().Build(),
+            TimeProvider.System,
             NullLogger<SoftDeleteCleanupService>.Instance);
 
         await service.PurgeExpiredRecordsAsync(CancellationToken.None);

@@ -34,7 +34,7 @@ public class HistoryClampedWriteTests(RlsCompletenessFixture fx) : IAsyncLifetim
     public async Task ClampedMember_RecordsALabResultFromLastQuarter_ButDoesNotReadItBack()
     {
         await using var scope = ClampedScope();
-        var repository = new LabHbA1cResultRepository(Factory(scope));
+        var repository = new LabHbA1cResultRepository(Factory(scope), TimeProvider.System);
 
         var created = await repository.CreateAsync(new LabHbA1cResult
         {
@@ -73,7 +73,7 @@ public class HistoryClampedWriteTests(RlsCompletenessFixture fx) : IAsyncLifetim
     public async Task ClampedMember_RecordsLastWeeksSleepSession()
     {
         await using var scope = ClampedScope();
-        var repository = new SleepSessionRepository(Factory(scope));
+        var repository = new SleepSessionRepository(Factory(scope), TimeProvider.System);
         var start = DateTime.UtcNow.AddDays(-7);
 
         var created = await repository.UpsertSessionAsync(new SleepSession
@@ -93,7 +93,7 @@ public class HistoryClampedWriteTests(RlsCompletenessFixture fx) : IAsyncLifetim
     {
         var (_, running) = await SeedRunningTrackerAsync();
         await using var scope = ClampedScope();
-        var repository = new TrackerRepository(Factory(scope));
+        var repository = new TrackerRepository(Factory(scope), TimeProvider.System);
         (await repository.GetInstanceByIdAsync(running)).Should().NotBeNull("a running tracker is inside the window");
 
         var completed = await repository.CompleteInstanceAsync(
@@ -109,7 +109,7 @@ public class HistoryClampedWriteTests(RlsCompletenessFixture fx) : IAsyncLifetim
     {
         var (definition, running) = await SeedRunningTrackerAsync();
         await using var scope = ClampedScope();
-        var repository = new TrackerRepository(Factory(scope));
+        var repository = new TrackerRepository(Factory(scope), TimeProvider.System);
         var startedAt = DateTime.UtcNow.AddDays(-2);
 
         var started = await repository.ExecuteUnderDefinitionLockAsync(

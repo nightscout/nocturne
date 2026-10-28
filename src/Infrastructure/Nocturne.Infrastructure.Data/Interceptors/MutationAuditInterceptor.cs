@@ -15,7 +15,7 @@ namespace Nocturne.Infrastructure.Data.Interceptors;
 /// transaction. Registered as a singleton; the actor is the <see cref="NocturneDbContext.AuditContext"/>
 /// of the context being saved.
 /// </summary>
-public class MutationAuditInterceptor : SaveChangesInterceptor
+public class MutationAuditInterceptor(TimeProvider time) : SaveChangesInterceptor
 {
     private static readonly ConcurrentDictionary<(Type EntityType, string PropertyName), AuditPropertyBehavior>
         PropertyBehaviorCache = new();
@@ -41,7 +41,7 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
         var auditContext = context.AuditContext;
 
         var auditEntries = new List<MutationAuditLogEntity>();
-        var now = DateTime.UtcNow;
+        var now = time.GetUtcNow().UtcDateTime;
 
         foreach (var entry in context.ChangeTracker.Entries())
         {

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -106,7 +107,7 @@ public class MutationAuditInterceptorTests : IDisposable
         var httpContextAccessor = new Mock<IHttpContextAccessor>();
         httpContextAccessor.Setup(x => x.HttpContext).Returns((HttpContext)null!);
 
-        _interceptor = new MutationAuditInterceptor();
+        _interceptor = new MutationAuditInterceptor(TimeProvider.System);
 
         _contextOptions = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseSqlite(_connection)
@@ -202,6 +203,24 @@ public class MutationAuditInterceptorTests : IDisposable
         log.AuthType.Should().Be("SessionCookie");
         log.SubjectName.Should().Be("tester");
         log.Endpoint.Should().Be("POST /api/v4/treatments");
+    }
+
+    [Fact]
+    public async Task Create_StampsTheAuditRecordWithTheInjectedClock()
+    {
+        var instant = new DateTimeOffset(2021, 6, 15, 8, 30, 0, TimeSpan.Zero);
+        using var context = CreateContext();
+        context.TestAuditables.Add(new TestAuditableEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            Name = "Stamped",
+        });
+
+        await InvokeSavingChanges(context, new MutationAuditInterceptor(new FakeTimeProvider(instant)));
+
+        context.ChangeTracker.Entries<MutationAuditLogEntity>()
+            .Should().ContainSingle().Which.Entity.CreatedAt.Should().Be(instant.UtcDateTime);
     }
 
     [Fact]

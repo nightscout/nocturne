@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Time.Testing;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
@@ -41,7 +42,7 @@ public class TenantAuditConfigCacheTests : IDisposable
     public async Task GetConfigAsync_WhenNoConfigExists_ReturnsDefaults()
     {
         var factory = new TestDbContextFactory(_contextOptions);
-        var cache = new TenantAuditConfigCache(factory);
+        var cache = new TenantAuditConfigCache(factory, TimeProvider.System);
 
         var config = await cache.GetConfigAsync(_tenantId);
 
@@ -70,7 +71,7 @@ public class TenantAuditConfigCacheTests : IDisposable
         }
 
         var factory = new TestDbContextFactory(_contextOptions);
-        var cache = new TenantAuditConfigCache(factory);
+        var cache = new TenantAuditConfigCache(factory, TimeProvider.System);
 
         var config = await cache.GetConfigAsync(_tenantId);
 
@@ -99,7 +100,7 @@ public class TenantAuditConfigCacheTests : IDisposable
         }
 
         var factory = new TrackingDbContextFactory(_contextOptions);
-        var cache = new TenantAuditConfigCache(factory);
+        var cache = new TenantAuditConfigCache(factory, TimeProvider.System);
 
         // First call — should hit DB
         var config1 = await cache.GetConfigAsync(_tenantId);
@@ -116,7 +117,7 @@ public class TenantAuditConfigCacheTests : IDisposable
     public async Task Invalidate_ClearsEntry_NextCallQueriesDb()
     {
         var factory = new TrackingDbContextFactory(_contextOptions);
-        var cache = new TenantAuditConfigCache(factory);
+        var cache = new TenantAuditConfigCache(factory, TimeProvider.System);
 
         // First call populates cache
         await cache.GetConfigAsync(_tenantId);
@@ -128,6 +129,23 @@ public class TenantAuditConfigCacheTests : IDisposable
         // Next call should re-query DB
         await cache.GetConfigAsync(_tenantId);
         factory.CreateCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetConfigAsync_RequeriesOnceTheEntryIsFiveMinutesOld()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2022, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var factory = new TrackingDbContextFactory(_contextOptions);
+        var cache = new TenantAuditConfigCache(factory, time);
+
+        await cache.GetConfigAsync(_tenantId);
+        time.Advance(TimeSpan.FromMinutes(5) - TimeSpan.FromTicks(1));
+        await cache.GetConfigAsync(_tenantId);
+        factory.CreateCount.Should().Be(1, "an entry younger than five minutes is served from the cache");
+
+        time.Advance(TimeSpan.FromTicks(1));
+        await cache.GetConfigAsync(_tenantId);
+        factory.CreateCount.Should().Be(2, "an entry five minutes old has expired");
     }
 
     #region Test Helpers

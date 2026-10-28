@@ -23,6 +23,7 @@ public class StateSpanRepository : IStateSpanRepository
     private readonly IDeduplicationService _deduplicationService;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<StateSpanRepository> _logger;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Categories where only one span can be active at a time.
@@ -70,17 +71,20 @@ public class StateSpanRepository : IStateSpanRepository
     /// <param name="deduplicationService">Service for deduplicating records</param>
     /// <param name="auditContext">The audit context for tracking mutations</param>
     /// <param name="logger">Logger instance</param>
+    /// <param name="time">The clock that stamps the spans a write closes or trims</param>
     public StateSpanRepository(
         INocturneDbContextFactory contexts,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<StateSpanRepository> logger
+        ILogger<StateSpanRepository> logger,
+        TimeProvider time
     )
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _deduplicationService = deduplicationService;
         _auditContext = auditContext;
         _logger = logger;
+        _time = time;
     }
 
     /// <summary>
@@ -465,7 +469,7 @@ public class StateSpanRepository : IStateSpanRepository
 
             open.EndTimestamp = entity.StartTimestamp;
             open.SupersededById = entity.Id;
-            open.UpdatedAt = DateTime.UtcNow;
+            open.UpdatedAt = _time.GetUtcNow().UtcDateTime;
             superseded++;
         }
 
@@ -482,7 +486,7 @@ public class StateSpanRepository : IStateSpanRepository
     /// Rows this batch loaded or added, whose changes the store does not hold until the save. Stored
     /// rows a stored successor closed join it, so the save writes them and the batch detaches them.
     /// </param>
-    private static async Task EndAtSuccessorAsync(
+    private async Task EndAtSuccessorAsync(
         NocturneDbContext db, StateSpanEntity entity, IDictionary<string, object>? metadata,
         HashSet<StateSpanEntity> batch, CancellationToken cancellationToken)
     {
@@ -544,7 +548,7 @@ public class StateSpanRepository : IStateSpanRepository
 
             earlier.EndTimestamp = entity.StartTimestamp;
             earlier.SupersededById = entity.Id;
-            earlier.UpdatedAt = DateTime.UtcNow;
+            earlier.UpdatedAt = _time.GetUtcNow().UtcDateTime;
         }
     }
 

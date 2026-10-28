@@ -101,7 +101,7 @@ public class TimezoneTimelineService : ITimezoneTimelineService
 
         if (entity is null)
         {
-            entity = TimezoneTimelineMapper.ToEntity(entry, tenantId);
+            entity = TimezoneTimelineMapper.ToEntity(entry, tenantId, _time.GetUtcNow().UtcDateTime);
             db.TimezoneTimeline.Add(entity);
         }
         else

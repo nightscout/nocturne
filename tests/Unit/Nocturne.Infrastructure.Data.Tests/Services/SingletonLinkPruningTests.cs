@@ -336,7 +336,7 @@ public class SingletonLinkPruningTests
             Ctx = _db.CreateContext();
             Ctx.TenantId = TenantId;
             Service = new DeduplicationService(
-                Ctx.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+                Ctx.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance, TimeProvider.System);
         }
 
         public NocturneDbContext Ctx { get; }

@@ -22,14 +22,14 @@ public static class TimezoneTimelineMapper
         };
 
     /// <summary>Convert a domain model to a database entity.</summary>
-    public static TimezoneTimelineEntity ToEntity(TimezoneTimelineEntry model, Guid tenantId) =>
+    public static TimezoneTimelineEntity ToEntity(TimezoneTimelineEntry model, Guid tenantId, DateTime now) =>
         new()
         {
             Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
             TenantId = tenantId,
             EffectiveFrom = DateTime.SpecifyKind(model.EffectiveFrom, DateTimeKind.Unspecified),
             Timezone = model.Timezone,
-            CreatedAt = model.CreatedAt ?? DateTime.UtcNow,
-            UpdatedAt = model.UpdatedAt ?? DateTime.UtcNow,
+            CreatedAt = model.CreatedAt ?? now,
+            UpdatedAt = model.UpdatedAt ?? now,
         };
 }

@@ -33,7 +33,8 @@ public class PatientDeviceRepositoryReorderTests : IDisposable
         _context = _db.CreateContext();
         _repo = new PatientDeviceRepository(
             new TestNocturneDbContextFactory(_context),
-            NullLogger<PatientDeviceRepository>.Instance);
+            NullLogger<PatientDeviceRepository>.Instance,
+            TimeProvider.System);
     }
 
     public void Dispose()

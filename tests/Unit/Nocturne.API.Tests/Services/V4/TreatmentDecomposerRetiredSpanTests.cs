@@ -121,7 +121,7 @@ public class TreatmentDecomposerRetiredSpanTests : IDisposable
         return new TreatmentDecomposer(
             _factory,
             new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
-            new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
+            new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance, TimeProvider.System),
             new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
             new BGCheckRepository(_factory, _dedup, _audit, NullLogger<BGCheckRepository>.Instance),
             new NoteRepository(_factory, _dedup, _audit, NullLogger<NoteRepository>.Instance),

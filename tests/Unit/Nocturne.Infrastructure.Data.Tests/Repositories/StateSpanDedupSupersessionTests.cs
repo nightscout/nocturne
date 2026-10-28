@@ -39,10 +39,10 @@ public class StateSpanDedupSupersessionTests : IDisposable
         var dedupContext = _db.CreateContext();
         dedupContext.TenantId = TestTenantId;
         _dedup = new DeduplicationService(
-            dedupContext.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+            dedupContext.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance, TimeProvider.System);
 
         _repository = new StateSpanRepository(
-            _context.AsFactory(), _dedup, new Mock<IAuditContext>().Object, NullLogger<StateSpanRepository>.Instance);
+            _context.AsFactory(), _dedup, new Mock<IAuditContext>().Object, NullLogger<StateSpanRepository>.Instance, TimeProvider.System);
     }
 
     public void Dispose()

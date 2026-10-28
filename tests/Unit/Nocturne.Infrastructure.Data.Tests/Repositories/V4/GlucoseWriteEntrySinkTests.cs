@@ -46,6 +46,7 @@ public class GlucoseWriteEntrySinkTests : IDisposable
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
             NullLogger<SensorGlucoseRepository>.Instance,
+            TimeProvider.System,
             entrySink: _sink.Object);
         _meter = new MeterGlucoseRepository(
             factory,

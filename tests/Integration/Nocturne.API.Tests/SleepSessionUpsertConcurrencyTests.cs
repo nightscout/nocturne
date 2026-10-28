@@ -205,7 +205,7 @@ public class SleepSessionUpsertConcurrencyTests : ApiIntegrationTestBase
             .ToList();
     }
 
-    private static SleepSessionRepository Repository(INocturneDbContextFactory contexts) => new(contexts);
+    private static SleepSessionRepository Repository(INocturneDbContextFactory contexts) => new(contexts, TimeProvider.System);
 
     private static SleepSession Session(Guid? id, string? originalId, short score) => new()
     {

@@ -161,7 +161,7 @@ public class RecentGlucoseAndDeviceStatusPublishTests : IDisposable
         var ctxFactory = new TestNocturneDbContextFactory(_context);
         var audit = Mock.Of<IAuditContext>();
         var sensorGlucose = new SensorGlucoseRepository(
-            ctxFactory, Mock.Of<IDeduplicationService>(), audit, NullLogger<SensorGlucoseRepository>.Instance);
+            ctxFactory, Mock.Of<IDeduplicationService>(), audit, NullLogger<SensorGlucoseRepository>.Instance, TimeProvider.System);
         var meterGlucose = new MeterGlucoseRepository(ctxFactory, audit, NullLogger<MeterGlucoseRepository>.Instance);
         var calibration = new CalibrationRepository(ctxFactory, audit, NullLogger<CalibrationRepository>.Instance);
 

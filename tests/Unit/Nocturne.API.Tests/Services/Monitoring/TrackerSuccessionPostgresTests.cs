@@ -63,7 +63,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
     }
 
     private sealed class MeetAfterReadRepository(NocturneDbContext context, Rendezvous rendezvous)
-        : TrackerRepository(context.AsFactory())
+        : TrackerRepository(context.AsFactory(), TimeProvider.System)
     {
         public override async Task<List<TrackerInstanceEntity>> GetActiveInstancesForDefinitionAsync(
             Guid definitionId, CancellationToken cancellationToken = default)
@@ -155,7 +155,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
 
         await using (var first = Context(tenant))
         {
-            var won = await new TrackerRepository(first.AsFactory()).CompleteInstanceAsync(
+            var won = await new TrackerRepository(first.AsFactory(), TimeProvider.System).CompleteInstanceAsync(
                 instanceId, CompletionReason.ReplacedEarly, "first", completedAt: Now.AddHours(-1));
             won.Should().NotBeNull();
             won!.CompletionReason.Should().Be(CompletionReason.ReplacedEarly);
@@ -163,7 +163,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
 
         await using (var second = Context(tenant))
         {
-            var lost = await new TrackerRepository(second.AsFactory()).CompleteInstanceAsync(
+            var lost = await new TrackerRepository(second.AsFactory(), TimeProvider.System).CompleteInstanceAsync(
                 instanceId, CompletionReason.Failed, "second", "treatment", Now);
             lost.Should().BeNull();
         }
@@ -209,8 +209,8 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         await using var second = Context(tenant);
 
         var results = await Task.WhenAll(
-            Task.Run(() => StartAsync(new TrackerRepository(first.AsFactory()), definition, Now, Now.AddDays(7))),
-            Task.Run(() => StartAsync(new TrackerRepository(second.AsFactory()), definition, Now, Now.AddDays(14))));
+            Task.Run(() => StartAsync(new TrackerRepository(first.AsFactory(), TimeProvider.System), definition, Now, Now.AddDays(7))),
+            Task.Run(() => StartAsync(new TrackerRepository(second.AsFactory(), TimeProvider.System), definition, Now, Now.AddDays(14))));
 
         results.Should().OnlyContain(r => r.Outcome == TrackerSuccessionOutcome.Started);
         (await RunningAsync(tenant, definition.Id)).Should().HaveCount(2);
@@ -242,11 +242,11 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         var definition = await SeedDefinitionAsync(tenant, TrackerMode.Duration, Now.AddDays(-2));
         var replacedId = (await RunningAsync(tenant, definition.Id)).Single().Id;
         await using (var db = Context(tenant))
-            await StartFromEventAsync(new TrackerRepository(db.AsFactory()), definition, Now, "change");
+            await StartFromEventAsync(new TrackerRepository(db.AsFactory(), TimeProvider.System), definition, Now, "change");
 
         TrackerStartRevert? revert;
         await using (var db = Context(tenant))
-            revert = await RevertAsync(new TrackerRepository(db.AsFactory()), definition, "change");
+            revert = await RevertAsync(new TrackerRepository(db.AsFactory(), TimeProvider.System), definition, "change");
 
         revert.Should().NotBeNull();
         revert!.Reopened.Should().ContainSingle().Which.Id.Should().Be(replacedId);
@@ -270,14 +270,14 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         var definition = await SeedDefinitionAsync(tenant, TrackerMode.Duration, Now.AddDays(-2));
         await using (var db = Context(tenant))
         {
-            var repository = new TrackerRepository(db.AsFactory());
+            var repository = new TrackerRepository(db.AsFactory(), TimeProvider.System);
             await StartFromEventAsync(repository, definition, Now.AddDays(-1), "first");
             await StartFromEventAsync(repository, definition, Now, "second");
         }
 
         TrackerStartRevert? revert;
         await using (var db = Context(tenant))
-            revert = await RevertAsync(new TrackerRepository(db.AsFactory()), definition, "first");
+            revert = await RevertAsync(new TrackerRepository(db.AsFactory(), TimeProvider.System), definition, "first");
 
         revert.Should().BeNull();
         (await RunningAsync(tenant, definition.Id)).Should().ContainSingle().Which.StartTreatmentId.Should().Be("second");
@@ -292,13 +292,13 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         var definition = await SeedDefinitionAsync(tenant, TrackerMode.Duration, Now.AddDays(-2));
         await using (var db = Context(tenant))
         {
-            var repository = new TrackerRepository(db.AsFactory());
+            var repository = new TrackerRepository(db.AsFactory(), TimeProvider.System);
             await StartFromEventAsync(repository, definition, Now.AddDays(-1), "replaced");
             await StartFromEventAsync(repository, definition, Now, "running");
         }
 
         await using var read = Context(tenant);
-        var found = await new TrackerRepository(read.AsFactory()).GetRunningStartedByAsync(["replaced", "running", "unknown"]);
+        var found = await new TrackerRepository(read.AsFactory(), TimeProvider.System).GetRunningStartedByAsync(["replaced", "running", "unknown"]);
 
         found.Should().ContainSingle().Which.Should().Match<TrackerInstanceEntity>(
             i => i.StartTreatmentId == "running" && i.Definition.Id == definition.Id);
@@ -317,7 +317,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         var definition = await SeedDefinitionAsync(tenant, TrackerMode.Duration, runningSince: null);
         await using (var db = Context(tenant))
         {
-            var repository = new TrackerRepository(db.AsFactory());
+            var repository = new TrackerRepository(db.AsFactory(), TimeProvider.System);
             await StartFromEventAsync(repository, definition, Now, "inferred");
             await RevertAsync(repository, definition, "inferred");
             if (endedSince)
@@ -330,7 +330,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         TrackerSuccessionResult result;
         await using (var db = Context(tenant))
         {
-            var repository = new TrackerRepository(db.AsFactory());
+            var repository = new TrackerRepository(db.AsFactory(), TimeProvider.System);
             result = await TrackerSuccession.StartAsync(
                 repository, Mock.Of<ISignalRBroadcastService>(), NullLogger.Instance, definition, Now.AddMinutes(-10),
                 completionNotes: null, completeTreatmentId: "recorded",
@@ -426,12 +426,12 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         var definition = await SeedDefinitionAsync(tenant, TrackerMode.Duration, Now.AddDays(-2));
         var endedId = (await RunningAsync(tenant, definition.Id)).Single().Id;
         await using (var db = Context(tenant))
-            await new TrackerRepository(db.AsFactory()).CompleteInstanceAsync(
+            await new TrackerRepository(db.AsFactory(), TimeProvider.System).CompleteInstanceAsync(
                 endedId, CompletionReason.ReplacedEarly, "ended", "deactivated", Now);
 
         await using (var db = Context(tenant))
         {
-            var repository = new TrackerRepository(db.AsFactory());
+            var repository = new TrackerRepository(db.AsFactory(), TimeProvider.System);
             (await repository.GetDefinitionsCompletedByAsync(["deactivated", "unknown"]))
                 .Should().Equal(definition.Id);
             (await ReopenAsync(repository, definition, "deactivated"))
@@ -459,7 +459,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         var endedId = (await RunningAsync(tenant, definition.Id)).Single().Id;
         await using (var db = Context(tenant))
         {
-            var repository = new TrackerRepository(db.AsFactory());
+            var repository = new TrackerRepository(db.AsFactory(), TimeProvider.System);
             await repository.CompleteInstanceAsync(endedId, CompletionReason.ReplacedEarly, "ended", "deactivated", Now);
             await StartFromEventAsync(repository, definition, Now.AddMinutes(10), "activated");
             await repository.CompleteInstanceAsync(
@@ -468,7 +468,7 @@ public class TrackerSuccessionPostgresTests(TrackerSuccessionPostgresTests.Datab
         }
 
         await using (var db = Context(tenant))
-            (await ReopenAsync(new TrackerRepository(db.AsFactory()), definition, "deactivated")).Should().BeEmpty();
+            (await ReopenAsync(new TrackerRepository(db.AsFactory(), TimeProvider.System), definition, "deactivated")).Should().BeEmpty();
 
         (await RunningAsync(tenant, definition.Id)).Should().BeEmpty();
     }

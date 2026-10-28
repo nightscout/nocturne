@@ -28,6 +28,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
 {
     private readonly IDeduplicationService _deduplicationService;
     private readonly IGlucoseReadingBroadcaster? _readingBroadcaster;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SensorGlucoseRepository"/> class.
@@ -37,6 +38,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<SensorGlucoseRepository> logger,
+        TimeProvider time,
         IV4RecordBroadcaster<SensorGlucose>? broadcaster = null,
         IDataEventSink<Entry>? entrySink = null,
         IGlucoseReadingBroadcaster? readingBroadcaster = null
@@ -45,6 +47,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     {
         _deduplicationService = deduplicationService;
         _readingBroadcaster = readingBroadcaster;
+        _time = time;
     }
 
     /// <summary>
@@ -159,7 +162,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         {
             await using var ctx = await ContextFactory.CreateAsync(ct);
 
-            var windowStart = DateTime.UtcNow - TimeSpan.FromMinutes(15);
+            var windowStart = _time.GetUtcNow().UtcDateTime - TimeSpan.FromMinutes(15);
             var recentEntities = await ctx.Set<SensorGlucoseEntity>()
                 .AsNoTracking()
                 .Where(e => e.Timestamp >= windowStart)
@@ -376,7 +379,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         // skew, a double-applied timezone offset) would otherwise pin the column ahead of now
         // for good — and the staleness/signal-loss evaluators compare "now - LastReadingAt",
         // so a pinned-future value silently disables the alerts that watch for silence.
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
         if (newest > now)
             newest = now;
 

@@ -66,7 +66,7 @@ public class LegacyTreatmentRoundTripTests : IDisposable
         var deviceEventRepo = new DeviceEventRepository(ctxFactory, dedup, caller, NullLogger<DeviceEventRepository>.Instance);
         var bolusCalcRepo = new BolusCalculationRepository(ctxFactory, dedup, caller, NullLogger<BolusCalculationRepository>.Instance);
 
-        var tempBasalRepo = new TempBasalRepository(ctxFactory, dedup, caller, NullLogger<TempBasalRepository>.Instance);
+        var tempBasalRepo = new TempBasalRepository(ctxFactory, dedup, caller, NullLogger<TempBasalRepository>.Instance, TimeProvider.System);
 
         var foods = new Mock<ITreatmentFoodService>();
         foods

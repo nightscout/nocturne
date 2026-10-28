@@ -55,7 +55,8 @@ public class StateSpanLatestStartPlanTests(RlsCompletenessFixture fx)
             new TestNocturneDbContextFactory(ctx),
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
-            NullLogger<StateSpanRepository>.Instance);
+            NullLogger<StateSpanRepository>.Instance,
+            TimeProvider.System);
         (await read(repository, Source)).Should().NotBeNull();
 
         var plan = await PlanTestSupport.ExplainAsync(conn, capture.Command!);

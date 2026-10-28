@@ -78,7 +78,8 @@ internal sealed class RootServiceProvider(IServiceProvider root)
 internal sealed class NocturneDbContextFactory(
     IDbContextFactory<NocturneDbContext> contexts,
     IServiceProvider services,
-    RootServiceProvider root) : INocturneDbContextFactory
+    RootServiceProvider root,
+    TimeProvider time) : INocturneDbContextFactory
 {
     private readonly TenantReadContext _readContext = ReferenceEquals(services, root.Root)
         ? TenantReadContext.FailClosed
@@ -113,6 +114,7 @@ internal sealed class NocturneDbContextFactory(
     {
         var context = contexts.CreateDbContext();
         context.ReadContext = new TenantReadContext(null, null, _readContext.AuditContext);
+        context.Clock = time;
         context.TenantId = tenantId;
         return ValueTask.FromResult(context);
     }
@@ -121,6 +123,7 @@ internal sealed class NocturneDbContextFactory(
     {
         var context = contexts.CreateDbContext();
         context.ReadContext = _readContext;
+        context.Clock = time;
         return context;
     }
 }

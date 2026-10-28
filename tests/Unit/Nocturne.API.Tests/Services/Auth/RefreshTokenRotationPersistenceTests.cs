@@ -191,7 +191,7 @@ public class RefreshTokenRotationPersistenceTests : IDisposable
 
     private RefreshTokenService Service(DbContextOptions<NocturneDbContext> options) =>
         new(
-            new EfFirstPartyTokenRepository(new OptionsFactory(options).AsNocturneFactory()),
+            new EfFirstPartyTokenRepository(new OptionsFactory(options).AsNocturneFactory(), TimeProvider.System),
             _jwtService.Object,
             _successorCache,
             Options.Create(new JwtOptions { RefreshTokenLifetimeDays = 7 }),

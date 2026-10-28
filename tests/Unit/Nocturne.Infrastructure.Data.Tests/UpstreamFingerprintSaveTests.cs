@@ -25,7 +25,7 @@ public class UpstreamFingerprintSaveTests : IDisposable
         var accessor = new Mock<IHttpContextAccessor>();
         accessor.Setup(a => a.HttpContext).Returns((HttpContext)null!);
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-            _tenantId, "test", new MutationAuditInterceptor());
+            _tenantId, "test", new MutationAuditInterceptor(TimeProvider.System));
     }
 
     public void Dispose()

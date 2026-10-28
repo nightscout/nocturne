@@ -49,7 +49,7 @@ public class SyncKeyedWriterConformanceTests : IDisposable
 
     private TempBasalRepository TempBasals() =>
         new(Factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,
-            NullLogger<TempBasalRepository>.Instance);
+            NullLogger<TempBasalRepository>.Instance, TimeProvider.System);
 
     private NoteRepository Notes() =>
         new(Factory, new Mock<IDeduplicationService>().Object, new Mock<IAuditContext>().Object,

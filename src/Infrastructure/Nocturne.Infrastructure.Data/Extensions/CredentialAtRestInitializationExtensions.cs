@@ -106,12 +106,14 @@ public static class CredentialAtRestInitializationExtensions
     /// </summary>
     /// <param name="dataSource">Data source for the runtime application role.</param>
     /// <param name="generateToken">Mints a new share token. Called until the digest is unique.</param>
+    /// <param name="time">The clock that stamps each new token's <c>share_token_set_at</c>.</param>
     /// <param name="logger">Logger for progress. Never receives a token.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The ids of the tenants whose share token was rotated by this pass.</returns>
     public static async Task<IReadOnlyList<Guid>> RotatePlaintextShareTokensAsync(
         NpgsqlDataSource dataSource,
         Func<string> generateToken,
+        TimeProvider time,
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
@@ -152,7 +154,7 @@ public static class CredentialAtRestInitializationExtensions
         }
 
         var rotated = new List<Guid>(stale.Count);
-        var now = DateTime.UtcNow;
+        var now = time.GetUtcNow().UtcDateTime;
 
         await using (var transaction = await connection.BeginTransactionAsync(cancellationToken))
         {

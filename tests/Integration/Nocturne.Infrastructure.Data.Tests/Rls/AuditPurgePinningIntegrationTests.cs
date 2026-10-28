@@ -72,7 +72,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
 
         // The production primitive both retention sweeps call. It pins internally, so the GUC is
         // present when EF opens the connection for the DELETE.
-        var purged = await factory.PurgeOlderThanAsync(tenant, AuditTable, "created_at", NinetyDays);
+        var purged = await factory.PurgeOlderThanAsync(tenant, AuditTable, "created_at", NinetyDays, TimeProvider.System);
 
         purged.Should().Be(3, "the shared purge pins the tenant and so actually deletes");
         (await CountAsync(tenant)).Should().Be(0, "the expired rows must be gone");
@@ -94,7 +94,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         await SeedRecentRowAsync(tenant);
 
         var purged = await BuildFactory().PurgeOlderThanAsync(
-            tenant, AuditTable, "created_at", NinetyDays, batchSize: 4);
+            tenant, AuditTable, "created_at", NinetyDays, TimeProvider.System, batchSize: 4);
 
         purged.Should().Be(9, "every expired row must be removed across three batches");
         (await CountAsync(tenant)).Should().Be(1, "the row inside the retention window survives");
@@ -113,7 +113,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         await SeedAsync(tenant, rows: 1);
 
         var capture = new CapturingInterceptor();
-        await BuildFactory(capture).PurgeOlderThanAsync(tenant, AuditTable, "created_at", NinetyDays);
+        await BuildFactory(capture).PurgeOlderThanAsync(tenant, AuditTable, "created_at", NinetyDays, TimeProvider.System);
 
         var delete = capture.Commands.Should()
             .ContainSingle(c => c.StartsWith("DELETE FROM", StringComparison.Ordinal)).Subject;
@@ -163,7 +163,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         try
         {
             var purged = await BuildFactory().PurgeOlderThanAsync(
-                tenant, ProbeTable, "created_at", NinetyDays);
+                tenant, ProbeTable, "created_at", NinetyDays, TimeProvider.System);
 
             purged.Should().Be(2, "only the purged tenant's rows are expired and in scope");
             (await ProbeCountAsync(tenant)).Should().Be(0);
@@ -187,7 +187,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
         // earlier than the moment the purge runs, so an absolute-cutoff guard would admit it and
         // the sweep would delete the tenant's entire audit table.
         var act = () => BuildFactory().PurgeOlderThanAsync(
-            Guid.NewGuid(), AuditTable, "created_at", TimeSpan.FromDays(days));
+            Guid.NewGuid(), AuditTable, "created_at", TimeSpan.FromDays(days), TimeProvider.System);
 
         await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
@@ -196,7 +196,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     public async Task PurgeOlderThanAsync_RejectsABatchSizeThatCannotMakeProgress()
     {
         var act = () => BuildFactory().PurgeOlderThanAsync(
-            Guid.NewGuid(), AuditTable, "created_at", NinetyDays, batchSize: 0);
+            Guid.NewGuid(), AuditTable, "created_at", NinetyDays, TimeProvider.System, batchSize: 0);
 
         await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
@@ -210,7 +210,7 @@ public class AuditPurgePinningIntegrationTests : IAsyncDisposable
     public async Task PurgeOlderThanAsync_RejectsNonIdentifiers(string table, string column)
     {
         var act = () => BuildFactory().PurgeOlderThanAsync(
-            Guid.NewGuid(), table, column, NinetyDays);
+            Guid.NewGuid(), table, column, NinetyDays, TimeProvider.System);
 
         await act.Should().ThrowAsync<ArgumentException>();
     }

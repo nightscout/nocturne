@@ -113,7 +113,8 @@ public class ActivityWatermarkSourceScopeTests(ActivityWatermarkSourceScopeTests
             _context.AsFactory(),
             Mock.Of<IDeduplicationService>(),
             Mock.Of<IAuditContext>(),
-            NullLogger<StateSpanRepository>.Instance);
+            NullLogger<StateSpanRepository>.Instance,
+            TimeProvider.System);
 
         _stateSpanService = new StateSpanService(
             stateSpanRepository, NullLogger<StateSpanService>.Instance);

@@ -47,10 +47,10 @@ public class DeviceSetupServiceTests
         var factory = new TestNocturneDbContextFactory(_db);
         _service = new DeviceSetupService(
             factory,
-            new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance),
-            new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
+            new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance, TimeProvider.System),
+            new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance, TimeProvider.System),
             _reattribution.Object,
-            new TrackerRepository(factory),
+            new TrackerRepository(factory, TimeProvider.System),
             _ruleSync.Object,
             _therapySettings.Object,
             new ConsumableTrackerWriter(

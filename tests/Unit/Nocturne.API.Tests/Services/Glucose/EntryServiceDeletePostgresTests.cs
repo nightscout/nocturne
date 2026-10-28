@@ -80,7 +80,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
             .UseNpgsql(database.AppConnectionString, npgsql => npgsql.EnableRetryOnFailure(
                 maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(1), errorCodesToAdd: null))
             .AddInterceptors(
-                new TenantConnectionInterceptor(), new MutationAuditInterceptor())
+                new TenantConnectionInterceptor(), new MutationAuditInterceptor(TimeProvider.System))
             .Options) { TenantId = tenant }.AttributedTo(_audit);
 
     private readonly IAuditContext _audit = Mock.Of<IAuditContext>();
@@ -105,7 +105,7 @@ public class EntryServiceDeletePostgresTests(EntryServiceDeletePostgresTests.Dat
         var audit = _audit;
         var events = new Mock<IDataEventSink<Entry>>();
         var sensorGlucose = new SensorGlucoseRepository(
-            factory, Mock.Of<IDeduplicationService>(), audit, NullLogger<SensorGlucoseRepository>.Instance,
+            factory, Mock.Of<IDeduplicationService>(), audit, NullLogger<SensorGlucoseRepository>.Instance, TimeProvider.System,
             entrySink: events.Object);
         var meterGlucose = new MeterGlucoseRepository(
             factory, audit, NullLogger<MeterGlucoseRepository>.Instance, entrySink: events.Object);

@@ -23,6 +23,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasalEntity>, ITempBasalRepository
 {
     private readonly IDeduplicationService _deduplicationService;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TempBasalRepository"/> class.
@@ -31,16 +32,19 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     /// <param name="deduplicationService">The deduplication service.</param>
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="time">The clock that stamps the rows a sweep soft-deletes.</param>
     /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
     public TempBasalRepository(
         INocturneDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<TempBasalRepository> logger,
+        TimeProvider time,
         IV4RecordBroadcaster<TempBasal>? broadcaster = null)
         : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
+        _time = time;
     }
 
     /// <inheritdoc />
@@ -203,7 +207,7 @@ public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasal
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var fromSchedule = rate is not null;
-        var stamp = DateTime.UtcNow;
+        var stamp = _time.GetUtcNow().UtcDateTime;
         var updated = await ctx.TempBasals
             .Where(t => t.Id == id && t.DeletedAt == null && t.Percent == percent && t.Rate == readRate
                 && (t.Rate == null || t.RateFromSchedule))

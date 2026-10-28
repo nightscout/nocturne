@@ -30,7 +30,7 @@ public class EntryDecomposerTests : IDisposable
         _context.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
         var mockDedup = new Mock<IDeduplicationService>();
         var ctxFactory = new TestNocturneDbContextFactory(_context);
-        var sgRepo = new SensorGlucoseRepository(ctxFactory, mockDedup.Object, new Mock<IAuditContext>().Object, NullLogger<SensorGlucoseRepository>.Instance);
+        var sgRepo = new SensorGlucoseRepository(ctxFactory, mockDedup.Object, new Mock<IAuditContext>().Object, NullLogger<SensorGlucoseRepository>.Instance, TimeProvider.System);
         var mgRepo = new MeterGlucoseRepository(ctxFactory, new Mock<IAuditContext>().Object, NullLogger<MeterGlucoseRepository>.Instance);
         var calRepo = new CalibrationRepository(ctxFactory, new Mock<IAuditContext>().Object, NullLogger<CalibrationRepository>.Instance);
 

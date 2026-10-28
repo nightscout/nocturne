@@ -135,6 +135,7 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddDataServices(this IServiceCollection services)
     {
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<ICategoryReadContext>(_ => new CategoryReadContext());
         services.AddScoped(sp => new TenantReadContext(
             sp.GetService<ITenantAccessor>(),

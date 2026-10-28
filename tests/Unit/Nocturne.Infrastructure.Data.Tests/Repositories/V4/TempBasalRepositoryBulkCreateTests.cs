@@ -32,7 +32,8 @@ public class TempBasalRepositoryBulkCreateTests : IDisposable
             new TestNocturneDbContextFactory(_context),
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
-            NullLogger<TempBasalRepository>.Instance);
+            NullLogger<TempBasalRepository>.Instance,
+            TimeProvider.System);
     }
 
     public void Dispose()

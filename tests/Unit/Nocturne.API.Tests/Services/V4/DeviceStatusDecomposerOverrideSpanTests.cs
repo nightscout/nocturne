@@ -36,7 +36,8 @@ public class DeviceStatusDecomposerOverrideSpanTests : IDisposable
         _context = _db.CreateContext();
         _spans = new StateSpanRepository(
             _context.AsFactory(), Mock.Of<IDeduplicationService>(), new SystemAuditContext(),
-            NullLogger<StateSpanRepository>.Instance);
+            NullLogger<StateSpanRepository>.Instance,
+            TimeProvider.System);
 
         _decomposer = new DeviceStatusDecomposer(
             MicrosecondPrecision<IApsSnapshotRepository>.Wrap(new ApsSnapshotRepository(

@@ -12,7 +12,7 @@ public static class SystemEventMapper
     /// <summary>
     /// Convert domain model to database entity
     /// </summary>
-    public static SystemEventEntity ToEntity(SystemEvent systemEvent)
+    public static SystemEventEntity ToEntity(SystemEvent systemEvent, DateTime now)
     {
         return new SystemEventEntity
         {
@@ -27,7 +27,7 @@ public static class SystemEventMapper
                 ? JsonSerializer.Serialize(systemEvent.Metadata)
                 : null,
             OriginalId = systemEvent.OriginalId,
-            CreatedAt = systemEvent.CreatedAt ?? DateTime.UtcNow,
+            CreatedAt = systemEvent.CreatedAt ?? now,
         };
     }
 

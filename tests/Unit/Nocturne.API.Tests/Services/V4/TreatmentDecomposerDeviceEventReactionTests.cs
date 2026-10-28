@@ -56,7 +56,7 @@ public class TreatmentDecomposerDeviceEventReactionTests : IDisposable
         _decomposer = new TreatmentDecomposer(
             _context.AsFactory(),
             new BolusRepository(factory, dedup, audit, NullLogger<BolusRepository>.Instance),
-            new TempBasalRepository(factory, dedup, audit, NullLogger<TempBasalRepository>.Instance),
+            new TempBasalRepository(factory, dedup, audit, NullLogger<TempBasalRepository>.Instance, TimeProvider.System),
             new CarbIntakeRepository(factory, dedup, audit, NullLogger<CarbIntakeRepository>.Instance),
             new BGCheckRepository(factory, dedup, audit, NullLogger<BGCheckRepository>.Instance),
             new NoteRepository(factory, dedup, audit, NullLogger<NoteRepository>.Instance),

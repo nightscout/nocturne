@@ -88,6 +88,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     internal TenantReadContext ReadContext { get; set; } = TenantReadContext.FailClosed;
 
     /// <summary>
+    /// The clock the static helpers that write through this context stamp with. Set by
+    /// <see cref="INocturneDbContextFactory"/>; a context built from bare options reads the system clock.
+    /// </summary>
+    internal TimeProvider Clock { get; set; } = TimeProvider.System;
+
+    /// <summary>
     /// The tenant whose rows this context reaches: a pin when one is set, otherwise the scope's
     /// resolved tenant, read live. The tenant query filter and the <c>app.current_tenant_id</c> GUC
     /// both read it. Only <see cref="INocturneDbContextFactory"/> and

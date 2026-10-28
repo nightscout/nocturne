@@ -61,7 +61,8 @@ public class StateSpanSupersessionClampTests : IAsyncLifetime
                 scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>(),
                 new Mock<IDeduplicationService>().Object,
                 new Mock<IAuditContext>().Object,
-                NullLogger<StateSpanRepository>.Instance);
+                NullLogger<StateSpanRepository>.Instance,
+                TimeProvider.System);
 
             (await repository.DeleteStateSpanAsync(supersessor.ToString())).Should().NotBeEmpty();
         }

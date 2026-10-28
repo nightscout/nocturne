@@ -101,7 +101,8 @@ public class SingletonLinkPrunePostgresTests(RlsCompletenessFixture fx)
     }
 
     private static DeduplicationService Service(NocturneDbContext context) =>
-        new(context.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+        new(context.AsFactory(), new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance,
+            TimeProvider.System);
 
     private static async Task<Guid> IngestGlucoseAsync(
         NocturneDbContext context, DeduplicationService service, DateTime at, string source, double mgdl)

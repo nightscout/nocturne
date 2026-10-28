@@ -13,11 +13,13 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly TimeProvider _time;
 
     /// <inheritdoc cref="IConnectorFoodEntryRepository" />
-    public ConnectorFoodEntryRepository(INocturneDbContextFactory contexts)
+    public ConnectorFoodEntryRepository(INocturneDbContextFactory contexts, TimeProvider time)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _time = time;
     }
 
     /// <inheritdoc />
@@ -76,7 +78,7 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         if (entity != null)
         {
             entity.Status = status;
-            entity.ResolvedAt = DateTimeOffset.UtcNow;
+            entity.ResolvedAt = _time.GetUtcNow();
             await db.SaveChangesAsync(ct);
         }
     }

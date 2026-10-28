@@ -52,7 +52,7 @@ public class DedupRecordTypeTests : IDisposable
     private RecordType? Declared(RecordType recordType) => recordType switch
     {
         RecordType.SensorGlucose => new SensorGlucoseRepository(
-            _factory, _dedup, _audit, NullLogger<SensorGlucoseRepository>.Instance).DedupRecordType,
+            _factory, _dedup, _audit, NullLogger<SensorGlucoseRepository>.Instance, TimeProvider.System).DedupRecordType,
         RecordType.Bolus => new BolusRepository(
             _factory, _dedup, _audit, NullLogger<BolusRepository>.Instance).DedupRecordType,
         RecordType.BolusCalculation => new BolusCalculationRepository(

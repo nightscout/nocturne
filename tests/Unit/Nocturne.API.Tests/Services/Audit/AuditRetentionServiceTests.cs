@@ -27,6 +27,7 @@ public class AuditRetentionServiceTests
     private AuditRetentionService CreateService(Dictionary<string, string?> settings) =>
         new(_contextFactory.Object.AsNocturneFactory(),
             new ConfigurationBuilder().AddInMemoryCollection(settings).Build(),
+            TimeProvider.System,
             _logger.Object);
 
     private static NocturneDbContext CreateInMemoryContext()
@@ -286,7 +287,7 @@ public class AuditRetentionServiceTests
         IDbContextFactory<NocturneDbContext> contextFactory,
         IConfiguration configuration,
         ILogger<AuditRetentionService> logger)
-        : AuditRetentionService(contextFactory.AsNocturneFactory(), configuration, logger)
+        : AuditRetentionService(contextFactory.AsNocturneFactory(), configuration, TimeProvider.System, logger)
     {
         public List<(Guid TenantId, string Table, TimeSpan MinAge)> Purges { get; } = [];
 

@@ -15,18 +15,22 @@ public class PatientRecordRepository : IPatientRecordRepository
 {
     private readonly INocturneDbContextFactory _contextFactory;
     private readonly ILogger<PatientRecordRepository> _logger;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PatientRecordRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="time">The clock that stamps a new record.</param>
     public PatientRecordRepository(
         INocturneDbContextFactory contextFactory,
-        ILogger<PatientRecordRepository> logger)
+        ILogger<PatientRecordRepository> logger,
+        TimeProvider time)
     {
         _contextFactory = contextFactory;
         _logger = logger;
+        _time = time;
     }
 
     /// <summary>
@@ -59,11 +63,12 @@ public class PatientRecordRepository : IPatientRecordRepository
 
         _logger.LogInformation("No patient record found, creating empty record");
 
+        var now = _time.GetUtcNow().UtcDateTime;
         var model = new PatientRecord
         {
             Id = Guid.CreateVersion7(),
-            CreatedAt = DateTime.UtcNow,
-            ModifiedAt = DateTime.UtcNow,
+            CreatedAt = now,
+            ModifiedAt = now,
         };
 
         var newEntity = PatientRecordMapper.ToEntity(model);

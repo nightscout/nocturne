@@ -285,6 +285,7 @@ public class SensorGlucoseRepositorySourceDeleteTests : GlucoseSourceDeleteAudit
             new Mock<IDeduplicationService>().Object,
             auditContext,
             Logger<SensorGlucoseRepository>(),
+            TimeProvider.System,
             entrySink: EntrySink.Object);
 
     protected override SensorGlucoseEntity NewRow(Guid id, DateTime timestamp, string? dataSource, string? device) =>

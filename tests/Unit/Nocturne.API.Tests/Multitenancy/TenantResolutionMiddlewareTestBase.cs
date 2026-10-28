@@ -38,6 +38,7 @@ public abstract class TenantResolutionMiddlewareTestBase : IDisposable
         services.AddScoped(sp => new TenantReadContext(
             sp.GetRequiredService<ITenantAccessor>(), sp.GetRequiredService<ICategoryReadContext>(), null));
         services.AddSingleton(sp => new RootServiceProvider(sp));
+        services.AddSingleton(TimeProvider.System);
         services.AddTransient<NocturneDbContextFactory>();
         services.AddTransient<INocturneDbContextFactory>(sp => sp.GetRequiredService<NocturneDbContextFactory>());
         services.AddSingleton<ShareTokenCacheService>();

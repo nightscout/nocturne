@@ -13,13 +13,15 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EfFirstPartyTokenRepository"/> class.
     /// </summary>
-    public EfFirstPartyTokenRepository(INocturneDbContextFactory contexts)
+    public EfFirstPartyTokenRepository(INocturneDbContextFactory contexts, TimeProvider time)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _time = time;
     }
 
     /// <inheritdoc />
@@ -30,7 +32,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         await db.SaveChangesAsync(ct);
     }
 
-    private static async Task AddAsync(NocturneDbContext db, RefreshTokenRecord record, CancellationToken ct)
+    private async Task AddAsync(NocturneDbContext db, RefreshTokenRecord record, CancellationToken ct)
     {
         // A demo tenant's visitor account is shared: anyone can obtain a session for it without
         // signing up, and GET /api/v4/account/sessions lists every session for the subject —
@@ -91,9 +93,9 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
     /// here.
     /// </para>
     /// </remarks>
-    private static async Task TrimDemoSessionsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
+    private async Task TrimDemoSessionsAsync(NocturneDbContext db, Guid subjectId, CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
 
         // Ordered newest-first with a tiebreaker, so "which rows are surplus" does not depend on
         // how the provider breaks ties between rows issued in the same instant — which visitors
@@ -164,10 +166,11 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         if (entity is null)
             return;
 
-        entity.RevokedAt = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
+        entity.RevokedAt = now;
         entity.RevokedReason = reason;
         entity.ReplacedByTokenId = replacedByTokenId;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = now;
 
         await db.SaveChangesAsync(ct);
     }
@@ -183,7 +186,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         return await db.ExecuteInTransactionAsync(
             async token =>
             {
-                var now = DateTime.UtcNow;
+                var now = _time.GetUtcNow().UtcDateTime;
 
                 // Single atomic UPDATE ... WHERE id = @id AND revoked_at IS NULL. The database admits
                 // exactly one concurrent caller while the row is still active, so parallel refresh
@@ -224,7 +227,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             .Where(t => t.SubjectId == subjectId && t.RevokedAt == null)
             .ToListAsync(ct);
 
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
         foreach (var token in tokens)
         {
             token.RevokedAt = now;
@@ -248,7 +251,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             .Where(t => t.OidcSessionId == oidcSessionId && t.RevokedAt == null)
             .ToListAsync(ct);
 
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
         foreach (var token in tokens)
         {
             token.RevokedAt = now;
@@ -275,7 +278,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             .Where(RefreshTokenEntity.InSession(sessionId))
             .ToListAsync(ct);
 
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
         foreach (var token in tokens)
         {
             token.RevokedAt = now;
@@ -302,7 +305,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             .Where(t => t.SubjectId == subjectId && t.RevokedAt == null)
             .ToListAsync(ct);
 
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
         var count = 0;
         foreach (var token in tokens)
         {
@@ -324,12 +327,13 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
     public async Task UpdateLastUsedAsync(string tokenHash, CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
+        var now = _time.GetUtcNow().UtcDateTime;
         await db.RefreshTokens
             .Where(t => t.TokenHash == tokenHash)
             .ExecuteUpdateAsync(
                 s => s
-                    .SetProperty(t => t.LastUsedAt, DateTime.UtcNow)
-                    .SetProperty(t => t.UpdatedAt, DateTime.UtcNow),
+                    .SetProperty(t => t.LastUsedAt, now)
+                    .SetProperty(t => t.UpdatedAt, now),
                 ct);
     }
 
@@ -348,9 +352,10 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
         CancellationToken ct = default)
     {
         await using var db = await _contexts.CreateAsync(ct);
+        var now = _time.GetUtcNow().UtcDateTime;
         return await db.RefreshTokens
             .AsNoTracking()
-            .Where(t => t.SubjectId == subjectId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
+            .Where(t => t.SubjectId == subjectId && t.RevokedAt == null && t.ExpiresAt > now)
             .OrderByDescending(t => t.LastUsedAt ?? t.IssuedAt)
             .Select(t => new RefreshTokenInfo
             {

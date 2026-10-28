@@ -186,6 +186,7 @@ public class CredentialAtRestPassTests
                 minted.Add(token);
                 return token;
             },
+            TimeProvider.System,
             NullLogger.Instance);
 
         rotated.Should().Contain(tenantId, "the seeded plaintext row must be rewritten");
@@ -203,7 +204,7 @@ public class CredentialAtRestPassTests
         // again. Asserted on the seeded tenant rather than on an empty result, because the sweep is
         // table-global and other tests in this collection seed tenants of their own.
         var second = await CredentialAtRestInitializationExtensions.RotatePlaintextShareTokensAsync(
-            dataSource, () => $"re{Guid.NewGuid():N}"[..12], NullLogger.Instance);
+            dataSource, () => $"re{Guid.NewGuid():N}"[..12], TimeProvider.System, NullLogger.Instance);
         second.Should().NotContain(tenantId);
         (await ReadShareTokenAsync(dataSource, tenantId)).Should().Be(stored);
     }
@@ -215,7 +216,7 @@ public class CredentialAtRestPassTests
         var tenantId = await SeedTenantAsync(dataSource, shareToken: null);
 
         var rotated = await CredentialAtRestInitializationExtensions.RotatePlaintextShareTokensAsync(
-            dataSource, () => $"idle{Guid.NewGuid():N}"[..12], NullLogger.Instance);
+            dataSource, () => $"idle{Guid.NewGuid():N}"[..12], TimeProvider.System, NullLogger.Instance);
 
         rotated.Should().NotContain(tenantId);
         (await ReadShareTokenAsync(dataSource, tenantId)).Should().BeNull();

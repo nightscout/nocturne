@@ -269,7 +269,7 @@ public class SaveChangesChangeDetectionTests : IDisposable
     private SqliteTestDatabase NewStore(Guid tenantId)
     {
         var db = TestDbContextFactory.CreateSqliteWithTenant(
-            tenantId, "test", new MutationAuditInterceptor());
+            tenantId, "test", new MutationAuditInterceptor(TimeProvider.System));
         _databases.Add(db);
         return db;
     }

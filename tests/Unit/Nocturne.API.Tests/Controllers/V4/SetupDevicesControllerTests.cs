@@ -33,10 +33,10 @@ public class SetupDevicesControllerTests
         var factory = new TestNocturneDbContextFactory(db);
         var service = new DeviceSetupService(
             factory,
-            new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance),
-            new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
+            new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance, TimeProvider.System),
+            new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance, TimeProvider.System),
             Mock.Of<IDeviceReattributionService>(),
-            new TrackerRepository(factory),
+            new TrackerRepository(factory, TimeProvider.System),
             Mock.Of<ITrackerAlertRuleSyncService>(),
             Mock.Of<ITherapySettingsResolver>(t =>
                 t.GetActionTimeAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>())

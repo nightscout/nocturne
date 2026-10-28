@@ -30,7 +30,8 @@ public class SensorGlucoseRepositoryBaseReadTests : IDisposable
             new TestNocturneDbContextFactory(_context),
             new Mock<IDeduplicationService>().Object,
             new Mock<IAuditContext>().Object,
-            NullLogger<SensorGlucoseRepository>.Instance);
+            NullLogger<SensorGlucoseRepository>.Instance,
+            TimeProvider.System);
     }
 
     public void Dispose()

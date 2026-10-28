@@ -146,7 +146,7 @@ public class CompatibilityAnalysisDetailTests : IDisposable
             Mock.Of<ILogger<CompatibilityController>>());
 
     private DiscrepancyAnalysisRepository CreateRepository() =>
-        new(_db.CreateContext(_tenantId).AsFactory());
+        new(_db.CreateContext(_tenantId).AsFactory(), TimeProvider.System);
 
     private static TenantEntity Tenant(Guid id, string slug) =>
         new()

@@ -57,7 +57,7 @@ public class BatchResendMatchesSingleTests : IDisposable
     public async Task Entry_BatchResend_UpdatesSensorMeterAndCalibrationRows()
     {
         var decomposer = new EntryDecomposer(
-            new SensorGlucoseRepository(_factory, _dedup, _audit, NullLogger<SensorGlucoseRepository>.Instance),
+            new SensorGlucoseRepository(_factory, _dedup, _audit, NullLogger<SensorGlucoseRepository>.Instance, TimeProvider.System),
             new MeterGlucoseRepository(_factory, _audit, NullLogger<MeterGlucoseRepository>.Instance),
             new CalibrationRepository(_factory, _audit, NullLogger<CalibrationRepository>.Instance),
             Mock.Of<IGlucoseProcessingResolver>(),
@@ -92,7 +92,7 @@ public class BatchResendMatchesSingleTests : IDisposable
         var decomposer = new TreatmentDecomposer(
             _context.AsFactory(),
             new BolusRepository(_factory, _dedup, _audit, NullLogger<BolusRepository>.Instance),
-            new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance),
+            new TempBasalRepository(_factory, _dedup, _audit, NullLogger<TempBasalRepository>.Instance, TimeProvider.System),
             new CarbIntakeRepository(_factory, _dedup, _audit, NullLogger<CarbIntakeRepository>.Instance),
             new BGCheckRepository(_factory, _dedup, _audit, NullLogger<BGCheckRepository>.Instance),
             new NoteRepository(_factory, _dedup, _audit, NullLogger<NoteRepository>.Instance),

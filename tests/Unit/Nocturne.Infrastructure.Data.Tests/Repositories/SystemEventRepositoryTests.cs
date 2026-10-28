@@ -25,7 +25,7 @@ public class SystemEventRepositoryTests : IDisposable
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId, "test", _saves);
         _context = _db.CreateContext();
-        _repository = new SystemEventRepository(_context.AsFactory());
+        _repository = new SystemEventRepository(_context.AsFactory(), TimeProvider.System);
     }
 
     private sealed class SaveCounter : SaveChangesInterceptor
@@ -108,8 +108,8 @@ public class SystemEventRepositoryTests : IDisposable
     public async Task BulkUpsertAsync_LeavesNoSystemEventTracked_EvenForDuplicateStoredRows()
     {
         _context.SystemEvents.AddRange(
-            SystemEventMapper.ToEntity(Event("evt-dup", "one", 1_000)),
-            SystemEventMapper.ToEntity(Event("evt-dup", "two", 1_100)));
+            SystemEventMapper.ToEntity(Event("evt-dup", "one", 1_000), DateTime.UnixEpoch),
+            SystemEventMapper.ToEntity(Event("evt-dup", "two", 1_100), DateTime.UnixEpoch));
         await _context.SaveChangesAsync();
         _context.ChangeTracker.Clear();
 

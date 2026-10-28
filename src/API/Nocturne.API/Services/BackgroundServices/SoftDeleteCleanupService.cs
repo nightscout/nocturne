@@ -13,6 +13,7 @@ namespace Nocturne.API.Services.BackgroundServices;
 public class SoftDeleteCleanupService(
     INocturneDbContextFactory contextFactory,
     IConfiguration configuration,
+    TimeProvider time,
     ILogger<SoftDeleteCleanupService> logger) : BackgroundService
 {
     private static readonly TimeSpan InitialDelay = TimeSpan.FromMinutes(10);
@@ -117,7 +118,7 @@ public class SoftDeleteCleanupService(
     /// <returns>Total number of records deleted.</returns>
     private Task<int> PurgeBatchedAsync(
         Guid tenantId, string table, TimeSpan minAge, CancellationToken ct) =>
-        contextFactory.PurgeOlderThanAsync(tenantId, table, AgeColumn, minAge, BatchSize, ct);
+        contextFactory.PurgeOlderThanAsync(tenantId, table, AgeColumn, minAge, time, BatchSize, ct);
 
     /// <summary>Age column on every soft-deletable table.</summary>
     internal const string AgeColumn = "deleted_at";

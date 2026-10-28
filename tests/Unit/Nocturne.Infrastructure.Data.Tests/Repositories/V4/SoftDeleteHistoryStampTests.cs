@@ -29,7 +29,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
     public SoftDeleteHistoryStampTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-            TenantId, "test", _statements, new MutationAuditInterceptor());
+            TenantId, "test", _statements, new MutationAuditInterceptor(TimeProvider.System));
         _context = _db.CreateContext();
     }
 
@@ -364,7 +364,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
 
         var repository = new StateSpanRepository(
             _context.AsFactory(), Mock.Of<Core.Contracts.Infrastructure.IDeduplicationService>(),
-            new SystemAuditContext(), NullLogger<StateSpanRepository>.Instance);
+            new SystemAuditContext(), NullLogger<StateSpanRepository>.Instance, TimeProvider.System);
 
         var deleted = activity
             ? await repository.DeleteActivityStateSpanAsync(primary.Id.ToString())

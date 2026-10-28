@@ -14,6 +14,7 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class InAppNotificationRepository : IInAppNotificationRepository
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// A notification's urgency as its position in <see cref="NotificationUrgency"/>, which is
@@ -47,9 +48,10 @@ public class InAppNotificationRepository : IInAppNotificationRepository
     /// <summary>
     /// Initializes a new instance of the <see cref="InAppNotificationRepository"/> class.
     /// </summary>
-    public InAppNotificationRepository(INocturneDbContextFactory contexts)
+    public InAppNotificationRepository(INocturneDbContextFactory contexts, TimeProvider time)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _time = time;
     }
 
     /// <summary>
@@ -118,7 +120,7 @@ public class InAppNotificationRepository : IInAppNotificationRepository
     {
         await using var db = await _contexts.CreateAsync(cancellationToken);
         entity.Id = Guid.CreateVersion7();
-        entity.CreatedAt = DateTime.UtcNow;
+        entity.CreatedAt = _time.GetUtcNow().UtcDateTime;
 
         db.InAppNotifications.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
@@ -148,7 +150,7 @@ public class InAppNotificationRepository : IInAppNotificationRepository
             return null;
 
         entity.IsArchived = true;
-        entity.ArchivedAt = DateTime.UtcNow;
+        entity.ArchivedAt = _time.GetUtcNow().UtcDateTime;
         entity.ArchiveReason = reason;
 
         await db.SaveChangesAsync(cancellationToken);
@@ -177,7 +179,7 @@ public class InAppNotificationRepository : IInAppNotificationRepository
 
         if (entity.ReadAt == null)
         {
-            entity.ReadAt = DateTime.UtcNow;
+            entity.ReadAt = _time.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync(cancellationToken);
         }
 
@@ -204,7 +206,7 @@ public class InAppNotificationRepository : IInAppNotificationRepository
         if (unread.Count == 0)
             return unread;
 
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
         foreach (var entity in unread)
             entity.ReadAt = now;
 

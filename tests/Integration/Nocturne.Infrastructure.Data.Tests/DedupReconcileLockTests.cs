@@ -81,7 +81,7 @@ public class DedupReconcileLockTests(DedupReconcileLockTests.Database database)
 
     private static DeduplicationService Service(NocturneDbContext context) =>
         new(context.AsFactory(), new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<DeduplicationService>.Instance);
+            NullLogger<DeduplicationService>.Instance, TimeProvider.System);
 
     [Fact]
     public async Task Concurrent_passes_over_one_tenant_merge_a_duplicate_pair_once()

@@ -16,14 +16,17 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class SleepSessionRepository : ISleepSessionRepository
 {
     private readonly INocturneDbContextFactory _contextFactory;
+    private readonly TimeProvider _time;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SleepSessionRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
-    public SleepSessionRepository(INocturneDbContextFactory contextFactory)
+    /// <param name="time">The clock that stamps a write and a soft delete.</param>
+    public SleepSessionRepository(INocturneDbContextFactory contextFactory, TimeProvider time)
     {
         _contextFactory = contextFactory;
+        _time = time;
     }
 
     /// <inheritdoc />
@@ -89,7 +92,7 @@ public class SleepSessionRepository : ISleepSessionRepository
         await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
         return await ctx.ExecuteInTransactionAsync(async token =>
         {
-            var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId);
+            var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId, _time.GetUtcNow().UtcDateTime);
 
             // Dedup by Source + OriginalId first: a re-sync of the same source record replaces
             // that row and keeps its primary key, so the session id (and any reference to it)
@@ -173,7 +176,7 @@ public class SleepSessionRepository : ISleepSessionRepository
         await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
         return await ctx.ExecuteInTransactionAsync<SleepSession?>(async token =>
         {
-            var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId);
+            var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId, _time.GetUtcNow().UtcDateTime);
             entity.Id = id;
             if (!string.IsNullOrEmpty(entity.OriginalId))
                 await LockSourceRecordAsync(ctx, entity, token);
@@ -231,7 +234,7 @@ public class SleepSessionRepository : ISleepSessionRepository
             if (existing is null)
                 return false;
 
-            existing.DeletedAt = DateTime.UtcNow;
+            existing.DeletedAt = _time.GetUtcNow().UtcDateTime;
             await ctx.SaveChangesAsync(token);
             return true;
         }, ct: cancellationToken);

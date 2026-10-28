@@ -25,7 +25,7 @@ public class EfFirstPartyTokenRepositoryTests : IDisposable
     {
         _context = TestDbContextFactory.CreateInMemoryContext();
         _context.TenantId = TenantId;
-        _repository = new EfFirstPartyTokenRepository(_context.AsFactory());
+        _repository = new EfFirstPartyTokenRepository(_context.AsFactory(), TimeProvider.System);
     }
 
     public void Dispose()

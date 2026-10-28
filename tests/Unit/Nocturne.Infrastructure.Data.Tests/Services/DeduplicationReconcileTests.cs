@@ -46,7 +46,8 @@ public class DeduplicationReconcileTests : IDisposable
         _service = new DeduplicationService(
             _context.AsFactory(),
             new Mock<IServiceScopeFactory>().Object,
-            NullLogger<DeduplicationService>.Instance);
+            NullLogger<DeduplicationService>.Instance,
+            TimeProvider.System);
     }
 
     private async Task<ReconcileCursor?> CursorAsync()
@@ -988,7 +989,7 @@ public class DeduplicationReconcileTests : IDisposable
         await SetAllLinkSysCreatedAt(now.AddMinutes(-5));
 
         var logger = new Mock<ILogger<DeduplicationService>>();
-        var service = new DeduplicationService(_context.AsFactory(), new Mock<IServiceScopeFactory>().Object, logger.Object);
+        var service = new DeduplicationService(_context.AsFactory(), new Mock<IServiceScopeFactory>().Object, logger.Object, TimeProvider.System);
         FailingReadsInterceptor.FailWhen = sql => sql.Contains("carb_intakes");
         try
         {

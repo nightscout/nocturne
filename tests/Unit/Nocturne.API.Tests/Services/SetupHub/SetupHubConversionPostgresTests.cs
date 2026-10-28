@@ -78,7 +78,7 @@ public class SetupHubConversionPostgresTests(SetupHubConversionPostgresTests.Dat
         {
             var tenant = await SeedTenantAsync();
             var factory = Context(tenant).AsFactory();
-            var patientDevices = new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance);
+            var patientDevices = new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance, TimeProvider.System);
             await patientDevices.CreateAsync(new PatientDevice
             {
                 DeviceCategory = DeviceCategory.InsulinPump, Manufacturer = "SOOIL", Model = "Dana-i",
@@ -99,15 +99,15 @@ public class SetupHubConversionPostgresTests(SetupHubConversionPostgresTests.Dat
             var hub = new DeviceSetupService(
                 factory,
                 patientDevices,
-                new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
+                new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance, TimeProvider.System),
                 Mock.Of<IDeviceReattributionService>(),
-                new TrackerRepository(Context(tenant).AsFactory()),
+                new TrackerRepository(Context(tenant).AsFactory(), TimeProvider.System),
                 Mock.Of<ITrackerAlertRuleSyncService>(),
                 Mock.Of<ITherapySettingsResolver>(),
                 Writer(),
                 NullLogger<DeviceSetupService>.Instance);
             var conversion = new LegacyFallbackService(
-                new TrackerRepository(Context(tenant).AsFactory()),
+                new TrackerRepository(Context(tenant).AsFactory(), TimeProvider.System),
                 deviceEvents.Object,
                 patientDevices,
                 Writer(),
