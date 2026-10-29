@@ -19,7 +19,6 @@ internal sealed class ReportRenderer(
     IServiceProvider services,
     ITenantAppearanceReader appearance,
     ITenantAccessor tenant,
-    ICategoryReadContext readContext,
     McpToolReadLog readLog,
     IOptions<MvcJsonOptions> jsonOptions)
 {
@@ -31,7 +30,7 @@ internal sealed class ReportRenderer(
 
         var report = await runner.RunAsync(
             spec,
-            new ReportRunContext(useMmol, http.GetGrantedScopes(), services, readLog, readContext.IsHistoryClamped),
+            new ReportRunContext(useMmol, http.GetGrantedScopes(), services, readLog, http.IsCallerHistoryClamped()),
             cancellationToken);
 
         var text = new StringBuilder(report.Summary);
