@@ -22,7 +22,8 @@ internal sealed class ReportResources
     public static ReadResourceResult GetReport(IHttpContextAccessor httpContextAccessor, ReportView view)
     {
         var html = view.GetHtml()
-            ?? throw new McpException("The report view was not built into this server.");
+            ?? throw new McpProtocolException(
+                "The report view was not built into this server.", McpErrorCode.InternalError);
 
         return new ReadResourceResult
         {
