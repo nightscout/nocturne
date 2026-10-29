@@ -117,6 +117,13 @@ public class FoodFindTests : IDisposable
     }
 
     [Fact]
+    public async Task Search_IgnoresCase()
+    {
+        (await _foods.SearchFoodAsync("BREAD", 10, 0)).Select(f => f.Name).Should().Equal("synthetic bread");
+        (await _foods.SearchFoodAsync("Fruit", 10, 0)).Should().HaveCount(2);
+    }
+
+    [Fact]
     public async Task Search_MatchesCategoryAndSubcategory()
     {
         (await _foods.SearchFoodAsync("fruit", 10, 0)).Should().HaveCount(2);

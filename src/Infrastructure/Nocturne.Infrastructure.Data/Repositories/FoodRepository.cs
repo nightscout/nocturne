@@ -402,10 +402,11 @@ public class FoodRepository : IFoodRepository
 
         if (!string.IsNullOrEmpty(text))
         {
+            var lower = text.ToLowerInvariant();
             query = query.Where(f =>
-                f.Name.Contains(text)
-                || f.Category.Contains(text)
-                || f.Subcategory.Contains(text)
+                f.Name.ToLower().Contains(lower)
+                || f.Category.ToLower().Contains(lower)
+                || f.Subcategory.ToLower().Contains(lower)
             );
         }
 

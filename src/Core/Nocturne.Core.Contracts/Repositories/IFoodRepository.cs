@@ -99,7 +99,7 @@ public interface IFoodRepository
     );
 
     /// <summary>
-    /// Foods whose name, category or subcategory contains <paramref name="text"/>, ordered by name.
+    /// Foods whose name, category or subcategory contains <paramref name="text"/>, ignoring case, ordered by name.
     /// This is the V4 free-text search, distinct from the legacy <c>find</c> syntax.
     /// </summary>
     /// <param name="text">The text to look for; null or empty matches every food.</param>
