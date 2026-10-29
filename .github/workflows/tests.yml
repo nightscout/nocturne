@@ -536,7 +536,10 @@ jobs:
       - name: MCP view browser tests
         if: ${{ !cancelled() }}
         working-directory: src/Web/packages/mcp-view
-        run: pnpm exec vitest --run
+        run: |
+          pnpm exec vitest --run
+          pnpm run build
+          pnpm run smoke
       - uses: actions/upload-artifact@v6
         if: always()
         with:

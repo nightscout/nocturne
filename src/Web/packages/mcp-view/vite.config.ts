@@ -21,6 +21,12 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    rollupOptions: { input: "mcp-app.html" },
+    rollupOptions: {
+      input: "mcp-app.html",
+      // Inlining layerchart's dynamic imports into one file makes rolldown initialise those
+      // modules lazily, and a component then ran before its module had (blank plot, "reading
+      // 'has'"). scripts/render-smoke.mjs renders the built file to catch it.
+      output: { strictExecutionOrder: true },
+    },
   },
 });

@@ -794,6 +794,9 @@ importers:
       eslint:
         specifier: ^10.3.0
         version: 10.3.0(jiti@2.7.0)
+      playwright:
+        specifier: 1.60.0
+        version: 1.60.0
       svelte-check:
         specifier: ^4.7.7
         version: 4.7.7(picomatch@4.0.7)(svelte@5.57.2(patch_hash=11cf29547185bfb79a9bc362eb6ea15850ab1534b63eb515c5ad12d80d4a14b2)(@typescript-eslint/types@8.59.3))(typescript@6.0.3)
