@@ -45,7 +45,7 @@ const twoPanels = {
         field("targetHigh", "Range high", "number", "mg/dL"),
       ],
       rows: glucoseData.map((r) => ({ time: r.time, glucose: r.sgv, targetLow: 70, targetHigh: 180 })),
-      thresholds: { veryLow: 54, low: 70, high: 180, veryHigh: 250 },
+      thresholds: { veryLow: 54, low: 70, high: 180, veryHigh: 250, mgdlPerUnit: 1 },
       summary: "Glucose from 2026-10-29 06:00 to 2026-10-29 09:00 UTC.\nReadings: 36.",
       omitted: [],
     },
@@ -113,12 +113,26 @@ describe("ReportView", () => {
     expect(page.getByTestId("report-panel").elements()).toHaveLength(2);
   });
 
-  it("colours a glucose line by the panel's thresholds, from the theme", async () => {
-    render(ReportView, { result: { structuredContent: twoPanels }, locale: "en-US" });
-
+  async function stopColours() {
     const series = page.getByTestId("report-time-series");
     await expect.poll(() => series.element().querySelectorAll("linearGradient stop").length).toBeGreaterThan(0);
-    const colours = [...series.element().querySelectorAll("linearGradient stop")].map((s) => s.getAttribute("stop-color"));
+    return [...series.element().querySelectorAll("linearGradient stop")].map((s) => s.getAttribute("stop-color") ?? "");
+  }
+
+  it("colours a glucose line with the dashboard's spectrum by default", async () => {
+    render(ReportView, { result: { structuredContent: twoPanels }, locale: "en-US" });
+
+    const colours = await stopColours();
+    expect(colours.every((c) => c.startsWith("oklch("))).toBe(true);
+  });
+
+  it("colours a glucose line by range when the report says so", async () => {
+    render(ReportView, {
+      result: { structuredContent: { ...twoPanels, glucoseColorMode: "threshold" } },
+      locale: "en-US",
+    });
+
+    const colours = await stopColours();
     expect(colours).toContain("var(--glucose-low)");
     expect(colours).toContain("var(--glucose-in-range)");
   });

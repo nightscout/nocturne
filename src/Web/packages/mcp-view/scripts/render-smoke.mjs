@@ -51,7 +51,7 @@ const result = {
           field("targetHigh", "Range high", "number", "mg/dL"),
         ],
         rows: glucoseData.map((r) => ({ time: r.time, glucose: r.sgv, targetLow: 70, targetHigh: 180 })),
-        thresholds: { veryLow: 54, low: 70, high: 180, veryHigh: 250 },
+        thresholds: { veryLow: 54, low: 70, high: 180, veryHigh: 250, mgdlPerUnit: 1 },
         summary: "line summary",
       },
     ],

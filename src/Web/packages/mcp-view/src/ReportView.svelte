@@ -26,13 +26,14 @@
   });
   const plotHeight = $derived(displayMode === "fullscreen" ? "h-[45vh] min-h-[280px]" : "h-[280px]");
   const tableHeight = $derived(displayMode === "fullscreen" ? "max-h-[45vh]" : "max-h-[280px]");
+  const colorMode = $derived(report?.glucoseColorMode ?? "continuous");
 </script>
 
 {#snippet panelBody(panel: ReportPanel)}
   {#if panel.status !== "ok"}
     <!-- The summary below says why. -->
   {:else if panel.primitive === "time_series"}
-    <TimeSeriesChart {panel} {format} heightClass={plotHeight} />
+    <TimeSeriesChart {panel} {format} heightClass={plotHeight} lineColorMode={colorMode} />
   {:else if panel.primitive === "stat_tiles"}
     <StatTiles {panel} {format} />
   {:else if panel.primitive === "table"}
@@ -47,6 +48,7 @@
       {format}
       heightClass="{displayMode === 'fullscreen' ? 'h-[70vh]' : 'h-[420px]'} w-full"
       omittedTracks={omittedToggles(panel.omittedScopes ?? [])}
+      appearance={{ lineColorMode: colorMode }}
     />
   {/if}
 {/snippet}

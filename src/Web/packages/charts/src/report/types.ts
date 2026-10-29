@@ -32,6 +32,8 @@ export interface ReportThresholds {
   low: number;
   high: number;
   veryHigh: number;
+  /** mg/dL in one display unit: 1, or 18.0182 for mmol/L. Places the mg/dL glucose spectrum on the axis. */
+  mgdlPerUnit: number;
 }
 
 export interface ReportBindings {
@@ -65,6 +67,8 @@ export interface ReportPanel {
   chart?: DashboardChartDataDto | null;
   omittedScopes?: string[];
   summary: string;
+  /** The range was cut to the last 24 hours, all a history-clamped caller reads. */
+  limited?: boolean;
   omitted?: { field: string; scope: string }[];
   resolution?: ReportResolution | null;
 }
@@ -72,6 +76,8 @@ export interface ReportPanel {
 export interface ReportResult {
   spec: { version: number; title?: string | null };
   units: "mg/dl" | "mmol";
+  /** How every glucose line in the report is coloured; one value per report. */
+  glucoseColorMode?: "continuous" | "threshold";
   panels: ReportPanel[];
   summary: string;
   warnings?: string[];

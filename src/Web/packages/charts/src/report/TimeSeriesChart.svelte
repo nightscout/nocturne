@@ -1,23 +1,25 @@
 <!--
   Lines of one unit over time from a report panel's rows, with an optional shaded band between two
-  fields. A field on the glucose scale is coloured by the panel's thresholds, as the dashboard's
-  glucose line is (lineStopsFor); every other line takes its field's theme colour.
+  fields. A field on the glucose scale is coloured as the dashboard's glucose line is (lineStopsFor),
+  in the report's one colour mode; every other line takes its field's theme colour.
 -->
 <script lang="ts">
   import { Area, Axis, Chart, ChartClipPath, LinearGradient, Rule, Spline, Svg, Tooltip } from "layerchart";
   import { curveMonotoneX, scaleTime } from "d3";
   import { resolveChartColor } from "../colors.js";
   import { formatClockTime, type ChartFormat } from "../format.js";
-  import { lineStopsFor } from "../view/glucose-gradient-stops.js";
-  import { boundFields, formatReportValue, type ReportPanel, type ReportRow } from "./types.js";
+  import { lineStopsFor, type LineColorMode } from "../view/glucose-gradient-stops.js";
+  import { boundFields, formatReportValue, type ReportPanel, type ReportRow, type ReportThresholds } from "./types.js";
 
   interface Props {
     panel: ReportPanel;
     format: ChartFormat;
     heightClass?: string;
+    /** The report's glucose colouring, from the API: the dashboard's spectrum by default. */
+    lineColorMode?: Exclude<LineColorMode, "single">;
   }
 
-  let { panel, format, heightClass = "h-[280px]" }: Props = $props();
+  let { panel, format, heightClass = "h-[280px]", lineColorMode = "continuous" }: Props = $props();
 
   type Point = { time: Date; row: ReportRow };
 
@@ -55,6 +57,13 @@
     for (const p of points) for (const n of names) max = Math.max(max, num(p.row, n) ?? 0);
     return max > 0 ? max * 1.1 : 1;
   });
+
+  // The stops are placed in mg/dL; the axis is in the display unit, which the API relates to mg/dL.
+  function glucoseStops(t: ReportThresholds, yScale: (value: number) => number, height: number) {
+    const f = t.mgdlPerUnit;
+    const mgdl = { veryLow: t.veryLow * f, low: t.low * f, high: t.high * f, veryHigh: t.veryHigh * f };
+    return lineStopsFor(lineColorMode, mgdl, (value) => yScale(value / f), height);
+  }
 
   const lineColor = (color: string | null | undefined) =>
     color ? resolveChartColor(color) : "var(--foreground)";
@@ -102,7 +111,7 @@
             {#each lines as field (field.name)}
               {#if field.glucoseScale && thresholds}
                 <LinearGradient
-                  stops={lineStopsFor("threshold", thresholds, context.yScale, context.height)}
+                  stops={glucoseStops(thresholds, context.yScale, context.height)}
                   units="userSpaceOnUse"
                   vertical
                   y1="0"
