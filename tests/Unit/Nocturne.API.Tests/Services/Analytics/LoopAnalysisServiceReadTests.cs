@@ -114,7 +114,8 @@ public class LoopAnalysisServiceReadTests
             therapySettingsRepository: Mock.Of<ITherapySettingsRepository>(),
             aidSystemMetrics: null!,
             deviceDates: DeviceDateClockDoubles.Utc(),
-            deviceEventRepository: Mock.Of<IDeviceEventRepository>());
+            deviceEventRepository: Mock.Of<IDeviceEventRepository>(),
+            treatmentFoodRepository: Mock.Of<ITreatmentFoodRepository>());
     }
 
     [Fact]

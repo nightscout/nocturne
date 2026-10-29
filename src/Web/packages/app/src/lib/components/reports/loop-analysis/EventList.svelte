@@ -111,7 +111,7 @@
               , in {(event.cohorts ?? [])
                 .map((n) => cohorts.find((c) => c.cohort === n))
                 .filter((c) => c != null)
-                .map(cohortLabel)
+                .map((c) => cohortLabel(c))
                 .join("; ")}
             </span>
           </td>

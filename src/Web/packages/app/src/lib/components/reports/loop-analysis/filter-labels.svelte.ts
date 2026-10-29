@@ -20,6 +20,8 @@ export function missingScopeReason(scope: string): string {
       return "Needs access to devices";
     case "therapy.read":
       return "Needs access to therapy settings";
+    case "food.read":
+      return "Needs access to food";
     default:
       return "Not available with your access";
   }
@@ -32,6 +34,10 @@ export function ignoredFilterLabel(name: string): string {
   if (cohort) return `Cohort ${cohort[1]}`;
   const grams = /^(min|max)Grams(\d)$/.exec(name);
   if (grams) return grams[1] === "min" ? `Cohort ${grams[2]}, at least (g)` : `Cohort ${grams[2]}, at most (g)`;
+  const foodIds = /^foodIds(\d)$/.exec(name);
+  if (foodIds) return `Cohort ${foodIds[1]}, foods`;
+  const foodCategory = /^foodCategory(\d)$/.exec(name);
+  if (foodCategory) return `Cohort ${foodCategory[1]}, food category`;
   const labels: Record<string, string> = { ...eventOptionLabels(), ...eventWindowLabels(), ...maskLabels() };
   return labels[name] ?? name;
 }

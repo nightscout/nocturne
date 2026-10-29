@@ -12,7 +12,9 @@ namespace Nocturne.API.Authorization;
 /// CGM data existed. A caller may ask only for anchors it could read, since the curves and counts
 /// aligned on an anchor would otherwise place each one in time; the controller drops the rest
 /// before anything is computed (<see cref="NarrowEvents"/>). The isolation and corroboration options
-/// read meals, boluses and delivery, so they need treatments too.
+/// read meals, boluses and delivery, so they need treatments too. A meal cohort's food filter reads
+/// the food catalogue, so it needs <c>food.read</c>; without it the filter is dropped and reported,
+/// as an option is, and the cohort counts every meal.
 /// </summary>
 internal static partial class LoopAnalysisReadScopeGuard
 {
@@ -35,15 +37,25 @@ internal static partial class LoopAnalysisReadScopeGuard
         ("requireCorroboration", d => d.RequireCorroboration, d => d.RequireCorroboration = false),
     ];
 
+    /// <summary>The cohort food filters, by the query parameter each is sent as, and how to drop each.</summary>
+    private static readonly (string Name, Func<EventCohortDefinition, bool> IsSet, Action<EventCohortDefinition> Clear)[] FoodFilters =
+    [
+        ("foodIds", c => c.FoodIds is { Count: > 0 }, c => c.FoodIds = null),
+        ("foodCategory", c => !string.IsNullOrWhiteSpace(c.FoodCategory), c => c.FoodCategory = null),
+    ];
+
     /// <summary>The first scope an anchor kind needs that the caller lacks, or null.</summary>
     private static string? MissingScope(EventAnchorKind anchor, IReadOnlySet<string> grantedScopes) =>
         AnchorScopes[anchor].FirstOrDefault(scope => !AnalyticsReadScopes.Allows(grantedScopes, scope));
 
     /// <summary>
     /// Drops from <paramref name="definition"/> every cohort whose anchor the caller could not read,
-    /// and the options without <c>treatments.read</c>.
+    /// the options without <c>treatments.read</c>, and the food filters without <c>food.read</c>.
     /// </summary>
-    /// <returns>The query parameters ignored: each dropped cohort's <c>anchor{n}</c>, and the options.</returns>
+    /// <returns>
+    /// The query parameters ignored: each dropped cohort's <c>anchor{n}</c>, the options, and each
+    /// dropped food filter's <c>foodIds{n}</c> or <c>foodCategory{n}</c>.
+    /// </returns>
     public static List<string> NarrowEvents(EventResponseDefinition definition, IReadOnlySet<string> grantedScopes)
     {
         var ignored = definition.Cohorts
@@ -60,6 +72,18 @@ internal static partial class LoopAnalysisReadScopeGuard
                 ignored.Add(option.Name);
             }
         }
+
+        if (!AnalyticsReadScopes.Allows(grantedScopes, Scope.FoodRead))
+        {
+            foreach (var cohort in definition.Cohorts)
+            {
+                foreach (var filter in FoodFilters.Where(f => f.IsSet(cohort)))
+                {
+                    filter.Clear(cohort);
+                    ignored.Add($"{filter.Name}{cohort.Cohort}");
+                }
+            }
+        }
         return ignored;
     }
 
@@ -72,10 +96,16 @@ internal static partial class LoopAnalysisReadScopeGuard
     ];
 
     /// <summary>The event options <see cref="NarrowEvents"/> would drop for this caller, set or not.</summary>
+    /// <remarks>The food filters are named without their cohort number.</remarks>
     public static List<LoopAnalysisUnavailableFilter> UnavailableEventFilters(IReadOnlySet<string> grantedScopes) =>
-        AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead)
+    [
+        .. AnalyticsReadScopes.Allows(grantedScopes, Scope.TreatmentsRead)
             ? []
-            : [.. EventOptions.Select(o => new LoopAnalysisUnavailableFilter { Filter = o.Name, RequiredScope = Scope.TreatmentsRead })];
+            : EventOptions.Select(o => new LoopAnalysisUnavailableFilter { Filter = o.Name, RequiredScope = Scope.TreatmentsRead }),
+        .. AnalyticsReadScopes.Allows(grantedScopes, Scope.FoodRead)
+            ? []
+            : FoodFilters.Select(f => new LoopAnalysisUnavailableFilter { Filter = f.Name, RequiredScope = Scope.FoodRead }),
+    ];
 
     /// <summary>The event series and figures the caller's scopes withhold, as <see cref="WithheldDailyProfile"/> is for the Daily profile.</summary>
     public static HashSet<LoopAnalysisSeries> WithheldEvents(IReadOnlySet<string> grantedScopes)

@@ -78,6 +78,50 @@ public class TreatmentFoodRepository : ITreatmentFoodRepository
             .ToList();
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<CarbIntakeFood>> GetCarbIntakeFoodsAsync(
+        IEnumerable<Guid> carbIntakeIds,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var ids = carbIntakeIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return [];
+
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        return await db
+            .TreatmentFoods.AsNoTracking()
+            .Where(tf => ids.Contains(tf.CarbIntakeId))
+            .Select(tf => new CarbIntakeFood(
+                tf.CarbIntakeId,
+                tf.FoodId,
+                tf.Food != null ? tf.Food.Name : null,
+                tf.Food != null ? tf.Food.Category : null))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, int>> CountCarbIntakesByFoodAsync(
+        DateTime since,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var counts = await db
+            .TreatmentFoods.AsNoTracking()
+            .Where(tf => tf.FoodId != null)
+            .Join(
+                db.CarbIntakes.AsNoTracking().Where(c => c.Timestamp >= since),
+                tf => tf.CarbIntakeId,
+                c => c.Id,
+                (tf, c) => new { FoodId = tf.FoodId!.Value, CarbIntakeId = c.Id })
+            .Distinct()
+            .GroupBy(x => x.FoodId)
+            .Select(g => new { FoodId = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        return counts.ToDictionary(c => c.FoodId, c => c.Count);
+    }
+
     /// <summary>
     /// Create a food breakdown entry.
     /// </summary>

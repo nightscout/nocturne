@@ -38,7 +38,8 @@ public class EventResponseCalculatorTests
         bool requireCorroboration = false,
         long? from = null,
         long? to = null,
-        long? now = null)
+        long? now = null,
+        IReadOnlyDictionary<long, IReadOnlyList<MealFood>>? mealFoods = null)
     {
         var definition = new EventResponseDefinition
         {
@@ -59,6 +60,7 @@ public class EventResponseCalculatorTests
             Sources = sources ?? new LoopAnalysisMaskSources(),
             SensorStarts = sensorStarts ?? [],
             Now = now ?? long.MaxValue,
+            MealFoods = mealFoods ?? new Dictionary<long, IReadOnlyList<MealFood>>(),
         };
         var start = from ?? From;
         var end = to ?? To;
@@ -92,6 +94,80 @@ public class EventResponseCalculatorTests
         range.Cohorts.Single().Events.Should().Be(1);
         range.Cohorts.Single().Anchors.Should().Be(1);
         range.Events.Should().ContainSingle().Which.Time.Should().Be("08:00");
+    }
+
+    [Fact]
+    public void AFoodFilter_CountsMealsWithAMatchingRecord_AndCountsCarbsOnlyMealsApart()
+    {
+        var pasta = Guid.NewGuid();
+        var rice = Guid.NewGuid();
+        var withPasta = Local(2024, 6, 11, 12);
+        var withRice = Local(2024, 6, 12, 12);
+        var carbsOnly = Local(2024, 6, 13, 12);
+        var uncategorised = Local(2024, 6, 14, 12);
+        var foods = new Dictionary<long, IReadOnlyList<MealFood>>
+        {
+            [withPasta] = [new MealFood(pasta, "Pasta"), new MealFood(null, null)],
+            [withRice] = [new MealFood(rice, "Grains")],
+            [uncategorised] = [new MealFood(null, null)],
+        };
+        CarbEvent[] carbs = [new(withPasta, 60), new(withRice, 50), new(carbsOnly, 40), new(uncategorised, 30)];
+
+        var byId = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodIds = [pasta] }],
+            glucose: Flat(120), carbs: carbs, mealFoods: foods).Cohorts.Single();
+        var byCategory = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodCategory = " grains " }],
+            glucose: Flat(120), carbs: carbs, mealFoods: foods).Cohorts.Single();
+        var both = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodIds = [pasta], FoodCategory = "Grains" }],
+            glucose: Flat(120), carbs: carbs, mealFoods: foods).Cohorts.Single();
+        var unfiltered = Calculate([Cohort(1)], glucose: Flat(120), carbs: carbs, mealFoods: foods).Cohorts.Single();
+
+        byId.Events.Should().Be(1);
+        byId.Anchors.Should().Be(1);
+        byId.MealsWithFoodRecord.Should().Be(3);
+        byId.MealsWithoutFoodRecord.Should().Be(1);
+        byCategory.Events.Should().Be(1);
+        byCategory.MealsWithFoodRecord.Should().Be(3);
+        byCategory.MealsWithoutFoodRecord.Should().Be(1);
+        both.Events.Should().Be(0);
+        unfiltered.Events.Should().Be(4);
+        unfiltered.MealsWithFoodRecord.Should().Be(0);
+        unfiltered.MealsWithoutFoodRecord.Should().Be(0);
+    }
+
+    [Fact]
+    public void AFoodFilter_CountsOnlyMealsThatPassTheOtherFilters()
+    {
+        var pasta = Guid.NewGuid();
+        var lunch = Local(2024, 6, 11, 12);
+        var dinner = Local(2024, 6, 11, 19);
+        var foods = new Dictionary<long, IReadOnlyList<MealFood>> { [lunch] = [new MealFood(pasta, "Pasta")] };
+
+        var cohort = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FromMinute = 11 * 60, ToMinute = 14 * 60, FoodIds = [pasta] }],
+            glucose: Flat(120), carbs: [new(lunch, 60), new(dinner, 40)], mealFoods: foods).Cohorts.Single();
+
+        cohort.Events.Should().Be(1);
+        cohort.MealsWithFoodRecord.Should().Be(1);
+        cohort.MealsWithoutFoodRecord.Should().Be(0);
+    }
+
+    [Fact]
+    public void ADayOfWeekFilter_KeepsAnchorsOnThoseLocalDays()
+    {
+        // 2024-06-10 is a Monday in Sydney; 23:30 Monday local is still Monday 13:30 UTC.
+        var monday = Local(2024, 6, 10, 23, 30);
+        var tuesday = Local(2024, 6, 11, 8);
+        var saturday = Local(2024, 6, 15, 8);
+
+        var range = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, DaysOfWeek = [DayOfWeek.Monday, DayOfWeek.Saturday] }],
+            glucose: Flat(120), carbs: [new(monday, 30), new(tuesday, 30), new(saturday, 30)]);
+
+        range.Cohorts.Single().Events.Should().Be(2);
+        range.Events.Select(e => e.Date).Should().Equal("2024-06-10", "2024-06-15");
     }
 
     [Fact]

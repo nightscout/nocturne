@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Models.Authorization;
@@ -249,6 +250,105 @@ public class LoopAnalysisEventResponseIntegrationTests(ApiIntegrationTestFixture
         var response = await AuthenticatedClient.GetAsync(Query($"{Week}&{events}"));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Filters_a_meal_cohort_by_food_and_weekday_and_counts_carbs_only_meals_apart()
+    {
+        await SeedProfileAsync("Australia/Sydney");
+        await SeedWeekAsync(WeekStart);
+        var (pasta, rice) = await SeedFoodsAsync();
+
+        var byFood = await GetOkAsync(AuthenticatedClient, Query($"{Week}&anchor1=Meal&foodIds1={pasta}"));
+        var byCategory = await GetOkAsync(AuthenticatedClient, Query($"{Week}&anchor1=Meal&foodCategory1=grains"));
+        var byDay = await GetOkAsync(AuthenticatedClient, Query($"{Week}&anchor1=Meal&dayOfWeek1=Monday&dayOfWeek1=Sunday"));
+
+        var cohort = byFood.GetProperty("primary").GetProperty("cohorts")[0];
+        cohort.GetProperty("events").GetInt32().Should().Be(2, "Monday's and Tuesday's lunches carry pasta");
+        cohort.GetProperty("mealsWithFoodRecord").GetInt32().Should().Be(3);
+        cohort.GetProperty("mealsWithoutFoodRecord").GetInt32().Should().Be(4, "the other lunches have carbs only, so they are counted, not dropped silently");
+        byFood.GetProperty("definition").GetProperty("cohorts")[0].GetProperty("foodIds")[0].GetGuid().Should().Be(pasta);
+
+        var grains = byCategory.GetProperty("primary").GetProperty("cohorts")[0];
+        grains.GetProperty("events").GetInt32().Should().Be(1);
+        grains.GetProperty("mealsWithoutFoodRecord").GetInt32().Should().Be(4);
+        _ = rice;
+
+        var days = byDay.GetProperty("primary").GetProperty("cohorts")[0];
+        days.GetProperty("events").GetInt32().Should().Be(2);
+        days.GetProperty("mealsWithFoodRecord").GetInt32().Should().Be(0, "no food filter, no food count");
+        byDay.GetProperty("primary").GetProperty("events").EnumerateArray().Select(e => e.GetProperty("date").GetString())
+            .Should().Equal("2024-06-10", "2024-06-16");
+    }
+
+    [Fact]
+    public async Task Ignores_a_food_filter_without_food_read_and_says_so()
+    {
+        await SeedProfileAsync("Australia/Sydney");
+        await SeedWeekAsync(WeekStart);
+        var (pasta, _) = await SeedFoodsAsync();
+        using var client = await CreateTokenClientAsync(Scope.ReportsRead, Scope.GlucoseRead, Scope.TreatmentsRead);
+
+        var body = await GetOkAsync(client, Query($"{Week}&anchor1=Meal&foodIds1={pasta}"));
+
+        body.GetProperty("ignoredFilters").EnumerateArray().Select(f => f.GetString()).Should().Equal("foodIds1");
+        body.GetProperty("unavailableFilters").EnumerateArray().Select(f => f.GetProperty("filter").GetString())
+            .Should().Contain(["foodIds", "foodCategory"]);
+        body.GetProperty("primary").GetProperty("cohorts")[0].GetProperty("events").GetInt32().Should().Be(7);
+    }
+
+    [Theory]
+    [InlineData("anchor1=CorrectionBolus&foodCategory1=Pasta")]
+    [InlineData("dayOfWeek2=Monday")]
+    public async Task Rejects_a_food_or_weekday_filter_it_cannot_apply(string events)
+    {
+        var response = await AuthenticatedClient.GetAsync(Query($"{Week}&{events}"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Reads_each_carb_intakes_foods_and_counts_intakes_per_food_since_a_date()
+    {
+        await SeedWeekAsync(WeekStart);
+        var (pasta, rice) = await SeedFoodsAsync();
+        using var scope = TenantScope();
+        var repository = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Repositories.ITreatmentFoodRepository>();
+        Guid[] intakes;
+        await using (var context = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync())
+            intakes = [.. await context.CarbIntakes.OrderBy(c => c.Timestamp).Select(c => c.Id).ToListAsync()];
+
+        var foods = await repository.GetCarbIntakeFoodsAsync(intakes);
+        var counts = await repository.CountCarbIntakesByFoodAsync(WeekStart.AddDays(1));
+
+        foods.Should().HaveCount(4);
+        foods.Where(f => f.FoodId == pasta).Should().HaveCount(2).And.OnlyContain(f => f.FoodName == "Penne" && f.FoodCategory == "Pasta");
+        foods.Should().ContainSingle(f => f.FoodId == null, "a record of unspecified carbs names no food");
+        counts.Should().BeEquivalentTo(new Dictionary<Guid, int> { [pasta] = 1, [rice] = 1 }, "Monday's lunch is before the date");
+    }
+
+    /// <summary>
+    /// Penne (Pasta) on Monday's and Tuesday's lunches, rice (Grains) with a record of unspecified
+    /// carbs on Wednesday's; the other lunches carry no food record.
+    /// </summary>
+    private async Task<(Guid Pasta, Guid Rice)> SeedFoodsAsync()
+    {
+        using var scope = TenantScope();
+        await using var context = await scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
+        var pasta = new Nocturne.Infrastructure.Data.Entities.FoodEntity { Id = Guid.NewGuid(), Name = "Penne", Category = "Pasta", Carbs = 30, Portion = 100 };
+        var rice = new Nocturne.Infrastructure.Data.Entities.FoodEntity { Id = Guid.NewGuid(), Name = "Rice", Category = "Grains", Carbs = 28, Portion = 100 };
+        context.Foods.AddRange(pasta, rice);
+        var lunches = await context.CarbIntakes.OrderBy(c => c.Timestamp).Select(c => c.Id).ToListAsync();
+        void Record(Guid intake, Guid? food, decimal carbs) => context.TreatmentFoods.Add(new Nocturne.Infrastructure.Data.Entities.TreatmentFoodEntity
+        {
+            Id = Guid.NewGuid(), CarbIntakeId = intake, FoodId = food, Carbs = carbs, Portions = 1,
+        });
+        Record(lunches[0], pasta.Id, 45);
+        Record(lunches[1], pasta.Id, 45);
+        Record(lunches[2], rice.Id, 30);
+        Record(lunches[2], null, 15);
+        await context.SaveChangesAsync();
+        return (pasta.Id, rice.Id);
     }
 
     /// <summary>

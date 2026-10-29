@@ -23,8 +23,9 @@ internal sealed partial class LoopAnalysisService
     }
 
     /// <param name="Timeline">The therapy settings in force over the window, which the IOB/COB was computed against.</param>
+    /// <param name="CarbIntakes">The carb entries read, from before the window for the carbs still acting.</param>
     private sealed record DailyProfileLoaded(
-        DailyProfileInputs Inputs, LoopAnalysisMaskSources Sources, TherapyTimeline Timeline) : ILoaded;
+        DailyProfileInputs Inputs, LoopAnalysisMaskSources Sources, TherapyTimeline Timeline, List<CarbIntake> CarbIntakes) : ILoaded;
 
     /// <param name="filter">Gives now, which a temp basal still running stops at, and the history clamp's visible edge.</param>
     private async Task<DailyProfileLoaded> LoadDailyProfileAsync(
@@ -69,7 +70,8 @@ internal sealed partial class LoopAnalysisService
                 delivery.HasTherapy ? common.Profiles : [], ActiveTemporaryTargets(common.Spans, to), zone, to, ct),
         };
 
-        return new DailyProfileLoaded(inputs, Sources(common, LoopStates(apsPoints.Where(p => p.Timestamp <= ToUtc(to))), to), delivery.Timeline);
+        return new DailyProfileLoaded(
+            inputs, Sources(common, LoopStates(apsPoints.Where(p => p.Timestamp <= ToUtc(to))), to), delivery.Timeline, carbs);
     }
 
     /// <summary>

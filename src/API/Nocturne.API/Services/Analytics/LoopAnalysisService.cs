@@ -45,7 +45,8 @@ internal sealed partial class LoopAnalysisService(
     ITherapySettingsRepository therapySettingsRepository,
     AidSystemMetricsReader aidSystemMetrics,
     DeviceDateClockResolver deviceDates,
-    IDeviceEventRepository deviceEventRepository
+    IDeviceEventRepository deviceEventRepository,
+    ITreatmentFoodRepository treatmentFoodRepository
 ) : ILoopAnalysisService
 {
     private const long TickMs = DailyProfileCalculator.SlotMinutes * LocalSlotBinning.MinuteMs;

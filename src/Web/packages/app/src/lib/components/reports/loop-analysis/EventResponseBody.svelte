@@ -72,6 +72,15 @@
   function droppedText(result: EventCohortResult | undefined): string {
     const n = (count: number | undefined) => count ?? 0;
     return [
+      n(result?.mealsWithFoodRecord) + n(result?.mealsWithoutFoodRecord) > 0
+        ? `${plural(n(result?.mealsWithFoodRecord), ["# meal with a food record", "# meals with a food record"])}, ${plural(
+            n(result?.mealsWithoutFoodRecord),
+            [
+              "# meal with only carbs not included because the food filter cannot apply to it",
+              "# meals with only carbs not included because the food filter cannot apply to them",
+            ]
+          )}`
+        : null,
       n(result?.notIsolated) > 0
         ? plural(n(result?.notIsolated), ["# not included because of another event in its window", "# not included because of another event in their window"])
         : null,

@@ -53,6 +53,10 @@ public class TreatmentFood
     public decimal? ProteinPerPortion { get; set; }
 }
 
+/// <summary>One food record of a carb intake, with the name and category of the food it names.</summary>
+/// <param name="FoodId">Null for a record of unspecified carbs.</param>
+public sealed record CarbIntakeFood(Guid CarbIntakeId, Guid? FoodId, string? FoodName, string? FoodCategory);
+
 /// <summary>
 /// User-specific favorite <see cref="Food"/> entry for quick selection.
 /// </summary>

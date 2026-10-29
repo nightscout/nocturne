@@ -22,7 +22,18 @@ public sealed record EventResponseInputs
     /// <inheritdoc cref="LoopAnalysisFilter.Now"/>
     /// <remarks>An event whose window ends after it is still under way, so it is not counted.</remarks>
     public long Now { get; init; } = long.MaxValue;
+
+    /// <summary>
+    /// The food records of each carb entry, by its instant, so a meal carries those of every entry it
+    /// sums. Read only when a cohort has a food filter; an instant with none is a meal of carbs only.
+    /// </summary>
+    public IReadOnlyDictionary<long, IReadOnlyList<MealFood>> MealFoods { get; init; } =
+        new Dictionary<long, IReadOnlyList<MealFood>>();
 }
+
+/// <summary>One food record of a carb entry: the food it names, if any, and that food's category.</summary>
+/// <param name="FoodId">Null for a record of unspecified carbs.</param>
+public readonly record struct MealFood(Guid? FoodId, string? Category);
 
 /// <summary>
 /// The Meals and events page: each cohort's events aligned on their anchors, every series spread
@@ -81,6 +92,17 @@ public static class EventResponseCalculator
                 if (anchor.Mills < from || anchor.Mills >= to || anchor.Mills + window.AfterMs > inputs.Now
                     || !mask.Analysed.Contains(anchor.Mills) || !Matches(cohort, anchor, zone))
                     continue;
+                if (anchor.Kind == EventAnchorKind.Meal && cohort.HasFoodFilter)
+                {
+                    if (!inputs.MealFoods.TryGetValue(anchor.Mills, out var foods) || foods.Count == 0)
+                    {
+                        result.MealsWithoutFoodRecord++;
+                        continue;
+                    }
+                    result.MealsWithFoodRecord++;
+                    if (!MatchesFoods(cohort, foods))
+                        continue;
+                }
                 result.Anchors++;
                 if (anchor.Mills < visibleFrom)
                 {
@@ -143,19 +165,43 @@ public static class EventResponseCalculator
         return [.. Enumerable.Range(0, window.SlotCount).Select(k => (int)(window.SlotOffset(k) / LocalSlotBinning.MinuteMs))];
     }
 
-    /// <summary>Whether an anchor falls in the cohort's local time-of-day window and, for a meal, its size.</summary>
+    /// <summary>
+    /// Whether an anchor falls on one of the cohort's local weekdays and in its local time-of-day
+    /// window and, for a meal, its size. The foods a meal carries are <see cref="MatchesFoods"/>'.
+    /// </summary>
     public static bool Matches(EventCohortDefinition cohort, EventAnchor anchor, TimeZoneInfo zone)
     {
         if (anchor.Grams is { } grams && (grams < cohort.MinGrams || grams > cohort.MaxGrams))
             return false;
-        if (cohort.FromMinute is null && cohort.ToMinute is null)
+        var days = cohort.DaysOfWeek is { Count: > 0 } d ? d : null;
+        if (days is null && cohort.FromMinute is null && cohort.ToMinute is null)
             return true;
 
         var local = LocalSlotBinning.LocalTime(anchor.Mills, zone);
+        if (days is not null && !days.Contains(local.DayOfWeek))
+            return false;
+        if (cohort.FromMinute is null && cohort.ToMinute is null)
+            return true;
+
         var minute = local.Hour * 60 + local.Minute;
         var start = cohort.FromMinute ?? 0;
         var end = cohort.ToMinute ?? 24 * 60;
         return start <= end ? minute >= start && minute < end : minute >= start || minute < end;
+    }
+
+    /// <summary>
+    /// Whether a meal's food records satisfy the cohort's food filter: one names a food of
+    /// <see cref="EventCohortDefinition.FoodIds"/>, and one is of
+    /// <see cref="EventCohortDefinition.FoodCategory"/>, where each is set.
+    /// </summary>
+    public static bool MatchesFoods(EventCohortDefinition cohort, IReadOnlyList<MealFood> foods)
+    {
+        if (cohort.FoodIds is { Count: > 0 } ids && !foods.Any(f => f.FoodId is { } id && ids.Contains(id)))
+            return false;
+        if (cohort.FoodCategory?.Trim() is { Length: > 0 } category
+            && !foods.Any(f => string.Equals(f.Category?.Trim(), category, StringComparison.OrdinalIgnoreCase)))
+            return false;
+        return true;
     }
 
     private static EventResponseEvent Event(EventEpisode episode, List<int> cohorts, TimeZoneInfo zone)

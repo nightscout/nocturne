@@ -123,7 +123,8 @@ public class LoopAnalysisLoopHealthZoneTests
             therapySettingsRepository: Mock.Of<ITherapySettingsRepository>(),
             aidSystemMetrics: reader,
             deviceDates: deviceDates,
-            deviceEventRepository: Mock.Of<IDeviceEventRepository>());
+            deviceEventRepository: Mock.Of<IDeviceEventRepository>(),
+            treatmentFoodRepository: Mock.Of<ITreatmentFoodRepository>());
 
         await service.GetLoopHealthAsync(
             new LoopAnalysisFilter
