@@ -1,0 +1,33 @@
+@import "@nocturne/ui/theme.css";
+@import "@nocturne/charts/themes/nocturne.css";
+@source "../node_modules/@nocturne/charts/src";
+@source "../node_modules/layerchart/dist";
+@source "./";
+
+/* The host's style variables (MCP Apps host context) restyle the chrome only. The clinical
+   colours stay Nocturne's, from the charts theme above. Without a host value the token keeps
+   @nocturne/ui's own. */
+:root {
+  --background: var(--color-background-primary, oklch(1 0 0));
+  --foreground: var(--color-text-primary, oklch(0.13 0.028 261.692));
+  --muted-foreground: var(--color-text-secondary, oklch(0.551 0.027 264.364));
+  --border: var(--color-border-primary, oklch(0.928 0.006 264.531));
+  --popover: var(--color-background-secondary, var(--background));
+  --popover-foreground: var(--foreground);
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+}
+
+.dark {
+  --background: var(--color-background-primary, oklch(0.13 0.028 261.692));
+  --foreground: var(--color-text-primary, oklch(0.985 0.002 247.839));
+  --muted-foreground: var(--color-text-secondary, oklch(0.707 0.022 261.325));
+  --border: var(--color-border-primary, oklch(1 0 0 / 10%));
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  background: var(--background);
+  color: var(--foreground);
+}

@@ -370,7 +370,7 @@ jobs:
       - name: Typecheck Svelte packages
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |
-          pnpm --filter @nocturne/charts --filter @nocturne/coach --filter @nocturne/ui --filter @nocturne/cms --filter @nocturne/desktop run check
+          pnpm --filter @nocturne/charts --filter @nocturne/mcp-view --filter @nocturne/coach --filter @nocturne/ui --filter @nocturne/cms --filter @nocturne/desktop run check
       - name: Typecheck app
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/app run check
@@ -532,6 +532,11 @@ jobs:
       - name: App browser component tests
         if: ${{ !cancelled() }}
         run: pnpm exec vitest --config vitest.browser.config.ts --run --coverage
+      # Runs here for the browser this job installs.
+      - name: MCP view browser tests
+        if: ${{ !cancelled() }}
+        working-directory: src/Web/packages/mcp-view
+        run: pnpm exec vitest --run
       - uses: actions/upload-artifact@v6
         if: always()
         with:

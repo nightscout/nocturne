@@ -177,6 +177,35 @@
     <Message Importance="high" Text="Remote function generation complete." />
     <Touch Files="$(IntermediateOutputPath)api-client.stamp" AlwaysCreate="true" />
   </Target>
+  <!-- The MCP Apps view (src/Web/packages/mcp-view) is one HTML file the API serves as
+       ui://nocturne/report (Mcp/ReportView.cs). Built here only when missing or older than its
+       sources or the chart package's, and embedded. Development reads the file from disk, so the
+       watch loop skips the build; the package's own dev script rebuilds it.
+       Opt out with the BuildMcpView=false property; a Release build without the file fails. -->
+  <PropertyGroup>
+    <McpViewDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../Web/packages/mcp-view'))/</McpViewDir>
+    <McpViewOutput>$(McpViewDir)dist/report.html</McpViewOutput>
+    <BuildMcpView Condition="'$(BuildMcpView)' == '' And '$(DOTNET_WATCH_ITERATION)' != ''">false</BuildMcpView>
+    <BuildMcpView Condition="'$(BuildMcpView)' == ''">true</BuildMcpView>
+  </PropertyGroup>
+  <ItemGroup>
+    <McpViewSource Include="$(McpViewDir)src/**/*;$(McpViewDir)mcp-app.html;$(McpViewDir)package.json;$(McpViewDir)vite.config.ts" Exclude="$(McpViewDir)src/**/*.test.ts" />
+    <McpViewSource Include="$(McpViewDir)../charts/src/**/*" Exclude="$(McpViewDir)../charts/src/**/*.test.ts" />
+  </ItemGroup>
+  <Target Name="BuildMcpView" BeforeTargets="AssignTargetPaths" Condition="'$(BuildMcpView)' == 'true' And '$(DesignTimeBuild)' != 'true'" Inputs="@(McpViewSource)" Outputs="$(McpViewOutput)">
+    <Exec Command="pnpm --version" ContinueOnError="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="_PnpmExitCode" />
+    </Exec>
+    <Error Condition="'$(_PnpmExitCode)' != '0'" Text="Building the MCP view (src/Web/packages/mcp-view) needs pnpm, which was not found. Install Node 24 and pnpm, run `pnpm install` in src/Web, or build with -p:BuildMcpView=false to leave the view out." />
+    <Message Importance="high" Text="Building the MCP view..." />
+    <Exec Command="pnpm --filter @nocturne/mcp-view run build" WorkingDirectory="$(McpViewDir)../.." />
+  </Target>
+  <Target Name="EmbedMcpView" AfterTargets="BuildMcpView" BeforeTargets="AssignTargetPaths" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(Configuration)' == 'Release' And '$(BuildMcpView)' == 'true' And !Exists('$(McpViewOutput)')" Text="The MCP view was not built: $(McpViewOutput) is missing." />
+    <ItemGroup Condition="Exists('$(McpViewOutput)')">
+      <EmbeddedResource Include="$(McpViewOutput)" LogicalName="Nocturne.API.Mcp.report.html" />
+    </ItemGroup>
+  </Target>
   <!-- The EF migrations assembly is built and copied beside the API, never compiled against (see
        NocturneMigrationsAssembly). It is not a ProjectReference, even with
        ReferenceOutputAssembly=false, because dotnet watch loads every project in the reference graph
