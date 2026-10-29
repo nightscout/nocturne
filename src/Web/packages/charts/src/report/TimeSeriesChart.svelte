@@ -9,7 +9,15 @@
   import { resolveChartColor } from "../colors.js";
   import { formatClockTime, type ChartFormat } from "../format.js";
   import { lineStopsFor, type LineColorMode } from "../view/glucose-gradient-stops.js";
-  import { boundFields, formatReportValue, type ReportPanel, type ReportRow, type ReportThresholds } from "./types.js";
+  import {
+    boundFields,
+    formatMinuteOfDay,
+    formatOffset,
+    formatReportValue,
+    type ReportPanel,
+    type ReportRow,
+    type ReportThresholds,
+  } from "./types.js";
 
   interface Props {
     panel: ReportPanel;
@@ -23,7 +31,18 @@
 
   type Point = { time: Date; row: ReportRow };
 
+  /**
+   * Minutes of the day or from an event are laid on the time axis from a fixed origin, so one time
+   * scale serves every axis and its ticks fall on whole hours; the labels convert them back.
+   */
+  const MINUTE_ORIGIN = Date.UTC(2000, 0, 1);
+  const fromMinutes = (minutes: number) => new Date(MINUTE_ORIGIN + minutes * 60_000);
+  const toMinutes = (date: Date) => (date.getTime() - MINUTE_ORIGIN) / 60_000;
+
   const xName = $derived(panel.bindings.x ?? "time");
+  // A time of day or minutes from an event lie on a linear axis; an instant on a time axis.
+  const xKind = $derived(panel.fields.find((f) => f.name === xName)?.kind ?? "time");
+  const linear = $derived(xKind === "time_of_day" || xKind === "offset");
   const lines = $derived(boundFields(panel, panel.bindings.y));
   const band = $derived(boundFields(panel, panel.bindings.band));
   const thresholds = $derived(lines.some((f) => f.glucoseScale) ? (panel.thresholds ?? null) : null);
@@ -31,7 +50,7 @@
   const points = $derived<Point[]>(
     panel.rows.flatMap((row) => {
       const at = row[xName];
-      return typeof at === "number" ? [{ time: new Date(at), row }] : [];
+      return typeof at === "number" ? [{ time: linear ? fromMinutes(at) : new Date(at), row }] : [];
     }),
   );
 
@@ -67,7 +86,18 @@
 
   const lineColor = (color: string | null | undefined) =>
     color ? resolveChartColor(color) : "var(--foreground)";
-  const time = (v: unknown) => (v instanceof Date ? formatClockTime(v, format) : String(v));
+  const time = (v: unknown) => {
+    if (!(v instanceof Date)) return String(v);
+    if (xKind === "time_of_day") return formatMinuteOfDay(toMinutes(v), format);
+    if (xKind === "offset") return formatOffset(toMinutes(v), format);
+    return formatClockTime(v, format);
+  };
+  const xDomain = $derived.by((): [Date, Date] => {
+    if (!linear) return [new Date(panel.window.from), new Date(panel.window.to)];
+    if (xKind === "time_of_day") return [fromMinutes(0), fromMinutes(1440)];
+    const xs = points.map((p) => p.time.getTime());
+    return [new Date(Math.min(...xs)), new Date(Math.max(...xs))];
+  });
 </script>
 
 {#if points.length === 0}
@@ -80,7 +110,7 @@
       data={points}
       x={(d: Point) => d.time}
       xScale={scaleTime()}
-      xDomain={[new Date(panel.window.from), new Date(panel.window.to)]}
+      {xDomain}
       yDomain={[0, yMax]}
       padding={{ left: 40, right: 12, top: 8, bottom: 24 }}
       tooltipContext={{ mode: "quadtree-x" }}

@@ -6,9 +6,10 @@ import type { ChartColor } from "../enums.js";
 import type { DashboardChartDataDto } from "../dto.js";
 import type { ChartFormat } from "../format.js";
 
-export type ReportPrimitive = "time_series" | "stat_tiles" | "table" | "glucose_chart";
+export type ReportPrimitive = "time_series" | "stat_tiles" | "table" | "glucose_chart" | "range_bands";
 
-export type ReportFieldKind = "time" | "number" | "category" | "percent";
+/** `offset` is minutes from an event, `time_of_day` minutes after local midnight. */
+export type ReportFieldKind = "time" | "number" | "category" | "percent" | "offset" | "time_of_day";
 
 export interface ReportField {
   name: string;
@@ -41,6 +42,8 @@ export interface ReportBindings {
   y?: string[] | null;
   band?: string[] | null;
   columns?: string[] | null;
+  /** range_bands: the category field whose values are drawn as separate bands. */
+  series?: string | null;
 }
 
 export interface ReportResolution {
@@ -71,6 +74,8 @@ export interface ReportPanel {
   limited?: boolean;
   omitted?: { field: string; scope: string }[];
   resolution?: ReportResolution | null;
+  /** The web report that shows the panel's data, with its range and parameters. */
+  link?: string | null;
 }
 
 export interface ReportResult {
@@ -78,6 +83,8 @@ export interface ReportResult {
   units: "mg/dl" | "mmol";
   /** How every glucose line in the report is coloured; one value per report. */
   glucoseColorMode?: "continuous" | "threshold";
+  /** The tenant's IANA zone, the one the summaries state local times in; null for UTC. */
+  timeZone?: string | null;
   panels: ReportPanel[];
   summary: string;
   warnings?: string[];
@@ -88,6 +95,20 @@ export function boundFields(panel: Pick<ReportPanel, "fields">, names: readonly 
   return (names ?? []).flatMap((name) => panel.fields.filter((f) => f.name === name));
 }
 
+/** Minutes after midnight as a clock time in the locale's format; the date is arbitrary and not shown. */
+export function formatMinuteOfDay(minute: number, format: ChartFormat): string {
+  const m = ((Math.round(minute) % 1440) + 1440) % 1440;
+  return new Intl.DateTimeFormat(format.locale, { hour: "numeric", minute: "2-digit", hour12: format.hour12, timeZone: "UTC" }).format(
+    Date.UTC(2000, 0, 1, Math.floor(m / 60), m % 60),
+  );
+}
+
+/** Minutes from an event, signed: "-30", "0", "+90". */
+export function formatOffset(minutes: number, format: ChartFormat): string {
+  const text = new Intl.NumberFormat(format.locale, { maximumFractionDigits: 0 }).format(Math.abs(minutes));
+  return minutes > 0 ? `+${text}` : minutes < 0 ? `-${text}` : text;
+}
+
 /** A field's value as printed: numbers in the locale's format, times as local date and time. */
 export function formatReportValue(
   value: ReportRow[string],
@@ -96,7 +117,9 @@ export function formatReportValue(
 ): string {
   if (value === null || value === undefined || value === "") return "–";
   if (field.kind === "time" && typeof value === "number")
-    return new Intl.DateTimeFormat(format.locale, { dateStyle: "medium", timeStyle: "short", hour12: format.hour12 }).format(value);
+    return new Intl.DateTimeFormat(format.locale, { dateStyle: "medium", timeStyle: "short", hour12: format.hour12, timeZone: format.timeZone }).format(value);
+  if (field.kind === "time_of_day" && typeof value === "number") return formatMinuteOfDay(value, format);
+  if (field.kind === "offset" && typeof value === "number") return formatOffset(value, format);
   if (typeof value === "number") return new Intl.NumberFormat(format.locale, { maximumFractionDigits: 2 }).format(value);
   return String(value);
 }

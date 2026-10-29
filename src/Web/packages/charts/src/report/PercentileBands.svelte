@@ -5,14 +5,13 @@
 -->
 <script lang="ts" generics="S extends object">
   import { Area, Spline } from "layerchart";
-  import type { LoopAnalysisAggregate } from "#lib/api/index.js";
-  import { patternClass } from "@nocturne/charts/core";
-  import { aggregateRuns, type AggregatePoint } from "./daily-profile-view";
+  import { patternClass } from "../print/patterns.js";
+  import { aggregateRuns, type AggregatePoint, type PercentileAggregate } from "./percentile-bands.js";
 
   interface Props {
     slots: S[];
     comparison?: S[] | null;
-    pick: (slot: S) => LoopAnalysisAggregate | undefined;
+    pick: (slot: S) => PercentileAggregate | null | undefined;
     /** Display-unit conversion applied to every value before it is drawn. */
     scale?: (value: number) => number;
     outerColor: string;
@@ -43,7 +42,7 @@
   const comparisonRuns = $derived(comparison ? aggregateRuns(comparison, pick) : []);
 
   const x = (p: AggregatePoint) => p.slot + 0.5;
-  const at = (key: keyof LoopAnalysisAggregate) => (p: AggregatePoint) =>
+  const at = (key: "p10" | "p25" | "p50" | "p75" | "p90") => (p: AggregatePoint) =>
     scale(Number(p.value[key] ?? 0));
 
   const EDGES: ("p25" | "p75")[] = ["p25", "p75"];

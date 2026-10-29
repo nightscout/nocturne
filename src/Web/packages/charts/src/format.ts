@@ -9,6 +9,8 @@ export type { GlucoseUnits };
 export interface ChartFormat {
 	locale: string;
 	hour12: boolean;
+	/** IANA zone times are written in; the browser's when absent. */
+	timeZone?: string;
 }
 
 /** A glucose value in the given units, as a number rounded for display. */
@@ -37,6 +39,7 @@ export function formatClockTime(
 		hour: 'numeric',
 		minute: opts.compact && format.hour12 ? 'numeric' : '2-digit',
 		hour12: format.hour12,
+		timeZone: format.timeZone,
 	};
 	if (opts.seconds) options.second = '2-digit';
 	return d.toLocaleTimeString(format.locale, options);

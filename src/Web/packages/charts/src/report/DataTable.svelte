@@ -1,15 +1,28 @@
-<!-- A report panel's rows as a table, one column per field, units in the headers. -->
+<!--
+  A report panel's rows as a table, one column per field, units in the headers. With `onselect`,
+  a row can be picked by click or by Enter or Space on it; `selected` marks the picked one.
+-->
 <script lang="ts">
   import type { ChartFormat } from "../format.js";
-  import { formatReportValue, type ReportPanel } from "./types.js";
+  import { formatReportValue, type ReportPanel, type ReportRow } from "./types.js";
 
   interface Props {
     panel: ReportPanel;
     format: ChartFormat;
     heightClass?: string;
+    /** Called with a row and its index when the reader picks it; rows are not selectable without it. */
+    onselect?: (row: ReportRow, index: number) => void;
+    /** The index of the picked row. */
+    selected?: number | null;
   }
 
-  let { panel, format, heightClass = "max-h-[280px]" }: Props = $props();
+  let { panel, format, heightClass = "max-h-[280px]", onselect, selected = null }: Props = $props();
+
+  function onkeydown(event: KeyboardEvent, row: ReportRow, index: number) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onselect?.(row, index);
+  }
 </script>
 
 {#if panel.rows.length === 0}
@@ -28,11 +41,25 @@
       </thead>
       <tbody>
         {#each panel.rows as row, i (i)}
-          <tr class="border-b border-border/50 last:border-0">
-            {#each panel.fields as field (field.name)}
-              <td class="px-2 py-1">{formatReportValue(row[field.name], field, format)}</td>
-            {/each}
-          </tr>
+          {#if onselect}
+            <tr
+              class="cursor-pointer border-b border-border/50 last:border-0 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring aria-selected:bg-muted"
+              tabindex="0"
+              aria-selected={selected === i}
+              onclick={() => onselect(row, i)}
+              onkeydown={(event) => onkeydown(event, row, i)}
+            >
+              {#each panel.fields as field (field.name)}
+                <td class="px-2 py-1">{formatReportValue(row[field.name], field, format)}</td>
+              {/each}
+            </tr>
+          {:else}
+            <tr class="border-b border-border/50 last:border-0">
+              {#each panel.fields as field (field.name)}
+                <td class="px-2 py-1">{formatReportValue(row[field.name], field, format)}</td>
+              {/each}
+            </tr>
+          {/if}
         {/each}
       </tbody>
     </table>

@@ -23,3 +23,4 @@ export * from "./view/plot-padding.js";
 export * from "./view/profile-activation.js";
 export * from "./view/proximity.js";
 export * from "./report/types.js";
+export * from "./report/percentile-bands.js";

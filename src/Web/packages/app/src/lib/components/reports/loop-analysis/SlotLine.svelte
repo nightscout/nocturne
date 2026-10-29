@@ -3,7 +3,7 @@
   import { Spline } from "layerchart";
   import { curveStepAfter } from "d3-shape";
   import type { DailyProfileSlot } from "#lib/api/index.js";
-  import { slotRuns, type SlotPoint } from "./daily-profile-view";
+  import { slotRuns, type SlotPoint } from "@nocturne/charts/core";
 
   interface Props {
     slots: DailyProfileSlot[];

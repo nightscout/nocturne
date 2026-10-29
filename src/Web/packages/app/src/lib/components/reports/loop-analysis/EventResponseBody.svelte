@@ -20,7 +20,7 @@
   import { bg, bgDelta, bgLabel, convertToDisplayUnits } from "#lib/utils/formatting.js";
   import Info from "@lucide/svelte/icons/info";
   import TimeOfDayPanel from "./TimeOfDayPanel.svelte";
-  import PercentileBands from "./PercentileBands.svelte";
+  import { PercentileBands } from "@nocturne/charts";
   import AggregateReadout from "./AggregateReadout.svelte";
   import EventMetricsTable from "./EventMetricsTable.svelte";
   import EventList from "./EventList.svelte";
@@ -30,7 +30,8 @@
   import CohortDot from "./CohortDot.svelte";
   import { TimeOfDayCursor } from "./time-of-day-cursor.svelte";
   import { axisEnd, axisStart, signedTwoPlaces as signedUnits } from "./daily-profile-view";
-  import { cohortBands, hourTicks, slotMinute } from "./event-response-view";
+  import { cohortBands } from "@nocturne/charts/core";
+  import { hourTicks, slotMinute } from "./event-response-view";
   import { cohortLabel, relativeHours, relativeMinutes } from "./event-labels.svelte";
   import IgnoredFiltersNotice from "./IgnoredFiltersNotice.svelte";
   import { eventOptionLabels } from "./filter-labels.svelte";
