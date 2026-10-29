@@ -63,6 +63,15 @@ public class ReportSpecSchemaTests(AuthenticationTestFactory factory) : IClassFi
     }
 
     [Fact]
+    public void The_schema_marks_what_the_validator_requires()
+    {
+        var spec = RegisteredSchema().GetProperty("properties").GetProperty("spec");
+        spec.GetProperty("required").EnumerateArray().Select(e => e.GetString()).Should().BeEquivalentTo("version", "panels");
+        spec.GetProperty("properties").GetProperty("panels").GetProperty("items").GetProperty("required")
+            .EnumerateArray().Select(e => e.GetString()).Should().BeEquivalentTo("dataset", "primitive");
+    }
+
+    [Fact]
     public void Every_dataset_allows_only_known_primitives_and_lists_its_fields_once()
     {
         foreach (var dataset in Registry.All)

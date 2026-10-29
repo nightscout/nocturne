@@ -15,6 +15,7 @@ internal sealed record ReportSpec
     public const int MaxPanels = 6;
 
     [Description("The spec format version. Send 1.")]
+    [JsonRequired]
     public int Version { get; init; } = CurrentVersion;
 
     [Description("The report heading. Optional.")]
@@ -24,6 +25,7 @@ internal sealed record ReportSpec
     public ReportRange? Range { get; init; }
 
     [Description("The panels, top to bottom. 1 to 6.")]
+    [JsonRequired]
     public IReadOnlyList<ReportPanelSpec> Panels { get; init; } = [];
 }
 
@@ -51,9 +53,11 @@ internal sealed record ReportPanelSpec
     public string? Title { get; init; }
 
     [Description("The dataset to read, chosen by 'name', with that dataset's parameters. Call describe_dataset for its fields.")]
+    [JsonRequired]
     public ReportDatasetParameters Dataset { get; init; } = null!;
 
     [Description("How to draw the dataset. Each dataset allows only some primitives; describe_dataset lists them.")]
+    [JsonRequired]
     public ReportPrimitive Primitive { get; init; }
 
     [Description("Which dataset fields the primitive draws. Optional; defaults depend on the primitive.")]
