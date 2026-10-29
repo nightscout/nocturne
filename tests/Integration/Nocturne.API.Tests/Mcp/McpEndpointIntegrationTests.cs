@@ -223,18 +223,128 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
         using var client = McpClient(_slugA, token);
 
         var list = await ReadRpcAsync(await PostRpcAsync(client, "tools/list", new { }));
-        var showGlucose = list.GetProperty("result").GetProperty("tools").EnumerateArray()
-            .Single(t => t.GetProperty("name").GetString() == "show_glucose");
-        showGlucose.GetProperty("_meta").GetProperty("ui").GetProperty("resourceUri").GetString()
-            .Should().Be("ui://nocturne/report");
+        var tools = list.GetProperty("result").GetProperty("tools").EnumerateArray().ToList();
+        foreach (var name in new[] { "show_glucose", "render_report" })
+            tools.Single(t => t.GetProperty("name").GetString() == name)
+                .GetProperty("_meta").GetProperty("ui").GetProperty("resourceUri").GetString()
+                .Should().Be("ui://nocturne/report");
+        var describe = tools.Single(t => t.GetProperty("name").GetString() == "describe_dataset");
+        describe.GetProperty("_meta").GetProperty("ui").GetProperty("visibility").EnumerateArray()
+            .Select(v => v.GetString()).Should().Equal("model", "app");
+        describe.GetProperty("_meta").GetProperty("ui").TryGetProperty("resourceUri", out _).Should().BeFalse();
 
         var call = await CallToolAsync(client, "show_glucose", new { hours = 3 });
         var result = call.GetProperty("result");
-        var structured = result.GetProperty("structuredContent");
-        structured.GetProperty("kind").GetString().Should().Be("glucose");
-        structured.GetProperty("data").GetProperty("glucoseData").EnumerateArray()
+        var panel = result.GetProperty("structuredContent").GetProperty("panels")[0];
+        panel.GetProperty("primitive").GetString().Should().Be("glucose_chart");
+        panel.GetProperty("chart").GetProperty("glucoseData").EnumerateArray()
             .Select(p => p.GetProperty("sgv").GetDouble()).Should().Contain(TenantAGlucose);
         ToolText(call).Should().Contain("Tracks omitted: insulin, carbs and basal");
+    }
+
+    [Fact]
+    public async Task RenderReport_DrawsTwoPanels_OnTheRequestHostsTenant()
+    {
+        var token = await McpTokenAsync(_slugA, _sessionA, "glucose.read");
+        using var client = McpClient(_slugA, token);
+
+        var call = await CallToolAsync(client, "render_report", new
+        {
+            spec = new
+            {
+                version = 1,
+                title = "Today",
+                range = new { hours = 6 },
+                panels = new object[]
+                {
+                    new
+                    {
+                        id = "line",
+                        dataset = new { name = "glucose_series", intervalMinutes = 5 },
+                        primitive = "time_series",
+                        bindings = new { y = new[] { "glucose" }, band = new[] { "targetLow", "targetHigh" } },
+                    },
+                    new
+                    {
+                        dataset = new { name = "glucose_statistics" },
+                        primitive = "stat_tiles",
+                        bindings = new { columns = new[] { "timeInRangePercent", "mean", "readings" } },
+                    },
+                },
+            },
+        });
+
+        call.TryGetProperty("error", out var error).Should().BeFalse(error.ToString());
+        var structured = call.GetProperty("result").GetProperty("structuredContent");
+        Log(structured.ToString());
+        structured.GetProperty("spec").GetProperty("version").GetInt32().Should().Be(1);
+        structured.GetProperty("spec").GetProperty("panels")[1].GetProperty("id").GetString().Should().Be("p2");
+        structured.GetProperty("spec").GetProperty("panels")[0].GetProperty("dataset").GetProperty("name").GetString()
+            .Should().Be("glucose_series");
+
+        var panels = structured.GetProperty("panels");
+        var line = panels[0];
+        line.GetProperty("status").GetString().Should().Be("ok");
+        line.GetProperty("rows").EnumerateArray().Select(r => r.GetProperty("glucose").GetDouble())
+            .Should().Contain(TenantAGlucose).And.NotContain(TenantBGlucose);
+        line.GetProperty("fields").EnumerateArray().Select(f => f.GetProperty("name").GetString())
+            .Should().Equal("time", "glucose", "targetLow", "targetHigh");
+
+        var tiles = panels[1];
+        tiles.GetProperty("rows")[0].GetProperty("readings").GetInt32().Should().Be(1);
+        tiles.GetProperty("rows")[0].GetProperty("mean").GetDouble().Should().Be(TenantAGlucose);
+
+        var text = ToolText(call);
+        text.Should().StartWith("Today").And.Contain("[line] glucose_series").And.Contain("[p2] glucose_statistics")
+            .And.Contain("Mean 111 mg/dL");
+    }
+
+    [Fact]
+    public async Task RenderReport_RefusesAnInvalidSpec_WithEveryFixNamingThePanel()
+    {
+        var token = await McpTokenAsync(_slugA, _sessionA, "glucose.read");
+        using var client = McpClient(_slugA, token);
+
+        var call = await CallToolAsync(client, "render_report", new
+        {
+            spec = new
+            {
+                panels = new object[]
+                {
+                    new { dataset = new { name = "insulin" }, primitive = "table" },
+                    new { dataset = new { name = "glucose_statistics" }, primitive = "time_series" },
+                },
+            },
+        });
+
+        call.TryGetProperty("error", out var error).Should().BeTrue(call.ToString());
+        error.GetProperty("code").GetInt32().Should().Be(-32602);
+        var message = error.GetProperty("message").GetString();
+        Log(message!);
+        message.Should().Contain("version: Missing")
+            .And.Contain("panels[0].dataset.name: 'insulin' is not a dataset")
+            .And.Contain("panels[1].primitive: glucose_statistics cannot be drawn as time_series");
+    }
+
+    [Fact]
+    public async Task DescribeDataset_ReturnsTheCatalogueEntry()
+    {
+        var token = await McpTokenAsync(_slugA, _sessionA, "glucose.read");
+        using var client = McpClient(_slugA, token);
+
+        var call = await CallToolAsync(client, "describe_dataset", new { name = "glucose_series" });
+
+        var structured = call.GetProperty("result").GetProperty("structuredContent");
+        structured.GetProperty("name").GetString().Should().Be("glucose_series");
+        structured.GetProperty("fields").EnumerateArray().Select(f => f.GetProperty("name").GetString())
+            .Should().Contain(["time", "glucose", "iob", "basalRate"]);
+        structured.GetProperty("primitives").EnumerateArray().Select(p => p.GetProperty("primitive").GetString())
+            .Should().Equal("time_series", "table", "glucose_chart");
+        structured.GetProperty("parameters").GetProperty("properties").TryGetProperty("intervalMinutes", out _).Should().BeTrue();
+        structured.GetProperty("sampleRows").GetArrayLength().Should().Be(3);
+
+        var unknown = await CallToolAsync(client, "describe_dataset", new { name = "insulin" });
+        unknown.GetProperty("error").GetProperty("message").GetString().Should().Contain("glucose_series, glucose_statistics");
     }
 
     private HttpClient McpClient(string slug, string token)
@@ -431,9 +541,21 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
         var tooLong = await CallToolAsync(client, "show_glucose", new { hours = 72, note = "not declared" });
         tooLong.GetProperty("result").GetProperty("isError").GetBoolean().Should().BeTrue();
         await CallToolAsync(client, "show_glucose", new { hours = 3 });
+        await CallToolAsync(client, "render_report", new
+        {
+            spec = new
+            {
+                version = 1,
+                panels = new object[]
+                {
+                    new { dataset = new { name = "glucose_series" }, primitive = "table" },
+                    new { dataset = new { name = "glucose_statistics" }, primitive = "stat_tiles" },
+                },
+            },
+        });
 
         var rows = new List<(int Status, string? Parameters, string? Entities)>();
-        for (var attempt = 0; attempt < 50 && rows.Count < 2; attempt++)
+        for (var attempt = 0; attempt < 50 && rows.Count < 3; attempt++)
         {
             await Task.Delay(100);
             rows.Clear();
@@ -443,7 +565,7 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
             cmd.CommandText = """
                 SELECT set_config('app.current_tenant_id', @t, false);
                 SELECT status_code, query_parameters::text, entity_type FROM read_access_log
-                WHERE endpoint = 'MCP show_glucose' ORDER BY created_at;
+                WHERE endpoint IN ('MCP show_glucose', 'MCP render_report') ORDER BY created_at;
                 """;
             cmd.Parameters.AddWithValue("t", _tenantAId.ToString());
             await using var reader = await cmd.ExecuteReaderAsync();
@@ -452,11 +574,14 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
                 rows.Add((reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2)));
         }
 
-        rows.Should().HaveCount(2);
+        rows.Should().HaveCount(3, "one row per call");
         rows[0].Status.Should().Be(500);
         rows[0].Parameters.Should().Be("""{"hours": 72}""", "only the arguments the tool declares are kept");
         rows[1].Status.Should().Be(200);
         rows[1].Entities.Should().StartWith("glucose");
+        rows[2].Status.Should().Be(200);
+        rows[2].Entities.Should().Be("glucose", "both panels read glucose and nothing else this token covers");
+        rows[2].Parameters.Should().StartWith("""{"spec": {""");
     }
 
     private async Task<string> McpTokenAsync(string slug, string session, string scope) =>

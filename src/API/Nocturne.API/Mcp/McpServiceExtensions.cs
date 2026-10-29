@@ -3,6 +3,8 @@ using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Protocol;
 using Nocturne.API.Extensions;
+using Nocturne.API.Mcp.Reports;
+using Nocturne.API.Mcp.Reports.Datasets;
 using Nocturne.API.Mcp.Tools;
 using Nocturne.API.Services.Platform;
 
@@ -15,6 +17,7 @@ internal static class McpServiceExtensions
         services.Configure<McpOptions>(configuration.GetSection(McpOptions.SectionName));
         services.AddSingleton<ReportView>();
         services.AddScoped<McpToolReadLog>();
+        AddReports(services);
 
         // Stateless: each POST is served by a server built on that request's services, so a tool
         // reads the request's tenant, credential and read context (see McpToolGuard).
@@ -31,6 +34,7 @@ internal static class McpServiceExtensions
             .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
             .WithTools<StatusTools>()
             .WithTools<GlucoseTools>()
+            .WithTools<DatasetTools>()
             .WithResources<ReportResources>()
             .WithRequestFilters(filters =>
             {
@@ -40,6 +44,17 @@ internal static class McpServiceExtensions
             .WithMcpApps();
 
         return services;
+    }
+
+    private static void AddReports(IServiceCollection services)
+    {
+        services.AddSingleton<IReportDataset, GlucoseSeriesDataset>();
+        services.AddSingleton<IReportDataset, GlucoseStatisticsDataset>();
+        services.AddSingleton<IReportDatasetRegistry, ReportDatasetRegistry>();
+        services.AddSingleton<ReportSpecValidator>();
+        services.AddSingleton<ReportSpecRunner>();
+        services.AddScoped<ReportRenderer>();
+        services.AddSingleton(ReportTools.Create);
     }
 
     public static void MapNocturneMcp(this WebApplication app)

@@ -1,14 +1,17 @@
 using System.Globalization;
 using System.Text;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Mcp;
 
 /// <summary>
-/// The text an assistant reads for <c>show_glucose</c>, which is all a host without MCP Apps
-/// shows, so it carries every figure the chart does in words.
+/// The text an assistant reads for a glucose series, which is all a host without MCP Apps shows,
+/// so it carries every figure the chart does in words. The figures come from
+/// <see cref="IStatisticsService"/>, the calculators the reports use.
 /// </summary>
 internal static class GlucoseSummary
 {
@@ -30,12 +33,37 @@ internal static class GlucoseSummary
     public static IReadOnlyList<string> OmittedScopes(Func<string, bool> hasScope) =>
         [.. TrackScopes.Where(t => !hasScope(t.Scope)).Select(t => t.Scope)];
 
+    /// <summary>The tenant's chart cut-points as the statistics calculators take them.</summary>
+    public static GlycemicThresholds Thresholds(ChartThresholdsDto chart)
+    {
+        var defaults = new GlycemicThresholds();
+        double Or(double value, double fallback) => value > 0 ? value : fallback;
+        var low = Or(chart.Low, defaults.Low);
+        var high = Or(chart.High, defaults.High);
+        return new GlycemicThresholds
+        {
+            VeryLow = Or(chart.VeryLow, defaults.VeryLow),
+            Low = low,
+            TargetBottom = low,
+            TargetTop = high,
+            High = high,
+            VeryHigh = Or(chart.VeryHigh, defaults.VeryHigh),
+        };
+    }
+
+    /// <summary>
+    /// The text for <paramref name="data"/>'s glucose. <paramref name="omittedTracks"/> names the
+    /// chart tracks the token cannot read (null when the panel draws no chart);
+    /// <paramref name="omittedFields"/> names the fields left out of a table or line panel.
+    /// </summary>
     public static string Build(
         DashboardChartData data,
+        IStatisticsService statistics,
         bool useMmol,
         DateTimeOffset from,
         DateTimeOffset to,
-        IReadOnlyList<string> omittedTracks)
+        IReadOnlyList<string>? omittedTracks,
+        IReadOnlyList<string>? omittedFields = null)
     {
         var text = new StringBuilder();
         var units = useMmol ? "mmol/L" : "mg/dL";
@@ -44,46 +72,56 @@ internal static class GlucoseSummary
             $"Glucose from {from:yyyy-MM-dd HH:mm} to {to:yyyy-MM-dd HH:mm} UTC");
         text.Append(".").Append('\n');
 
-        var readings = data.GlucoseData;
-        if (readings.Count == 0)
+        var basic = statistics.CalculateBasicStats(data.GlucoseData.Select(r => r.Sgv));
+        if (basic.Count == 0)
         {
             text.Append("No glucose readings in this period.").Append('\n');
         }
         else
         {
-            var values = readings.Select(r => r.Sgv).ToList();
-            var low = data.Thresholds.Low;
-            var high = data.Thresholds.High;
-            var inRange = values.Count(v => v >= low && v <= high);
-            var below = values.Count(v => v < low);
-            var above = values.Count(v => v > high);
+            var thresholds = Thresholds(data.Thresholds);
+            var tir = statistics.CalculateTimeInRange(Readings(data), thresholds);
+            var below = tir.Percentages.VeryLow + tir.Percentages.Low;
+            var above = tir.Percentages.High + tir.Percentages.VeryHigh;
 
-            text.Append(CultureInfo.InvariantCulture, $"Readings: {values.Count}.").Append('\n');
+            text.Append(CultureInfo.InvariantCulture, $"Readings: {basic.Count}.").Append('\n');
             text.Append(CultureInfo.InvariantCulture,
-                $"Min {Format(values.Min(), useMmol)}, max {Format(values.Max(), useMmol)}, "
-                + $"mean {Format(values.Average(), useMmol)} {units}.").Append('\n');
+                $"Min {Format(basic.Min, useMmol)}, max {Format(basic.Max, useMmol)}, "
+                + $"mean {Format(basic.Mean, useMmol)} {units}.").Append('\n');
             text.Append(CultureInfo.InvariantCulture,
-                $"Time in range ({Format(low, useMmol)}-{Format(high, useMmol)} {units}): "
-                + $"{Percent(inRange, values.Count)}%.").Append('\n');
+                $"Time in range ({Format(thresholds.TargetBottom, useMmol)}-{Format(thresholds.TargetTop, useMmol)} {units}): "
+                + $"{Percent(tir.Percentages.Target)}%. Below: {Percent(below)}%. Above: {Percent(above)}%.").Append('\n');
             text.Append(CultureInfo.InvariantCulture,
-                $"Readings below range: {below}. Readings above range: {above}.").Append('\n');
+                $"Lows (episodes below range): {tir.Episodes.BelowRange}. Highs (episodes above range): {tir.Episodes.AboveRange}.")
+                .Append('\n');
         }
 
-        if (!omittedTracks.Contains(TrackScopes[0].Track))
+        if (omittedTracks is not null && !omittedTracks.Contains(TrackScopes[0].Track))
         {
             text.Append(CultureInfo.InvariantCulture,
                 $"Boluses: {data.BolusMarkers.Count}. Carb entries: {data.CarbMarkers.Count}.").Append('\n');
         }
 
-        if (omittedTracks.Count > 0)
+        if (omittedTracks is { Count: > 0 })
             text.Append($"Tracks omitted: {string.Join(", ", omittedTracks)} (scope not granted).").Append('\n');
+
+        if (omittedFields is { Count: > 0 })
+            text.Append($"Fields omitted: {string.Join(", ", omittedFields)} (scope not granted).").Append('\n');
 
         return text.ToString().TrimEnd();
     }
 
+    /// <summary>The chart's readings as the calculators read them.</summary>
+    internal static IEnumerable<SensorGlucose> Readings(DashboardChartData data) =>
+        data.GlucoseData.Select(r => new SensorGlucose
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(r.Time).UtcDateTime,
+            Mgdl = r.Sgv,
+        });
+
     internal static string Format(double mgdl, bool useMmol) =>
         GlucoseUnits.Scale(mgdl, useMmol).ToString(useMmol ? "0.0" : "0", CultureInfo.InvariantCulture);
 
-    private static string Percent(int part, int whole) =>
-        Math.Round(100.0 * part / whole).ToString("0", CultureInfo.InvariantCulture);
+    private static string Percent(double percent) =>
+        Math.Round(percent).ToString("0", CultureInfo.InvariantCulture);
 }

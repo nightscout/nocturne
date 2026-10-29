@@ -1,0 +1,75 @@
+using System.Text.Json.Serialization;
+using Nocturne.Core.Models;
+
+namespace Nocturne.API.Mcp.Reports;
+
+/// <summary><c>render_report</c>'s <c>structuredContent</c>: the normalised spec and each panel's resolved data.</summary>
+internal sealed record ReportResult
+{
+    public required ReportSpec Spec { get; init; }
+
+    /// <summary>The tenant's glucose display unit, <c>mg/dl</c> or <c>mmol</c>.</summary>
+    public required string Units { get; init; }
+
+    public required IReadOnlyList<ReportPanelResult> Panels { get; init; }
+
+    /// <summary>Every panel's summary, joined: the text an assistant reads.</summary>
+    public required string Summary { get; init; }
+
+    public IReadOnlyList<string> Warnings { get; init; } = [];
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<ReportPanelStatus>))]
+internal enum ReportPanelStatus
+{
+    /// <summary>Read and resolved.</summary>
+    [JsonStringEnumMemberName("ok")]
+    Ok,
+
+    /// <summary>Not read: the token lacks the dataset's scope.</summary>
+    [JsonStringEnumMemberName("not_permitted")]
+    NotPermitted,
+
+    /// <summary>Not finished within the report's time limit.</summary>
+    [JsonStringEnumMemberName("timed_out")]
+    TimedOut,
+}
+
+internal sealed record ReportPanelResult
+{
+    public required string Id { get; init; }
+
+    public string? Title { get; init; }
+
+    public required string Dataset { get; init; }
+
+    public required ReportPrimitive Primitive { get; init; }
+
+    public required ReportBindings Bindings { get; init; }
+
+    public required ReportPanelStatus Status { get; init; }
+
+    /// <summary>The resolved range, Unix milliseconds.</summary>
+    public required ReportWindow Window { get; init; }
+
+    /// <summary>The catalogue entries of the fields the bindings draw and the rows carry.</summary>
+    public IReadOnlyList<ReportField> Fields { get; init; } = [];
+
+    public IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows { get; init; } = [];
+
+    public ReportThresholds? Thresholds { get; init; }
+
+    /// <summary>The dashboard chart payload, for <see cref="ReportPrimitive.GlucoseChart"/> only.</summary>
+    public DashboardChartData? Chart { get; init; }
+
+    public IReadOnlyList<string> OmittedScopes { get; init; } = [];
+
+    public required string Summary { get; init; }
+
+    /// <summary>Fields left out because the token lacks their scope.</summary>
+    public IReadOnlyList<ReportOmittedField> Omitted { get; init; } = [];
+
+    public ReportResolution? Resolution { get; init; }
+}
+
+internal sealed record ReportWindow(long From, long To);

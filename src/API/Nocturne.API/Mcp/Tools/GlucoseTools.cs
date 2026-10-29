@@ -1,18 +1,11 @@
 using System.ComponentModel;
-using System.Text.Json;
-using Microsoft.Extensions.Options;
 using ModelContextProtocol;
 using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
-using Nocturne.API.Authorization;
-using Nocturne.API.Extensions;
-using Nocturne.API.Services.Auth;
-using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.API.Mcp.Reports;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using MvcJsonOptions = Microsoft.AspNetCore.Mvc.JsonOptions;
 
 namespace Nocturne.API.Mcp.Tools;
 
@@ -26,60 +19,38 @@ internal sealed class GlucoseTools
     [Description(
         "Shows the glucose chart for the last few hours, with insulin, carbs, basal, pump modes, "
         + "profiles, heart rate, steps and sleep where the token's scopes allow. Returns a text "
-        + "summary: range, min, max, mean, time in range, readings below and above range, and the "
-        + "number of boluses and carb entries.")]
+        + "summary: range, min, max, mean, time in range, below and above range, low and high episodes, "
+        + "and the number of boluses and carb entries. For other ranges or more panels, use render_report.")]
     [McpRequireScope(Scope.GlucoseRead)]
     public static async Task<CallToolResult> ShowGlucose(
-        IHttpContextAccessor httpContextAccessor,
-        IChartDataService chartData,
-        ITenantAppearanceReader appearance,
-        ITenantAccessor tenant,
-        IOptions<MvcJsonOptions> jsonOptions,
-        McpToolReadLog readLog,
-        TimeProvider time,
+        ReportRenderer renderer,
         [Description("How many hours back from now to show, 1 to 24.")] int hours = 6,
         CancellationToken cancellationToken = default)
     {
         if (hours is < 1 or > MaxHours)
             throw new McpException($"hours must be between 1 and {MaxHours}.");
 
-        var http = httpContextAccessor.HttpContext!;
-        var to = time.GetUtcNow();
-        var from = to.AddHours(-hours);
-
-        var data = await chartData.GetDashboardChartDataAsync(
-            from.ToUnixTimeMilliseconds(),
-            to.ToUnixTimeMilliseconds(),
-            intervalMinutes: 5,
-            includeHealthSeries: true,
-            cancellationToken);
-        data = ChartDataReadScopeGuard.Redact(data, http.GetGrantedScopes());
-        if (!TrackerReadAccess.Allows(http))
-            data.TrackerMarkers = [];
-
-        RecordReads(data, readLog);
-
-        var useMmol = await GlucoseUnits.UsesMmolAsync(appearance, tenant, cancellationToken);
-        var omitted = GlucoseSummary.OmittedTracks(http.HasScope);
-
-        return new CallToolResult
-        {
-            Content =
-            [
-                new TextContentBlock { Text = GlucoseSummary.Build(data, useMmol, from, to, omitted) },
-            ],
-            StructuredContent = JsonSerializer.SerializeToElement(
-                new
-                {
-                    kind = "glucose",
-                    units = useMmol ? "mmol" : "mg/dl",
-                    window = new { from = from.ToUnixTimeMilliseconds(), to = to.ToUnixTimeMilliseconds() },
-                    omittedScopes = GlucoseSummary.OmittedScopes(http.HasScope),
-                    data,
-                },
-                jsonOptions.Value.JsonSerializerOptions),
-        };
+        return (await renderer.RenderAsync(Preset(hours), cancellationToken)).Result;
     }
+
+    /// <summary>The spec <c>show_glucose</c> draws: one dashboard chart of the last <paramref name="hours"/> hours.</summary>
+    internal static ReportSpec Preset(int hours) => new()
+    {
+        Version = ReportSpec.CurrentVersion,
+        Title = null,
+        Range = new ReportRange { Hours = hours },
+        Panels =
+        [
+            new ReportPanelSpec
+            {
+                Id = "glucose",
+                Dataset = new GlucoseSeriesParameters(),
+                Primitive = ReportPrimitive.GlucoseChart,
+                Bindings = new ReportBindings(),
+                Range = new ReportRange { Hours = hours },
+            },
+        ],
+    };
 
     /// <summary>
     /// Every dataset the redacted payload carries, with its record count. Redaction has already
