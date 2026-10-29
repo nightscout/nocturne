@@ -90,14 +90,14 @@
               <Area
                 data={bandPoints}
                 x={(d: Point) => d.time}
-                y0={(d: Point) => context.yScale(num(d.row, band[0].name))}
-                y1={(d: Point) => context.yScale(num(d.row, band[1].name))}
+                y0={(d: Point) => num(d.row, band[0].name)}
+                y1={(d: Point) => num(d.row, band[1].name)}
                 class="fill-glucose-in-range/15"
               />
             {/if}
             {#if thresholds}
-              <Rule y={context.yScale(thresholds.low)} class="stroke-glucose-low/60" dashArray="4 4" />
-              <Rule y={context.yScale(thresholds.high)} class="stroke-glucose-high/60" dashArray="4 4" />
+              <Rule y={thresholds.low} class="stroke-glucose-low/60" dashArray="4 4" />
+              <Rule y={thresholds.high} class="stroke-glucose-high/60" dashArray="4 4" />
             {/if}
             {#each lines as field (field.name)}
               {#if field.glucoseScale && thresholds}
@@ -112,7 +112,7 @@
                     <Spline
                       data={drawnFor(field.name)}
                       x={(d: Point) => d.time}
-                      y={(d: Point) => context.yScale(num(d.row, field.name))}
+                      y={(d: Point) => num(d.row, field.name)}
                       stroke={gradient}
                       class="stroke-2 fill-none"
                       curve={curveMonotoneX}
@@ -123,7 +123,7 @@
                 <Spline
                   data={drawnFor(field.name)}
                   x={(d: Point) => d.time}
-                  y={(d: Point) => context.yScale(num(d.row, field.name))}
+                  y={(d: Point) => num(d.row, field.name)}
                   stroke={lineColor(field.color)}
                   class="stroke-2 fill-none"
                   curve={curveMonotoneX}

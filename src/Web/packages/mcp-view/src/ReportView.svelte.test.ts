@@ -123,6 +123,18 @@ describe("ReportView", () => {
     expect(colours).toContain("var(--glucose-in-range)");
   });
 
+  it("places values on the axis once: the low threshold sits at its data value", async () => {
+    render(ReportView, { result: { structuredContent: twoPanels }, locale: "en-US" });
+
+    const series = page.getByTestId("report-time-series");
+    await expect.poll(() => series.element().querySelector("line.stroke-glucose-low\\/60")).not.toBeNull();
+    const rule = series.element().querySelector("line.stroke-glucose-low\\/60")!;
+    // 280px tall, 8px top and 24px bottom padding; the axis runs 0 to 1.1 x the highest reading (265).
+    const plotHeight = 280 - 8 - 24;
+    const expected = plotHeight * (1 - 70 / (265 * 1.1));
+    expect(Number(rule.getAttribute("y1"))).toBeCloseTo(expected, 0);
+  });
+
   it("draws the rows of a table panel", async () => {
     const table = {
       ...twoPanels,
