@@ -58,7 +58,7 @@ public partial class AnalyticsReadScopeGuardTests
     private static DashboardChartData OneRecordPerCategory() => new()
     {
         GlucoseData = [new GlucosePointDto { Time = 1, Sgv = 120 }],
-        Thresholds = new ChartThresholdsDto { Low = 70, High = 180 },
+        Thresholds = new ChartThresholdsDto { Low = 70, High = 180, TargetLow = 100, TargetHigh = 120 },
         BgCheckMarkers = [new BgCheckMarkerDto { Time = 1, Glucose = 110 }],
         IobSeries = [new TimeSeriesPoint { Timestamp = 1, Value = 2 }],
         CobSeries = [new TimeSeriesPoint { Timestamp = 1, Value = 3 }],
@@ -112,6 +112,17 @@ public partial class AnalyticsReadScopeGuardTests
         data.HeartRateSeries.Should().BeEmpty();
         data.StepSeries.Should().BeEmpty();
         data.ActivitySpans.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ChartData_WithoutTherapy_ClearsTheProfileTargetButKeepsTheRangeBand()
+    {
+        var glucoseOnly = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.GlucoseRead));
+        var withTherapy = ChartDataReadScopeGuard.Redact(OneRecordPerCategory(), Granted(Scope.GlucoseRead, Scope.TherapyRead));
+
+        glucoseOnly.Thresholds.Should().BeEquivalentTo(new ChartThresholdsDto { Low = 70, High = 180 });
+        withTherapy.Thresholds.TargetLow.Should().Be(100);
+        withTherapy.Thresholds.TargetHigh.Should().Be(120);
     }
 
     [Fact]
