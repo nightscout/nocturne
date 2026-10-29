@@ -906,7 +906,7 @@ class Program
 
             // Show the gateway URL on the web resource in the Aspire dashboard
             // so users can click through to the app via the HTTPS gateway.
-            if (hasExplicitDomain)
+            if (hasExplicitDomain && !isWorktree)
             {
                 web.WithUrl($"https://{customDomain}", customDomain);
             }
