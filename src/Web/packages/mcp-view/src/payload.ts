@@ -1,20 +1,38 @@
 import { z } from "zod";
-import type { DashboardChartDataDto, LegendToggle } from "@nocturne/charts/core";
+import type { LegendToggle, ReportResult } from "@nocturne/charts/core";
 
 /**
- * `structuredContent` of the API's `show_glucose` tool (Nocturne.API/Mcp/Tools/GlucoseTools.cs).
- * `data` is the API's DashboardChartData, redacted to the token's scopes.
+ * `structuredContent` of the API's `render_report` and `show_glucose` tools
+ * (Nocturne.API/Mcp/Reports/ReportResult.cs). Checked only as deep as the view branches on; the
+ * rows, fields and chart payload are drawn as they come.
  */
-export const glucoseReportSchema = z.object({
-  kind: z.literal("glucose"),
+const reportResultSchema = z.object({
+  spec: z.object({ version: z.number(), title: z.string().nullish() }),
   units: z.enum(["mg/dl", "mmol"]),
-  window: z.object({ from: z.number(), to: z.number() }),
-  /** The read scopes the token lacks; the tracks they govern are absent from `data`. */
-  omittedScopes: z.array(z.string()).default([]),
-  data: z.custom<DashboardChartDataDto>((value) => typeof value === "object" && value !== null),
+  summary: z.string(),
+  warnings: z.array(z.string()).default([]),
+  panels: z.array(
+    z.object({
+      id: z.string(),
+      dataset: z.string(),
+      primitive: z.enum(["time_series", "stat_tiles", "table", "glucose_chart"]),
+      status: z.enum(["ok", "not_permitted", "timed_out"]),
+      window: z.object({ from: z.number(), to: z.number() }),
+      fields: z.array(z.object({ name: z.string(), label: z.string() }).passthrough()).default([]),
+      rows: z.array(z.record(z.string(), z.unknown())).default([]),
+      summary: z.string(),
+      omittedScopes: z.array(z.string()).default([]),
+    }).passthrough(),
+  ),
 });
 
-export type GlucoseReport = z.infer<typeof glucoseReportSchema>;
+const reportResult = z.custom<ReportResult>((value) => reportResultSchema.safeParse(value).success);
+
+/** The report a tool result carries, or null when it carries none this view can draw. */
+export function readReport(structuredContent: unknown): ReportResult | null {
+  const parsed = reportResult.safeParse(structuredContent);
+  return parsed.success ? parsed.data : null;
+}
 
 /**
  * The legend toggles for tracks the token could not read, mirroring the API's
@@ -29,10 +47,4 @@ export function omittedToggles(omittedScopes: readonly string[]): LegendToggle[]
   if (missing.has("therapy.read")) toggles.push("profileSpans");
   if (missing.has("treatments.read") && missing.has("sleep.read")) toggles.push("activitySpans");
   return toggles;
-}
-
-/** The report a tool result carries, or null when it carries none this view can draw. */
-export function readGlucoseReport(structuredContent: unknown): GlucoseReport | null {
-  const parsed = glucoseReportSchema.safeParse(structuredContent);
-  return parsed.success ? parsed.data : null;
 }
