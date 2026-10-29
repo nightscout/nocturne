@@ -127,6 +127,7 @@ const consentSchema = z.object({
   code_challenge: z.string().min(1),
   approved: z.string(),
   limit_to_24_hours: z.string().optional(),
+  resource: z.string().optional(),
 });
 
 /**
@@ -152,6 +153,9 @@ export const consentForm = form(consentSchema, async (data, issue) => {
   body.set("approved", data.approved);
   if (data.limit_to_24_hours) {
     body.set("limit_to_24_hours", data.limit_to_24_hours);
+  }
+  if (data.resource) {
+    body.set("resource", data.resource);
   }
 
   // Forward Host (for tenant resolution) and Cookie (for authentication)

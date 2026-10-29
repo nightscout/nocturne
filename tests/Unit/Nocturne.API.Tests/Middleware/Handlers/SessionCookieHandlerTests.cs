@@ -147,6 +147,8 @@ public class SessionCookieHandlerTests
         nameof(JwtClaims.JwtId),
         nameof(JwtClaims.IssuedAt),
         nameof(JwtClaims.ExpiresAt),
+        // The API audience; a token for an MCP resource fails validation on the cookie path.
+        nameof(JwtClaims.Audience),
     ];
 
     [Fact]

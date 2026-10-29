@@ -1,4 +1,5 @@
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Mcp;
 
@@ -9,6 +10,14 @@ namespace Nocturne.API.Mcp;
 internal static class McpScopes
 {
     public static IReadOnlyList<string> Offered => ChartDataReadScopeGuard.AdmissionScopes;
+
+    /// <summary>
+    /// The scopes a grant or token for <paramref name="resource"/> may hold: all of them for the
+    /// API (null), read scopes only for an MCP endpoint, whose tools read and whose tokens are held
+    /// by the assistant's provider.
+    /// </summary>
+    public static IEnumerable<string> ForResource(IEnumerable<string> scopes, string? resource) =>
+        resource is null ? scopes : scopes.Where(Scope.IsReadScope);
 }
 
 /// <summary>

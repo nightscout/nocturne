@@ -191,6 +191,35 @@ public class JwtService : IJwtService
         TimeSpan? lifetime = null,
         bool platformAccess = false,
         Guid? grantId = null
+    ) => WriteOAuthToken(subject, permissions, roles, scopes, clientId, limitTo24Hours, tenantId,
+        lifetime, platformAccess, grantId, _options.Audience);
+
+    /// <inheritdoc />
+    public string GenerateResourceAccessToken(
+        SubjectInfo subject,
+        IEnumerable<string> permissions,
+        IEnumerable<string> roles,
+        IEnumerable<string> scopes,
+        string? clientId,
+        bool limitTo24Hours,
+        Guid tenantId,
+        Guid grantId,
+        string audience
+    ) => WriteOAuthToken(subject, permissions, roles, scopes, clientId, limitTo24Hours, tenantId,
+        lifetime: null, platformAccess: false, grantId, audience);
+
+    private string WriteOAuthToken(
+        SubjectInfo subject,
+        IEnumerable<string> permissions,
+        IEnumerable<string> roles,
+        IEnumerable<string> scopes,
+        string? clientId,
+        bool limitTo24Hours,
+        Guid? tenantId,
+        TimeSpan? lifetime,
+        bool platformAccess,
+        Guid? grantId,
+        string audience
     )
     {
         var now = _timeProvider.GetUtcNow();
@@ -273,10 +302,11 @@ public class JwtService : IJwtService
             claims.Add(new Claim("permission", permission));
         }
 
-        return WriteToken(claims, now, expires);
+        return WriteToken(claims, now, expires, audience);
     }
 
-    private string WriteToken(List<Claim> claims, DateTimeOffset now, DateTimeOffset expires)
+    private string WriteToken(
+        List<Claim> claims, DateTimeOffset now, DateTimeOffset expires, string? audience = null)
     {
         var tokenDescriptor = new SecurityTokenDescriptor
         {
@@ -286,7 +316,7 @@ public class JwtService : IJwtService
             NotBefore = now.UtcDateTime,
             Expires = expires.UtcDateTime,
             Issuer = _options.Issuer,
-            Audience = _options.Audience,
+            Audience = audience ?? _options.Audience,
             SigningCredentials = new SigningCredentials(
                 _signingKey,
                 SecurityAlgorithms.HmacSha256Signature
@@ -298,13 +328,25 @@ public class JwtService : IJwtService
     }
 
     /// <inheritdoc />
-    public JwtValidationResult ValidateAccessToken(string token)
+    public JwtValidationResult ValidateAccessToken(string token) =>
+        Validate(token, _validationParameters);
+
+    /// <inheritdoc />
+    public JwtValidationResult ValidateAccessToken(string token, string resourceAudience)
+    {
+        var parameters = _validationParameters.Clone();
+        parameters.ValidAudience = null;
+        parameters.ValidAudiences = [_options.Audience, resourceAudience];
+        return Validate(token, parameters);
+    }
+
+    private JwtValidationResult Validate(string token, TokenValidationParameters parameters)
     {
         try
         {
             var principal = _tokenHandler.ValidateToken(
                 token,
-                _validationParameters,
+                parameters,
                 out var validatedToken
             );
 
@@ -360,6 +402,7 @@ public class JwtService : IJwtService
 
             var claims = new JwtClaims
             {
+                Audience = jwtToken.Audiences.FirstOrDefault(),
                 SubjectId = subjectId,
                 Name = principal.FindFirst(JwtRegisteredClaimNames.Name)?.Value,
                 Email = principal.FindFirst(JwtRegisteredClaimNames.Email)?.Value,

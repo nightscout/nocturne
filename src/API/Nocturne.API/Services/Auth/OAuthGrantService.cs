@@ -1,3 +1,4 @@
+using Nocturne.API.Mcp;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -53,6 +54,7 @@ public class OAuthGrantService : IOAuthGrantService
         string? label = null,
         bool limitTo24Hours = false,
         bool approvedByDeviceCode = false,
+        string? resource = null,
         CancellationToken ct = default)
     {
         await using var db = await _dbContextFactory.CreateAsync(ct);
@@ -66,13 +68,13 @@ public class OAuthGrantService : IOAuthGrantService
         if (existingGrant != null)
         {
             // Merge scopes: union of existing and new
-            var mergedScopes = existingGrant.Scopes
-                .Union(scopes)
+            var mergedScopes = McpScopes.ForResource(existingGrant.Scopes.Union(scopes), resource)
                 .OrderBy(s => s)
                 .ToList();
 
             existingGrant.Scopes = mergedScopes;
             existingGrant.LimitTo24Hours = limitTo24Hours;
+            existingGrant.Resource = resource;
             existingGrant.ApprovedByDeviceCode |= approvedByDeviceCode;
 
             if (label != null)
@@ -89,7 +91,7 @@ public class OAuthGrantService : IOAuthGrantService
             return MapToInfo(existingGrant);
         }
 
-        var scopeList = scopes.Distinct().OrderBy(s => s).ToList();
+        var scopeList = McpScopes.ForResource(scopes, resource).Distinct().OrderBy(s => s).ToList();
 
         var entity = new OAuthGrantEntity
         {
@@ -101,6 +103,7 @@ public class OAuthGrantService : IOAuthGrantService
             Label = label,
             LimitTo24Hours = limitTo24Hours,
             ApprovedByDeviceCode = approvedByDeviceCode,
+            Resource = resource,
         };
 
         db.OAuthGrants.Add(entity);
@@ -266,6 +269,7 @@ public class OAuthGrantService : IOAuthGrantService
             LastUsedUserAgent = entity.LastUsedUserAgent,
             IsRevoked = entity.IsRevoked,
             LimitTo24Hours = entity.LimitTo24Hours,
+            Resource = entity.Resource,
         };
     }
 

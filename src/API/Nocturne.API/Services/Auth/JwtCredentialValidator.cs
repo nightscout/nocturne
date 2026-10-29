@@ -28,6 +28,14 @@ public interface IJwtCredentialValidator
     /// token nor the grant behind it has been revoked.
     /// </summary>
     Task<JwtCredentialResult> ValidateAsync(string token, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// <see cref="ValidateAsync(string, CancellationToken)"/> that also accepts a token issued for
+    /// <paramref name="resourceAudience"/> (an MCP endpoint); <see cref="JwtClaims.Audience"/> says
+    /// which audience it carried.
+    /// </summary>
+    Task<JwtCredentialResult> ValidateAsync(
+        string token, string resourceAudience, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Why a JWT credential was refused.</summary>
@@ -87,10 +95,17 @@ public sealed class JwtCredentialValidator : IJwtCredentialValidator
     }
 
     /// <inheritdoc />
-    public async Task<JwtCredentialResult> ValidateAsync(
-        string token, CancellationToken cancellationToken = default)
+    public Task<JwtCredentialResult> ValidateAsync(
+        string token, CancellationToken cancellationToken = default) =>
+        CheckAsync(_jwtService.ValidateAccessToken(token), cancellationToken);
+
+    public Task<JwtCredentialResult> ValidateAsync(
+        string token, string resourceAudience, CancellationToken cancellationToken = default) =>
+        CheckAsync(_jwtService.ValidateAccessToken(token, resourceAudience), cancellationToken);
+
+    private async Task<JwtCredentialResult> CheckAsync(
+        JwtValidationResult validation, CancellationToken cancellationToken)
     {
-        var validation = _jwtService.ValidateAccessToken(token);
         if (!validation.IsValid || validation.Claims is null)
         {
             _logger.LogDebug("JWT validation failed: {Error}", validation.Error);

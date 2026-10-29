@@ -7,8 +7,9 @@ namespace Nocturne.API.Mcp;
 internal sealed class McpEndpointMetadata;
 
 /// <summary>
-/// Admits a request to <c>/mcp</c> only when it carries an OAuth access token that holds at least
-/// one of <see cref="McpScopes.Offered"/>, on a tenant host that is not a public share.
+/// Admits a request to <c>/mcp</c> only when it carries an OAuth access token issued for this
+/// host's MCP endpoint (its audience, see <c>OAuthGrantEntity.Resource</c>) that holds at least one
+/// of <see cref="McpScopes.Offered"/>, on a tenant host that is not a public share.
 /// </summary>
 /// <remarks>
 /// Middleware rather than an authorization policy: the SDK maps <c>/mcp</c> as plain request
@@ -35,10 +36,12 @@ internal sealed class McpAccessGateMiddleware(RequestDelegate next)
                 $"Bearer resource_metadata=\"{metadataUrl}\"",
                 "An OAuth access token is required.");
 
-        if (context.GetAuthContext()?.AuthType is not AuthType.OAuthAccessToken)
+        if (context.GetAuthContext() is not { AuthType: AuthType.OAuthAccessToken } auth
+            || auth.Audience != ResourceUrl(context.Request))
             return RefuseAsync(context, StatusCodes.Status403Forbidden,
                 $"Bearer error=\"invalid_token\", resource_metadata=\"{metadataUrl}\"",
-                "Only an OAuth access token issued to an MCP client is accepted here.");
+                $"This credential was not issued for {ResourceUrl(context.Request)}. Connect the "
+                + "assistant to that address, so that it signs in and gets a token for it.");
 
         if (!McpScopes.Offered.Any(context.HasScope))
             return RefuseAsync(context, StatusCodes.Status403Forbidden,

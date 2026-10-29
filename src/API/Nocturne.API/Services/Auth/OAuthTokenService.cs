@@ -1,3 +1,4 @@
+using Nocturne.API.Mcp;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
@@ -77,6 +78,7 @@ public class OAuthTokenService : IOAuthTokenService
         string redirectUri,
         string codeChallenge,
         bool limitTo24Hours = false,
+        string? resource = null,
         CancellationToken ct = default
     )
     {
@@ -89,11 +91,12 @@ public class OAuthTokenService : IOAuthTokenService
             ClientEntityId = clientEntityId,
             SubjectId = subjectId,
             CodeHash = codeHash,
-            Scopes = scopes.ToList(),
+            Scopes = McpScopes.ForResource(scopes, resource).ToList(),
             RedirectUri = redirectUri,
             CodeChallenge = codeChallenge,
             ExpiresAt = UtcNow.Add(AuthorizationCodeLifetime),
             LimitTo24Hours = limitTo24Hours,
+            Resource = resource,
         };
 
         db.OAuthAuthorizationCodes.Add(entity);
@@ -179,6 +182,7 @@ public class OAuthTokenService : IOAuthTokenService
             authCode.SubjectId,
             authCode.Scopes,
             limitTo24Hours: authCode.LimitTo24Hours,
+            resource: authCode.Resource,
             ct: ct
         );
 
@@ -331,21 +335,13 @@ public class OAuthTokenService : IOAuthTokenService
         };
 
         var roles = await _subjectService.GetSubjectRolesAsync(subject.Id);
-        var permissions = ScopeTranslator.ToPermissions(grant.Scopes).ToList();
-
-        var accessToken = _jwtService.GenerateAccessToken(
-            subjectInfo,
-            permissions,
-            roles,
-            grant.Scopes,
-            grant.Client?.ClientId,
-            limitTo24Hours: grant.LimitTo24Hours,
-            tenantId: grant.TenantId,
-            grantId: grant.Id
-        );
+        var scopes = McpScopes.ForResource(grant.Scopes, grant.Resource).ToList();
+        var accessToken = MintAccessToken(
+            subjectInfo, roles, scopes, grant.Client?.ClientId, grant.LimitTo24Hours,
+            grant.TenantId, grant.Id, grant.Resource);
 
         var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
-        var scopeStr = string.Join(" ", grant.Scopes);
+        var scopeStr = string.Join(" ", scopes);
 
         return OAuthTokenResult.Ok(accessToken, newRefreshToken, expiresIn, scopeStr);
     }
@@ -660,18 +656,10 @@ public class OAuthTokenService : IOAuthTokenService
         };
 
         var roles = await _subjectService.GetSubjectRolesAsync(subject.Id);
-        var permissions = ScopeTranslator.ToPermissions(grant.Scopes).ToList();
-
-        var accessToken = _jwtService.GenerateAccessToken(
-            subjectInfo,
-            permissions,
-            roles,
-            grant.Scopes,
-            grant.ClientId,
-            limitTo24Hours: grant.LimitTo24Hours,
-            tenantId: grant.TenantId,
-            grantId: grant.Id
-        );
+        var scopes = McpScopes.ForResource(grant.Scopes, grant.Resource).ToList();
+        var accessToken = MintAccessToken(
+            subjectInfo, roles, scopes, grant.ClientId, grant.LimitTo24Hours,
+            grant.TenantId, grant.Id, grant.Resource);
 
         // Generate and store refresh token
         var refreshToken = _jwtService.GenerateRefreshToken();
@@ -696,8 +684,31 @@ public class OAuthTokenService : IOAuthTokenService
             "token_issued", grant.Id, grant.ClientId, grant.SubjectId, string.Join(" ", grant.Scopes));
 
         var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
-        var scope = string.Join(" ", grant.Scopes);
+        var scope = string.Join(" ", scopes);
 
         return OAuthTokenResult.Ok(accessToken, refreshToken, expiresIn, scope);
+    }
+
+    /// <summary>
+    /// The access token for a grant: bound to the grant's resource when it has one (see
+    /// <c>OAuthGrantEntity.Resource</c>), else to the API.
+    /// </summary>
+    private string MintAccessToken(
+        SubjectInfo subject,
+        IEnumerable<string> roles,
+        List<string> scopes,
+        string? clientId,
+        bool limitTo24Hours,
+        Guid tenantId,
+        Guid grantId,
+        string? resource)
+    {
+        var permissions = ScopeTranslator.ToPermissions(scopes).ToList();
+        return resource is null
+            ? _jwtService.GenerateAccessToken(
+                subject, permissions, roles, scopes, clientId,
+                limitTo24Hours: limitTo24Hours, tenantId: tenantId, grantId: grantId)
+            : _jwtService.GenerateResourceAccessToken(
+                subject, permissions, roles, scopes, clientId, limitTo24Hours, tenantId, grantId, resource);
     }
 }

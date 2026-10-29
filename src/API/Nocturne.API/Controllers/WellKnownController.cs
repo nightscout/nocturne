@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Mcp;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
@@ -25,7 +26,14 @@ namespace Nocturne.API.Controllers;
 /// </list>
 ///
 /// Both endpoints are <see cref="AllowAnonymousAttribute"/> and are consumed by OAuth clients during
-/// the dynamic discovery phase. The issuer URL and signing key are derived from <see cref="JwtOptions"/>.
+/// the dynamic discovery phase.
+/// <para>
+/// The two discovery documents report different issuers. The OpenID document's issuer is the one
+/// its ID tokens carry as <c>iss</c>, <see cref="JwtOptions.Issuer"/>. The OAuth document's issuer
+/// is a URL (<see cref="Services.Auth.OAuthIssuer"/>): RFC 8414 requires the metadata to be fetched
+/// under it, and an OAuth client compares it with the <c>iss</c> of every authorization response
+/// (RFC 9207) and with the protected resource metadata's authorization server.
+/// </para>
 /// </remarks>
 /// <seealso cref="JwtOptions"/>
 [ApiController]
@@ -143,20 +151,15 @@ public class WellKnownController : ControllerBase
     /// </summary>
     [HttpGet("oauth-authorization-server")]
     [ProducesResponseType(typeof(OAuthAuthorizationServerMetadata), StatusCodes.Status200OK)]
-    /// <remarks>
-    /// The issuer and every endpoint are the requesting host's origin. An OAuth client registers
-    /// with, and is authorized by, one tenant host, so the server it discovers here has to be that
-    /// host; and RFC 8414 requires the issuer to be the URL this document was fetched under, which
-    /// is what an MCP client compares it with (see <see cref="GetOAuthProtectedResourceMetadata"/>).
-    /// </remarks>
+    /// <remarks>Its issuer differs from the OpenID document's; see the class remarks.</remarks>
     public ActionResult<OAuthAuthorizationServerMetadata> GetOAuthMetadata()
     {
-        var baseUrl = McpAccessGateMiddleware.ResourceOrigin(Request);
+        var baseUrl = GetBaseUrl();
 
         return Ok(
             new OAuthAuthorizationServerMetadata
             {
-                Issuer = baseUrl,
+                Issuer = OAuthIssuer.Of(Request),
                 AuthorizationEndpoint = $"{baseUrl}/api/oauth/authorize",
                 TokenEndpoint = $"{baseUrl}/api/oauth/token",
                 DeviceAuthorizationEndpoint = $"{baseUrl}/api/oauth/device",
@@ -204,7 +207,7 @@ public class WellKnownController : ControllerBase
             new OAuthProtectedResourceMetadata
             {
                 Resource = McpAccessGateMiddleware.ResourceUrl(Request),
-                AuthorizationServers = [McpAccessGateMiddleware.ResourceOrigin(Request)],
+                AuthorizationServers = [OAuthIssuer.Of(Request)],
                 ScopesSupported = [.. McpScopes.Offered],
                 BearerMethodsSupported = ["header"],
                 ResourceName = "Nocturne",

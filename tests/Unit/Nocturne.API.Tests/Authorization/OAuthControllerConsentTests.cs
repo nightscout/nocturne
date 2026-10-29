@@ -58,9 +58,9 @@ public class OAuthControllerConsentTests
             .Setup(s => s.GenerateAuthorizationCodeAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<Guid, Guid, IEnumerable<string>, string, string, bool, CancellationToken>(
-                (_, _, scopes, _, _, _, _) => _issuedScopes.AddRange(scopes))
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, Guid, IEnumerable<string>, string, string, bool, string?, CancellationToken>(
+                (_, _, scopes, _, _, _, _, _) => _issuedScopes.AddRange(scopes))
             .ReturnsAsync("the-code");
     }
 
@@ -189,7 +189,7 @@ public class OAuthControllerConsentTests
             s => s.GenerateAuthorizationCodeAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

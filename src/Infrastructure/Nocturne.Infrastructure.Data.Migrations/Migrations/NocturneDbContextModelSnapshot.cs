@@ -3049,6 +3049,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("redirect_uri");
 
+                    b.Property<string>("Resource")
+                        .HasColumnType("text")
+                        .HasColumnName("resource");
+
                     b.PrimitiveCollection<List<string>>("Scopes")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -3349,6 +3353,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<bool>("LimitTo24Hours")
                         .HasColumnType("boolean")
                         .HasColumnName("limit_to_24_hours");
+
+                    b.Property<string>("Resource")
+                        .HasColumnType("text")
+                        .HasColumnName("resource");
 
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")

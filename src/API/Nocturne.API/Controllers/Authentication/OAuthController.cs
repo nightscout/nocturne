@@ -157,6 +157,16 @@ public class OAuthController : ControllerBase
             });
         }
 
+        var mcpResource = NamesThisMcpServer(resource) ? McpAccessGateMiddleware.ResourceUrl(Request) : null;
+        if (mcpResource is not null)
+        {
+            requestedScopes = [.. McpScopes.ForResource(requestedScopes, mcpResource)];
+            if (requestedScopes.Length == 0)
+            {
+                return BadRequest(McpReadOnlyRefusal());
+            }
+        }
+
         // Look up the registered client; clients must register via DCR before authorize
         var client = await _clientService.GetClientAsync(client_id);
         if (client == null)
@@ -212,7 +222,8 @@ public class OAuthController : ControllerBase
                     redirect_uri,
                     code_challenge,
                     state,
-                    HttpContext.InheritHistoryClamp(existingGrant.LimitTo24Hours)
+                    HttpContext.InheritHistoryClamp(existingGrant.LimitTo24Hours),
+                    mcpResource
                 );
             }
         }
@@ -222,8 +233,8 @@ public class OAuthController : ControllerBase
             ? string.Join(" ", existingGrant.Scopes)
             : null;
         var consentUrl = BuildConsentUrl(
-            client_id, redirect_uri, scope!, state, code_challenge, existingScopeString,
-            forAssistant: NamesThisMcpServer(resource));
+            client_id, redirect_uri, string.Join(' ', requestedScopes), state, code_challenge,
+            existingScopeString, mcpResource);
         return Redirect(consentUrl);
     }
 
@@ -277,9 +288,27 @@ public class OAuthController : ControllerBase
             );
         }
 
+        string? mcpResource = null;
+        if (!string.IsNullOrEmpty(request.Resource))
+        {
+            if (!NamesThisMcpServer(request.Resource))
+            {
+                return BadRequest(new OAuthError
+                {
+                    Error = "invalid_target",
+                    ErrorDescription = "The resource is not this server's MCP endpoint.",
+                });
+            }
+            mcpResource = McpAccessGateMiddleware.ResourceUrl(Request);
+        }
+
         // Validate scopes
         var scopes = request.Scope?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
-        var normalizedScopes = Scope.Normalize(scopes);
+        var normalizedScopes = Scope.Normalize(McpScopes.ForResource(scopes, mcpResource));
+        if (mcpResource is not null && normalizedScopes.Count == 0)
+        {
+            return BadRequest(McpReadOnlyRefusal());
+        }
 
         if (normalizedScopes.Count == 0)
         {
@@ -310,7 +339,8 @@ public class OAuthController : ControllerBase
             request.RedirectUri,
             request.CodeChallenge,
             request.State,
-            HttpContext.InheritHistoryClamp(request.LimitTo24Hours)
+            HttpContext.InheritHistoryClamp(request.LimitTo24Hours),
+            mcpResource
         );
     }
 
@@ -701,7 +731,8 @@ public class OAuthController : ControllerBase
         string redirectUri,
         string codeChallenge,
         string? state,
-        bool limitTo24Hours = false
+        bool limitTo24Hours = false,
+        string? resource = null
     )
     {
         var code = await _tokenService.GenerateAuthorizationCodeAsync(
@@ -710,7 +741,8 @@ public class OAuthController : ControllerBase
             scopes,
             redirectUri,
             codeChallenge,
-            limitTo24Hours
+            limitTo24Hours,
+            resource
         );
 
         var separator = redirectUri.Contains('?') ? '&' : '?';
@@ -720,6 +752,8 @@ public class OAuthController : ControllerBase
         {
             redirectUrl += $"&state={Uri.EscapeDataString(state)}";
         }
+
+        redirectUrl += $"&iss={Uri.EscapeDataString(OAuthIssuer.Of(Request))}";
 
         return Redirect(redirectUrl);
     }
@@ -745,6 +779,8 @@ public class OAuthController : ControllerBase
             redirectUrl += $"&state={Uri.EscapeDataString(state)}";
         }
 
+        redirectUrl += $"&iss={Uri.EscapeDataString(OAuthIssuer.Of(Request))}";
+
         return Redirect(redirectUrl);
     }
 
@@ -755,7 +791,7 @@ public class OAuthController : ControllerBase
         string? state,
         string codeChallenge,
         string? existingScopes = null,
-        bool forAssistant = false
+        string? mcpResource = null
     )
     {
         var qs = $"client_id={Uri.EscapeDataString(clientId)}" +
@@ -773,19 +809,26 @@ public class OAuthController : ControllerBase
             qs += $"&existing_scopes={Uri.EscapeDataString(existingScopes)}";
         }
 
-        if (forAssistant)
+        if (mcpResource is not null)
         {
-            qs += "&mcp=1";
+            qs += $"&resource={Uri.EscapeDataString(mcpResource)}";
         }
 
         return $"/oauth/consent?{qs}";
     }
 
     /// <summary>
-    /// Whether an RFC 8707 resource indicator names this host's MCP endpoint. The indicator is the
-    /// client's own claim, as everything about an anonymously registered client is, so it decides
-    /// only what the consent page says, never what is granted.
+    /// Whether an RFC 8707 resource indicator names this host's MCP endpoint. When it does, the
+    /// grant holds read scopes only and its tokens carry that endpoint as their audience, which the
+    /// API refuses and the MCP endpoint requires.
     /// </summary>
+    private static OAuthError McpReadOnlyRefusal() => new()
+    {
+        Error = "invalid_scope",
+        ErrorDescription = "An assistant connected through MCP can only read data. Request one or more "
+            + $"read scopes: {string.Join(", ", McpScopes.Offered)}.",
+    };
+
     private bool NamesThisMcpServer(string? resource) =>
         !string.IsNullOrEmpty(resource)
         && string.Equals(

@@ -62,16 +62,30 @@ describe("consent approval", () => {
     await expect.element(approve()).not.toBeInTheDocument();
   });
 
-  it("says that an assistant's readings go to its provider", async () => {
+  it("says nothing about a provider for an ordinary app", async () => {
+    clientInfo.current = { clientId: "trio", displayName: "Trio", isKnown: true, deletionAccess: "ReadWrite" };
+    render(ConsentPage);
+
+    await expect.element(approve()).toBeEnabled();
+    await expect
+      .element(browserPage.getByText("This assistant sends the data it receives to its provider."))
+      .not.toBeInTheDocument();
+  });
+
+  it("tells the user an assistant's data goes to its provider, and posts the resource back", async () => {
     clientInfo.current = { clientId: "claude", displayName: "Claude", isKnown: false, deletionAccess: "None" };
-    const sentence = "This assistant sends the readings that it gets to its provider.";
-
+    page.url = new URL(
+      `${page.url.href}&resource=${encodeURIComponent("https://dev.example/mcp")}`
+    ) as typeof page.url;
     render(ConsentPage);
-    await expect.element(browserPage.getByText(sentence)).not.toBeInTheDocument();
 
-    page.url = new URL(`${page.url.href}&mcp=1`) as typeof page.url;
-    render(ConsentPage);
-    await expect.element(browserPage.getByText(sentence)).toBeVisible();
+    await expect
+      .element(browserPage.getByText("This assistant sends the data it receives to its provider."))
+      .toBeVisible();
+    await approve().click();
+    await expect
+      .poll(() => consent.mock.calls.at(-1)?.[0])
+      .toMatchObject({ resource: "https://dev.example/mcp", approved: "true" });
   });
 
   it("shows why the server refused, and keeps Approve usable", async () => {

@@ -38,8 +38,12 @@
   const oauthState = $derived(page.url.searchParams.get("state") ?? "");
   const codeChallenge = $derived(page.url.searchParams.get("code_challenge") ?? "");
   const existingScopes = $derived(page.url.searchParams.get("existing_scopes") ?? "");
-  /** Set by the API's authorize endpoint when the client named this host's MCP server. */
-  const forAssistant = $derived(page.url.searchParams.get("mcp") === "1");
+  /**
+   * The MCP endpoint the API's authorize endpoint matched to this host, carried back on approval.
+   * The API grants it read scopes only, so `scope` here already holds no others.
+   */
+  const resource = $derived(page.url.searchParams.get("resource") ?? "");
+  const forAssistant = $derived(resource !== "");
 
   const missingParams = $derived(!clientId || !redirectUri || !scope || !codeChallenge);
 
@@ -184,7 +188,7 @@
           <div class="flex items-start gap-3 rounded-md bg-muted/50 p-3">
             <Bot class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <p class="text-sm text-foreground">
-              This assistant sends the readings that it gets to its provider.
+              This assistant sends the data it receives to its provider.
             </p>
           </div>
         {/if}
@@ -321,6 +325,7 @@
             <input {...denyForm.fields.code_challenge.as("hidden", codeChallenge)} />
             <input {...denyForm.fields.approved.as("hidden", "false")} />
             <input {...denyForm.fields.limit_to_24_hours.as("hidden", limitTo24Hours ? "true" : "false")} />
+            <input {...denyForm.fields.resource.as("hidden", resource)} />
             <Button
               type="submit"
               variant="outline"
@@ -346,6 +351,7 @@
             <input {...approveForm.fields.code_challenge.as("hidden", codeChallenge)} />
             <input {...approveForm.fields.approved.as("hidden", "true")} />
             <input {...approveForm.fields.limit_to_24_hours.as("hidden", limitTo24Hours ? "true" : "false")} />
+            <input {...approveForm.fields.resource.as("hidden", resource)} />
             <Button
               type="submit"
               class="w-full"
