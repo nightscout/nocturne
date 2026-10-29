@@ -9,6 +9,8 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591;NU1608;NU1701</NoWarn>
+    <!-- ModelContextProtocol.Extensions.Apps is marked experimental. -->
+    <NoWarn>$(NoWarn);MCPEXP003</NoWarn>
     <!-- Container publishing configuration for Aspire -->
     <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
     <!-- Restore RID-specific assets for both container architectures so a
@@ -67,6 +69,8 @@
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Yarp.ReverseProxy" />
     <PackageReference Include="MongoDB.Driver" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+    <PackageReference Include="ModelContextProtocol.Extensions.Apps" />
   </ItemGroup>
   <ItemGroup>
     <!-- Source for the Scalar docs theme; see NocturneScalarTheme. -->

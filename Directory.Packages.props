@@ -120,8 +120,8 @@
     <!-- Extension packages -->
     <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.14" />
     <!-- MCP (Model Context Protocol) packages -->
-    <PackageVersion Include="ModelContextProtocol" Version="1.0.0" />
-    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="1.0.0" />
+    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.3.0" />
+    <PackageVersion Include="ModelContextProtocol.Extensions.Apps" Version="2.3.0" />
     <!-- Roslyn Code Analysis packages (for source generators) -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
