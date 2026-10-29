@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import IntegrationsTabContent from "./integrations-tab-content-test-wrapper.svelte";
-import type { PlatformSettingsSummary } from "$api";
+import type { PlatformSettingsSummary } from "#lib/api/index.js";
 
 const callback = "https://nocturne.example/api/v4/google-health/oauth/callback";
 const platform: PlatformSettingsSummary = {
