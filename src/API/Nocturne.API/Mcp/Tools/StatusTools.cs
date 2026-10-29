@@ -44,29 +44,29 @@ internal sealed class StatusTools
         readLog.Record("glucose", latest is null ? 0 : 1);
         if (latest is null)
         {
-            text.AppendLine("Glucose: no reading found.");
+            text.Append("Glucose: no reading found.").Append('\n');
         }
         else
         {
-            var age = (int)Math.Floor((now.UtcDateTime - latest.Timestamp).TotalMinutes);
+            var age = Math.Max((int)Math.Floor((now.UtcDateTime - latest.Timestamp).TotalMinutes), 0);
             var display = useMmol
                 ? $"{GlucoseSummary.Format(latest.Mgdl, true)} mmol/L ({GlucoseSummary.Format(latest.Mgdl, false)} mg/dL)"
                 : $"{GlucoseSummary.Format(latest.Mgdl, false)} mg/dL";
-            text.AppendLine(CultureInfo.InvariantCulture,
+            text.Append(CultureInfo.InvariantCulture,
                 $"Glucose: {display}, trend {latest.Direction?.ToString() ?? "unknown"}, "
-                + $"{Math.Max(age, 0)} minutes ago.");
+                + $"{age} {(age == 1 ? "minute" : "minutes")} ago.").Append('\n');
         }
 
         if (http.HasScope(Scope.TreatmentsRead))
         {
             var reading = await iobCob.ReadTotalAsync(now.ToUnixTimeMilliseconds(), live: true, cancellationToken);
             readLog.Record("iob_cob", 1);
-            text.AppendLine(reading.HasIob
+            text.Append(reading.HasIob
                 ? string.Create(CultureInfo.InvariantCulture, $"Insulin on board: {reading.Iob.Iob:0.00} U.")
-                : "Insulin on board: no data.");
-            text.AppendLine(reading.HasCob
+                : "Insulin on board: no data.").Append('\n');
+            text.Append(reading.HasCob
                 ? string.Create(CultureInfo.InvariantCulture, $"Carbs on board: {reading.Cob!.Cob:0} g.")
-                : "Carbs on board: no data.");
+                : "Carbs on board: no data.").Append('\n');
         }
         else
         {
@@ -77,7 +77,7 @@ internal sealed class StatusTools
         {
             var mode = await stateSpans.GetCurrentPumpModeAsync(cancellationToken);
             readLog.Record("pump_mode", mode is null ? 0 : 1);
-            text.AppendLine($"Pump mode: {mode?.ToString() ?? "unknown"}.");
+            text.Append($"Pump mode: {mode?.ToString() ?? "unknown"}.").Append('\n');
         }
         else
         {
@@ -88,7 +88,7 @@ internal sealed class StatusTools
         {
             var profile = await profiles.GetActiveProfileNameAsync(now.ToUnixTimeMilliseconds(), cancellationToken);
             readLog.Record("profile", profile is null ? 0 : 1);
-            text.AppendLine($"Active profile: {profile ?? "none"}.");
+            text.Append($"Active profile: {profile ?? "none"}.").Append('\n');
         }
         else
         {
@@ -96,7 +96,7 @@ internal sealed class StatusTools
         }
 
         if (omitted.Count > 0)
-            text.AppendLine($"Not included (scope not granted): {string.Join(", ", omitted)}.");
+            text.Append($"Not included (scope not granted): {string.Join(", ", omitted)}.").Append('\n');
 
         return new CallToolResult { Content = [new TextContentBlock { Text = text.ToString().TrimEnd() }] };
     }

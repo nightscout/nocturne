@@ -396,6 +396,49 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
         System.Web.HttpUtility.ParseQueryString(location.Query)["iss"].Should().Be(issuer);
     }
 
+    [Fact]
+    public async Task EveryToolCall_WritesOneReadAuditRow_FailedCallsIncluded()
+    {
+        using (var session = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _sessionA))
+        {
+            var enabled = await session.PutAsJsonAsync("/api/v4/audit/config", new { readAuditEnabled = true });
+            enabled.StatusCode.Should().Be(HttpStatusCode.OK, await enabled.Content.ReadAsStringAsync());
+        }
+
+        var token = await McpTokenAsync(_slugA, _sessionA, "glucose.read");
+        using var client = McpClient(_slugA, token);
+
+        var tooLong = await CallToolAsync(client, "show_glucose", new { hours = 72, note = "not declared" });
+        tooLong.GetProperty("result").GetProperty("isError").GetBoolean().Should().BeTrue();
+        await CallToolAsync(client, "show_glucose", new { hours = 3 });
+
+        var rows = new List<(int Status, string? Parameters, string? Entities)>();
+        for (var attempt = 0; attempt < 50 && rows.Count < 2; attempt++)
+        {
+            await Task.Delay(100);
+            rows.Clear();
+            await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT set_config('app.current_tenant_id', @t, false);
+                SELECT status_code, query_parameters::text, entity_type FROM read_access_log
+                WHERE endpoint = 'MCP show_glucose' ORDER BY created_at;
+                """;
+            cmd.Parameters.AddWithValue("t", _tenantAId.ToString());
+            await using var reader = await cmd.ExecuteReaderAsync();
+            await reader.NextResultAsync();
+            while (await reader.ReadAsync())
+                rows.Add((reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2)));
+        }
+
+        rows.Should().HaveCount(2);
+        rows[0].Status.Should().Be(500);
+        rows[0].Parameters.Should().Be("""{"hours": 72}""", "only the arguments the tool declares are kept");
+        rows[1].Status.Should().Be(200);
+        rows[1].Entities.Should().StartWith("glucose");
+    }
+
     private async Task<string> McpTokenAsync(string slug, string session, string scope) =>
         (await McpTokenPairAsync(slug, session, scope)).Access;
 

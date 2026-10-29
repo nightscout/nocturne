@@ -38,12 +38,12 @@ internal static class GlucoseSummary
 
         text.Append(CultureInfo.InvariantCulture,
             $"Glucose from {from:yyyy-MM-dd HH:mm} to {to:yyyy-MM-dd HH:mm} UTC");
-        text.AppendLine(".");
+        text.Append(".").Append('\n');
 
         var readings = data.GlucoseData;
         if (readings.Count == 0)
         {
-            text.AppendLine("No glucose readings in this period.");
+            text.Append("No glucose readings in this period.").Append('\n');
         }
         else
         {
@@ -54,25 +54,25 @@ internal static class GlucoseSummary
             var below = values.Count(v => v < low);
             var above = values.Count(v => v > high);
 
-            text.AppendLine(CultureInfo.InvariantCulture, $"Readings: {values.Count}.");
-            text.AppendLine(CultureInfo.InvariantCulture,
+            text.Append(CultureInfo.InvariantCulture, $"Readings: {values.Count}.").Append('\n');
+            text.Append(CultureInfo.InvariantCulture,
                 $"Min {Format(values.Min(), useMmol)}, max {Format(values.Max(), useMmol)}, "
-                + $"mean {Format(values.Average(), useMmol)} {units}.");
-            text.AppendLine(CultureInfo.InvariantCulture,
+                + $"mean {Format(values.Average(), useMmol)} {units}.").Append('\n');
+            text.Append(CultureInfo.InvariantCulture,
                 $"Time in range ({Format(low, useMmol)}-{Format(high, useMmol)} {units}): "
-                + $"{Percent(inRange, values.Count)}%.");
-            text.AppendLine(CultureInfo.InvariantCulture,
-                $"Readings below range: {below}. Readings above range: {above}.");
+                + $"{Percent(inRange, values.Count)}%.").Append('\n');
+            text.Append(CultureInfo.InvariantCulture,
+                $"Readings below range: {below}. Readings above range: {above}.").Append('\n');
         }
 
         if (!omittedTracks.Contains(TrackScopes[0].Track))
         {
-            text.AppendLine(CultureInfo.InvariantCulture,
-                $"Boluses: {data.BolusMarkers.Count}. Carb entries: {data.CarbMarkers.Count}.");
+            text.Append(CultureInfo.InvariantCulture,
+                $"Boluses: {data.BolusMarkers.Count}. Carb entries: {data.CarbMarkers.Count}.").Append('\n');
         }
 
         if (omittedTracks.Count > 0)
-            text.AppendLine($"Tracks omitted: {string.Join(", ", omittedTracks)} (scope not granted).");
+            text.Append($"Tracks omitted: {string.Join(", ", omittedTracks)} (scope not granted).").Append('\n');
 
         return text.ToString().TrimEnd();
     }

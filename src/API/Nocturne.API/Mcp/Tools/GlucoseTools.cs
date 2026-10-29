@@ -10,6 +10,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using MvcJsonOptions = Microsoft.AspNetCore.Mvc.JsonOptions;
 
@@ -56,9 +57,7 @@ internal sealed class GlucoseTools
         if (!TrackerReadAccess.Allows(http))
             data.TrackerMarkers = [];
 
-        readLog.Record("glucose", data.GlucoseData.Count);
-        if (http.HasScope(Scope.TreatmentsRead))
-            readLog.Record("treatments", data.BolusMarkers.Count + data.CarbMarkers.Count);
+        RecordReads(data, readLog);
 
         var useMmol = await GlucoseUnits.UsesMmolAsync(appearance, tenant, cancellationToken);
         var omitted = GlucoseSummary.OmittedTracks(http.HasScope);
@@ -80,5 +79,32 @@ internal sealed class GlucoseTools
                 },
                 jsonOptions.Value.JsonSerializerOptions),
         };
+    }
+
+    /// <summary>
+    /// Every dataset the redacted payload carries, with its record count. Redaction has already
+    /// emptied what the token's scopes do not cover, so an empty dataset is left out.
+    /// </summary>
+    internal static void RecordReads(DashboardChartData data, McpToolReadLog readLog)
+    {
+        void Read(string dataset, int records)
+        {
+            if (records > 0)
+                readLog.Record(dataset, records);
+        }
+
+        Read("glucose", data.GlucoseData.Count + data.BgCheckMarkers.Count);
+        Read("treatments",
+            data.BolusMarkers.Count + data.CarbMarkers.Count + data.BasalInjectionMarkers.Count
+            + data.BasalSeries.Count + data.IobSeries.Count + data.CobSeries.Count
+            + data.TempBasalSpans.Count + data.BasalDeliverySpans.Count + data.OverrideSpans.Count
+            + data.ActivitySpans.Count(s => s.Kind != ChartSpanKind.Sleep));
+        Read("device_events", data.DeviceEventMarkers.Count + data.SystemEventMarkers.Count);
+        Read("pump_modes", data.PumpModeSpans.Count);
+        Read("profiles", data.ProfileSpans.Count);
+        Read("heart_rate", data.HeartRateSeries.Count);
+        Read("steps", data.StepSeries.Count);
+        Read("sleep", data.ActivitySpans.Count(s => s.Kind == ChartSpanKind.Sleep));
+        Read("trackers", data.TrackerMarkers.Count);
     }
 }

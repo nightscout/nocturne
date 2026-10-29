@@ -38,7 +38,7 @@ public class GlucoseSummaryTests
             Time in range (70-180 mg/dL): 50%.
             Readings below range: 1. Readings above range: 1.
             Boluses: 1. Carb entries: 2.
-            """.ReplaceLineEndings());
+            """.ReplaceLineEndings("\n"));
     }
 
     [Fact]
