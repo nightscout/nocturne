@@ -62,6 +62,18 @@ describe("consent approval", () => {
     await expect.element(approve()).not.toBeInTheDocument();
   });
 
+  it("says that an assistant's readings go to its provider", async () => {
+    clientInfo.current = { clientId: "claude", displayName: "Claude", isKnown: false, deletionAccess: "None" };
+    const sentence = "This assistant sends the readings that it gets to its provider.";
+
+    render(ConsentPage);
+    await expect.element(browserPage.getByText(sentence)).not.toBeInTheDocument();
+
+    page.url = new URL(`${page.url.href}&mcp=1`) as typeof page.url;
+    render(ConsentPage);
+    await expect.element(browserPage.getByText(sentence)).toBeVisible();
+  });
+
   it("shows why the server refused, and keeps Approve usable", async () => {
     consent.mockRejectedValueOnce({ status: 400, body: { message: "The redirect address is not allowed" } });
     clientInfo.current = { clientId: "trio", displayName: "Trio", isKnown: true, deletionAccess: "ReadWrite" };

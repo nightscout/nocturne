@@ -16,6 +16,7 @@
   import Clock from "@lucide/svelte/icons/clock";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Globe from "@lucide/svelte/icons/globe";
+  import Bot from "@lucide/svelte/icons/bot";
   import { consentForm, getClientInfo } from "../oauth.remote";
   import { FormError, useSubmission } from "#lib/forms/index.js";
   import { getOAuthScopeDescription } from "#lib/constants/oauth-scopes.js";
@@ -37,6 +38,8 @@
   const oauthState = $derived(page.url.searchParams.get("state") ?? "");
   const codeChallenge = $derived(page.url.searchParams.get("code_challenge") ?? "");
   const existingScopes = $derived(page.url.searchParams.get("existing_scopes") ?? "");
+  /** Set by the API's authorize endpoint when the client named this host's MCP server. */
+  const forAssistant = $derived(page.url.searchParams.get("mcp") === "1");
 
   const missingParams = $derived(!clientId || !redirectUri || !scope || !codeChallenge);
 
@@ -176,6 +179,15 @@
             <span class="break-all font-mono text-foreground">{redirectUri}</span>
           </p>
         </div>
+
+        {#if forAssistant}
+          <div class="flex items-start gap-3 rounded-md bg-muted/50 p-3">
+            <Bot class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <p class="text-sm text-foreground">
+              This assistant sends the readings that it gets to its provider.
+            </p>
+          </div>
+        {/if}
 
         <Separator />
 
