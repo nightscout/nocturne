@@ -317,13 +317,59 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
             },
         });
 
-        call.TryGetProperty("error", out var error).Should().BeTrue(call.ToString());
-        error.GetProperty("code").GetInt32().Should().Be(-32602);
-        var message = error.GetProperty("message").GetString();
+        call.TryGetProperty("error", out _).Should().BeFalse("the model reads an isError result and can repair the spec");
+        call.GetProperty("result").GetProperty("isError").GetBoolean().Should().BeTrue();
+        var message = ToolText(call);
         Log(message!);
         message.Should().Contain("version: Missing")
             .And.Contain("panels[0].dataset.name: 'insulin' is not a dataset")
             .And.Contain("panels[1].primitive: glucose_statistics cannot be drawn as time_series");
+    }
+
+    [Fact]
+    public async Task RenderReport_ForAHistoryClampedMember_ReportsOnlyTheLastDay_AndSaysSo()
+    {
+        await PostGlucoseAsync(_slugA, _sessionA, 300, TimeSpan.FromDays(20));
+
+        Guid subject;
+        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        {
+            await conn.OpenAsync();
+            (subject, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantAId, "MCP Clamped");
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE tenant_members SET limit_to_24_hours = true, direct_permissions = '["glucose.read"]'::jsonb
+                WHERE subject_id = @subject;
+                """;
+            cmd.Parameters.AddWithValue("subject", subject);
+            (await cmd.ExecuteNonQueryAsync()).Should().Be(1);
+        }
+        var session = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subject);
+        var token = await McpTokenAsync(_slugA, session, "glucose.read");
+        using var client = McpClient(_slugA, token);
+
+        var started = DateTimeOffset.UtcNow;
+        var call = await CallToolAsync(client, "render_report", new
+        {
+            spec = new
+            {
+                version = 1,
+                range = new { hours = 336 },
+                panels = new object[] { new { dataset = new { name = "glucose_statistics" }, primitive = "stat_tiles" } },
+            },
+        });
+
+        var structured = call.GetProperty("result").GetProperty("structuredContent");
+        Log(ToolText(call));
+        var panel = structured.GetProperty("panels")[0];
+        panel.GetProperty("limited").GetBoolean().Should().BeTrue();
+        panel.GetProperty("rows")[0].GetProperty("readings").GetInt32().Should().Be(1, "the reading of 20 days ago is older than the clamp");
+        DateTimeOffset.FromUnixTimeMilliseconds(panel.GetProperty("window").GetProperty("from").GetInt64())
+            .Should().BeCloseTo(started.AddHours(-24), TimeSpan.FromMinutes(1));
+        panel.GetProperty("summary").GetString().Should().Contain("Limited to the last 24 hours");
+        structured.GetProperty("warnings").EnumerateArray().Select(w => w.GetString())
+            .Should().ContainSingle(w => w!.Contains("Limited to the last 24 hours"));
+        ToolText(call).Should().Contain("Readings: 1.");
     }
 
     [Fact]
@@ -344,7 +390,8 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
         structured.GetProperty("sampleRows").GetArrayLength().Should().Be(3);
 
         var unknown = await CallToolAsync(client, "describe_dataset", new { name = "insulin" });
-        unknown.GetProperty("error").GetProperty("message").GetString().Should().Contain("glucose_series, glucose_statistics");
+        unknown.GetProperty("result").GetProperty("isError").GetBoolean().Should().BeTrue();
+        ToolText(unknown).Should().Contain("glucose_series, glucose_statistics");
     }
 
     private HttpClient McpClient(string slug, string token)
@@ -386,10 +433,10 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
         string.Join("\n", rpc.GetProperty("result").GetProperty("content").EnumerateArray()
             .Select(c => c.GetProperty("text").GetString()));
 
-    private async Task PostGlucoseAsync(string slug, string session, int sgv)
+    private async Task PostGlucoseAsync(string slug, string session, int sgv, TimeSpan? age = null)
     {
         using var client = AuthTestHelpers.CreateTenantBearerClient(Fixture, slug, _baseDomain, session);
-        var now = DateTimeOffset.UtcNow.AddMinutes(-2);
+        var now = DateTimeOffset.UtcNow - (age ?? TimeSpan.FromMinutes(2));
         var response = await client.PostAsJsonAsync("/api/v1/entries", new[]
         {
             new { type = "sgv", sgv, direction = "Flat", date = now.ToUnixTimeMilliseconds(), dateString = now.UtcDateTime.ToString("o") },
@@ -554,8 +601,11 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
             },
         });
 
+        var invalid = await CallToolAsync(client, "render_report", new { spec = new { version = "1", panels = 3 } });
+        invalid.GetProperty("result").GetProperty("isError").GetBoolean().Should().BeTrue();
+
         var rows = new List<(int Status, string? Parameters, string? Entities)>();
-        for (var attempt = 0; attempt < 50 && rows.Count < 3; attempt++)
+        for (var attempt = 0; attempt < 50 && rows.Count < 4; attempt++)
         {
             await Task.Delay(100);
             rows.Clear();
@@ -574,8 +624,10 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
                 rows.Add((reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2)));
         }
 
-        rows.Should().HaveCount(3, "one row per call");
-        rows[0].Status.Should().Be(500);
+        rows.Should().HaveCount(4, "one row per call");
+        rows[3].Status.Should().Be(400, "an invalid spec is the caller's error");
+        rows[3].Entities.Should().BeNull("nothing was read");
+        rows[0].Status.Should().Be(400, "arguments out of range are the caller's error, as a failed MVC validation is");
         rows[0].Parameters.Should().Be("""{"hours": 72}""", "only the arguments the tool declares are kept");
         rows[1].Status.Should().Be(200);
         rows[1].Entities.Should().StartWith("glucose");

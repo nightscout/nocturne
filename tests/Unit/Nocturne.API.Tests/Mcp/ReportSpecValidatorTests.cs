@@ -10,7 +10,7 @@ public class ReportSpecValidatorTests
 {
     internal static readonly ReportDatasetRegistry Registry = new([new GlucoseSeriesDataset(), new GlucoseStatisticsDataset()]);
 
-    private static readonly ReportSpecValidator Validator = new(Registry);
+    private static readonly ReportSpecValidator Validator = new(Registry, TimeProvider.System);
 
     private static ReportSpecValidation Validate(string json) => Validator.Validate(JsonDocument.Parse(json).RootElement);
 
@@ -30,7 +30,7 @@ public class ReportSpecValidatorTests
               "title": "Last day",
               "range": { "hours": 24 },
               "panels": [
-                { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": "glucose" } },
+                { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose"] } },
                 { "id": "p1", "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles",
                   "range": { "from": "2026-10-01T00:00:00Z", "to": "2026-10-15T00:00:00Z" } }
               ]
@@ -139,7 +139,7 @@ public class ReportSpecValidatorTests
     public void Range_over_the_datasets_maximum_names_the_panel_and_the_limit()
     {
         var error = SingleError("""
-            { "version": 1, "range": { "hours": 2400 }, "panels": [
+            { "version": 1, "range": { "from": "2026-06-01T00:00:00Z", "to": "2026-09-09T00:00:00Z" }, "panels": [
               { "dataset": { "name": "glucose_series" }, "primitive": "table" } ] }
             """);
 
@@ -188,7 +188,7 @@ public class ReportSpecValidatorTests
         SingleError("""
             { "version": 1, "panels": [
               { "dataset": { "name": "glucose_statistics", "intervalMinutes": 5 }, "primitive": "table" } ] }
-            """).Path.Should().Be("panels[0].dataset");
+            """).Path.Should().Be("panels[0].dataset.intervalMinutes");
     }
 
     [Fact]
@@ -236,5 +236,102 @@ public class ReportSpecValidatorTests
     {
         SingleError("[]").Path.Should().Be("spec");
         Validator.Validate(default).Errors.Should().ContainSingle().Which.Path.Should().Be("spec");
+    }
+
+    [Theory]
+    [InlineData("65", "panels[0].dataset.intervalMinutes")]
+    [InlineData("0", "panels[0].dataset.intervalMinutes")]
+    [InlineData("\"5\"", "panels[0].dataset.intervalMinutes")]
+    [InlineData("5.5", "panels[0].dataset.intervalMinutes")]
+    public void Interval_minutes_outside_1_to_60_or_not_a_whole_number_is_refused(string value, string path)
+    {
+        var error = SingleError($$"""
+            { "version": 1, "panels": [ { "dataset": { "name": "glucose_series", "intervalMinutes": {{value}} }, "primitive": "table" } ] }
+            """);
+
+        error.Path.Should().Be(path);
+    }
+
+    [Fact]
+    public void A_single_string_for_a_list_binding_is_refused()
+    {
+        var error = SingleError("""
+            { "version": 1, "panels": [
+              { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": "glucose" } } ] }
+            """);
+
+        error.Path.Should().Be("panels[0].bindings.y");
+        error.Message.Should().Contain("[\"glucose\"]");
+    }
+
+    [Fact]
+    public void The_unit_mismatch_names_the_display_unit()
+    {
+        var spec = JsonDocument.Parse("""
+            { "version": 1, "panels": [
+              { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose", "iob"] } } ] }
+            """).RootElement;
+
+        Validator.Validate(spec, useMmol: true).Errors.Single().Message.Should().Contain("'glucose' (mmol/L)").And.Contain("'iob' (U)");
+        Validator.Validate(spec, useMmol: false).Errors.Single().Message.Should().Contain("'glucose' (mg/dL)");
+    }
+
+    private const string Table = """{ "dataset": { "name": "glucose_series" }, "primitive": "table" }""";
+
+    /// <summary>
+    /// Malformed specs, each with the path its error must name. The first nine threw before the
+    /// validator read the JSON kind first.
+    /// </summary>
+    public static TheoryData<string, string> Malformed => new()
+    {
+        { $$"""{ "version": "1", "panels": [{{Table}}] }""", "version" },
+        { $$"""{ "version": 1, "range": { "hours": "6" }, "panels": [{{Table}}] }""", "range.hours" },
+        { $$"""{ "version": 1, "range": { "hours": 1000000000 }, "panels": [{{Table}}] }""", "range.hours" },
+        { $$"""{ "version": 1, "range": { "hours": 2147483647 }, "panels": [{{Table}}] }""", "range.hours" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "x": [], "y": ["glucose"] } } ] }""", "panels[0].bindings.x" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "x": ["time", "time"], "y": ["glucose"] } } ] }""", "panels[0].bindings.x" },
+        { $$"""{ "version": 1, "range": { "from": "0001-01-01T00:00:00Z", "to": "2026-10-01T00:00:00Z" }, "panels": [{{Table}}] }""", "range.from" },
+        { $$"""{ "version": 1, "range": { "from": "2026-10-01T00:00:00Z", "to": "9999-12-30T00:00:00Z" }, "panels": [{{Table}}] }""", "range.to" },
+        { $$"""{ "version": 1, "range": { "from": "1999-12-31T00:00:00Z", "to": "2000-01-02T00:00:00Z" }, "panels": [{{Table}}] }""", "range.from" },
+        { $$"""{ "version": 1.5, "panels": [{{Table}}] }""", "version" },
+        { $$"""{ "version": true, "panels": [{{Table}}] }""", "version" },
+        { $$"""{ "version": 99999999999999999999, "panels": [{{Table}}] }""", "version" },
+        { """{ "version": 1, "panels": {} }""", "panels" },
+        { """{ "version": 1, "panels": "all" }""", "panels" },
+        { """{ "version": 1, "panels": [ 1 ] }""", "panels[0]" },
+        { """{ "version": 1, "panels": [ null ] }""", "panels[0]" },
+        { """{ "version": 1, "panels": [ { "dataset": "glucose_series", "primitive": "table" } ] }""", "panels[0].dataset" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": 7 }, "primitive": "table" } ] }""", "panels[0].dataset.name" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": 3 } ] }""", "panels[0].primitive" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series", "intervalMinutes": {} }, "primitive": "table" } ] }""", "panels[0].dataset.intervalMinutes" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series", "intervalMinutes": 5, "intervalMinutes": 90 }, "primitive": "table" } ] }""", "panels[0].dataset.intervalMinutes" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series", "foo": 1 }, "primitive": "table" } ] }""", "panels[0].dataset.foo" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "table", "bindings": [] } ] }""", "panels[0].bindings" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "table", "bindings": { "columns": [1, 2] } } ] }""", "panels[0].bindings.columns" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "x": 5, "y": ["glucose"] } } ] }""", "panels[0].bindings.x" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose"], "band": "targetLow" } } ] }""", "panels[0].bindings.band" },
+        { $$"""{ "version": 1, "range": { "from": 5, "to": 6 }, "panels": [{{Table}}] }""", "range.from" },
+        { $$"""{ "version": 1, "range": { "hours": -3 }, "panels": [{{Table}}] }""", "range.hours" },
+        { $$"""{ "version": 1, "range": [], "panels": [{{Table}}] }""", "range" },
+        { $$"""{ "version": 1, "title": 42, "panels": [{{Table}}] }""", "title" },
+        { $$"""{ "version": 1, "title": "{{new string('t', 201)}}", "panels": [{{Table}}] }""", "title" },
+        { """{ "version": 1, "panels": [ { "id": 7, "dataset": { "name": "glucose_series" }, "primitive": "table" } ] }""", "panels[0].id" },
+        { """{ "version": 1, "panels": [ { "id": "this-id-is-far-too-long-for-a-panel-x", "dataset": { "name": "glucose_series" }, "primitive": "table" } ] }""", "panels[0].id" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "table", "range": { "hours": 6, "to": "x" } } ] }""", "panels[0].range" },
+    };
+
+    [Theory]
+    [MemberData(nameof(Malformed))]
+    public void A_malformed_spec_is_an_error_naming_where_never_an_exception(string json, string path)
+    {
+        var validation = Validate(json);
+
+        validation.IsValid.Should().BeFalse();
+        validation.Errors.Select(e => e.Path).Should().Contain(path, string.Join("\n", validation.Errors));
+        foreach (var error in validation.Errors)
+        {
+            error.Message.Should().NotBeNullOrWhiteSpace();
+            error.Message.Should().NotContain("System.").And.NotContain("Nocturne.").And.NotContain("Int32");
+        }
     }
 }

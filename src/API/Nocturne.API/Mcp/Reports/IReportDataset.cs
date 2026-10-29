@@ -129,13 +129,12 @@ internal sealed record ReportResolution(
     int RequestedIntervalMinutes,
     int IntervalMinutes,
     int SourceRows,
-    int Rows)
-{
-    public bool Downsampled => IntervalMinutes > RequestedIntervalMinutes && Rows < SourceRows;
-}
+    int Rows,
+    bool Downsampled);
 
-/// <summary>Glucose cut-points in the display unit.</summary>
-internal sealed record ReportThresholds(double VeryLow, double Low, double High, double VeryHigh);
+/// <summary>Glucose cut-points in the display unit, and the mg/dL in one display unit (1, or 18.0182 for mmol/L).</summary>
+/// <remarks>The view needs the factor to place the continuous glucose spectrum, whose stops are in mg/dL, on a display-unit axis.</remarks>
+internal sealed record ReportThresholds(double VeryLow, double Low, double High, double VeryHigh, double MgdlPerUnit);
 
 /// <summary>The registered datasets, by name.</summary>
 internal interface IReportDatasetRegistry

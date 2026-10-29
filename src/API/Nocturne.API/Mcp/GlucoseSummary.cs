@@ -33,7 +33,11 @@ internal static class GlucoseSummary
     public static IReadOnlyList<string> OmittedScopes(Func<string, bool> hasScope) =>
         [.. TrackScopes.Where(t => !hasScope(t.Scope)).Select(t => t.Scope)];
 
-    /// <summary>The tenant's chart cut-points as the statistics calculators take them.</summary>
+    /// <summary>
+    /// The chart's cut-points as the statistics calculators take them: the clinical consensus limits
+    /// (54, 70, 180, 250 mg/dL) that <c>ChartThresholdsBuilder</c> sets for every tenant, not the profile
+    /// target, which the chart carries apart as <see cref="ChartThresholdsDto.TargetLow"/>/<see cref="ChartThresholdsDto.TargetHigh"/>.
+    /// </summary>
     public static GlycemicThresholds Thresholds(ChartThresholdsDto chart)
     {
         var defaults = new GlycemicThresholds();

@@ -2,6 +2,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
 using Nocturne.API.Mcp.Tools;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -43,9 +44,9 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         new("direction", "Trend", ReportFieldKind.Category, null,
             "The trend arrow: DoubleUp, SingleUp, FortyFiveUp, Flat, FortyFiveDown, SingleDown, DoubleDown, or empty."),
         new("targetLow", "Range low", ReportFieldKind.Number, ReportField.GlucoseUnit,
-            "The lower limit of the user's target range, in the display unit.", Color: ChartColor.GlucoseLow),
+            "The lower limit of the in-range band, 70 mg/dL (3.9 mmol/L), the clinical consensus limit the reports use. Not the user's profile target.", Color: ChartColor.GlucoseLow),
         new("targetHigh", "Range high", ReportFieldKind.Number, ReportField.GlucoseUnit,
-            "The upper limit of the user's target range, in the display unit.", Color: ChartColor.GlucoseHigh),
+            "The upper limit of the in-range band, 180 mg/dL (10.0 mmol/L), the clinical consensus limit the reports use. Not the user's profile target.", Color: ChartColor.GlucoseHigh),
         new("iob", "IOB", ReportFieldKind.Number, "U", "Insulin on board at the reading.",
             Scope.TreatmentsRead, ChartColor.InsulinBolus),
         new("cob", "COB", ReportFieldKind.Number, "g", "Carbs on board at the reading.",
@@ -138,8 +139,11 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         var thresholds = GlucoseSummary.Thresholds(data.Thresholds);
         var sourceRows = data.GlucoseData.Count;
         var sampled = chart ? [] : Downsample(data.GlucoseData, request.From.ToUnixTimeMilliseconds(), interval);
-        if (chart)
-            data.GlucoseData = Downsample(data.GlucoseData, request.From.ToUnixTimeMilliseconds(), interval);
+        // The dashboard chart draws every reading, as the dashboard does; only more than the budget is thinned.
+        var chartInterval = sourceRows > Budget ? IntervalFor(request.From, request.To, 1, Budget) : 0;
+        if (chart && chartInterval > 0)
+            data.GlucoseData = Downsample(data.GlucoseData, request.From.ToUnixTimeMilliseconds(), chartInterval);
+        var rows = chart ? data.GlucoseData.Count : sampled.Count;
 
         return new ReportDatasetOutput
         {
@@ -151,13 +155,15 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
                 GlucoseUnits.Scale(thresholds.VeryLow, request.UseMmol),
                 GlucoseUnits.Scale(thresholds.Low, request.UseMmol),
                 GlucoseUnits.Scale(thresholds.High, request.UseMmol),
-                GlucoseUnits.Scale(thresholds.VeryHigh, request.UseMmol)),
+                GlucoseUnits.Scale(thresholds.VeryHigh, request.UseMmol),
+                request.UseMmol ? GlucoseConstants.MgdlPerMmol : 1),
             Chart = chart ? data : null,
             Resolution = new ReportResolution(
                 parameters.IntervalMinutes,
-                interval,
+                chart ? (chartInterval > 0 ? chartInterval : parameters.IntervalMinutes) : interval,
                 sourceRows,
-                chart ? data.GlucoseData.Count : sampled.Count),
+                rows,
+                rows < sourceRows),
         };
     }
 

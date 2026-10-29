@@ -54,7 +54,7 @@ public class McpToolAuditTests
         readLog.Record("glucose", 0);
 
         var row = McpToolGuard.BuildAuditEntry(
-            Tenant, Call("show_glucose", new { hours = 6 }), Hours, new CallToolResult(), readLog, Audit(), Http(), Now);
+            Tenant, Call("show_glucose", new { hours = 6 }), Hours, new CallToolResult(), false, readLog, Audit(), Http(), Now);
 
         row.TenantId.Should().Be(Tenant);
         row.Endpoint.Should().Be("MCP show_glucose");
@@ -77,7 +77,7 @@ public class McpToolAuditTests
     {
         var row = McpToolGuard.BuildAuditEntry(
             Tenant, Call("show_glucose", new { hours = 6, prompt = "whatever the model wrote" }), Hours,
-            new CallToolResult(), new McpToolReadLog(), Audit(), Http(), Now);
+            new CallToolResult(), false, new McpToolReadLog(), Audit(), Http(), Now);
 
         row.QueryParametersJson.Should().Be("""{"hours":6}""");
     }
@@ -89,7 +89,7 @@ public class McpToolAuditTests
 
         var row = McpToolGuard.BuildAuditEntry(
             Tenant, Call("show_glucose", new { hours = junk }), Hours,
-            new CallToolResult(), new McpToolReadLog(), Audit(), Http(), Now);
+            new CallToolResult(), false, new McpToolReadLog(), Audit(), Http(), Now);
 
         row.QueryParametersJson!.Length.Should().BeLessThanOrEqualTo(McpToolGuard.MaxArgumentsLength);
         JsonDocument.Parse(row.QueryParametersJson).RootElement.GetProperty("hours").GetString()
@@ -105,13 +105,23 @@ public class McpToolAuditTests
         {
             var row = McpToolGuard.BuildAuditEntry(
                 Tenant, new CallToolRequestParams { Name = "get_current_status" }, Hours,
-                result, new McpToolReadLog(), Audit(), Http(), Now);
+                result, false, new McpToolReadLog(), Audit(), Http(), Now);
 
             row.StatusCode.Should().Be(500);
             row.QueryParametersJson.Should().BeNull();
             row.EntityType.Should().BeNull();
             row.RecordCount.Should().Be(0);
         }
+    }
+
+    [Fact]
+    public void A_call_with_invalid_arguments_records_400()
+    {
+        var row = McpToolGuard.BuildAuditEntry(
+            Tenant, Call("show_glucose", new { hours = 72 }), Hours, null, true, new McpToolReadLog(), Audit(), Http(), Now);
+
+        row.StatusCode.Should().Be(400);
+        row.QueryParametersJson.Should().Be("""{"hours":72}""");
     }
 
     [Fact]

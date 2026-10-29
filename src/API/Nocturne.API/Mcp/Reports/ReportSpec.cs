@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using Nocturne.API.Controllers.V4.Base;
 using System.Text.Json.Serialization;
 
 namespace Nocturne.API.Mcp.Reports;
@@ -9,16 +11,24 @@ namespace Nocturne.API.Mcp.Reports;
 /// the normalised spec the result returns; <see cref="ReportSpecValidator"/> reads the argument.
 /// </summary>
 [Description("A report: one or more panels, each one dataset drawn as one chart primitive.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportSpec
 {
     public const int CurrentVersion = 1;
     public const int MaxPanels = 6;
+    public const int MaxTitleLength = 200;
+    public const int MaxIdLength = 32;
+    public const string IdPattern = "^[A-Za-z0-9_-]{1,32}$";
+
+    /// <summary>The longest range any dataset covers; each dataset may allow less.</summary>
+    public const int MaxRangeHours = V4ReadLimits.MaxAnalyticsSpanDays * 24;
 
     [Description("The spec format version. Send 1.")]
     [JsonRequired]
     public int Version { get; init; } = CurrentVersion;
 
     [Description("The report heading. Optional.")]
+    [StringLength(MaxTitleLength)]
     public string? Title { get; init; }
 
     [Description("The time range of every panel that does not give its own. Optional; each dataset has a default.")]
@@ -26,14 +36,17 @@ internal sealed record ReportSpec
 
     [Description("The panels, top to bottom. 1 to 6.")]
     [JsonRequired]
+    [Length(1, MaxPanels)]
     public IReadOnlyList<ReportPanelSpec> Panels { get; init; } = [];
 }
 
 /// <summary>Either the last <see cref="Hours"/> hours, or <see cref="From"/> to <see cref="To"/>.</summary>
 [Description("A time range: either 'hours' (the last N hours to now), or 'from' and 'to' together.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportRange
 {
     [Description("The last N hours, to now. Do not send with 'from' or 'to'.")]
+    [Range(1, ReportSpec.MaxRangeHours)]
     public int? Hours { get; init; }
 
     [Description("The start, an ISO 8601 date and time with an offset. Send with 'to'.")]
@@ -44,12 +57,16 @@ internal sealed record ReportRange
 }
 
 [Description("One panel: a dataset, the primitive that draws it, and which fields go where.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportPanelSpec
 {
     [Description("A short identifier, unique in the report (letters, digits, '-' and '_'). Optional; p1, p2 ... when missing.")]
+    [StringLength(ReportSpec.MaxIdLength)]
+    [RegularExpression(ReportSpec.IdPattern)]
     public string? Id { get; init; }
 
     [Description("The panel heading. Optional.")]
+    [StringLength(ReportSpec.MaxTitleLength)]
     public string? Title { get; init; }
 
     [Description("The dataset to read, chosen by 'name', with that dataset's parameters. Call describe_dataset for its fields.")]
@@ -68,9 +85,10 @@ internal sealed record ReportPanelSpec
 }
 
 [Description(
-    "Field bindings. time_series: 'x' (a time field), 'y' (one field, or a list of fields in one unit) "
+    "Field bindings. time_series: 'x' (a time field), 'y' (a list of fields in one unit) "
     + "and optional 'band' (two fields: the lower and upper edge of a shaded range). "
     + "table and stat_tiles: optional 'columns' (the fields to show, in order). glucose_chart: none.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportBindings
 {
     [Description("time_series only: the time field on the horizontal axis. Default 'time'.")]
@@ -103,6 +121,7 @@ internal abstract record ReportDatasetParameters
 [Description(
     "glucose_series: glucose readings over time, with the target range and, where the token allows, "
     + "insulin on board, carbs on board and the basal rate at each reading.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record GlucoseSeriesParameters : ReportDatasetParameters
 {
     public const string Name = "glucose_series";
@@ -113,12 +132,14 @@ internal sealed record GlucoseSeriesParameters : ReportDatasetParameters
     public override string DatasetName => Name;
 
     [Description("Minutes between rows, 1 to 60. Default 5. A long range can make it coarser, to keep each series under its point limit.")]
+    [Range(1, 60)]
     public int IntervalMinutes { get; init; } = DefaultIntervalMinutes;
 }
 
 [Description(
     "glucose_statistics: one row of glucose statistics over the range: time in range, below and above, "
     + "mean, GMI, CV, SD and the number of readings.")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record GlucoseStatisticsParameters : ReportDatasetParameters
 {
     public const string Name = "glucose_statistics";

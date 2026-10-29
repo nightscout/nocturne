@@ -1,6 +1,7 @@
+using System.Buffers;
 using System.Globalization;
+using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
@@ -25,13 +26,19 @@ internal sealed record ReportSpecValidation(ReportSpec? Spec, IReadOnlyList<Repo
 /// <remarks>
 /// It reads the JSON itself rather than deserialising the polymorphic type: the serializer stops
 /// at the first unknown dataset name or enum value, with a message that names neither the panel
-/// nor the choices, and the model needs both to repair the spec.
+/// nor the choices and does name .NET types, and the model needs the panel and the choices to
+/// repair the spec. Every value is checked for its JSON kind before it is read, so a malformed spec
+/// is an error list, never an exception.
 /// </remarks>
-internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registry)
+internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registry, TimeProvider time)
 {
-    private static readonly JsonSerializerOptions ParameterOptions = new(JsonSerializerDefaults.Web)
+    /// <summary>The earliest date a range may start: before it there is no data, and older dates overflow the readers' conversions.</summary>
+    internal static readonly DateTimeOffset EarliestDate = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    private static readonly JsonSerializerOptions ParameterOptions = new()
     {
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        NumberHandling = JsonNumberHandling.Strict,
     };
 
     private static readonly string[] SpecKeys = ["version", "title", "range", "panels"];
@@ -39,10 +46,11 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
     private static readonly string[] RangeKeys = ["hours", "from", "to"];
     private static readonly string[] BindingKeys = ["x", "y", "band", "columns"];
 
-    public ReportSpecValidation Validate(JsonElement spec)
+    public ReportSpecValidation Validate(JsonElement spec, bool useMmol = false)
     {
         var errors = new List<ReportSpecError>();
         void Error(string path, string message) => errors.Add(new ReportSpecError(path, message));
+        var now = time.GetUtcNow();
 
         if (spec.ValueKind != JsonValueKind.Object)
         {
@@ -54,16 +62,16 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
 
         if (!spec.TryGetProperty("version", out var version) || version.ValueKind == JsonValueKind.Null)
             Error("version", $"Missing. Send \"version\": {ReportSpec.CurrentVersion}.");
-        else if (!version.TryGetInt32(out var v) || v != ReportSpec.CurrentVersion)
-            Error("version", $"Version {version.GetRawText()} is not supported. Send {ReportSpec.CurrentVersion}.");
+        else if (version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var v) || v != ReportSpec.CurrentVersion)
+            Error("version", $"{Shorten(version.GetRawText())} is not a supported version. Send the number {ReportSpec.CurrentVersion}.");
 
-        var title = OptionalString(spec, "title", "title", 200, Error);
-        var reportRange = spec.TryGetProperty("range", out var r) ? ReadRange(r, "range", Error) : null;
+        var title = OptionalString(spec, "title", "title", ReportSpec.MaxTitleLength, Error);
+        var reportRange = spec.TryGetProperty("range", out var r) ? ReadRange(r, "range", now, Error) : null;
 
         var panels = new List<ReportPanelSpec>();
         if (!spec.TryGetProperty("panels", out var panelsElement) || panelsElement.ValueKind != JsonValueKind.Array)
         {
-            Error("panels", "Missing. Send a list of 1 to 6 panels.");
+            Error("panels", $"Missing. Send a list of 1 to {ReportSpec.MaxPanels} panels.");
         }
         else if (panelsElement.GetArrayLength() is 0 or > ReportSpec.MaxPanels)
         {
@@ -76,7 +84,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (var panel in panelsElement.EnumerateArray())
             {
-                if (ReadPanel(panel, index, reportRange, ids, Error) is { } read)
+                if (ReadPanel(panel, index, reportRange, ids, now, useMmol, Error) is { } read)
                     panels.Add(read);
                 index++;
             }
@@ -105,6 +113,8 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         int index,
         ReportRange? reportRange,
         HashSet<string> ids,
+        DateTimeOffset now,
+        bool useMmol,
         Action<string, string> error)
     {
         var at = $"panels[{index}]";
@@ -123,13 +133,13 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
 
         UnknownKeys(panel, at, PanelKeys, Error);
 
-        var id = OptionalString(panel, "id", $"{at}.id", 32, Error);
+        var id = OptionalString(panel, "id", $"{at}.id", ReportSpec.MaxIdLength, Error);
         if (id is not null && !IdPattern().IsMatch(id))
             Error($"{at}.id", "Use only letters, digits, '-' and '_'.");
         if (id is not null && !ids.Add(id))
             Error($"{at}.id", $"'{id}' is already the id of another panel. Panel ids must be unique.");
 
-        var title = OptionalString(panel, "title", $"{at}.title", 200, Error);
+        var title = OptionalString(panel, "title", $"{at}.title", ReportSpec.MaxTitleLength, Error);
 
         var dataset = ReadDataset(panel, at, Error, out var parameters);
 
@@ -140,7 +150,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         }
         else if (ReportPrimitives.Parse(p.GetString()) is not { } parsed)
         {
-            Error($"{at}.primitive", $"'{p.GetString()}' is not a primitive. Send one of: {PrimitiveList(ReportPrimitives.All)}.");
+            Error($"{at}.primitive", $"'{Shorten(p.GetString()!)}' is not a primitive. Send one of: {PrimitiveList(ReportPrimitives.All)}.");
         }
         else if (dataset is not null && !dataset.AllowedPrimitives.Contains(parsed))
         {
@@ -152,13 +162,13 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             primitive = parsed;
         }
 
-        var range = panel.TryGetProperty("range", out var pr) ? ReadRange(pr, $"{at}.range", Error) : null;
+        var range = panel.TryGetProperty("range", out var pr) ? ReadRange(pr, $"{at}.range", now, Error) : null;
         range ??= reportRange;
         if (dataset is not null && primitive is { } drawn)
         {
             range ??= new ReportRange { Hours = (int)dataset.DefaultRange.TotalHours };
-            var span = range.Hours is { } hours ? TimeSpan.FromHours(hours) : range.To!.Value - range.From!.Value;
             var max = dataset.MaxRange(drawn);
+            var span = range.Hours is { } hours ? TimeSpan.FromHours(hours) : range.To!.Value - range.From!.Value;
             if (span > max)
                 Error($"{at}.range",
                     $"{dataset.Name} drawn as {drawn.WireName()} covers at most {Describe(max)}; this range is {Describe(span)}. "
@@ -169,7 +179,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         if (dataset is not null && primitive is { } kind)
         {
             panel.TryGetProperty("bindings", out var b);
-            bindings = ReadBindings(b, $"{at}.bindings", dataset, kind, Error);
+            bindings = ReadBindings(b, $"{at}.bindings", dataset, kind, useMmol, Error);
         }
 
         if (failed || dataset is null || parameters is null || primitive is null)
@@ -210,26 +220,74 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         var name = nameElement.GetString()!;
         if (registry.Find(name) is not { } dataset)
         {
-            error($"{at}.dataset.name", $"'{name}' is not a dataset. Send one of: {names}.");
+            error($"{at}.dataset.name", $"'{Shorten(name)}' is not a dataset. Send one of: {names}.");
             return null;
         }
 
-        var body = JsonObject.Create(element)!;
-        body.Remove("name");
+        var properties = ParameterProperties(dataset.ParametersType);
+        var known = properties.Keys.Prepend("name").ToArray();
+        var failed = false;
+        UnknownKeys(element, $"{at}.dataset", known, (path, message) =>
+        {
+            failed = true;
+            error(path, message + " Call describe_dataset for its parameters.");
+        });
+        if (failed)
+            return dataset;
+
         try
         {
-            parameters = (ReportDatasetParameters?)body.Deserialize(dataset.ParametersType, ParameterOptions);
+            parameters = (ReportDatasetParameters?)JsonSerializer.Deserialize(WithoutName(element), dataset.ParametersType, ParameterOptions);
         }
         catch (JsonException ex)
         {
-            error($"{at}.dataset", $"The parameters of {name} are not valid: {ex.Message} Call describe_dataset for its parameters.");
+            var key = ex.Path is { Length: > 2 } path && path.StartsWith("$.", StringComparison.Ordinal) ? path[2..] : null;
+            var expected = key is not null && properties.TryGetValue(key, out var type) ? Expected(type) : "a value of the kind describe_dataset lists";
+            error(key is null ? $"{at}.dataset" : $"{at}.dataset.{key}", $"Send {expected}.");
             return dataset;
         }
 
-        foreach (var (field, message) in dataset.Validate(parameters!))
+        if (parameters is null)
+            return dataset;
+
+        foreach (var (field, message) in dataset.Validate(parameters))
             error($"{at}.dataset.{field}", message);
 
         return dataset;
+    }
+
+    /// <summary>The parameters a dataset's type binds, by wire name.</summary>
+    private static Dictionary<string, Type> ParameterProperties(Type parametersType) =>
+        parametersType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanWrite && p.GetCustomAttribute<JsonIgnoreAttribute>() is null)
+            .ToDictionary(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name), p => p.PropertyType, StringComparer.Ordinal);
+
+    private static string Expected(Type type) =>
+        (Nullable.GetUnderlyingType(type) ?? type) switch
+        {
+            var t when t == typeof(int) || t == typeof(long) => "a whole number",
+            var t when t == typeof(double) || t == typeof(decimal) => "a number",
+            var t when t == typeof(bool) => "true or false",
+            var t when t == typeof(string) => "text",
+            _ => "a value of the kind describe_dataset lists",
+        };
+
+    /// <summary>The dataset object without its discriminator, written property by property so a repeated key cannot throw.</summary>
+    private static byte[] WithoutName(JsonElement element)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.Name == "name")
+                    continue;
+                property.WriteTo(writer);
+            }
+            writer.WriteEndObject();
+        }
+        return buffer.WrittenSpan.ToArray();
     }
 
     private static ReportBindings ReadBindings(
@@ -237,6 +295,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         string at,
         IReportDataset dataset,
         ReportPrimitive primitive,
+        bool useMmol,
         Action<string, string> error)
     {
         var present = element.ValueKind == JsonValueKind.Object;
@@ -249,19 +308,31 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         if (present)
             UnknownKeys(element, at, BindingKeys, error);
 
+        string? Text(string key, out bool sent)
+        {
+            sent = present && element.TryGetProperty(key, out var value) && value.ValueKind != JsonValueKind.Null;
+            if (!sent)
+                return null;
+            var v = element.GetProperty(key);
+            if (v.ValueKind == JsonValueKind.String)
+                return v.GetString();
+            error($"{at}.{key}", "Send one field name as text.");
+            return null;
+        }
+
+        var malformed = new HashSet<string>(StringComparer.Ordinal);
         IReadOnlyList<string>? List(string key)
         {
             if (!present || !element.TryGetProperty(key, out var value) || value.ValueKind == JsonValueKind.Null)
                 return null;
-            if (value.ValueKind == JsonValueKind.String)
-                return [value.GetString()!];
             if (value.ValueKind == JsonValueKind.Array && value.EnumerateArray().All(v => v.ValueKind == JsonValueKind.String))
                 return [.. value.EnumerateArray().Select(v => v.GetString()!)];
-            error($"{at}.{key}", "Send a field name or a list of field names.");
+            error($"{at}.{key}", "Send a list of field names, for example [\"glucose\"].");
+            malformed.Add(key);
             return null;
         }
 
-        var x = List("x");
+        var x = Text("x", out var xSent);
         var y = List("y");
         var band = List("band");
         var columns = List("columns");
@@ -271,13 +342,13 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         {
             var field = dataset.Fields.FirstOrDefault(f => f.Name == name);
             if (field is null)
-                error(path, $"'{name}' is not a field of {dataset.Name}. Fields: {fieldNames}.");
-            return field;
+                error(path, $"'{Shorten(name)}' is not a field of {dataset.Name}. Fields: {fieldNames}.");
+            return field?.ResolveUnit(useMmol);
         }
 
-        void NotFor(string key, IReadOnlyList<string>? value)
+        void NotFor(string key, bool sent)
         {
-            if (value is not null)
+            if (sent)
                 error($"{at}.{key}", $"{primitive.WireName()} does not use '{key}'. Remove it.");
         }
 
@@ -285,18 +356,20 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         {
             case ReportPrimitive.TimeSeries:
             {
-                NotFor("columns", columns);
-                var xName = x is null ? dataset.Fields.FirstOrDefault(f => f.Kind == ReportFieldKind.Time)?.Name : x.Single();
-                if (x is { Count: not 1 })
-                    error($"{at}.x", "Send one time field.");
-                else if (xName is not null && Field($"{at}.x", xName) is { } xField && xField.Kind != ReportFieldKind.Time)
-                    error($"{at}.x", $"'{xName}' is not a time field. Send a field of kind 'time'.");
+                NotFor("columns", columns is not null);
+                var xName = xSent ? x : dataset.Fields.FirstOrDefault(f => f.Kind == ReportFieldKind.Time)?.Name;
+                if (x is not null && Field($"{at}.x", x) is { } xField && xField.Kind != ReportFieldKind.Time)
+                    error($"{at}.x", $"'{x}' is not a time field. Send a field of kind 'time'.");
 
                 if (y is null || y.Count == 0)
                 {
-                    error($"{at}.y", $"Missing. Send the field or fields to draw as lines. Fields: {fieldNames}.");
+                    if (!malformed.Contains("y"))
+                        error($"{at}.y", $"Missing. Send the fields to draw as lines, for example [\"glucose\"]. Fields: {fieldNames}.");
                     return new ReportBindings { X = xName };
                 }
+
+                if (y.Distinct().Count() != y.Count)
+                    error($"{at}.y", "A field is named twice.");
 
                 var yFields = new List<ReportField>();
                 foreach (var name in y)
@@ -335,9 +408,9 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             case ReportPrimitive.Table:
             case ReportPrimitive.StatTiles:
             {
-                NotFor("x", x);
-                NotFor("y", y);
-                NotFor("band", band);
+                NotFor("x", xSent);
+                NotFor("y", y is not null);
+                NotFor("band", band is not null);
                 if (columns is { Count: 0 })
                     error($"{at}.columns", "Send at least one field, or leave 'columns' out for every field.");
                 foreach (var name in columns ?? [])
@@ -348,10 +421,10 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             }
 
             case ReportPrimitive.GlucoseChart:
-                NotFor("x", x);
-                NotFor("y", y);
-                NotFor("band", band);
-                NotFor("columns", columns);
+                NotFor("x", xSent);
+                NotFor("y", y is not null);
+                NotFor("band", band is not null);
+                NotFor("columns", columns is not null);
                 return new ReportBindings();
 
             default:
@@ -359,7 +432,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         }
     }
 
-    private static ReportRange? ReadRange(JsonElement element, string at, Action<string, string> error)
+    private static ReportRange? ReadRange(JsonElement element, string at, DateTimeOffset now, Action<string, string> error)
     {
         if (element.ValueKind == JsonValueKind.Null)
             return null;
@@ -382,9 +455,10 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
                 error(at, "Send either 'hours', or 'from' and 'to', not both.");
                 return null;
             }
-            if (!hoursElement.TryGetInt32(out var hours) || hours < 1)
+            if (hoursElement.ValueKind != JsonValueKind.Number || !hoursElement.TryGetInt32(out var hours)
+                || hours < 1 || hours > ReportSpec.MaxRangeHours)
             {
-                error($"{at}.hours", "Send a whole number of hours, 1 or more.");
+                error($"{at}.hours", $"Send a whole number of hours, 1 to {ReportSpec.MaxRangeHours}.");
                 return null;
             }
             return new ReportRange { Hours = hours };
@@ -396,8 +470,9 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             return null;
         }
 
-        var from = Date(fromElement, $"{at}.from", error);
-        var to = Date(toElement, $"{at}.to", error);
+        var latest = now.AddDays(1);
+        var from = Date(fromElement, $"{at}.from", latest, error);
+        var to = Date(toElement, $"{at}.to", latest, error);
         if (from is null || to is null)
             return null;
         if (to <= from)
@@ -409,13 +484,22 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         return new ReportRange { From = from, To = to };
     }
 
-    private static DateTimeOffset? Date(JsonElement element, string at, Action<string, string> error)
+    private static DateTimeOffset? Date(JsonElement element, string at, DateTimeOffset latest, Action<string, string> error)
     {
-        if (element.ValueKind == JsonValueKind.String
-            && DateTimeOffset.TryParse(element.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date))
-            return date.ToUniversalTime();
-        error(at, "Send an ISO 8601 date and time, for example 2026-10-29T06:00:00Z.");
-        return null;
+        if (element.ValueKind != JsonValueKind.String
+            || !DateTimeOffset.TryParse(element.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date))
+        {
+            error(at, "Send an ISO 8601 date and time, for example 2026-10-29T06:00:00Z.");
+            return null;
+        }
+
+        var utc = date.ToUniversalTime();
+        if (utc < EarliestDate || utc > latest)
+        {
+            error(at, $"Send a date from {EarliestDate:yyyy-MM-dd} to one day after now.");
+            return null;
+        }
+        return utc;
     }
 
     private static string? OptionalString(JsonElement owner, string key, string at, int maxLength, Action<string, string> error)
@@ -441,9 +525,12 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         foreach (var property in element.EnumerateObject())
         {
             if (!known.Contains(property.Name, StringComparer.Ordinal))
-                error($"{at}.{property.Name}", $"Not a known key. Keys here: {string.Join(", ", known)}.");
+                error($"{at}.{Shorten(property.Name)}", $"Not a known key. Keys here: {string.Join(", ", known)}.");
         }
     }
+
+    /// <summary>A value the model sent, cut short enough to quote back.</summary>
+    private static string Shorten(string text) => text.Length <= 40 ? text : text[..40] + "...";
 
     private static string NextFreeId(HashSet<string> taken, int index)
     {
@@ -466,6 +553,6 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             ? $"{span.TotalHours.ToString("0.#", CultureInfo.InvariantCulture)} hours"
             : $"{span.TotalDays.ToString("0.#", CultureInfo.InvariantCulture)} days";
 
-    [GeneratedRegex("^[A-Za-z0-9_-]{1,32}$")]
+    [GeneratedRegex(ReportSpec.IdPattern)]
     private static partial Regex IdPattern();
 }

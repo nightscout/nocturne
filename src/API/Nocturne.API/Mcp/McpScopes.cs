@@ -29,3 +29,10 @@ internal sealed class McpRequireScopeAttribute(string scope) : Attribute
 {
     public string Scope { get; } = scope;
 }
+
+/// <summary>
+/// A tool call whose arguments are wrong. The SDK returns its message as an <c>isError</c> result,
+/// which the model reads and can act on; <see cref="McpToolGuard"/> audits it as 400, as MVC
+/// audits a request that fails validation.
+/// </summary>
+internal sealed class McpInvalidArgumentsException(string message) : ModelContextProtocol.McpException(message);

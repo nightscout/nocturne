@@ -9,7 +9,8 @@ internal sealed record ReportRunContext(
     bool UseMmol,
     IReadOnlySet<string> GrantedScopes,
     IServiceProvider Services,
-    McpToolReadLog ReadLog)
+    McpToolReadLog ReadLog,
+    bool HistoryClamped = false)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 }
@@ -31,6 +32,11 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
 
     public TimeSpan Timeout { get; init; } = DefaultTimeout;
 
+    /// <summary>How far back a history-clamped caller reads; the database clamps reads to the same window.</summary>
+    public static readonly TimeSpan ClampedHistory = TimeSpan.FromHours(24);
+
+    internal const string LimitedNote = "Limited to the last 24 hours: this token does not read older data.";
+
     public async Task<ReportResult> RunAsync(ReportSpec spec, ReportRunContext context, CancellationToken cancellationToken)
     {
         using var deadline = new CancellationTokenSource(Timeout, time);
@@ -43,6 +49,18 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             var dataset = registry.Find(panel.Dataset.DatasetName)
                 ?? throw new InvalidOperationException($"The validated spec names an unregistered dataset '{panel.Dataset.DatasetName}'.");
             var (from, to) = Resolve(panel.Range!, now);
+            var limited = false;
+            if (context.HistoryClamped && from < now - ClampedHistory)
+            {
+                limited = true;
+                from = now - ClampedHistory;
+                if (to <= from)
+                {
+                    panels.Add(Empty(panel, dataset, from, from, ReportPanelStatus.NotPermitted,
+                        "Not shown: the range ends more than 24 hours ago, and this token reads only the last 24 hours."));
+                    continue;
+                }
+            }
 
             if (deadline.IsCancellationRequested)
             {
@@ -71,7 +89,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 continue;
             }
 
-            panels.Add(Resolve(panel, dataset, from, to, output, context.UseMmol));
+            var resolved = Resolve(panel, dataset, from, to, output, context.UseMmol);
+            panels.Add(limited ? resolved with { Summary = resolved.Summary + '\n' + LimitedNote, Limited = true } : resolved);
         }
 
         var warnings = new List<string>();
@@ -81,11 +100,15 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 $"{(timedOut.Count == 1 ? "Panel" : "Panels")} {string.Join(", ", timedOut)} did not finish in "
                 + $"{Timeout.TotalSeconds.ToString("0", CultureInfo.InvariantCulture)} seconds and {(timedOut.Count == 1 ? "has" : "have")} no data. "
                 + "Ask for a shorter range or fewer panels.");
+        var limitedPanels = panels.Where(p => p.Limited).Select(p => p.Id).ToList();
+        if (limitedPanels.Count > 0)
+            warnings.Add($"{(limitedPanels.Count == 1 ? "Panel" : "Panels")} {string.Join(", ", limitedPanels)}: {LimitedNote}");
 
         return new ReportResult
         {
             Spec = spec,
             Units = context.UseMmol ? "mmol" : "mg/dl",
+            GlucoseColorMode = ReportResult.DefaultGlucoseColorMode,
             Panels = panels,
             Summary = JoinSummaries(spec, panels),
             Warnings = warnings,

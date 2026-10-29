@@ -11,6 +11,15 @@ internal sealed record ReportResult
     /// <summary>The tenant's glucose display unit, <c>mg/dl</c> or <c>mmol</c>.</summary>
     public required string Units { get; init; }
 
+    public const string DefaultGlucoseColorMode = "continuous";
+
+    /// <summary>
+    /// How every glucose line in the report is coloured: <c>continuous</c> (the glucose spectrum, the
+    /// dashboard's default) or <c>threshold</c> (one colour per range). One value per report, so its
+    /// panels never colour glucose two ways.
+    /// </summary>
+    public string GlucoseColorMode { get; init; } = DefaultGlucoseColorMode;
+
     public required IReadOnlyList<ReportPanelResult> Panels { get; init; }
 
     /// <summary>Every panel's summary, joined: the text an assistant reads.</summary>
@@ -65,6 +74,9 @@ internal sealed record ReportPanelResult
     public IReadOnlyList<string> OmittedScopes { get; init; } = [];
 
     public required string Summary { get; init; }
+
+    /// <summary>The range was cut to the last 24 hours, all a history-clamped caller reads.</summary>
+    public bool Limited { get; init; }
 
     /// <summary>Fields left out because the token lacks their scope.</summary>
     public IReadOnlyList<ReportOmittedField> Omitted { get; init; } = [];

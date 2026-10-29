@@ -43,12 +43,11 @@ internal static class ReportTools
         [Description(ReportSpecSchema.SpecDescription)] JsonElement? spec = null,
         CancellationToken cancellationToken = default)
     {
-        var validation = validator.Validate(spec ?? default);
+        var validation = validator.Validate(spec ?? default, await renderer.UsesMmolAsync(cancellationToken));
         if (!validation.IsValid)
-            throw new McpProtocolException(
+            throw new McpInvalidArgumentsException(
                 "The report spec is not valid. Change these and call render_report again:\n"
-                + string.Join('\n', validation.Errors.Select(e => $"- {e}")),
-                McpErrorCode.InvalidParams);
+                + string.Join('\n', validation.Errors.Select(e => $"- {e}")));
 
         return (await renderer.RenderAsync(validation.Spec!, cancellationToken)).Result;
     }
@@ -73,9 +72,8 @@ internal sealed class DatasetTools
         CancellationToken cancellationToken = default)
     {
         var dataset = registry.Find(name)
-            ?? throw new McpProtocolException(
-                $"'{name}' is not a dataset. Send one of: {string.Join(", ", registry.All.Select(d => d.Name))}.",
-                McpErrorCode.InvalidParams);
+            ?? throw new McpInvalidArgumentsException(
+                $"'{name}' is not a dataset. Send one of: {string.Join(", ", registry.All.Select(d => d.Name))}.");
 
         var useMmol = await GlucoseUnits.UsesMmolAsync(appearance, tenant, cancellationToken);
         var description = Describe(dataset, useMmol);

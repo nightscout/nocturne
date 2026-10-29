@@ -19,6 +19,7 @@ internal sealed class ReportRenderer(
     IServiceProvider services,
     ITenantAppearanceReader appearance,
     ITenantAccessor tenant,
+    ICategoryReadContext readContext,
     McpToolReadLog readLog,
     IOptions<MvcJsonOptions> jsonOptions)
 {
@@ -26,11 +27,11 @@ internal sealed class ReportRenderer(
     {
         var http = httpContextAccessor.HttpContext
             ?? throw new InvalidOperationException("A report ran outside an HTTP request.");
-        var useMmol = await GlucoseUnits.UsesMmolAsync(appearance, tenant, cancellationToken);
+        var useMmol = await UsesMmolAsync(cancellationToken);
 
         var report = await runner.RunAsync(
             spec,
-            new ReportRunContext(useMmol, http.GetGrantedScopes(), services, readLog),
+            new ReportRunContext(useMmol, http.GetGrantedScopes(), services, readLog, readContext.IsHistoryClamped),
             cancellationToken);
 
         var text = new StringBuilder(report.Summary);
@@ -43,4 +44,8 @@ internal sealed class ReportRenderer(
             StructuredContent = JsonSerializer.SerializeToElement(report, jsonOptions.Value.JsonSerializerOptions),
         }, report);
     }
+
+    /// <summary>Whether the tenant shows glucose in mmol/L.</summary>
+    public Task<bool> UsesMmolAsync(CancellationToken cancellationToken) =>
+        GlucoseUnits.UsesMmolAsync(appearance, tenant, cancellationToken);
 }

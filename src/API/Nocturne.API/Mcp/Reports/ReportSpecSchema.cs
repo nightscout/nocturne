@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
@@ -31,7 +32,13 @@ internal static class ReportSpecSchema
     private static JsonElement Build()
     {
         var method = typeof(ReportSpecSchema).GetMethod(nameof(Shape), BindingFlags.NonPublic | BindingFlags.Static)!;
-        return McpServerTool.Create(method, (object?)null, new McpServerToolCreateOptions()).ProtocolTool.InputSchema;
+        var generated = McpServerTool.Create(method, (object?)null, new McpServerToolCreateOptions()).ProtocolTool.InputSchema;
+
+        // The one constraint no attribute expresses: the version is a constant.
+        var schema = JsonNode.Parse(generated.GetRawText())!;
+        var version = schema["properties"]!["spec"]!["properties"]!["version"]!.AsObject();
+        version["const"] = ReportSpec.CurrentVersion;
+        return JsonSerializer.SerializeToElement(schema);
     }
 
     private static void Shape([Description(SpecDescription)] ReportSpec spec) => _ = spec;

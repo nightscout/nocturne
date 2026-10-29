@@ -24,20 +24,20 @@ public class ReportSpecRunnerTests
     }
 
     private static ReportSpec Spec(string json) =>
-        new ReportSpecValidator(ReportSpecValidatorTests.Registry).Validate(JsonDocument.Parse(json).RootElement) is { IsValid: true } v
+        new ReportSpecValidator(ReportSpecValidatorTests.Registry, new FixedTime(Now)).Validate(JsonDocument.Parse(json).RootElement) is { IsValid: true } v
             ? v.Spec!
             : throw new InvalidOperationException("The test spec is not valid.");
 
     /// <summary>One reading every five minutes over the window, with IOB, COB and basal series.</summary>
-    private static DashboardChartData ChartData(long from, long to)
+    private static DashboardChartData ChartData(long from, long to, int spacingMinutes = 5)
     {
         var data = new DashboardChartData
         {
             Thresholds = new ChartThresholdsDto { Low = 70, High = 180, VeryLow = 54, VeryHigh = 250, GlucoseYMax = 300 },
         };
-        for (var t = from; t <= to; t += 5 * 60_000)
+        for (var t = from; t <= to; t += spacingMinutes * 60_000)
         {
-            var i = (t - from) / (5 * 60_000);
+            var i = (t - from) / (spacingMinutes * 60_000);
             data.GlucoseData.Add(new GlucosePointDto { Time = t, Sgv = 100 + i % 50, Direction = "Flat" });
             data.IobSeries.Add(new TimeSeriesPoint { Timestamp = t, Value = 1.5 });
             data.CobSeries.Add(new TimeSeriesPoint { Timestamp = t, Value = 20 });
@@ -48,12 +48,15 @@ public class ReportSpecRunnerTests
     }
 
     private static (ReportSpecRunner Runner, ReportRunContext Context, McpToolReadLog ReadLog) Arrange(
-        IReportDatasetRegistry registry, params string[] scopes)
+        IReportDatasetRegistry registry, params string[] scopes) => ArrangeWith(registry, 5, false, scopes);
+
+    private static (ReportSpecRunner Runner, ReportRunContext Context, McpToolReadLog ReadLog) ArrangeWith(
+        IReportDatasetRegistry registry, int spacingMinutes, bool clamped, params string[] scopes)
     {
         var chartData = new Mock<IChartDataService>();
         chartData
             .Setup(c => c.GetDashboardChartDataAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((long from, long to, int _, bool _, CancellationToken _) => ChartData(from, to));
+            .ReturnsAsync((long from, long to, int _, bool _, CancellationToken _) => ChartData(from, to, spacingMinutes));
 
         var services = new ServiceCollection()
             .AddSingleton(chartData.Object)
@@ -62,7 +65,7 @@ public class ReportSpecRunnerTests
             .BuildServiceProvider();
 
         var readLog = new McpToolReadLog();
-        var context = new ReportRunContext(false, scopes.ToHashSet(), services, readLog);
+        var context = new ReportRunContext(false, scopes.ToHashSet(), services, readLog, clamped);
         return (new ReportSpecRunner(registry, new FixedTime(Now)), context, readLog);
     }
 
@@ -110,7 +113,7 @@ public class ReportSpecRunnerTests
         var (runner, context, _) = Arrange(ReportSpecValidatorTests.Registry, Scope.GlucoseRead);
         var spec = Spec("""
             { "version": 1, "range": { "hours": 720 }, "panels": [
-              { "dataset": { "name": "glucose_series", "intervalMinutes": 5 }, "primitive": "time_series", "bindings": { "y": "glucose" } } ] }
+              { "dataset": { "name": "glucose_series", "intervalMinutes": 5 }, "primitive": "time_series", "bindings": { "y": ["glucose"] } } ] }
             """);
 
         var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single();
@@ -121,6 +124,68 @@ public class ReportSpecRunnerTests
         panel.Resolution.SourceRows.Should().Be(30 * 288 + 1);
         panel.Resolution.Downsampled.Should().BeTrue();
         panel.Summary.Should().Contain($"Readings: {30 * 288 + 1}.", "the summary covers every reading, not the sampled rows");
+    }
+
+    [Fact]
+    public async Task The_dashboard_chart_keeps_every_reading_under_the_point_budget()
+    {
+        var (runner, context, _) = ArrangeWith(ReportSpecValidatorTests.Registry, 1, false, Scope.GlucoseRead);
+
+        var panel = (await runner.RunAsync(Nocturne.API.Mcp.Tools.GlucoseTools.Preset(24), context, CancellationToken.None)).Panels.Single();
+
+        panel.Chart!.GlucoseData.Should().HaveCount(24 * 60 + 1, "one-minute readings, 1441 of them, are under the 2000-point budget");
+        panel.Resolution!.Downsampled.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task The_dashboard_chart_thins_only_past_the_point_budget()
+    {
+        var (runner, context, _) = ArrangeWith(ReportSpecValidatorTests.Registry, 1, false, Scope.GlucoseRead);
+        var spec = Spec("""
+            { "version": 1, "range": { "hours": 72 }, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "glucose_chart" } ] }
+            """);
+
+        var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single();
+
+        panel.Chart!.GlucoseData.Count.Should().BeLessThanOrEqualTo(GlucoseSeriesDataset.Budget).And.BeGreaterThan(1000);
+        panel.Resolution!.Downsampled.Should().BeTrue();
+        panel.Resolution.IntervalMinutes.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task A_history_clamped_caller_gets_the_last_24_hours_and_is_told()
+    {
+        var (runner, context, _) = ArrangeWith(ReportSpecValidatorTests.Registry, 5, true, Scope.GlucoseRead);
+        var spec = Spec("""
+            { "version": 1, "range": { "hours": 72 }, "panels": [
+              { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose"] } },
+              { "dataset": { "name": "glucose_series" }, "primitive": "table", "range": { "hours": 2 } } ] }
+            """);
+
+        var result = await runner.RunAsync(spec, context, CancellationToken.None);
+
+        var clipped = result.Panels[0];
+        clipped.Window.From.Should().Be(Now.AddHours(-24).ToUnixTimeMilliseconds());
+        clipped.Limited.Should().BeTrue();
+        clipped.Summary.Should().StartWith("Glucose from 2026-10-28 12:00").And.Contain("Readings: 289.")
+            .And.EndWith(ReportSpecRunner.LimitedNote);
+        result.Panels[1].Limited.Should().BeFalse("a range inside the last day is not cut");
+        result.Warnings.Should().ContainSingle().Which.Should().Be($"Panel p1: {ReportSpecRunner.LimitedNote}");
+    }
+
+    [Fact]
+    public async Task A_history_clamped_caller_asking_only_for_older_data_gets_no_panel_data()
+    {
+        var (runner, context, _) = ArrangeWith(ReportSpecValidatorTests.Registry, 5, true, Scope.GlucoseRead);
+        var spec = Spec($$"""
+            { "version": 1, "range": { "from": "{{Now.AddDays(-5):O}}", "to": "{{Now.AddDays(-4):O}}" }, "panels": [
+              { "dataset": { "name": "glucose_series" }, "primitive": "table" } ] }
+            """);
+
+        var panel = (await runner.RunAsync(spec, context, CancellationToken.None)).Panels.Single();
+
+        panel.Status.Should().Be(ReportPanelStatus.NotPermitted);
+        panel.Rows.Should().BeEmpty();
     }
 
     [Fact]
@@ -157,7 +222,7 @@ public class ReportSpecRunnerTests
         var (runner, context, _) = Arrange(ReportSpecValidatorTests.Registry, Scope.GlucoseRead);
         var spec = Spec("""
             { "version": 1, "title": "Two panels", "range": { "hours": 2 }, "panels": [
-              { "id": "a", "title": "Glucose", "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": "glucose", "band": ["targetLow", "targetHigh"] } },
+              { "id": "a", "title": "Glucose", "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose"], "band": ["targetLow", "targetHigh"] } },
               { "id": "b", "dataset": { "name": "glucose_series" }, "primitive": "table" } ] }
             """);
 
@@ -167,7 +232,7 @@ public class ReportSpecRunnerTests
             .And.Contain("\n\n[b] glucose_series\nGlucose from");
         result.Panels[0].Fields.Select(f => f.Name).Should().Equal("time", "glucose", "targetLow", "targetHigh");
         result.Panels[0].Fields.Single(f => f.Name == "glucose").Unit.Should().Be("mg/dL");
-        result.Panels[0].Thresholds.Should().Be(new ReportThresholds(54, 70, 180, 250));
+        result.Panels[0].Thresholds.Should().Be(new ReportThresholds(54, 70, 180, 250, 1));
     }
 
     [Fact]

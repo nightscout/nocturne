@@ -52,17 +52,23 @@ internal static class McpToolGuard
             }
 
             CallToolResult? result = null;
+            var invalidArguments = false;
             try
             {
                 result = await next(request, cancellationToken);
                 return result;
+            }
+            catch (McpInvalidArgumentsException)
+            {
+                invalidArguments = true;
+                throw;
             }
             finally
             {
                 // A tool that threw (an argument out of range) reads as failed, as the MVC filter
                 // audits an exception. A call the client abandoned is not recorded.
                 if (!cancellationToken.IsCancellationRequested)
-                    await AuditAsync(services, httpContext, tool, request.Params, result, cancellationToken);
+                    await AuditAsync(services, httpContext, tool, request.Params, result, invalidArguments, cancellationToken);
             }
         };
 
@@ -72,6 +78,7 @@ internal static class McpToolGuard
         McpServerTool? tool,
         CallToolRequestParams? call,
         CallToolResult? result,
+        bool invalidArguments,
         CancellationToken cancellationToken)
     {
         if (httpContext.GetTenantContext() is not { } tenant)
@@ -96,6 +103,7 @@ internal static class McpToolGuard
             call,
             DeclaredArguments(tool),
             result,
+            invalidArguments,
             services.GetRequiredService<McpToolReadLog>(),
             services.GetRequiredService<IAuditContext>(),
             httpContext,
@@ -115,6 +123,7 @@ internal static class McpToolGuard
         CallToolRequestParams? call,
         IReadOnlySet<string> declaredArguments,
         CallToolResult? result,
+        bool invalidArguments,
         McpToolReadLog readLog,
         IAuditContext audit,
         HttpContext httpContext,
@@ -138,8 +147,8 @@ internal static class McpToolGuard
             RecordCount = readLog.RecordCount,
             QueryParametersJson = SanitizeArguments(call?.Arguments, declaredArguments),
             TraceId = audit.TraceId,
-            StatusCode = result is null || result.IsError == true
-                ? StatusCodes.Status500InternalServerError
+            StatusCode = invalidArguments ? StatusCodes.Status400BadRequest
+                : result is null || result.IsError == true ? StatusCodes.Status500InternalServerError
                 : StatusCodes.Status200OK,
             CreatedAt = now,
         };

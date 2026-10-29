@@ -28,7 +28,7 @@ internal sealed class GlucoseTools
         CancellationToken cancellationToken = default)
     {
         if (hours is < 1 or > MaxHours)
-            throw new McpException($"hours must be between 1 and {MaxHours}.");
+            throw new McpInvalidArgumentsException($"hours must be between 1 and {MaxHours}.");
 
         return (await renderer.RenderAsync(Preset(hours), cancellationToken)).Result;
     }
