@@ -35,6 +35,7 @@ internal static class McpServiceExtensions
             .WithTools<StatusTools>()
             .WithTools<GlucoseTools>()
             .WithTools<DatasetTools>()
+            .WithTools<FoodTools>()
             .WithResources<ReportResources>()
             .WithRequestFilters(filters =>
             {
@@ -50,11 +51,16 @@ internal static class McpServiceExtensions
     {
         services.AddSingleton<IReportDataset, GlucoseSeriesDataset>();
         services.AddSingleton<IReportDataset, GlucoseStatisticsDataset>();
+        services.AddSingleton<IReportDataset, EventResponseDataset>();
+        services.AddSingleton<IReportDataset, SettingsEvidenceDataset>();
+        services.AddSingleton<IReportDataset, DailyProfileDataset>();
+        services.AddSingleton<IReportDataset, GlucoseDistributionByHourDataset>();
         services.AddSingleton<IReportDatasetRegistry, ReportDatasetRegistry>();
         services.AddSingleton<ReportSpecValidator>();
         services.AddSingleton<ReportSpecRunner>();
         services.AddScoped<ReportRenderer>();
         services.AddSingleton(ReportTools.Create);
+        services.AddSingleton(ReportTools.CreateRefine);
     }
 
     public static void MapNocturneMcp(this WebApplication app)

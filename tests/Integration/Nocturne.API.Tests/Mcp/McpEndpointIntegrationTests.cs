@@ -185,7 +185,7 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task TokenWithNoOfferedScope_Is403()
     {
-        var token = await McpTokenAsync(_slugA, _sessionA, "food.read");
+        var token = await McpTokenAsync(_slugA, _sessionA, "reports.read");
 
         using var client = McpClient(_slugA, token);
         var response = await PostRpcAsync(client, "tools/list", new { });

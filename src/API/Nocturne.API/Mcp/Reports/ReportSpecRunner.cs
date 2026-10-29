@@ -80,7 +80,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             {
                 output = await dataset.RunAsync(
                     new ReportDatasetRequest(panel.Dataset, panel.Primitive, from, to, context.UseMmol,
-                        context.GrantedScopes, context.Services, context.ReadLog),
+                        context.GrantedScopes, context.Services, context.ReadLog, context.HistoryClamped),
                     linked.Token);
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
@@ -124,6 +124,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             .Concat(bindings.Y ?? [])
             .Concat(bindings.Band ?? [])
             .Concat(bindings.Columns ?? [])
+            .Concat(new[] { bindings.Series }.OfType<string>())
             .Distinct(StringComparer.Ordinal)];
 
     private static ReportPanelResult Resolve(
@@ -150,7 +151,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Primitive = panel.Primitive,
             Bindings = panel.Bindings!,
             Status = ReportPanelStatus.Ok,
-            Window = new ReportWindow(from.ToUnixTimeMilliseconds(), to.ToUnixTimeMilliseconds()),
+            Window = output.Window ?? new ReportWindow(from.ToUnixTimeMilliseconds(), to.ToUnixTimeMilliseconds()),
             Fields = fields,
             Rows = [.. output.Rows.Select(row => (IReadOnlyDictionary<string, object?>)names.ToDictionary(n => n, n => row.GetValueOrDefault(n)))],
             Thresholds = output.Thresholds,

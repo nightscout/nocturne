@@ -19,13 +19,24 @@ internal enum ReportFieldKind
 
     [JsonStringEnumMemberName("percent")]
     Percent,
+
+    /// <summary>Minutes from an event's anchor, negative before it.</summary>
+    [JsonStringEnumMemberName("offset")]
+    Offset,
+
+    /// <summary>Minutes after local midnight.</summary>
+    [JsonStringEnumMemberName("time_of_day")]
+    TimeOfDay,
 }
 
 /// <summary>One field of a dataset's rows, as the catalogue and the result describe it.</summary>
 /// <param name="Name">The key in each row.</param>
 /// <param name="Label">The words the view prints for it.</param>
 /// <param name="Kind">What it holds.</param>
-/// <param name="Unit">Its unit as printed, null for none. <c>glucose</c> stands for the tenant's display unit until <see cref="ResolveUnit"/>.</param>
+/// <param name="Unit">
+/// Its unit as printed, null for none. <c>glucose</c> stands for the tenant's display unit until
+/// <see cref="ResolveUnit"/>, and so does a leading <c>glucose/</c> (<c>glucose/U</c> for an ISF).
+/// </param>
 /// <param name="Description">What it is, for the model.</param>
 /// <param name="Scope">The read scope it needs beyond the dataset's own, or null.</param>
 /// <param name="Color">The theme colour a line of it is drawn in.</param>
@@ -42,8 +53,11 @@ internal sealed record ReportField(
 {
     public const string GlucoseUnit = "glucose";
 
+    /// <summary>Whether the field's values are glucose, or glucose per something, so written in the display unit.</summary>
+    public bool InGlucoseUnit => Unit is not null && (Unit == GlucoseUnit || Unit.StartsWith(GlucoseUnit + "/", StringComparison.Ordinal));
+
     public ReportField ResolveUnit(bool useMmol) =>
-        Unit == GlucoseUnit ? this with { Unit = useMmol ? "mmol/L" : "mg/dL" } : this;
+        InGlucoseUnit ? this with { Unit = (useMmol ? "mmol/L" : "mg/dL") + Unit![GlucoseUnit.Length..] } : this;
 }
 
 /// <summary>
@@ -66,6 +80,12 @@ internal interface IReportDataset
     IReadOnlyList<ReportField> Fields { get; }
 
     IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; }
+
+    /// <summary>The fields a panel drawn as <paramref name="primitive"/> may bind; a dataset whose rows differ by primitive narrows them.</summary>
+    IReadOnlyList<ReportField> FieldsFor(ReportPrimitive primitive) => Fields;
+
+    /// <summary>The bindings a panel drawn as <paramref name="primitive"/> gets when it sends none, or null for the primitive's own defaults.</summary>
+    ReportBindings? DefaultBindings(ReportPrimitive primitive) => null;
 
     /// <summary>The range a panel gets when neither it nor the report gives one.</summary>
     TimeSpan DefaultRange { get; }
@@ -94,7 +114,8 @@ internal sealed record ReportDatasetRequest(
     bool UseMmol,
     IReadOnlySet<string> GrantedScopes,
     IServiceProvider Services,
-    McpToolReadLog ReadLog)
+    McpToolReadLog ReadLog,
+    bool HistoryClamped = false)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 }
@@ -120,6 +141,9 @@ internal sealed record ReportDatasetOutput
 
     /// <summary>The read scopes the token lacks, for the chart's legend.</summary>
     public IReadOnlyList<string> OmittedScopes { get; init; } = [];
+
+    /// <summary>The range the dataset read, where it differs from the one asked for: whole local days, say.</summary>
+    public ReportWindow? Window { get; init; }
 }
 
 internal sealed record ReportOmittedField(string Field, string Scope);

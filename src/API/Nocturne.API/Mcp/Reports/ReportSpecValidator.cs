@@ -44,7 +44,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
     private static readonly string[] SpecKeys = ["version", "title", "range", "panels"];
     private static readonly string[] PanelKeys = ["id", "title", "dataset", "primitive", "bindings", "range"];
     private static readonly string[] RangeKeys = ["hours", "from", "to"];
-    private static readonly string[] BindingKeys = ["x", "y", "band", "columns"];
+    private static readonly string[] BindingKeys = ["x", "y", "band", "columns", "series"];
 
     public ReportSpecValidation Validate(JsonElement spec, bool useMmol = false)
     {
@@ -242,8 +242,13 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         catch (JsonException ex)
         {
             var key = ex.Path is { Length: > 2 } path && path.StartsWith("$.", StringComparison.Ordinal) ? path[2..] : null;
-            var expected = key is not null && properties.TryGetValue(key, out var type) ? Expected(type) : "a value of the kind describe_dataset lists";
-            error(key is null ? $"{at}.dataset" : $"{at}.dataset.{key}", $"Send {expected}.");
+            var type = key is null ? null : PathType(dataset.ParametersType, key);
+            error(key is null ? $"{at}.dataset" : $"{at}.dataset.{key}", (key, type) switch
+            {
+                (null, _) => "Send a value of the kind describe_dataset lists.",
+                (_, null) => "Not a known key. Call describe_dataset for its parameters.",
+                _ => $"Send {Expected(type)}.",
+            });
             return dataset;
         }
 
@@ -262,6 +267,43 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             .Where(p => p.CanWrite && p.GetCustomAttribute<JsonIgnoreAttribute>() is null)
             .ToDictionary(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name), p => p.PropertyType, StringComparer.Ordinal);
 
+    /// <summary>
+    /// The type a JSON path into <paramref name="root"/> lands on, <c>cohorts[0].anchor</c> say, or
+    /// null where the path names no property.
+    /// </summary>
+    internal static Type? PathType(Type root, string path)
+    {
+        var type = root;
+        foreach (var segment in path.Split('.'))
+        {
+            var name = segment;
+            var indexed = 0;
+            while (name.EndsWith(']') && name.LastIndexOf('[') is var open and > 0)
+            {
+                name = name[..open];
+                indexed++;
+            }
+            var property = ParameterProperties(type).GetValueOrDefault(name);
+            if (property is null)
+                return null;
+            type = property;
+            for (var i = 0; i < indexed; i++)
+            {
+                if (ElementType(type) is not { } element)
+                    return null;
+                type = element;
+            }
+        }
+        return type;
+    }
+
+    private static Type? ElementType(Type type) =>
+        type.IsArray
+            ? type.GetElementType()
+            : type.IsGenericType && type.GetGenericArguments() is [var element] && typeof(System.Collections.IEnumerable).IsAssignableFrom(type)
+                ? element
+                : null;
+
     private static string Expected(Type type) =>
         (Nullable.GetUnderlyingType(type) ?? type) switch
         {
@@ -269,8 +311,18 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             var t when t == typeof(double) || t == typeof(decimal) => "a number",
             var t when t == typeof(bool) => "true or false",
             var t when t == typeof(string) => "text",
+            var t when t == typeof(Guid) => "an id, as find_foods returns it",
+            var t when t == typeof(DateOnly) => "a date, yyyy-MM-dd",
+            var t when t.IsEnum => "one of: " + string.Join(", ", EnumNames(t)),
+            var t when t != typeof(string) && ElementType(t) is { } element => $"a list, each item {Expected(element)}",
+            var t when t.IsClass => "an object with the keys describe_dataset lists",
             _ => "a value of the kind describe_dataset lists",
         };
+
+    /// <summary>An enum's values as they are sent: their <see cref="JsonStringEnumMemberNameAttribute"/>, else their names.</summary>
+    private static IEnumerable<string> EnumNames(Type type) =>
+        type.GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Select(f => f.GetCustomAttribute<JsonStringEnumMemberNameAttribute>()?.Name ?? f.Name);
 
     /// <summary>The dataset object without its discriminator, written property by property so a repeated key cannot throw.</summary>
     private static byte[] WithoutName(JsonElement element)
@@ -336,11 +388,24 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         var y = List("y");
         var band = List("band");
         var columns = List("columns");
-        var fieldNames = string.Join(", ", dataset.Fields.Select(f => f.Name));
+        var series = Text("series", out var seriesSent);
+        var fields = dataset.FieldsFor(primitive);
+        var fieldNames = string.Join(", ", fields.Select(f => f.Name));
+
+        if (!present && dataset.DefaultBindings(primitive) is { } defaults)
+        {
+            x = defaults.X;
+            xSent = x is not null;
+            y = defaults.Y;
+            band = defaults.Band;
+            columns = defaults.Columns;
+            series = defaults.Series;
+            seriesSent = series is not null;
+        }
 
         ReportField? Field(string path, string name)
         {
-            var field = dataset.Fields.FirstOrDefault(f => f.Name == name);
+            var field = fields.FirstOrDefault(f => f.Name == name);
             if (field is null)
                 error(path, $"'{Shorten(name)}' is not a field of {dataset.Name}. Fields: {fieldNames}.");
             return field?.ResolveUnit(useMmol);
@@ -357,9 +422,10 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             case ReportPrimitive.TimeSeries:
             {
                 NotFor("columns", columns is not null);
-                var xName = xSent ? x : dataset.Fields.FirstOrDefault(f => f.Kind == ReportFieldKind.Time)?.Name;
-                if (x is not null && Field($"{at}.x", x) is { } xField && xField.Kind != ReportFieldKind.Time)
-                    error($"{at}.x", $"'{x}' is not a time field. Send a field of kind 'time'.");
+                NotFor("series", seriesSent);
+                var xName = xSent ? x : fields.FirstOrDefault(f => IsAxis(f.Kind))?.Name;
+                if (x is not null && Field($"{at}.x", x) is { } xField && !IsAxis(xField.Kind))
+                    error($"{at}.x", $"'{x}' is not a field the horizontal axis can show. Send a field of kind 'time', 'time_of_day' or 'offset'.");
 
                 if (y is null || y.Count == 0)
                 {
@@ -405,19 +471,64 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
                 return new ReportBindings { X = xName, Y = y, Band = band };
             }
 
+            case ReportPrimitive.RangeBands:
+            {
+                NotFor("columns", columns is not null);
+                var xName = xSent ? x : fields.FirstOrDefault(f => f.Kind is ReportFieldKind.Offset or ReportFieldKind.TimeOfDay)?.Name;
+                if (xName is null)
+                    error($"{at}.x", "Missing. Send a field of kind 'time_of_day' or 'offset'.");
+                else if (Field($"{at}.x", xName) is { } xField && xField.Kind is not (ReportFieldKind.Offset or ReportFieldKind.TimeOfDay))
+                    error($"{at}.x", $"'{xName}' is not a field range_bands can lay out. Send a field of kind 'time_of_day' or 'offset'.");
+
+                ReportField? median = null;
+                if (y is not { Count: 1 })
+                {
+                    if (!malformed.Contains("y"))
+                        error($"{at}.y", "Send exactly one field: the median line.");
+                }
+                else if (Field($"{at}.y", y[0]) is { } field)
+                {
+                    if (field.Kind is not (ReportFieldKind.Number or ReportFieldKind.Percent))
+                        error($"{at}.y", $"'{y[0]}' is a {Wire(field.Kind)} field. A line needs a number field.");
+                    else
+                        median = field;
+                }
+
+                if (band is not { Count: 2 or 4 })
+                {
+                    if (!malformed.Contains("band"))
+                        error($"{at}.band", "Send two fields (the band's low and high edges) or four (outer low, inner low, inner high, outer high).");
+                }
+                else
+                {
+                    if (band.Distinct().Count() != band.Count)
+                        error($"{at}.band", "A field is named twice.");
+                    var edges = band.Select(name => Field($"{at}.band", name)).ToList();
+                    if (median is not null && edges.All(e => e is not null)
+                        && edges.Any(e => e!.Unit != median.Unit || e.Kind is not (ReportFieldKind.Number or ReportFieldKind.Percent)))
+                        error($"{at}.band", $"Every edge must be a number field in the unit of 'y' ({median.Unit ?? "no unit"}).");
+                }
+
+                if (series is not null && Field($"{at}.series", series) is { } seriesField && seriesField.Kind != ReportFieldKind.Category)
+                    error($"{at}.series", $"'{series}' is a {Wire(seriesField.Kind)} field. Send a category field.");
+
+                return new ReportBindings { X = xName, Y = y, Band = band, Series = series };
+            }
+
             case ReportPrimitive.Table:
             case ReportPrimitive.StatTiles:
             {
                 NotFor("x", xSent);
                 NotFor("y", y is not null);
                 NotFor("band", band is not null);
+                NotFor("series", seriesSent);
                 if (columns is { Count: 0 })
                     error($"{at}.columns", "Send at least one field, or leave 'columns' out for every field.");
                 foreach (var name in columns ?? [])
                     Field($"{at}.columns", name);
                 if (columns is not null && columns.Distinct().Count() != columns.Count)
                     error($"{at}.columns", "A field is named twice.");
-                return new ReportBindings { Columns = columns ?? [.. dataset.Fields.Select(f => f.Name)] };
+                return new ReportBindings { Columns = columns ?? [.. fields.Select(f => f.Name)] };
             }
 
             case ReportPrimitive.GlucoseChart:
@@ -425,6 +536,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
                 NotFor("y", y is not null);
                 NotFor("band", band is not null);
                 NotFor("columns", columns is not null);
+                NotFor("series", seriesSent);
                 return new ReportBindings();
 
             default:
@@ -444,9 +556,10 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
 
         UnknownKeys(element, at, RangeKeys, error);
 
-        var hasHours = element.TryGetProperty("hours", out var hoursElement);
-        var hasFrom = element.TryGetProperty("from", out var fromElement);
-        var hasTo = element.TryGetProperty("to", out var toElement);
+        // A key sent as null is absent: the normalised spec render_report returns writes the unused ones so.
+        var hasHours = element.TryGetProperty("hours", out var hoursElement) && hoursElement.ValueKind != JsonValueKind.Null;
+        var hasFrom = element.TryGetProperty("from", out var fromElement) && fromElement.ValueKind != JsonValueKind.Null;
+        var hasTo = element.TryGetProperty("to", out var toElement) && toElement.ValueKind != JsonValueKind.Null;
 
         if (hasHours)
         {
@@ -544,6 +657,10 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
 
     private static string PrimitiveList(IEnumerable<ReportPrimitive> primitives) =>
         string.Join(", ", primitives.Select(p => p.WireName()));
+
+    /// <summary>Whether a field of <paramref name="kind"/> can lie along a time_series' horizontal axis.</summary>
+    private static bool IsAxis(ReportFieldKind kind) =>
+        kind is ReportFieldKind.Time or ReportFieldKind.TimeOfDay or ReportFieldKind.Offset;
 
     private static string Wire(ReportFieldKind kind) =>
         JsonSerializer.Serialize(kind).Trim('"');

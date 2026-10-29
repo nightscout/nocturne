@@ -8,7 +8,11 @@ namespace Nocturne.API.Tests.Mcp;
 
 public class ReportSpecValidatorTests
 {
-    internal static readonly ReportDatasetRegistry Registry = new([new GlucoseSeriesDataset(), new GlucoseStatisticsDataset()]);
+    internal static readonly ReportDatasetRegistry Registry = new(
+    [
+        new GlucoseSeriesDataset(), new GlucoseStatisticsDataset(), new EventResponseDataset(), new SettingsEvidenceDataset(),
+        new DailyProfileDataset(), new GlucoseDistributionByHourDataset(),
+    ]);
 
     private static readonly ReportSpecValidator Validator = new(Registry, TimeProvider.System);
 
@@ -118,11 +122,11 @@ public class ReportSpecValidatorTests
     public void Unknown_primitive()
     {
         var error = SingleError("""
-            { "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "range_bands" } ] }
+            { "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "histogram" } ] }
             """);
 
         error.Path.Should().Be("panels[0].primitive");
-        error.Message.Should().Contain("'range_bands' is not a primitive");
+        error.Message.Should().Contain("'histogram' is not a primitive");
     }
 
     [Fact]
@@ -318,6 +322,25 @@ public class ReportSpecValidatorTests
         { """{ "version": 1, "panels": [ { "id": 7, "dataset": { "name": "glucose_series" }, "primitive": "table" } ] }""", "panels[0].id" },
         { """{ "version": 1, "panels": [ { "id": "this-id-is-far-too-long-for-a-panel-x", "dataset": { "name": "glucose_series" }, "primitive": "table" } ] }""", "panels[0].id" },
         { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "table", "range": { "hours": 6, "to": "x" } } ] }""", "panels[0].range" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Lunch" } ] }, "primitive": "range_bands" } ] }""", "panels[0].dataset.cohorts[0].anchor" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Meal", "dayOfWeek": ["Funday"] } ] }, "primitive": "range_bands" } ] }""", "panels[0].dataset.cohorts[0].dayOfWeek[0]" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Meal", "foods": ["pasta"] } ] }, "primitive": "range_bands" } ] }""", "panels[0].dataset.cohorts[0].foods[0]" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Meal", "colour": "red" } ] }, "primitive": "range_bands" } ] }""", "panels[0].dataset.cohorts[0].colour" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": "meals" }, "primitive": "range_bands" } ] }""", "panels[0].dataset.cohorts" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": [] }, "primitive": "range_bands" } ] }""", "panels[0].dataset.cohorts" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Meal" }, { "anchor": "Meal" }, { "anchor": "Meal" }, { "anchor": "Meal" } ] }, "primitive": "range_bands" } ] }""", "panels[0].dataset.cohorts" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": [ { "anchor": "CorrectionBolus", "foodCategory": "Pasta" } ] }, "primitive": "range_bands" } ] }""", "panels[0].dataset.cohorts[0].foods" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Meal", "timeOfDay": { "fromMinute": 1500, "toMinute": 60 } } ] }, "primitive": "range_bands" } ] }""", "panels[0].dataset.cohorts[0].timeOfDay" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response", "minutesAfter": 301 }, "primitive": "range_bands" } ] }""", "panels[0].dataset.minutesAfter" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response", "comparisonRange": { "from": "2026-10-10", "to": "2026-10-01" } }, "primitive": "range_bands" } ] }""", "panels[0].dataset.comparisonRange.to" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response" }, "primitive": "range_bands", "bindings": { "y": ["glucoseP50", "glucoseP90"], "band": ["glucoseP10", "glucoseP90"] } } ] }""", "panels[0].bindings.y" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response" }, "primitive": "range_bands", "bindings": { "y": ["glucoseP50"], "band": ["glucoseP10", "glucoseP25", "glucoseP75"] } } ] }""", "panels[0].bindings.band" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response" }, "primitive": "range_bands", "bindings": { "y": ["glucoseP50"], "band": ["glucoseP10", "iobP50"] } } ] }""", "panels[0].bindings.band" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response" }, "primitive": "range_bands", "bindings": { "y": ["glucoseP50"], "band": ["glucoseP10", "glucoseP90"], "series": "minute" } } ] }""", "panels[0].bindings.series" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "event_response" }, "primitive": "table", "bindings": { "columns": ["glucoseP50"] } } ] }""", "panels[0].bindings.columns" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "settings_evidence", "setting": "carbs" }, "primitive": "table" } ] }""", "panels[0].dataset.setting" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "range_bands" } ] }""", "panels[0].primitive" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "table", "bindings": { "series": "direction" } } ] }""", "panels[0].bindings.series" },
     };
 
     [Theory]

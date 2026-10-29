@@ -5,11 +5,12 @@ namespace Nocturne.API.Mcp;
 
 /// <summary>
 /// The scopes an MCP client may hold. MCP is read-only, so these are read scopes, and they are the
-/// categories the tools read: the dashboard chart's.
+/// categories the tools read: the dashboard chart's, and the food catalogue that <c>find_foods</c>
+/// searches and a meal cohort's food filter reads.
 /// </summary>
 internal static class McpScopes
 {
-    public static IReadOnlyList<string> Offered => ChartDataReadScopeGuard.AdmissionScopes;
+    public static IReadOnlyList<string> Offered { get; } = [.. ChartDataReadScopeGuard.AdmissionScopes, Scope.FoodRead];
 
     /// <summary>
     /// The scopes a grant or token for <paramref name="resource"/> may hold: all of them for the

@@ -16,11 +16,29 @@ public class McpToolSchemaTests(AuthenticationTestFactory factory) : IClassFixtu
     [InlineData("get_current_status", new string[0])]
     [InlineData("render_report", new[] { "spec" })]
     [InlineData("describe_dataset", new[] { "name" })]
+    [InlineData("refine_report", new[] { "spec", "patch" })]
+    [InlineData("find_foods", new[] { "query" })]
     public void The_audit_keeps_the_arguments_the_input_schema_declares(string name, string[] declared)
     {
         var tools = factory.Services.GetRequiredService<IOptions<McpServerOptions>>().Value.ToolCollection!;
         tools.TryGetPrimitive(name, out var tool).Should().BeTrue();
 
         McpToolGuard.DeclaredArguments(tool).Should().BeEquivalentTo(declared);
+    }
+
+    [Fact]
+    public void Refine_report_is_for_the_view_only_and_takes_the_spec_render_report_takes()
+    {
+        var tools = factory.Services.GetRequiredService<IOptions<McpServerOptions>>().Value.ToolCollection!;
+        tools.TryGetPrimitive("refine_report", out var refine).Should().BeTrue();
+        tools.TryGetPrimitive("render_report", out var render).Should().BeTrue();
+
+        var ui = refine!.ProtocolTool.Meta!["ui"]!;
+        ui["visibility"]!.AsArray().Select(v => v!.GetValue<string>()).Should().Equal("app");
+        ui["resourceUri"]!.GetValue<string>().Should().Be("ui://nocturne/report");
+        var properties = refine.ProtocolTool.InputSchema.GetProperty("properties");
+        properties.GetProperty("spec").GetProperty("properties").GetRawText()
+            .Should().Be(render!.ProtocolTool.InputSchema.GetProperty("properties").GetProperty("spec").GetProperty("properties").GetRawText());
+        properties.GetProperty("patch").GetProperty("properties").TryGetProperty("panels", out _).Should().BeTrue();
     }
 }

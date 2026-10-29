@@ -19,6 +19,8 @@ internal static class ReportTools
 {
     public const string RenderReportName = "render_report";
 
+    public const string RefineReportName = "refine_report";
+
     /// <summary>The tool, with <see cref="ReportSpecSchema.InputSchema"/> in place of the raw argument's.</summary>
     public static McpServerTool Create(IServiceProvider services)
     {
@@ -28,14 +30,27 @@ internal static class ReportTools
         return tool;
     }
 
+    /// <summary><c>refine_report</c>, with <see cref="ReportSpecSchema.RefineInputSchema"/> in place of the raw arguments'.</summary>
+    public static McpServerTool CreateRefine(IServiceProvider services)
+    {
+        var method = typeof(ReportTools).GetMethod(nameof(RefineReport), BindingFlags.Public | BindingFlags.Static)!;
+        var tool = McpServerTool.Create(method, (object?)null, new McpServerToolCreateOptions { Services = services });
+        tool.ProtocolTool.InputSchema = ReportSpecSchema.RefineInputSchema;
+        return tool;
+    }
+
     [McpServerTool(Name = RenderReportName, Title = "Render report", ReadOnly = true, OpenWorld = false)]
     [McpAppUi(ResourceUri = ReportResources.ReportUri)]
     [Description(
         "Draws a report of one to six panels from Nocturne's data. Each panel reads one dataset over a "
         + "time range and draws it as one primitive: time_series (lines over time, with an optional shaded "
-        + "band), stat_tiles (a row of figures), table, or glucose_chart (the full dashboard chart). "
+        + "band), stat_tiles (a row of figures), table, glucose_chart (the full dashboard chart), or "
+        + "range_bands (percentile bands under a median line, over the time of day or minutes from an event). "
         + "Datasets: glucose_series (readings with IOB, COB and basal), glucose_statistics (time in range, "
-        + "mean, GMI, CV, SD). Call describe_dataset for a dataset's fields and limits. Returns a text summary "
+        + "mean, GMI, CV, SD), event_response (meals and other events aligned on their start, by cohort, with a food "
+        + "and weekday filter; ids from find_foods), settings_evidence (observed basal, ISF and carb ratio beside the "
+        + "profile's), daily_profile (each five-minute slot of the day), glucose_distribution_by_hour. "
+        + "Call describe_dataset for a dataset's fields and limits. Returns a text summary "
         + "of each panel. An invalid spec is refused with a list of what to change.")]
     public static async Task<CallToolResult> RenderReport(
         ReportSpecValidator validator,
@@ -47,6 +62,33 @@ internal static class ReportTools
         if (!validation.IsValid)
             throw new McpInvalidArgumentsException(
                 "The report spec is not valid. Change these and call render_report again:\n"
+                + string.Join('\n', validation.Errors.Select(e => $"- {e}")));
+
+        return (await renderer.RenderAsync(validation.Spec!, cancellationToken)).Result;
+    }
+
+    [McpServerTool(Name = RefineReportName, Title = "Refine report", ReadOnly = true, OpenWorld = false)]
+    [McpAppUi(ResourceUri = ReportResources.ReportUri, Visibility = [McpUiToolVisibility.App])]
+    [Description(
+        "For the report view: draws a report again with a patch applied to the spec render_report returned: a new range "
+        + "for every panel, or a panel's new range or dataset parameters. Validated and limited as render_report is.")]
+    public static async Task<CallToolResult> RefineReport(
+        ReportSpecValidator validator,
+        ReportRenderer renderer,
+        [Description("The normalised spec render_report returned.")] JsonElement? spec = null,
+        [Description(ReportSpecSchema.PatchDescription)] JsonElement? patch = null,
+        CancellationToken cancellationToken = default)
+    {
+        var (patched, errors) = ReportSpecPatches.Apply(spec ?? default, patch ?? default);
+        if (patched is not { } merged)
+            throw new McpInvalidArgumentsException(
+                "The patch cannot be applied. Change these and call refine_report again:\n"
+                + string.Join('\n', errors.Select(e => $"- {e}")));
+
+        var validation = validator.Validate(merged, await renderer.UsesMmolAsync(cancellationToken));
+        if (!validation.IsValid)
+            throw new McpInvalidArgumentsException(
+                "The refined report spec is not valid. Change these and call refine_report again:\n"
                 + string.Join('\n', validation.Errors.Select(e => $"- {e}")));
 
         return (await renderer.RenderAsync(validation.Spec!, cancellationToken)).Result;
@@ -68,7 +110,7 @@ internal sealed class DatasetTools
         ITenantAppearanceReader appearance,
         ITenantAccessor tenant,
         IOptions<MvcJsonOptions> jsonOptions,
-        [Description("The dataset name: glucose_series or glucose_statistics.")] string name,
+        [Description("The dataset name, one of those render_report lists.")] string name,
         CancellationToken cancellationToken = default)
     {
         var dataset = registry.Find(name)
@@ -102,7 +144,7 @@ internal sealed class DatasetTools
     /// <summary>The sample rows, written in mg/dL, in the tenant's unit.</summary>
     private static IReadOnlyList<IReadOnlyDictionary<string, object?>> SampleRows(IReportDataset dataset, bool useMmol)
     {
-        var glucose = dataset.Fields.Where(f => f.Unit == ReportField.GlucoseUnit).Select(f => f.Name).ToHashSet();
+        var glucose = dataset.Fields.Where(f => f.InGlucoseUnit).Select(f => f.Name).ToHashSet();
         return [.. dataset.SampleRows.Select(row => (IReadOnlyDictionary<string, object?>)row.ToDictionary(
             kv => kv.Key,
             kv => glucose.Contains(kv.Key) && kv.Value is double mgdl ? GlucoseUnits.Scale(mgdl, useMmol) : kv.Value))];

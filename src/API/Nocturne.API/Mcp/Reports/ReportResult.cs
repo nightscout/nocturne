@@ -20,6 +20,12 @@ internal sealed record ReportResult
     /// </summary>
     public string GlucoseColorMode { get; init; } = DefaultGlucoseColorMode;
 
+    /// <summary>
+    /// The tenant's IANA time zone, in which the summaries state local times, so the view writes
+    /// times in it too; null when the tenant has none and the summaries use UTC.
+    /// </summary>
+    public string? TimeZone { get; init; }
+
     public required IReadOnlyList<ReportPanelResult> Panels { get; init; }
 
     /// <summary>Every panel's summary, joined: the text an assistant reads.</summary>
@@ -82,6 +88,9 @@ internal sealed record ReportPanelResult
     public IReadOnlyList<ReportOmittedField> Omitted { get; init; } = [];
 
     public ReportResolution? Resolution { get; init; }
+
+    /// <summary>The web report that shows this panel's data, with its range and parameters; null where there is none.</summary>
+    public string? Link { get; init; }
 }
 
 internal sealed record ReportWindow(long From, long To);

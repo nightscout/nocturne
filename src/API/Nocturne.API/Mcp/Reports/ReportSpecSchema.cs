@@ -23,15 +23,21 @@ internal static class ReportSpecSchema
         "The report to draw. Each panel names a dataset and a primitive; call describe_dataset first to "
         + "see a dataset's fields, units, allowed primitives and longest range.";
 
-    public static JsonElement InputSchema { get; } = Build();
+    public const string PatchDescription =
+        "What to change: 'range' for every panel, or 'panels' with each panel's id and its new range or dataset parameters.";
+
+    public static JsonElement InputSchema { get; } = Build(nameof(Shape));
+
+    /// <summary><c>refine_report</c>'s input schema: the spec as <see cref="InputSchema"/> has it, and a <see cref="ReportSpecPatch"/>.</summary>
+    public static JsonElement RefineInputSchema { get; } = Build(nameof(RefineShape));
 
     /// <summary>A dataset's parameters as the SDK describes a tool argument of that type.</summary>
     public static JsonElement ParametersSchema(Type parametersType) =>
         AIJsonUtilities.CreateJsonSchema(parametersType, serializerOptions: McpJsonUtilities.DefaultOptions);
 
-    private static JsonElement Build()
+    private static JsonElement Build(string shape)
     {
-        var method = typeof(ReportSpecSchema).GetMethod(nameof(Shape), BindingFlags.NonPublic | BindingFlags.Static)!;
+        var method = typeof(ReportSpecSchema).GetMethod(shape, BindingFlags.NonPublic | BindingFlags.Static)!;
         var generated = McpServerTool.Create(method, (object?)null, new McpServerToolCreateOptions()).ProtocolTool.InputSchema;
 
         // The one constraint no attribute expresses: the version is a constant.
@@ -42,4 +48,8 @@ internal static class ReportSpecSchema
     }
 
     private static void Shape([Description(SpecDescription)] ReportSpec spec) => _ = spec;
+
+    private static void RefineShape(
+        [Description("The normalised spec render_report returned.")] ReportSpec spec,
+        [Description(PatchDescription)] ReportSpecPatch patch) => _ = (spec, patch);
 }

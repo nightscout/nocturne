@@ -85,20 +85,27 @@ internal sealed record ReportPanelSpec
 }
 
 [Description(
-    "Field bindings. time_series: 'x' (a time field), 'y' (a list of fields in one unit) "
+    "Field bindings. time_series: 'x' (a time, time-of-day or minutes-from-event field), 'y' (a list of fields in one unit) "
     + "and optional 'band' (two fields: the lower and upper edge of a shaded range). "
+    + "range_bands: 'x', 'y' (one field: the median line), 'band' (two fields, or four: outer low, inner low, inner high, "
+    + "outer high) and optional 'series' (a category field; one set of bands per value). Optional; each dataset has defaults. "
     + "table and stat_tiles: optional 'columns' (the fields to show, in order). glucose_chart: none.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportBindings
 {
-    [Description("time_series only: the time field on the horizontal axis. Default 'time'.")]
+    [Description("time_series and range_bands: the field on the horizontal axis: a time, time-of-day or minutes-from-event field.")]
     public string? X { get; init; }
 
-    [Description("time_series only: the fields drawn as lines. All must have the same unit.")]
+    [Description("time_series: the fields drawn as lines, all in one unit. range_bands: one field, the median line.")]
     public IReadOnlyList<string>? Y { get; init; }
 
-    [Description("time_series only: two fields, the lower and upper edge of a shaded range, in the unit of 'y'.")]
+    [Description(
+        "time_series: two fields, the lower and upper edge of a shaded range, in the unit of 'y'. range_bands: two or four "
+        + "fields in the unit of 'y': the outer band's low edge, then (with four) the inner band's low and high edges, then the outer band's high edge.")]
     public IReadOnlyList<string>? Band { get; init; }
+
+    [Description("range_bands only: a category field; each of its values is drawn as its own bands and line.")]
+    public string? Series { get; init; }
 
     [Description("table and stat_tiles only: the fields to show, in order. Default: every field the token can read.")]
     public IReadOnlyList<string>? Columns { get; init; }
@@ -112,6 +119,10 @@ internal sealed record ReportBindings
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "name")]
 [JsonDerivedType(typeof(GlucoseSeriesParameters), GlucoseSeriesParameters.Name)]
 [JsonDerivedType(typeof(GlucoseStatisticsParameters), GlucoseStatisticsParameters.Name)]
+[JsonDerivedType(typeof(EventResponseParameters), EventResponseParameters.Name)]
+[JsonDerivedType(typeof(SettingsEvidenceParameters), SettingsEvidenceParameters.Name)]
+[JsonDerivedType(typeof(DailyProfileParameters), DailyProfileParameters.Name)]
+[JsonDerivedType(typeof(GlucoseDistributionByHourParameters), GlucoseDistributionByHourParameters.Name)]
 internal abstract record ReportDatasetParameters
 {
     [JsonIgnore]
@@ -167,6 +178,10 @@ internal enum ReportPrimitive
     /// </summary>
     [JsonStringEnumMemberName("glucose_chart")]
     GlucoseChart,
+
+    /// <summary>Percentile bands (outer and inner) under a median line, one set per series, over an axis of time of day or minutes from an event.</summary>
+    [JsonStringEnumMemberName("range_bands")]
+    RangeBands,
 }
 
 internal static class ReportPrimitives
@@ -179,6 +194,7 @@ internal static class ReportPrimitives
         ReportPrimitive.StatTiles => "stat_tiles",
         ReportPrimitive.Table => "table",
         ReportPrimitive.GlucoseChart => "glucose_chart",
+        ReportPrimitive.RangeBands => "range_bands",
         _ => throw new ArgumentOutOfRangeException(nameof(primitive), primitive, null),
     };
 
