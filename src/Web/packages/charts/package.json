@@ -53,11 +53,12 @@
   "devDependencies": {
     "@lucide/svelte": "^1.14.0",
     "@nocturne/eslint-config": "workspace:*",
+    "@sveltejs/kit": "^3.1.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/d3": "^7.4.3",
     "@types/d3-scale": "^4.0.9",
     "@types/d3-time": "^3.0.4",
-    "@types/node": "^24.10.1",
+    "@types/node": "^25.6.0",
     "d3": "^7.9.0",
     "d3-scale": "^4.0.2",
     "d3-time": "^3.1.0",
@@ -67,6 +68,7 @@
     "svelte-check": "^4.7.7",
     "typescript": "^6.0.3",
     "vite": "^8.0.12",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.6",
+    "zod": "4.4.3"
   }
 }

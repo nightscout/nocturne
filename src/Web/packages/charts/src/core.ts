@@ -21,3 +21,4 @@ export * from "./view/marker-label-layout.js";
 export * from "./view/glucose-gradient-stops.js";
 export * from "./view/plot-padding.js";
 export * from "./view/profile-activation.js";
+export * from "./view/proximity.js";

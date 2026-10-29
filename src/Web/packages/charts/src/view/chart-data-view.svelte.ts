@@ -13,6 +13,7 @@ import type { PredictionData } from "../predictions.js";
 import { STALE_THRESHOLD_MS } from "../staleness.js";
 import type { TransformedChartData } from "../transform.js";
 import { profileActivationLabel } from "./profile-activation.js";
+import { TREATMENT_PROXIMITY_MS } from "./proximity.js";
 import { resolveChartThresholds, type ChartThresholds } from "../thresholds.js";
 import { bisector } from "d3";
 // ===== Data Point Types =====
@@ -167,10 +168,6 @@ export interface ScheduledBasalPoint {
   timestamp?: number;
   rate?: number;
 }
-
-// ===== Proximity constant =====
-
-export const TREATMENT_PROXIMITY_MS = 5 * 60 * 1000;
 
 /** All lookup functions for tooltip and inspection consumers */
 export interface SeriesFinders {

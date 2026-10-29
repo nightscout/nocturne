@@ -378,7 +378,7 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Disabled until the workflow token can publish to the @nightscout GitHub Packages scope.
+  # Disabled until the workflow token can publish to the @nocturne GitHub Packages scope.
   # publish-charts:
   #   needs: [dotnet-images, web-image]
   #   runs-on: ubuntu-latest
@@ -395,7 +395,7 @@ jobs:
   #       with:
   #         node-version: ${{ env.NODE_VERSION }}
   #         registry-url: 'https://npm.pkg.github.com'
-  #         scope: '@nightscout'
+  #         scope: '@nocturne'
   #     - name: Install dependencies
   #       run: pnpm install --frozen-lockfile
   #       working-directory: src/Web

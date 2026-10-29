@@ -21,6 +21,9 @@ const FORBIDDEN: { pattern: RegExp; reason: string }[] = [
   { pattern: /(^|\/)stores\/|-store(\.|$)/, reason: "app store" },
 ];
 
+/** The only @nocturne/ui modules allowed: plain TS with no Svelte and nothing of the app. */
+const UI_ALLOWED = new Set(["@nocturne/ui/glucose", "@nocturne/ui/utils"]);
+
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = join(dir, entry.name);
@@ -43,6 +46,9 @@ describe("@nocturne/charts imports", () => {
     for (const file of files) {
       for (const match of readFileSync(file, "utf8").matchAll(SPECIFIER)) {
         const specifier = match[1] ?? match[2] ?? match[3];
+        if (/^@nocturne\/ui(\/|$)/.test(specifier) && !UI_ALLOWED.has(specifier)) {
+          found.push(`${relative(root, file)}: ${specifier} (only ${[...UI_ALLOWED].join(", ")} of @nocturne/ui)`);
+        }
         const hit = FORBIDDEN.find((f) => f.pattern.test(specifier));
         if (hit) found.push(`${relative(root, file)}: ${specifier} (${hit.reason})`);
         if (specifier.startsWith(".") && relative(root, resolve(dirname(file), specifier)).startsWith("..")) {
