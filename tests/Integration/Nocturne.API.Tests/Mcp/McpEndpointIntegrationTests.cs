@@ -110,6 +110,7 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
 
         var server = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-authorization-server");
         var issuer = server.GetProperty("issuer").GetString();
+        issuer.Should().Be($"http://{_slugA}.{_baseDomain}", "a tenant host is its own authorization server");
         metadata.GetProperty("authorization_servers").EnumerateArray().Select(e => e.GetString())
             .Should().Equal(issuer);
     }
@@ -157,7 +158,7 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
         var mcpUrl = $"http://{_slugA}.{_baseDomain}/mcp";
         (await ConsentLocationAsync(mcpUrl)).Should().Contain($"&resource={Uri.EscapeDataString(mcpUrl)}");
         (await ConsentLocationAsync(null)).Should().StartWith("/oauth/consent").And.NotContain("resource=");
-        (await ConsentLocationAsync($"http://{_slugB}.{_baseDomain}/mcp")).Should().NotContain("resource=");
+        (await ConsentLocationAsync($"http://{_slugB}.{_baseDomain}/mcp")).Should().Be("(no redirect: 400)");
     }
 
     [Fact]
@@ -342,6 +343,25 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
         using var client = McpClient(_slugA, jwt);
         (await PostRpcAsync(client, "tools/call", new { name = "get_current_status" }))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Theory]
+    [InlineData("https://api.example.test/")]
+    [InlineData("urn:other")]
+    public async Task AnotherResource_IsRefusedWithInvalidTarget(string other)
+    {
+        using var session = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _sessionA);
+        var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(session, scope: "glucose.read");
+        var (_, challenge) = AuthTestHelpers.GeneratePkceChallenge();
+
+        var response = await session.GetAsync("/api/oauth/authorize?response_type=code&scope=glucose.read"
+            + $"&client_id={Uri.EscapeDataString(clientId)}"
+            + $"&redirect_uri={Uri.EscapeDataString("http://localhost:9999/callback")}"
+            + $"&code_challenge={challenge}&code_challenge_method=S256&resource={Uri.EscapeDataString(other)}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync())
+            .GetProperty("error").GetString().Should().Be("invalid_target");
     }
 
     [Fact]

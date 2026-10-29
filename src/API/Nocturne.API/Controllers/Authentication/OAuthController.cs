@@ -157,7 +157,17 @@ public class OAuthController : ControllerBase
             });
         }
 
-        var mcpResource = NamesThisMcpServer(resource) ? McpAccessGateMiddleware.ResourceUrl(Request) : null;
+        if (!string.IsNullOrEmpty(resource) && !NamesThisMcpServer(resource))
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_target",
+                ErrorDescription = "The only resource this server issues tokens for is "
+                    + $"{McpAccessGateMiddleware.ResourceUrl(Request)}.",
+            });
+        }
+
+        var mcpResource = string.IsNullOrEmpty(resource) ? null : McpAccessGateMiddleware.ResourceUrl(Request);
         if (mcpResource is not null)
         {
             requestedScopes = [.. McpScopes.ForResource(requestedScopes, mcpResource)];

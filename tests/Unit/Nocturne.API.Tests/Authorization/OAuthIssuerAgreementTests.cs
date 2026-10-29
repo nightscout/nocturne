@@ -28,10 +28,12 @@ public class OAuthIssuerAgreementTests
     private const string RedirectUri = "https://claude.ai/api/mcp/auth_callback";
 
     [Theory]
-    [InlineData(null, "https://rhys.example.test")]
-    [InlineData("example.test", "https://example.test")]
-    public async Task The_authorize_redirect_carries_the_issuer_the_metadata_reports(
-        string? baseDomain, string expectedIssuer)
+    [InlineData(null, "rhys.example.test", "https://rhys.example.test")]
+    [InlineData("example.test", "rhys.example.test", "https://rhys.example.test")]
+    [InlineData("example.test", "example.test", "https://example.test")]
+    [InlineData("localhost:1612", "rhys.localhost:1612", "https://rhys.localhost:1612")]
+    public async Task Both_documents_and_the_authorize_redirect_name_the_tenant_hosts_own_origin(
+        string? baseDomain, string host, string expectedIssuer)
     {
         var services = new ServiceCollection()
             .AddSingleton(Options.Create(new BaseDomainOptions { BaseDomain = baseDomain ?? "" }))
@@ -42,12 +44,19 @@ public class OAuthIssuerAgreementTests
             services.GetRequiredService<IOptions<BaseDomainOptions>>(),
             Options.Create(new McpOptions()))
         {
-            ControllerContext = new ControllerContext { HttpContext = Request(services) },
+            ControllerContext = new ControllerContext { HttpContext = Request(services, host) },
         };
-        var issuer = ((OkObjectResult)metadata.GetOAuthMetadata().Result!).Value
-            .Should().BeOfType<OAuthAuthorizationServerMetadata>().Subject.Issuer;
+        var server = ((OkObjectResult)metadata.GetOAuthMetadata().Result!).Value
+            .Should().BeOfType<OAuthAuthorizationServerMetadata>().Subject;
+        var issuer = server.Issuer;
+        var resource = ((OkObjectResult)metadata.GetOAuthProtectedResourceMetadata().Result!).Value
+            .Should().BeOfType<OAuthProtectedResourceMetadata>().Subject;
 
-        var redirect = (RedirectResult)await Authorizer(services).ApproveConsent(new ConsentApprovalRequest
+        resource.AuthorizationServers.Should().Equal(expectedIssuer);
+        new[] { server.AuthorizationEndpoint, server.TokenEndpoint, server.RegistrationEndpoint!, server.JwksUri }
+            .Should().OnlyContain(endpoint => endpoint.StartsWith(expectedIssuer + "/"));
+
+        var redirect = (RedirectResult)await Authorizer(services, host).ApproveConsent(new ConsentApprovalRequest
         {
             ClientId = ClientId,
             RedirectUri = RedirectUri,
@@ -60,11 +69,11 @@ public class OAuthIssuerAgreementTests
         System.Web.HttpUtility.ParseQueryString(new Uri(redirect.Url).Query)["iss"].Should().Be(issuer);
     }
 
-    private static DefaultHttpContext Request(IServiceProvider services)
+    private static DefaultHttpContext Request(IServiceProvider services, string host)
     {
         var http = new DefaultHttpContext { RequestServices = services };
         http.Request.Scheme = "https";
-        http.Request.Host = new HostString("rhys.example.test");
+        http.Request.Host = new HostString(host);
         http.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
@@ -75,7 +84,7 @@ public class OAuthIssuerAgreementTests
         return http;
     }
 
-    private static OAuthController Authorizer(IServiceProvider services)
+    private static OAuthController Authorizer(IServiceProvider services, string host)
     {
         var clients = new Mock<IOAuthClientService>();
         clients.Setup(s => s.GetClientAsync(ClientId, It.IsAny<CancellationToken>()))
@@ -98,7 +107,7 @@ public class OAuthIssuerAgreementTests
             Mock.Of<IOAuthTokenRevocationCache>(),
             NullLogger<OAuthController>.Instance)
         {
-            ControllerContext = new ControllerContext { HttpContext = Request(services) },
+            ControllerContext = new ControllerContext { HttpContext = Request(services, host) },
         };
     }
 }

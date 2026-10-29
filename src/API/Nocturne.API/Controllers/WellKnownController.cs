@@ -30,9 +30,11 @@ namespace Nocturne.API.Controllers;
 /// <para>
 /// The two discovery documents report different issuers. The OpenID document's issuer is the one
 /// its ID tokens carry as <c>iss</c>, <see cref="JwtOptions.Issuer"/>. The OAuth document's issuer
-/// is a URL (<see cref="Services.Auth.OAuthIssuer"/>): RFC 8414 requires the metadata to be fetched
-/// under it, and an OAuth client compares it with the <c>iss</c> of every authorization response
-/// (RFC 9207) and with the protected resource metadata's authorization server.
+/// and endpoints, and the protected resource document's authorization server, are the requesting
+/// tenant host's own origin, never the apex; the configured public origin is used only for a request
+/// to the apex itself (<see cref="Services.Auth.OAuthIssuer"/>). RFC 8414 requires the metadata to be
+/// fetched under the issuer, an OAuth client compares it with the <c>iss</c> of every authorization
+/// response (RFC 9207), and a client registers with and is authorized by the tenant host it calls.
 /// </para>
 /// </remarks>
 /// <seealso cref="JwtOptions"/>
@@ -154,12 +156,12 @@ public class WellKnownController : ControllerBase
     /// <remarks>Its issuer differs from the OpenID document's; see the class remarks.</remarks>
     public ActionResult<OAuthAuthorizationServerMetadata> GetOAuthMetadata()
     {
-        var baseUrl = GetBaseUrl();
+        var baseUrl = OAuthIssuer.Of(Request);
 
         return Ok(
             new OAuthAuthorizationServerMetadata
             {
-                Issuer = OAuthIssuer.Of(Request),
+                Issuer = baseUrl,
                 AuthorizationEndpoint = $"{baseUrl}/api/oauth/authorize",
                 TokenEndpoint = $"{baseUrl}/api/oauth/token",
                 DeviceAuthorizationEndpoint = $"{baseUrl}/api/oauth/device",
