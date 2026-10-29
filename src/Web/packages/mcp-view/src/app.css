@@ -2,6 +2,8 @@
 @import "@nocturne/charts/themes/nocturne.css";
 @source "../node_modules/@nocturne/charts/src";
 @source "../node_modules/layerchart/dist";
+@source "../node_modules/@nocturne/ui/src/lib/components/ui/button";
+@source "../node_modules/@nocturne/ui/src/lib/components/ui/checkbox";
 @source "./";
 
 /* The host's style variables (MCP Apps host context) restyle the chrome only. The clinical

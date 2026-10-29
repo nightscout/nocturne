@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import "./app.css";
 import ReportView from "./ReportView.svelte";
 
@@ -203,5 +203,117 @@ describe("ReportView", () => {
     render(ReportView, { result: { structuredContent: { kind: "other" } }, locale: "en-US" });
 
     await expect.element(page.getByRole("alert")).toHaveTextContent("no report data");
+  });
+
+  /** An event_response result: two cohorts' bands, and the events as a table. */
+  const minutes = Array.from({ length: 24 }, (_, i) => -60 + i * 15);
+  const slotRows = (series: string, cohort: number, lift: number) =>
+    minutes.map((minute) => {
+      const rise = Math.max(0, Math.min(minute, 60)) + lift;
+      return {
+        series, cohort, range: "primary", minute,
+        glucoseP10: 90 + rise, glucoseP25: 100 + rise, glucoseP50: 115 + rise, glucoseP75: 130 + rise, glucoseP90: 150 + rise,
+      };
+    });
+  const bandFields = [
+    field("series", "Series", "category", null),
+    field("minute", "Minutes from event", "offset", "min"),
+    field("glucoseP50", "Glucose median", "number", "mg/dL"),
+    field("glucoseP10", "Glucose P10", "number", "mg/dL"),
+    field("glucoseP25", "Glucose P25", "number", "mg/dL"),
+    field("glucoseP75", "Glucose P75", "number", "mg/dL"),
+    field("glucoseP90", "Glucose P90", "number", "mg/dL"),
+  ];
+  const sentence = "Meal of 45 g on 2026-10-12 at 08:05: started at 110 mg/dL, rose 72 mg/dL to its peak 55 minutes later.";
+  const eventsSpec = {
+    version: 1,
+    panels: [
+      { id: "bands", dataset: { name: "event_response", cohorts: [{ anchor: "Meal" }, { anchor: "CorrectionBolus" }] }, primitive: "range_bands",
+        bindings: { x: "minute", y: ["glucoseP50"], band: ["glucoseP10", "glucoseP25", "glucoseP75", "glucoseP90"], series: "series" },
+        range: { hours: 720 } },
+      { id: "events", dataset: { name: "event_response" }, primitive: "table", bindings: { columns: ["at", "summary"] }, range: { hours: 720 } },
+    ],
+  };
+  const eventResult = {
+    spec: eventsSpec,
+    units: "mg/dl",
+    summary: "events",
+    panels: [
+      {
+        id: "bands", dataset: "event_response", primitive: "range_bands", bindings: eventsSpec.panels[0].bindings, status: "ok", window,
+        fields: bandFields, rows: [...slotRows("Cohort 1: Meal", 1, 0), ...slotRows("Cohort 2: CorrectionBolus", 2, 40)],
+        summary: "Cohort 1: Meal: 12 events.", link: "https://dev.nocturne.localhost/reports/loop-analysis/meals-and-events?anchor1=Meal",
+      },
+      {
+        id: "events", dataset: "event_response", primitive: "table", bindings: { columns: ["at", "summary"] }, status: "ok", window,
+        fields: [field("at", "Time", "time", null), field("summary", "Summary", "category", null)],
+        rows: [{ at: from, summary: sentence }], summary: "1 event.",
+      },
+    ],
+  };
+
+  it("draws range_bands with one set of bands per cohort", async () => {
+    render(ReportView, { result: { structuredContent: eventResult }, locale: "en-US" });
+
+    const chart = page.getByTestId("report-range-bands");
+    await expect.element(chart).toBeVisible();
+    const series = chart.element().querySelectorAll("[data-testid=report-range-bands-series]");
+    expect([...series].map((s) => s.getAttribute("data-series"))).toEqual(["Cohort 1: Meal", "Cohort 2: CorrectionBolus"]);
+    await expect.poll(() => series[1].querySelectorAll("path").length).toBeGreaterThanOrEqual(3);
+    await expect.element(page.getByText("Cohort 2: CorrectionBolus")).toBeVisible();
+  });
+
+  it("offers no host control when the host granted no call", async () => {
+    render(ReportView, { result: { structuredContent: eventResult }, locale: "en-US" });
+
+    await expect.element(page.getByTestId("report-range-bands")).toBeVisible();
+    expect(page.getByRole("button", { name: "Load earlier data" }).elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: "Open in Nocturne" }).elements()).toHaveLength(0);
+    expect(page.getByRole("checkbox").elements()).toHaveLength(0);
+    expect(page.getByText(sentence).element().closest("tr")?.getAttribute("tabindex")).toBeNull();
+  });
+
+  it("refines with the normalised spec: load earlier data, and switch a cohort off", async () => {
+    const refine = vi.fn(async () => {});
+    render(ReportView, { result: { structuredContent: eventResult }, locale: "en-US", refine });
+
+    await page.getByRole("button", { name: "Load earlier data" }).first().click();
+    expect(refine).toHaveBeenLastCalledWith({
+      panels: [{ id: "bands", range: { from: new Date(window.from - (window.to - window.from)).toISOString(), to: new Date(window.to).toISOString() } }],
+    });
+
+    await page.getByRole("checkbox", { name: "Cohort 2: CorrectionBolus" }).click();
+    expect(refine).toHaveBeenLastCalledWith({ panels: [{ id: "bands", dataset: { cohorts: [{ anchor: "Meal" }] } }] });
+  });
+
+  it("hands the selected event's own sentence to the host, and opens the web report", async () => {
+    const selectEvent = vi.fn();
+    const openLink = vi.fn();
+    render(ReportView, { result: { structuredContent: eventResult }, locale: "en-US", selectEvent, openLink });
+
+    await page.getByText(sentence).click();
+    expect(selectEvent).toHaveBeenCalledWith(sentence);
+
+    await page.getByRole("button", { name: "Open in Nocturne" }).click();
+    expect(openLink).toHaveBeenCalledWith(eventResult.panels[0].link);
+  });
+
+  it("writes an event's time in the tenant's zone, as its sentence does", async () => {
+    render(ReportView, { result: { structuredContent: { ...eventResult, timeZone: "Australia/Sydney" } }, locale: "en-GB" });
+
+    // 06:00 UTC on 29 October 2026 is 17:00 in Sydney (UTC+11).
+    await expect.element(page.getByRole("cell", { name: "29 Oct 2026, 17:00" })).toBeVisible();
+  });
+
+  it("writes times in UTC when the tenant has no zone", async () => {
+    render(ReportView, { result: { structuredContent: { ...eventResult, timeZone: null } }, locale: "en-GB" });
+
+    await expect.element(page.getByRole("cell", { name: "29 Oct 2026, 06:00" })).toBeVisible();
+  });
+
+  it("shows why a refinement failed", async () => {
+    render(ReportView, { result: { structuredContent: eventResult }, locale: "en-US", notice: "- panels[0].range: too long" });
+
+    await expect.element(page.getByRole("alert")).toHaveTextContent("too long");
   });
 });
