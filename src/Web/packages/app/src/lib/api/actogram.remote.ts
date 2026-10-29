@@ -6,8 +6,8 @@
 import { query } from "$app/server";
 import { z } from "zod";
 import { getActogram } from "#lib/api/generated/actograms.generated.remote.js";
-import { getGlucoseColor } from "#lib/utils/chart-colors.js";
-import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import { getGlucoseColor } from "@nocturne/charts/core";
+import { resolveChartThresholds } from "@nocturne/charts/core";
 
 const actogramSchema = z.object({
   from: z.number(),

@@ -6,7 +6,7 @@
   import { getRealtimeStore } from "#lib/stores/realtime-store.svelte.js";
   import { glucoseUnits } from "#lib/stores/appearance-store.svelte.js";
   import { displayedGlucose } from "#lib/stores/current-glucose-status.svelte.js";
-  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import { getGlucoseTileVariant } from "#lib/utils/glucose-status.js";
   import { getDirectionInfo } from "#lib/utils/index.js";
   import {

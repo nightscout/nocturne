@@ -1,5 +1,7 @@
 @import "@nocturne/ui/theme.css";
+@import "@nocturne/charts/themes/nocturne.css";
 @source "../node_modules/@nocturne/ui/src";
+@source "../node_modules/@nocturne/charts/src";
 @source not "../locales/";
 @source '../node_modules/layerchart/dist';
 @source "../node_modules/water-ui/src";

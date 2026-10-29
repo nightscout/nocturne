@@ -7,9 +7,9 @@
   import {
     FALLBACK_GLUCOSE_Y_MAX,
     type ChartThresholds,
-  } from '#lib/constants/glucose-thresholds.js';
+  } from '@nocturne/charts/core';
   import { bg, bgLabel, time } from '#lib/utils/formatting.js';
-  import { dashClass } from '#lib/components/charts/print/chart-print-patterns.js';
+  import { dashClass } from '@nocturne/charts/core';
   import {
     MS_PER_HOUR,
     HOURS_PER_ROW,

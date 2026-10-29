@@ -45,7 +45,7 @@
   import { ONBOARDING_CORE_GATE, sequences } from "#lib/coach-marks/sequences.js";
   import { coachLabels } from "#lib/coach-marks/copy.svelte.js";
   import CoachParamHandler from "#lib/coach-marks/CoachParamHandler.svelte";
-  import { STALE_THRESHOLD_MS } from "#lib/constants/staleness.js";
+  import { STALE_THRESHOLD_MS } from "@nocturne/charts/core";
   import ChartPrintPatterns from "#lib/components/charts/print/ChartPrintPatterns.svelte";
 
   // LocalStorage key for title/favicon settings

@@ -14,19 +14,18 @@ import {
   glucoseChartLookback,
   GLUCOSE_CHART_FETCH_HOURS,
 } from "#lib/stores/appearance-store.svelte.js";
-import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import { resolveChartThresholds } from "@nocturne/charts/core";
 import { mergeChartData, replaceWindow } from "#lib/utils/chart-data-merge.js";
-import type { TransformedChartData } from "#lib/utils/chart-data-transform.js";
+import type { TransformedChartData } from "@nocturne/charts/core";
 import { stableBy } from "#lib/utils/stable-by.js";
 import { mergeRealtimeGlucose } from "./merge-glucose";
 import {
   createChartDataView,
-  type ChartDataEngine,
+  type ChartDataView,
   type PredictionAvailability,
-} from "./chart-data-view.svelte";
+} from "@nocturne/charts";
 import { fresh } from "#lib/api/fresh-query.js";
 
-export * from "./chart-data-view.svelte";
 
 // ===== Options & Interfaces =====
 
@@ -116,7 +115,7 @@ function shiftDate(date: Date, ms: number): Date {
 
 export function createChartDataEngine(
   options: ChartDataEngineOptions
-): ChartDataEngine {
+): ChartDataView {
   const realtimeStore = getRealtimeStore();
   const isBrowser = typeof window !== "undefined";
   const realtimeOnly = $derived(options.glucoseSource === "realtime");

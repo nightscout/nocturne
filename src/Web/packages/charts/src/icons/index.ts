@@ -1,0 +1,30 @@
+// The event and state icons, apart from the chart, so a page that shows only an icon does not
+// load the chart.
+export { default as PumpModeIcon } from "./PumpModeIcon.svelte";
+export { default as ActivityCategoryIcon } from "./ActivityCategoryIcon.svelte";
+export { default as DeviceEventIcon } from "./DeviceEventIcon.svelte";
+export { default as SystemEventIcon } from "./SystemEventIcon.svelte";
+export { default as TrackerCategoryIcon } from "./TrackerCategoryIcon.svelte";
+export { default as AutomaticModeIcon } from "./AutomaticModeIcon.svelte";
+export { default as ManualModeIcon } from "./ManualModeIcon.svelte";
+export { default as BoostModeIcon } from "./BoostModeIcon.svelte";
+export { default as SleepModeIcon } from "./SleepModeIcon.svelte";
+export { default as ExerciseModeIcon } from "./ExerciseModeIcon.svelte";
+export { default as SuspendedModeIcon } from "./SuspendedModeIcon.svelte";
+export { default as LimitedModeIcon } from "./LimitedModeIcon.svelte";
+export { default as EaseOffModeIcon } from "./EaseOffModeIcon.svelte";
+export { default as LibertyModeIcon } from "./LibertyModeIcon.svelte";
+export { default as SensorIcon } from "./SensorIcon.svelte";
+export { default as SiteChangeIcon } from "./SiteChangeIcon.svelte";
+export { default as ReservoirIcon } from "./ReservoirIcon.svelte";
+export { default as BatteryIcon } from "./BatteryIcon.svelte";
+export { default as AlarmIcon } from "./AlarmIcon.svelte";
+export { default as HazardIcon } from "./HazardIcon.svelte";
+export { default as WarningIcon } from "./WarningIcon.svelte";
+export { default as InfoIcon } from "./InfoIcon.svelte";
+export { default as CannulaIcon } from "./CannulaIcon.svelte";
+export { default as PodIcon } from "./PodIcon.svelte";
+export { default as BolusIcon } from "./BolusIcon.svelte";
+export { default as CarbsIcon } from "./CarbsIcon.svelte";
+export * from "./marker-shapes.js";
+export type { IconProps } from "./types.js";

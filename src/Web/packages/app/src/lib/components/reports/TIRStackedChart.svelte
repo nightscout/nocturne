@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { GlucoseRange } from "#lib/components/charts/print/chart-print-patterns.js";
+  import type { GlucoseRange } from "@nocturne/charts/core";
 
   type BandKey = "veryLow" | "low" | "target" | "high" | "veryHigh";
 
@@ -27,8 +27,8 @@
   import { scaleBand, scaleLinear } from "d3-scale";
   import { bandScale as toBandScale, numericScale } from "#lib/components/charts/scale-guards.js";
   import { bgRange } from "#lib/utils/formatting.js";
-  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
-  import TextureSwatch from "#lib/components/charts/print/TextureSwatch.svelte";
+  import { patternClass } from "@nocturne/charts/core";
+  import { TextureSwatch } from "@nocturne/charts/print";
   import type { TimeInRangePercentages } from "#lib/api/generated/nocturne-api-client.js";
 
   interface Props {

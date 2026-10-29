@@ -1,7 +1,7 @@
 <script lang="ts">
-  import DeviceEventMarker from "./DeviceEventMarker.svelte";
-  import { setGlucoseChartContext } from "../chart-context.svelte";
-  import type { GlucoseChartContext } from "../chart-context.svelte";
+  import { DeviceEventMarker } from "@nocturne/charts";
+  import { setGlucoseChartContext } from "@nocturne/charts";
+  import type { GlucoseChartContext } from "@nocturne/charts";
   import { DeviceEventType } from "#lib/api/index.js";
 
   interface Props {

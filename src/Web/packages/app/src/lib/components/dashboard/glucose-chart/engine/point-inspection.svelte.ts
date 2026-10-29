@@ -1,10 +1,11 @@
-import type {
-  ChartBasalPoint,
-  SeriesFinders,
-  GlucosePoint,
-  SeriesPoint,
-} from "./chart-data-view.svelte";
-import { BasalDeliveryOrigin, type MealPeriod } from "#lib/api/generated/nocturne-api-client.js";
+import {
+  BasalDeliveryOrigin,
+  type ChartBasalPoint,
+  type SeriesFinders,
+  type GlucosePoint,
+  type SeriesPoint,
+  type MealPeriod,
+} from "@nocturne/charts";
 import type { GlucoseUnits } from "#lib/stores/appearance-store.svelte.js";
 import {
   bg,

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { appChartContext } from "#lib/components/dashboard/glucose-chart/app-chart-context.svelte.js";
   /**
    * Tiny glucose curve for embedding in calendar day cells. Uses the shared
    * GlucoseTrack component with threshold-coloured line and deviation-fill
@@ -11,13 +12,13 @@
   import { Chart, Svg } from "layerchart";
   import { scaleTime } from "d3-scale";
   import {
-    partialEngine,
+    partialView,
     setGlucoseChartContext,
-  } from "#lib/components/dashboard/glucose-chart/chart-context.svelte.js";
-  import { computeTrackLayout } from "#lib/components/dashboard/glucose-chart/engine/track-layout.js";
-  import GlucoseTrack from "#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
+  } from "@nocturne/charts";
+  import { computeTrackLayout } from "@nocturne/charts/core";
+  import { GlucoseTrack } from "@nocturne/charts";
   import type { ChartThresholdsDto } from "#lib/api/generated/nocturne-api-client.js";
-  import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+  import { resolveChartThresholds } from "@nocturne/charts/core";
   import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
 
   interface Props {
@@ -62,7 +63,7 @@
   let chartHeight = $state(0);
 
   // GlucoseTrack reads only `glucoseData` and `thresholds`.
-  const engineStub = partialEngine({
+  const engineStub = partialView({
     get glucoseData() {
       return glucoseData;
     },
@@ -82,14 +83,14 @@
     )
   );
 
-  setGlucoseChartContext({
-    get engine() {
+  setGlucoseChartContext(appChartContext({
+    get view() {
       return engineStub;
     },
     get layout() {
       return layout;
     },
-  });
+  }));
 </script>
 
 {#if entries.length > 0 && xDomain}

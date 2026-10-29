@@ -99,6 +99,7 @@
   },
   "dependencies": {
     "@nocturne/bot": "workspace:*",
+    "@nocturne/charts": "workspace:*",
     "@nocturne/bridge": "workspace:*",
     "@nocturne/cms": "workspace:*",
     "@nocturne/coach": "workspace:*",

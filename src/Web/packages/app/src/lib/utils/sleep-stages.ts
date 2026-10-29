@@ -8,7 +8,7 @@
  * @nocturne/ui theme.css) — no colour mapping lives here.
  */
 
-import type { TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+import type { TextureKey } from "@nocturne/charts/core";
 
 /** Classic hypnogram order, top to bottom. Unspecified is appended only when present. */
 export const HYPNOGRAM_LANE_ORDER = ["awake", "rem", "light", "deep"];

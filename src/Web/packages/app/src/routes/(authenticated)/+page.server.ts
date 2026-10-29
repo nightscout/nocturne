@@ -3,7 +3,7 @@ import type { PageServerLoad } from './$types';
 import { getOriginalProto } from '#lib/server/request-host.js';
 import { resolveSingleTenantLanding } from '#lib/utils/tenant-host.js';
 import { classifyRequestHost } from '#lib/server/tenantless-host.js';
-import { transformChartData, type TransformedChartData } from '#lib/utils/chart-data-transform.js';
+import { transformChartData, type TransformedChartData } from '@nocturne/charts/core';
 import { hasPlotSize, renderPlotSnapshot } from '#lib/server/plot-snapshot.js';
 import { mergeChartData } from '#lib/utils/chart-data-merge.js';
 import { displayPreferenceLayers, displayPreferenceSources } from '#lib/server/display-preference-layers.js';

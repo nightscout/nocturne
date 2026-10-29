@@ -3,7 +3,7 @@
   import { formatClock } from "#lib/utils/formatting.js";
   import { PieChart, Text, Tooltip } from "layerchart";
   import type { Bolus, CarbIntake } from "#lib/api/index.js";
-  import { patternClass, type TextureKey } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { patternClass, type TextureKey } from "@nocturne/charts/core";
   import * as Breadcrumb from "#lib/components/ui/breadcrumb/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { cn } from "#lib/utils/index.js";

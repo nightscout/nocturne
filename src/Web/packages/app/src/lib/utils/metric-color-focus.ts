@@ -1,4 +1,4 @@
-import { GLUCOSE_HEATMAP_LEGEND_STOPS } from "./chart-colors";
+import { GLUCOSE_HEATMAP_LEGEND_STOPS } from "@nocturne/charts/core";
 
 export type ColorFocusRange = readonly [number, number];
 

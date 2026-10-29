@@ -379,7 +379,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Disabled until the workflow token can publish to the @nightscout GitHub Packages scope.
-  # publish-glucose-chart:
+  # publish-charts:
   #   needs: [dotnet-images, web-image]
   #   runs-on: ubuntu-latest
   #   if: github.ref == 'refs/heads/main'
@@ -399,14 +399,14 @@ jobs:
   #     - name: Install dependencies
   #       run: pnpm install --frozen-lockfile
   #       working-directory: src/Web
-  #     - name: Publish @nightscout/glucose-chart
-  #       working-directory: src/Web/packages/glucose-chart
+  #     - name: Publish @nocturne/charts
+  #       working-directory: src/Web/packages/charts
   #       env:
   #         NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   #       run: |
   #         version=$(node -p "require('./package.json').version")
-  #         if npm view "@nightscout/glucose-chart@${version}" version > /dev/null 2>&1; then
-  #           echo "@nightscout/glucose-chart@${version} already published; skipping."
+  #         if npm view "@nocturne/charts@${version}" version > /dev/null 2>&1; then
+  #           echo "@nocturne/charts@${version} already published; skipping."
   #         else
   #           pnpm publish --access public --no-git-checks
   #         fi

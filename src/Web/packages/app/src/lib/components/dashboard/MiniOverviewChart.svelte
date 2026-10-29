@@ -14,13 +14,13 @@
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { Button } from "#lib/components/ui/button/index.js";
   import { time, formatDateTimeCompact } from "#lib/utils/formatting.js";
-  import type { GlucoseThresholds } from "#lib/utils/chart-colors.js";
+  import type { GlucoseThresholds } from "@nocturne/charts/core";
   import {
     lineStopsFor,
     fillStopsFor,
     type AreaMode,
     type LineColorMode,
-  } from "./glucose-chart/utils/glucose-gradient-stops";
+  } from "@nocturne/charts/core";
 
   interface GlucosePoint {
     time: Date;

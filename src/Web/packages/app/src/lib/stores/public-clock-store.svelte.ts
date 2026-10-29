@@ -7,7 +7,7 @@
 
 import { clockFaceAlertsClient, clockFacesClient } from "#lib/api/browser-clients.js";
 import type { ClockAlertDto, ClockGlucoseDto } from "#lib/api/index.js";
-import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import { resolveChartThresholds } from "@nocturne/charts/core";
 import {
   glucoseDelta,
   type ClockGlucoseSource,

@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import type { ClockSettings } from "#lib/api/index.js";
 import { glucoseUnits, timeFormat } from "#lib/stores/appearance-store.svelte.js";
 import type { ClockGlucoseSource } from "#lib/stores/realtime-store.svelte.js";
-import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
+import { resolveChartThresholds } from "@nocturne/charts/core";
 import { renderClockElementValue } from "#lib/components/clock/element-value.js";
 import {
   ELEMENT_GROUPS,

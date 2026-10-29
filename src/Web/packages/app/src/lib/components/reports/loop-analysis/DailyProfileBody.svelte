@@ -17,7 +17,7 @@
   import { Label } from "#lib/components/ui/label/index.js";
   import FigureStrip, { type Figure } from "#lib/components/reports/FigureStrip.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { CHART_TEXTURES, dashClass, patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { CHART_TEXTURES, dashClass, patternClass } from "@nocturne/charts/core";
   import {
     BASAL_BANDS,
     COB_BANDS as COB,

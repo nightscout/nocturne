@@ -52,16 +52,15 @@ function parseFiles(paths: string[]): Declarations {
   return merged;
 }
 
-const chartOnly: Record<string, Record<string, string>> = {
-  nocturne: {},
-  trio: {},
-};
-
-describe.each(["nocturne", "trio"])("glucose-chart %s theme", (theme) => {
-  const chart = parseFiles([packages(`glucose-chart/src/themes/${theme}.css`)]);
+/**
+ * The clinical colours have one definition, in @nocturne/charts. ui's default theme keeps
+ * the rest; its other themes restyle both under more specific selectors.
+ */
+describe("the chart theme", () => {
+  const chart = parseFiles([packages("charts/src/themes/nocturne.css")]);
   const ui = parseFiles([
     packages("ui/src/theme.css"),
-    packages(`ui/src/styles/${theme}-theme.css`),
+    packages("ui/src/styles/nocturne-theme.css"),
   ]);
 
   const entries = [...chart].flatMap(([selector, block]) =>
@@ -72,32 +71,7 @@ describe.each(["nocturne", "trio"])("glucose-chart %s theme", (theme) => {
     expect(entries.length).toBeGreaterThan(0);
   });
 
-  it.each(entries)(
-    "$selector $name matches ui",
-    ({ selector, name, value }) => {
-      const uiValue = ui.get(selector)?.get(name);
-      if (uiValue === undefined) {
-        expect(
-          chartOnly[theme],
-          `${name} under "${selector}" is declared by the chart but not by ui`
-        ).toHaveProperty([`${selector}|${name}`]);
-        return;
-      }
-      expect(value, `${name} under "${selector}"`).toBe(uiValue);
-    }
-  );
-
-  it("allowlists only properties the chart declares and ui does not", () => {
-    for (const key of Object.keys(chartOnly[theme])) {
-      const [selector, name] = key.split("|");
-      expect(
-        chart.get(selector)?.has(name),
-        `${key} is not declared by the chart`
-      ).toBe(true);
-      expect(
-        ui.get(selector)?.has(name),
-        `${key} is declared by ui`
-      ).toBeFalsy();
-    }
+  it.each(entries)("$selector $name is declared only by the chart", ({ selector, name }) => {
+    expect(ui.get(selector)?.has(name), `${name} under "${selector}"`).toBeFalsy();
   });
 });

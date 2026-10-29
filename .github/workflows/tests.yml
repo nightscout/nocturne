@@ -370,7 +370,7 @@ jobs:
       - name: Typecheck Svelte packages
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: |
-          pnpm --filter @nightscout/glucose-chart --filter @nocturne/coach --filter @nocturne/ui --filter @nocturne/cms --filter @nocturne/desktop run check
+          pnpm --filter @nocturne/charts --filter @nocturne/coach --filter @nocturne/ui --filter @nocturne/cms --filter @nocturne/desktop run check
       - name: Typecheck app
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/app run check
@@ -397,6 +397,9 @@ jobs:
       - name: CMS unit tests
         if: ${{ !cancelled() && steps.client.outcome == 'success' }}
         run: pnpm --filter @nocturne/cms exec vitest run --coverage
+      - name: Charts unit tests
+        if: ${{ !cancelled() && steps.client.outcome == 'success' }}
+        run: pnpm --filter @nocturne/charts exec vitest run
       # Renders pages through the translation transform. The build cannot see
       # what that transform does to code that only runs at render time, and the
       # E2E suite that would is opt-in, so this is the only gate on it.

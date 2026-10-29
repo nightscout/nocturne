@@ -13,13 +13,9 @@
   } from "#lib/api/generated/nocturne-api-client.js";
   import { indexBy } from "#lib/utils/collections.js";
   import { time } from "#lib/utils/formatting.js";
-  import type { ChartDataEngine } from "#lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.js";
+  import type { ChartDataView } from "@nocturne/charts";
   import GlucoseChartShell from "#lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
-  import GlucoseTrack from "#lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
-  import BasalTrack from "#lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte";
-  import IobCobTrack from "#lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
-  import ThresholdRules from "#lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
-  import ChartTooltip from "#lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
+  import { GlucoseTrack, BasalTrack, IobCobTrack, ThresholdRules, ChartTooltip } from "@nocturne/charts";
   import { severityVar } from "./severity";
   import { severityLabel } from "./severityLabel.svelte";
   import ReplayOverlay from "./ReplayOverlay.svelte";
@@ -42,7 +38,7 @@
     chartEngine: (options: {
       range: { from: Date; to: Date };
       onDataReady: () => void;
-    }) => ChartDataEngine;
+    }) => ChartDataView;
     onSelectionChange?: (domain: [Date, Date] | null) => void;
     /** Draw glucose and only the series the rules read, rather than every series. */
     seriesFromRules?: boolean;

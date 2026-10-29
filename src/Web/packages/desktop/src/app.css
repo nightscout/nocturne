@@ -1,2 +1,3 @@
 @import "@nocturne/ui/theme.css";
+@import "@nocturne/charts/themes/nocturne.css";
 @source "../node_modules/@nocturne/ui/src";

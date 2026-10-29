@@ -8,7 +8,7 @@
   import { scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3-shape";
   import { ClusterConfidence } from "#lib/api/index.js";
-  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { patternClass } from "@nocturne/charts/core";
   import type { DayBucket } from "./buckets";
   import { tenantChartThresholds } from "#lib/stores/realtime-store.svelte.js";
   import { confidenceKey } from "./format";

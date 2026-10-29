@@ -6,7 +6,7 @@
 <script lang="ts" generics="S extends object">
   import { Area, Spline } from "layerchart";
   import type { LoopAnalysisAggregate } from "#lib/api/index.js";
-  import { patternClass } from "#lib/components/charts/print/chart-print-patterns.js";
+  import { patternClass } from "@nocturne/charts/core";
   import { aggregateRuns, type AggregatePoint } from "./daily-profile-view";
 
   interface Props {

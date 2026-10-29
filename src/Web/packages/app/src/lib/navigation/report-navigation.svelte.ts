@@ -25,7 +25,7 @@ import Syringe from "@lucide/svelte/icons/syringe";
 import Utensils from "@lucide/svelte/icons/utensils";
 import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
 import Target from "@lucide/svelte/icons/target";
-import SiteChangeIcon from "#lib/components/icons/SiteChangeIcon.svelte";
+import { SiteChangeIcon } from "@nocturne/charts/icons";
 import { satisfiesAllScopes } from "#lib/authorization/scopes.js";
 
 export interface ReportItem {
