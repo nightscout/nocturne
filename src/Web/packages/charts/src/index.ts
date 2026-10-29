@@ -37,3 +37,7 @@ export { default as BgCheckMarkers } from "./markers/BgCheckMarkers.svelte";
 export * from "./print/index.js";
 export * from "./icons/index.js";
 
+
+export { default as TimeSeriesChart } from "./report/TimeSeriesChart.svelte";
+export { default as StatTiles } from "./report/StatTiles.svelte";
+export { default as DataTable } from "./report/DataTable.svelte";

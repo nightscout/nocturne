@@ -22,3 +22,4 @@ export * from "./view/glucose-gradient-stops.js";
 export * from "./view/plot-padding.js";
 export * from "./view/profile-activation.js";
 export * from "./view/proximity.js";
+export * from "./report/types.js";
