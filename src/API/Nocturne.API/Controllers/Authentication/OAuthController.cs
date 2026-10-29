@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Extensions;
+using Nocturne.API.Mcp;
 using Nocturne.API.Models.OAuth;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Docs;
@@ -96,6 +97,9 @@ public class OAuthController : ControllerBase
     /// <param name="state">Optional state value passed back to the redirect URI.</param>
     /// <param name="code_challenge">PKCE code challenge (required).</param>
     /// <param name="code_challenge_method">Must be <c>S256</c>.</param>
+    /// <param name="resource">RFC 8707 resource indicator. An MCP client names this host's
+    /// <c>/mcp</c> endpoint here, and the consent page then says that what it reads goes to the
+    /// assistant's provider.</param>
     /// <returns>Redirect to the consent page, or directly issues an authorization code if a valid grant already covers all requested scopes.</returns>
     [HttpGet("authorize")]
     [AllowAnonymous]
@@ -108,7 +112,8 @@ public class OAuthController : ControllerBase
         [FromQuery] string scope,
         [FromQuery] string? state = null,
         [FromQuery] string? code_challenge = null,
-        [FromQuery] string? code_challenge_method = null
+        [FromQuery] string? code_challenge_method = null,
+        [FromQuery] string? resource = null
     )
     {
         // Validate response_type
@@ -216,7 +221,9 @@ public class OAuthController : ControllerBase
         var existingScopeString = existingGrant != null
             ? string.Join(" ", existingGrant.Scopes)
             : null;
-        var consentUrl = BuildConsentUrl(client_id, redirect_uri, scope!, state, code_challenge, existingScopeString);
+        var consentUrl = BuildConsentUrl(
+            client_id, redirect_uri, scope!, state, code_challenge, existingScopeString,
+            forAssistant: NamesThisMcpServer(resource));
         return Redirect(consentUrl);
     }
 
@@ -747,7 +754,8 @@ public class OAuthController : ControllerBase
         string scope,
         string? state,
         string codeChallenge,
-        string? existingScopes = null
+        string? existingScopes = null,
+        bool forAssistant = false
     )
     {
         var qs = $"client_id={Uri.EscapeDataString(clientId)}" +
@@ -765,8 +773,25 @@ public class OAuthController : ControllerBase
             qs += $"&existing_scopes={Uri.EscapeDataString(existingScopes)}";
         }
 
+        if (forAssistant)
+        {
+            qs += "&mcp=1";
+        }
+
         return $"/oauth/consent?{qs}";
     }
+
+    /// <summary>
+    /// Whether an RFC 8707 resource indicator names this host's MCP endpoint. The indicator is the
+    /// client's own claim, as everything about an anonymously registered client is, so it decides
+    /// only what the consent page says, never what is granted.
+    /// </summary>
+    private bool NamesThisMcpServer(string? resource) =>
+        !string.IsNullOrEmpty(resource)
+        && string.Equals(
+            resource.TrimEnd('/'),
+            McpAccessGateMiddleware.ResourceUrl(Request),
+            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// List all active grants for the authenticated user.

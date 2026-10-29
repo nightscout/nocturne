@@ -42,9 +42,10 @@ public class ClientAddressPolicyCoverageTests
         var applied = AppliedPolicies();
 
         ClientAddressPolicyNames()
-            // The documentation surface is mapped rather than a controller action, so it carries
-            // its policy through RequireRateLimiting in Program.cs.
-            .Where(policy => policy != ServiceRegistrationExtensions.DocsRateLimitPolicy)
+            // The documentation surface and /mcp are mapped rather than controller actions, so
+            // they carry their policies through RequireRateLimiting.
+            .Where(policy => policy != ServiceRegistrationExtensions.DocsRateLimitPolicy
+                && policy != ServiceRegistrationExtensions.McpRateLimitPolicy)
             .Except(applied)
             .Should().BeEmpty("a policy nothing applies is dead configuration");
     }

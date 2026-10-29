@@ -115,6 +115,11 @@ public static class ServiceRegistrationExtensions
     public const string ConnectorVerifyRateLimitPolicy = "connector-verify";
 
     /// <summary>
+    /// Rate-limiting policy for <c>/mcp</c>, which is mapped rather than a controller action.
+    /// </summary>
+    public const string McpRateLimitPolicy = "mcp";
+
+    /// <summary>
     /// The rate-limiting policies partitioned on the calling client, with the ceiling and window
     /// each applies. Held as one table so all of them resolve their partition through
     /// <see cref="ClientRateLimitKey"/> and the trust decision behind a forwarded address is taken
@@ -189,6 +194,10 @@ public static class ServiceRegistrationExtensions
         // ScalarAuthProvider.MaxRedirectUris entries, and both the tenant resolution and the
         // client id are cached, so a flood mostly costs the page render.
         (DocsRateLimitPolicy, 30, TimeSpan.FromMinutes(1)),
+        // An assistant answering one question makes a handful of tool calls, and each chart call
+        // runs the dashboard's IOB/COB pipeline. Keyed on the address because the limiter runs
+        // before the OAuth client is known.
+        (McpRateLimitPolicy, 120, TimeSpan.FromMinutes(1)),
     ];
 
     /// <summary>
