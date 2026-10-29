@@ -22,6 +22,7 @@
   import { createLegendState } from "./legend-state.svelte.js";
   import { BasalDeliveryOrigin } from "./enums.js";
   import type { ChartInspector, LegendState } from "./context.svelte.js";
+  import type { LegendToggle } from "./options.js";
   import type { ChartDataView } from "./view/chart-data-view.svelte.js";
   import type { PlotPadding } from "./view/plot-padding.js";
   import type { ChartFormat, GlucoseUnits } from "./format.js";
@@ -35,6 +36,8 @@
     format: ChartFormat;
     /** The legend's toggles; the chart keeps its own when none is given. */
     legend?: LegendState;
+    /** Legend toggles to leave out, for tracks the host has no data for. */
+    omittedTracks?: readonly LegendToggle[];
     appearance?: GlucoseLineAppearance;
     /** Forecasts draw only when given and `show` is true. */
     predictions?: PredictionOptions;
@@ -65,6 +68,7 @@
     labels,
     format,
     legend: legendProp,
+    omittedTracks = [],
     appearance = {},
     predictions,
     printing = false,
@@ -145,6 +149,7 @@
 {@render belowPlot?.()}
 
 <ChartLegend
+  omitted={omittedTracks}
   {glucoseUnits}
   {labels}
   {printing}

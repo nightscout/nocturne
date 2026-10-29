@@ -26,6 +26,10 @@ internal static class GlucoseSummary
     public static IReadOnlyList<string> OmittedTracks(Func<string, bool> hasScope) =>
         [.. TrackScopes.Where(t => !hasScope(t.Scope)).Select(t => t.Track)];
 
+    /// <summary>The scopes behind <see cref="OmittedTracks"/>, for the view's legend.</summary>
+    public static IReadOnlyList<string> OmittedScopes(Func<string, bool> hasScope) =>
+        [.. TrackScopes.Where(t => !hasScope(t.Scope)).Select(t => t.Scope)];
+
     public static string Build(
         DashboardChartData data,
         bool useMmol,

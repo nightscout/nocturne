@@ -13,7 +13,7 @@ const structuredContent = {
   kind: "glucose",
   units: "mg/dl",
   window: { from, to: from + 3 * 60 * MINUTE },
-  omittedTracks: ["heart rate"],
+  omittedScopes: ["heartrate.read"],
   data: {
     glucoseData: Array.from({ length: readings }, (_, i) => ({
       time: from + i * 5 * MINUTE,
@@ -35,6 +35,26 @@ describe("ReportView", () => {
     await expect
       .poll(() => plot.element().querySelectorAll("circle").length)
       .toBeGreaterThanOrEqual(readings);
+  });
+
+  it("leaves out the legend toggles of tracks the token could not read", async () => {
+    render(ReportView, {
+      result: { structuredContent: { ...structuredContent, omittedScopes: ["treatments.read", "therapy.read"] } },
+      locale: "en-US",
+    });
+
+    await expect.element(page.getByTestId("glucose-plot")).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "IOB" })).not.toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Carbs" })).not.toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Profile" })).not.toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Activity" })).toBeInTheDocument();
+  });
+
+  it("keeps every toggle when nothing was left out", async () => {
+    render(ReportView, { result: { structuredContent }, locale: "en-US" });
+
+    await expect.element(page.getByRole("button", { name: "IOB" })).toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Profile" })).toBeInTheDocument();
   });
 
   it("waits for the result before drawing", async () => {

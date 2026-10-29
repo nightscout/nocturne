@@ -6,7 +6,7 @@
   import { GlucoseChart } from "@nocturne/charts";
   import { transformChartData } from "@nocturne/charts/core";
   import { chartLabels } from "./labels.js";
-  import { readGlucoseReport } from "./payload.js";
+  import { omittedToggles, readGlucoseReport } from "./payload.js";
 
   interface Props {
     /** The tool result; null until the host sends it. */
@@ -19,6 +19,7 @@
 
   const report = $derived(result ? readGlucoseReport(result.structuredContent) : null);
   const data = $derived(report ? transformChartData(report.data) : null);
+  const omittedTracks = $derived(report ? omittedToggles(report.omittedScopes) : []);
   const format = $derived({
     locale,
     hour12: new Intl.DateTimeFormat(locale, { hour: "numeric" }).resolvedOptions().hour12 ?? false,
@@ -41,6 +42,7 @@
       labels={chartLabels}
       {format}
       heightClass="h-[420px] w-full"
+      {omittedTracks}
     />
   {/if}
 </main>

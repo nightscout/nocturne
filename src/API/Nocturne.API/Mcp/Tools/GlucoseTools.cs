@@ -74,7 +74,7 @@ internal sealed class GlucoseTools
                     kind = "glucose",
                     units = useMmol ? "mmol" : "mg/dl",
                     window = new { from = from.ToUnixTimeMilliseconds(), to = to.ToUnixTimeMilliseconds() },
-                    omittedTracks = omitted,
+                    omittedScopes = GlucoseSummary.OmittedScopes(http.HasScope),
                     data,
                 },
                 jsonOptions.Value.JsonSerializerOptions),

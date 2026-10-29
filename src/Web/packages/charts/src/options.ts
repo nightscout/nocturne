@@ -12,6 +12,18 @@ export interface GlucoseLineAppearance {
   areaOpacity?: number;
 }
 
+/** A legend toggle, by the key `LegendState.toggle` takes. */
+export type LegendToggle =
+  | "basal"
+  | "iob"
+  | "cob"
+  | "bolus"
+  | "carbs"
+  | "pumpModes"
+  | "overrideSpans"
+  | "profileSpans"
+  | "activitySpans";
+
 export interface PredictionOptions {
   show: boolean;
   displayMode: PredictionDisplayMode;

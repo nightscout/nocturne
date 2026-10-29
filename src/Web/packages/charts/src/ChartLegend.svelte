@@ -5,6 +5,7 @@
   import { cn } from "@nocturne/ui/utils";
   import { glucoseValue, type GlucoseUnits } from "./format.js";
   import type { ChartLabels } from "./labels.js";
+  import type { LegendToggle } from "./options.js";
   import SystemEventIcon from "./icons/SystemEventIcon.svelte";
   import PumpModeIcon from "./icons/PumpModeIcon.svelte";
   import SensorIcon from "./icons/SensorIcon.svelte";
@@ -97,9 +98,12 @@
     hasScheduledBasal?: boolean;
     targetLow?: number | null;
     targetHigh?: number | null;
+    /** Toggles left out, for tracks the host has no data for (e.g. a scope it was not granted). */
+    omitted?: readonly LegendToggle[];
   }
 
   let {
+    omitted = [],
     glucoseData,
     highThreshold,
     lowThreshold,
@@ -283,17 +287,27 @@
   {/if}
 
   <!-- Data toggles -->
-  {@render legendToggle(showBasal, onToggleBasal, labels.basal, basalIcon)}
+  {#if !omitted.includes("basal")}
+    {@render legendToggle(showBasal, onToggleBasal, labels.basal, basalIcon)}
+  {/if}
   {#if hasScheduledBasal}
     {@render printKey(scheduledBasalSwatch, labels.scheduledBasal)}
   {/if}
   {#if hasUnreportedBasal}
     {@render printKey(hatchSwatch, labels.notReportedByPump)}
   {/if}
-  {@render legendToggle(showIob, onToggleIob, labels.iob, iobIcon)}
-  {@render legendToggle(showCob, onToggleCob, labels.cob, cobIcon)}
-  {@render legendToggle(showBolus, onToggleBolus, labels.bolus, bolusIconSnippet)}
-  {@render legendToggle(showCarbs, onToggleCarbs, labels.carbs, carbsIconSnippet)}
+  {#if !omitted.includes("iob")}
+    {@render legendToggle(showIob, onToggleIob, labels.iob, iobIcon)}
+  {/if}
+  {#if !omitted.includes("cob")}
+    {@render legendToggle(showCob, onToggleCob, labels.cob, cobIcon)}
+  {/if}
+  {#if !omitted.includes("bolus")}
+    {@render legendToggle(showBolus, onToggleBolus, labels.bolus, bolusIconSnippet)}
+  {/if}
+  {#if !omitted.includes("carbs")}
+    {@render legendToggle(showCarbs, onToggleCarbs, labels.carbs, carbsIconSnippet)}
+  {/if}
 
   <!-- Device event legend items (only show if present in current view) -->
   {#if deviceEventMarkers.some((m) => m.eventType === DeviceEventType.SensorStart || m.eventType === DeviceEventType.SensorChange)}
@@ -310,6 +324,7 @@
   {/if}
 
   <!-- Pump mode toggle with expandable dropdown -->
+  {#if !omitted.includes("pumpModes")}
   <div class={cn("relative flex items-center", !showPumpModes && "print:hidden")}>
     <!-- eslint-disable-next-line no-restricted-syntax -- chart legend series toggle -->
     <button
@@ -360,8 +375,9 @@
       </div>
     {/if}
   </div>
+  {/if}
 
-  {#if showPumpModes && uniquePumpModes.length > 1}
+  {#if showPumpModes && uniquePumpModes.length > 1 && !omitted.includes("pumpModes")}
     {#each uniquePumpModes.filter((m) => m !== (currentPumpMode ?? PumpModeState.Automatic)) as state (state)}
       {@const span = pumpModeSpans.find((s) => s.state === state)}
       {#if span}
@@ -427,22 +443,13 @@
   {/if}
 
   <!-- Override, Profile, Activity spans toggles -->
-  {@render legendToggle(
-    showOverrideSpans,
-    onToggleOverrideSpans,
-    labels.overrides,
-    overrideIcon
-  )}
-  {@render legendToggle(
-    showProfileSpans,
-    onToggleProfileSpans,
-    labels.profile,
-    profileIcon
-  )}
-  {@render legendToggle(
-    showActivitySpans,
-    onToggleActivitySpans,
-    labels.activity,
-    activityIcon
-  )}
+  {#if !omitted.includes("overrideSpans")}
+    {@render legendToggle(showOverrideSpans, onToggleOverrideSpans, labels.overrides, overrideIcon)}
+  {/if}
+  {#if !omitted.includes("profileSpans")}
+    {@render legendToggle(showProfileSpans, onToggleProfileSpans, labels.profile, profileIcon)}
+  {/if}
+  {#if !omitted.includes("activitySpans")}
+    {@render legendToggle(showActivitySpans, onToggleActivitySpans, labels.activity, activityIcon)}
+  {/if}
 </div>
