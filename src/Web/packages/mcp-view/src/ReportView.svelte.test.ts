@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 import "./app.css";
 import ReportView from "./ReportView.svelte";
+import { cohortBands } from "@nocturne/charts/core";
 
 const from = Date.UTC(2026, 9, 29, 6);
 const MINUTE = 60 * 1000;
@@ -261,6 +262,23 @@ describe("ReportView", () => {
     expect([...series].map((s) => s.getAttribute("data-series"))).toEqual(["Cohort 1: Meal", "Cohort 2: CorrectionBolus"]);
     await expect.poll(() => series[1].querySelectorAll("path").length).toBeGreaterThanOrEqual(3);
     await expect.element(page.getByText("Cohort 2: CorrectionBolus")).toBeVisible();
+  });
+
+  it("keeps a cohort's colour when another is off, and draws a comparison as its dashed overlay", async () => {
+    const comparison = slotRows("Cohort 2: CorrectionBolus (comparison)", 2, 20).map((r) => ({ ...r, range: "comparison" }));
+    const onlySecond = {
+      ...eventResult,
+      panels: [{ ...eventResult.panels[0], rows: [...slotRows("Cohort 2: CorrectionBolus", 2, 40), ...comparison] }],
+    };
+    render(ReportView, { result: { structuredContent: onlySecond }, locale: "en-US" });
+
+    const chart = page.getByTestId("report-range-bands");
+    await expect.element(chart).toBeVisible();
+    const series = [...chart.element().querySelectorAll("[data-testid=report-range-bands-series]")];
+    expect(series.map((s) => s.getAttribute("data-series"))).toEqual(["Cohort 2: CorrectionBolus"]);
+    expect(series[0].getAttribute("data-color")).toBe(cohortBands(1).median);
+    await expect.poll(() => series[0].querySelectorAll("path[stroke-dasharray]").length).toBeGreaterThanOrEqual(1);
+    await expect.element(page.getByText("Comparison range")).toBeVisible();
   });
 
   it("offers no host control when the host granted no call", async () => {

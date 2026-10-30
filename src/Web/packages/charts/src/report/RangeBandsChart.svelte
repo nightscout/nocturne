@@ -1,8 +1,9 @@
 <!--
   Percentile bands under a median line from a report panel's rows, one set per value of the series
   field, over minutes from an event or the time of day. Rows are laid out in slots by their x
-  value, so every series shares one axis; a missing value is a gap. Each series takes a cohort
-  colour, in order, as the Meals & events report colours its cohorts.
+  value, so every series shares one axis; a missing value is a gap. A row's numeric `cohort` field
+  picks its colour, so a cohort keeps its colour when another is switched off; a row whose `range`
+  field is "comparison" is drawn as its cohort's dashed overlay, not as a set of its own.
 -->
 <script lang="ts">
   import { Axis, Chart, Rule, Svg } from "layerchart";
@@ -58,24 +59,36 @@
     return { p25: num(row, edges[0]?.name), p50, p75: num(row, edges[1]?.name) };
   }
 
+  type Group = { key: string; name: string; colorIndex: number; slots: Slot[]; comparison: Slot[] | null };
+
   const groups = $derived.by(() => {
-    const found: { name: string; slots: Slot[] }[] = [];
+    const found: Group[] = [];
+    const empty = () => xs.map((): Slot => ({ aggregate: null }));
     for (const row of panel.rows) {
       const x = num(row, xName);
       if (x === undefined) continue;
+      const cohort = num(row, "cohort");
       const name = seriesName ? String(row[seriesName] ?? "") : (median?.label ?? "");
-      let group = found.find((g) => g.name === name);
+      const key = cohort !== undefined ? `cohort-${cohort}` : name;
+      let group = found.find((g) => g.key === key);
       if (!group) {
-        group = { name, slots: xs.map(() => ({ aggregate: null })) };
+        group = { key, name, colorIndex: cohort !== undefined ? cohort - 1 : found.length, slots: empty(), comparison: null };
         found.push(group);
       }
-      group.slots[xs.indexOf(x)] = { aggregate: aggregateOf(row) };
+      if (row.range === "comparison") {
+        group.comparison ??= empty();
+        group.comparison[xs.indexOf(x)] = { aggregate: aggregateOf(row) };
+      } else {
+        group.name = name;
+        group.slots[xs.indexOf(x)] = { aggregate: aggregateOf(row) };
+      }
     }
-    return found.map((group, i): { name: string; slots: Slot[]; colors: BandColors } => ({
+    return found.map((group): Group & { colors: BandColors } => ({
       ...group,
-      colors: found.length === 1 && median?.color?.startsWith("glucose") ? GLUCOSE_BANDS : cohortBands(i),
+      colors: found.length === 1 && median?.color?.startsWith("glucose") ? GLUCOSE_BANDS : cohortBands(group.colorIndex),
     }));
   });
+  const hasComparison = $derived(groups.some((g) => g.comparison));
 
   const yDomain = $derived.by((): [number, number] => {
     const values = groups.flatMap((g) =>
@@ -122,10 +135,12 @@
         {#if yDomain[0] < 0}
           <Rule y={0} class="stroke-foreground/40" />
         {/if}
-        {#each groups as group (group.name)}
-          <g data-testid="report-range-bands-series" data-series={group.name}>
+        {#each groups as group (group.key)}
+          <g data-testid="report-range-bands-series" data-series={group.name} data-color={group.colors.median}>
             <PercentileBands
               slots={group.slots}
+              comparison={group.comparison}
+              comparisonColor={group.colors.median}
               {pick}
               outerColor={group.colors.outer}
               innerColor={group.colors.inner}
@@ -145,12 +160,18 @@
     </Chart>
   </div>
   <ul class="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground" aria-label="Series">
-    {#each groups as group (group.name)}
+    {#each groups as group (group.key)}
       <li class="flex items-center gap-1">
         <span class="inline-block size-2.5 rounded-full bg-(--swatch)" style:--swatch={group.colors.median}></span>
         {group.name}
       </li>
     {/each}
+    {#if hasComparison}
+      <li class="flex items-center gap-1">
+        <span class="inline-block w-4 border-t-2 border-dashed border-muted-foreground"></span>
+        Comparison range
+      </li>
+    {/if}
     <li>{median.label}{unit}</li>
   </ul>
 {/if}
