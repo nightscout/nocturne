@@ -347,7 +347,14 @@ else
 
 // Configure middleware pipeline
 app.UseSecurityHeaders();
-app.UseExceptionHandler();
+// A request Kestrel refuses while the action reads it (a body over [RequestSizeLimit]) keeps its
+// own status, 413 say, rather than reading as a server failure.
+app.UseExceptionHandler(new ExceptionHandlerOptions
+{
+    StatusCodeSelector = exception => exception is BadHttpRequestException refused
+        ? refused.StatusCode
+        : StatusCodes.Status500InternalServerError,
+});
 app.UseStatusCodePages();
 // Documentation paths get the any-origin policy, foreign origins on the legacy API get
 // LegacyApiCorsPolicy when the instance enables cors, everything else the credentialed default.

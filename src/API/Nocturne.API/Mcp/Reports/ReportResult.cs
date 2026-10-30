@@ -32,6 +32,13 @@ internal sealed record ReportResult
     public required string Summary { get; init; }
 
     public IReadOnlyList<string> Warnings { get; init; } = [];
+
+    /// <summary>
+    /// The web app's page that opens this spec (<see cref="ReportSpecLink"/>), where a member can
+    /// run and save it; null when the spec is too large for a link, and the panels' own
+    /// <see cref="ReportPanelResult.Link"/>s are left.
+    /// </summary>
+    public string? OpenUrl { get; init; }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<ReportPanelStatus>))]

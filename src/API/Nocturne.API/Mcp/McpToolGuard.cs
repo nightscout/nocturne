@@ -72,13 +72,35 @@ internal static class McpToolGuard
             }
         };
 
-    private static async Task AuditAsync(
+    private static Task AuditAsync(
         IServiceProvider services,
         HttpContext httpContext,
         McpServerTool? tool,
         CallToolRequestParams? call,
         CallToolResult? result,
         bool invalidArguments,
+        CancellationToken cancellationToken) =>
+        WriteReadAuditAsync(services, httpContext, call?.Name, tenantId => BuildAuditEntry(
+            tenantId,
+            call,
+            DeclaredArguments(tool),
+            result,
+            invalidArguments,
+            services.GetRequiredService<McpToolReadLog>(),
+            services.GetRequiredService<IAuditContext>(),
+            httpContext,
+            DateTime.UtcNow), cancellationToken);
+
+    /// <summary>
+    /// Enqueues the read-audit row <paramref name="build"/> makes when the request's tenant audits
+    /// reads. Shared by tool calls and the web app's custom report runs, which MVC's read filter does
+    /// not see (a POST).
+    /// </summary>
+    internal static async Task WriteReadAuditAsync(
+        IServiceProvider services,
+        HttpContext httpContext,
+        string? what,
+        Func<Guid, ReadAccessLogEntity> build,
         CancellationToken cancellationToken)
     {
         if (httpContext.GetTenantContext() is not { } tenant)
@@ -94,20 +116,11 @@ internal static class McpToolGuard
         catch (Exception ex) when (ex is DbException or InvalidOperationException or TimeoutException)
         {
             services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(McpToolGuard))
-                .LogWarning(ex, "Could not read the read-audit setting; the MCP call {Tool} is not audited", call?.Name);
+                .LogWarning(ex, "Could not read the read-audit setting; the report read {What} is not audited", what);
             return;
         }
 
-        services.GetRequiredService<ReadAccessLogWriter>().Enqueue(BuildAuditEntry(
-            tenant.TenantId,
-            call,
-            DeclaredArguments(tool),
-            result,
-            invalidArguments,
-            services.GetRequiredService<McpToolReadLog>(),
-            services.GetRequiredService<IAuditContext>(),
-            httpContext,
-            DateTime.UtcNow));
+        services.GetRequiredService<ReadAccessLogWriter>().Enqueue(build(tenant.TenantId));
     }
 
     /// <summary>The argument names a tool's input schema declares.</summary>
@@ -127,6 +140,28 @@ internal static class McpToolGuard
         McpToolReadLog readLog,
         IAuditContext audit,
         HttpContext httpContext,
+        DateTime now) =>
+        BuildReadEntry(
+            tenantId,
+            $"MCP {call?.Name}",
+            SanitizeArguments(call?.Arguments, declaredArguments),
+            invalidArguments ? StatusCodes.Status400BadRequest
+                : result is null || result.IsError == true ? StatusCodes.Status500InternalServerError
+                : StatusCodes.Status200OK,
+            readLog,
+            audit,
+            httpContext,
+            now);
+
+    /// <summary>A read-audit row for a report read: the categories and count <paramref name="readLog"/> holds.</summary>
+    internal static ReadAccessLogEntity BuildReadEntry(
+        Guid tenantId,
+        string endpoint,
+        string? queryParametersJson,
+        int statusCode,
+        McpToolReadLog readLog,
+        IAuditContext audit,
+        HttpContext httpContext,
         DateTime now)
     {
         var userAgent = httpContext.Request.Headers.UserAgent.ToString();
@@ -142,14 +177,12 @@ internal static class McpToolGuard
             CredentialFingerprint = httpContext.GetAuthContext()?.CredentialFingerprint,
             IpAddress = audit.IpAddress,
             UserAgent = string.IsNullOrEmpty(userAgent) ? null : userAgent,
-            Endpoint = $"MCP {call?.Name}",
+            Endpoint = endpoint,
             EntityType = readLog.Datasets.Count == 0 ? null : string.Join(',', readLog.Datasets),
             RecordCount = readLog.RecordCount,
-            QueryParametersJson = SanitizeArguments(call?.Arguments, declaredArguments),
+            QueryParametersJson = queryParametersJson,
             TraceId = audit.TraceId,
-            StatusCode = invalidArguments ? StatusCodes.Status400BadRequest
-                : result is null || result.IsError == true ? StatusCodes.Status500InternalServerError
-                : StatusCodes.Status200OK,
+            StatusCode = statusCode,
             CreatedAt = now,
         };
     }

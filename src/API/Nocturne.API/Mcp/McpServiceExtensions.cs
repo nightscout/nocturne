@@ -59,6 +59,8 @@ internal static class McpServiceExtensions
         services.AddSingleton<ReportSpecValidator>();
         services.AddSingleton<ReportSpecRunner>();
         services.AddScoped<ReportRenderer>();
+        services.AddScoped<IReportSpecStore, ReportSpecStore>();
+        services.AddScoped<ICustomReportRunner, CustomReportRunner>();
         services.AddSingleton(ReportTools.Create);
         services.AddSingleton(ReportTools.CreateRefine);
     }

@@ -24,6 +24,7 @@ using Nocturne.API.Services.SetupHub.Items;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Clinical.Treatments;
 using Nocturne.Core.Contracts.Content;
+using Nocturne.Core.Contracts.Reports;
 using Nocturne.Core.Contracts.Translations;
 using Nocturne.API.Services.Timezones;
 using Nocturne.API.Services.ChartData;
@@ -972,6 +973,7 @@ public static class ServiceRegistrationExtensions
 
         // Manually-entered lab results (outside the V4 sync/dedup family)
         services.AddScoped<ILabHbA1cResultRepository, LabHbA1cResultRepository>();
+        services.AddScoped<IReportSpecRepository, ReportSpecRepository>();
 
         // V4 Snapshot Repositories
         services.AddScoped<IApsSnapshotRepository, ApsSnapshotRepository>();

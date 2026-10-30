@@ -11,8 +11,9 @@ using MvcJsonOptions = Microsoft.AspNetCore.Mvc.JsonOptions;
 namespace Nocturne.API.Mcp.Reports;
 
 /// <summary>
-/// Runs a normalised spec for the request's caller and shapes the tool result: the joined
-/// summaries as text, the <see cref="ReportResult"/> as <c>structuredContent</c>.
+/// Runs a normalised spec for the request's caller: its scopes, its history clamp, its reader. The
+/// MCP tools shape the result as a tool result (<see cref="RenderAsync"/>); the web app's custom
+/// reports take the <see cref="ReportResult"/> itself (<see cref="RunAsync"/>).
 /// </summary>
 internal sealed class ReportRenderer(
     ReportSpecRunner runner,
@@ -24,7 +25,27 @@ internal sealed class ReportRenderer(
     TenantClockResolver tenantClock,
     IOptions<MvcJsonOptions> jsonOptions)
 {
+    /// <summary>The joined summaries as text, the <see cref="ReportResult"/> as <c>structuredContent</c>.</summary>
     public async Task<(CallToolResult Result, ReportResult Report)> RenderAsync(ReportSpec spec, CancellationToken cancellationToken)
+    {
+        var report = await RunAsync(spec, cancellationToken);
+
+        var text = new StringBuilder(report.Summary);
+        foreach (var warning in report.Warnings)
+            text.Append('\n').Append("Warning: ").Append(warning);
+
+        return (new CallToolResult
+        {
+            Content = [new TextContentBlock { Text = text.ToString() }],
+            StructuredContent = JsonSerializer.SerializeToElement(report, jsonOptions.Value.JsonSerializerOptions),
+        }, report);
+    }
+
+    /// <summary>
+    /// The report, with each panel's web report link and the link that opens the whole spec in the
+    /// web app (<see cref="ReportResult.OpenUrl"/>), both on the request's host.
+    /// </summary>
+    public async Task<ReportResult> RunAsync(ReportSpec spec, CancellationToken cancellationToken)
     {
         var http = httpContextAccessor.HttpContext
             ?? throw new InvalidOperationException("A report ran outside an HTTP request.");
@@ -37,24 +58,15 @@ internal sealed class ReportRenderer(
 
         var origin = $"{http.Request.PublicScheme()}://{http.Request.Host}";
         var zone = (await tenantClock.ResolveAsync(cancellationToken)).Zone?.Id;
-        report = report with
+        return report with
         {
             TimeZone = zone is null ? null
                 : TimeZoneInfo.TryConvertWindowsIdToIanaId(zone, out var iana) ? iana : zone,
             Panels = [.. report.Panels.Select((panel, i) => panel.Status == ReportPanelStatus.Ok
                 ? panel with { Link = ReportLinks.For(origin, spec.Panels[i], panel, zone) }
                 : panel)],
+            OpenUrl = ReportSpecLink.NewReportUrl(origin, spec, jsonOptions.Value.JsonSerializerOptions),
         };
-
-        var text = new StringBuilder(report.Summary);
-        foreach (var warning in report.Warnings)
-            text.Append('\n').Append("Warning: ").Append(warning);
-
-        return (new CallToolResult
-        {
-            Content = [new TextContentBlock { Text = text.ToString() }],
-            StructuredContent = JsonSerializer.SerializeToElement(report, jsonOptions.Value.JsonSerializerOptions),
-        }, report);
     }
 
     /// <summary>Whether the tenant shows glucose in mmol/L.</summary>

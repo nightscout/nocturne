@@ -209,6 +209,10 @@ public class V4WriteScopeGatingTests
             // caller's categories, asserted by AlertReplayReadScopeTests.
             ["AlertReplayController"] = NotDataCategory.ComputesAndReturns,
 
+            // A saved report spec names datasets, ranges and chart bindings, no readings, and the
+            // taxonomy has no reports.readwrite. Writes need reports.read and the member's own
+            // sign-in ([RequireInteractiveSession]); Run computes and returns, persisting nothing.
+            ["CustomReportsController"] = NotDataCategory.PresentationState,
             ["CoachMarkController"] = NotDataCategory.PresentationState,
             ["UserPreferencesController"] = NotDataCategory.PresentationState,
 
