@@ -27,7 +27,11 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         "Glucose readings over time, in the user's display unit and in mg/dL, with the trend arrow and the "
         + "target range at each reading. With treatments.read, also insulin on board, carbs on board and the "
         + "basal rate at each reading. Draw as time_series (lines), table, or glucose_chart (the full dashboard "
-        + "chart with boluses, carbs, basal, pump modes and profiles).";
+        + "chart with boluses, carbs, basal, pump modes and profiles). A time_series panel of at most 72 hours can "
+        + "draw bolus and carb markers on the line ('markers').";
+
+    /// <summary>The longest range a panel draws markers over: every marker is sent, as the dashboard chart sends them.</summary>
+    internal static readonly TimeSpan MarkerMaxRange = TimeSpan.FromHours(72);
 
     public Type ParametersType => typeof(GlucoseSeriesParameters);
 
@@ -89,6 +93,20 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         var p = (GlucoseSeriesParameters)parameters;
         if (p.IntervalMinutes is < 1 or > 60)
             yield return ("intervalMinutes", $"{p.IntervalMinutes} is out of range. Send 1 to 60.");
+        if (p.Markers is { } markers && markers.Distinct().Count() != markers.Count)
+            yield return ("markers", "A marker is named twice.");
+    }
+
+    public IEnumerable<(string Field, string Message)> ValidatePanel(ReportDatasetParameters parameters, ReportPrimitive primitive, TimeSpan span)
+    {
+        if (((GlucoseSeriesParameters)parameters).Markers is not { Count: > 0 })
+            yield break;
+        if (primitive != ReportPrimitive.TimeSeries)
+            yield return ("markers", $"Only a time_series panel draws markers. This panel is {primitive.WireName()}. Remove 'markers'.");
+        else if (span > MarkerMaxRange)
+            yield return ("markers",
+                $"Markers cover at most {ReportSpecValidator.Describe(MarkerMaxRange)}. This range is {ReportSpecValidator.Describe(span)}. "
+                + "Shorten the range, or remove 'markers'.");
     }
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
@@ -113,11 +131,12 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         {
             GlucoseTools.RecordReads(data, request.ReadLog);
         }
-        else
+        IReadOnlyList<ReportMarker> markers = chart ? [] : Markers(data, parameters.Markers);
+        if (!chart)
         {
             if (data.GlucoseData.Count > 0)
                 request.ReadLog.Record("glucose", data.GlucoseData.Count);
-            var series = data.IobSeries.Count + data.CobSeries.Count + data.BasalSeries.Count;
+            var series = data.IobSeries.Count + data.CobSeries.Count + data.BasalSeries.Count + markers.Count;
             if (treatments && series > 0)
                 request.ReadLog.Record("treatments", series);
         }
@@ -135,6 +154,8 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
             request.To,
             chart ? GlucoseSummary.OmittedTracks(request.HasScope) : null,
             chart ? null : [.. omitted.Select(o => o.Field)]);
+        if (parameters.Markers is { Count: > 0 } asked)
+            summary += '\n' + MarkerNote(asked, markers, treatments);
 
         var thresholds = GlucoseSummary.Thresholds(data.Thresholds);
         var sourceRows = data.GlucoseData.Count;
@@ -158,6 +179,7 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
                 GlucoseUnits.Scale(thresholds.VeryHigh, request.UseMmol),
                 request.UseMmol ? GlucoseConstants.MgdlPerMmol : 1),
             Chart = chart ? data : null,
+            Markers = markers,
             Resolution = new ReportResolution(
                 parameters.IntervalMinutes,
                 chart ? (chartInterval > 0 ? chartInterval : parameters.IntervalMinutes) : interval,
@@ -165,6 +187,38 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
                 rows,
                 rows < sourceRows),
         };
+    }
+
+    /// <summary>
+    /// The dashboard's bolus and carb markers of the kinds asked for. The chart payload is already
+    /// redacted, so without treatments.read there are none.
+    /// </summary>
+    internal static IReadOnlyList<ReportMarker> Markers(DashboardChartData data, IReadOnlyList<ReportMarkerKind>? kinds)
+    {
+        if (kinds is not { Count: > 0 })
+            return [];
+        var markers = new List<ReportMarker>();
+        if (kinds.Contains(ReportMarkerKind.Bolus))
+            markers.AddRange(data.BolusMarkers.Select(b => new ReportMarker(
+                b.Time, ReportMarkerKind.Bolus, Math.Round(b.Insulin, 2), b.BolusType is BolusType.Smb or BolusType.AutomaticBolus)));
+        if (kinds.Contains(ReportMarkerKind.Carbs))
+            markers.AddRange(data.CarbMarkers.Select(c => new ReportMarker(c.Time, ReportMarkerKind.Carbs, Math.Round(c.Carbs, 1))));
+        return [.. markers.OrderBy(m => m.Time)];
+    }
+
+    internal static string MarkerNote(IReadOnlyList<ReportMarkerKind> asked, IReadOnlyList<ReportMarker> markers, bool treatments)
+    {
+        var words = asked.Select(k => k == ReportMarkerKind.Bolus ? "bolus" : "carbs").ToList();
+        if (!treatments)
+            return $"Markers omitted: {string.Join(", ", words)} (scope not granted: treatments.read).";
+        var boluses = markers.Count(m => m.Kind == ReportMarkerKind.Bolus);
+        var carbs = markers.Count(m => m.Kind == ReportMarkerKind.Carbs);
+        var parts = new List<string>();
+        if (asked.Contains(ReportMarkerKind.Bolus))
+            parts.Add($"{boluses} {(boluses == 1 ? "bolus" : "boluses")}");
+        if (asked.Contains(ReportMarkerKind.Carbs))
+            parts.Add($"{carbs} carb {(carbs == 1 ? "entry" : "entries")}");
+        return $"Markers drawn: {string.Join(", ", parts)}.";
     }
 
     /// <summary>

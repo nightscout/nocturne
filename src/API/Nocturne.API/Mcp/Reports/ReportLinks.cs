@@ -21,6 +21,10 @@ internal static class ReportLinks
             GlucoseDistributionByHourParameters => "/reports/glucose-distribution",
             GlucoseStatisticsParameters => "/reports/glucose-distribution",
             GlucoseSeriesParameters => "/reports/readings",
+            TreatmentsParameters => "/reports/treatments",
+            BasalDeliveryParameters => "/reports/basal-analysis",
+            DeviceStatusParameters => "/reports/battery",
+            GlucoseDistributionParameters => "/reports/agp",
             _ => null,
         };
         if (path is null)

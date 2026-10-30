@@ -41,6 +41,12 @@ internal enum ReportFieldKind
 /// <param name="Scope">The read scope it needs beyond the dataset's own, or null.</param>
 /// <param name="Color">The theme colour a line of it is drawn in.</param>
 /// <param name="GlucoseScale">Drawn on the glucose scale and coloured by the glucose thresholds.</param>
+/// <param name="Marker">Drawn on a time series as the dashboard's bolus or carb marker at each value, not as a line.</param>
+/// <param name="Step">The value holds until the next row, so a line of it is drawn as steps.</param>
+/// <param name="ColorField">
+/// The field each row carries its theme colour in, for a bar of this category; the runner sends it
+/// with the field, so a bar's colour is the data's, never the view's.
+/// </param>
 internal sealed record ReportField(
     string Name,
     string Label,
@@ -49,7 +55,10 @@ internal sealed record ReportField(
     string Description,
     string? Scope = null,
     ChartColor? Color = null,
-    bool GlucoseScale = false)
+    bool GlucoseScale = false,
+    ReportMarkerKind? Marker = null,
+    bool Step = false,
+    string? ColorField = null)
 {
     public const string GlucoseUnit = "glucose";
 
@@ -102,6 +111,9 @@ internal interface IReportDataset
     /// <summary>Errors in the parameters, as messages naming the parameter.</summary>
     IEnumerable<(string Field, string Message)> Validate(ReportDatasetParameters parameters);
 
+    /// <summary>Errors in parameters that depend on how the panel draws the dataset and over how long.</summary>
+    IEnumerable<(string Field, string Message)> ValidatePanel(ReportDatasetParameters parameters, ReportPrimitive primitive, TimeSpan span) => [];
+
     Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken);
 }
 
@@ -144,9 +156,16 @@ internal sealed record ReportDatasetOutput
 
     /// <summary>The range the dataset read, where it differs from the one asked for: whole local days, say.</summary>
     public ReportWindow? Window { get; init; }
+
+    /// <summary>Treatment markers to draw on a time series panel.</summary>
+    public IReadOnlyList<ReportMarker> Markers { get; init; } = [];
 }
 
 internal sealed record ReportOmittedField(string Field, string Scope);
+
+/// <summary>A treatment marker on a time series: when, which, and its amount (units of insulin, grams of carbs).</summary>
+/// <param name="Automatic">A bolus the algorithm gave, drawn outlined as the dashboard draws it.</param>
+internal sealed record ReportMarker(long Time, ReportMarkerKind Kind, double Amount, bool Automatic = false);
 
 /// <summary>How the rows were spaced: the interval asked for and the one the point budget allowed.</summary>
 internal sealed record ReportResolution(

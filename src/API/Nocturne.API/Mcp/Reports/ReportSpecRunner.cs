@@ -148,10 +148,16 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         bool useMmol)
     {
         var omitted = output.Omitted.Select(o => o.Field).ToHashSet(StringComparer.Ordinal);
+        var catalogue = dataset.FieldsFor(panel.Primitive);
         var bound = BoundFields(panel.Bindings!);
-        var fields = bound
+        // A bar category's colour travels with it, so the view colours the bar from the row.
+        var colours = bound
+            .Select(name => catalogue.Single(f => f.Name == name).ColorField)
+            .OfType<string>()
+            .Where(name => catalogue.Any(f => f.Name == name));
+        var fields = bound.Concat(colours).Distinct(StringComparer.Ordinal)
             .Where(name => !omitted.Contains(name))
-            .Select(name => dataset.Fields.Single(f => f.Name == name).ResolveUnit(useMmol))
+            .Select(name => catalogue.Single(f => f.Name == name).ResolveUnit(useMmol))
             .ToList();
         var names = fields.Select(f => f.Name).ToList();
 
@@ -172,6 +178,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Summary = output.Summary,
             Omitted = output.Omitted,
             Resolution = output.Resolution,
+            Markers = panel.Primitive == ReportPrimitive.TimeSeries ? output.Markers : [],
         };
     }
 

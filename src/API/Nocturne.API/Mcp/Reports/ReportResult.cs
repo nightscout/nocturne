@@ -100,6 +100,9 @@ internal sealed record ReportPanelResult
 
     public ReportResolution? Resolution { get; init; }
 
+    /// <summary>Treatment markers the panel's time series draws, read under the token's scopes.</summary>
+    public IReadOnlyList<ReportMarker> Markers { get; init; } = [];
+
     /// <summary>The web report that shows this panel's data, with its range and parameters; null where there is none.</summary>
     public string? Link { get; init; }
 }

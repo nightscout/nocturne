@@ -8,13 +8,15 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Mcp.Reports.Datasets;
 
 /// <summary>
 /// One row of glucose statistics over the range, computed as <c>GET /api/v4/statistics/range-analytics</c>
 /// computes them: the canonical stream, <see cref="IStatisticsService.AnalyzeGlucoseDataExtended"/>,
-/// the population's target range.
+/// the population's target range. With treatments.read, the insulin and carbs per day as
+/// <c>GET /api/v4/statistics/insulin-delivery-stats</c> computes them.
 /// </summary>
 internal sealed class GlucoseStatisticsDataset : IReportDataset
 {
@@ -26,6 +28,7 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
         "Glucose statistics over the range, in one row: time in range, below range and above range "
         + "(percent of the time the readings cover), mean, standard deviation, coefficient of variation, "
         + "GMI, the number of readings and the target range the time in range was measured against. "
+        + "With treatments.read, also insulin per day, the basal share of it and carbs per day. "
         + "The same figures as the Nocturne reports. Draw as stat_tiles or table.";
 
     public Type ParametersType => typeof(GlucoseStatisticsParameters);
@@ -49,7 +52,17 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
             "The lower limit of the target range the time in range was measured against."),
         new("targetHigh", "Range high", ReportFieldKind.Number, ReportField.GlucoseUnit,
             "The upper limit of the target range the time in range was measured against."),
+        new("tdd", "Insulin per day", ReportFieldKind.Number, "U",
+            "Total daily dose: bolus and basal insulin over the range, per day, as the Nocturne insulin delivery report computes it.",
+            Scope.TreatmentsRead, ChartColor.InsulinBolus),
+        new("basalPercent", "Basal share", ReportFieldKind.Percent, "%", "Basal insulin as a percent of all insulin delivered.",
+            Scope.TreatmentsRead, ChartColor.InsulinBasal),
+        new("carbsPerDay", "Carbs per day", ReportFieldKind.Number, "g", "Carbs entered over the range, per day.",
+            Scope.TreatmentsRead, ChartColor.Carbs),
     ];
+
+    /// <summary>The fields read from insulin and carb records, left out without <see cref="Scope.TreatmentsRead"/>.</summary>
+    internal static readonly IReadOnlyList<string> InsulinFields = ["tdd", "basalPercent", "carbsPerDay"];
 
     public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.StatTiles, ReportPrimitive.Table];
 
@@ -65,6 +78,7 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
         {
             ["timeInRangePercent"] = 72.4, ["timeBelow"] = 2.1, ["timeAbove"] = 25.5, ["mean"] = 151.0,
             ["gmi"] = 6.9, ["cv"] = 33.2, ["sd"] = 50.0, ["readings"] = 4012, ["targetLow"] = 70.0, ["targetHigh"] = 180.0,
+            ["tdd"] = 42.5, ["basalPercent"] = 48.0, ["carbsPerDay"] = 165.0,
         },
     ];
 
@@ -72,20 +86,7 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
-        var services = request.Services;
-        var from = request.From.UtcDateTime;
-        var to = request.To.UtcDateTime;
-
-        var raw = await services.GetRequiredService<ISensorGlucoseRepository>().GetForAnalyticsAsync(
-            from, to, null, null, int.MaxValue, descending: false, ct: cancellationToken);
-        var entries = await services.GetRequiredService<ICanonicalGlucoseService>().SelectAsync(raw.ToList(), cancellationToken);
-        var clock = await services.GetRequiredService<TenantClockResolver>().ResolveAsync(cancellationToken);
-
-        var analysis = services.GetRequiredService<IStatisticsService>().AnalyzeGlucoseDataExtended(
-            entries, [], [], StatisticsService.WindowDays(from, to), Population, timeZone: clock.Zone);
-
-        if (entries.Count > 0)
-            request.ReadLog.Record("glucose", entries.Count);
+        var (_, analysis) = await AnalyseAsync(request, cancellationToken);
 
         var useMmol = request.UseMmol;
         var count = analysis.BasicStats.Count;
@@ -109,31 +110,102 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
             ["targetHigh"] = GlucoseUnits.Scale(thresholds.TargetTop, useMmol),
         };
 
+        var treatments = request.HasScope(Scope.TreatmentsRead);
+        if (treatments)
+        {
+            var insulin = await InsulinAsync(request, cancellationToken);
+            row["tdd"] = insulin is null ? null : Math.Round(insulin.Tdd, 1);
+            row["basalPercent"] = insulin is null || insulin.TotalInsulin <= 0 ? null : Math.Round(insulin.BasalPercent, 1);
+            row["carbsPerDay"] = insulin is null ? null : Math.Round(insulin.CarbsPerDay, 0);
+        }
+
+        IReadOnlyList<ReportOmittedField> omitted = treatments
+            ? []
+            : [.. InsulinFields.Select(f => new ReportOmittedField(f, Scope.TreatmentsRead))];
+
         return new ReportDatasetOutput
         {
             Rows = [row],
-            Summary = Summarise(row, request.From, request.To, useMmol),
+            Summary = Summarise(row, request.From, request.To, useMmol, [.. omitted.Select(o => o.Field)]),
+            Omitted = omitted,
         };
     }
 
-    internal static string Summarise(IReadOnlyDictionary<string, object?> row, DateTimeOffset from, DateTimeOffset to, bool useMmol)
+    /// <summary>
+    /// The canonical readings over the request's range and their analysis, as
+    /// <c>GET /api/v4/statistics/range-analytics</c> computes it. Records the readings for the audit.
+    /// </summary>
+    internal static async Task<(IReadOnlyList<SensorGlucose> Entries, ExtendedGlucoseAnalytics Analysis)> AnalyseAsync(
+        ReportDatasetRequest request, CancellationToken cancellationToken)
+    {
+        var services = request.Services;
+        var from = request.From.UtcDateTime;
+        var to = request.To.UtcDateTime;
+
+        var raw = await services.GetRequiredService<ISensorGlucoseRepository>().GetForAnalyticsAsync(
+            from, to, null, null, int.MaxValue, descending: false, ct: cancellationToken);
+        var entries = await services.GetRequiredService<ICanonicalGlucoseService>().SelectAsync(raw.ToList(), cancellationToken);
+        var clock = await services.GetRequiredService<TenantClockResolver>().ResolveAsync(cancellationToken);
+
+        var analysis = services.GetRequiredService<IStatisticsService>().AnalyzeGlucoseDataExtended(
+            entries, [], [], StatisticsService.WindowDays(from, to), Population, timeZone: clock.Zone);
+
+        if (entries.Count > 0)
+            request.ReadLog.Record("glucose", entries.Count);
+        return (entries, analysis);
+    }
+
+    /// <summary>The insulin delivery figures over the range, or null when no insulin or carb record is in it.</summary>
+    private static async Task<InsulinDeliveryStatistics?> InsulinAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
+    {
+        var from = request.From.UtcDateTime;
+        var to = request.To.UtcDateTime;
+        var records = await InsulinRecords.ReadAsync(request.Services, from, to, cancellationToken);
+        if (records.Count == 0)
+            return null;
+
+        request.ReadLog.Record("treatments", records.Count);
+        var now = request.Services.GetRequiredService<TimeProvider>().GetUtcNow();
+        return request.Services.GetRequiredService<IStatisticsService>().CalculateInsulinDeliveryStatistics(
+            records.ManualBoluses, records.AlgorithmBoluses, records.TempBasals, records.Carbs,
+            from, to, StatisticsService.UntilMills(to, now), records.BasalInjections);
+    }
+
+    internal static string Summarise(
+        IReadOnlyDictionary<string, object?> row,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        bool useMmol,
+        IReadOnlyList<string>? omitted = null)
     {
         var units = useMmol ? "mmol/L" : "mg/dL";
         string F(string key, string format) =>
-            row[key] is IFormattable value ? value.ToString(format, CultureInfo.InvariantCulture) : "no data";
+            row.GetValueOrDefault(key) is IFormattable value ? value.ToString(format, CultureInfo.InvariantCulture) : "no data";
         var glucose = useMmol ? "0.0" : "0";
 
-        var head = string.Create(CultureInfo.InvariantCulture,
-            $"Glucose statistics from {from:yyyy-MM-dd HH:mm} to {to:yyyy-MM-dd HH:mm} UTC.");
+        var lines = new List<string>
+        {
+            string.Create(CultureInfo.InvariantCulture, $"Glucose statistics from {from:yyyy-MM-dd HH:mm} to {to:yyyy-MM-dd HH:mm} UTC."),
+        };
         if (row["readings"] is 0)
-            return head + "\nNo glucose readings in this period.";
+        {
+            lines.Add("No glucose readings in this period.");
+        }
+        else
+        {
+            lines.Add($"Readings: {F("readings", "0")}.");
+            lines.Add($"Time in range ({F("targetLow", glucose)}-{F("targetHigh", glucose)} {units}): {F("timeInRangePercent", "0.#")}%. "
+                + $"Below: {F("timeBelow", "0.#")}%. Above: {F("timeAbove", "0.#")}%.");
+            lines.Add($"Mean {F("mean", glucose)} {units}, SD {F("sd", glucose)} {units}, CV {F("cv", "0.#")}%.");
+            lines.Add($"GMI {F("gmi", "0.0")}%.");
+        }
 
-        return string.Join('\n',
-            head,
-            $"Readings: {F("readings", "0")}.",
-            $"Time in range ({F("targetLow", glucose)}-{F("targetHigh", glucose)} {units}): {F("timeInRangePercent", "0.#")}%. "
-                + $"Below: {F("timeBelow", "0.#")}%. Above: {F("timeAbove", "0.#")}%.",
-            $"Mean {F("mean", glucose)} {units}, SD {F("sd", glucose)} {units}, CV {F("cv", "0.#")}%.",
-            $"GMI {F("gmi", "0.0")}%.");
+        if (row.ContainsKey("tdd"))
+            lines.Add(row["tdd"] is null
+                ? "Insulin and carbs: no records in this period."
+                : $"Insulin per day {F("tdd", "0.#")} U, {F("basalPercent", "0")}% of it basal. Carbs per day {F("carbsPerDay", "0")} g.");
+        if (omitted is { Count: > 0 })
+            lines.Add($"Fields omitted: {string.Join(", ", omitted)} (scope not granted).");
+        return string.Join('\n', lines);
     }
 }

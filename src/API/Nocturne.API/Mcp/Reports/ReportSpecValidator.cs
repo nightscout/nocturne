@@ -44,7 +44,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
     private static readonly string[] SpecKeys = ["version", "title", "range", "panels"];
     private static readonly string[] PanelKeys = ["id", "title", "dataset", "primitive", "bindings", "range"];
     private static readonly string[] RangeKeys = ["hours", "from", "to"];
-    private static readonly string[] BindingKeys = ["x", "y", "band", "columns", "series"];
+    private static readonly string[] BindingKeys = ["x", "y", "band", "columns", "series", "stacked"];
 
     public ReportSpecValidation Validate(JsonElement spec, bool useMmol = false)
     {
@@ -173,6 +173,9 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
                 Error($"{at}.range",
                     $"{dataset.Name} drawn as {drawn.WireName()} covers at most {Describe(max)}; this range is {Describe(span)}. "
                     + "Shorten it, or split it into more than one panel.");
+            if (parameters is not null)
+                foreach (var (field, message) in dataset.ValidatePanel(parameters, drawn, span))
+                    Error($"{at}.dataset.{field}", message);
         }
 
         ReportBindings? bindings = null;
@@ -384,6 +387,18 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             return null;
         }
 
+        bool? stacked = null;
+        var stackedSent = present && element.TryGetProperty("stacked", out var stackedValue) && stackedValue.ValueKind != JsonValueKind.Null;
+        if (stackedSent)
+        {
+            if (element.GetProperty("stacked").ValueKind is JsonValueKind.True or JsonValueKind.False)
+                stacked = element.GetProperty("stacked").GetBoolean();
+            else
+                error($"{at}.stacked", "Send true or false.");
+        }
+        if (primitive != ReportPrimitive.Bar && stackedSent)
+            error($"{at}.stacked", $"{primitive.WireName()} does not use 'stacked'. Remove it.");
+
         var x = Text("x", out var xSent);
         var y = List("y");
         var band = List("band");
@@ -401,6 +416,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             columns = defaults.Columns;
             series = defaults.Series;
             seriesSent = series is not null;
+            stacked = defaults.Stacked;
         }
 
         ReportField? Field(string path, string name)
@@ -529,6 +545,44 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
                 if (columns is not null && columns.Distinct().Count() != columns.Count)
                     error($"{at}.columns", "A field is named twice.");
                 return new ReportBindings { Columns = columns ?? [.. fields.Select(f => f.Name)] };
+            }
+
+            case ReportPrimitive.Bar:
+            {
+                NotFor("columns", columns is not null);
+                NotFor("band", band is not null);
+                NotFor("series", seriesSent);
+                var xName = xSent ? x : fields.FirstOrDefault(f => f.Kind == ReportFieldKind.Category)?.Name;
+                if (xName is null)
+                    error($"{at}.x", "Missing. Send a field of kind 'category'.");
+                else if (Field($"{at}.x", xName) is { } xField && xField.Kind != ReportFieldKind.Category)
+                    error($"{at}.x", $"'{xName}' is a {Wire(xField.Kind)} field. A bar's axis needs a category field.");
+
+                if (y is null || y.Count == 0)
+                {
+                    if (!malformed.Contains("y"))
+                        error($"{at}.y", $"Missing. Send the fields to draw as bars. Fields: {fieldNames}.");
+                    return new ReportBindings { X = xName, Stacked = stacked };
+                }
+
+                if (y.Distinct().Count() != y.Count)
+                    error($"{at}.y", "A field is named twice.");
+                var yFields = new List<ReportField>();
+                foreach (var name in y)
+                {
+                    if (Field($"{at}.y", name) is not { } field)
+                        continue;
+                    if (field.Kind is not (ReportFieldKind.Number or ReportFieldKind.Percent))
+                        error($"{at}.y", $"'{name}' is a {Wire(field.Kind)} field. A bar needs a number field.");
+                    else
+                        yFields.Add(field);
+                }
+                if (yFields.Select(f => f.Unit).Distinct().Count() > 1)
+                    error($"{at}.y",
+                        $"The fields {string.Join(", ", yFields.Select(f => $"'{f.Name}' ({f.Unit ?? "no unit"})"))} have different units. "
+                        + "Put fields of another unit in their own panel.");
+
+                return new ReportBindings { X = xName, Y = y, Stacked = stacked ?? false };
             }
 
             case ReportPrimitive.GlucoseChart:

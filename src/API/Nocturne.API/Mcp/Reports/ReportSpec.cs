@@ -89,14 +89,15 @@ internal sealed record ReportPanelSpec
     + "and optional 'band' (two fields: the lower and upper edge of a shaded range). "
     + "range_bands: 'x', 'y' (one field: the median line), 'band' (two fields, or four: outer low, inner low, inner high, "
     + "outer high) and optional 'series' (a category field; one set of bands per value). Optional; each dataset has defaults. "
+    + "bar: 'x' (a category field), 'y' (one or more number fields in one unit) and optional 'stacked'. "
     + "table and stat_tiles: optional 'columns' (the fields to show, in order). glucose_chart: none.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportBindings
 {
-    [Description("time_series and range_bands: the field on the horizontal axis: a time, time-of-day or minutes-from-event field.")]
+    [Description("time_series and range_bands: the field on the horizontal axis: a time, time-of-day or minutes-from-event field. bar: a category field, one bar or group per value.")]
     public string? X { get; init; }
 
-    [Description("time_series: the fields drawn as lines, all in one unit. range_bands: one field, the median line.")]
+    [Description("time_series: the fields drawn as lines, all in one unit. range_bands: one field, the median line. bar: the fields drawn as bars, all in one unit.")]
     public IReadOnlyList<string>? Y { get; init; }
 
     [Description(
@@ -109,6 +110,9 @@ internal sealed record ReportBindings
 
     [Description("table and stat_tiles only: the fields to show, in order. Default: every field the token can read.")]
     public IReadOnlyList<string>? Columns { get; init; }
+
+    [Description("bar only: true to stack the 'y' fields in one bar per category, false (the default) to draw them side by side.")]
+    public bool? Stacked { get; init; }
 }
 
 /// <summary>
@@ -123,6 +127,11 @@ internal sealed record ReportBindings
 [JsonDerivedType(typeof(SettingsEvidenceParameters), SettingsEvidenceParameters.Name)]
 [JsonDerivedType(typeof(DailyProfileParameters), DailyProfileParameters.Name)]
 [JsonDerivedType(typeof(GlucoseDistributionByHourParameters), GlucoseDistributionByHourParameters.Name)]
+[JsonDerivedType(typeof(TreatmentsParameters), TreatmentsParameters.Name)]
+[JsonDerivedType(typeof(BasalDeliveryParameters), BasalDeliveryParameters.Name)]
+[JsonDerivedType(typeof(DeviceStatusParameters), DeviceStatusParameters.Name)]
+[JsonDerivedType(typeof(GlucoseDistributionParameters), GlucoseDistributionParameters.Name)]
+[JsonDerivedType(typeof(DailySummaryParameters), DailySummaryParameters.Name)]
 internal abstract record ReportDatasetParameters
 {
     [JsonIgnore]
@@ -145,6 +154,22 @@ internal sealed record GlucoseSeriesParameters : ReportDatasetParameters
     [Description("Minutes between rows, 1 to 60. Default 5. A long range can make it coarser, to keep each series under its point limit.")]
     [Range(1, 60)]
     public int IntervalMinutes { get; init; } = DefaultIntervalMinutes;
+
+    [Description(
+        "time_series only: treatment markers to draw on the glucose line, 'bolus' and/or 'carbs'. Optional. Needs "
+        + "treatments.read; without it the markers are left out and the summary says so. A range of at most 72 hours.")]
+    public IReadOnlyList<ReportMarkerKind>? Markers { get; init; }
+}
+
+/// <summary>A treatment marker the dashboard chart draws, which a panel can draw on a time series.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReportMarkerKind>))]
+internal enum ReportMarkerKind
+{
+    [JsonStringEnumMemberName("bolus")]
+    Bolus,
+
+    [JsonStringEnumMemberName("carbs")]
+    Carbs,
 }
 
 [Description(
@@ -182,6 +207,10 @@ internal enum ReportPrimitive
     /// <summary>Percentile bands (outer and inner) under a median line, one set per series, over an axis of time of day or minutes from an event.</summary>
     [JsonStringEnumMemberName("range_bands")]
     RangeBands,
+
+    /// <summary>Bars over a category axis, one or more fields per category, side by side or stacked.</summary>
+    [JsonStringEnumMemberName("bar")]
+    Bar,
 }
 
 internal static class ReportPrimitives
@@ -195,6 +224,7 @@ internal static class ReportPrimitives
         ReportPrimitive.Table => "table",
         ReportPrimitive.GlucoseChart => "glucose_chart",
         ReportPrimitive.RangeBands => "range_bands",
+        ReportPrimitive.Bar => "bar",
         _ => throw new ArgumentOutOfRangeException(nameof(primitive), primitive, null),
     };
 

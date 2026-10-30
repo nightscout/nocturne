@@ -11,7 +11,8 @@ public class ReportSpecValidatorTests
     internal static readonly ReportDatasetRegistry Registry = new(
     [
         new GlucoseSeriesDataset(), new GlucoseStatisticsDataset(), new EventResponseDataset(), new SettingsEvidenceDataset(),
-        new DailyProfileDataset(), new GlucoseDistributionByHourDataset(),
+        new DailyProfileDataset(), new GlucoseDistributionByHourDataset(), new TreatmentsDataset(), new BasalDeliveryDataset(),
+        new DeviceStatusDataset(), new GlucoseDistributionDataset(), new DailySummaryDataset(),
     ]);
 
     private static readonly ReportSpecValidator Validator = new(Registry, TimeProvider.System);
@@ -341,6 +342,38 @@ public class ReportSpecValidatorTests
         { """{ "version": 1, "panels": [ { "dataset": { "name": "settings_evidence", "setting": "carbs" }, "primitive": "table" } ] }""", "panels[0].dataset.setting" },
         { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "range_bands" } ] }""", "panels[0].primitive" },
         { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "table", "bindings": { "series": "direction" } } ] }""", "panels[0].bindings.series" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "bar", "bindings": { "x": "band", "y": ["percent"], "stacked": "yes" } } ] }""", "panels[0].bindings.stacked" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose"], "stacked": true } } ] }""", "panels[0].bindings.stacked" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "bar", "bindings": { "x": "percent", "y": ["percent"] } } ] }""", "panels[0].bindings.x" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "bar", "bindings": { "x": "band", "y": ["percent", "minutes"] } } ] }""", "panels[0].bindings.y" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "bar", "bindings": { "x": "band", "y": ["range"] } } ] }""", "panels[0].bindings.y" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "bar", "bindings": { "x": "band", "y": [] } } ] }""", "panels[0].bindings.y" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "bar", "bindings": { "x": "band", "y": ["percent"], "band": ["percent", "percent"] } } ] }""", "panels[0].bindings.band" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "bar", "bindings": { "x": "band", "y": ["percent"], "series": "band" } } ] }""", "panels[0].bindings.series" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_distribution", "bins": 10 }, "primitive": "bar" } ] }""", "panels[0].dataset.bins" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "time_series" } ] }""", "panels[0].primitive" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "daily_summary" }, "primitive": "stat_tiles" } ] }""", "panels[0].primitive" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "daily_summary" }, "primitive": "bar", "bindings": { "x": "day", "y": ["timeInRange"] } } ] }""", "panels[0].bindings.x" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "daily_summary" }, "primitive": "bar", "bindings": { "x": "date", "y": ["timeInRange", "totalInsulin"] } } ] }""", "panels[0].bindings.y" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "treatments", "types": ["insulin"] }, "primitive": "table" } ] }""", "panels[0].dataset.types[0]" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "treatments", "types": "bolus" }, "primitive": "table" } ] }""", "panels[0].dataset.types" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "treatments", "types": [] }, "primitive": "table" } ] }""", "panels[0].dataset.types" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "treatments", "minCarbs": -1 }, "primitive": "table" } ] }""", "panels[0].dataset.minCarbs" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "treatments", "minCarbs": "10" }, "primitive": "table" } ] }""", "panels[0].dataset.minCarbs" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "treatments", "minInsulin": 500 }, "primitive": "table" } ] }""", "panels[0].dataset.minInsulin" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "treatments" }, "primitive": "table", "range": { "hours": 400 } } ] }""", "panels[0].range" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "treatments" }, "primitive": "time_series", "bindings": { "y": ["insulin", "carbs"] } } ] }""", "panels[0].bindings.y" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "treatments" }, "primitive": "bar" } ] }""", "panels[0].primitive" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series", "markers": ["bolus"] }, "primitive": "table" } ] }""", "panels[0].dataset.markers" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series", "markers": ["bolus"] }, "primitive": "time_series", "bindings": { "y": ["glucose"] }, "range": { "hours": 96 } } ] }""", "panels[0].dataset.markers" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series", "markers": ["insulin"] }, "primitive": "time_series", "bindings": { "y": ["glucose"] } } ] }""", "panels[0].dataset.markers[0]" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series", "markers": ["carbs", "carbs"] }, "primitive": "time_series", "bindings": { "y": ["glucose"] } } ] }""", "panels[0].dataset.markers" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "glucose_series", "markers": "bolus" }, "primitive": "time_series", "bindings": { "y": ["glucose"] } } ] }""", "panels[0].dataset.markers" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "basal_delivery" }, "primitive": "table" } ] }""", "panels[0].primitive" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "basal_delivery" }, "primitive": "time_series", "bindings": { "y": ["delivered", "origin"] } } ] }""", "panels[0].bindings.y" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "device_status" }, "primitive": "time_series", "range": { "hours": 960 } } ] }""", "panels[0].range" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "device_status" }, "primitive": "time_series", "bindings": { "y": ["reservoir", "pumpBattery"] } } ] }""", "panels[0].bindings.y" },
+        { """{ "version": 1, "panels": [ { "dataset": { "name": "device_status" }, "primitive": "stat_tiles", "bindings": { "columns": ["time"] } } ] }""", "panels[0].bindings.columns" },
     };
 
     [Theory]
