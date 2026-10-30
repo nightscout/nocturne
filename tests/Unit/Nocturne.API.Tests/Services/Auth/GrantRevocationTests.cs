@@ -10,6 +10,7 @@ using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -91,7 +92,7 @@ public class GrantRevocationTests : IDisposable
                 var guestLinks = new GuestLinkService(
                     db.AsFactory(),
                     _sessionCache,
-                    new GrantRevocationService(_sessionCache),
+                    new GrantRevocationService(_sessionCache, new OAuthTokenRepository(db.AsFactory())),
                     NullLogger<GuestLinkService>.Instance);
                 (await guestLinks.RevokeAsync(grantId, _ownerSubjectId)).Should().BeTrue();
                 break;
@@ -101,7 +102,8 @@ public class GrantRevocationTests : IDisposable
                     _db.ContextFactory.AsNocturneFactory(),
                     new Mock<IOAuthClientService>().Object,
                     _sessionCache,
-                    new GrantRevocationService(_sessionCache),
+                    new GrantRevocationService(
+                        _sessionCache, new OAuthTokenRepository(_db.ContextFactory.AsNocturneFactory())),
                     NullLogger<OAuthGrantService>.Instance);
                 await grants.RevokeGrantAsync(grantId);
                 break;
@@ -109,7 +111,7 @@ public class GrantRevocationTests : IDisposable
             default:
                 var directGrants = new DirectGrantService(
                     new Mock<IAuthAuditService>().Object,
-                    new GrantRevocationService(_sessionCache),
+                    new GrantRevocationService(_sessionCache, new OAuthTokenRepository(db.AsFactory())),
                     NullLogger<DirectGrantService>.Instance);
                 (await directGrants.RevokeAsync(
                     db, grantId, subjectId: null, ipAddress: null, userAgent: null)).Should().BeTrue();

@@ -1,5 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.ClientDevices;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -11,15 +11,21 @@ namespace Nocturne.API.Services.Auth;
 /// </summary>
 /// <remarks>
 /// Runs on the caller's context, never one it resolves itself, so a platform-admin caller's
-/// tenant pin decides which grant the consequences apply to.
+/// tenant pin decides which grant the consequences apply to; the refresh tokens are revoked
+/// through <see cref="IOAuthTokenRepository"/> pinned to each grant's tenant for the same reason.
+/// The grant stamp is saved before the tokens are revoked: a refresh under a revoked grant is
+/// refused on the grant, so a token the second step never reached is dead anyway, whereas a token
+/// revoked under a grant the first step never reached would read as a sign-out.
 /// </remarks>
 public sealed class GrantRevocationService
 {
     private readonly GuestSessionCacheService _guestSessionCache;
+    private readonly IOAuthTokenRepository _tokens;
 
-    public GrantRevocationService(GuestSessionCacheService guestSessionCache)
+    public GrantRevocationService(GuestSessionCacheService guestSessionCache, IOAuthTokenRepository tokens)
     {
         _guestSessionCache = guestSessionCache;
+        _tokens = tokens;
     }
 
     /// <summary>
@@ -55,15 +61,6 @@ public sealed class GrantRevocationService
             grant.RevokedAt = now;
         }
 
-        var refreshTokens = await db.OAuthRefreshTokens
-            .Where(t => grantIds.Contains(t.GrantId) && t.RevokedAt == null)
-            .ToListAsync(ct);
-
-        foreach (var token in refreshTokens)
-        {
-            token.RevokedAt = now;
-        }
-
         var removedDevices = 0;
         foreach (var grantId in grantIds)
         {
@@ -71,6 +68,13 @@ public sealed class GrantRevocationService
         }
 
         await db.SaveChangesAsync(ct);
+
+        var revokedTokens = 0;
+        foreach (var tenant in grants.GroupBy(g => g.TenantId))
+        {
+            revokedTokens += await _tokens.RevokeRefreshTokensOfGrantsAsync(
+                tenant.Key, tenant.Select(g => g.Id).ToList(), now, ct);
+        }
 
         // The cached guest session is what makes a revoked link stop resolving before its 30-second
         // TTL, so it has to be evicted on every revoke path, not only the ones that enter
@@ -80,7 +84,7 @@ public sealed class GrantRevocationService
             _guestSessionCache.Evict(grant.TenantId, grant.Id);
         }
 
-        return new GrantRevocationOutcome(refreshTokens.Count, removedDevices);
+        return new GrantRevocationOutcome(revokedTokens, removedDevices);
     }
 }
 

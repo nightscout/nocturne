@@ -17,6 +17,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -71,7 +72,8 @@ public class DirectGrantControllerTests : IDisposable
         var directGrantService = new DirectGrantService(
             auditService,
             new GrantRevocationService(
-                new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+                new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
+                new OAuthTokenRepository(_dbContext.AsFactory())),
             new Mock<ILogger<DirectGrantService>>().Object);
 
         _controller = new DirectGrantController(_dbContext.AsFactory(), directGrantService);

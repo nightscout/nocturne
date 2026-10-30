@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Identity;
@@ -37,7 +38,9 @@ public sealed class TenantServiceProvisionOwnerTests : IDisposable
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
-        new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+        new GrantRevocationService(
+            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
+            new OAuthTokenRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory())),
         TimeProvider.System,
         NullLogger<TenantService>.Instance);
 

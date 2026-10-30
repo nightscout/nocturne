@@ -13,6 +13,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -63,7 +64,7 @@ public class GuestLinkGrantListingTests : IDisposable
     public async Task Both_listings_show_only_the_scopes_a_guest_can_hold()
     {
         var sessionCache = new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()));
-        var revocation = new GrantRevocationService(sessionCache);
+        var revocation = new GrantRevocationService(sessionCache, new OAuthTokenRepository(_dbContext.AsFactory()));
 
         var guestLinks = await new GuestLinkService(
                 _dbContext.AsFactory(), sessionCache, revocation, NullLogger<GuestLinkService>.Instance)

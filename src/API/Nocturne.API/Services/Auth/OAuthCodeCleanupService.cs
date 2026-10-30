@@ -2,6 +2,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.API.Services.Docs;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
@@ -23,6 +24,7 @@ namespace Nocturne.API.Services.Auth;
 public class OAuthCodeCleanupService : BackgroundService
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly IOAuthTokenRepository _tokens;
     private readonly ILogger<OAuthCodeCleanupService> _logger;
 
     /// <summary>
@@ -47,13 +49,15 @@ public class OAuthCodeCleanupService : BackgroundService
     /// Initializes a new instance of the <see cref="OAuthCodeCleanupService"/> class.
     /// </summary>
     /// <param name="contexts">Root-resolved, so each tenant's context is pinned explicitly.</param>
-    /// <param name="logger">Logger</param>
+    /// <param name="tokens">Root-resolved likewise; the sweep pins each tenant on the call.</param>
     public OAuthCodeCleanupService(
         INocturneDbContextFactory contexts,
+        IOAuthTokenRepository tokens,
         ILogger<OAuthCodeCleanupService> logger
     )
     {
         _contexts = contexts;
+        _tokens = tokens;
         _logger = logger;
     }
 
@@ -119,16 +123,11 @@ public class OAuthCodeCleanupService : BackgroundService
         {
             try
             {
+                var deletedCodes = await _tokens.DeleteExpiredCodesAsync(tenantId, codeCutoff, ct);
+                deletedDeviceCodes += deletedCodes.DeviceCodes;
+                deletedAuthCodes += deletedCodes.AuthorizationCodes;
+
                 await using var db = await _contexts.CreateForTenantAsync(tenantId, ct);
-
-                deletedDeviceCodes += await db
-                    .OAuthDeviceCodes.Where(d => d.ExpiresAt < codeCutoff)
-                    .ExecuteDeleteAsync(ct);
-
-                deletedAuthCodes += await db
-                    .OAuthAuthorizationCodes.Where(c => c.ExpiresAt < codeCutoff)
-                    .ExecuteDeleteAsync(ct);
-
                 deletedClients += await db
                     .OAuthClients.Where(c =>
                         c.CreatedAt < clientCutoff

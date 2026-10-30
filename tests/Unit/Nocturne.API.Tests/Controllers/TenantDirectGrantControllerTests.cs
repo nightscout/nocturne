@@ -18,6 +18,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
@@ -89,7 +90,8 @@ public class TenantDirectGrantControllerTests : IDisposable
                 new AuditContext(),
                 new Mock<ILogger<AuthAuditService>>().Object),
             new GrantRevocationService(
-                new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+                new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
+                new OAuthTokenRepository(factory.Object.AsNocturneFactory())),
             new Mock<ILogger<DirectGrantService>>().Object);
         var tenantMemberService = new TenantMemberService(factory.Object.AsNocturneFactory());
 

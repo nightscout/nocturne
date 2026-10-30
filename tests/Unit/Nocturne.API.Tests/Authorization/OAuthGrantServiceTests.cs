@@ -9,6 +9,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -67,7 +68,7 @@ public class OAuthGrantServiceTests : IDisposable
             _db.ContextFactory.AsNocturneFactory(),
             _mockClientService.Object,
             _guestSessionCache,
-            new GrantRevocationService(_guestSessionCache),
+            new GrantRevocationService(_guestSessionCache, new OAuthTokenRepository(_db.ContextFactory.AsNocturneFactory())),
             _mockLogger.Object);
     }
 

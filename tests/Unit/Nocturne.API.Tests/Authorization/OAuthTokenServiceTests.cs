@@ -8,6 +8,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Infrastructure.Data.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Authorization;
@@ -120,6 +121,7 @@ public class OAuthTokenServiceTests : IDisposable
         NocturneDbContext dbContext, IOAuthGrantService? grantService = null)
     {
         return new OAuthTokenService(
+            new OAuthTokenRepository(dbContext.AsFactory()),
             dbContext.AsFactory(),
             _mockJwtService.Object,
             _mockSubjectService.Object,
@@ -348,7 +350,7 @@ public class OAuthTokenServiceTests : IDisposable
             _db.ContextFactory.AsNocturneFactory(),
             Mock.Of<IOAuthClientService>(),
             guestSessionCache,
-            new GrantRevocationService(guestSessionCache),
+            new GrantRevocationService(guestSessionCache, new OAuthTokenRepository(_db.ContextFactory.AsNocturneFactory())),
             Mock.Of<ILogger<OAuthGrantService>>());
 
         var result = await CreateService(db, grantService).ExchangeAuthorizationCodeAsync(
