@@ -112,9 +112,9 @@ public class CanonicalGlucoseServiceTests
         primaryReading.Timestamp = bucketStart.AddMinutes(1);
         var secondaryReading = Reading(secondary.Id, 0, mgdl: 160);
         secondaryReading.Timestamp = bucketStart.AddMinutes(2);
-        _sgRepo.Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        _sgRepo.Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([secondaryReading, primaryReading]);
 
         var latest = await _sut.GetLatestAsync();
@@ -127,9 +127,9 @@ public class CanonicalGlucoseServiceTests
     [Fact]
     public async Task GetLatestAsync_NoRecentReadings_ReturnsNull()
     {
-        _sgRepo.Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        _sgRepo.Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         (await _sut.GetLatestAsync()).Should().BeNull();
@@ -143,9 +143,8 @@ public class CanonicalGlucoseServiceTests
         var real = Reading(deviceId, 1, mgdl: 90);
         var ephemeral = Reading(deviceId, 2, mgdl: 300);
         ephemeral.DataSource = Nocturne.Core.Constants.DataSources.DemoService;
-        _sgRepo.Setup(r => r.GetAsync(
-                since, null, null, null,
-                It.IsAny<int>(), 0, true, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+        _sgRepo.Setup(r => r.GetCountedAsync(
+                since, null, null, It.IsAny<int>(), true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([real, ephemeral]);
 
         var recent = await _sut.GetRecentAsync(since);

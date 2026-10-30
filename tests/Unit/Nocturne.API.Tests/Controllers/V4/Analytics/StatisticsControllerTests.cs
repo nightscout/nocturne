@@ -1862,6 +1862,83 @@ public partial class StatisticsControllerTests
     }
 
     [Fact]
+    public async Task AnalyzeGlucoseDataExtended_LeavesOutPostedInvalidReadings()
+    {
+        _statsServiceMock
+            .Setup(s => s.AnalyzeGlucoseDataExtended(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<IEnumerable<Bolus>>(),
+                It.IsAny<IEnumerable<CarbIntake>>(),
+                It.IsAny<int>(),
+                It.IsAny<DiabetesPopulation>(),
+                It.IsAny<ExtendedAnalysisConfig?>(),
+                It.IsAny<TimeZoneInfo?>()))
+            .Returns(new ExtendedGlucoseAnalytics());
+
+        await CreateController().AnalyzeGlucoseDataExtended(new ExtendedGlucoseAnalyticsRequest
+        {
+            Entries =
+            [
+                new SensorGlucose { Mgdl = 120 },
+                new SensorGlucose { Mgdl = 45, Quality = SensorGlucoseQuality.Invalid },
+                new SensorGlucose { Mgdl = 118, Quality = SensorGlucoseQuality.Uncertain },
+            ],
+        });
+
+        _statsServiceMock.Verify(s => s.AnalyzeGlucoseDataExtended(
+            It.Is<IEnumerable<SensorGlucose>>(e => e.Select(r => r.Mgdl).SequenceEqual(new[] { 120.0, 118.0 })),
+            It.IsAny<IEnumerable<Bolus>>(),
+            It.IsAny<IEnumerable<CarbIntake>>(),
+            It.IsAny<int>(),
+            It.IsAny<DiabetesPopulation>(),
+            It.IsAny<ExtendedAnalysisConfig?>(),
+            It.IsAny<TimeZoneInfo?>()), Times.Once);
+    }
+
+    private static SensorGlucose[] PostedWithAnInvalidReading() =>
+    [
+        new SensorGlucose { Mgdl = 120 },
+        new SensorGlucose { Mgdl = 45, Quality = SensorGlucoseQuality.Invalid },
+        new SensorGlucose { Mgdl = 118, Quality = SensorGlucoseQuality.Uncertain },
+    ];
+
+    private static bool AreTheCountedReadings(IEnumerable<SensorGlucose> entries) =>
+        entries.Select(r => r.Mgdl).SequenceEqual(new[] { 120.0, 118.0 });
+
+    [Fact]
+    public void CalculateTimeInRange_LeavesOutPostedInvalidReadings()
+    {
+        CreateController().CalculateTimeInRange(new TimeInRangeRequest { Entries = PostedWithAnInvalidReading() });
+
+        _statsServiceMock.Verify(s => s.CalculateTimeInRange(
+            It.Is<IEnumerable<SensorGlucose>>(e => AreTheCountedReadings(e)),
+            It.IsAny<GlycemicThresholds?>()), Times.Once);
+    }
+
+    [Fact]
+    public void CalculateGlucoseDistribution_LeavesOutPostedInvalidReadings()
+    {
+        CreateController().CalculateGlucoseDistribution(
+            new GlucoseDistributionRequest { Entries = PostedWithAnInvalidReading() });
+
+        _statsServiceMock.Verify(s => s.CalculateGlucoseDistribution(
+            It.Is<IEnumerable<SensorGlucose>>(e => AreTheCountedReadings(e)),
+            It.IsAny<IEnumerable<DistributionBin>?>()), Times.Once);
+    }
+
+    [Fact]
+    public void CalculateSiteChangeImpact_LeavesOutPostedInvalidReadings()
+    {
+        CreateController().CalculateSiteChangeImpact(
+            new SiteChangeImpactRequest { Entries = PostedWithAnInvalidReading() });
+
+        _statsServiceMock.Verify(s => s.CalculateSiteChangeImpact(
+            It.Is<IEnumerable<SensorGlucose>>(e => AreTheCountedReadings(e)),
+            It.IsAny<IEnumerable<DeviceEvent>>(),
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()), Times.Once);
+    }
+
+    [Fact]
     public async Task GetRangeAnalytics_PassesTheRequestedWindowAndTheTenantZone()
     {
         SetupGlucose(new List<SensorGlucose>());

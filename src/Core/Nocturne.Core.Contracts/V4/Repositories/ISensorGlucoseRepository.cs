@@ -50,6 +50,8 @@ public interface ISensorGlucoseRepository
     /// <summary>
     /// Partial readings for statistics and canonical selection only; these must not be returned
     /// as raw records or projected into legacy entries. Includes the per-reading UTC offset.
+    /// Leaves out readings that don't count in statistics
+    /// (<see cref="SensorGlucoseQualityRules.CountsInStatistics"/>).
     /// </summary>
     Task<IEnumerable<SensorGlucose>> GetForAnalyticsAsync(
         DateTime? from, DateTime? to, string? device, string? source,
@@ -58,8 +60,18 @@ public interface ISensorGlucoseRepository
         CancellationToken ct = default, Guid? patientDeviceId = null);
 
     /// <summary>
+    /// Full readings like <see cref="GetAsync(DateTime?, DateTime?, string?, string?, int, int, bool, DateTime?, Guid?, CancellationToken, Guid?)"/>,
+    /// less those that don't count in statistics. They are left out before the limit, so a long
+    /// sensor-error episode can't fill the page and hide the last reading that counts.
+    /// </summary>
+    Task<IEnumerable<SensorGlucose>> GetCountedAsync(
+        DateTime? from, DateTime? to, string? source, int limit, bool descending,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Partial readings for canonical selection and <see cref="EntryProjection.FromSensorGlucose"/>
-    /// only; omitted V4 fields must not leak into raw record responses.
+    /// only; omitted V4 fields must not leak into raw record responses. Readings that don't count
+    /// in statistics are left out, as v1/v3 clients can't see why.
     /// </summary>
     Task<IEnumerable<SensorGlucose>> GetForEntriesAsync(
         DateTime? from, DateTime? to, string? device, string? source,

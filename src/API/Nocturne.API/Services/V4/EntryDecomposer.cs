@@ -94,7 +94,9 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
 
     /// <summary>
     /// Glucose processing type and smoothed/unsmoothed values are resolved from the hints a v1/v3
-    /// entry carries in its additional properties.
+    /// entry carries in its additional properties; <c>quality</c> and <c>sensorStatus</c> are read
+    /// from there too, since Nightscout entries have no such fields. An unknown quality is dropped,
+    /// the reading kept.
     /// </summary>
     private async Task<SensorGlucose> BuildSensorGlucoseAsync(Entry entry, Guid? correlationId, CancellationToken ct)
     {
@@ -112,6 +114,12 @@ internal class EntryDecomposer : DecomposerBase, IEntryDecomposer
                 smoothedHint = sm;
             if (TryGetDouble(props, "unsmoothedMgdl", out var um))
                 unsmoothedHint = um;
+            if (TryGetString(props, "quality", out var quality)
+                && Enum.TryParse<SensorGlucoseQuality>(quality, ignoreCase: true, out var parsedQuality)
+                && Enum.IsDefined(parsedQuality))
+                model.Quality = parsedQuality;
+            if (TryGetString(props, "sensorStatus", out var sensorStatus))
+                model.SensorStatus = sensorStatus.Length > 64 ? sensorStatus[..64] : sensorStatus;
         }
 
         await _glucoseResolver.ResolveAsync(model, gpHint, smoothedHint, unsmoothedHint, ct);

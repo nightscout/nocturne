@@ -261,10 +261,9 @@ public class ClockFacesControllerTests
 
         // The clock UUID is the capability: with no valid clock, no glucose is ever read.
         _sensorGlucoseRepositoryMock.Verify(
-            r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+            r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -294,10 +293,9 @@ public class ClockFacesControllerTests
         };
 
         _sensorGlucoseRepositoryMock
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { newest, previous });
 
         var result = await CreateController().GetGlucose(id);
@@ -315,26 +313,23 @@ public class ClockFacesControllerTests
     }
 
     [Fact]
-    public async Task GetGlucose_RequestsOnlyTheLatestTwoReadings_NewestFirst()
+    public async Task GetGlucose_RequestsOnlyTheLatestTwoCountedReadings_NewestFirst()
     {
         var id = Guid.NewGuid();
         _clockFaceServiceMock
             .Setup(s => s.GetByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ClockFace { Id = id, Config = new ClockFaceConfig() });
         _sensorGlucoseRepositoryMock
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetCountedAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<SensorGlucose>());
 
         await CreateController().GetGlucose(id);
 
         _sensorGlucoseRepositoryMock.Verify(
-            r => r.GetAsync(
-                null, null, null, null,
-                2, 0, true,
-                It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+            r => r.GetCountedAsync(
+                null, null, null, 2, true, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }

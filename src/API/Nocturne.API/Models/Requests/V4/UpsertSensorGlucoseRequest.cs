@@ -85,6 +85,16 @@ public class UpsertSensorGlucoseRequest : IBulkUpsertRequest
     public int? Rssi { get; set; }
 
     /// <summary>
+    /// Whether the sensor trusted the value. Null when the uploader doesn't know.
+    /// </summary>
+    public SensorGlucoseQuality? Quality { get; set; }
+
+    /// <summary>
+    /// The vendor's raw state behind <see cref="Quality"/>, e.g. <c>G7:Errors/info2</c>.
+    /// </summary>
+    public string? SensorStatus { get; set; }
+
+    /// <summary>
     /// Whether this glucose value is smoothed or unsmoothed.
     /// Accepted values: "Smoothed", "Unsmoothed". Case-insensitive. Null for unknown.
     /// </summary>

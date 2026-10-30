@@ -24,14 +24,18 @@ public interface ICanonicalGlucoseService
     /// <summary>
     /// The most recent canonical reading, however old — computed over the newest stored readings
     /// so delayed-sync sources (hours-late connector backfills) still surface a latest value.
-    /// Null only when the tenant has no readings at all. Staleness judgement belongs to the
+    /// Null only when the tenant has no reading that counts. Staleness judgement belongs to the
     /// caller, exactly as it did when consumers used the newest reading of a write batch.
+    /// Readings that don't count in statistics
+    /// (<see cref="SensorGlucoseQualityRules.CountsInStatistics"/>) are skipped before the newest
+    /// rows are taken, as alarms act on this value: during a sensor-error episode of any length
+    /// the last trusted reading ages, and the signal-loss and staleness alerts take over.
     /// </summary>
     Task<SensorGlucose?> GetLatestAsync(CancellationToken ct = default);
 
     /// <summary>
     /// Canonical readings timestamped at or after <paramref name="since"/>, newest first, under the
-    /// same source filtering as <see cref="GetLatestAsync"/>.
+    /// same filtering as <see cref="GetLatestAsync"/>.
     /// </summary>
     Task<IReadOnlyList<SensorGlucose>> GetRecentAsync(DateTime since, CancellationToken ct = default);
 }

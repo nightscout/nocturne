@@ -78,6 +78,31 @@ public class SensorGlucoseControllerTests
     }
 
     [Fact]
+    public async Task Create_PassesTheQualityAndSensorStatusToTheRepository()
+    {
+        SensorGlucose? stored = null;
+        _repoMock.As<IV4Repository<SensorGlucose>>()
+            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<SensorGlucose, WriteOrigin, CancellationToken>((model, _, _) => stored = model)
+            .ReturnsAsync((SensorGlucose model, WriteOrigin _, CancellationToken _) => model);
+        _repoMock
+            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<SensorGlucose, WriteOrigin, CancellationToken>((model, _, _) => stored = model)
+            .ReturnsAsync((SensorGlucose model, WriteOrigin _, CancellationToken _) => model);
+
+        await CreateController().Create(new UpsertSensorGlucoseRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Mgdl = 76,
+            Quality = SensorGlucoseQuality.Invalid,
+            SensorStatus = "G7:Errors/info2",
+        });
+
+        stored!.Quality.Should().Be(SensorGlucoseQuality.Invalid);
+        stored.SensorStatus.Should().Be("G7:Errors/info2");
+    }
+
+    [Fact]
     public async Task CreateBulk_Returns201_WithCreatedReadings()
     {
         // Arrange

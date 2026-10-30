@@ -292,11 +292,13 @@ internal sealed class AlertReplayService(
     /// <summary>
     /// Canonical selection over one batch, re-sorted by timestamp. Selection preserves input
     /// order and the repository returns ascending rows, so the sort is a no-op on well-ordered
-    /// input; it holds the ascending invariant the tick-loop fold depends on.
+    /// input; it holds the ascending invariant the tick-loop fold depends on. Readings the live
+    /// alerts skip (<see cref="ICanonicalGlucoseService.GetLatestAsync"/>) are skipped here too.
     /// </summary>
     private async Task<IEnumerable<SensorGlucose>> SelectCanonicalAsync(
         IReadOnlyList<SensorGlucose> batch, CancellationToken ct)
     {
+        batch = batch.Where(r => r.CountsInStatistics()).ToList();
         if (batch.Count == 0) return [];
         return (await canonicalGlucose.SelectAsync(batch, ct)).OrderBy(r => r.Timestamp);
     }
