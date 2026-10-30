@@ -160,6 +160,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IOAuthTokenRepository, OAuthTokenRepository>();
         services.AddTransient<IOAuthGrantRepository, OAuthGrantRepository>();
         services.AddTransient<IMemberInviteRepository, MemberInviteRepository>();
+        services.AddTransient<ISubjectRepository, SubjectRepository>();
+        services.AddTransient<IPasskeyCredentialRepository, PasskeyCredentialRepository>();
+        services.AddTransient<ITotpCredentialRepository, TotpCredentialRepository>();
+        services.AddTransient<IRecoveryCodeRepository, RecoveryCodeRepository>();
 
         // Register avatar storage
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();

@@ -37,6 +37,15 @@ public sealed class DbUnitOfWork : IAsyncDisposable
         new(await contexts.CreateForTenantAsync(tenantId, ct));
 
     /// <summary>
+    /// Opens a unit on a context with no tenant and no subject, for a write to platform tables, or
+    /// one that provisions a tenant and pins it once the row exists. The pin is what
+    /// <c>INocturneDbContextFactory.CreatePlatformAsync</c> gives.
+    /// </summary>
+    public static async ValueTask<DbUnitOfWork> OpenPlatformAsync(
+        INocturneDbContextFactory contexts, CancellationToken ct = default) =>
+        new(await contexts.CreatePlatformAsync(ct));
+
+    /// <summary>
     /// Takes ownership of <paramref name="context"/>, for a test that runs a writer on a context it
     /// built by hand. Disposing the unit disposes it.
     /// </summary>

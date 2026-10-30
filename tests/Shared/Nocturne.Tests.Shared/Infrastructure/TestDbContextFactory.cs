@@ -5,7 +5,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.InMemory.Storage.Internal;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Tests.Shared.Infrastructure;
@@ -121,12 +123,13 @@ public sealed class SqliteTestDatabase : IDisposable
     /// <summary>
     /// Registers this database the way the request pipeline resolves it: <see cref="ContextFactory"/>
     /// as the context pool and behind <c>INocturneDbContextFactory</c>, every context over the same
-    /// connection.
+    /// connection, and the subject repository the authentication pipeline reads through.
     /// </summary>
     public IServiceCollection AddToServices(IServiceCollection services)
     {
         services.AddSingleton(ContextFactory);
         services.AddSingleton(ContextFactory.AsNocturneFactory());
+        services.AddTransient<ISubjectRepository, SubjectRepository>();
         return services;
     }
 
