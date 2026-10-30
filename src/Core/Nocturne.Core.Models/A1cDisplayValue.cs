@@ -19,7 +19,7 @@ public class A1cDisplayValue
 
 /// <summary>
 /// Whether a value is below its target, judged separately in each unit at the precision that unit
-/// is displayed at: one decimal for percent, a whole number for mmol/mol. Near a boundary the two
+/// is displayed at: two decimals for percent, one for mmol/mol. Near a boundary the two
 /// can differ, so each unit's display is paired with its own state.
 /// </summary>
 public class A1cTargetState
@@ -29,10 +29,10 @@ public class A1cTargetState
 
     public static A1cTargetState Below(A1cDisplayValue value, A1cDisplayValue target) => new()
     {
-        Percent = Math.Round(value.Percent, 1, MidpointRounding.AwayFromZero)
-            < Math.Round(target.Percent, 1, MidpointRounding.AwayFromZero),
-        MmolMol = Math.Round(value.MmolMol, 0, MidpointRounding.AwayFromZero)
-            < Math.Round(target.MmolMol, 0, MidpointRounding.AwayFromZero),
+        Percent = Math.Round(value.Percent, 2, MidpointRounding.AwayFromZero)
+            < Math.Round(target.Percent, 2, MidpointRounding.AwayFromZero),
+        MmolMol = Math.Round(value.MmolMol, 1, MidpointRounding.AwayFromZero)
+            < Math.Round(target.MmolMol, 1, MidpointRounding.AwayFromZero),
     };
 }
 

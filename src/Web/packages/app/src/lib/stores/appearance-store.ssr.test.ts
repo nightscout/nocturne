@@ -32,8 +32,8 @@ describe("appearance-store SSR resolution", () => {
       ssr([{ a1cName: "A1c", a1cUnits: "mmol/mol" }]),
       ssr([]),
     ]);
-    expect(custom).toContain("A1c / eA1c: 53 mmol/mol");
-    expect(defaults).toContain("HbA1c / eHbA1c: 7.0%");
+    expect(custom).toContain("A1c / eA1c: 53.0 mmol/mol");
+    expect(defaults).toContain("HbA1c / eHbA1c: 7.00%");
   });
   it("renders the request's units, not the module default", async () => {
     const body = await ssr([mmol]);

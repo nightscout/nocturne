@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { SvelteMap } from "svelte/reactivity";
+  import { MediaQuery, SvelteMap } from "svelte/reactivity";
   import { LineChart, Tooltip } from "layerchart";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Activity from "@lucide/svelte/icons/activity";
@@ -82,9 +82,13 @@
   let labResultError = $state<string | null>(null);
   let pendingDeleteLabResult = $state<LabHbA1cResult | null>(null);
 
-  /** Normalizes a lab result's measuredAt (Date instance or ISO string) to a Date. */
+  /**
+   * A lab result's measuredAt is a calendar date stored at UTC midnight; this reads it as
+   * local midnight of that date, where the timeline's own points sit.
+   */
   function toDate(value: Date | string | undefined): Date {
-    return value instanceof Date ? value : new Date(value ?? 0);
+    const utc = value instanceof Date ? value : new Date(value ?? 0);
+    return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
   }
 
   function dateKey(date: Date): string {
@@ -244,6 +248,40 @@
       note: r.note,
     }))
   );
+
+  /**
+   * CSS pixels around a lab marker, across and up or down, within which the tooltip shows
+   * that lab draw. Kept tight so the days around a lab draw, and the date axis below it, stay
+   * readable.
+   */
+  const LAB_SNAP_PX = { fine: 12, coarse: 16 };
+  const coarsePointer = new MediaQuery("pointer: coarse");
+
+  /**
+   * A lab draw is one day wide on a year of daily estimates, so the tooltip snaps to the
+   * nearest lab marker when the pointer is within {@link LAB_SNAP_PX} of it. `pointerY` is in the
+   * same plot coordinates as `yScale`.
+   */
+  function snapToLabDate(
+    hovered: Date,
+    pointerY: number,
+    xScale: (value: Date) => number,
+    yScale: (value: number) => number
+  ): Date {
+    const hoveredX = xScale(hovered);
+    const reach = coarsePointer.current ? LAB_SNAP_PX.coarse : LAB_SNAP_PX.fine;
+    let nearest = hovered;
+    let nearestDistance = reach;
+    for (const labPoint of labChartPoints) {
+      if (Math.abs(yScale(labPoint.displayValue) - pointerY) > reach) continue;
+      const distance = Math.abs(xScale(labPoint.date) - hoveredX);
+      if (distance <= nearestDistance) {
+        nearest = labPoint.date;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
+  }
 
   function displayValueForChartDate(date: Date): number | null {
     if (chartData.length === 0) return null;
@@ -428,7 +466,12 @@
             {#snippet tooltip({ context })}
               <Tooltip.Root {context} class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg">
                 {#snippet children({ data })}
-                  {@const hoveredDate = context.x(data)}
+                  {@const hoveredDate = snapToLabDate(
+                    context.x(data),
+                    context.tooltip.y - context.padding.top,
+                    context.xScale,
+                    context.yScale
+                  )}
                   {@const hoveredDateKey = dateKey(hoveredDate)}
                   {@const eHbA1cPoint = chartData.find((point) => dateKey(point.date) === hoveredDateKey)}
                   {@const labResultsForDate = labChartPoints.filter((point) => dateKey(point.date) === hoveredDateKey)}
@@ -539,16 +582,16 @@
           <Input
             id="lab-value"
             type="number"
-            step={a1cUnits.current === "percent" ? "0.1" : "1"}
+            step={a1cUnits.current === "percent" ? "0.01" : "0.1"}
             bind:value={newLabValue}
             placeholder={a1cUnits.current === "percent"
-              ? "e.g. 7.0"
-              : "e.g. 53"}
+              ? "e.g. 6.54"
+              : "e.g. 50.3"}
           />
         </div>
         <div class="space-y-1.5">
           <Label for="lab-note">Note (optional)</Label>
-          <Input id="lab-note" type="text" bind:value={newLabNote} placeholder="e.g. GP lab" />
+          <Input id="lab-note" type="text" maxlength={500} bind:value={newLabNote} placeholder="e.g. GP lab" />
         </div>
       </div>
 

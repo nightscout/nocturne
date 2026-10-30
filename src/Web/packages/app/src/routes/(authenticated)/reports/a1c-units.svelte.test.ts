@@ -37,7 +37,7 @@ beforeEach(() => {
 
 it("changes only A1c units while CV and time below range remain percentages", async () => {
   render(ReportsPage);
-  await expect.element(page.getByText(/^53\s*mmol\/mol$/)).toBeVisible();
+  await expect.element(page.getByText(/^53\.0\s*mmol\/mol$/)).toBeVisible();
   await expect.element(page.getByText(/^33\s*%$/)).toBeVisible();
   await expect.element(page.getByText(/^4\.0\s*%$/)).toBeVisible();
 });

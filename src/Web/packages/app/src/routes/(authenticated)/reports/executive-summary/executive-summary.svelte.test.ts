@@ -69,13 +69,13 @@ it.each(["percent", "mmol/mol"] as const)(
     applyPreferences({ a1cUnits });
     render(ExecutiveSummary);
     await expect.element(page.getByText("No estimate for this window")).toBeVisible();
-    await expect.element(page.getByText(/^Target: <(?:–|7\.0%|53 mmol\/mol)$/)).not.toBeInTheDocument();
+    await expect.element(page.getByText(/^Target: <(?:–|7\.00%|53\.0 mmol\/mol)$/)).not.toBeInTheDocument();
   }
 );
 
 it.each([
-  { a1cUnits: "percent" as const, target: "Target: <7.0%" },
-  { a1cUnits: "mmol/mol" as const, target: "Target: <53 mmol/mol" },
+  { a1cUnits: "percent" as const, target: "Target: <7.00%" },
+  { a1cUnits: "mmol/mol" as const, target: "Target: <53.0 mmol/mol" },
 ])("shows the backend target in $a1cUnits", async ({ a1cUnits, target }) => {
   report.variability = {
     estimatedA1c: 7,
@@ -105,8 +105,8 @@ it.each([
     const { container } = render(ExecutiveSummary);
 
     const a1cCard = cardWith(container, "What is eHbA1c?");
-    await expect.element(a1cCard.getByText("6.4%", { exact: true })).toBeVisible();
-    await expect.element(a1cCard.getByText("Target: below 7.0%", { exact: true })).toBeVisible();
+    await expect.element(a1cCard.getByText("6.40%", { exact: true })).toBeVisible();
+    await expect.element(a1cCard.getByText("Target: below 7.00%", { exact: true })).toBeVisible();
     await expect.element(a1cCard.getByText(a1cState, { exact: true })).toBeVisible();
 
     const cvCard = cardWith(container, "Glucose stability");
@@ -117,14 +117,14 @@ it.each([
 );
 
 it.each([
-  { a1cUnits: "percent" as const, shown: "7.0%", target: "Target: below 7.0%", state: "Target not met" },
-  { a1cUnits: "mmol/mol" as const, shown: "52 mmol/mol", target: "Target: below 53 mmol/mol", state: "Target met" },
+  { a1cUnits: "percent" as const, shown: "6.99%", target: "Target: below 7.00%", state: "Target met" },
+  { a1cUnits: "mmol/mol" as const, shown: "53.0 mmol/mol", target: "Target: below 53.0 mmol/mol", state: "Target not met" },
 ])("judges the eA1c state in the displayed unit ($a1cUnits)", async ({ a1cUnits, shown, target, state }) => {
   report.variability = {
-    estimatedA1c: 6.95,
-    estimatedA1cDisplay: { percent: 6.95, mmolMol: 52.459 },
+    estimatedA1c: 6.99491,
+    estimatedA1cDisplay: { percent: 6.99491, mmolMol: 52.95002 },
     a1cTarget: { percent: 7, mmolMol: 53.00565 },
-    estimatedA1cMeetsTarget: { percent: false, mmolMol: true },
+    estimatedA1cMeetsTarget: { percent: true, mmolMol: false },
   };
   applyPreferences({ a1cUnits });
   const { container } = render(ExecutiveSummary);

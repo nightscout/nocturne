@@ -52,4 +52,40 @@ public class LabHbA1cControllerTests
         response.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
         repository.Verify(r => r.CreateAsync(It.IsAny<LabHbA1cResult>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Theory]
+    [InlineData(DateTimeKind.Unspecified)]
+    [InlineData(DateTimeKind.Utc)]
+    public async Task Create_stores_the_calendar_date_at_utc_midnight(DateTimeKind kind)
+    {
+        var repository = new Mock<ILabHbA1cResultRepository>();
+        LabHbA1cResult? saved = null;
+        repository.Setup(r => r.CreateAsync(It.IsAny<LabHbA1cResult>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((LabHbA1cResult result, CancellationToken _) => { saved = result; return result; });
+        var response = await new LabHbA1cController(repository.Object).Create(new CreateLabHbA1cResultRequest
+        {
+            Value = 7, MeasuredAt = new DateTime(2025, 3, 15, 13, 30, 0, kind),
+        });
+        response.Result.Should().BeOfType<OkObjectResult>();
+        saved!.MeasuredAt.Should().Be(new DateTime(2025, 3, 15));
+        saved.MeasuredAt.Kind.Should().Be(DateTimeKind.Utc);
+    }
+
+    [Theory]
+    [InlineData(LabHbA1cResult.MaxNoteLength, true)]
+    [InlineData(LabHbA1cResult.MaxNoteLength + 1, false)]
+    public async Task Create_refuses_a_note_longer_than_the_store_holds(int length, bool accepted)
+    {
+        var repository = new Mock<ILabHbA1cResultRepository>();
+        repository.Setup(r => r.CreateAsync(It.IsAny<LabHbA1cResult>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((LabHbA1cResult result, CancellationToken _) => result);
+        var response = await new LabHbA1cController(repository.Object).Create(new CreateLabHbA1cResultRequest
+        {
+            Value = 7, MeasuredAt = new DateTime(2025, 1, 1), Note = new string('x', length),
+        });
+        if (accepted)
+            response.Result.Should().BeOfType<OkObjectResult>();
+        else
+            response.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
 }

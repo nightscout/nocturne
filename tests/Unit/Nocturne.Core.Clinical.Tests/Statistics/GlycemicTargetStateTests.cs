@@ -10,9 +10,9 @@ public class GlycemicTargetStateTests
 
     [Theory]
     [InlineData(6.9, true, true)]
-    [InlineData(6.94, true, true)]
-    [InlineData(6.95, false, true)]
-    [InlineData(6.9538, false, false)]
+    [InlineData(6.994, true, true)]
+    [InlineData(6.99491, true, false)]
+    [InlineData(6.996, false, false)]
     [InlineData(7.0, false, false)]
     [InlineData(7.1, false, false)]
     public void EstimatedA1cMeetsTarget_IsJudgedPerUnitAtItsDisplayedPrecision(
