@@ -36562,14 +36562,11 @@ msgstr "Waiting for your first reading"
 msgid "{0} low end color"
 msgstr "{0} low end color"
 
-#. 0: metricLabel
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "Swap {0} end colors"
-msgstr "Swap {0} end colors"
+#~ msgid "Swap {0} end colors"
+#~ msgstr "Swap {0} end colors"
 
-#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
-msgid "<0/> Swap colors"
-msgstr "<0/> Swap colors"
+#~ msgid "<0/> Swap colors"
+#~ msgstr "<0/> Swap colors"
 
 #. 0: metricLabel
 #: src/lib/components/reports/year-overview/ColorFocusRange.svelte
@@ -38349,3 +38346,31 @@ msgstr "Could not load profiles"
 #: src/routes/(authenticated)/StickyBarProbe.test.svelte
 msgid "bar"
 msgstr "bar"
+
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "Add a color boundary here"
+msgstr "Add a color boundary here"
+
+#. 0: metricLabel
+#. 0: metricLabel
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "{0} low color position"
+msgstr "{0} low color position"
+
+#. 0: metricLabel
+#. 0: metricLabel
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "{0} high color position"
+msgstr "{0} high color position"
+
+#. 0: metricLabel
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "{0} focus window"
+msgstr "{0} focus window"
+
+#. 0: Number.isFinite(limits[1]) ? `, between ${formatted(limits[0])} and ${formatted(limits[1])} ${unitLabel}` \\: ""
+#: src/lib/components/reports/year-overview/ColorFocusRange.svelte
+msgid "Enter a color range with its low end below its high end{0}."
+msgstr "Enter a color range with its low end below its high end{0}."
