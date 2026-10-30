@@ -40,6 +40,7 @@ public class AlertRulesControllerDeviceActionTests
         return new AlertRulesController(
             factory,
             new AlertRepository(factory),
+            new AlertRuleRepository(factory),
             MockTenantAccessor.Create(Tenant).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),

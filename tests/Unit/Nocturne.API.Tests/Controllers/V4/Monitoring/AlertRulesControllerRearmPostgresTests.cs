@@ -157,6 +157,7 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
         var controller = new AlertRulesController(
             new Factory(() => Context(tenant, failure)),
             new AlertRepository(new RawFactory(() => Context(tenant, failure))),
+            new AlertRuleRepository(new Factory(() => Context(tenant, failure))),
             MockTenantAccessor.Create(tenant).Object,
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),

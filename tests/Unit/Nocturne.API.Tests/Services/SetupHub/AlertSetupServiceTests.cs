@@ -4,6 +4,7 @@ using Nocturne.API.Services.SetupHub;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -37,7 +38,7 @@ public class AlertSetupServiceTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private AlertSetupService Service() => new(_factory, null!, null!, null!, null!, null!, TimeProvider.System);
+    private AlertSetupService Service() => new(_factory, new AlertRuleRepository(_factory), null!, null!, null!, null!, null!, TimeProvider.System);
 
     private async Task MigrationRun(
         string state, NightscoutAlarmSettings? settings, DateTime? startedAt = null, string? rawSettings = null)

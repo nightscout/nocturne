@@ -10,6 +10,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -49,7 +50,7 @@ public class SetupHubServiceTests
         {
             // Registered out of order on purpose: the key decides the hub order.
             new AboutItem(factory), new SharingItem(factory, TimeProvider.System), new TherapyItem(factory),
-            DevicesItemOver(db), new AlertsItem(factory), new ConnectDataItem(factory),
+            DevicesItemOver(db), new AlertsItem(factory, new AlertRuleRepository(factory)), new ConnectDataItem(factory),
         });
     }
 

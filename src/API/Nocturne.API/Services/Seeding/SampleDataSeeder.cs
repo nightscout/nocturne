@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Platform;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -76,6 +77,7 @@ public class SampleDataSeeder
     private readonly IHeartRateService _heartRateService;
     private readonly IStepCountService _stepCountService;
     private readonly ITrackerRepository _trackerRepository;
+    private readonly IAlertRuleRepository _alertRules;
     private readonly IRuleScopeClassifier _scopeClassifier;
     private readonly IProfileWriteService _profileWriteService;
     private readonly IDeviceStatusService _deviceStatuses;
@@ -115,6 +117,7 @@ public class SampleDataSeeder
         IHeartRateService heartRateService,
         IStepCountService stepCountService,
         ITrackerRepository trackerRepository,
+        IAlertRuleRepository alertRules,
         IRuleScopeClassifier scopeClassifier,
         IProfileWriteService profileWriteService,
         IDeviceStatusService deviceStatuses,
@@ -133,6 +136,7 @@ public class SampleDataSeeder
         _heartRateService = heartRateService;
         _stepCountService = stepCountService;
         _trackerRepository = trackerRepository;
+        _alertRules = alertRules;
         _scopeClassifier = scopeClassifier;
         _profileWriteService = profileWriteService;
         _deviceStatuses = deviceStatuses;
@@ -548,50 +552,34 @@ public class SampleDataSeeder
         IReadOnlyList<DemoAlertSeeds.GlucoseEpisode> episodes,
         CancellationToken ct)
     {
-        var rulesByName = new Dictionary<string, AlertRuleEntity>(StringComparer.OrdinalIgnoreCase);
-        var rulesCreated = 0;
-
-        foreach (var seed in DemoAlertSeeds.Defaults)
-        {
-            var rule = await db.AlertRules
-                .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Name == seed.Name, ct);
-
-            if (rule is null)
-            {
-                rule = new AlertRuleEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = tenantId,
-                    Name = seed.Name,
-                    Description = seed.Description,
-                    ConditionType = seed.ConditionType,
-                    ConditionParams = seed.ConditionParamsJson,
-                    ScopeClass = _scopeClassifier.Classify(seed.ConditionType, seed.ConditionParamsJson),
-                    Severity = seed.Severity,
-                    IsEnabled = true,
-                };
-                if (ownerSubjectId is { } owner)
-                {
-                    rule.Channels.Add(new AlertRuleChannelEntity
-                    {
-                        Id = Guid.CreateVersion7(),
-                        TenantId = tenantId,
-                        AlertRuleId = rule.Id,
-                        ChannelType = ChannelType.InApp,
-                        Destination = owner.ToString(),
-                        SortOrder = 0,
-                    });
-                }
-                db.AlertRules.Add(rule);
-                rulesCreated++;
-            }
-
-            rulesByName[seed.Name] = rule;
-        }
-        await db.SaveChangesAsync(ct);
+        IReadOnlyList<AlertRuleChannelWrite> channels = ownerSubjectId is { } owner
+            ? [new AlertRuleChannelWrite(ChannelType.InApp, owner.ToString())]
+            : [];
+        var seeded = await _alertRules.CreateMissingByNameAsync(
+            tenantId,
+            DemoAlertSeeds.Defaults
+                .Select(seed => new NewAlertRule(
+                    new AlertRuleWrite(
+                        seed.Name,
+                        seed.Description,
+                        seed.ConditionType,
+                        seed.ConditionParamsJson,
+                        _scopeClassifier.Classify(seed.ConditionType, seed.ConditionParamsJson),
+                        seed.Severity,
+                        IsEnabled: true,
+                        SortOrder: 0,
+                        AllowThroughDnd: false,
+                        AutoResolveEnabled: false,
+                        AutoResolveParams: null,
+                        ClientConfiguration: "{}"),
+                    channels))
+                .ToList(),
+            ct);
+        var rulesByName = seeded.RuleIdsByName;
+        var rulesCreated = seeded.Created;
 
         // Rebuild alarm history for the seeded rules (idempotent re-seed).
-        var seededRuleIds = rulesByName.Values.Select(r => r.Id).ToList();
+        var seededRuleIds = rulesByName.Values.ToList();
         await db.AlertInstances.PurgeAsync(
             i => i.AlertExcursion != null && seededRuleIds.Contains(i.AlertExcursion.AlertRuleId), ct);
         await db.AlertExcursions.PurgeAsync(e => seededRuleIds.Contains(e.AlertRuleId), ct);
@@ -599,7 +587,7 @@ public class SampleDataSeeder
         var excursionsCreated = 0;
         foreach (var episode in episodes.OrderByDescending(e => e.StartUtc).Take(MaxAlarmEpisodes))
         {
-            if (!rulesByName.TryGetValue(episode.RuleName, out var rule))
+            if (!rulesByName.TryGetValue(episode.RuleName, out var ruleId))
                 continue;
 
             var rng = DayScenarios.RngFor(episode.StartUtc.Date, $"ack:{episode.RuleName}");
@@ -612,7 +600,7 @@ public class SampleDataSeeder
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = tenantId,
-                AlertRuleId = rule.Id,
+                AlertRuleId = ruleId,
                 StartedAt = episode.StartUtc,
                 EndedAt = episode.EndUtc,
                 AcknowledgedAt = acknowledgedAt,

@@ -18,7 +18,7 @@ using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Authorization;
 
@@ -58,6 +58,7 @@ public class AlertRulesController : ControllerBase
 {
     private readonly INocturneDbContextFactory _contextFactory;
     private readonly IAlertRepository _alerts;
+    private readonly IAlertRuleRepository _rules;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IAlertReferenceService _referenceService;
     private readonly IAlertDeliveryService _deliveryService;
@@ -74,6 +75,7 @@ public class AlertRulesController : ControllerBase
     public AlertRulesController(
         INocturneDbContextFactory contextFactory,
         IAlertRepository alerts,
+        IAlertRuleRepository rules,
         ITenantAccessor tenantAccessor,
         IAlertReferenceService referenceService,
         IAlertDeliveryService deliveryService,
@@ -86,6 +88,7 @@ public class AlertRulesController : ControllerBase
     {
         _contextFactory = contextFactory;
         _alerts = alerts;
+        _rules = rules;
         _tenantAccessor = tenantAccessor;
         _referenceService = referenceService;
         _deliveryService = deliveryService;
@@ -157,39 +160,25 @@ public class AlertRulesController : ControllerBase
 
         var conditionParamsJson = trees.ConditionParams;
 
-        var rule = new AlertRuleEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
-            Name = request.Name,
-            Description = request.Description,
-            ConditionType = request.ConditionType,
-            ConditionParams = conditionParamsJson,
-            ScopeClass = _scopeClassifier.Classify(request.ConditionType, conditionParamsJson),
-            IsEnabled = request.IsEnabled,
-            SortOrder = request.SortOrder,
-            Severity = request.Severity ?? AlertRuleSeverity.Warning,
-            AllowThroughDnd = request.AllowThroughDnd,
-            AutoResolveEnabled = request.AutoResolveEnabled,
-            AutoResolveParams = trees.AutoResolveParams,
-            ClientConfiguration = trees.ClientConfiguration ?? "{}",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
+        var ruleId = await _rules.CreateAsync(
+            new NewAlertRule(
+                new AlertRuleWrite(
+                    request.Name,
+                    request.Description,
+                    request.ConditionType,
+                    conditionParamsJson,
+                    _scopeClassifier.Classify(request.ConditionType, conditionParamsJson),
+                    request.Severity ?? AlertRuleSeverity.Warning,
+                    request.IsEnabled,
+                    request.SortOrder,
+                    request.AllowThroughDnd,
+                    request.AutoResolveEnabled,
+                    trees.AutoResolveParams,
+                    trees.ClientConfiguration ?? "{}"),
+                _channels.ToWrites(request.Channels ?? [])),
+            ct);
 
-        if (request.Channels is { Count: > 0 })
-        {
-            var sortIndex = 0;
-            foreach (var ch in request.Channels)
-            {
-                rule.Channels.Add(_channels.Build(ch, rule.Id, tenantId, sortIndex++, AlertRuleChannelWriter.NoRetainedSecrets));
-            }
-        }
-
-        db.AlertRules.Add(rule);
-        await db.SaveChangesAsync(ct);
-
-        return CreatedAtAction(nameof(GetRule), new { id = rule.Id }, await ReadBackAsync(tenantId, rule.Id, ct));
+        return CreatedAtAction(nameof(GetRule), new { id = ruleId }, await ReadBackAsync(tenantId, ruleId, ct));
     }
 
     /// <summary>
@@ -204,19 +193,17 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> UpdateRule(
         Guid id, [FromBody] UpdateAlertRuleRequest request, CancellationToken ct)
     {
-        await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
-        var db = unit.Context;
-
-        var rule = await db.AlertRules
-            .Include(r => r.Channels)
-            .FirstOrDefaultAsync(r => r.Id == id, ct);
-
+        var tenantId = _tenantAccessor.TenantId;
+        var rule = await _alerts.GetRuleAsync(tenantId, id, ct);
         if (rule is null)
             return NotFound();
 
         var trees = RequestTrees.From(request.ConditionParams, request.AutoResolveParams, request.ClientConfiguration);
         if (RejectInvalidConditions(request.ConditionType, trees, request.AutoResolveEnabled) is { } invalid)
             return invalid;
+
+        await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
+        var db = unit.Context;
 
         if (await ResolveAndValidateChannelsAsync(request.Channels, AlertRuleChannelWriter.InAppRecipientsOf(rule.Channels), db, ct) is { } badChannel)
             return badChannel;
@@ -230,57 +217,38 @@ public class AlertRulesController : ControllerBase
             return BadRequest("Cyclical alert_state reference detected.");
         }
 
-        var tenantId = db.TenantId;
-
         var conditionParamsJson = trees.ConditionParams;
 
-        // A tree equal as JSON keeps its stored text, so an edit that leaves it alone is not a
-        // new condition version.
-        var sameBody = ConditionTreeEquality.Same(rule.ConditionParams, conditionParamsJson);
-        var sameAutoResolve = ConditionTreeEquality.Same(rule.AutoResolveParams, trees.AutoResolveParams);
+        var sameBody = ConditionTreeEquality.Same(rule.Rule.ConditionParams, conditionParamsJson);
+        var sameAutoResolve = ConditionTreeEquality.Same(rule.Rule.AutoResolveParams, trees.AutoResolveParams);
         var conditionsChanged = rule.IsEnabled != request.IsEnabled
-            || rule.ConditionType != request.ConditionType
+            || rule.Rule.ConditionType != request.ConditionType
             || !sameBody
-            || rule.AutoResolveEnabled != request.AutoResolveEnabled
+            || rule.Rule.AutoResolveEnabled != request.AutoResolveEnabled
             || !sameAutoResolve;
         var snoozeChanged = !SmartSnoozeConfig.SameConditions(
-            SmartSnoozeConfig.StoredConditions(rule.ClientConfiguration),
+            SmartSnoozeConfig.StoredConditions(rule.Rule.ClientConfiguration),
             SmartSnoozeConfig.StoredConditions(trees.ClientConfiguration));
-
-        rule.Name = request.Name;
-        rule.Description = request.Description;
-        rule.ConditionType = request.ConditionType;
-        if (!sameBody)
-            rule.ConditionParams = conditionParamsJson;
-        rule.ScopeClass = _scopeClassifier.Classify(request.ConditionType, conditionParamsJson);
         var wasEnabled = rule.IsEnabled;
-        rule.IsEnabled = request.IsEnabled;
-        rule.SortOrder = request.SortOrder;
-        rule.Severity = request.Severity ?? AlertRuleSeverity.Warning;
-        rule.AllowThroughDnd = request.AllowThroughDnd;
-        rule.AutoResolveEnabled = request.AutoResolveEnabled;
-        if (!sameAutoResolve)
-            rule.AutoResolveParams = trees.AutoResolveParams;
-        rule.ClientConfiguration = trees.ClientConfiguration ?? "{}";
-        rule.ReviewReason = null;
-        rule.UpdatedAt = DateTime.UtcNow;
 
+        var rules = new AlertRuleRepository(unit);
+        var write = new AlertRuleWrite(
+            request.Name,
+            request.Description,
+            request.ConditionType,
+            sameBody ? rule.Rule.ConditionParams : conditionParamsJson,
+            _scopeClassifier.Classify(request.ConditionType, conditionParamsJson),
+            request.Severity ?? AlertRuleSeverity.Warning,
+            request.IsEnabled,
+            request.SortOrder,
+            request.AllowThroughDnd,
+            request.AutoResolveEnabled,
+            sameAutoResolve ? rule.Rule.AutoResolveParams : trees.AutoResolveParams,
+            trees.ClientConfiguration ?? "{}");
+        if (!await rules.UpdateAsync(id, write, ct))
+            return NotFound();
         if (request.Channels is not null)
-        {
-            var retainedSecrets = AlertRuleChannelWriter.CollectRetainedSecrets(rule.Channels);
-
-            // Replace the channel list wholesale. Cascade-delete on AlertRuleChannelEntity ⇒
-            // AlertDeliveryEntity is configured as SetNull (not Cascade) to preserve the audit
-            // trail of historical deliveries even when the source channel is reconfigured.
-            db.AlertRuleChannels.RemoveRange(rule.Channels);
-            rule.Channels.Clear();
-
-            var sortIndex = 0;
-            foreach (var ch in request.Channels)
-            {
-                rule.Channels.Add(_channels.Build(ch, rule.Id, tenantId, sortIndex++, retainedSecrets));
-            }
-        }
+            await rules.ReplaceChannelsAsync(id, _channels.ToWrites(request.Channels), kept: null, ct);
 
         // A save without its clear would stand: a retried edit changes nothing, so it would not
         // clear the hold.
@@ -307,9 +275,8 @@ public class AlertRulesController : ControllerBase
     [ProducesResponseType(typeof(ReferencingRulesResponse), StatusCodes.Status409Conflict)]
     public async Task<ActionResult> DeleteRule(Guid id, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateAsync(ct);
-
-        var rule = await db.AlertRules.FirstOrDefaultAsync(r => r.Id == id, ct);
+        var tenantId = _tenantAccessor.TenantId;
+        var rule = await _alerts.GetRuleAsync(tenantId, id, ct);
         if (rule is null)
             return NotFound();
 
@@ -333,10 +300,10 @@ public class AlertRulesController : ControllerBase
         // AlertRuleRetirement's remarks: a delete closes first. An abort here leaves the rule in
         // place with its excursion closed.
         if (rule.IsEnabled)
-            await _retirement.CloseAsync([id], db.TenantId, ct);
+            await _retirement.CloseAsync([id], tenantId, ct);
 
-        db.AlertRules.Remove(rule);
-        await db.SaveChangesAsync(ct);
+        if (!await _rules.DeleteAsync(id, ct))
+            return NotFound();
 
         return NoContent();
     }
@@ -354,13 +321,9 @@ public class AlertRulesController : ControllerBase
         await using var unit = await DbUnitOfWork.OpenAsync(_contextFactory, ct);
         var db = unit.Context;
 
-        var rule = await db.AlertRules.FirstOrDefaultAsync(r => r.Id == id, ct);
-        if (rule is null)
+        if (await new AlertRuleRepository(unit).ToggleEnabledAsync(id, ct) is not { } wasEnabled)
             return NotFound();
 
-        var wasEnabled = rule.IsEnabled;
-        rule.IsEnabled = !rule.IsEnabled;
-        rule.UpdatedAt = DateTime.UtcNow;
         await _rearm.SaveAndClearAsync(unit, id, ct);
         if (wasEnabled)
             await _retirement.CloseAsync([id], db.TenantId, CancellationToken.None);
@@ -405,13 +368,7 @@ public class AlertRulesController : ControllerBase
         // Held to the same rules as a save: a preview that accepted a destination the editor
         // would refuse to store would report success for a channel that cannot deliver. The
         // request names no rule, so any in-app recipient stored on this site counts as stored.
-        var storedRecipients = (await db.AlertRuleChannels
-                .AsNoTracking()
-                .Where(c => c.ChannelType == ChannelType.InApp)
-                .Select(c => c.Destination)
-                .Distinct()
-                .ToListAsync(ct))
-            .ToHashSet();
+        var storedRecipients = await _rules.GetInAppDestinationsAsync(ct);
         if (await ResolveAndValidateChannelsAsync(request.Channels, storedRecipients, db, ct) is { } badChannel)
             return badChannel;
 

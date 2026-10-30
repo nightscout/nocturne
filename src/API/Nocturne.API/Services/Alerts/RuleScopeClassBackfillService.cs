@@ -18,10 +18,11 @@ namespace Nocturne.API.Services.Alerts;
 /// Idempotent and safe to run on every startup: only rows whose recomputed class differs from the
 /// stored one are written, so once the population is classified the scan writes nothing. Runs as a
 /// <see cref="BackgroundService"/> so the scan never gates host startup, reads untracked rule
-/// snapshots through <see cref="IAlertRepository"/>, and writes via targeted
-/// <c>ExecuteUpdateAsync</c>. The scan is per-tenant because <c>alert_rules</c> is RLS-scoped and
-/// the policy is fail-closed — a cross-tenant <c>IgnoreQueryFilters</c> read would be blocked, so
-/// we set the tenant context per iteration exactly like the sweep service does.
+/// snapshots through <see cref="IAlertRepository"/>, and writes each class in one statement through
+/// <see cref="IAlertRuleRepository.SetScopeClassAsync"/>. The scan is per-tenant because
+/// <c>alert_rules</c> is RLS-scoped and the policy is fail-closed — a cross-tenant
+/// <c>IgnoreQueryFilters</c> read would be blocked, so the tenant is pinned per iteration exactly
+/// like the sweep service does.
 /// </remarks>
 /// <seealso cref="RuleScopeClassifier"/>
 public sealed class RuleScopeClassBackfillService : BackgroundService
@@ -47,6 +48,7 @@ public sealed class RuleScopeClassBackfillService : BackgroundService
             using var scope = _serviceProvider.CreateScope();
             var factory = scope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>();
             var alerts = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
+            var rules = scope.ServiceProvider.GetRequiredService<IAlertRuleRepository>();
             var classifier = scope.ServiceProvider.GetRequiredService<IRuleScopeClassifier>();
 
             // Tenants are not RLS-scoped, so this list read is safe without a tenant context.
@@ -63,10 +65,10 @@ public sealed class RuleScopeClassBackfillService : BackgroundService
             var updatedTotal = 0;
             foreach (var tenantId in tenantIds)
             {
-                var rules = await alerts.GetRuleSnapshotsAsync(tenantId, stoppingToken);
+                var snapshots = await alerts.GetRuleSnapshotsAsync(tenantId, stoppingToken);
 
                 // Group reclassified rules so each distinct target class is one UPDATE.
-                var reclassified = rules
+                var reclassified = snapshots
                     .Select(r => (r.Id, Computed: classifier.Classify(r.ConditionType, r.ConditionParams), r.ScopeClass))
                     .Where(r => r.ScopeClass != r.Computed)
                     .GroupBy(r => r.Computed, r => r.Id)
@@ -74,15 +76,8 @@ public sealed class RuleScopeClassBackfillService : BackgroundService
                 if (reclassified.Count == 0)
                     continue;
 
-                await using var db = await factory.CreateForTenantAsync(tenantId, stoppingToken);
                 foreach (var group in reclassified)
-                {
-                    var ids = group.ToList();
-                    var scopeClass = group.Key;
-                    updatedTotal += await db.AlertRules
-                        .Where(r => ids.Contains(r.Id))
-                        .ExecuteUpdateAsync(s => s.SetProperty(r => r.ScopeClass, scopeClass), stoppingToken);
-                }
+                    updatedTotal += await rules.SetScopeClassAsync(tenantId, group.Key, group.ToList(), stoppingToken);
             }
 
             if (updatedTotal > 0)

@@ -18,6 +18,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Services.Demo.Services;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -98,6 +99,7 @@ public class SampleDataSeederMixedZoneTests : IDisposable
             Mock.Of<IHeartRateService>(),
             Mock.Of<IStepCountService>(),
             Mock.Of<ITrackerRepository>(),
+            new AlertRuleRepository(_db.ContextFactory.AsNocturneFactory()),
             Mock.Of<IRuleScopeClassifier>(),
             Mock.Of<IProfileWriteService>(),
             statuses.Object,

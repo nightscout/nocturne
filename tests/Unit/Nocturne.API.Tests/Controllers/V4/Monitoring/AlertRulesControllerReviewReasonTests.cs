@@ -67,6 +67,7 @@ public class AlertRulesControllerReviewReasonTests
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(db),
             new AlertRepository(new TestNocturneDbContextFactory(db)),
+            new AlertRuleRepository(new TestNocturneDbContextFactory(db)),
             MockTenantAccessor.Create(db.TenantId).Object,
             referenceService.Object,
             Mock.Of<IAlertDeliveryService>(),

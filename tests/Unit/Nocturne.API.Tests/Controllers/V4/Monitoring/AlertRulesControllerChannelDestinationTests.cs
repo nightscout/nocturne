@@ -48,6 +48,7 @@ public class AlertRulesControllerChannelDestinationTests
         var controller = new AlertRulesController(
             new TestNocturneDbContextFactory(ctx),
             new AlertRepository(new TestNocturneDbContextFactory(ctx)),
+            new AlertRuleRepository(new TestNocturneDbContextFactory(ctx)),
             MockTenantAccessor.Create(ctx.TenantId).Object,
             Mock.Of<IAlertReferenceService>(),
             deliveryService ?? Mock.Of<IAlertDeliveryService>(),
