@@ -19,7 +19,9 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// The text scan does not see an entity reached through a navigation property, so a host member
 /// that holds one that way is caught only by the reflection half, and a query that goes through a
 /// navigation is not caught at all. An <see cref="Exemption"/> names a file that may still use the
-/// concept's <c>DbSet</c>s or types, with the reason; a later slice or follow-up deletes it.
+/// concept's <c>DbSet</c>s or types, with the reason; a later slice or follow-up deletes it. The
+/// reflection half honours it for the type the file is named after and the types nested in it,
+/// which is where a local the file holds across an <c>await</c> ends up.
 /// </remarks>
 [Trait("Category", "Unit")]
 public class HostPersistenceGuardTests
@@ -32,6 +34,10 @@ public class HostPersistenceGuardTests
             Entities.Select(NamePattern).Concat(DbSets.Select(DbSetPattern));
 
         public bool Exempts(string path) => Exemptions.Any(e => e.File == path);
+
+        public bool Exempts(Type type) => Exemptions.Any(e => Path.GetFileNameWithoutExtension(e.File) == Outermost(type).Name);
+
+        private static Type Outermost(Type type) => type.DeclaringType is { } outer ? Outermost(outer) : type;
     }
 
     private static readonly Concept[] Concepts =
@@ -51,6 +57,15 @@ public class HostPersistenceGuardTests
             [
                 new("src/API/Nocturne.API/Services/Auth/OAuthCodeCleanupService.cs",
                     "deletes the OAuth clients no grant or code names, by a subquery on the code tables; moves with OAuth client persistence in #3102"),
+            ]),
+        new("grants and invites (#3102)",
+            ["OAuthGrantEntity", "MemberInviteEntity", "RefreshTokenEntity"],
+            ["OAuthGrants", "MemberInvites", "RefreshTokens"],
+            [
+                new("src/API/Nocturne.API/Services/Auth/OAuthCodeCleanupService.cs",
+                    "deletes the OAuth clients no grant or code names, by a subquery on the grant table; moves with OAuth client persistence in #3102"),
+                new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
+                    "dev-only whole-schema snapshot restore that re-points the invites of a tenant alongside every other table in one transaction"),
             ]),
     ];
 
@@ -78,7 +93,8 @@ public class HostPersistenceGuardTests
     [Fact]
     public void NoHostMemberCarriesAnEntityOfAConcept()
     {
-        var entities = Concepts.SelectMany(c => c.Entities).ToHashSet(StringComparer.Ordinal);
+        var entities = Concepts.SelectMany(c => c.Entities.Select(entity => (entity, concept: c)))
+            .ToDictionary(pair => pair.entity, pair => pair.concept, StringComparer.Ordinal);
         const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
 
         var members = Api.GetTypes()
@@ -88,7 +104,7 @@ public class HostPersistenceGuardTests
                 .Concat(t.GetFields(all).Select(f => f.FieldType))
                 .Concat(t.GetProperties(all).Select(p => p.PropertyType))
                 .SelectMany(EntitiesIn)
-                .Where(entities.Contains)
+                .Where(entity => entities.TryGetValue(entity, out var concept) && !concept.Exempts(t))
                 .Select(entity => $"{t.FullName}({entity})"))
             .Distinct()
             .ToList();

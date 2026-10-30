@@ -122,7 +122,7 @@ public class OAuthTokenServiceTests : IDisposable
     {
         return new OAuthTokenService(
             new OAuthTokenRepository(dbContext.AsFactory()),
-            dbContext.AsFactory(),
+            new OAuthGrantRepository(dbContext.AsFactory()),
             _mockJwtService.Object,
             _mockSubjectService.Object,
             grantService ?? _mockGrantService.Object,
@@ -347,10 +347,10 @@ public class OAuthTokenServiceTests : IDisposable
         var guestSessionCache = new GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(
             new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
         var grantService = new OAuthGrantService(
-            _db.ContextFactory.AsNocturneFactory(),
+            _db.ContextFactory.AsNocturneFactory(), new OAuthGrantRepository(_db.ContextFactory.AsNocturneFactory()),
             Mock.Of<IOAuthClientService>(),
             guestSessionCache,
-            new GrantRevocationService(guestSessionCache, new OAuthTokenRepository(_db.ContextFactory.AsNocturneFactory())),
+            new GrantRevocationService(guestSessionCache),
             Mock.Of<ILogger<OAuthGrantService>>());
 
         var result = await CreateService(db, grantService).ExchangeAuthorizationCodeAsync(

@@ -18,6 +18,7 @@ using Xunit;
 using Nocturne.API.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.API.Services.Caching;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Controllers.V4.Demo;
 
@@ -216,7 +217,7 @@ public class DemoSessionControllerTests : IDisposable
     private DemoSessionController BuildController(Guid tenantId, bool isDemo, bool shareAccess = false)
     {
         var demoTenantService = new DemoTenantService(
-            BuildDbFactory().AsNocturneFactory(),
+            BuildDbFactory().AsNocturneFactory(), new EfFirstPartyTokenRepository(BuildDbFactory().AsNocturneFactory()),
             new Mock<ITenantService>().Object,
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Caching;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -50,14 +51,17 @@ public sealed class DemoTenantService
     public const string DemoRoleSlug = "demo-visitor";
 
     private readonly INocturneDbContextFactory _factory;
+    private readonly IFirstPartyTokenRepository _sessions;
     private readonly ITenantService _tenantService;
     private readonly PublicAccessCacheService _publicAccessCache;
     private readonly ITenantCache _cache;
     private readonly TimeProvider _time;
     private readonly ILogger<DemoTenantService> _logger;
 
+    /// <param name="sessions">The first-party sessions a retired demo visitor's rows are deleted from.</param>
     public DemoTenantService(
         INocturneDbContextFactory factory,
+        IFirstPartyTokenRepository sessions,
         ITenantService tenantService,
         PublicAccessCacheService publicAccessCache,
         ITenantCache cache,
@@ -65,6 +69,7 @@ public sealed class DemoTenantService
         ILogger<DemoTenantService> logger)
     {
         _factory = factory;
+        _sessions = sessions;
         _tenantService = tenantService;
         _publicAccessCache = publicAccessCache;
         _cache = cache;
@@ -330,9 +335,7 @@ public sealed class DemoTenantService
             return;
         }
 
-        await db.RefreshTokens
-            .Where(t => t.SubjectId == subjectId.Value)
-            .ExecuteDeleteAsync(ct);
+        await _sessions.DeleteAllForSubjectAsync(subjectId.Value, ct);
 
         await db.TenantMembers
             .Where(m => m.SubjectId == subjectId.Value)

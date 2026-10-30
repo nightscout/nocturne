@@ -15,6 +15,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -359,20 +360,20 @@ public class MigrationSubjectGrantTests
         // and the token the source issued still resolves through the rule that reads it. Asserting
         // the stored column alone would pass even if nothing could authenticate with it.
         var byIssuedToken = await DirectGrantTokenHandler.FindActiveGrantAsync(
-            factory.AsNocturneFactory(), ReaderToken, tenantId, DateTime.UtcNow);
+            new OAuthGrantRepository(factory.AsNocturneFactory()), ReaderToken, tenantId, DateTime.UtcNow);
 
         byIssuedToken.Should().NotBeNull();
-        byIssuedToken!.Value.Grant.Label.Should().Be("Reader");
+        byIssuedToken!.Grant.Label.Should().Be("Reader");
 
         // The name in front of the dash is cosmetic, and a longer prefix of the same digest is the
         // same credential; both are Nightscout's rule, not ours.
         (await DirectGrantTokenHandler.FindActiveGrantAsync(
-            factory.AsNocturneFactory(), $"anything-{ReaderDigest}", tenantId, DateTime.UtcNow))
+            new OAuthGrantRepository(factory.AsNocturneFactory()), $"anything-{ReaderDigest}", tenantId, DateTime.UtcNow))
             .Should().NotBeNull();
 
         // A prefix taken from the middle of the digest is not a prefix of it.
         (await DirectGrantTokenHandler.FindActiveGrantAsync(
-            factory.AsNocturneFactory(), $"reader-{ReaderDigest[8..24]}", tenantId, DateTime.UtcNow))
+            new OAuthGrantRepository(factory.AsNocturneFactory()), $"reader-{ReaderDigest[8..24]}", tenantId, DateTime.UtcNow))
             .Should().BeNull();
     }
 

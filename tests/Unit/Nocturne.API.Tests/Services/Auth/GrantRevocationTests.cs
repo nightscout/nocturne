@@ -90,20 +90,20 @@ public class GrantRevocationTests : IDisposable
         {
             case Guest:
                 var guestLinks = new GuestLinkService(
-                    db.AsFactory(),
+                    db.AsFactory(), new OAuthGrantRepository(db.AsFactory()),
                     _sessionCache,
-                    new GrantRevocationService(_sessionCache, new OAuthTokenRepository(db.AsFactory())),
+                    new GrantRevocationService(_sessionCache),
                     NullLogger<GuestLinkService>.Instance);
                 (await guestLinks.RevokeAsync(grantId, _ownerSubjectId)).Should().BeTrue();
                 break;
 
             case App:
                 var grants = new OAuthGrantService(
-                    _db.ContextFactory.AsNocturneFactory(),
+                    _db.ContextFactory.AsNocturneFactory(), new OAuthGrantRepository(_db.ContextFactory.AsNocturneFactory()),
                     new Mock<IOAuthClientService>().Object,
                     _sessionCache,
                     new GrantRevocationService(
-                        _sessionCache, new OAuthTokenRepository(_db.ContextFactory.AsNocturneFactory())),
+                        _sessionCache),
                     NullLogger<OAuthGrantService>.Instance);
                 await grants.RevokeGrantAsync(grantId);
                 break;
@@ -111,10 +111,13 @@ public class GrantRevocationTests : IDisposable
             default:
                 var directGrants = new DirectGrantService(
                     new Mock<IAuthAuditService>().Object,
-                    new GrantRevocationService(_sessionCache, new OAuthTokenRepository(db.AsFactory())),
+                    new GrantRevocationService(_sessionCache),
                     NullLogger<DirectGrantService>.Instance);
-                (await directGrants.RevokeAsync(
-                    db, grantId, subjectId: null, ipAddress: null, userAgent: null)).Should().BeTrue();
+                await using (var unit = await DbUnitOfWork.OpenAsync(db.AsFactory()))
+                {
+                    (await directGrants.RevokeAsync(
+                        unit, grantId, subjectId: null, ipAddress: null, userAgent: null)).Should().BeTrue();
+                }
                 break;
         }
     }

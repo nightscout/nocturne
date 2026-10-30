@@ -37,8 +37,7 @@ public sealed class ApexAnswerSurvivesTenantProvisioningTests : TenantResolution
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
         new GrantRevocationService(
-            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
-            new OAuthTokenRepository(Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory())),
+            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
         NullLogger<TenantService>.Instance);
 

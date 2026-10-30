@@ -72,8 +72,7 @@ public class DirectGrantControllerTests : IDisposable
         var directGrantService = new DirectGrantService(
             auditService,
             new GrantRevocationService(
-                new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
-                new OAuthTokenRepository(_dbContext.AsFactory())),
+                new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             new Mock<ILogger<DirectGrantService>>().Object);
 
         _controller = new DirectGrantController(_dbContext.AsFactory(), directGrantService);

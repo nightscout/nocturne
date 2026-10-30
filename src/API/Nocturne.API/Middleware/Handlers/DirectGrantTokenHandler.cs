@@ -1,10 +1,6 @@
-using System.Linq.Expressions;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Utilities;
-using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 
@@ -35,19 +31,20 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// </summary>
     public string Name => "DirectGrantTokenHandler";
 
-    private readonly INocturneDbContextFactory _dbContextFactory;
+    private readonly IOAuthGrantRepository _grants;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<DirectGrantTokenHandler> _logger;
 
     /// <summary>
     /// Creates a new instance of DirectGrantTokenHandler
     /// </summary>
+    /// <param name="grants">The stored grants, pinned per read to the request's tenant.</param>
     public DirectGrantTokenHandler(
-        INocturneDbContextFactory dbContextFactory,
+        IOAuthGrantRepository grants,
         TimeProvider timeProvider,
         ILogger<DirectGrantTokenHandler> logger)
     {
-        _dbContextFactory = dbContextFactory;
+        _grants = grants;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -77,20 +74,20 @@ public class DirectGrantTokenHandler : IAuthHandler
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         if (await FindActiveGrantAsync(
-                _dbContextFactory, token, tenantCtx.TenantId, now, context.RequestAborted, rawToken)
+                _grants, token, tenantCtx.TenantId, now, context.RequestAborted, rawToken)
             is not var (grant, membership))
         {
             _logger.LogDebug("No matching direct grant found for token");
             return AuthResult.Skip();
         }
 
-        new RequestMembership(grant.SubjectId, tenantCtx.TenantId, membership).StoreOn(context);
+        new RequestMembership(grant.SubjectId, tenantCtx.TenantId, MembershipFacts.From(membership)).StoreOn(context);
 
         // Update last used metadata (fire and forget via separate context)
         if (LastUsedStamp.IsDue(grant.LastUsedAt, now))
         {
             _ = RecordLastUsedAsync(
-                _dbContextFactory, _logger, grant.Id, tenantCtx.TenantId,
+                _grants, _logger, grant.Id, tenantCtx.TenantId,
                 context.Connection.RemoteIpAddress?.ToString(),
                 context.Request.Headers.UserAgent.FirstOrDefault());
         }
@@ -103,7 +100,7 @@ public class DirectGrantTokenHandler : IAuthHandler
             IsAuthenticated = true,
             AuthType = AuthType.DirectGrant,
             SubjectId = grant.SubjectId,
-            Scopes = grant.Scopes,
+            Scopes = [.. grant.Scopes],
             TokenId = grant.Id,
             // MemberScopeMiddleware applies the membership's limit on top of this one.
             LimitTo24Hours = grant.LimitTo24Hours,
@@ -116,13 +113,10 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// statement, or null when there is none.
     /// </summary>
     /// <remarks>
-    /// Runs on its own context pinned to <paramref name="tenantId"/>: callers hold a scope whose
-    /// context may carry no tenant, and <c>oauth_grants</c> is tenant-scoped by both a global query
-    /// filter and the <c>tenant_isolation</c> RLS policy, so an unpinned read matches no row. The
-    /// grant's own <c>TenantId</c> is matched explicitly as well, so the tenant a grant authorizes is
-    /// decided here rather than by whatever tenant state the connection carries.
+    /// Reads pinned to <paramref name="tenantId"/>, for the reason on
+    /// <see cref="IOAuthGrantRepository.FindLiveDirectGrantAsync(Guid, DirectGrantLookup, DateTime, CancellationToken)"/>.
     /// </remarks>
-    /// <param name="dbContextFactory">Factory for the tenant-pinned context.</param>
+    /// <param name="grants">The stored grants.</param>
     /// <param name="token">The presented token, <c>noc_</c>-prefixed.</param>
     /// <param name="tenantId">The tenant the grant must belong to.</param>
     /// <param name="now">The instant the grant must be active at.</param>
@@ -133,8 +127,8 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// <paramref name="token"/> because a dashless Nightscout token, which is a bare digest, stops
     /// parsing as one once a prefix is prepended.
     /// </param>
-    internal static async Task<(OAuthGrantEntity Grant, MembershipFacts? Membership)?> FindActiveGrantAsync(
-        INocturneDbContextFactory dbContextFactory,
+    internal static async Task<AuthenticatedDirectGrant?> FindActiveGrantAsync(
+        IOAuthGrantRepository grants,
         string token,
         Guid tenantId,
         DateTime now,
@@ -157,63 +151,19 @@ public class DirectGrantTokenHandler : IAuthHandler
         // a LIKE pattern below.
         var digestPrefix = LegacyNightscoutToken.ExtractDigestPrefix(legacyToken ?? token);
 
-        await using var dbContext = await dbContextFactory.CreateForTenantAsync(tenantId, ct);
-
-        var grants = ActiveDirectGrants(dbContext.OAuthGrants.AsNoTracking(), tenantId, now);
-
         // Two lookups rather than one OR'd predicate. The hash match is what almost every request
         // takes; the digest match is a filtered-index range scan only an imported Nightscout token
         // can satisfy, and OR-ing the two would deny the planner the digest index on every request.
-        var byHash = await FirstWithMembershipAsync(
-            grants.Where(g => g.TokenHash != null && candidateHashes.Contains(g.TokenHash)));
+        var byHash = await grants.FindLiveDirectGrantAsync(
+            tenantId, new DirectGrantLookup.ByTokenHash(candidateHashes), now, ct);
         if (byHash != null || digestPrefix == null)
         {
             return byHash;
         }
 
-        return await FirstWithMembershipAsync(
-            grants.Where(g => g.LegacyTokenDigest != null && g.LegacyTokenDigest.StartsWith(digestPrefix)));
-
-        async Task<(OAuthGrantEntity, MembershipFacts?)?> FirstWithMembershipAsync(IQueryable<OAuthGrantEntity> matching)
-        {
-            var row = await RequestMembership.WithMembership(matching, g => g.SubjectId, dbContext, tenantId)
-                .FirstOrDefaultAsync(ct);
-            return row is null ? null : (row.Outer, row.Member.ToFacts());
-        }
+        return await grants.FindLiveDirectGrantAsync(
+            tenantId, new DirectGrantLookup.ByLegacyTokenDigestPrefix(digestPrefix), now, ct);
     }
-
-    /// <summary>
-    /// Narrows <paramref name="grants"/> to the direct grants on <paramref name="tenantId"/> that
-    /// authenticate at <paramref name="now"/>: not revoked, and either open-ended or short of their
-    /// <c>ExpiresAt</c>. The expiry instant itself does not authenticate, matching
-    /// <see cref="Services.Auth.GuestLinkService"/>.
-    /// </summary>
-    /// <remarks>
-    /// Query filters are ignored here for the reason given on <see cref="FindActiveGrantAsync"/>.
-    /// </remarks>
-    internal static IQueryable<OAuthGrantEntity> ActiveDirectGrants(
-        IQueryable<OAuthGrantEntity> grants, Guid tenantId, DateTime now)
-    {
-        return grants
-            .IgnoreQueryFilters()
-            .Where(g => g.TenantId == tenantId)
-            .Where(IsLiveDirectGrant(now));
-    }
-
-    /// <summary>
-    /// What makes a direct grant usable, independent of how the caller scopes it to a tenant.
-    /// </summary>
-    /// <remarks>
-    /// Shared with the <c>/api/v2/authorization/request/{token}</c> exchange, which scopes by the
-    /// global query filter rather than an explicit tenant id and so cannot reuse
-    /// <see cref="ActiveDirectGrants"/> wholesale. Both callers must agree on what is live, or a
-    /// grant one of them refuses is still exchangeable for a fresh JWT through the other.
-    /// </remarks>
-    /// <param name="now">The instant to judge expiry against.</param>
-    internal static Expression<Func<OAuthGrantEntity, bool>> IsLiveDirectGrant(DateTime now) =>
-        g => g.GrantType == OAuthGrantTypes.Direct
-             && g.RevokedAt == null
-             && (g.ExpiresAt == null || g.ExpiresAt > now);
 
     /// <summary>
     /// Extracts a direct grant token from the request. Accepts the <c>Authorization: Bearer</c>
@@ -256,18 +206,18 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// Stamps when, from where and by what a grant was last presented.
     /// </summary>
     /// <remarks>
-    /// Runs on its own context pinned to <paramref name="tenantId"/>, for the reason given on
+    /// Pinned to <paramref name="tenantId"/>, for the reason given on
     /// <see cref="FindActiveGrantAsync"/>. Every caller starts it fire-and-forget from a request that
     /// has already authenticated, so a failure is logged and swallowed rather than surfaced.
     /// </remarks>
-    /// <param name="dbContextFactory">Factory for the tenant-pinned context.</param>
+    /// <param name="grants">The stored grants.</param>
     /// <param name="logger">Where a failure is reported.</param>
     /// <param name="grantId">The grant that was presented.</param>
     /// <param name="tenantId">The tenant the grant belongs to.</param>
     /// <param name="ipAddress">The caller's address, when the connection has one.</param>
     /// <param name="userAgent">The caller's user-agent, when it sent one.</param>
     internal static async Task RecordLastUsedAsync(
-        INocturneDbContextFactory dbContextFactory,
+        IOAuthGrantRepository grants,
         ILogger logger,
         Guid grantId,
         Guid tenantId,
@@ -276,14 +226,8 @@ public class DirectGrantTokenHandler : IAuthHandler
     {
         try
         {
-            await using var dbContext = await dbContextFactory.CreateForTenantAsync(tenantId);
-            await dbContext.OAuthGrants
-                .IgnoreQueryFilters()
-                .Where(g => g.Id == grantId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(g => g.LastUsedAt, DateTime.UtcNow)
-                    .SetProperty(g => g.LastUsedIp, ipAddress)
-                    .SetProperty(g => g.LastUsedUserAgent, userAgent));
+            await grants.RecordUseAsync(
+                tenantId, grantId, DateTime.UtcNow, new GrantPresentation(ipAddress, userAgent), CancellationToken.None);
         }
         catch (Exception ex)
         {

@@ -366,6 +366,31 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             .ToListAsync(ct);
     }
 
+    /// <inheritdoc />
+    public async Task<bool> HasLiveSessionAsync(
+        Guid subjectId, string? sessionId, DateTime now, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateForSubjectAsync(subjectId, ct);
+        var live = db.RefreshTokens.Where(t =>
+            t.SubjectId == subjectId && t.RevokedAt == null && t.ExpiresAt > now);
+        if (sessionId != null)
+            live = live.Where(RefreshTokenEntity.InSession(sessionId));
+        return await live.AnyAsync(ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The table carries no tenant, so the reader's tenant is immaterial, and the subject GUC is
+    /// unset on the scope's context, so every row of the subject is in reach.
+    /// </remarks>
+    public async Task<int> DeleteAllForSubjectAsync(Guid subjectId, CancellationToken ct = default)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        return await db.RefreshTokens
+            .Where(t => t.SubjectId == subjectId)
+            .ExecuteDeleteAsync(ct);
+    }
+
     private static RefreshTokenRecord ToRecord(RefreshTokenEntity entity) =>
         new(
             Id: entity.Id,

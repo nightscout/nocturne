@@ -13,6 +13,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using Nocturne.API.Services.Caching;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Demo;
 
@@ -45,7 +46,7 @@ public class DemoTenantServiceResetTests : IDisposable
             .Returns((Guid tenantId, CancellationToken _) => SeedRolesAndPublicMemberAsync(tenantId));
 
         _service = new DemoTenantService(
-            dbFactory.Object.AsNocturneFactory(),
+            dbFactory.Object.AsNocturneFactory(), new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
             _tenantService.Object,
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),

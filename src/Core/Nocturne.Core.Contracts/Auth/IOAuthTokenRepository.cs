@@ -9,9 +9,9 @@ namespace Nocturne.Core.Contracts.Auth;
 /// token pair. First-party session tokens are on <see cref="IFirstPartyTokenRepository"/>.
 /// </summary>
 /// <remarks>
-/// Every method runs as the scope's reader on its tenant, except
-/// <see cref="RevokeRefreshTokensOfRevokedGrantsAsync"/> and <see cref="DeleteExpiredCodesAsync"/>,
-/// which pin the tenant they are given. A <c>Try</c> method is one conditional statement and
+/// Every method runs as the scope's reader on its tenant, except <see cref="DeleteExpiredCodesAsync"/>
+/// and <see cref="RevokeRefreshTokensOfRevokedGrantsAsync"/>, which pin the tenant they are given, and
+/// <see cref="RevokeRefreshTokensOfGrantsAsync"/>, which runs only on a caller's unit of work. A <c>Try</c> method is one conditional statement and
 /// returns whether this caller's statement changed the row; a lookup returns null for a row the
 /// reader cannot see; any other write returning <c>bool</c> says whether it found a row to change.
 /// </remarks>
@@ -69,6 +69,16 @@ public interface IOAuthTokenRepository
     /// <c>false</c> when it was already revoked, by a rotation or a sign-out.
     /// </summary>
     Task<bool> RevokeRefreshTokenAsync(Guid tokenId, DateTime now, CancellationToken ct);
+
+    /// <summary>
+    /// Stages, at <paramref name="now"/>, the revocation of the live refresh tokens of
+    /// <paramref name="grantIds"/> on the caller's unit of work, and returns how many. The caller has
+    /// staged the grants' own revocation on the same unit, so the two land in one save and no token
+    /// outlives its grant or dies before it.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The repository is not over a unit of work.</exception>
+    Task<int> RevokeRefreshTokensOfGrantsAsync(
+        IReadOnlyCollection<Guid> grantIds, DateTime now, CancellationToken ct);
 
     /// <summary>
     /// Revokes, at <paramref name="now"/>, the live refresh tokens of those of

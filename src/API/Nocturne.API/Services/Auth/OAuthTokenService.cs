@@ -1,7 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -17,7 +15,7 @@ namespace Nocturne.API.Services.Auth;
 public class OAuthTokenService : IOAuthTokenService
 {
     private readonly IOAuthTokenRepository _tokens;
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly IOAuthGrantRepository _grants;
     private readonly IJwtService _jwtService;
     private readonly ISubjectService _subjectService;
     private readonly IOAuthGrantService _grantService;
@@ -41,7 +39,7 @@ public class OAuthTokenService : IOAuthTokenService
     private const int MaxGraceRedemptions = 1;
 
     /// <param name="tokens">The stored codes and refresh tokens.</param>
-    /// <param name="contexts">For <see cref="LoadGrantAsync"/> only.</param>
+    /// <param name="grants">The stored grants, for <see cref="LoadGrantAsync"/>.</param>
     /// <param name="jwtService">Service for generating and validating JWT access tokens and refresh tokens.</param>
     /// <param name="subjectService">Service for resolving subject permissions and roles for token claims.</param>
     /// <param name="grantService">Service for persisting and querying OAuth consent grants.</param>
@@ -50,7 +48,7 @@ public class OAuthTokenService : IOAuthTokenService
     /// <param name="logger">The logger.</param>
     public OAuthTokenService(
         IOAuthTokenRepository tokens,
-        INocturneDbContextFactory contexts,
+        IOAuthGrantRepository grants,
         IJwtService jwtService,
         ISubjectService subjectService,
         IOAuthGrantService grantService,
@@ -60,7 +58,7 @@ public class OAuthTokenService : IOAuthTokenService
     )
     {
         _tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _grants = grants ?? throw new ArgumentNullException(nameof(grants));
         _jwtService = jwtService;
         _subjectService = subjectService;
         _grantService = grantService;
@@ -544,43 +542,12 @@ public class OAuthTokenService : IOAuthTokenService
 
     /// <summary>
     /// The grant a device code was approved into, with its client; null when it is gone or
-    /// revoked. The one grant read left in this service: <see cref="IOAuthGrantService"/> has no
-    /// lookup by id, and grant persistence moves to its own module in #3102.
+    /// revoked.
     /// </summary>
     private async Task<OAuthGrantInfo?> LoadGrantAsync(Guid grantId, CancellationToken ct)
     {
-        await using var db = await _contexts.CreateAsync(ct);
-        var grantEntity = await db.OAuthGrants
-            .AsNoTracking()
-            .Include(g => g.Client)
-            .FirstOrDefaultAsync(g => g.Id == grantId, ct);
-
-        if (grantEntity == null || grantEntity.IsRevoked)
-        {
-            return null;
-        }
-
-        return new OAuthGrantInfo
-        {
-            Id = grantEntity.Id,
-            TenantId = grantEntity.TenantId,
-            ClientEntityId = grantEntity.ClientEntityId,
-            ClientId = grantEntity.Client?.ClientId ?? string.Empty,
-            ClientDisplayName = grantEntity.Client?.DisplayName,
-            ClientUri = grantEntity.Client?.ClientUri,
-            LogoUri = grantEntity.Client?.LogoUri,
-            ClientIdentity = grantEntity.ClientIdentity,
-            SubjectId = grantEntity.SubjectId,
-            GrantType = grantEntity.GrantType,
-            Scopes = grantEntity.Scopes,
-            Label = grantEntity.Label,
-            CreatedAt = grantEntity.CreatedAt,
-            LastUsedAt = grantEntity.LastUsedAt,
-            LastUsedIp = grantEntity.LastUsedIp,
-            LastUsedUserAgent = grantEntity.LastUsedUserAgent,
-            IsRevoked = grantEntity.IsRevoked,
-            LimitTo24Hours = grantEntity.LimitTo24Hours,
-        };
+        var grant = await _grants.GetAsync(grantId, ct);
+        return grant is null || grant.IsRevoked ? null : OAuthGrantService.ToInfo(grant);
     }
 
     /// <summary>

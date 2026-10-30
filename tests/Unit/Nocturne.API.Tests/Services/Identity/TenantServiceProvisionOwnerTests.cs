@@ -39,8 +39,7 @@ public sealed class TenantServiceProvisionOwnerTests : IDisposable
         Mock.Of<IHttpClientFactory>(),
         Mock.Of<ITenantRoleService>(),
         new GrantRevocationService(
-            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
-            new OAuthTokenRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory())),
+            new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
         TimeProvider.System,
         NullLogger<TenantService>.Instance);
 

@@ -27,6 +27,16 @@ public sealed class DbUnitOfWork : IAsyncDisposable
         new(await contexts.CreateAsync(ct));
 
     /// <summary>
+    /// Opens a unit on a context pinned to <paramref name="tenantId"/> in place of the scope's, for
+    /// a caller that has checked the reader may write there, such as a platform admin acting on a
+    /// tenant other than their own. The pin is what <c>INocturneDbContextFactory.CreateForTenantAsync</c>
+    /// gives: tenant only, the scope's share, clamp and audit state unchanged.
+    /// </summary>
+    public static async ValueTask<DbUnitOfWork> OpenForTenantAsync(
+        INocturneDbContextFactory contexts, Guid tenantId, CancellationToken ct = default) =>
+        new(await contexts.CreateForTenantAsync(tenantId, ct));
+
+    /// <summary>
     /// Takes ownership of <paramref name="context"/>, for a test that runs a writer on a context it
     /// built by hand. Disposing the unit disposes it.
     /// </summary>

@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Hubs;
@@ -105,6 +106,8 @@ public class HubCredentialVerifierTests
     {
         var services = new ServiceCollection()
             .AddSingleton(_contexts.AsNocturneFactory())
+            .AddSingleton<IOAuthGrantRepository>(new OAuthGrantRepository(_contexts.AsNocturneFactory()))
+            .AddSingleton<IFirstPartyTokenRepository>(new EfFirstPartyTokenRepository(_contexts.AsNocturneFactory()))
             .AddSingleton(_members.Object)
             .AddSingleton(_guestLinks.Object)
             .AddSingleton(_overview.Object)

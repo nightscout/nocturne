@@ -15,6 +15,7 @@ using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Security;
@@ -157,6 +158,8 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<ISettingsRepository, SettingsRepository>();
         services.AddTransient<IOAuthTokenRepository, OAuthTokenRepository>();
+        services.AddTransient<IOAuthGrantRepository, OAuthGrantRepository>();
+        services.AddTransient<IMemberInviteRepository, MemberInviteRepository>();
 
         // Register avatar storage
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();

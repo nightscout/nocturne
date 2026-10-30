@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -394,7 +395,8 @@ public partial class TenantService : ITenantService
     public async Task<MemberRemovalResult> RemoveMemberAsync(
         Guid tenantId, Guid subjectId, CancellationToken ct = default)
     {
-        await using var context = await _factory.CreateForTenantAsync(tenantId, ct);
+        await using var unit = await DbUnitOfWork.OpenForTenantAsync(_factory, tenantId, ct);
+        var context = unit.Context;
         var member = await context.TenantMembers
             .Include(tm => tm.Subject)
             .FirstOrDefaultAsync(tm => tm.TenantId == tenantId && tm.SubjectId == subjectId, ct);
@@ -420,14 +422,12 @@ public partial class TenantService : ITenantService
             .ToListAsync(ct);
 
         // Grants carry no membership join either; left live, every one would work again the moment
-        // the subject is re-added. The revocation's save commits the removal with them.
-        var grants = await context.OAuthGrants
-            .Where(g => g.TenantId == tenantId && g.SubjectId == subjectId && g.RevokedAt == null)
-            .ToListAsync(ct);
+        // the subject is re-added. The revocation's commit lands the removal with them.
+        var grants = await new OAuthGrantRepository(unit).GetActiveForSubjectAsync(subjectId, ct);
 
         context.TenantMembers.Remove(member);
         context.ChatIdentityDirectory.RemoveRange(chatLinks);
-        await _grantRevocation.RevokeAllAsync(context, grants, ct);
+        await _grantRevocation.RevokeAllAsync(unit, grants, ct);
 
         return new MemberRemovalResult(true);
     }

@@ -565,7 +565,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
     {
         return new OAuthTokenService(
             new OAuthTokenRepository(dbContext.AsFactory()),
-            dbContext.AsFactory(),
+            new OAuthGrantRepository(dbContext.AsFactory()),
             _mockJwtService.Object,
             _mockSubjectService.Object,
             _mockGrantService.Object,

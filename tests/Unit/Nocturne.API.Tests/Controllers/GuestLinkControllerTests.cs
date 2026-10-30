@@ -41,9 +41,9 @@ public class GuestLinkControllerTests : IDisposable
         _dbContext.SaveChanges();
 
         var service = new GuestLinkService(
-            _dbContext.AsFactory(),
+            _dbContext.AsFactory(), new OAuthGrantRepository(_dbContext.AsFactory()),
             new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
-            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())), new OAuthTokenRepository(_dbContext.AsFactory())),
+            new GrantRevocationService(new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             NullLogger<GuestLinkService>.Instance);
 
         var handler = new GuestSessionHandler(

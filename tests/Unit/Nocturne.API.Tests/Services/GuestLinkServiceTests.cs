@@ -46,9 +46,9 @@ public class GuestLinkServiceTests : IDisposable
         _sessionCache = new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()));
 
         _service = new GuestLinkService(
-            _dbContext.AsFactory(),
+            _dbContext.AsFactory(), new OAuthGrantRepository(_dbContext.AsFactory()),
             _sessionCache,
-            new GrantRevocationService(_sessionCache, new OAuthTokenRepository(_dbContext.AsFactory())),
+            new GrantRevocationService(_sessionCache),
             NullLogger<GuestLinkService>.Instance);
     }
 

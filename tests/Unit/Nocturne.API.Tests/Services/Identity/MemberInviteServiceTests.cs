@@ -13,6 +13,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -55,7 +56,7 @@ public class MemberInviteServiceTests : IDisposable
         var logger = new Mock<ILogger<MemberInviteService>>();
 
         _service = new MemberInviteService(
-            _dbContext.AsFactory(),
+            _dbContext.AsFactory(), new MemberInviteRepository(_dbContext.AsFactory()),
             _jwtService.Object,
             _tenantService.Object,
             new TenantRoleService(_dbContext.AsFactory(), _time),
@@ -627,6 +628,5 @@ public class MemberInviteServiceTests : IDisposable
 
         var invite = await _dbContext.MemberInvites.FirstAsync();
         invite.RevokedAt.Should().NotBeNull();
-        invite.IsRevoked.Should().BeTrue();
     }
 }

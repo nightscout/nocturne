@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -120,4 +121,9 @@ internal sealed record RequestMembership(Guid SubjectId, Guid TenantId, Membersh
 /// <param name="Id">The membership row.</param>
 /// <param name="Access">What the membership grants on its tenant.</param>
 /// <param name="LastUsedAt">When the membership was last stamped as used.</param>
-internal sealed record MembershipFacts(Guid Id, TenantMemberAccess Access, DateTime? LastUsedAt);
+internal sealed record MembershipFacts(Guid Id, TenantMemberAccess Access, DateTime? LastUsedAt)
+{
+    /// <summary>The membership a grant repository read beside the grant, or null when there was none.</summary>
+    internal static MembershipFacts? From(DirectGrantMembership? membership) =>
+        membership is null ? null : new MembershipFacts(membership.Id, membership.Access, membership.LastUsedAt);
+}

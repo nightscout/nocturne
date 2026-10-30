@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -47,6 +48,7 @@ public class ConnectorEffectiveConfigurationTests : IDisposable
     private ConnectorConfigurationService CreateService(IConfiguration configuration) =>
         new(
             _dbContext.AsFactory(),
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IAuditContext>(),

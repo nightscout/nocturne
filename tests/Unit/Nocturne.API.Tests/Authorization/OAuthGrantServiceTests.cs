@@ -65,10 +65,10 @@ public class OAuthGrantServiceTests : IDisposable
     private OAuthGrantService CreateService(NocturneDbContext dbContext)
     {
         return new OAuthGrantService(
-            _db.ContextFactory.AsNocturneFactory(),
+            _db.ContextFactory.AsNocturneFactory(), new OAuthGrantRepository(_db.ContextFactory.AsNocturneFactory()),
             _mockClientService.Object,
             _guestSessionCache,
-            new GrantRevocationService(_guestSessionCache, new OAuthTokenRepository(_db.ContextFactory.AsNocturneFactory())),
+            new GrantRevocationService(_guestSessionCache),
             _mockLogger.Object);
     }
 

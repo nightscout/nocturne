@@ -16,6 +16,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 using AuthSubject = Nocturne.Core.Models.Authorization.Subject;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Identity;
 
@@ -66,6 +67,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             _mockSubjectService.Object,
             new Mock<IRoleService>().Object,
             new Mock<IDirectGrantService>().Object,
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             _mockJwtService.Object,
             _dbContext.AsFactory(),
             _categoryReadContext,
@@ -384,6 +386,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             _mockSubjectService.Object,
             new Mock<IRoleService>().Object,
             new Mock<IDirectGrantService>().Object,
+            new OAuthGrantRepository(context.AsFactory()),
             _mockJwtService.Object,
             context.AsFactory(),
             _categoryReadContext,

@@ -10,6 +10,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using DecompositionResult = Nocturne.Core.Models.V4.DecompositionResult;
 using Nocturne.Core.Contracts.DeviceStatuses;
@@ -948,7 +949,8 @@ internal class MigrationJob
         // Build the list of collections to migrate
         var allCollections = new (string name, Func<HttpClient, CancellationToken, Task> migrate)[]
         {
-            ("subjects", (client, token) => MigrateSubjectsViaApiAsync(client, dbContext, token)),
+            ("subjects", (client, token) => MigrateSubjectsViaApiAsync(
+                client, dbContext, scope.ServiceProvider.GetRequiredService<IOAuthGrantRepository>(), token)),
             ("entries", (client, token) => MigratePagedCollectionAsync(client, s_entriesCollection, token)),
             ("treatments", (client, token) => MigratePagedCollectionAsync(client, s_treatmentsCollection, token)),
             ("devicestatus", (client, token) => MigratePagedCollectionAsync(client, s_deviceStatusCollection, token)),
@@ -2118,6 +2120,7 @@ internal class MigrationJob
     private async Task MigrateSubjectsViaApiAsync(
         HttpClient httpClient,
         NocturneDbContext dbContext,
+        IOAuthGrantRepository grants,
         CancellationToken ct)
     {
         _currentOperation = "Migrating subjects";
@@ -2161,10 +2164,7 @@ internal class MigrationJob
         UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
         UpdateOverallProgress();
 
-        var existingHashes = await dbContext.OAuthGrants
-            .Where(g => g.TenantId == _tenantId && g.TokenHash != null)
-            .Select(g => g.TokenHash!)
-            .ToHashSetAsync(ct);
+        var existingHashes = (await grants.GetTokenHashesAsync(ct)).ToHashSet(StringComparer.Ordinal);
 
         var nocturneRoles = await dbContext.Roles
             .ToDictionaryAsync(r => r.Name, r => r, ct);
@@ -2230,14 +2230,14 @@ internal class MigrationJob
 
                 // Both spellings the source instance would have accepted: the token verbatim, and
                 // any other digest prefix. Existing AAPS and xDrip setups keep uploading.
-                dbContext.OAuthGrants.Add(OAuthGrantEntity.AdoptedLegacyCredential(
-                    deviceSubjectId.Value,
-                    subject.Name ?? "Unnamed",
-                    scopes,
-                    tokenHash: tokenHash,
-                    legacyTokenDigest: legacyDigest));
-
-                await dbContext.SaveChangesAsync(ct);
+                await grants.AdoptLegacyCredentialAsync(
+                    new AdoptedLegacyCredential(
+                        deviceSubjectId.Value,
+                        subject.Name ?? "Unnamed",
+                        [.. scopes],
+                        TokenHash: tokenHash,
+                        LegacyTokenDigest: legacyDigest),
+                    ct);
 
                 existingHashes.Add(tokenHash);
                 totalMigrated++;

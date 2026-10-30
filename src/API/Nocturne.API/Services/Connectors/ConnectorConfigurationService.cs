@@ -11,6 +11,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
@@ -31,6 +32,7 @@ namespace Nocturne.API.Services.Connectors;
 public class ConnectorConfigurationService : IConnectorConfigurationService
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly IOAuthGrantRepository _grants;
     private readonly ISecretEncryptionService _encryptionService;
     private readonly ISignalRBroadcastService _broadcastService;
     private readonly IAuditContext _auditContext;
@@ -45,8 +47,10 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         WriteIndented = false
     };
 
+    /// <param name="grants">The stored grants, which a saved Nightscout secret is adopted into.</param>
     public ConnectorConfigurationService(
         INocturneDbContextFactory contexts,
+        IOAuthGrantRepository grants,
         ISecretEncryptionService encryptionService,
         ISignalRBroadcastService broadcastService,
         IAuditContext auditContext,
@@ -57,6 +61,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         ILogger<ConnectorConfigurationService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _grants = grants ?? throw new ArgumentNullException(nameof(grants));
         _encryptionService = encryptionService;
         _broadcastService = broadcastService;
         _auditContext = auditContext;
@@ -312,31 +317,24 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         // with SHA-1, so legacy clients (xDrip, etc.) send that hash and we must match it.
         var sha1Hash = HashUtils.Sha1Hex(apiSecret);
 
-        var alreadyExists = await db.OAuthGrants
-            .AnyAsync(g => g.TenantId == db.TenantId
-                        && g.LegacySecretHash == sha1Hash
-                        && g.GrantType == OAuthGrantTypes.Direct
-                        && g.RevokedAt == null, ct);
-
-        if (alreadyExists)
+        if (await _grants.HasUnrevokedLegacySecretAsync(sha1Hash, ct))
         {
             _logger.LogDebug("Legacy grant for Nightscout API secret already exists, skipping creation");
             return;
         }
 
         // A site's secret, not the saver's: see DeviceSubjectFilter.
-        var grant = OAuthGrantEntity.AdoptedLegacyCredential(
-            await db.DeviceSubjectOf(db.TenantId, ct),
-            "Nightscout (migrated)",
-            [Scope.HealthReadWrite],
-            legacySecretHash: sha1Hash);
-
-        db.OAuthGrants.Add(grant);
-        await db.SaveChangesAsync(ct);
+        var grantId = await _grants.AdoptLegacyCredentialAsync(
+            new AdoptedLegacyCredential(
+                await db.DeviceSubjectOf(db.TenantId, ct),
+                "Nightscout (migrated)",
+                [Scope.HealthReadWrite],
+                LegacySecretHash: sha1Hash),
+            ct);
 
         _logger.LogInformation(
             "Created legacy DirectGrant {GrantId} for Nightscout migration (tenant {TenantId})",
-            grant.Id, db.TenantId);
+            grantId, db.TenantId);
     }
 
     /// <inheritdoc />

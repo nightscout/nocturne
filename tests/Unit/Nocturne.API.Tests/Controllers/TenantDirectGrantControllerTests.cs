@@ -90,8 +90,7 @@ public class TenantDirectGrantControllerTests : IDisposable
                 new AuditContext(),
                 new Mock<ILogger<AuthAuditService>>().Object),
             new GrantRevocationService(
-                new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions())),
-                new OAuthTokenRepository(factory.Object.AsNocturneFactory())),
+                new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             new Mock<ILogger<DirectGrantService>>().Object);
         var tenantMemberService = new TenantMemberService(factory.Object.AsNocturneFactory());
 

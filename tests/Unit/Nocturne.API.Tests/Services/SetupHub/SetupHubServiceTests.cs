@@ -49,7 +49,7 @@ public class SetupHubServiceTests
         return new(factory, new ISetupHubItem[]
         {
             // Registered out of order on purpose: the key decides the hub order.
-            new AboutItem(factory), new SharingItem(factory, TimeProvider.System), new TherapyItem(factory),
+            new AboutItem(factory), new SharingItem(factory, new MemberInviteRepository(factory), new OAuthGrantRepository(factory), TimeProvider.System), new TherapyItem(factory),
             DevicesItemOver(db), new AlertsItem(factory, new AlertRuleRepository(factory)), new ConnectDataItem(factory),
         });
     }
@@ -286,7 +286,7 @@ public class SetupHubServiceTests
         AddInvite(expiry.UtcDateTime);
         AddGrant(OAuthGrantTypes.Guest, expiresAt: expiry.UtcDateTime);
         await _db.SaveChangesAsync();
-        var item = new SharingItem(new TestNocturneDbContextFactory(_db), clock);
+        var item = new SharingItem(new TestNocturneDbContextFactory(_db), new MemberInviteRepository(new TestNocturneDbContextFactory(_db)), new OAuthGrantRepository(new TestNocturneDbContextFactory(_db)), clock);
 
         (await item.WorksAsync(CancellationToken.None)).Should().BeTrue();
 

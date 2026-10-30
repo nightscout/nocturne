@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.SetupHub;
-using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
@@ -16,7 +17,11 @@ namespace Nocturne.API.Services.SetupHub.Items;
 /// A helper's tenant is shared by handing it over, so it is done only once the recipient owns it
 /// (<see cref="Handover.RecipientJoinedAsync"/>); an invite they have not accepted yet is not enough.
 /// </summary>
-public class SharingItem(INocturneDbContextFactory contexts, TimeProvider time) : ISetupHubItem
+public class SharingItem(
+    INocturneDbContextFactory contexts,
+    IMemberInviteRepository invites,
+    IOAuthGrantRepository grants,
+    TimeProvider time) : ISetupHubItem
 {
     public SetupHubItemKey Key => SetupHubItemKey.Sharing;
 
@@ -31,14 +36,8 @@ public class SharingItem(INocturneDbContextFactory contexts, TimeProvider time) 
             return await Handover.RecipientJoinedAsync(db, db.TenantId, await Handover.HelperAsync(db, db.TenantId, ct), ct);
 
         var now = time.GetUtcNow().UtcDateTime;
-        return await db.MemberInvites.AnyAsync(
-                i => i.UseCount > 0
-                    || (i.RevokedAt == null && i.ExpiresAt > now && (i.MaxUses == null || i.UseCount < i.MaxUses)),
-                ct)
-            || await db.OAuthGrants.AnyAsync(
-                g => (g.GrantType == OAuthGrantTypes.Guest || g.GrantType == OAuthGrantTypes.Follower)
-                    && g.RevokedAt == null && (g.ExpiresAt == null || g.ExpiresAt > now),
-                ct)
+        return await invites.AnyUsedOrLiveAsync(now, ct)
+            || await grants.HasLiveShareGrantAsync(now, ct)
             || await db.Tenants.AnyAsync(t => t.Id == db.TenantId && t.ShareToken != null, ct)
             || await db.TenantMembers.CountAsync(
                 m => m.TenantId == db.TenantId && !m.Subject!.IsSystemSubject, ct) > 1;
