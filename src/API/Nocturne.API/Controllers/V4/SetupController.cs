@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
@@ -43,6 +44,7 @@ public partial class SetupController : ControllerBase
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ISessionService _sessionService;
     private readonly ISubjectService _subjectService;
+    private readonly ISubjectRepository _subjects;
     private readonly INocturneDbContextFactory _dbFactory;
     private readonly OidcOptions _oidcOptions;
     private readonly IOidcAuthService _oidcAuthService;
@@ -58,6 +60,7 @@ public partial class SetupController : ControllerBase
         IRecoveryCodeService recoveryCodeService,
         ISessionService sessionService,
         ISubjectService subjectService,
+        ISubjectRepository subjects,
         INocturneDbContextFactory dbFactory,
         IOptions<OidcOptions> oidcOptions,
         IOidcAuthService oidcAuthService,
@@ -72,6 +75,7 @@ public partial class SetupController : ControllerBase
         _recoveryCodeService = recoveryCodeService;
         _sessionService = sessionService;
         _subjectService = subjectService;
+        _subjects = subjects;
         _dbFactory = dbFactory;
         _oidcOptions = oidcOptions.Value;
         _oidcAuthService = oidcAuthService;
@@ -502,31 +506,12 @@ public partial class SetupController : ControllerBase
     }
 
     /// <summary>
-    /// The first-run owner subject: the earliest active subject that is neither a system subject
-    /// nor the demo visitor (<see cref="DemoExclusionFilter"/>). Setup only runs while no member
-    /// of the tenant holds credentials, so this is the account the owner options step created or
-    /// reused. Ordered so the options and complete steps resolve the same row.
+    /// Returns the first-run owner subject's id
+    /// (<see cref="ISubjectRepository.FindSetupOwnerCandidateAsync"/>), or <see langword="null"/>
+    /// when the options step has not created it yet.
     /// </summary>
-    /// <remarks>
-    /// <c>subjects</c> is not tenant-scoped, so this sees every subject on the instance — the
-    /// demo visitor included, and it is older than the operator's.
-    /// </remarks>
-    private static IQueryable<SubjectEntity> SetupOwnerSubjects(NocturneDbContext context) =>
-        context.Subjects.ExcludeDemo().Where(s => !s.IsSystemSubject && s.IsActive).OrderBy(s => s.Id);
-
-    /// <summary>
-    /// Returns the first-run owner subject's id as resolved from the database, or
-    /// <see langword="null"/> when the options step has not created it yet.
-    /// </summary>
-    private async Task<Guid?> FindSetupOwnerSubjectIdAsync(TenantEntity tenant, CancellationToken ct)
-    {
-        await using var context = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
-
-        return await SetupOwnerSubjects(context)
-            .AsNoTracking()
-            .Select(s => (Guid?)s.Id)
-            .FirstOrDefaultAsync(ct);
-    }
+    private async Task<Guid?> FindSetupOwnerSubjectIdAsync(TenantEntity tenant, CancellationToken ct) =>
+        (await _subjects.FindSetupOwnerCandidateAsync(tenant.Id, ct))?.Id;
 
     /// <summary>
     /// Find or create the first non-system subject, ensure it is a member of the
@@ -537,35 +522,24 @@ public partial class SetupController : ControllerBase
     private async Task<Guid> EnsureOwnerSubjectAsync(
         TenantEntity tenant, string displayName, string username, CancellationToken ct)
     {
-        await using var context = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
-
-        var existingSubject = await SetupOwnerSubjects(context).FirstOrDefaultAsync(ct);
+        var existingSubject = await _subjects.FindSetupOwnerCandidateAsync(tenant.Id, ct);
 
         Guid subjectId;
         if (existingSubject != null)
         {
             subjectId = existingSubject.Id;
-            existingSubject.Name = displayName;
-            existingSubject.Username = username;
-            await context.SaveChangesAsync(ct);
+            await _subjects.UpdateAsync(subjectId, new SubjectEdit(Name: displayName, Username: username), ct);
         }
         else
         {
-            subjectId = Guid.CreateVersion7();
-            context.Subjects.Add(new SubjectEntity
-            {
-                Id = subjectId,
-                Name = displayName,
-                Username = username,
-                IsActive = true,
-                IsSystemSubject = false,
-            });
-            await context.SaveChangesAsync(ct);
+            subjectId = await _subjects.CreateAsync(new NewSubject(displayName, Username: username), ct);
 
             _logger.LogInformation(
                 "Setup: created owner {SubjectId} ({Username}) for tenant {TenantId}",
                 subjectId, username, tenant.Id);
         }
+
+        await using var context = await _dbFactory.CreateForTenantAsync(tenant.Id, ct);
 
         // Ensure tenant membership with owner role — required when reusing a
         // subject from a previously deleted tenant.

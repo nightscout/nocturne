@@ -15,6 +15,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Controllers.V4.DevOnly;
 
 /// <summary>
@@ -84,6 +86,8 @@ public class DevAdminSnapshotCreationStampTests : IDisposable
     private DevAdminController NewController(NocturneDbContext context) =>
         new(
             context.AsFactory(),
+            new SubjectRepository(context.AsFactory()),
+            new PasskeyCredentialRepository(context.AsFactory()),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ITenantService>(),
             new MemoryCache(new MemoryCacheOptions()),

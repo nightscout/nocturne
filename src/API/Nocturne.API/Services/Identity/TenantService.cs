@@ -9,6 +9,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Docs;
 using Nocturne.API.Services.SetupHub;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
@@ -35,6 +36,7 @@ namespace Nocturne.API.Services.Identity;
 public partial class TenantService : ITenantService
 {
     private readonly INocturneDbContextFactory _factory;
+    private readonly ISubjectRepository _subjects;
     private readonly IMemoryCache _cache;
     private readonly OperatorConfiguration _config;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -82,6 +84,7 @@ public partial class TenantService : ITenantService
     /// <param name="logger">The logger instance.</param>
     public TenantService(
         INocturneDbContextFactory factory,
+        ISubjectRepository subjects,
         IMemoryCache cache,
         IOptions<OperatorConfiguration> config,
         IHttpClientFactory httpClientFactory,
@@ -91,6 +94,7 @@ public partial class TenantService : ITenantService
         ILogger<TenantService> logger)
     {
         _factory = factory;
+        _subjects = subjects;
         _cache = cache;
         _config = config.Value;
         _httpClientFactory = httpClientFactory;
@@ -512,8 +516,12 @@ public partial class TenantService : ITenantService
         ProvisionCredentialData? credential, ProvisionOidcIdentityData? oidcIdentity,
         CancellationToken ct = default)
     {
-        await using var context = await _factory.CreatePlatformAsync(ct);
-        var provisioned = await context.ExecuteInTransactionAsync(async token =>
+        // One unit: the owner, its credential and its membership land with the tenant or not at all.
+        await using var unit = await DbUnitOfWork.OpenPlatformAsync(_factory, ct);
+        var context = unit.Context;
+        var subjects = new SubjectRepository(unit);
+        var passkeys = new PasskeyCredentialRepository(unit);
+        var provisioned = await unit.CommitAsync(async token =>
         {
             // 1. Create tenant
             var tenant = new TenantEntity
@@ -549,8 +557,7 @@ public partial class TenantService : ITenantService
             await context.SaveChangesAsync(token);
 
             // Create Public subject membership (no roles = private by default)
-            var publicSubject = await context.Subjects
-                .FirstOrDefaultAsync(s => s.IsSystemSubject && s.Name == "Public", token);
+            var publicSubject = await subjects.FindSystemSubjectAsync("Public", token);
 
             if (publicSubject != null)
             {
@@ -576,48 +583,46 @@ public partial class TenantService : ITenantService
             var normalizedIssuer = oidcIdentity?.Issuer.TrimEnd('/');
             var existingIdentity = oidcIdentity is null
                 ? null
-                : await context.SubjectOidcIdentities.FirstOrDefaultAsync(x =>
-                    x.OidcSubjectId == oidcIdentity.OidcSubjectId
-                    && x.Issuer == normalizedIssuer, token);
+                : await subjects.FindByOidcIdentityAsync(oidcIdentity.OidcSubjectId, normalizedIssuer!, token);
 
-            var subject = existingIdentity is null
-                ? null
-                : await context.Subjects.FirstOrDefaultAsync(s => s.Id == existingIdentity.SubjectId, token);
-            if (subject is null)
+            Guid ownerSubjectId;
+            if (existingIdentity is null)
             {
-                var ownerId = credential?.SubjectId ?? oidcIdentity?.SubjectId ?? Guid.CreateVersion7();
-                if (await context.Subjects.AnyAsync(s => s.Id == ownerId, token))
+                ownerSubjectId = credential?.SubjectId ?? oidcIdentity?.SubjectId ?? Guid.CreateVersion7();
+                if (await subjects.ExistsAsync(ownerSubjectId, token))
                 {
                     throw new ProvisionConflictException(
-                        $"Subject {ownerId} already exists; a provisioned owner is always a new subject.");
+                        $"Subject {ownerSubjectId} already exists; a provisioned owner is always a new subject.");
                 }
 
-                subject = new SubjectEntity
-                {
-                    Id = ownerId,
-                    Name = ownerUsername,
-                    Username = ownerUsername.ToLowerInvariant(),
-                    Email = ownerEmail,
-                    IsActive = true,
-                    ApprovalStatus = "Approved",
-                };
-                context.Subjects.Add(subject);
+                await subjects.CreateAsync(
+                    new NewSubject(
+                        ownerUsername,
+                        Username: ownerUsername.ToLowerInvariant(),
+                        Email: ownerEmail,
+                        Id: ownerSubjectId),
+                    token);
                 await context.SaveChangesAsync(token);
+            }
+            else
+            {
+                ownerSubjectId = existingIdentity.Subject.Id;
             }
 
             // 3. Create credential (passkey or OIDC identity)
             if (credential is not null)
             {
-                context.PasskeyCredentials.Add(new PasskeyCredentialEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    SubjectId = subject.Id,
-                    CredentialId = Convert.FromBase64String(credential.CredentialId),
-                    PublicKey = Convert.FromBase64String(credential.PublicKey),
-                    SignCount = credential.SignCount,
-                    Transports = credential.Transports,
-                    AaGuid = credential.AaGuid,
-                });
+                await passkeys.CreateAsync(
+                    new NewPasskeyCredential(
+                        ownerSubjectId,
+                        Convert.FromBase64String(credential.CredentialId),
+                        Convert.FromBase64String(credential.PublicKey),
+                        credential.SignCount,
+                        credential.Transports,
+                        Label: null,
+                        credential.AaGuid,
+                        _time.GetUtcNow().UtcDateTime),
+                    token);
             }
             else if (oidcIdentity is not null)
             {
@@ -642,22 +647,22 @@ public partial class TenantService : ITenantService
                         await context.SaveChangesAsync(token);
                     }
 
-                    context.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
-                    {
-                        Id = Guid.CreateVersion7(),
-                        SubjectId = subject.Id,
-                        ProviderId = provider.Id,
-                        OidcSubjectId = oidcIdentity.OidcSubjectId,
-                        Issuer = normalizedIssuer!,
-                        Email = oidcIdentity.Email,
-                        LinkedAt = _time.GetUtcNow().UtcDateTime,
-                    });
+                    await subjects.AddOidcIdentityAsync(
+                        new NewSubjectOidcIdentity(
+                            ownerSubjectId,
+                            provider.Id,
+                            oidcIdentity.OidcSubjectId,
+                            normalizedIssuer!,
+                            oidcIdentity.Email,
+                            _time.GetUtcNow().UtcDateTime),
+                        token);
                 }
                 else
                 {
                     // Identity already links to the owner subject resolved above;
                     // just record the reuse.
-                    existingIdentity.LastUsedAt = _time.GetUtcNow().UtcDateTime;
+                    await subjects.TouchOidcIdentityAsync(
+                        existingIdentity.Identity.Id, _time.GetUtcNow().UtcDateTime, email: null, token);
                 }
             }
             await context.SaveChangesAsync(token);
@@ -669,7 +674,7 @@ public partial class TenantService : ITenantService
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = tenant.Id,
-                SubjectId = subject.Id,
+                SubjectId = ownerSubjectId,
             };
             context.TenantMembers.Add(member);
             context.TenantMemberRoles.Add(new TenantMemberRoleEntity
@@ -680,7 +685,7 @@ public partial class TenantService : ITenantService
             });
             await context.SaveChangesAsync(token);
 
-            return new ProvisionResult(tenant.Id, subject.Id, tenant.Slug);
+            return new ProvisionResult(tenant.Id, ownerSubjectId, tenant.Slug);
         }, ct: ct);
 
         TenantResolutionMiddleware.EvictTenant(_cache, provisioned.Slug);
@@ -690,8 +695,7 @@ public partial class TenantService : ITenantService
     private async Task CreatePublicSubjectMembershipAsync(
         NocturneDbContext context, Guid tenantId, CancellationToken ct = default)
     {
-        var publicSubject = await context.Subjects
-            .FirstOrDefaultAsync(s => s.IsSystemSubject && s.Name == "Public", ct);
+        var publicSubject = await _subjects.FindSystemSubjectAsync("Public", ct);
 
         if (publicSubject != null)
         {

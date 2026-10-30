@@ -93,6 +93,7 @@ public class SampleDataSeederMixedZoneTests : IDisposable
         return new SampleDataSeeder(
             tenant.Object,
             _db.ContextFactory.AsNocturneFactory(),
+            new SubjectRepository(_db.ContextFactory.AsNocturneFactory()),
             entries.Object,
             treatments.Object,
             sleep.Object,

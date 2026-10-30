@@ -55,8 +55,6 @@ public sealed record OverviewGrant(
 /// </remarks>
 public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvider timeProvider)
 {
-    private sealed record SubjectState(bool IsActive, bool IsPlatformAdmin);
-
     private readonly ConcurrentDictionary<object, Lazy<Task<object?>>> _memo = new();
     private readonly DateTime _now = timeProvider.GetUtcNow().UtcDateTime;
 
@@ -69,16 +67,9 @@ public sealed class HubCredentialVerifier(IServiceProvider services, TimeProvide
         Memo(("grant", tenantId, grantId), () =>
             services.GetRequiredService<IOAuthGrantRepository>().GetStateAsync(tenantId, grantId, CancellationToken.None));
 
-    private Task<SubjectState?> SubjectAsync(Guid subjectId) =>
-        Memo(("subject", subjectId), async () =>
-        {
-            await using var db = await Contexts.CreateForSubjectAsync(subjectId);
-            return await db.Subjects
-                .AsNoTracking()
-                .Where(s => s.Id == subjectId)
-                .Select(s => new SubjectState(s.IsActive, s.IsPlatformAdmin))
-                .FirstOrDefaultAsync();
-        });
+    private Task<SubjectSignInState?> SubjectAsync(Guid subjectId) =>
+        Memo(("subject", subjectId), () =>
+            services.GetRequiredService<ISubjectRepository>().GetSignInStateAsync(subjectId, CancellationToken.None));
 
     /// <summary>
     /// Whether the session a login belongs to still has a live refresh token, as

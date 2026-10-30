@@ -12,6 +12,7 @@ using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.DevOnly;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -35,6 +36,8 @@ namespace Nocturne.API.Controllers.V4.DevOnly;
 public class DevAdminController : ControllerBase
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly ISubjectRepository _subjects;
+    private readonly IPasskeyCredentialRepository _passkeys;
     private readonly ISecretEncryptionService _encryption;
     private readonly ITenantService _tenantService;
     private readonly IMemoryCache _cache;
@@ -56,6 +59,8 @@ public class DevAdminController : ControllerBase
     /// <param name="logger">Logger instance.</param>
     public DevAdminController(
         INocturneDbContextFactory contexts,
+        ISubjectRepository subjects,
+        IPasskeyCredentialRepository passkeys,
         ISecretEncryptionService encryption,
         ITenantService tenantService,
         IMemoryCache cache,
@@ -64,6 +69,8 @@ public class DevAdminController : ControllerBase
     )
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _subjects = subjects;
+        _passkeys = passkeys;
         _encryption = encryption;
         _tenantService = tenantService;
         _cache = cache;
@@ -1069,7 +1076,7 @@ public class DevAdminController : ControllerBase
         // passkeys (re-seeded from docs/seed/dev-identities.json) can then sign
         // in to this tenant with the developer's actual authenticator.
         var fixtureSubjectIds = await DevIdentityFixtureSeeder.SeedAsync(
-            db, configuration, _time, _logger, ct);
+            _subjects, _passkeys, configuration, _time, _logger, ct);
         foreach (var fixtureSubjectId in fixtureSubjectIds)
         {
             if (fixtureSubjectId == subjectResult.Subject.Id)

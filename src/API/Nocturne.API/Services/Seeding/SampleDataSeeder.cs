@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -71,6 +72,7 @@ public class SampleDataSeeder
 
     private readonly ITenantAccessor _tenantAccessor;
     private readonly INocturneDbContextFactory _contexts;
+    private readonly ISubjectRepository _subjects;
     private readonly IEntryService _entryService;
     private readonly ITreatmentService _treatmentService;
     private readonly ISleepService _sleepService;
@@ -111,6 +113,7 @@ public class SampleDataSeeder
     public SampleDataSeeder(
         ITenantAccessor tenantAccessor,
         INocturneDbContextFactory contexts,
+        ISubjectRepository subjects,
         IEntryService entryService,
         ITreatmentService treatmentService,
         ISleepService sleepService,
@@ -130,6 +133,7 @@ public class SampleDataSeeder
     {
         _tenantAccessor = tenantAccessor;
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _entryService = entryService;
         _treatmentService = treatmentService;
         _sleepService = sleepService;
@@ -1108,11 +1112,7 @@ public class SampleDataSeeder
         if (exists)
             return 0;
 
-        var ownerPreferences = await db.Subjects
-            .AsNoTracking()
-            .Where(s => s.Id == owner)
-            .Select(s => s.Preferences)
-            .FirstOrDefaultAsync(ct);
+        var ownerPreferences = (await _subjects.GetPreferencesAsync(owner, ct))?.Preferences;
 
         db.ClockFaces.Add(new ClockFaceEntity
         {

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Infrastructure.Data.Services;
-using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Identity;
 
@@ -8,10 +8,12 @@ namespace Nocturne.API.Services.Identity;
 public sealed class InstanceSetupState : IInstanceSetupState
 {
     private readonly INocturneDbContextFactory _dbFactory;
+    private readonly ISubjectRepository _subjects;
 
-    public InstanceSetupState(INocturneDbContextFactory dbFactory)
+    public InstanceSetupState(INocturneDbContextFactory dbFactory, ISubjectRepository subjects)
     {
         _dbFactory = dbFactory;
+        _subjects = subjects;
     }
 
     /// <inheritdoc />
@@ -40,18 +42,7 @@ public sealed class InstanceSetupState : IInstanceSetupState
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// System-pinned (<see cref="INocturneDbContextFactory.CreateSystemPinnedAsync"/>): setup state is asked on public-share
-    /// requests too.
-    /// </remarks>
-    public async Task<bool> TenantHasCredentialedMemberAsync(Guid tenantId, CancellationToken ct = default)
-    {
-        await using var context = await _dbFactory.CreateSystemPinnedAsync(tenantId, ct);
-
-        return await context.TenantMembers.AsNoTracking()
-            .Where(m => m.TenantId == tenantId)
-            .AnyAsync(m =>
-                context.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
-                context.WorkingOidcIdentities().Any(o => o.SubjectId == m.SubjectId), ct);
-    }
+    /// <remarks>System-pinned in the repository: setup state is asked on public-share requests too.</remarks>
+    public Task<bool> TenantHasCredentialedMemberAsync(Guid tenantId, CancellationToken ct = default) =>
+        _subjects.TenantHasCredentialedMemberAsync(tenantId, ct);
 }

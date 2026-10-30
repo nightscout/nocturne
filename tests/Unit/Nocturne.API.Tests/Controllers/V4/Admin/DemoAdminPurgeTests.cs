@@ -54,7 +54,8 @@ public class DemoAdminPurgeTests : IDisposable
 
         var tenantService = new Mock<ITenantService>();
         var demoTenantService = new DemoTenantService(
-            dbFactory.Object.AsNocturneFactory(), new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
+            dbFactory.Object.AsNocturneFactory(), new SubjectRepository(dbFactory.Object.AsNocturneFactory()),
+            new EfFirstPartyTokenRepository(dbFactory.Object.AsNocturneFactory()),
             tenantService.Object,
             TestPublicAccessCache.Create(),
             Mock.Of<ITenantCache>(),

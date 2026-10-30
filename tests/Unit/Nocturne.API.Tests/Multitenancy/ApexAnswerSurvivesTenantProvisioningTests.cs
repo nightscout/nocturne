@@ -32,6 +32,7 @@ public sealed class ApexAnswerSurvivesTenantProvisioningTests : TenantResolution
 {
     private TenantService Provisioner() => new(
         Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory(),
+        new SubjectRepository(Root.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory()),
         Root.GetRequiredService<IMemoryCache>(),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),

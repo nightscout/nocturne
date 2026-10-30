@@ -27,6 +27,10 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
+using Nocturne.Core.Contracts.Auth;
+
 namespace Nocturne.API.Tests.Controllers.V4;
 
 /// <summary>
@@ -221,6 +225,7 @@ public class TenantSettingsControllerRequestValidationTests
                     services.AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(database));
                     services.AddSingleton<INocturneDbContextFactory>(sp =>
                         sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().AsNocturneFactory());
+                    services.AddTransient<ISubjectRepository, SubjectRepository>();
                     services.Configure<RouteOptions>(o => o.SuppressCheckForUnhandledSecurityMetadata = true);
                     services.AddControllers().ConfigureApplicationPartManager(manager =>
                     {

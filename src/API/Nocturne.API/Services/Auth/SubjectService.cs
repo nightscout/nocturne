@@ -1,19 +1,14 @@
-using System.Security.Cryptography;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Authorization;
-using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Extensions;
-using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
 /// <summary>
-/// Service for managing authentication <see cref="Subject"/> entities — creation,
-/// lookup by ID or token hash, password management, role assignment, and TOTP enrollment.
+/// Service for managing authentication <see cref="Subject"/>s — creation, lookup, role assignment
+/// and the rules around a subject's sign-in factors — over <see cref="ISubjectRepository"/>.
 /// All audit-significant operations are forwarded to <see cref="IAuthAuditService"/>.
 /// </summary>
 /// <seealso cref="ISubjectService"/>
@@ -22,25 +17,21 @@ namespace Nocturne.API.Services.Auth;
 /// <seealso cref="RoleService"/>
 public class SubjectService : ISubjectService
 {
-    private readonly INocturneDbContextFactory _contexts;
+    private readonly ISubjectRepository _subjects;
     private readonly IAuthAuditService _auditService;
     private readonly IRecoveryCodeService _recoveryCodeService;
     private readonly ILogger<SubjectService> _logger;
 
-    /// <summary>
-    /// Initializes a new instance of <see cref="SubjectService"/>.
-    /// </summary>
     /// <param name="auditService">Service for recording audit events on authentication actions.</param>
     /// <param name="recoveryCodeService">Service for counting the subject's unused recovery codes.</param>
-    /// <param name="logger">The logger instance.</param>
     public SubjectService(
-        INocturneDbContextFactory contexts,
+        ISubjectRepository subjects,
         IAuthAuditService auditService,
         IRecoveryCodeService recoveryCodeService,
         ILogger<SubjectService> logger
     )
     {
-        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _auditService = auditService;
         _recoveryCodeService = recoveryCodeService;
         _logger = logger;
@@ -49,14 +40,8 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<Subject?> GetSubjectByIdAsync(Guid subjectId)
     {
-        await using var db = await _contexts.CreateAsync();
-        var entity = await db
-            .Subjects.AsNoTracking()
-            .Include(s => s.SubjectRoles)
-            .ThenInclude(sr => sr.Role)
-            .FirstOrDefaultAsync(s => s.Id == subjectId);
-
-        return entity == null ? null : MapToModel(entity);
+        var record = await _subjects.GetAsync(subjectId, CancellationToken.None);
+        return record is null ? null : MapToModel(record);
     }
 
     /// <inheritdoc />
@@ -71,224 +56,115 @@ public class SubjectService : ISubjectService
     )
     {
         var verifiedEmail = emailVerified && !string.IsNullOrEmpty(email) ? email : null;
+        var now = DateTime.UtcNow;
 
-        await using var db = await _contexts.CreateAsync();
-        // Try to find existing subject via the join table
-        var identity = await db.SubjectOidcIdentities
-            .Include(x => x.Subject)
-            .ThenInclude(s => s!.SubjectRoles)
-            .ThenInclude(sr => sr.Role)
-            .FirstOrDefaultAsync(x => x.OidcSubjectId == oidcSubjectId && x.Issuer == issuer);
-
-        if (identity?.Subject != null)
+        var match = await _subjects.FindByOidcIdentityAsync(oidcSubjectId, issuer, CancellationToken.None);
+        if (match is not null)
         {
-            var entity = identity.Subject;
+            var existing = match.Subject;
+            await _subjects.TouchOidcIdentityAsync(match.Identity.Id, now, email: null, CancellationToken.None);
 
-            if (verifiedEmail is not null && entity.Email != verifiedEmail)
+            var newEmail = verifiedEmail is not null && existing.Email != verifiedEmail ? verifiedEmail : null;
+            var newName = !string.IsNullOrEmpty(name) && existing.Name != name ? name : null;
+            if (newEmail is not null || newName is not null)
             {
-                entity.Email = verifiedEmail;
+                await _subjects.UpdateAsync(existing.Id, new SubjectEdit(Name: newName, Email: newEmail), CancellationToken.None);
+                existing = existing with { Email = newEmail ?? existing.Email, Name = newName ?? existing.Name };
             }
-
-            if (!string.IsNullOrEmpty(name) && entity.Name != name)
-            {
-                entity.Name = name;
-            }
-
-            // Always bump LastUsedAt on the identity row and the subject's UpdatedAt.
-            identity.LastUsedAt = DateTime.UtcNow;
-            entity.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
 
             _logger.LogDebug(
                 "Found existing subject {SubjectId} for OIDC identity {OidcSubjectId}",
-                entity.Id,
+                existing.Id,
                 oidcSubjectId
             );
-            return MapToModel(entity);
+            return MapToModel(existing);
         }
 
-        // Create new subject
-        var newEntity = new SubjectEntity
-        {
-            Id = Guid.CreateVersion7(),
-            Name = name ?? email ?? oidcSubjectId,
-            Email = verifiedEmail,
-            IsActive = true,
-        };
+        var subjectId = await _subjects.CreateAsync(
+            new NewSubject(
+                Name: name ?? email ?? oidcSubjectId,
+                Email: verifiedEmail,
+                RoleNames: defaultRoles?.ToList()),
+            CancellationToken.None);
 
-        db.Subjects.Add(newEntity);
-
-        // Create the OIDC identity link
-        var identityEntity = new SubjectOidcIdentityEntity
-        {
-            Id = Guid.CreateVersion7(),
-            SubjectId = newEntity.Id,
-            ProviderId = providerId,
-            OidcSubjectId = oidcSubjectId,
-            Issuer = issuer,
-            Email = email,
-            LinkedAt = DateTime.UtcNow,
-        };
-        db.SubjectOidcIdentities.Add(identityEntity);
-
-        await db.SaveChangesAsync();
-
-        // Assign default roles if specified
-        if (defaultRoles != null)
-        {
-            var assignedRoleIds = new HashSet<Guid>();
-            foreach (var roleName in defaultRoles
-                .Select(rn => rn.Trim())
-                .Where(rn => !string.IsNullOrWhiteSpace(rn))
-                .Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                var role = await db.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
-                if (role != null && assignedRoleIds.Add(role.Id))
-                {
-                    db.SubjectRoles.Add(
-                        new SubjectRoleEntity
-                        {
-                            SubjectId = newEntity.Id,
-                            RoleId = role.Id,
-                            AssignedAt = DateTime.UtcNow,
-                        }
-                    );
-                }
-            }
-            await db.SaveChangesAsync();
-        }
-
-        // Reload with roles
-        newEntity = await db
-            .Subjects.Include(s => s.SubjectRoles)
-            .ThenInclude(sr => sr.Role)
-            .FirstAsync(s => s.Id == newEntity.Id);
+        await _subjects.AddOidcIdentityAsync(
+            new NewSubjectOidcIdentity(subjectId, providerId, oidcSubjectId, issuer, email, now),
+            CancellationToken.None);
 
         _logger.LogInformation(
             "Created new subject {SubjectId} for OIDC identity {OidcSubjectId}",
-            newEntity.Id,
+            subjectId,
             oidcSubjectId
         );
-        return MapToModel(newEntity);
+        return MapToModel((await _subjects.GetAsync(subjectId, CancellationToken.None))!);
     }
 
     /// <inheritdoc />
     public async Task<SubjectCreationResult> CreateSubjectAsync(Subject subject)
     {
-        await using var db = await _contexts.CreateAsync();
-        var entity = new SubjectEntity
-        {
-            Id = subject.Id == Guid.Empty ? Guid.CreateVersion7() : subject.Id,
-            Name = subject.Name,
-            Email = subject.Email,
-            Notes = subject.Notes,
-            IsActive = subject.IsActive,
-        };
+        var subjectId = await _subjects.CreateAsync(
+            new NewSubject(
+                Name: subject.Name,
+                Email: subject.Email,
+                Notes: subject.Notes,
+                IsActive: subject.IsActive,
+                Id: subject.Id == Guid.Empty ? null : subject.Id,
+                RoleNames: subject.Roles.Select(role => role.Name).ToList()),
+            CancellationToken.None);
 
-        db.Subjects.Add(entity);
-        await db.SaveChangesAsync();
+        var created = (await _subjects.GetAsync(subjectId, CancellationToken.None))!;
 
-        // Assign roles
-        var assignedRoleIds = new HashSet<Guid>();
-        foreach (var roleName in subject.Roles
-            .Select(role => role.Name.Trim())
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            var roleEntity = await db.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
-            if (roleEntity != null && assignedRoleIds.Add(roleEntity.Id))
-            {
-                db.SubjectRoles.Add(
-                    new SubjectRoleEntity
-                    {
-                        SubjectId = entity.Id,
-                        RoleId = roleEntity.Id,
-                        AssignedAt = DateTime.UtcNow,
-                    }
-                );
-            }
-        }
-        await db.SaveChangesAsync();
+        _logger.LogInformation("Created subject {SubjectId} ({Name})", created.Id, created.Name);
 
-        // Reload with roles
-        entity = await db
-            .Subjects.Include(s => s.SubjectRoles)
-            .ThenInclude(sr => sr.Role)
-            .FirstAsync(s => s.Id == entity.Id);
-
-        _logger.LogInformation("Created subject {SubjectId} ({Name})", entity.Id, entity.Name);
-
-        await _auditService.LogAsync(AuthAuditEventType.SubjectCreated, entity.Id, success: true,
-            detailsJson: JsonSerializer.Serialize(new { name = entity.Name }));
+        await _auditService.LogAsync(AuthAuditEventType.SubjectCreated, created.Id, success: true,
+            detailsJson: JsonSerializer.Serialize(new { name = created.Name }));
 
         return new SubjectCreationResult
         {
-            Subject = MapToModel(entity),
+            Subject = MapToModel(created),
         };
     }
 
     /// <inheritdoc />
     public async Task<Subject?> UpdateSubjectAsync(Subject subject)
     {
-        await using var db = await _contexts.CreateAsync();
-        var entity = await db
-            .Subjects.Include(s => s.SubjectRoles)
-            .FirstOrDefaultAsync(s => s.Id == subject.Id);
+        var updated = await _subjects.UpdateProfileAsync(
+            subject.Id,
+            new SubjectProfile(subject.Name, subject.Email, subject.Notes, subject.IsActive),
+            CancellationToken.None);
 
-        if (entity == null)
+        if (updated is null)
         {
             return null;
         }
 
-        entity.Name = subject.Name;
-        entity.Email = subject.Email;
-        entity.Notes = subject.Notes;
-        entity.IsActive = subject.IsActive;
-        entity.UpdatedAt = DateTime.UtcNow;
+        _logger.LogInformation("Updated subject {SubjectId}", updated.Id);
 
-        await db.SaveChangesAsync();
+        await _auditService.LogAsync(AuthAuditEventType.SubjectUpdated, updated.Id, success: true,
+            detailsJson: JsonSerializer.Serialize(new { name = updated.Name }));
 
-        // Reload with roles
-        entity = await db
-            .Subjects.Include(s => s.SubjectRoles)
-            .ThenInclude(sr => sr.Role)
-            .FirstAsync(s => s.Id == entity.Id);
-
-        _logger.LogInformation("Updated subject {SubjectId}", entity.Id);
-
-        await _auditService.LogAsync(AuthAuditEventType.SubjectUpdated, entity.Id, success: true,
-            detailsJson: JsonSerializer.Serialize(new { name = entity.Name }));
-
-        return MapToModel(entity);
+        return MapToModel(updated);
     }
 
     /// <inheritdoc />
     public async Task<bool> DeleteSubjectAsync(Guid subjectId)
     {
-        await using var db = await _contexts.CreateAsync();
-        var entity = await db.Subjects.FindAsync(subjectId);
-        if (entity == null)
+        var subject = await _subjects.GetAsync(subjectId, CancellationToken.None);
+        if (subject == null)
         {
             return false;
         }
 
-        if (entity.IsSystemSubject)
+        if (subject.IsSystemSubject)
         {
-            _logger.LogWarning("Attempted to delete system subject {SubjectId} ({Name})", subjectId, entity.Name);
+            _logger.LogWarning("Attempted to delete system subject {SubjectId} ({Name})", subjectId, subject.Name);
             return false;
         }
 
-        await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        if (!await _subjects.DeleteAsync(subjectId, CancellationToken.None))
         {
-            await using var tx = await db.Database.BeginTransactionAsync();
-
-            await ScrubAuthAuditPersonalDataAsync(db, subjectId);
-
-            db.Subjects.Remove(entity);
-            await db.SaveChangesAsync();
-
-            await tx.CommitAsync();
-        });
+            return false;
+        }
 
         _logger.LogInformation("Deleted subject {SubjectId}", subjectId);
 
@@ -297,81 +173,29 @@ public class SubjectService : ISubjectService
         return true;
     }
 
-    /// <summary>
-    /// Clears the deleted subject's personal data from the auth audit trail, leaving the ids that
-    /// make it a pseudonymous record (see <see cref="AuthAuditLogEntity"/>). The client address and
-    /// user agent are the actor's, so another subject's on a row about this one are kept.
-    /// </summary>
-    private async Task ScrubAuthAuditPersonalDataAsync(NocturneDbContext db, Guid subjectId)
-    {
-        await db.AuthAuditLog
-            .Where(a => a.ActorSubjectId == subjectId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(a => a.IpAddress, (string?)null)
-                .SetProperty(a => a.UserAgent, (string?)null));
-
-        await db.AuthAuditLog
-            .Where(a => a.TargetSubjectId == subjectId || a.ActorSubjectId == subjectId)
-            .ExecuteUpdateAsync(s => s.SetProperty(a => a.DetailsJson, (string?)null));
-    }
+    /// <inheritdoc />
+    public Task<bool> ActivateSubjectAsync(Guid subjectId) =>
+        _subjects.UpdateAsync(subjectId, new SubjectEdit(IsActive: true), CancellationToken.None);
 
     /// <inheritdoc />
-    public async Task<bool> ActivateSubjectAsync(Guid subjectId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        var result = await db
-            .Subjects.Where(s => s.Id == subjectId)
-            .ExecuteUpdateAsync(s =>
-                s.SetProperty(e => e.IsActive, true).SetProperty(e => e.UpdatedAt, DateTime.UtcNow)
-            );
-
-        return result > 0;
-    }
+    public Task<bool> DeactivateSubjectAsync(Guid subjectId) =>
+        _subjects.UpdateAsync(subjectId, new SubjectEdit(IsActive: false), CancellationToken.None);
 
     /// <inheritdoc />
-    public async Task<bool> DeactivateSubjectAsync(Guid subjectId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        var result = await db
-            .Subjects.Where(s => s.Id == subjectId)
-            .ExecuteUpdateAsync(s =>
-                s.SetProperty(e => e.IsActive, false).SetProperty(e => e.UpdatedAt, DateTime.UtcNow)
-            );
-
-        return result > 0;
-    }
-
-    /// <inheritdoc />
-    public async Task<List<string>> GetSubjectRolesAsync(Guid subjectId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        return await db
-            .SubjectRoles.AsNoTracking()
-            .Where(sr => sr.SubjectId == subjectId)
-            .Select(sr => sr.Role!.Name)
-            .ToListAsync();
-    }
+    public async Task<List<string>> GetSubjectRolesAsync(Guid subjectId) =>
+        (await _subjects.GetRoleNamesAsync(subjectId, CancellationToken.None)).ToList();
 
     /// <inheritdoc />
     public async Task<List<string>> GetSubjectPermissionsAsync(Guid subjectId)
     {
-        await using var db = await _contexts.CreateAsync();
-        var roles = await db
-            .SubjectRoles.AsNoTracking()
-            .Where(sr => sr.SubjectId == subjectId)
-            .Include(sr => sr.Role)
-            .Select(sr => sr.Role!)
-            .ToListAsync();
+        var roles = await _subjects.GetRolesAsync(subjectId, CancellationToken.None);
 
         var permissions = new HashSet<string>();
         foreach (var role in roles)
         {
-            if (role.Permissions != null)
+            foreach (var permission in role.Permissions)
             {
-                foreach (var permission in role.Permissions)
-                {
-                    permissions.Add(permission);
-                }
+                permissions.Add(permission);
             }
         }
 
@@ -385,38 +209,19 @@ public class SubjectService : ISubjectService
         Guid? assignedBy = null
     )
     {
-        await using var db = await _contexts.CreateAsync();
-        var role = await db.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
-        if (role == null)
+        var outcome = await _subjects.AssignRoleAsync(subjectId, roleName, assignedBy, DateTime.UtcNow, CancellationToken.None);
+        switch (outcome)
         {
-            _logger.LogWarning(
-                "Role {RoleName} not found when assigning to subject {SubjectId}",
-                roleName,
-                subjectId
-            );
-            return false;
+            case RoleAssignment.RoleNotFound:
+                _logger.LogWarning(
+                    "Role {RoleName} not found when assigning to subject {SubjectId}",
+                    roleName,
+                    subjectId
+                );
+                return false;
+            case RoleAssignment.AlreadyAssigned:
+                return false;
         }
-
-        var existingAssignment = await db.SubjectRoles.AnyAsync(sr =>
-            sr.SubjectId == subjectId && sr.RoleId == role.Id
-        );
-
-        if (existingAssignment)
-        {
-            return false; // Already assigned
-        }
-
-        db.SubjectRoles.Add(
-            new SubjectRoleEntity
-            {
-                SubjectId = subjectId,
-                RoleId = role.Id,
-                AssignedAt = DateTime.UtcNow,
-                AssignedById = assignedBy,
-            }
-        );
-
-        await db.SaveChangesAsync();
 
         _logger.LogInformation(
             "Assigned role {RoleName} to subject {SubjectId}",
@@ -434,30 +239,21 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<bool> RemoveRoleAsync(Guid subjectId, string roleName)
     {
-        await using var db = await _contexts.CreateAsync();
-        var role = await db.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
-        if (role == null)
+        if (!await _subjects.RemoveRoleAsync(subjectId, roleName, CancellationToken.None))
         {
             return false;
         }
 
-        var result = await db
-            .SubjectRoles.Where(sr => sr.SubjectId == subjectId && sr.RoleId == role.Id)
-            .ExecuteDeleteAsync();
+        _logger.LogInformation(
+            "Removed role {RoleName} from subject {SubjectId}",
+            roleName,
+            subjectId
+        );
 
-        if (result > 0)
-        {
-            _logger.LogInformation(
-                "Removed role {RoleName} from subject {SubjectId}",
-                roleName,
-                subjectId
-            );
+        await _auditService.LogAsync(AuthAuditEventType.RoleRemoved, subjectId, success: true,
+            detailsJson: JsonSerializer.Serialize(new { role = roleName }));
 
-            await _auditService.LogAsync(AuthAuditEventType.RoleRemoved, subjectId, success: true,
-                detailsJson: JsonSerializer.Serialize(new { role = roleName }));
-        }
-
-        return result > 0;
+        return true;
     }
 
     /// <inheritdoc />
@@ -496,199 +292,73 @@ public class SubjectService : ISubjectService
     /// <inheritdoc />
     public async Task<Subject?> InitializePublicSubjectAsync()
     {
-        await using var db = await _contexts.CreateAsync();
         const string publicSubjectName = "Public";
 
-        // Check if "Public" subject already exists
-        var existing = await db
-            .Subjects.Include(s => s.SubjectRoles)
-            .ThenInclude(sr => sr.Role)
-            .FirstOrDefaultAsync(s => s.Name == publicSubjectName && s.IsSystemSubject);
-
+        var existing = await _subjects.FindSystemSubjectAsync(publicSubjectName, CancellationToken.None);
         if (existing != null)
         {
             _logger.LogDebug("Public subject already exists");
             return MapToModel(existing);
         }
 
-        // Create the Public subject
-        var entity = new SubjectEntity
-        {
-            Id = Guid.CreateVersion7(),
-            Name = publicSubjectName,
-            Email = null,
-            Notes = "Represents unauthenticated access. Assign roles to control what the public can see.",
-            IsActive = true,
-            IsSystemSubject = true,
-        };
+        var subjectId = await _subjects.CreateAsync(
+            new NewSubject(
+                Name: publicSubjectName,
+                Notes: "Represents unauthenticated access. Assign roles to control what the public can see.",
+                IsSystemSubject: true),
+            CancellationToken.None);
 
-        db.Subjects.Add(entity);
-        await db.SaveChangesAsync();
-
-        // Assign the "public" role
-        await AssignRoleAsync(entity.Id, "public");
-
-        // Reload with roles
-        entity = await db
-            .Subjects.Include(s => s.SubjectRoles)
-            .ThenInclude(sr => sr.Role)
-            .FirstAsync(s => s.Id == entity.Id);
+        await AssignRoleAsync(subjectId, "public");
 
         _logger.LogInformation("Created system Public subject for unauthenticated access");
 
-        return MapToModel(entity);
+        return MapToModel((await _subjects.GetAsync(subjectId, CancellationToken.None))!);
     }
 
     /// <inheritdoc />
-    public async Task UpdateLastLoginAsync(Guid subjectId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        await db
-            .Subjects.Where(s => s.Id == subjectId)
-            .ExecuteUpdateAsync(s =>
-                s.SetProperty(e => e.LastLoginAt, DateTime.UtcNow)
-                    .SetProperty(e => e.UpdatedAt, DateTime.UtcNow)
-            );
-    }
+    public Task UpdateLastLoginAsync(Guid subjectId) =>
+        _subjects.UpdateAsync(subjectId, new SubjectEdit(LastLoginAt: DateTime.UtcNow), CancellationToken.None);
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<SubjectOidcIdentity>> GetLinkedOidcIdentitiesAsync(Guid subjectId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        var entities = await db.SubjectOidcIdentities
-            .Include(x => x.Provider)
-            .Where(x => x.SubjectId == subjectId)
-            .OrderBy(x => x.LinkedAt)
-            .ToListAsync();
-
-        return entities.Select(e => new SubjectOidcIdentity
-        {
-            Id = e.Id,
-            SubjectId = e.SubjectId,
-            ProviderId = e.ProviderId,
-            ProviderName = e.Provider?.Name ?? "Unknown",
-            ProviderIcon = e.Provider?.Icon,
-            ProviderButtonColor = e.Provider?.ButtonColor,
-            OidcSubjectId = e.OidcSubjectId,
-            Issuer = e.Issuer,
-            Email = e.Email,
-            LinkedAt = e.LinkedAt,
-            LastUsedAt = e.LastUsedAt,
-        }).ToList();
-    }
+    public Task<IReadOnlyList<SubjectOidcIdentity>> GetLinkedOidcIdentitiesAsync(Guid subjectId) =>
+        _subjects.GetOidcIdentitiesAsync(subjectId, CancellationToken.None);
 
     /// <inheritdoc />
     public async Task<(OidcLinkOutcome Outcome, Guid? IdentityId)> AttachOidcIdentityAsync(
         Guid subjectId, Guid providerId, string oidcSubjectId, string issuer, string? email)
     {
-        await using var db = await _contexts.CreateAsync();
-        var existing = await db.SubjectOidcIdentities
-            .FirstOrDefaultAsync(x => x.OidcSubjectId == oidcSubjectId && x.Issuer == issuer);
-
+        var existing = await _subjects.FindByOidcIdentityAsync(oidcSubjectId, issuer, CancellationToken.None);
         if (existing != null)
         {
-            if (existing.SubjectId == subjectId)
+            if (existing.Identity.SubjectId == subjectId)
             {
-                existing.LastUsedAt = DateTime.UtcNow;
-                if (!string.IsNullOrEmpty(email) && existing.Email != email)
-                    existing.Email = email;
-                await db.SaveChangesAsync();
-                return (OidcLinkOutcome.AlreadyLinkedToSelf, existing.Id);
+                await _subjects.TouchOidcIdentityAsync(existing.Identity.Id, DateTime.UtcNow, email, CancellationToken.None);
+                return (OidcLinkOutcome.AlreadyLinkedToSelf, existing.Identity.Id);
             }
             return (OidcLinkOutcome.AlreadyLinkedToOther, null);
         }
 
-        var row = new SubjectOidcIdentityEntity
-        {
-            Id = Guid.CreateVersion7(),
-            SubjectId = subjectId,
-            ProviderId = providerId,
-            OidcSubjectId = oidcSubjectId,
-            Issuer = issuer,
-            Email = email,
-            LinkedAt = DateTime.UtcNow,
-        };
-        db.SubjectOidcIdentities.Add(row);
-        await db.SaveChangesAsync();
-        return (OidcLinkOutcome.Created, row.Id);
+        var identityId = await _subjects.AddOidcIdentityAsync(
+            new NewSubjectOidcIdentity(subjectId, providerId, oidcSubjectId, issuer, email, DateTime.UtcNow),
+            CancellationToken.None);
+        return (OidcLinkOutcome.Created, identityId);
     }
 
     /// <inheritdoc />
-    public async Task<SubjectOidcIdentity?> GetMostRecentlyUsedIdentityAsync(Guid subjectId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        var e = await db.SubjectOidcIdentities
-            .Include(x => x.Provider)
-            .Where(x => x.SubjectId == subjectId)
-            .OrderByDescending(x => x.LastUsedAt ?? x.LinkedAt)
-            .FirstOrDefaultAsync();
-
-        if (e == null) return null;
-
-        return new SubjectOidcIdentity
-        {
-            Id = e.Id,
-            SubjectId = e.SubjectId,
-            ProviderId = e.ProviderId,
-            ProviderName = e.Provider?.Name ?? "Unknown",
-            ProviderIcon = e.Provider?.Icon,
-            ProviderButtonColor = e.Provider?.ButtonColor,
-            OidcSubjectId = e.OidcSubjectId,
-            Issuer = e.Issuer,
-            Email = e.Email,
-            LinkedAt = e.LinkedAt,
-            LastUsedAt = e.LastUsedAt,
-        };
-    }
+    public Task<SubjectOidcIdentity?> GetMostRecentlyUsedIdentityAsync(Guid subjectId) =>
+        _subjects.GetMostRecentlyUsedOidcIdentityAsync(subjectId, CancellationToken.None);
 
     /// <inheritdoc />
     public Task<FactorRemovalResult> TryRemoveOidcIdentityAsync(Guid subjectId, Guid identityId) =>
-        TryRemoveFactorAsync(
-            db => db.SubjectOidcIdentities.Where(x => x.Id == identityId && x.SubjectId == subjectId),
-            async db => await db.PasskeyCredentials.CountAsync(p => p.SubjectId == subjectId)
-                + await db.WorkingOidcIdentities()
-                    .CountAsync(i => i.SubjectId == subjectId && i.Id != identityId));
+        _subjects.TryRemoveFactorAsync(subjectId, new SignInFactor.OidcIdentity(identityId), CancellationToken.None);
 
     /// <inheritdoc />
     public Task<FactorRemovalResult> TryRemovePasskeyCredentialAsync(Guid subjectId, Guid credentialId) =>
-        TryRemoveFactorAsync(
-            db => db.PasskeyCredentials.Where(x => x.Id == credentialId && x.SubjectId == subjectId),
-            async db => await db.PasskeyCredentials
-                    .CountAsync(p => p.SubjectId == subjectId && p.Id != credentialId)
-                + await db.WorkingOidcIdentities().CountAsync(i => i.SubjectId == subjectId));
-
-    private async Task<FactorRemovalResult> TryRemoveFactorAsync<TFactor>(
-        Func<NocturneDbContext, IQueryable<TFactor>> factorOf, Func<NocturneDbContext, Task<int>> countOtherFactors)
-        where TFactor : class
-    {
-        await using var db = await _contexts.CreateAsync();
-        var factor = factorOf(db);
-        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-        {
-            await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
-
-            if (!await factor.AnyAsync())
-                return FactorRemovalResult.NotFound;
-
-            if (await countOtherFactors(db) < 1)
-                return FactorRemovalResult.LastPrimaryFactor;
-
-            // Untracked, so a retried attempt never inherits a Deleted entry from the failed one.
-            await factor.ExecuteDeleteAsync();
-            await tx.CommitAsync();
-            return FactorRemovalResult.Removed;
-        });
-    }
+        _subjects.TryRemoveFactorAsync(subjectId, new SignInFactor.Passkey(credentialId), CancellationToken.None);
 
     /// <inheritdoc />
-    public async Task<int> CountPrimaryAuthFactorsAsync(Guid subjectId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        var passkeys = await db.PasskeyCredentials.CountAsync(p => p.SubjectId == subjectId);
-        var oidc = await db.WorkingOidcIdentities()
-            .CountAsync(i => i.SubjectId == subjectId);
-        return passkeys + oidc;
-    }
+    public Task<int> CountPrimaryAuthFactorsAsync(Guid subjectId) =>
+        _subjects.CountPrimaryAuthFactorsAsync(subjectId, CancellationToken.None);
 
     /// <inheritdoc />
     public async Task<bool> HasSingleSignInMethodAsync(Guid subjectId)
@@ -702,75 +372,32 @@ public class SubjectService : ISubjectService
     }
 
     /// <inheritdoc />
-    public async Task UpdateOidcIdentityLastUsedAsync(Guid identityId)
-    {
-        await using var db = await _contexts.CreateAsync();
-        var row = await db.SubjectOidcIdentities.FindAsync(identityId);
-        if (row != null)
-        {
-            row.LastUsedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-        }
-    }
+    public Task UpdateOidcIdentityLastUsedAsync(Guid identityId) =>
+        _subjects.TouchOidcIdentityAsync(identityId, DateTime.UtcNow, email: null, CancellationToken.None);
 
-    /// <summary>
-    /// Map entity to domain model
-    /// </summary>
-    private static Subject MapToModel(SubjectEntity entity)
+    private static Subject MapToModel(SubjectRecord record)
     {
         var subject = new Subject
         {
-            Id = entity.Id,
-            Name = entity.Name,
-            Email = entity.Email,
-            IsActive = entity.IsActive,
-            IsSystemSubject = entity.IsSystemSubject,
-            IsPlatformAdmin = entity.IsPlatformAdmin,
-            CreatedAt = entity.CreatedAt,
-            LastLoginAt = entity.LastLoginAt,
-            Notes = entity.Notes,
-            PreferredLanguage = entity.PreferredLanguage,
-            Preferences = entity.Preferences,
-            AvatarUrl = entity.AvatarUrl,
-            Roles = new List<Role>(),
-            Permissions = new List<string>(),
+            Id = record.Id,
+            Name = record.Name,
+            Email = record.Email,
+            IsActive = record.IsActive,
+            IsSystemSubject = record.IsSystemSubject,
+            IsPlatformAdmin = record.IsPlatformAdmin,
+            CreatedAt = record.CreatedAt,
+            LastLoginAt = record.LastLoginAt,
+            Notes = record.Notes,
+            PreferredLanguage = record.PreferredLanguage,
+            Preferences = record.Preferences,
+            AvatarUrl = record.AvatarUrl,
+            Roles = record.Roles.ToList(),
+            Permissions = record.Roles.SelectMany(role => role.Permissions).Distinct().ToList(),
         };
 
         // Every subject is a person: a device or service credential is a direct grant, not a
         // subject, so nothing here can distinguish one.
         subject.Type = SubjectType.User;
-
-        // Map roles and aggregate permissions
-        var permissions = new HashSet<string>();
-        foreach (var subjectRole in entity.SubjectRoles)
-        {
-            if (subjectRole.Role != null)
-            {
-                subject.Roles.Add(
-                    new Role
-                    {
-                        Id = subjectRole.Role.Id,
-                        Name = subjectRole.Role.Name,
-                        Description = subjectRole.Role.Description,
-                        Permissions =
-                            subjectRole.Role.Permissions != null
-                                ? new List<string>(subjectRole.Role.Permissions)
-                                : new List<string>(),
-                        IsSystemRole = subjectRole.Role.IsSystemRole,
-                    }
-                );
-
-                if (subjectRole.Role.Permissions != null)
-                {
-                    foreach (var permission in subjectRole.Role.Permissions)
-                    {
-                        permissions.Add(permission);
-                    }
-                }
-            }
-        }
-
-        subject.Permissions = permissions.ToList();
         return subject;
     }
 }

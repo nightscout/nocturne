@@ -631,10 +631,11 @@ if (!app.Environment.IsDevelopment() && DevOnlyEndpoints.IsOptedIn(app.Configura
 if (app.Environment.IsDevelopment() && !isNSwagGeneration)
 {
     using var devSeedScope = app.Services.CreateScope();
-    await using var devSeedDb = await devSeedScope.ServiceProvider.GetRequiredService<INocturneDbContextFactory>().CreateAsync();
     var devSeedLogger = devSeedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await DevIdentityFixtureSeeder.SeedAsync(
-        devSeedDb, app.Configuration, app.Services.GetRequiredService<TimeProvider>(), devSeedLogger, CancellationToken.None);
+        devSeedScope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Auth.ISubjectRepository>(),
+        devSeedScope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.Auth.IPasskeyCredentialRepository>(),
+        app.Configuration, app.Services.GetRequiredService<TimeProvider>(), devSeedLogger, CancellationToken.None);
 }
 
 await app.RunAsync();

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -16,6 +17,7 @@ namespace Nocturne.API.Services.Identity;
 public class MembershipRequestService : IMembershipRequestService
 {
     private readonly INocturneDbContextFactory _contexts;
+    private readonly ISubjectRepository _subjects;
     private readonly ITenantService _tenantService;
     private readonly ITenantRoleService _tenantRoleService;
     private readonly IInAppNotificationService _notificationService;
@@ -24,6 +26,7 @@ public class MembershipRequestService : IMembershipRequestService
 
     public MembershipRequestService(
         INocturneDbContextFactory contexts,
+        ISubjectRepository subjects,
         ITenantService tenantService,
         ITenantRoleService tenantRoleService,
         IInAppNotificationService notificationService,
@@ -31,6 +34,7 @@ public class MembershipRequestService : IMembershipRequestService
         ILogger<MembershipRequestService> logger)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _tenantService = tenantService;
         _tenantRoleService = tenantRoleService;
         _notificationService = notificationService;
@@ -73,8 +77,7 @@ public class MembershipRequestService : IMembershipRequestService
             "request_created", entity.Id, tenantId, subjectId);
 
         // Look up the requester's name for the notification
-        var subject = await db.Subjects.FindAsync([subjectId], ct);
-        var subjectName = subject?.Name ?? "Someone";
+        var subjectName = (await _subjects.GetNamesAsync([subjectId], ct)).GetValueOrDefault(subjectId) ?? "Someone";
 
         var candidates = await db.TenantMembers
             .AsNoTracking()
@@ -116,7 +119,7 @@ public class MembershipRequestService : IMembershipRequestService
         if (entity == null)
             return null;
 
-        var subject = await db.Subjects.FindAsync([subjectId], ct);
+        var subject = await _subjects.GetAsync(subjectId, ct);
 
         return new MembershipRequestDto(
             entity.Id,
@@ -142,9 +145,7 @@ public class MembershipRequestService : IMembershipRequestService
             return [];
 
         var subjectIds = requests.Select(r => r.SubjectId).Distinct().ToList();
-        var subjects = await db.Subjects
-            .Where(s => subjectIds.Contains(s.Id))
-            .ToDictionaryAsync(s => s.Id, ct);
+        var subjects = (await _subjects.GetManyAsync(subjectIds, ct)).ToDictionary(s => s.Id);
 
         return requests.Select(r =>
         {

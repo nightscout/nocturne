@@ -31,6 +31,7 @@ namespace Nocturne.API.Controllers.V4.DevOnly;
 public class DevAuthController : ControllerBase
 {
     private readonly INocturneDbContextFactory _dbFactory;
+    private readonly IPasskeyCredentialRepository _passkeys;
     private readonly ISessionService _sessionService;
     private readonly IOptions<OidcOptions> _oidcOptions;
     private readonly IOptions<BaseDomainOptions> _baseDomainOptions;
@@ -38,12 +39,14 @@ public class DevAuthController : ControllerBase
 
     public DevAuthController(
         INocturneDbContextFactory dbFactory,
+        IPasskeyCredentialRepository passkeys,
         ISessionService sessionService,
         IOptions<OidcOptions> oidcOptions,
         IOptions<BaseDomainOptions> baseDomainOptions,
         ILogger<DevAuthController> logger)
     {
         _dbFactory = dbFactory;
+        _passkeys = passkeys;
         _sessionService = sessionService;
         _oidcOptions = oidcOptions;
         _baseDomainOptions = baseDomainOptions;
@@ -108,35 +111,27 @@ public class DevAuthController : ControllerBase
     public async Task<ActionResult<DevIdentityFixtureFile>> ExportPasskeyFixture(
         [FromQuery] string? username, CancellationToken ct)
     {
-        await using var db = await _dbFactory.CreateAsync(ct);
-        var credentials = await db.PasskeyCredentials
-            .AsNoTracking()
-            .Include(c => c.Subject)
-            .Where(c => c.Subject != null && !c.Subject.IsSystemSubject && c.Subject.IsActive)
-            .ToListAsync(ct);
+        var holders = await _passkeys.ListHoldersAsync(ct);
 
-        var identities = credentials
-            .Where(c => !DevIdentityFixtureSeeder.IsSyntheticCredentialId(c.CredentialId))
-            .GroupBy(c => c.SubjectId)
-            .Select(group =>
+        var identities = holders
+            .Select(holder => new DevIdentityDto
             {
-                var subject = group.First().Subject!;
-                return new DevIdentityDto
-                {
-                    SubjectId = subject.Id,
-                    Name = subject.Name,
-                    Username = subject.Username,
-                    Email = subject.Email,
-                    Credentials = group.Select(c => new DevIdentityCredentialDto
+                SubjectId = holder.Subject.Id,
+                Name = holder.Subject.Name,
+                Username = holder.Subject.Username,
+                Email = holder.Subject.Email,
+                Credentials = holder.Credentials
+                    .Where(c => !DevIdentityFixtureSeeder.IsSyntheticCredentialId(c.CredentialId))
+                    .Select(c => new DevIdentityCredentialDto
                     {
                         CredentialId = Convert.ToBase64String(c.CredentialId),
                         PublicKey = Convert.ToBase64String(c.PublicKey),
-                        Transports = c.Transports,
+                        Transports = c.Transports.ToList(),
                         Label = c.Label,
                         AaGuid = c.AaGuid,
                     }).ToList(),
-                };
             })
+            .Where(i => i.Credentials.Count > 0)
             .Where(i => username == null
                 || string.Equals(i.Username, username, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(i.Name, username, StringComparison.OrdinalIgnoreCase))

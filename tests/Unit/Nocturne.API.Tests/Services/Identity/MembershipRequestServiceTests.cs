@@ -13,6 +13,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Identity;
 
 public class MembershipRequestServiceTests : IDisposable
@@ -50,6 +52,7 @@ public class MembershipRequestServiceTests : IDisposable
 
         _service = new MembershipRequestService(
             _dbContext.AsFactory(),
+            new SubjectRepository(_dbContext.AsFactory()),
             _tenantService.Object,
             new TenantRoleService(_dbContext.AsFactory(), TimeProvider.System),
             _notificationService.Object,

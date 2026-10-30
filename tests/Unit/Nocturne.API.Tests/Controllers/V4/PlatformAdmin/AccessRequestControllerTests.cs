@@ -13,6 +13,8 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Controllers.V4.PlatformAdmin;
 
 /// <summary>
@@ -43,6 +45,7 @@ public sealed class AccessRequestControllerTests : IDisposable
 
         _controller = new AccessRequestController(
             _dbContext.AsFactory(),
+            new SubjectRepository(_dbContext.AsFactory()),
             Mock.Of<ISubjectService>(),
             _tenantService.Object,
             roleService.Object,

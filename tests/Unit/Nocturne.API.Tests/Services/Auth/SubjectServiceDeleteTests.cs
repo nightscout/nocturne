@@ -10,6 +10,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Auth;
 
 /// <summary>
@@ -129,7 +131,7 @@ public class SubjectServiceDeleteTests : IDisposable
             new AuditContext(),
             NullLogger<AuthAuditService>.Instance);
         var service = new SubjectService(
-            dbContext.AsFactory(), audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
+            new SubjectRepository(dbContext.AsFactory()), audit, Mock.Of<IRecoveryCodeService>(), NullLogger<SubjectService>.Instance);
 
         (await service.DeleteSubjectAsync(_deletedId)).Should().BeTrue();
     }

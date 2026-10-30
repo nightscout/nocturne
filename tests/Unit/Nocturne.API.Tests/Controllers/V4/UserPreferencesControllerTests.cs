@@ -11,6 +11,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Controllers.V4;
 
 /// <summary>
@@ -167,7 +169,7 @@ public class UserPreferencesControllerTests
         }
 
         var dbContext = new NocturneDbContext(options);
-        var controller = new UserPreferencesController(dbContext.AsFactory(), NullLogger<UserPreferencesController>.Instance)
+        var controller = new UserPreferencesController(new SubjectRepository(dbContext.AsFactory()), NullLogger<UserPreferencesController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = HttpContextWith(authenticated) },
         };

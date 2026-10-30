@@ -14,6 +14,8 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Services.Sleep;
 
 [Trait("Category", "Unit")]
@@ -47,7 +49,7 @@ public class SleepReportServiceTests
             _glucoseRepo.Object,
             new CanonicalGlucoseService(_glucoseRepo.Object, _patientDevices.Object, demoMode.Object),
             _patientRecord.Object,
-            _db.AsFactory(),
+            new SubjectRepository(_db.AsFactory()),
             _caller.Object,
             TimeProvider.System,
             NullLogger<SleepReportService>.Instance);

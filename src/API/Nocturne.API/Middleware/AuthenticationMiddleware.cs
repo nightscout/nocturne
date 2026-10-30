@@ -133,15 +133,9 @@ public class AuthenticationMiddleware
                 && PlatformAdminCredentials.Carries(authContext.AuthType))
             {
                 using var scope = _scopeFactory.CreateScope();
-                await using var db = await scope.ServiceProvider
-                    .GetRequiredService<Nocturne.Infrastructure.Data.Services.INocturneDbContextFactory>()
-                    .CreateAsync(context.RequestAborted);
-                var isPlatformAdmin = await db.Subjects
-                    .Where(s => s.Id == authContext.SubjectId.Value)
-                    .OrderBy(s => s.Id)
-                    .Select(s => s.IsPlatformAdmin)
-                    .FirstOrDefaultAsync();
-                authContext.IsPlatformAdmin = isPlatformAdmin;
+                authContext.IsPlatformAdmin = await scope.ServiceProvider
+                    .GetRequiredService<Nocturne.Core.Contracts.Auth.ISubjectRepository>()
+                    .IsPlatformAdminAsync(authContext.SubjectId.Value, context.RequestAborted);
             }
 
             // Set HttpContext.User for [Authorize] attribute to work

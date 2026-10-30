@@ -106,6 +106,7 @@ public class HubCredentialVerifierTests
     {
         var services = new ServiceCollection()
             .AddSingleton(_contexts.AsNocturneFactory())
+            .AddSingleton<ISubjectRepository>(new SubjectRepository(_contexts.AsNocturneFactory()))
             .AddSingleton<IOAuthGrantRepository>(new OAuthGrantRepository(_contexts.AsNocturneFactory()))
             .AddSingleton<IFirstPartyTokenRepository>(new EfFirstPartyTokenRepository(_contexts.AsNocturneFactory()))
             .AddSingleton(_members.Object)

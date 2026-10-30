@@ -51,6 +51,7 @@ public sealed class DemoTenantService
     public const string DemoRoleSlug = "demo-visitor";
 
     private readonly INocturneDbContextFactory _factory;
+    private readonly ISubjectRepository _subjects;
     private readonly IFirstPartyTokenRepository _sessions;
     private readonly ITenantService _tenantService;
     private readonly PublicAccessCacheService _publicAccessCache;
@@ -61,6 +62,7 @@ public sealed class DemoTenantService
     /// <param name="sessions">The first-party sessions a retired demo visitor's rows are deleted from.</param>
     public DemoTenantService(
         INocturneDbContextFactory factory,
+        ISubjectRepository subjects,
         IFirstPartyTokenRepository sessions,
         ITenantService tenantService,
         PublicAccessCacheService publicAccessCache,
@@ -69,6 +71,7 @@ public sealed class DemoTenantService
         ILogger<DemoTenantService> logger)
     {
         _factory = factory;
+        _subjects = subjects;
         _sessions = sessions;
         _tenantService = tenantService;
         _publicAccessCache = publicAccessCache;
@@ -94,7 +97,7 @@ public sealed class DemoTenantService
     /// <see langword="null"/> when the tenant has no demo member.
     /// </summary>
     /// <remarks>
-    /// The subject must itself carry <see cref="SubjectEntity.IsDemoSubject"/>, not merely hold the
+    /// The subject must itself be flagged a demo subject, not merely hold the
     /// membership under the demo username. Both callers act on the result in ways that must never
     /// reach a real account — one issues a session for it to any anonymous caller, the other
     /// deletes it — and the membership alone does not establish that:
@@ -300,7 +303,7 @@ public sealed class DemoTenantService
     /// </para>
     /// <para>
     /// Only ever called with a subject read from the demo tenant's own membership; the
-    /// <see cref="SubjectEntity.IsDemoSubject"/> check makes that explicit rather than
+    /// <see cref="ISubjectRepository.IsDemoSubjectAsync"/> check makes that explicit rather than
     /// implied, because this deletes a global row and must never reach a real account.
     /// </para>
     /// <para>
@@ -319,15 +322,7 @@ public sealed class DemoTenantService
         if (subjectId is null)
             return;
 
-        await using var db = await _factory.CreatePlatformAsync(ct);
-
-        var isDemoSubject = await db.Subjects
-            .AsNoTracking()
-            .Where(s => s.Id == subjectId.Value)
-            .Select(s => s.IsDemoSubject)
-            .FirstOrDefaultAsync(ct);
-
-        if (!isDemoSubject)
+        if (await _subjects.IsDemoSubjectAsync(subjectId.Value, ct) is not true)
         {
             _logger.LogWarning(
                 "Subject {SubjectId} held the demo membership but is not a demo subject — leaving it in place",
@@ -337,11 +332,14 @@ public sealed class DemoTenantService
 
         await _sessions.DeleteAllForSubjectAsync(subjectId.Value, ct);
 
-        await db.TenantMembers
-            .Where(m => m.SubjectId == subjectId.Value)
-            .ExecuteDeleteAsync(ct);
+        await using (var db = await _factory.CreatePlatformAsync(ct))
+        {
+            await db.TenantMembers
+                .Where(m => m.SubjectId == subjectId.Value)
+                .ExecuteDeleteAsync(ct);
+        }
 
-        await db.Subjects.Where(s => s.Id == subjectId.Value).ExecuteDeleteAsync(ct);
+        await _subjects.DeleteAsync(subjectId.Value, ct);
     }
 
     /// <summary>
@@ -448,24 +446,16 @@ public sealed class DemoTenantService
 
         if (member is null)
         {
-            var subject = new SubjectEntity
-            {
-                Id = Guid.CreateVersion7(),
-                Name = DemoMemberName,
-                IsActive = true,
-                ApprovalStatus = "Approved",
-                // Anyone can obtain a session for this account, so it must be refused
-                // wherever "authenticated" is read as "a person who signed up".
-                IsDemoSubject = true,
-            };
-            db.Subjects.Add(subject);
-            await db.SaveChangesAsync(ct);
+            // Anyone can obtain a session for this account, so it is flagged a demo subject and
+            // refused wherever "authenticated" is read as "a person who signed up".
+            var subjectId = await _subjects.CreateAsync(
+                new NewSubject(DemoMemberName, IsDemoSubject: true), ct);
 
             member = new TenantMemberEntity
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = tenantId,
-                SubjectId = subject.Id,
+                SubjectId = subjectId,
                 Username = DemoMemberUsername,
                 LimitTo24Hours = false,
                 Label = DemoMemberName,

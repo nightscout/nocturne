@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
@@ -28,22 +29,22 @@ namespace Nocturne.API.Services.Auth;
 public class PlatformAdminBootstrapService
 {
     private readonly INocturneDbContextFactory _dbFactory;
+    private readonly ISubjectRepository _subjects;
     private readonly PlatformOptions _options;
     private readonly ILogger<PlatformAdminBootstrapService> _logger;
 
-    /// <summary>
-    /// Initialises a new <see cref="PlatformAdminBootstrapService"/>.
-    /// </summary>
-    /// <param name="dbFactory">Factory for subject and tenant member queries. A dedicated
+    /// <param name="dbFactory">Factory for the tenant member queries. A dedicated
     /// context keeps the bootstrap independent of any tenant pinned on a request-scoped one.</param>
+    /// <param name="subjects">The subjects the flag is read from and granted on, on a platform context.</param>
     /// <param name="options">Platform configuration options, including <c>AdminSubjectIds</c>.</param>
-    /// <param name="logger">Logger for the resulting grant.</param>
     public PlatformAdminBootstrapService(
         INocturneDbContextFactory dbFactory,
+        ISubjectRepository subjects,
         IOptions<PlatformOptions> options,
         ILogger<PlatformAdminBootstrapService> logger)
     {
         _dbFactory = dbFactory;
+        _subjects = subjects;
         _options = options.Value;
         _logger = logger;
     }
@@ -51,17 +52,12 @@ public class PlatformAdminBootstrapService
     /// <summary>
     /// Grants platform admin status according to the configured priority rules.
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token.</param>
     public async Task BootstrapAsync(CancellationToken cancellationToken)
     {
-        await using var db = await _dbFactory.CreatePlatformAsync(cancellationToken);
-
         // Option 1: explicit config takes precedence
         if (_options.AdminSubjectIds.Count > 0)
         {
-            var configGrants = await db.Subjects
-                .Where(s => _options.AdminSubjectIds.Contains(s.Id))
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsPlatformAdmin, true), cancellationToken);
+            var configGrants = await _subjects.GrantPlatformAdminAsync(_options.AdminSubjectIds, cancellationToken);
 
             // Config wins outright, so a set of IDs that matches nothing leaves the
             // instance with no platform admin and no way into the admin UI.
@@ -75,8 +71,10 @@ public class PlatformAdminBootstrapService
         }
 
         // No-op if a platform admin already exists
-        if (await db.Subjects.AnyAsync(s => s.IsPlatformAdmin, cancellationToken))
+        if (await _subjects.AnyPlatformAdminAsync(cancellationToken))
             return;
+
+        await using var db = await _dbFactory.CreatePlatformAsync(cancellationToken);
 
         // Option 2: grant to the owner of the oldest tenant that has one. Resolved by walking
         // tenants oldest-first and looking the owner up under each tenant's own pin, because a
@@ -91,7 +89,7 @@ public class PlatformAdminBootstrapService
             return;
         }
 
-        await GrantAsync(db, firstOwnerSubjectId.Value, cancellationToken);
+        await _subjects.GrantPlatformAdminAsync([firstOwnerSubjectId.Value], cancellationToken);
 
         _logger.LogInformation(
             "Granted platform admin to subject {SubjectId}, the owner of the oldest tenant",
@@ -156,10 +154,10 @@ public class PlatformAdminBootstrapService
         if (_options.AdminSubjectIds.Count > 0)
             return false;
 
-        await using var db = await _dbFactory.CreatePlatformAsync(cancellationToken);
-
-        if (await db.Subjects.AnyAsync(s => s.IsPlatformAdmin, cancellationToken))
+        if (await _subjects.AnyPlatformAdminAsync(cancellationToken))
             return false;
+
+        await using var db = await _dbFactory.CreatePlatformAsync(cancellationToken);
 
         // More than one tenant means this is not a fresh install, whatever the caller thinks.
         var tenantIds = await db.Tenants.ExcludeDemo().Select(t => t.Id).Take(2).ToListAsync(cancellationToken);
@@ -183,7 +181,7 @@ public class PlatformAdminBootstrapService
             return false;
         }
 
-        var granted = await GrantAsync(db, subjectId, cancellationToken) > 0;
+        var granted = await _subjects.GrantPlatformAdminAsync([subjectId], cancellationToken) > 0;
 
         if (granted)
             _logger.LogInformation(
@@ -191,10 +189,4 @@ public class PlatformAdminBootstrapService
 
         return granted;
     }
-
-    private static Task<int> GrantAsync(
-        NocturneDbContext db, Guid subjectId, CancellationToken cancellationToken) =>
-        db.Subjects
-            .Where(s => s.Id == subjectId)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsPlatformAdmin, true), cancellationToken);
 }

@@ -22,10 +22,9 @@ public class SystemPinnedAllowlistTests
     private static readonly string[] Allowed =
     [
         "src/API/Nocturne.API/Middleware/TenantSetupMiddleware.cs: TenantSetupMiddleware.EvaluateGateAsync",
-        "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.TenantHasCredentialsAsync",
-        "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.HasOrphanedSubjectAsync",
         "src/API/Nocturne.API/Controllers/Authentication/PasskeyController.cs: PasskeyController.AccessRequestComplete",
-        "src/API/Nocturne.API/Services/Identity/InstanceSetupState.cs: InstanceSetupState.TenantHasCredentialedMemberAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SubjectRepository.cs: SubjectRepository.TenantHasCredentialedMemberAsync",
+        "src/Infrastructure/Nocturne.Infrastructure.Data/Repositories/SubjectRepository.cs: SubjectRepository.HasOrphanedMemberAsync",
     ];
 
     private static readonly IReadOnlyList<string> Callers = Scan();

@@ -34,6 +34,7 @@ public sealed class TenantServiceProvisionOwnerTests : IDisposable
 
     private TenantService Provisioner() => new(
         new SharedSqliteFactory(_db.Options).AsNocturneFactory(),
+        new SubjectRepository(new SharedSqliteFactory(_db.Options).AsNocturneFactory()),
         new MemoryCache(new MemoryCacheOptions()),
         Options.Create(new OperatorConfiguration()),
         Mock.Of<IHttpClientFactory>(),

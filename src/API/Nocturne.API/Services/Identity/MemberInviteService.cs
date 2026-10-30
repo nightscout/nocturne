@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -25,6 +26,7 @@ public class MemberInviteService : IMemberInviteService
 
     private readonly INocturneDbContextFactory _contexts;
     private readonly IMemberInviteRepository _invites;
+    private readonly ISubjectRepository _subjects;
     private readonly IJwtService _jwtService;
     private readonly ITenantService _tenantService;
     private readonly ITenantRoleService _tenantRoleService;
@@ -32,11 +34,13 @@ public class MemberInviteService : IMemberInviteService
     private readonly TimeProvider _time;
     private readonly ILogger<MemberInviteService> _logger;
 
-    /// <param name="contexts">For the roles, subjects and memberships an invite names.</param>
+    /// <param name="contexts">For the roles and memberships an invite names.</param>
     /// <param name="invites">The stored invites.</param>
+    /// <param name="subjects">For the name of the member who minted an invite.</param>
     public MemberInviteService(
         INocturneDbContextFactory contexts,
         IMemberInviteRepository invites,
+        ISubjectRepository subjects,
         IJwtService jwtService,
         ITenantService tenantService,
         ITenantRoleService tenantRoleService,
@@ -46,6 +50,7 @@ public class MemberInviteService : IMemberInviteService
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _invites = invites ?? throw new ArgumentNullException(nameof(invites));
+        _subjects = subjects ?? throw new ArgumentNullException(nameof(subjects));
         _jwtService = jwtService;
         _tenantService = tenantService;
         _tenantRoleService = tenantRoleService;
@@ -116,18 +121,14 @@ public class MemberInviteService : IMemberInviteService
         var inviteUrl =
             $"{origin}{IMemberInviteService.JoinPath}?{IMemberInviteService.TokenQueryParameter}={token}";
 
-        await using var db = await _contexts.CreateAsync();
-        var createdByName = await db.Subjects
-            .Where(s => s.Id == createdBySubjectId)
-            .Select(s => s.Name)
-            .FirstOrDefaultAsync();
+        var names = await _subjects.GetNamesAsync([createdBySubjectId], CancellationToken.None);
 
         return new MemberInviteResult(
             inviteId,
             token,
             inviteUrl,
             expiresAt,
-            createdByName ?? "");
+            names.GetValueOrDefault(createdBySubjectId) ?? "");
     }
 
     /// <inheritdoc />

@@ -2267,7 +2267,7 @@ internal class MigrationJob
     /// </summary>
     /// <remarks>
     /// "denied" is dropped: it is Nightscout's way of spelling "no access", carried instead by
-    /// <see cref="SubjectEntity.IsActive"/>, and a role row for it would grant nothing anyway.
+    /// the subject's <c>is_active</c> flag, and a role row for it would grant nothing anyway.
     /// </remarks>
     private static async Task<List<RoleEntity>> ResolveRolesAsync(
         NocturneDbContext dbContext,

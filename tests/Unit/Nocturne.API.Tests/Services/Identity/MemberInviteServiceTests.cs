@@ -56,7 +56,7 @@ public class MemberInviteServiceTests : IDisposable
         var logger = new Mock<ILogger<MemberInviteService>>();
 
         _service = new MemberInviteService(
-            _dbContext.AsFactory(), new MemberInviteRepository(_dbContext.AsFactory()),
+            _dbContext.AsFactory(), new MemberInviteRepository(_dbContext.AsFactory()), new SubjectRepository(_dbContext.AsFactory()),
             _jwtService.Object,
             _tenantService.Object,
             new TenantRoleService(_dbContext.AsFactory(), _time),

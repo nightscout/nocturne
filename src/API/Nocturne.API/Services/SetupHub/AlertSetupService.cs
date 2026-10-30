@@ -6,6 +6,7 @@ using Nocturne.API.Services.Alerts.Conditions;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Configuration;
@@ -33,6 +34,7 @@ namespace Nocturne.API.Services.SetupHub;
 /// </remarks>
 public class AlertSetupService(
     INocturneDbContextFactory contexts,
+    ISubjectRepository subjects,
     IAlertRuleRepository rules,
     IRuleScopeClassifier scopeClassifier,
     ISecretEncryptionService encryption,
@@ -408,12 +410,9 @@ public class AlertSetupService(
                 _ => AlertRouting.ToYou,
             };
 
-    private static async Task<string> UnitsAsync(NocturneDbContext db, Guid callerId, CancellationToken ct)
+    private async Task<string> UnitsAsync(NocturneDbContext db, Guid callerId, CancellationToken ct)
     {
-        var preferences = await db.Subjects.AsNoTracking()
-            .Where(s => s.Id == callerId)
-            .Select(s => s.Preferences)
-            .FirstOrDefaultAsync(ct);
+        var preferences = (await subjects.GetPreferencesAsync(callerId, ct))?.Preferences;
         var tenantUnits = await db.Tenants.AsNoTracking()
             .Where(t => t.Id == db.TenantId)
             .Select(t => t.DefaultGlucoseUnits)

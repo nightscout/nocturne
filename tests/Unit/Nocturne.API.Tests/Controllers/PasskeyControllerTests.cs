@@ -22,6 +22,8 @@ using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
+using Nocturne.Infrastructure.Data.Repositories;
+
 namespace Nocturne.API.Tests.Controllers;
 
 public class PasskeyControllerTests : IDisposable
@@ -94,6 +96,7 @@ public class PasskeyControllerTests : IDisposable
             // The real service, not a mock: the enrolment probe's cross-tenant reach is the
             // property under test, and a mock would assert the mock.
             new TenantMemberService((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
+            new SubjectRepository((new SharedSqliteFactory(_db.Options)).AsNocturneFactory()),
             (new SharedSqliteFactory(_db.Options)).AsNocturneFactory(),
             oidcOptions,
             logger.Object);
@@ -575,7 +578,7 @@ public class PasskeyControllerTests : IDisposable
             _passkeyService.Object, _totpService.Object, _recoveryCodeService.Object, _jwtService.Object,
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
             _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(tenantContexts),
-            tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
+            new SubjectRepository(tenantContexts), tenantContexts, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
         {
             ControllerContext = _controller.ControllerContext,
         };
@@ -609,7 +612,7 @@ public class PasskeyControllerTests : IDisposable
             _passkeyService.Object, _totpService.Object, _recoveryCodeService.Object, _jwtService.Object,
             _sessionService.Object, _subjectService.Object, new Mock<IAuthAuditService>().Object,
             _tenantAccessor.Object, _tenantService.Object, new TenantMemberService(failingContexts.Object),
-            failingContexts.Object, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
+            new SubjectRepository(failingContexts.Object), failingContexts.Object, Options.Create(new OidcOptions()), new Mock<ILogger<PasskeyController>>().Object)
         {
             ControllerContext = _controller.ControllerContext,
         };
