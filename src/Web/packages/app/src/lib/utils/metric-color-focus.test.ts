@@ -3,6 +3,7 @@ import { getGlucoseHeatmapFill } from "./chart-colors";
 import {
   addColorBoundary,
   insertSliderSteps,
+  isOutsideWindow,
   intensityScale,
   metricRamp,
   paintRamp,
@@ -11,6 +12,7 @@ import {
   rampValue,
   resolveColorBoundaries,
   resolveColorFocusRange,
+  scaleColor,
   scaleFill,
   scaleGradient,
   glucoseScale as buildGlucoseScale,
@@ -209,6 +211,25 @@ describe("chosen colors", () => {
     ]);
   });
 
+  it("blends straight between the ends and the colored boundaries, dropping the theme stops between", () => {
+    const ramp = paintRamp(
+      GLUCOSE_RAMP,
+      { low: "#000080", high: "#ffff00" },
+      [
+        { value: 100, position: 0.3, color: "#00ff00" },
+        { value: 150, position: 0.45 },
+        { value: 250, position: 0.7, color: "#ff0000" },
+      ],
+      [40, 350]
+    );
+    expect(ramp).toEqual([
+      { position: 0, color: "#000080" },
+      { position: 0.3, color: "#00ff00" },
+      { position: 0.7, color: "#ff0000" },
+      { position: 1, color: "#ffff00" },
+    ]);
+  });
+
   it("leaves the theme ramp untouched without chosen colors", () => {
     expect(paintRamp(GLUCOSE_RAMP, {}, [{ value: 100, position: 0.3 }], [40, 350])).toBe(GLUCOSE_RAMP);
   });
@@ -236,5 +257,25 @@ describe("chosen colors", () => {
     const [added] = addColorBoundary(scale)!;
     expect(added.color).toBeUndefined();
     expect(rampColor(scale.ramp, added.position)).toBe(scaleFill(added.value, scale));
+  });
+});
+
+describe("glucoseScale", () => {
+  it("spans the glucose ramp across the color range, apart from the window", () => {
+    const scale = buildGlucoseScale([100, 300], null, 90, {}, [70, 180]);
+    expect(scale.domain).toEqual([70, 180]);
+    expect(scale.window).toEqual([100, 300]);
+    expect(scale.axis).toEqual([GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX]);
+    expect(scaleColor(70, scale)).toBe(GLUCOSE_RAMP[0].color);
+    expect(scaleColor(180, scale)).toBe(GLUCOSE_RAMP.at(-1)!.color);
+    expect(isOutsideWindow(90, scale)).toBe(true);
+    expect(buildGlucoseScale([70, 180], null, 90).domain).toEqual([GLUCOSE_COLOR_MIN, GLUCOSE_COLOR_MAX]);
+  });
+
+  it("keeps an intensity ramp on its color range when the window narrows", () => {
+    const scale = intensityScale("--insulin", [0, Infinity], 50, [10, 20], null, 90, {}, [5, 40]);
+    expect(scale.domain).toEqual([5, 40]);
+    expect(scale.window).toEqual([10, 20]);
+    expect(intensityScale("--insulin", [0, Infinity], 50, [10, 20], null, 90).domain).toEqual([0, 50]);
   });
 });
