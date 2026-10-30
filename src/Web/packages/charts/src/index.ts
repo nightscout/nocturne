@@ -44,3 +44,4 @@ export { default as DataTable } from "./report/DataTable.svelte";
 export { default as PercentileBands } from "./report/PercentileBands.svelte";
 export { default as RangeBandsChart } from "./report/RangeBandsChart.svelte";
 export { default as ReportView } from "./report/ReportView.svelte";
+export { default as BarChart } from "./report/BarChart.svelte";

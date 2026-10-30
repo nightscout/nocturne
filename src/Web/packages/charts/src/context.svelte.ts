@@ -79,3 +79,17 @@ export function partialView<K extends keyof ChartDataView>(
 	// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- see the doc comment: a track-only host has no full view to give
 	return fields as ChartDataView;
 }
+
+/**
+ * A context for a host that draws only the dashboard's bolus and carb markers (a report's time
+ * series): they read nothing but the labels, so the view and the track layout are absent. The
+ * context is typed for the whole chart, so this is asserted, as {@link partialView} is.
+ */
+export function markerOnlyContext(
+	labels: ChartLabels,
+	format: ChartFormat,
+	glucoseUnits: GlucoseUnits
+): GlucoseChartContext {
+	// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- see the doc comment: a marker-only host has no view or layout to give
+	return { labels, format, glucoseUnits, printing: false } as GlucoseChartContext;
+}

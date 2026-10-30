@@ -1,6 +1,6 @@
 // Renders the built dist/report.html the way an MCP Apps host does: in a sandboxed iframe under
 // the spec's default CSP, behind a minimal host that answers ui/initialize and sends one
-// report result (a dashboard chart panel and a time series panel). The vitest suite runs the unbundled sources, so only this sees the bundle.
+// report result (a dashboard chart panel, a time series panel with treatment markers and a bar panel). The vitest suite runs the unbundled sources, so only this sees the bundle.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
@@ -52,7 +52,30 @@ const result = {
         ],
         rows: glucoseData.map((r) => ({ time: r.time, glucose: r.sgv, targetLow: 70, targetHigh: 180 })),
         thresholds: { veryLow: 54, low: 70, high: 180, veryHigh: 250, mgdlPerUnit: 1 },
+        markers: [
+          { time: from + 1_800_000, kind: "bolus", amount: 4.5 },
+          { time: from + 1_800_000, kind: "carbs", amount: 45 },
+        ],
         summary: "line summary",
+      },
+      {
+        id: "bar",
+        dataset: "glucose_distribution",
+        primitive: "bar",
+        bindings: { x: "band", y: ["percent"], stacked: false },
+        status: "ok",
+        window: window_,
+        fields: [
+          field("band", "Band", "category", null, { colorField: "color" }),
+          field("percent", "Time", "percent", "%"),
+          field("color", "Colour", "category", null),
+        ],
+        rows: [
+          { band: "Low", percent: 3, color: "glucose-low" },
+          { band: "In range", percent: 72, color: "glucose-in-range" },
+          { band: "High", percent: 25, color: "glucose-high" },
+        ],
+        summary: "bar summary",
       },
     ],
   },
@@ -101,6 +124,8 @@ await page.evaluate(
 const plot = page.frameLocator("#view").getByTestId("glucose-plot");
 let circles = 0;
 let lines;
+let markers;
+let bars;
 try {
   await plot.waitFor({ timeout: 15_000 });
   for (let i = 0; i < 30 && circles < READINGS; i++) {
@@ -110,13 +135,15 @@ try {
   const series = page.frameLocator("#view").getByTestId("report-time-series");
   await series.waitFor({ timeout: 5_000 });
   lines = await series.locator("path.fill-none").count();
+  markers = await series.locator("[data-testid=report-bolus-marker], [data-testid=report-carb-marker]").count();
+  bars = await page.frameLocator("#view").getByTestId("report-bar-segment").count();
 } finally {
   await browser.close();
 }
 
-if (errors.length > 0 || circles < READINGS || !(lines >= 1)) {
-  console.error(`render smoke failed: ${circles} of ${READINGS} points drawn, ${lines} time-series lines`);
+if (errors.length > 0 || circles < READINGS || !(lines >= 1) || markers !== 2 || bars !== 3) {
+  console.error(`render smoke failed: ${circles} of ${READINGS} points drawn, ${lines} time-series lines, ${markers} markers, ${bars} bars`);
   for (const error of errors) console.error(`  ${error}`);
   process.exit(1);
 }
-console.log(`render smoke passed: ${circles} points drawn, ${lines} time-series lines, no errors`);
+console.log(`render smoke passed: ${circles} points drawn, ${lines} time-series lines, ${markers} markers, ${bars} bars, no errors`);

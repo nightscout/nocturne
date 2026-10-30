@@ -9,6 +9,7 @@
   import GlucoseChart from "../GlucoseChart.svelte";
   import type { ChartFormat } from "../format.js";
   import { transformChartData } from "../transform.js";
+  import BarChart from "./BarChart.svelte";
   import DataTable from "./DataTable.svelte";
   import RangeBandsChart from "./RangeBandsChart.svelte";
   import StatTiles from "./StatTiles.svelte";
@@ -85,7 +86,16 @@
       {#if panel.status !== "ok"}
         <!-- The summary below says why. -->
       {:else if panel.primitive === "time_series"}
-        <TimeSeriesChart {panel} format={zoned} heightClass={plotHeight} lineColorMode={colorMode} />
+        <TimeSeriesChart
+          {panel}
+          format={zoned}
+          heightClass={plotHeight}
+          lineColorMode={colorMode}
+          labels={labels.chart}
+          glucoseUnits={report.units}
+        />
+      {:else if panel.primitive === "bar"}
+        <BarChart {panel} format={zoned} heightClass={plotHeight} />
       {:else if panel.primitive === "range_bands"}
         <RangeBandsChart {panel} format={zoned} heightClass={plotHeight} />
       {:else if panel.primitive === "stat_tiles"}

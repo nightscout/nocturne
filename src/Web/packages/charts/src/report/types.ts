@@ -6,7 +6,10 @@ import type { ChartColor } from "../enums.js";
 import type { DashboardChartDataDto } from "../dto.js";
 import type { ChartFormat } from "../format.js";
 
-export type ReportPrimitive = "time_series" | "stat_tiles" | "table" | "glucose_chart" | "range_bands";
+export type ReportPrimitive = "time_series" | "stat_tiles" | "table" | "glucose_chart" | "range_bands" | "bar";
+
+/** A treatment marker the dashboard chart draws. */
+export type ReportMarkerKind = "bolus" | "carbs";
 
 /** `offset` is minutes from an event, `time_of_day` minutes after local midnight. */
 export type ReportFieldKind = "time" | "number" | "category" | "percent" | "offset" | "time_of_day";
@@ -23,6 +26,21 @@ export interface ReportField {
   color?: ChartColor | null;
   /** Drawn on the glucose scale and coloured by the glucose thresholds. */
   glucoseScale?: boolean;
+  /** Drawn on a time series as the dashboard's bolus or carb marker at each value, not as a line. */
+  marker?: ReportMarkerKind | null;
+  /** The value holds until the next row: a line of it is drawn as steps. */
+  step?: boolean;
+  /** The field each row carries its bar colour in (a theme colour name), for a bar of this category. */
+  colorField?: string | null;
+}
+
+/** A treatment marker on a time series panel: its time, kind and amount (U or g). */
+export interface ReportMarker {
+  time: number;
+  kind: ReportMarkerKind;
+  amount: number;
+  /** A bolus the algorithm gave, drawn outlined. */
+  automatic?: boolean;
 }
 
 export type ReportRow = Record<string, string | number | boolean | null | undefined>;
@@ -44,6 +62,8 @@ export interface ReportBindings {
   columns?: string[] | null;
   /** range_bands: the category field whose values are drawn as separate bands. */
   series?: string | null;
+  /** bar: stack the y fields in one bar per category. */
+  stacked?: boolean | null;
 }
 
 export interface ReportResolution {
@@ -76,6 +96,8 @@ export interface ReportPanel {
   resolution?: ReportResolution | null;
   /** The web report that shows the panel's data, with its range and parameters. */
   link?: string | null;
+  /** Treatment markers a time series panel draws on its line. */
+  markers?: ReportMarker[];
 }
 
 export interface ReportResult {

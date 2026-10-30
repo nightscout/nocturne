@@ -1,13 +1,18 @@
 <!--
   Lines of one unit over time from a report panel's rows, with an optional shaded band between two
   fields. A field on the glucose scale is coloured as the dashboard's glucose line is (lineStopsFor),
-  in the report's one colour mode; every other line takes its field's theme colour.
+  in the report's one colour mode; every other line takes its field's theme colour, and a field that
+  holds its value until the next row is drawn as steps. A field the API marks as a bolus or carb
+  marker is drawn as the dashboard's markers at its values, and the panel's own treatment markers sit
+  on its first line.
 -->
 <script lang="ts">
   import { Area, Axis, Chart, ChartClipPath, LinearGradient, Rule, Spline, Svg, Tooltip } from "layerchart";
-  import { curveMonotoneX, scaleTime } from "d3";
+  import { curveMonotoneX, curveStepAfter, scaleTime } from "d3";
   import { resolveChartColor } from "../colors.js";
-  import { formatClockTime, type ChartFormat } from "../format.js";
+  import { formatClockTime, type ChartFormat, type GlucoseUnits } from "../format.js";
+  import type { ChartLabels } from "../labels.js";
+  import ReportMarkerLayer, { type PlacedMarker } from "./ReportMarkerLayer.svelte";
   import { lineStopsFor, type LineColorMode } from "../view/glucose-gradient-stops.js";
   import {
     boundFields,
@@ -25,9 +30,19 @@
     heightClass?: string;
     /** The report's glucose colouring, from the API: the dashboard's spectrum by default. */
     lineColorMode?: Exclude<LineColorMode, "single">;
+    /** The chart's words, which the treatment markers write their amounts with; no markers are drawn without them. */
+    labels?: ChartLabels;
+    glucoseUnits?: GlucoseUnits;
   }
 
-  let { panel, format, heightClass = "h-[280px]", lineColorMode = "continuous" }: Props = $props();
+  let {
+    panel,
+    format,
+    heightClass = "h-[280px]",
+    lineColorMode = "continuous",
+    labels,
+    glucoseUnits = "mg/dl",
+  }: Props = $props();
 
   type Point = { time: Date; row: ReportRow };
 
@@ -43,7 +58,9 @@
   // A time of day or minutes from an event lie on a linear axis; an instant on a time axis.
   const xKind = $derived(panel.fields.find((f) => f.name === xName)?.kind ?? "time");
   const linear = $derived(xKind === "time_of_day" || xKind === "offset");
-  const lines = $derived(boundFields(panel, panel.bindings.y));
+  const bound = $derived(boundFields(panel, panel.bindings.y));
+  const lines = $derived(bound.filter((f) => !f.marker));
+  const markerFields = $derived(bound.filter((f) => f.marker));
   const band = $derived(boundFields(panel, panel.bindings.band));
   const thresholds = $derived(lines.some((f) => f.glucoseScale) ? (panel.thresholds ?? null) : null);
 
@@ -71,7 +88,7 @@
 
   // The axis ceiling: the largest drawn value, or the high threshold when that is larger.
   const yMax = $derived.by(() => {
-    const names = [...lines, ...band].map((f) => f.name);
+    const names = [...bound, ...band].map((f) => f.name);
     let max = thresholds?.high ?? 0;
     for (const p of points) for (const n of names) max = Math.max(max, num(p.row, n) ?? 0);
     return max > 0 ? max * 1.1 : 1;
@@ -82,6 +99,45 @@
     const f = t.mgdlPerUnit;
     const mgdl = { veryLow: t.veryLow * f, low: t.low * f, high: t.high * f, veryHigh: t.veryHigh * f };
     return lineStopsFor(lineColorMode, mgdl, (value) => yScale(value / f), height);
+  }
+
+  /**
+   * Where each marker sits: a marker field's at its own value; the panel's treatment markers on the
+   * first line at the reading nearest them, a carb raised above a bolus at the same time.
+   */
+  function placeMarkers(xScale: (d: Date) => number, yScale: (v: number) => number, height: number): PlacedMarker[] {
+    const placed: PlacedMarker[] = [];
+    for (const field of markerFields) {
+      for (const p of drawnFor(field.name)) {
+        const amount = num(p.row, field.name) ?? 0;
+        placed.push({
+          key: `${field.name}-${p.time.getTime()}-${placed.length}`,
+          x: xScale(p.time),
+          y: yScale(amount),
+          kind: field.marker ?? "bolus",
+          amount,
+          automatic: p.row.automatic === "yes",
+        });
+      }
+    }
+    const line = lines[0];
+    const along = line ? drawnFor(line.name) : [];
+    for (const [i, m] of (panel.markers ?? []).entries()) {
+      let nearest: Point | undefined;
+      for (const p of along)
+        if (!nearest || Math.abs(p.time.getTime() - m.time) < Math.abs(nearest.time.getTime() - m.time)) nearest = p;
+      const value = nearest && line ? num(nearest.row, line.name) : null;
+      const y = value === null ? height - 12 : yScale(value);
+      placed.push({
+        key: `marker-${m.kind}-${m.time}-${i}`,
+        x: xScale(new Date(m.time)),
+        y: m.kind === "carbs" ? y - 34 : y,
+        kind: m.kind,
+        amount: m.amount,
+        automatic: m.automatic ?? false,
+      });
+    }
+    return placed;
   }
 
   const lineColor = (color: string | null | undefined) =>
@@ -154,7 +210,7 @@
                       y={(d: Point) => num(d.row, field.name)}
                       stroke={gradient}
                       class="stroke-2 fill-none"
-                      curve={curveMonotoneX}
+                      curve={field.step ? curveStepAfter : curveMonotoneX}
                     />
                   {/snippet}
                 </LinearGradient>
@@ -165,10 +221,18 @@
                   y={(d: Point) => num(d.row, field.name)}
                   stroke={lineColor(field.color)}
                   class="stroke-2 fill-none"
-                  curve={curveMonotoneX}
+                  curve={field.step ? curveStepAfter : curveMonotoneX}
                 />
               {/if}
             {/each}
+            {#if labels && (markerFields.length > 0 || (panel.markers ?? []).length > 0)}
+              <ReportMarkerLayer
+                markers={placeMarkers(context.xScale, context.yScale, context.height)}
+                {labels}
+                {format}
+                {glucoseUnits}
+              />
+            {/if}
           </ChartClipPath>
         </Svg>
 
@@ -180,7 +244,7 @@
               class="mb-1 border-b border-border pb-1 font-semibold"
             />
             <Tooltip.List>
-              {#each [...lines, ...band] as field (field.name)}
+              {#each [...bound, ...band] as field (field.name)}
                 <Tooltip.Item
                   label={field.label}
                   value={`${formatReportValue(data?.row?.[field.name], field, format)}${field.unit ? ` ${field.unit}` : ""}`}
