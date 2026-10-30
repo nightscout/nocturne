@@ -26,7 +26,7 @@ public class UserPreferencesController : ControllerBase
     // Supported language codes - must match supportedLocales.json
     private static readonly HashSet<string> SupportedLanguages = new(StringComparer.OrdinalIgnoreCase)
     {
-        "en", "es", "fr", "de", "it", "pt", "nl", "ru", "zh", "ja", "ko"
+        "en", "es", "fr", "de", "it", "pt", "nl", "ru", "zh", "ja", "ko", "cs"
     };
 
     /// <summary>
