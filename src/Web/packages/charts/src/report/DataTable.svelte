@@ -14,9 +14,11 @@
     onselect?: (row: ReportRow, index: number) => void;
     /** The index of the picked row. */
     selected?: number | null;
+    /** Shown in place of the rows when there are none: the host's words. */
+    emptyText?: string;
   }
 
-  let { panel, format, heightClass = "max-h-[280px]", onselect, selected = null }: Props = $props();
+  let { panel, format, heightClass = "max-h-[280px]", onselect, selected = null, emptyText = "No data in this range." }: Props = $props();
 
   function onkeydown(event: KeyboardEvent, row: ReportRow, index: number) {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -26,7 +28,7 @@
 </script>
 
 {#if panel.rows.length === 0}
-  <p class="text-sm text-muted-foreground">No data in this range.</p>
+  <p class="text-sm text-muted-foreground">{emptyText}</p>
 {:else}
   <div class="{heightClass} overflow-auto rounded-md border border-border">
     <table class="w-full text-xs tabular-nums" data-testid="report-table">

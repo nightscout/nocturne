@@ -2,7 +2,7 @@
   The view's connection to the MCP Apps host. The tool result arrives as a notification. Each call
   to the host is offered only when the host's capabilities grant it: display mode when it lists both
   modes, refine_report with tools/call, the selected event's sentence with update-model-context,
-  and the web report with open-link.
+  and the web app and the matching web reports with open-link.
 -->
 <script lang="ts">
   import {
@@ -16,8 +16,9 @@
   import Maximize2 from "@lucide/svelte/icons/maximize-2";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
   import { Button } from "@nocturne/ui/ui/button";
-  import ReportView from "./ReportView.svelte";
-  import { readReport, type ReportPatch } from "./payload.js";
+  import { readReport } from "@nocturne/charts/core";
+  import ReportBody from "./ReportBody.svelte";
+  import type { ReportPatch } from "./payload.js";
 
   type DisplayMode = "inline" | "fullscreen";
   type ToolResult = { structuredContent?: unknown; isError?: boolean; content?: unknown };
@@ -124,7 +125,7 @@
       </Button>
     </div>
   {/if}
-  <ReportView
+  <ReportBody
     {result}
     {original}
     {locale}

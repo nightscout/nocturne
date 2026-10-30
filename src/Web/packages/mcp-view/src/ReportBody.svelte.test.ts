@@ -2,7 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 import "./app.css";
-import ReportView from "./ReportView.svelte";
+import ReportView from "./ReportBody.svelte";
 import { cohortBands } from "@nocturne/charts/core";
 
 const from = Date.UTC(2026, 9, 29, 6);
@@ -287,6 +287,7 @@ describe("ReportView", () => {
     await expect.element(page.getByTestId("report-range-bands")).toBeVisible();
     expect(page.getByRole("button", { name: "Load earlier data" }).elements()).toHaveLength(0);
     expect(page.getByRole("button", { name: "Open in Nocturne" }).elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: "Open the matching report" }).elements()).toHaveLength(0);
     expect(page.getByRole("checkbox").elements()).toHaveLength(0);
     expect(page.getByText(sentence).element().closest("tr")?.getAttribute("tabindex")).toBeNull();
   });
@@ -304,7 +305,7 @@ describe("ReportView", () => {
     expect(refine).toHaveBeenLastCalledWith({ panels: [{ id: "bands", dataset: { cohorts: [{ anchor: "Meal" }] } }] });
   });
 
-  it("hands the selected event's own sentence to the host, and opens the web report", async () => {
+  it("hands the selected event's own sentence to the host, and opens the matching web report", async () => {
     const selectEvent = vi.fn();
     const openLink = vi.fn();
     render(ReportView, { result: { structuredContent: eventResult }, locale: "en-US", selectEvent, openLink });
@@ -312,8 +313,28 @@ describe("ReportView", () => {
     await page.getByText(sentence).click();
     expect(selectEvent).toHaveBeenCalledWith(sentence);
 
-    await page.getByRole("button", { name: "Open in Nocturne" }).click();
+    await page.getByRole("button", { name: "Open the matching report" }).first().click();
     expect(openLink).toHaveBeenCalledWith(eventResult.panels[0].link);
+    expect(page.getByRole("button", { name: "Open in Nocturne" }).elements()).toHaveLength(0);
+  });
+
+  it("opens the whole spec in the web app with the link the API built", async () => {
+    const openLink = vi.fn();
+    const openUrl = "https://dev.nocturne.localhost/reports/custom/new?spec=q1Yq";
+    render(ReportView, { result: { structuredContent: { ...eventResult, openUrl } }, locale: "en-US", openLink });
+
+    await page.getByRole("button", { name: "Open in Nocturne" }).click();
+    expect(openLink).toHaveBeenCalledWith(openUrl);
+  });
+
+  it("writes a title as text, never as markup", async () => {
+    render(ReportView, {
+      result: { structuredContent: { ...twoPanels, spec: { version: 1, title: "<img src=x onerror=alert(1)>" } } },
+      locale: "en-US",
+    });
+
+    await expect.element(page.getByRole("heading", { name: "<img src=x onerror=alert(1)>" })).toBeVisible();
+    expect(document.querySelector("main img")).toBeNull();
   });
 
   it("writes an event's time in the tenant's zone, as its sentence does", async () => {

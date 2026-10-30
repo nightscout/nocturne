@@ -88,6 +88,8 @@ export interface ReportResult {
   panels: ReportPanel[];
   summary: string;
   warnings?: string[];
+  /** The web app's page that opens the whole spec, on the tenant's host; null when the spec is too large for a link. */
+  openUrl?: string | null;
 }
 
 /** The fields a time series draws, looked up by name in the panel's catalogue entries. */

@@ -24,3 +24,5 @@ export * from "./view/profile-activation.js";
 export * from "./view/proximity.js";
 export * from "./report/types.js";
 export * from "./report/percentile-bands.js";
+export * from "./report/read.js";
+export type { ReportViewLabels } from "./report/report-view-labels.js";

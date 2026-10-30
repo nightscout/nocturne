@@ -6,15 +6,17 @@
   interface Props {
     panel: ReportPanel;
     format: ChartFormat;
+    /** Shown in place of the rows when there are none: the host's words. */
+    emptyText?: string;
   }
 
-  let { panel, format }: Props = $props();
+  let { panel, format, emptyText = "No data in this range." }: Props = $props();
 
   const row = $derived(panel.rows[0]);
 </script>
 
 {#if !row}
-  <p class="text-sm text-muted-foreground">No data in this range.</p>
+  <p class="text-sm text-muted-foreground">{emptyText}</p>
 {:else}
   <dl class="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2" data-testid="report-stat-tiles">
     {#each panel.fields as field (field.name)}

@@ -1,17 +1,17 @@
 <!--
-  Draws a report tool result: a heading, then each panel with its primitive and the summary the
-  API wrote for it. Kept apart from the host connection so a test can mount it with a fixture.
-  The host calls arrive as optional callbacks: a control shows only when the host granted its call.
+  A report tool result, drawn by the charts package's ReportView, with the host's controls. Kept
+  apart from the host connection so a test can mount it with a fixture. The host calls arrive as
+  optional callbacks: a control shows only when the host granted its call.
 -->
 <script lang="ts">
-  import { DataTable, GlucoseChart, RangeBandsChart, StatTiles, TimeSeriesChart } from "@nocturne/charts";
-  import { transformChartData, type ReportPanel, type ReportRow } from "@nocturne/charts/core";
+  import { ReportView } from "@nocturne/charts";
+  import { readReport, type ReportPanel, type ReportRow, type ReportViewLabels } from "@nocturne/charts/core";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import History from "@lucide/svelte/icons/history";
   import { Button } from "@nocturne/ui/ui/button";
   import { Checkbox } from "@nocturne/ui/ui/checkbox";
   import { chartLabels } from "./labels.js";
-  import { cohortsOf, earlierRange, omittedToggles, readReport, type ReportPatch, type SpecCohort } from "./payload.js";
+  import { cohortsOf, earlierRange, type ReportPatch, type SpecCohort } from "./payload.js";
 
   interface Props {
     /** The tool result; null until the host sends it. */
@@ -46,25 +46,13 @@
     busy = false,
   }: Props = $props();
 
+  const labels: ReportViewLabels = { chart: chartLabels, noData: "No data in this range." };
+
   const report = $derived(result ? readReport(result.structuredContent) : null);
   const format = $derived({
     locale,
     hour12: new Intl.DateTimeFormat(locale, { hour: "numeric" }).resolvedOptions().hour12 ?? false,
-    timeZone: knownZone(report?.timeZone ?? "UTC"),
   });
-
-  /** The zone when this browser knows it, so times match the summaries; else the browser's own. */
-  function knownZone(zone: string): string | undefined {
-    try {
-      new Intl.DateTimeFormat("en", { timeZone: zone });
-      return zone;
-    } catch {
-      return undefined;
-    }
-  }
-  const plotHeight = $derived(displayMode === "fullscreen" ? "h-[45vh] min-h-[280px]" : "h-[280px]");
-  const tableHeight = $derived(displayMode === "fullscreen" ? "max-h-[45vh]" : "max-h-[280px]");
-  const colorMode = $derived(report?.glucoseColorMode ?? "continuous");
 
   const originalSpec = $derived((original ? readReport(original.structuredContent) : report)?.spec);
 
@@ -90,38 +78,6 @@
     void refine?.({ panels: [{ id: panel.id, dataset: { cohorts: next } }] });
   }
 </script>
-
-{#snippet panelBody(panel: ReportPanel)}
-  {#if panel.status !== "ok"}
-    <!-- The summary below says why. -->
-  {:else if panel.primitive === "time_series"}
-    <TimeSeriesChart {panel} {format} heightClass={plotHeight} lineColorMode={colorMode} />
-  {:else if panel.primitive === "range_bands"}
-    <RangeBandsChart {panel} {format} heightClass={plotHeight} />
-  {:else if panel.primitive === "stat_tiles"}
-    <StatTiles {panel} {format} />
-  {:else if panel.primitive === "table"}
-    <DataTable
-      {panel}
-      {format}
-      heightClass={tableHeight}
-      onselect={selectEvent && panel.fields.some((f) => f.name === "summary") ? (row, i) => pickRow(panel, row, i) : undefined}
-      selected={selected?.panel === panel.id ? selected.row : null}
-    />
-  {:else if panel.primitive === "glucose_chart" && panel.chart && report}
-    <GlucoseChart
-      data={transformChartData(panel.chart)}
-      xDomain={{ from: new Date(panel.window.from), to: new Date(panel.window.to) }}
-      now={panel.window.to}
-      glucoseUnits={report.units}
-      labels={chartLabels}
-      {format}
-      heightClass="{displayMode === 'fullscreen' ? 'h-[70vh]' : 'h-[420px]'} w-full"
-      omittedTracks={omittedToggles(panel.omittedScopes ?? [])}
-      appearance={{ lineColorMode: colorMode }}
-    />
-  {/if}
-{/snippet}
 
 {#snippet panelControls(panel: ReportPanel)}
   {@const panelCohorts = panel.dataset === "event_response" ? cohortsOf(originalSpec, panel.id) : []}
@@ -151,7 +107,7 @@
       {#if openLink && panel.link}
         <Button variant="ghost" size="sm" onclick={() => openLink(panel.link!)}>
           <ExternalLink class="size-4" />
-          Open in Nocturne
+          Open the matching report
         </Button>
       {/if}
     </div>
@@ -166,24 +122,26 @@
       The tool result has no report data. The view cannot show a report.
     </p>
   {:else}
-    {#if report.spec.title}
-      <h1 class="mb-2 text-base font-semibold">{report.spec.title}</h1>
+    {#if openLink && report.openUrl}
+      <div class="mb-2 flex justify-end">
+        <Button variant="outline" size="sm" onclick={() => openLink(report.openUrl!)}>
+          <ExternalLink class="size-4" />
+          Open in Nocturne
+        </Button>
+      </div>
     {/if}
-    {#each report.warnings ?? [] as warning (warning)}
-      <p class="mb-2 text-sm text-warning" role="status">{warning}</p>
-    {/each}
     {#if notice}
       <p class="mb-2 whitespace-pre-line text-sm text-warning" role="alert">{notice}</p>
     {/if}
-    <div class="flex flex-col gap-4">
-      {#each report.panels as panel (panel.id)}
-        <section aria-labelledby="panel-{panel.id}" data-testid="report-panel">
-          <h2 id="panel-{panel.id}" class="mb-1 text-sm font-medium">{panel.title ?? panel.dataset}</h2>
-          {@render panelBody(panel)}
-          {@render panelControls(panel)}
-          <p class="mt-1 whitespace-pre-line text-xs text-muted-foreground">{panel.summary}</p>
-        </section>
-      {/each}
-    </div>
+    <ReportView
+      {report}
+      {format}
+      {labels}
+      {displayMode}
+      onselectrow={selectEvent ? pickRow : undefined}
+      selectable={(panel) => panel.fields.some((f) => f.name === "summary")}
+      {selected}
+      controls={panelControls}
+    />
   {/if}
 </main>

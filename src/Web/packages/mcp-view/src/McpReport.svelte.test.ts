@@ -80,7 +80,7 @@ describe("McpReport", () => {
     });
     await expect.element(page.getByText("Mean 160 mg/dL.")).toBeVisible();
 
-    await page.getByRole("button", { name: "Open in Nocturne" }).click();
+    await page.getByRole("button", { name: "Open the matching report" }).click();
     expect(host.openLink).toHaveBeenCalledWith({ url: report(150).panels[0].link });
   });
 
@@ -92,7 +92,7 @@ describe("McpReport", () => {
 
     await expect.element(page.getByText("Mean 150 mg/dL.")).toBeVisible();
     expect(page.getByRole("button", { name: "Load earlier data" }).elements()).toHaveLength(0);
-    expect(page.getByRole("button", { name: "Open in Nocturne" }).elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: "Open the matching report" }).elements()).toHaveLength(0);
     expect(page.getByRole("button", { name: "Show full screen" }).elements()).toHaveLength(0);
     expect(host.callServerTool).not.toHaveBeenCalled();
   });
