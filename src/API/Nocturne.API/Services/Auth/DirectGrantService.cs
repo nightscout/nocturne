@@ -17,10 +17,11 @@ namespace Nocturne.API.Services.Auth;
 /// </summary>
 /// <remarks>
 /// Each operation runs on a unit of work the service opens and commits itself. A self-service
-/// caller passes no tenant and the unit reads as the request's reader; a platform-admin caller
-/// that has checked its right to act on another tenant pins it, as its context pin did before
-/// the service owned the unit. Grant rows are tenant-scoped, so the unit's tenant decides which
-/// grants are visible and which tenant a new grant is bound to.
+/// caller passes no tenant and the unit reads as the request's reader. Only a caller behind the
+/// <c>platform_admin</c> role gate (<see cref="Controllers.V4.PlatformAdmin.TenantDirectGrantController"/>)
+/// may pin another tenant, as its context pin did before the service owned the unit; a route or
+/// body value must never reach the pin from anywhere else. Grant rows are tenant-scoped, so the
+/// unit's tenant decides which grants are visible and which tenant a new grant is bound to.
 /// </remarks>
 /// <seealso cref="DirectGrantTokenHandler"/>
 public interface IDirectGrantService
