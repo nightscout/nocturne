@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Storage;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Configuration;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -182,6 +183,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAlertRepositories(this IServiceCollection services)
     {
         services.AddScoped<IAlertTrackerRepository, AlertTrackerRepository>();
+        services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
         services.AddScoped<ITrackerRepository, TrackerRepository>();
         services.AddScoped<IStateSpanRepository, StateSpanRepository>();
         services.AddScoped<ISleepSessionRepository, SleepSessionRepository>();

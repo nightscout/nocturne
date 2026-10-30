@@ -6,6 +6,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Converters;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -189,21 +190,7 @@ public class AlertRepository : IAlertRepository
             .Include(r => r.Channels)
             .Where(r => r.TenantId == tenantId);
 
-    private static AlertRuleRecord ToRecord(AlertRuleEntity r) => new(
-        new AlertRuleSnapshot(
-            r.Id, r.TenantId, r.Name, r.ConditionType,
-            r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
-            r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass),
-        r.Description,
-        r.IsEnabled,
-        r.ManagedBy,
-        r.ReviewReason,
-        r.Channels
-            .OrderBy(c => c.SortOrder)
-            .Select(c => new AlertRuleChannelSnapshot(
-                c.Id, c.AlertRuleId, c.ChannelType,
-                c.Destination, c.DestinationLabel, c.SortOrder, c.Metadata, c.Secret))
-            .ToList());
+    private static AlertRuleRecord ToRecord(AlertRuleEntity r) => AlertRuleMapper.ToRecord(r);
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<AlertRuleChannelSnapshot>> GetChannelsForRuleAsync(
