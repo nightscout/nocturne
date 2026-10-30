@@ -258,12 +258,7 @@
             <dd class="m-0 flex items-baseline gap-2">
               <span class="text-lg font-semibold tabular-nums">{insulinStats.mealBoluses ?? 0}</span>
               <span class="text-xs text-muted-foreground">
-                {(insulinStats.manualBolusCount ?? 0) > 0
-                  ? (
-                      ((insulinStats.mealBoluses ?? 0) / (insulinStats.manualBolusCount ?? 1)) *
-                      100
-                    ).toFixed(0)
-                  : 0}% of boluses
+                {(insulinStats.mealBolusPercent ?? 0).toFixed(0)}% of boluses
               </span>
             </dd>
           </div>
@@ -272,12 +267,7 @@
             <dd class="m-0 flex items-baseline gap-2">
               <span class="text-lg font-semibold tabular-nums">{insulinStats.correctionBoluses ?? 0}</span>
               <span class="text-xs text-muted-foreground">
-                {(insulinStats.manualBolusCount ?? 0) > 0
-                  ? (
-                      ((insulinStats.correctionBoluses ?? 0) / (insulinStats.manualBolusCount ?? 1)) *
-                      100
-                    ).toFixed(0)
-                  : 0}% of boluses
+                {(insulinStats.correctionBolusPercent ?? 0).toFixed(0)}% of boluses
               </span>
             </dd>
           </div>

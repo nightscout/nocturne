@@ -33,11 +33,13 @@ vi.mock("#lib/components/reports/HourlyBolusChart.svelte", async () => ({
 import IdpPage from "./+page.svelte";
 
 const NOTE = /place each reading at the local time its device reported/;
+const BOLUS_HOURS = "This chart cannot show boluses by hour of day.";
 
 function respond(timeZoneUnavailableReason?: TimeZoneUnavailableReason) {
   resource.current = {
     readingCount: 0,
-    boluses: [],
+    hourlyBolusCounts: [],
+    hourlyTimeZoneUnavailableReason: timeZoneUnavailableReason,
     activeSchedules: [],
     analysis: { reliability: { meetsReliabilityCriteria: false, daysOfData: 3, recommendedMinimumDays: 14 }, basicStats: {}, glycemicVariability: {}, timeInRange: { percentages: {} } },
     averagedStats: [],
@@ -70,6 +72,14 @@ describe("insulin dosing profile report", () => {
 
     await expect.element(page.getByText("0 readings")).toBeVisible();
     await expect.element(page.getByText(NOTE)).not.toBeInTheDocument();
+    await expect.element(page.getByText(BOLUS_HOURS)).not.toBeInTheDocument();
+  });
+
+  it("says the hourly bolus chart cannot be drawn instead of drawing it empty", async () => {
+    respond(TimeZoneUnavailableReason.NotConfigured);
+    render(IdpPage);
+
+    await expect.element(page.getByText(BOLUS_HOURS)).toBeVisible();
   });
 
   it("states the cause once and folds the UTC days into the note when reliability falls short", async () => {

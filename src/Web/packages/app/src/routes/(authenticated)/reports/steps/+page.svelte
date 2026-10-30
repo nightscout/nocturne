@@ -37,20 +37,20 @@
     (actogramResource.current?.glucoseData ?? []).map((g) => ({ mills: g.mills, sgv: g.sgv, color: g.color }))
   );
 
-  // Summary statistics scoped to the selected range, not the padded fetch window
-  const selectedStepCounts = $derived(
-    pointsInRange(
-      actogramResource.current?.stepCounts ?? [],
-      reportsParams.dateRangeMillis.from,
-      reportsParams.dateRangeMillis.to
-    )
-  );
-  const totalSteps = $derived(selectedStepCounts.reduce((sum, s) => sum + s.metric, 0));
-  const dayCount = $derived(reportsParams.dayCount);
-  const dailyAverage = $derived(Math.round(totalSteps / dayCount));
-  // Cap bar scale at a reasonable max
+  const stepSummary = $derived(actogramResource.current?.stepSummary);
+  // Bar heights scale to the selected range's largest sample, not the padded fetch window
   const barScale = $derived(
-    Math.max(extentOf(selectedStepCounts, (s) => s.metric)?.max ?? 0, 1000)
+    Math.max(
+      extentOf(
+        pointsInRange(
+          actogramResource.current?.stepCounts ?? [],
+          reportsParams.dateRangeMillis.from,
+          reportsParams.dateRangeMillis.to
+        ),
+        (s) => s.metric
+      )?.max ?? 0,
+      1000
+    )
   );
 </script>
 
@@ -63,9 +63,9 @@
 
   <FigureStrip
     figures={[
-      { label: "Total steps", value: formatNumber(totalSteps), unit: "steps" },
-      { label: "Daily average", value: formatNumber(dailyAverage), unit: "steps/day" },
-      { label: "Period", value: String(dayCount), unit: "days" },
+      { label: "Total steps", value: stepSummary ? formatNumber(stepSummary.totalSteps ?? 0) : "--", unit: "steps" },
+      { label: "Daily average", value: stepSummary ? formatNumber(stepSummary.dailyAverage ?? 0) : "--", unit: "steps/day" },
+      { label: "Period", value: stepSummary ? String(stepSummary.dayCount ?? 0) : "--", unit: "days" },
     ]}
   />
 

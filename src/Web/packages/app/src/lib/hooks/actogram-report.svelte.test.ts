@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { getActogramData } from "#lib/api/actogram.remote.js";
 import { servedDays } from "#lib/test-stubs/actogram-days.js";
 
 const AUCKLAND_MINUTES = 13 * 60;
@@ -18,7 +19,8 @@ vi.mock("./date-params.svelte", () => ({
   }),
 }));
 vi.mock("./resource-context.svelte", () => ({
-  contextResource: () => ({
+  contextResource: (fetcher: () => unknown) => ({
+    fetch: fetcher,
     get current() {
       return { days: hoisted.days };
     },
@@ -38,6 +40,17 @@ describe("useActogramReport", () => {
     expect(report.rangeDayCount).toBe(14);
     expect(report.days.filter((day) => day.date >= "2025-11-01").map((day) => day.date)).toEqual(
       Array.from({ length: 14 }, (_, index) => `2025-11-${String(14 - index).padStart(2, "0")}`)
+    );
+  });
+
+  it("asks for the summaries over the picker's range, ending just after its last millisecond", () => {
+    const report = useActogramReport("Error");
+    (report.resource as unknown as { fetch: () => unknown }).fetch();
+
+    const from = Date.parse("2025-11-01T00:00:00Z") - HONOLULU_MINUTES * 60_000;
+    const to = Date.parse("2025-11-14T23:59:59.999Z") - HONOLULU_MINUTES * 60_000;
+    expect(getActogramData).toHaveBeenCalledWith(
+      expect.objectContaining({ summaryFrom: from, summaryTo: to + 1 })
     );
   });
 });

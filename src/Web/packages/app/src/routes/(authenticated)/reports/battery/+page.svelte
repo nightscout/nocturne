@@ -67,16 +67,20 @@
     });
   }
 
+  /** Icon for each `level` bucket the API serves (0, 25, 50, 75, 100). */
+  const LEVEL_ICONS: Record<number, typeof BatteryFull> = {
+    100: BatteryFull,
+    75: BatteryMedium,
+    50: BatteryMedium,
+    25: BatteryLow,
+  };
+
   function getBatteryIconComponent(
     level: number | undefined,
     isCharging: boolean | undefined
   ) {
     if (isCharging) return BatteryCharging;
-    if (!level) return BatteryWarning;
-    if (level >= 95) return BatteryFull;
-    if (level >= 50) return BatteryMedium;
-    if (level >= 25) return BatteryLow;
-    return BatteryWarning;
+    return LEVEL_ICONS[level ?? 0] ?? BatteryWarning;
   }
 
   function extractDeviceName(device: string | undefined): string {

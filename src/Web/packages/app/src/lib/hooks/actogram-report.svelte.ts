@@ -23,6 +23,9 @@ export function useActogramReport(errorTitle: string, defaultDays = 14) {
       getActogramData({
         from: paddedFrom,
         to: params.dateRangeMillis.to + ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
+        // The picker's last millisecond is inclusive; the API's summary end is not.
+        summaryFrom: params.dateRangeMillis.from,
+        summaryTo: params.dateRangeMillis.to + 1,
       }),
     { errorTitle }
   );

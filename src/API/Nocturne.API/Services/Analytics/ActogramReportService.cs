@@ -1,5 +1,6 @@
 using System.Globalization;
 using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Glucose;
@@ -67,9 +68,14 @@ public sealed class ActogramReportService : IActogramReportService
     public async Task<ActogramReportData> GetAsync(
         long startTime,
         long endTime,
+        long? summaryStartTime = null,
+        long? summaryEndTime = null,
         CancellationToken cancellationToken = default
     )
     {
+        var summaryStart = summaryStartTime ?? startTime;
+        var summaryEnd = summaryEndTime ?? endTime;
+
         var fromDt = DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime;
         var toDt = DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime;
 
@@ -177,6 +183,51 @@ public sealed class ActogramReportService : IActogramReportService
             StepDayTotals = SumStepsByDay(stepRecords, days, zone),
             TimeZoneUnavailableReason = clock.Reason,
             SleepSpans = sleepSpans,
+            HeartRateSummary = SummariseHeartRates(heartRates, summaryStart, summaryEnd),
+            StepSummary = SummariseSteps(stepCounts, summaryStart, summaryEnd),
+        };
+    }
+
+    private static ActogramHeartRateSummary? SummariseHeartRates(
+        IEnumerable<HeartRatePointDto> heartRates,
+        long start,
+        long end
+    )
+    {
+        var bpms = heartRates
+            .Where(h => h.Time >= start && h.Time < end)
+            .Select(h => h.Bpm)
+            .Order()
+            .ToList();
+        if (bpms.Count == 0)
+            return null;
+
+        return new ActogramHeartRateSummary
+        {
+            AverageBpm = (int)Math.Round(bpms.Average(), MidpointRounding.AwayFromZero),
+            RestingBpm = bpms[bpms.Count / 10],
+            MinBpm = bpms[0],
+            MaxBpm = bpms[^1],
+            ReadingCount = bpms.Count,
+        };
+    }
+
+    private static ActogramStepSummary SummariseSteps(
+        IEnumerable<StepBubbleDto> stepCounts,
+        long start,
+        long end
+    )
+    {
+        var total = stepCounts.Where(s => s.Time >= start && s.Time < end).Sum(s => s.Steps);
+        var dayCount = StatisticsService.WindowDays(
+            DateTimeOffset.FromUnixTimeMilliseconds(start).UtcDateTime,
+            DateTimeOffset.FromUnixTimeMilliseconds(end).UtcDateTime);
+
+        return new ActogramStepSummary
+        {
+            TotalSteps = total,
+            DayCount = dayCount,
+            DailyAverage = (int)Math.Round((double)total / dayCount, MidpointRounding.AwayFromZero),
         };
     }
 

@@ -58,6 +58,23 @@ function totalOf(row: HTMLElement): number {
 }
 
 describe("steps report", () => {
+  it("shows no figures while the API serves no step summary", async () => {
+    respond();
+    render(StepsPage);
+
+    await expect.element(page.getByText("Period", { exact: true })).toBeVisible();
+    expect(page.getByText("--", { exact: true }).elements()).toHaveLength(3);
+  });
+
+  it("shows the total and daily average the API served", async () => {
+    respond();
+    hoisted.current.stepSummary = { totalSteps: 12345, dayCount: 3, dailyAverage: 4115 };
+    render(StepsPage);
+
+    await expect.element(page.getByText("12,345")).toBeVisible();
+    await expect.element(page.getByText("4,115")).toBeVisible();
+  });
+
   it("shows the day total on each row when the time zone resolved", async () => {
     respond();
     render(StepsPage);

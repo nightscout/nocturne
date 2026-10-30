@@ -50,6 +50,7 @@
       minRate: s?.minRate ?? 0,
       maxRate: s?.maxRate ?? 0,
       totalDelivered: s?.totalDelivered ?? 0,
+      totalDeliveredPerDay: s?.totalDeliveredPerDay ?? 0,
     };
   });
 
@@ -246,9 +247,9 @@
               <h4 class="font-medium">Daily basal insulin</h4>
               <p class="text-sm text-muted-foreground">
                 Average of <strong>
-                  {(basalStats.totalDelivered / dateInfo.dayCount).toFixed(1)} units
+                  {basalStats.totalDeliveredPerDay.toFixed(1)} units
                 </strong>
-                of basal insulin delivered per day over this {dateInfo.dayCount}-day
+                of basal insulin delivered per day over this {analysisQuery.current?.windowDays ?? dateInfo.dayCount}-day
                 period.
               </p>
             </div>

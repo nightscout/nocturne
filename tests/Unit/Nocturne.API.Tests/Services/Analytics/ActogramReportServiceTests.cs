@@ -19,6 +19,10 @@ public class ActogramReportServiceTests
     // +14 days
     private const long EndMills = StartMills + 14L * 24 * 60 * 60 * 1000;
 
+    // 22:30:00Z on 14 Nov, one hour long
+    private const long SummaryStart = StartMills + 1_000_000L;
+    private const long SummaryEnd = SummaryStart + 3_600_000L;
+
     private readonly Mock<ISensorGlucoseRepository> _glucose = new();
     private readonly Mock<ISleepService> _sleep = new();
     private readonly Mock<IStepCountService> _steps = new();
@@ -399,6 +403,197 @@ public class ActogramReportServiceTests
 
         await act.Should().NotThrowAsync();
     }
+
+    [Fact]
+    public async Task GetAsync_HeartRateSummary_CoversOnlyTheSummaryRange_HalfOpen()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupHeartRates(
+            (SummaryStart - 1, 30),
+            (SummaryStart, 80),
+            (SummaryStart + 60_000, 60),
+            (SummaryStart + 120_000, 100),
+            (SummaryStart + 180_000, 70),
+            (SummaryStart + 240_000, 90),
+            (SummaryStart + 300_000, 65),
+            (SummaryStart + 360_000, 75),
+            (SummaryStart + 420_000, 85),
+            (SummaryStart + 480_000, 95),
+            (SummaryStart + 540_000, 55),
+            (SummaryEnd, 200),
+            (SummaryEnd + 60_000, 200));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryEnd);
+
+        result.HeartRateSummary.Should().NotBeNull();
+        var summary = result.HeartRateSummary!;
+        summary.ReadingCount.Should().Be(10);
+        summary.MinBpm.Should().Be(55);
+        summary.MaxBpm.Should().Be(100);
+        summary.AverageBpm.Should().Be(78, "the mean is 77.5, which rounds away from zero");
+        summary.RestingBpm.Should().Be(60, "index 10 / 10 = 1 of the ascending readings");
+        result.HeartRates.Should().HaveCount(13, "the series itself is not clipped to the summary range");
+    }
+
+    [Fact]
+    public async Task GetAsync_HeartRateSummary_RestingBpmIsTheAscendingReadingAtCountOverTen()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupHeartRates(Enumerable.Range(0, 25)
+            .Select(i => (SummaryStart + i * 60_000L, 125 - i * 2))
+            .ToArray());
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryEnd);
+
+        // Ascending readings are 77, 79, 81, ...; floor(25 / 10) = 2.
+        result.HeartRateSummary!.RestingBpm.Should().Be(81);
+        result.HeartRateSummary.MinBpm.Should().Be(77);
+    }
+
+    [Fact]
+    public async Task GetAsync_HeartRateSummary_IsNullWhenNoReadingFallsInTheSummaryRange()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupHeartRates((SummaryStart - 1, 64), (SummaryEnd, 70));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryEnd);
+
+        result.HeartRateSummary.Should().BeNull();
+        result.HeartRates.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetAsync_HeartRateSummary_IsNullWithNoReadings()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills);
+
+        result.HeartRateSummary.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_StepSummary_CoversOnlyTheSummaryRange()
+    {
+        SetupEmpty();
+        SetupZone("Europe/Stockholm");
+        SetupSteps(
+            (SummaryStart - 1, 777),
+            (SummaryStart, 300),
+            (SummaryStart + 1_800_000, 500),
+            (SummaryEnd, 999));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryEnd);
+
+        result.StepSummary!.TotalSteps.Should().Be(800);
+        result.StepSummary.DayCount.Should().Be(1);
+        result.StepSummary.DailyAverage.Should().Be(800);
+    }
+
+    [Theory]
+    [InlineData("Pacific/Auckland")]
+    [InlineData("Europe/Stockholm")]
+    [InlineData(null)]
+    public async Task GetAsync_StepSummary_CountsTheRangesWholeDaysWhateverItsMidnights(string? zone)
+    {
+        // A 14-day pick aligned to Auckland midnights touches 15 UTC or Stockholm days.
+        var aucklandMidnight = DateTimeOffset.Parse("2023-11-15T00:00:00+13:00").ToUnixTimeMilliseconds();
+        SetupEmpty();
+        SetupZone(zone);
+        SetupSteps((aucklandMidnight, 1400));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(
+            aucklandMidnight - 86_400_000, aucklandMidnight + 15 * 86_400_000L,
+            aucklandMidnight, aucklandMidnight + 14 * 86_400_000L);
+
+        result.StepSummary!.DayCount.Should().Be(14);
+        result.StepSummary.DailyAverage.Should().Be(100);
+    }
+
+    [Fact]
+    public async Task GetAsync_StepSummary_DailyAverageRoundsAwayFromZero()
+    {
+        SetupEmpty();
+        SetupZone("Europe/Stockholm");
+        SetupSteps((SummaryStart, 500), (SummaryStart + 1_800_000, 501));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(
+            StartMills, EndMills, SummaryStart, SummaryStart + 2 * 86_400_000L);
+
+        result.StepSummary!.TotalSteps.Should().Be(1001);
+        result.StepSummary.DayCount.Should().Be(2);
+        result.StepSummary.DailyAverage.Should().Be(501, "500.5 rounds up");
+    }
+
+    [Fact]
+    public async Task GetAsync_StepSummary_CountsAtLeastOneDay()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupSteps((SummaryStart, 120));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryStart + 1);
+
+        result.StepSummary!.DayCount.Should().Be(1);
+        result.StepSummary.DailyAverage.Should().Be(120);
+    }
+
+    [Fact]
+    public async Task GetAsync_StepSummary_ExcludesPossibleRunningTotals()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupSteps(
+            (SummaryStart, 300, 0),
+            (SummaryStart + 60_000, 9_000, StepCount.PossibleRunningTotalFlag));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills, SummaryStart, SummaryEnd);
+
+        result.StepSummary!.TotalSteps.Should().Be(300);
+    }
+
+    [Fact]
+    public async Task GetAsync_SummaryRangeOmitted_SummarisesTheWholeWindow()
+    {
+        SetupEmpty();
+        SetupZone("UTC");
+        SetupHeartRates((StartMills, 60), (StartMills + 3_600_000, 80), (EndMills - 1, 100));
+        SetupSteps((StartMills, 100), (EndMills - 1, 200));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills);
+
+        result.HeartRateSummary!.ReadingCount.Should().Be(3);
+        result.HeartRateSummary.AverageBpm.Should().Be(80);
+        result.StepSummary!.TotalSteps.Should().Be(300);
+        result.StepSummary.DayCount.Should().Be(14);
+        result.StepSummary.DailyAverage.Should().Be(21);
+    }
+
+    private void SetupHeartRates(params (long Mills, int Bpm)[] samples) =>
+        _heartRates
+            .Setup(h => h.GetHeartRateMinuteAveragesByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(samples
+                .Select(s => new HeartRate
+                {
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(s.Mills).UtcDateTime,
+                    Bpm = s.Bpm,
+                })
+                .ToArray());
 
     private void SetupZone(string? id) =>
         _therapy

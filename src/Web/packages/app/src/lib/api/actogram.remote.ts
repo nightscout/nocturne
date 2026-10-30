@@ -12,10 +12,17 @@ import { resolveChartThresholds } from "#lib/constants/glucose-thresholds.js";
 const actogramSchema = z.object({
   from: z.number(),
   to: z.number(),
+  summaryFrom: z.number().optional(),
+  summaryTo: z.number().optional(),
 });
 
-export const getActogramData = query(actogramSchema, async ({ from, to }) => {
-  const data = await getActogram({ startTime: from, endTime: to });
+export const getActogramData = query(actogramSchema, async ({ from, to, summaryFrom, summaryTo }) => {
+  const data = await getActogram({
+    startTime: from,
+    endTime: to,
+    summaryStartTime: summaryFrom,
+    summaryEndTime: summaryTo,
+  });
 
   const thresholds = resolveChartThresholds(data.thresholds);
 
@@ -55,6 +62,8 @@ export const getActogramData = query(actogramSchema, async ({ from, to }) => {
     days,
     stepCounts,
     stepDayTotals: data.stepDayTotals ?? {},
+    stepSummary: data.stepSummary,
+    heartRateSummary: data.heartRateSummary,
     timeZoneUnavailableReason: data.timeZoneUnavailableReason,
     heartRates,
     glucoseData,
