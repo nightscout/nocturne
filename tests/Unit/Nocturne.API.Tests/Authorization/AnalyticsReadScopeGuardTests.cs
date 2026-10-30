@@ -1369,7 +1369,7 @@ public partial class AnalyticsReadScopeGuardTests
             [
                 .. new[]
                 {
-                    "Primary", "Comparison", "HistoryClamped", "TimeZoneUnavailableReason", "PrimaryRange",
+                    "Primary", "Comparison", "HistoryClamped", "RangeOutsideHistory", "TimeZoneUnavailableReason", "PrimaryRange",
                     "ComparisonRange", "AppliedFilters", "IgnoredFilters", "WithheldSeries", "UnavailableFilters",
                     "Definition", "SlotMinutes", "BackToStartMgdl", "UnavailableAnchors", "WithheldReason", "Rules",
                     "HistoryWindowHours", "Limits", "LoopGapMinutes", "ContextLookbackMs",
@@ -1688,7 +1688,7 @@ public partial class AnalyticsReadScopeGuardTests
     }
 
     [Fact]
-    public async Task LoopAnalysis_Handler_AnalysesAClampedCallersLastDayWhateverDatesItAskedFor()
+    public async Task LoopAnalysis_Handler_GivesAClampedCallerAnEmptyRangeForDatesBeforeItsWindow()
     {
         var (controller, service) = LoopAnalysisHandler(
             Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories]), historyClamped: true,
@@ -1700,15 +1700,13 @@ public partial class AnalyticsReadScopeGuardTests
         }));
 
         data.HistoryClamped.Should().BeTrue();
+        data.RangeOutsideHistory.Should().BeTrue();
         data.ComparisonRange.Should().BeNull();
         data.IgnoredFilters.Should().BeEquivalentTo("startDate", "endDate", "compare");
         data.PrimaryRange!.From.Should().Be(LoopAnalysisNow.AddHours(-24));
-        data.PrimaryRange.To.Should().Be(LoopAnalysisNow);
+        data.PrimaryRange.To.Should().Be(data.PrimaryRange.From);
         service.Verify(s => s.GetDailyProfileAsync(
-            It.Is<LoopAnalysisFilter>(f =>
-                f.From == LoopAnalysisNow.AddHours(-24) && f.To == LoopAnalysisNow && f.CompareFrom == null && f.CompareTo == null),
-            It.IsAny<TimeZoneInfo>(),
-            It.IsAny<CancellationToken>()));
+            It.IsAny<LoopAnalysisFilter>(), It.IsAny<TimeZoneInfo>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -2000,7 +1998,7 @@ public partial class AnalyticsReadScopeGuardTests
         var (controller, service) = LoopAnalysisHandler(
             Granted([Scope.ReportsRead, .. AllLoopAnalysisCategories]), historyClamped: true);
 
-        var data = Ok(await controller.GetPredictionAccuracy(Week()));
+        var data = Ok(await controller.GetPredictionAccuracy(Week(q => q.EndDate = new DateOnly(2024, 6, 8))));
 
         data.HistoryClamped.Should().BeTrue();
         service.Verify(s => s.GetPredictionAccuracyAsync(

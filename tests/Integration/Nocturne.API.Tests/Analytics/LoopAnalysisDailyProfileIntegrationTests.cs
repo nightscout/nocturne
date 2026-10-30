@@ -178,23 +178,46 @@ public class LoopAnalysisDailyProfileIntegrationTests(ApiIntegrationTestFixture 
     }
 
     [Fact]
-    public async Task A_history_clamped_member_is_analysed_over_its_last_24_hours_whatever_it_asks_for()
+    public async Task A_history_clamped_member_is_analysed_over_the_part_of_its_range_in_the_last_24_hours()
     {
         await SeedProfileAsync("Australia/Sydney");
         using var clamped = await CreateHistoryClampedClientAsync();
         var now = DateTime.UtcNow;
 
-        var body = await GetOkAsync(clamped, Query($"{Week}&compare=previous"));
+        var body = await GetOkAsync(clamped, Query($"{RecentDays(3)}&compare=previous"));
 
         body.GetProperty("historyClamped").GetBoolean().Should().BeTrue();
+        body.GetProperty("rangeOutsideHistory").GetBoolean().Should().BeFalse();
         var primaryRange = body.GetProperty("primaryRange");
         primaryRange.GetProperty("from").GetDateTime().ToUniversalTime().Should().BeCloseTo(now.AddHours(-24), TimeSpan.FromMinutes(5));
         primaryRange.GetProperty("to").GetDateTime().ToUniversalTime().Should().BeCloseTo(now, TimeSpan.FromMinutes(5));
         Absent(body, "comparisonRange").Should().BeTrue();
         Absent(body, "comparison").Should().BeTrue();
         body.GetProperty("ignoredFilters").EnumerateArray().Select(f => f.GetString())
-            .Should().BeEquivalentTo("startDate", "endDate", "compare");
+            .Should().BeEquivalentTo("startDate", "compare");
         body.GetProperty("primary").GetProperty("days").GetArrayLength().Should().BeLessThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public async Task A_history_clamped_member_asking_for_a_range_before_its_window_gets_an_empty_range_and_the_reason()
+    {
+        await SeedProfileAsync("Australia/Sydney");
+        await SeedWeekAsync(WeekStart, tempRate: 1.5);
+        using var clamped = await CreateHistoryClampedClientAsync();
+        var now = DateTime.UtcNow;
+
+        var body = await GetOkAsync(clamped, Query($"{Week}&compare=previous"));
+
+        body.GetProperty("historyClamped").GetBoolean().Should().BeTrue();
+        body.GetProperty("rangeOutsideHistory").GetBoolean().Should().BeTrue();
+        var primaryRange = body.GetProperty("primaryRange");
+        var from = primaryRange.GetProperty("from").GetDateTime().ToUniversalTime();
+        from.Should().BeCloseTo(now.AddHours(-24), TimeSpan.FromMinutes(5));
+        primaryRange.GetProperty("to").GetDateTime().ToUniversalTime().Should().Be(from);
+        Absent(body, "comparisonRange").Should().BeTrue();
+        body.GetProperty("ignoredFilters").EnumerateArray().Select(f => f.GetString())
+            .Should().BeEquivalentTo("startDate", "endDate", "compare");
+        body.GetProperty("primary").GetProperty("summary").GetProperty("daysWithData").GetInt32().Should().Be(0);
     }
 
     [Fact]

@@ -245,7 +245,7 @@ describe("SettingsEvidenceBody", () => {
     });
     await expect.element(page.getByText("This page needs more than the last 24 hours")).toBeVisible();
     await expect.element(page.getByText(/You can see only the last 24 hours, so the page shows no figures\./)).toBeVisible();
-    await expect.element(page.getByText(/This page uses only the last/)).not.toBeInTheDocument();
+    await expect.element(page.getByText(/This page uses only the data/)).not.toBeInTheDocument();
     await expect.element(page.getByText("Your access does not include the data for this page")).not.toBeInTheDocument();
     await expect.element(page.getByRole("slider")).not.toBeInTheDocument();
   });

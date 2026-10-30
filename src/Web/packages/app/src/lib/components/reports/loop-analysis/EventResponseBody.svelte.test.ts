@@ -192,7 +192,7 @@ describe("EventResponseBody", () => {
     response.ignoredFilters = ["startDate", "anchor2", "isolatedOnly"];
     render(EventResponseBody, { props: { response } });
 
-    await expect.element(page.getByText(/This page uses only the last 24 hours/)).toBeVisible();
+    await expect.element(page.getByText(/This page uses only the data from the last 24 hours/)).toBeVisible();
     await expect.element(page.getByText(/Cohort 2, Isolated events only\./)).toBeVisible();
   });
 

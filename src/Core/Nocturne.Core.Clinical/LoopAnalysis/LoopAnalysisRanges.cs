@@ -63,6 +63,34 @@ public static class LoopAnalysisRanges
         };
     }
 
+    /// <summary>
+    /// The part of <paramref name="range"/> from <paramref name="from"/> (inclusive) to
+    /// <paramref name="to"/> (exclusive), with the local dates that part spans. When they do not
+    /// overlap, an empty range: <c>From</c> and <c>To</c> both <paramref name="from"/>, on its local day.
+    /// </summary>
+    public static LoopAnalysisResolvedRange Intersect(
+        LoopAnalysisResolvedRange range, DateTime from, DateTime to, TimeZoneInfo tz)
+    {
+        var start = range.From > from ? range.From : from;
+        var end = range.To < to ? range.To : to;
+        if (end <= start)
+        {
+            var day = LocalSlotBinning.LocalDay(from.ToMills(), tz);
+            return new LoopAnalysisResolvedRange
+            {
+                StartDate = day, EndDate = day, From = from, To = from, Shortened = range.Shortened,
+            };
+        }
+        return new LoopAnalysisResolvedRange
+        {
+            StartDate = LocalSlotBinning.LocalDay(start.ToMills(), tz),
+            EndDate = LocalSlotBinning.LocalDay(end.ToMills() - 1, tz),
+            From = start,
+            To = end,
+            Shortened = range.Shortened,
+        };
+    }
+
     private static LoopAnalysisResolvedRange Of(DateOnly startDate, DateOnly endDate, TimeZoneInfo tz, bool shortened) => new()
     {
         StartDate = startDate,

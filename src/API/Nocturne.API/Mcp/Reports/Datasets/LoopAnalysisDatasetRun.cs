@@ -21,7 +21,8 @@ internal static class LoopAnalysisDatasetRun
 
     /// <summary>
     /// The request for the local days the panel's range touches, with these masks and, when given, a
-    /// comparison range. A history-clamped caller is read over its last 24 hours, as on the pages.
+    /// comparison range. A history-clamped caller is read over the part of the range in its last
+    /// 24 hours, to the instant, with no comparison.
     /// </summary>
     public static Task<LoopAnalysisRequest> ResolveAsync(
         ReportDatasetRequest request,
@@ -58,7 +59,7 @@ internal static class LoopAnalysisDatasetRun
         }
 
         return await new LoopAnalysisRequestResolver(clock, time)
-            .ResolveAsync(query, grantedScopes, historyClamped, sent, ct);
+            .ResolveAsync(query, grantedScopes, historyClamped, sent, ct, (from.UtcDateTime, to.UtcDateTime));
     }
 
     /// <summary>The page's response filled and narrowed for the caller, as the controller serves it.</summary>
@@ -84,19 +85,30 @@ internal static class LoopAnalysisDatasetRun
     /// <summary>How the request was read: the local days, the comparison, the history clamp and what the token could not use.</summary>
     public static IEnumerable<string> Context(LoopAnalysisResponse response, string what)
     {
-        if (response.PrimaryRange is { } primary)
+        if (response.PrimaryRange is { } primary && !response.RangeOutsideHistory)
             yield return string.Create(CultureInfo.InvariantCulture,
                 $"{what} over local days {primary.StartDate:yyyy-MM-dd} to {primary.EndDate:yyyy-MM-dd}{(primary.Shortened ? " (only the latest 90 days)." : ".")}");
         if (response.ComparisonRange is { } comparison)
             yield return string.Create(CultureInfo.InvariantCulture,
                 $"Comparison range: local days {comparison.StartDate:yyyy-MM-dd} to {comparison.EndDate:yyyy-MM-dd}.");
         if (response.HistoryClamped)
-            yield return "This token reads only the last 24 hours, so the analysis covers that window and has no comparison.";
+            yield return HistoryClampNote(response);
         if (response.IgnoredFilters.Count > 0)
             yield return $"Not applied, because the token does not hold the scope they need: {string.Join(", ", response.IgnoredFilters)}.";
         var withheld = response.WithheldSeries.Where(s => s != LoopAnalysisSeries.ProfileNames).ToList();
         if (withheld.Count > 0)
             yield return $"Withheld, because the token does not hold the scope they need: {string.Join(", ", withheld)}.";
+    }
+
+    /// <summary>What the history clamp did to the range: the window served, or that the range is older than the window.</summary>
+    internal static string HistoryClampNote(LoopAnalysisResponse response)
+    {
+        if (response.RangeOutsideHistory)
+            return "No data: the range ends before the last 24 hours, and this token reads only the last 24 hours.";
+        return response.PrimaryRange is not { } range || range.To - range.From >= HistoryClamp.Window
+            ? "This token reads only the last 24 hours, so the analysis covers that window and has no comparison."
+            : string.Create(CultureInfo.InvariantCulture,
+                $"This token reads only the last 24 hours, so the analysis covers only the part of the range in that window, {range.From:yyyy-MM-dd HH:mm} to {range.To:yyyy-MM-dd HH:mm} UTC, and has no comparison.");
     }
 
     /// <summary>The scope that withholds a series from a caller; the first one when several do.</summary>

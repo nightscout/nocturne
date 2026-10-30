@@ -146,7 +146,10 @@ public class LoopAnalysisController(
                 : service.GetSettingsEvidenceAsync,
             cancellationToken);
         if (served.Result is OkObjectResult { Value: SettingsEvidenceReport report })
+        {
+            report.WithheldReason ??= withheld;
             report.Rules = SettingsEvidenceCalculator.Rules();
+        }
         return served;
     }
 
@@ -219,8 +222,8 @@ public class LoopAnalysisController(
     }
 
     /// <summary>
-    /// Resolves <paramref name="query"/>, computes the page when the tenant has a zone, fills the
-    /// envelope and narrows the result to the caller.
+    /// Resolves <paramref name="query"/>, computes the page when there is a range to analyse, fills
+    /// the envelope and narrows the result to the caller.
     /// </summary>
     private async Task<ActionResult<T>> ServeAsync<T>(
         LoopAnalysisQuery query,
@@ -232,7 +235,7 @@ public class LoopAnalysisController(
         if (invalid is not null)
             return invalid;
 
-        var result = request!.Zone is { } zone ? await compute(request.Filter!, zone, ct) : new T();
+        var result = request!.Filter is { } filter && request.Zone is { } zone ? await compute(filter, zone, ct) : new T();
         return Ok(LoopAnalysisReadScopeGuard.Redact(request.Fill(result), HttpContext.GetGrantedScopes()));
     }
 

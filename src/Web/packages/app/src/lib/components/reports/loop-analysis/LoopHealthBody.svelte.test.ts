@@ -258,7 +258,7 @@ describe("LoopHealthBody", () => {
   it("says a clamped viewer sees only the last 24 hours", async () => {
     render(LoopHealthBody, { props: { response: loopHealthResponse({ historyClamped: true, days: 1 }) } });
 
-    await expect.element(page.getByText(/This page uses only the last 24 hours/)).toBeVisible();
+    await expect.element(page.getByText(/This page uses only the data from the last 24 hours/)).toBeVisible();
     await tile("Closed loop").toContain("91.1%");
   });
 

@@ -409,4 +409,28 @@ public partial class LoopAnalysisDatasetTests
         link.Should().StartWith("https://dev.nocturne.localhost/reports/loop-analysis/meals-and-events?from=2026-10-01&to=2026-10-28");
         link.Should().Contain("excludeOverrides=true").And.Contain("anchor1=Meal").And.Contain($"foodIds1={Pasta}").And.Contain("dayOfWeek1=1");
     }
+
+    [Theory]
+    [InlineData(24, false, "so the analysis covers that window and has no comparison.")]
+    [InlineData(6, false, "only the part of the range in that window, 2026-10-30 18:00 to 2026-10-31 00:00 UTC, and has no comparison.")]
+    [InlineData(0, true, "No data: the range ends before the last 24 hours")]
+    public void A_clamped_summary_names_the_window_it_served(int hours, bool outside, string expected)
+    {
+        var to = new DateTime(2026, 10, 31, 0, 0, 0, DateTimeKind.Utc);
+        var response = new LoopAnalysisResponse
+        {
+            HistoryClamped = true,
+            RangeOutsideHistory = outside,
+            PrimaryRange = new LoopAnalysisResolvedRange
+            {
+                StartDate = new DateOnly(2026, 10, 30), EndDate = new DateOnly(2026, 10, 30),
+                From = to.AddHours(-hours), To = to,
+            },
+        };
+
+        var lines = LoopAnalysisDatasetRun.Context(response, "Meals & events").ToList();
+
+        lines.Should().ContainSingle(l => l.Contains(expected));
+        lines.Any(l => l.StartsWith("Meals & events over local days")).Should().Be(!outside);
+    }
 }

@@ -1,4 +1,5 @@
 using Nocturne.Core.Clinical.LoopAnalysis;
+using Nocturne.Core.Models.LoopAnalysis;
 
 namespace Nocturne.Core.Clinical.Tests.LoopAnalysis;
 
@@ -111,5 +112,76 @@ public class LoopAnalysisRangesTests
         previous.From.Should().Be(Utc(2024, 5, 27, 14));
         previous.To.Should().Be(Utc(2024, 6, 2, 20, 20), "06:20 on 3 June, local");
         (previous.To - previous.From).Should().Be(range.To - range.From);
+    }
+
+    private static LoopAnalysisResolvedRange Intersected(DateOnly start, DateOnly end, DateTime now) =>
+        LoopAnalysisRanges.Intersect(
+            LoopAnalysisRanges.Resolve(start, end, Sydney, 90, now), now - TimeSpan.FromHours(24), now, Sydney);
+
+    [Fact]
+    public void Intersect_ARangeInsideTheWindow_IsUnchanged()
+    {
+        var range = Intersected(new DateOnly(2024, 6, 10), new DateOnly(2024, 6, 10), SixTwenty);
+
+        range.From.Should().Be(Utc(2024, 6, 9, 14));
+        range.To.Should().Be(SixTwenty);
+        range.StartDate.Should().Be(new DateOnly(2024, 6, 10));
+        range.EndDate.Should().Be(new DateOnly(2024, 6, 10));
+    }
+
+    [Fact]
+    public void Intersect_AWindowStartingMidDay_StartsTheRangeThere_OnThatLocalDay()
+    {
+        var range = Intersected(new DateOnly(2024, 6, 1), new DateOnly(2024, 6, 10), SixTwenty);
+
+        range.From.Should().Be(Utc(2024, 6, 8, 20, 20), "06:20 on 9 June, local");
+        range.To.Should().Be(SixTwenty);
+        range.StartDate.Should().Be(new DateOnly(2024, 6, 9));
+        range.EndDate.Should().Be(new DateOnly(2024, 6, 10));
+    }
+
+    [Fact]
+    public void Intersect_ARangeBeforeTheWindow_IsEmptyAtTheWindowStart()
+    {
+        var range = Intersected(new DateOnly(2024, 6, 1), new DateOnly(2024, 6, 3), SixTwenty);
+
+        range.From.Should().Be(Utc(2024, 6, 8, 20, 20));
+        range.To.Should().Be(range.From);
+        range.StartDate.Should().Be(new DateOnly(2024, 6, 9));
+        range.EndDate.Should().Be(new DateOnly(2024, 6, 9));
+    }
+
+    [Fact]
+    public void Intersect_ARangePastTheWindowEnd_EndsThere_AndOneWhollyAfterItIsEmpty()
+    {
+        var day = new LoopAnalysisResolvedRange
+        {
+            StartDate = new DateOnly(2024, 6, 10), EndDate = new DateOnly(2024, 6, 10),
+            From = Utc(2024, 6, 9, 14), To = Utc(2024, 6, 10, 14),
+        };
+
+        var capped = LoopAnalysisRanges.Intersect(day, Utc(2024, 6, 8, 20, 20), SixTwenty, Sydney);
+        capped.From.Should().Be(Utc(2024, 6, 9, 14));
+        capped.To.Should().Be(SixTwenty);
+        capped.EndDate.Should().Be(new DateOnly(2024, 6, 10));
+
+        var after = LoopAnalysisRanges.Intersect(day, Utc(2024, 6, 8, 0), Utc(2024, 6, 9, 0), Sydney);
+        after.From.Should().Be(Utc(2024, 6, 8, 0));
+        after.To.Should().Be(after.From);
+    }
+
+    [Fact]
+    public void Intersect_OnTheDayClocksGoBack_KeepsTheWindowLength_AndItsLocalDay()
+    {
+        // 2024-04-07 in Sydney is 25 hours long: 03:00 AEDT falls back to 02:00 AEST. Now is 23:30 AEST.
+        var now = Utc(2024, 4, 7, 13, 30);
+
+        var range = Intersected(new DateOnly(2024, 4, 6), new DateOnly(2024, 4, 7), now);
+
+        range.From.Should().Be(Utc(2024, 4, 6, 13, 30), "00:30 AEDT on 7 April");
+        range.To.Should().Be(now);
+        (range.To - range.From).Should().Be(TimeSpan.FromHours(24));
+        range.StartDate.Should().Be(new DateOnly(2024, 4, 7));
+        range.EndDate.Should().Be(new DateOnly(2024, 4, 7));
     }
 }

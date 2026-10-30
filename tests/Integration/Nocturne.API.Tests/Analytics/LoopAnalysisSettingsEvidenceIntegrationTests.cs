@@ -122,7 +122,7 @@ public class LoopAnalysisSettingsEvidenceIntegrationTests(ApiIntegrationTestFixt
         await SeedCarbsAsync(now.AddHours(-24.5), 30);
         using var clamped = await CreateHistoryClampedClientAsync();
 
-        var body = await GetOkAsync(clamped, Query($"{Week}&compare=previous"));
+        var body = await GetOkAsync(clamped, Query($"{RecentDays(3)}&compare=previous"));
 
         body.GetProperty("historyClamped").GetBoolean().Should().BeTrue();
         body.GetProperty("withheldReason").GetString().Should().Be("HistoryClamped");

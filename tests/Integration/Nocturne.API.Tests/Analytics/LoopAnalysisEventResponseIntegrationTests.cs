@@ -140,7 +140,7 @@ public class LoopAnalysisEventResponseIntegrationTests(ApiIntegrationTestFixture
         }
 
         using var clamped = await CreateHistoryClampedClientAsync();
-        var body = await GetOkAsync(clamped, Query($"{Week}&anchor1=UnannouncedRise"));
+        var body = await GetOkAsync(clamped, Query($"{RecentDays(3)}&anchor1=UnannouncedRise"));
 
         body.GetProperty("historyClamped").GetBoolean().Should().BeTrue();
         var cohort = body.GetProperty("primary").GetProperty("cohorts")[0];

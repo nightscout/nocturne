@@ -269,6 +269,48 @@ public class McpLoopAnalysisIntegrationTests(ApiIntegrationTestFixture fixture, 
         text.Should().Contain("Daily profile over local days").And.Contain("Glucose by hour of day").And.Contain("next to the profile's");
     }
 
+    [Fact]
+    public async Task A_clamped_member_asking_for_six_hours_of_events_is_served_those_six_hours()
+    {
+        Guid subject;
+        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        {
+            await conn.OpenAsync();
+            (subject, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "MCP loop clamped");
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE tenant_members SET limit_to_24_hours = true, direct_permissions = '["glucose.read","treatments.read"]'::jsonb
+                WHERE subject_id = @subject;
+                """;
+            cmd.Parameters.AddWithValue("subject", subject);
+            (await cmd.ExecuteNonQueryAsync()).Should().Be(1);
+        }
+        var session = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subject);
+        using var client = McpClient(await McpTokenAsync("glucose.read treatments.read", session));
+
+        var started = DateTimeOffset.UtcNow;
+        var call = await CallToolAsync(client, "render_report", new
+        {
+            spec = new
+            {
+                version = 1,
+                range = new { hours = 6 },
+                panels = new object[] { new { dataset = new { name = "event_response", cohorts = new object[] { new { anchor = "Meal" } } }, primitive = "table" } },
+            },
+        });
+
+        call.TryGetProperty("error", out var error).Should().BeFalse(error.ToString());
+        var text = ToolText(call);
+        Log(text);
+        var panel = call.GetProperty("result").GetProperty("structuredContent").GetProperty("panels")[0];
+        panel.GetProperty("status").GetString().Should().Be("ok");
+        var window = panel.GetProperty("window");
+        DateTimeOffset.FromUnixTimeMilliseconds(window.GetProperty("from").GetInt64())
+            .Should().BeCloseTo(started.AddHours(-6), TimeSpan.FromMinutes(1), "the six hours asked for, not the whole 24-hour window");
+        DateTimeOffset.FromUnixTimeMilliseconds(window.GetProperty("to").GetInt64()).Should().BeCloseTo(started, TimeSpan.FromMinutes(1));
+        text.Should().Contain("only the part of the range in that window").And.NotContain("covers that window");
+    }
+
     private async Task SeedProfileAsync()
     {
         static object[] Values(double value) => [new { time = "00:00", value }];
@@ -353,18 +395,19 @@ public class McpLoopAnalysisIntegrationTests(ApiIntegrationTestFixture fixture, 
         string.Join("\n", rpc.GetProperty("result").GetProperty("content").EnumerateArray().Select(c => c.GetProperty("text").GetString()));
 
     /// <summary>The flow an MCP client runs, as <c>McpEndpointIntegrationTests</c> runs it.</summary>
-    private async Task<string> McpTokenAsync(string scope)
+    private async Task<string> McpTokenAsync(string scope, string? sessionToken = null)
     {
+        var sessionToUse = sessionToken ?? _session;
         const string redirectUri = "http://localhost:9999/callback";
         var resource = $"http://{_slug}.{_baseDomain}/mcp";
-        using var session = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slug, _baseDomain, _session);
+        using var session = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slug, _baseDomain, sessionToUse);
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(session, scope: scope);
         var (verifier, challenge) = AuthTestHelpers.GeneratePkceChallenge();
 
         using var handler = new HttpClientHandler { AllowAutoRedirect = false };
         using var noRedirect = Fixture.CreateHttpClient(handler);
         noRedirect.DefaultRequestHeaders.Host = $"{_slug}.{_baseDomain}";
-        noRedirect.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _session);
+        noRedirect.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sessionToUse);
         var approval = await noRedirect.PostAsync("/api/oauth/authorize", new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["client_id"] = clientId, ["redirect_uri"] = redirectUri, ["scope"] = scope, ["code_challenge"] = challenge,

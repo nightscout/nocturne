@@ -26956,13 +26956,12 @@ msgstr ""
 msgid "{0} to {1} each event. <0/> <1/>"
 msgstr ""
 
-#: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
-msgid "This page uses only the last hour for each range that you select."
-msgid_plural "This page uses only the last # hours for each range that you select."
-msgstr[0] ""
-msgstr[1] ""
+#~ msgid "This page uses only the last hour for each range that you select."
+#~ msgid_plural "This page uses only the last # hours for each range that you select."
+#~ msgstr[0] ""
+#~ msgstr[1] ""
 
-#. 0: plural(response.historyWindowHours ?? 0, [ "This page uses only the last hour for each range that you select.", "This page uses only the last # hours for each range that you select.", ])
+#. 0: plural(response.historyWindowHours ?? 0, [ "This page uses only the data from the last hour in each range that you select.", "This page uses only the data from the last # hours in each range that you select.", ])
 #: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
 msgid "{0} It does not compare ranges. <0/>"
 msgstr ""
@@ -38545,3 +38544,15 @@ msgstr ""
 #: src/routes/(authenticated)/reports/custom/[id]/+page.svelte
 msgid "<0/> Copy link"
 msgstr ""
+
+#: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
+msgid "The range that you selected ends before the last hour. You can see only the last hour, so this page has no data for this range."
+msgid_plural "The range that you selected ends before the last # hours. You can see only the last # hours, so this page has no data for this range."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/components/reports/loop-analysis/HistoryClampNote.svelte
+msgid "This page uses only the data from the last hour in each range that you select."
+msgid_plural "This page uses only the data from the last # hours in each range that you select."
+msgstr[0] ""
+msgstr[1] ""
