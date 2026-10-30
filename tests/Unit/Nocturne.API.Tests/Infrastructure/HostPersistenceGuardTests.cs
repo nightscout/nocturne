@@ -45,6 +45,13 @@ public class HostPersistenceGuardTests
                 new("src/API/Nocturne.API/Services/Platform/InstanceKey/UndecryptableSecretScanner.cs",
                     "reads every channel secret of the tenant for the instance-key scan; moves behind the repository in #3107"),
             ]),
+        new("OAuth tokens (#3101)",
+            ["OAuthAuthorizationCodeEntity", "OAuthRefreshTokenEntity", "OAuthDeviceCodeEntity"],
+            ["OAuthAuthorizationCodes", "OAuthRefreshTokens", "OAuthDeviceCodes"],
+            [
+                new("src/API/Nocturne.API/Services/Auth/OAuthCodeCleanupService.cs",
+                    "deletes the OAuth clients no grant or code names, by a subquery on the code tables; moves with OAuth client persistence in #3102"),
+            ]),
     ];
 
     private const string Host = "src/API/Nocturne.API";
