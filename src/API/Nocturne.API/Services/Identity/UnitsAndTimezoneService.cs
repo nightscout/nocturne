@@ -61,7 +61,6 @@ public class UnitsAndTimezoneService(
     IConnectorConfigurationService connectorConfigurations,
     IMigrationJobService migrations,
     ICacheService cache,
-    TimeProvider time,
     ILogger<UnitsAndTimezoneService> logger) : IUnitsAndTimezoneService
 {
     /// <summary>The connector onboarding saves a Nightscout instance under.</summary>
@@ -72,7 +71,7 @@ public class UnitsAndTimezoneService(
     {
         var (nightscout, unavailable) = readNightscout ? await ReadNightscoutAsync(ct) : (null, false);
 
-        var preferences = (await subjects.GetPreferencesAsync(ownerSubjectId, ct))?.Preferences;
+        var preferences = (await subjects.GetAsync(ownerSubjectId, ct))?.Preferences;
         var record = await patientRecords.GetAsync(ct);
 
         return new UnitsAndTimezoneDto(
@@ -87,7 +86,7 @@ public class UnitsAndTimezoneService(
     public async Task<UnitsAndTimezoneDto> SetAsync(
         Guid tenantId, Guid ownerSubjectId, string glucoseUnits, string timezone, CancellationToken ct = default)
     {
-        var stored = await subjects.GetPreferencesAsync(ownerSubjectId, ct)
+        var stored = await subjects.GetAsync(ownerSubjectId, ct)
             ?? throw new InvalidOperationException($"Subject {ownerSubjectId} not found.");
         var preferences = UserDisplayPreferences.Deserialize(stored.Preferences);
         preferences.GlucoseUnits = glucoseUnits;

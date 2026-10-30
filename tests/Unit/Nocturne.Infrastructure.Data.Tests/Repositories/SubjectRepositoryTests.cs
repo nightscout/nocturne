@@ -69,6 +69,9 @@ public class SubjectRepositoryTests : IDisposable
         return passkey.Id;
     }
 
+    /// <summary>An id that sorts after every <see cref="Ordered"/> id with a smaller <paramref name="n"/>, on SQLite and in memory alike.</summary>
+    private static Guid Ordered(int n) => Guid.Parse($"00000000-0000-7000-8000-{n:D12}");
+
     private Task<Guid> LinkAsync(Guid subject, Guid provider, string sub, string issuer = "https://issuer.example") =>
         Subjects().AddOidcIdentityAsync(new NewSubjectOidcIdentity(subject, provider, sub, issuer, "a@b.example", Now), CancellationToken.None);
 
@@ -89,10 +92,28 @@ public class SubjectRepositoryTests : IDisposable
         });
         subject.Roles.Select(r => r.Name).Should().BeEquivalentTo("admin", "public");
         subject.Roles.Single(r => r.Name == "admin").Permissions.Should().Equal("*");
-        (await Subjects().GetRoleNamesAsync(id, CancellationToken.None)).Should().BeEquivalentTo("admin", "public");
-        (await Subjects().ExistsAsync(id, CancellationToken.None)).Should().BeTrue();
-        (await Subjects().ExistsAsync(Guid.CreateVersion7(), CancellationToken.None)).Should().BeFalse();
+        (await Subjects().GetRolesAsync(id, CancellationToken.None)).Select(r => r.Name).Should().BeEquivalentTo("admin", "public");
         (await Subjects().GetAsync(Guid.CreateVersion7(), CancellationToken.None)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ASubjectCreatedFromAnOidcIdentityIsOneSaveWithIt()
+    {
+        var link = new NewOidcLink(_provider, "ext-first", "https://issuer.example", "f@x.example", Now);
+        var id = await CreateAsync(new NewSubject("First", Email: "f@x.example", RoleNames: ["admin"], OidcIdentity: link));
+
+        var match = await Subjects().FindByOidcIdentityAsync("ext-first", "https://issuer.example", CancellationToken.None);
+        match!.Subject.Id.Should().Be(id);
+        match.Subject.Roles.Select(r => r.Name).Should().Equal("admin");
+        match.Identity.Should().BeEquivalentTo(new { SubjectId = id, ProviderId = _provider, Email = "f@x.example", LinkedAt = Now });
+
+        // The same id again fails the save; the identity must fail with it rather than link to nothing.
+        var clash = () => CreateAsync(new NewSubject("Again", Id: id,
+            OidcIdentity: link with { OidcSubjectId = "ext-second" }));
+        await clash.Should().ThrowAsync<DbUpdateException>();
+        (await Subjects().FindByOidcIdentityAsync("ext-second", "https://issuer.example", CancellationToken.None)).Should().BeNull();
+        await using var check = _db.CreateContext();
+        (await check.SubjectOidcIdentities.CountAsync(i => i.OidcSubjectId == "ext-second")).Should().Be(0);
     }
 
     [Fact]
@@ -104,11 +125,7 @@ public class SubjectRepositoryTests : IDisposable
         var many = await Subjects().GetManyAsync([a, b, Guid.CreateVersion7()], CancellationToken.None);
         many.Select(s => s.Name).Should().BeEquivalentTo("A", "B");
         many.Should().OnlyContain(s => s.Roles.Count == 0, "a list read leaves roles unread");
-        (await Subjects().GetNamesAsync([a, Guid.CreateVersion7()], CancellationToken.None))
-            .Should().BeEquivalentTo(new Dictionary<Guid, string> { [a] = "A" });
         (await Subjects().GetManyAsync([], CancellationToken.None)).Should().BeEmpty();
-        (await Subjects().GetPreferencesAsync(a, CancellationToken.None)).Should().Be(new SubjectPreferences(null, null));
-        (await Subjects().GetPreferencesAsync(Guid.CreateVersion7(), CancellationToken.None)).Should().BeNull();
     }
 
     [Fact]
@@ -148,22 +165,22 @@ public class SubjectRepositoryTests : IDisposable
     [Fact]
     public async Task AccessRequestsAreListedNewestFirstAndEnrolmentCandidatesHoldNoFactor()
     {
-        var older = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", AccessRequestMessage: "hi"));
-        var newer = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending"));
-        await CreateAsync(new NewSubject("Bot", IsSystemSubject: true, IsActive: false, ApprovalStatus: "Pending"));
-        var withPasskey = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending"));
+        // Explicit ids: the candidate order is by id, and v7 ids minted in one millisecond do not order.
+        var older = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", AccessRequestMessage: "hi", Id: Ordered(1)));
+        var newer = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", Id: Ordered(2)));
+        await CreateAsync(new NewSubject("Bot", IsSystemSubject: true, IsActive: false, ApprovalStatus: "Pending", Id: Ordered(3)));
+        var withPasskey = await CreateAsync(new NewSubject("Ann", IsActive: false, ApprovalStatus: "Pending", Id: Ordered(4)));
         AddPasskey(withPasskey);
-        var invitee = await CreateAsync(new NewSubject("Inv", Username: "inv"));
-        var linked = await CreateAsync(new NewSubject("Inv2", Username: "inv"));
+        var invitee = await CreateAsync(new NewSubject("Inv", Username: "inv", Id: Ordered(5)));
+        var linked = await CreateAsync(new NewSubject("Inv2", Username: "inv", Id: Ordered(6)));
         await LinkAsync(linked, _provider, "ext");
-        var linkedToDisabled = await CreateAsync(new NewSubject("Inv3", Username: "inv"));
+        var linkedToDisabled = await CreateAsync(new NewSubject("Inv3", Username: "inv", Id: Ordered(7)));
         await LinkAsync(linkedToDisabled, _disabledProvider, "ext2", "https://old.example");
 
         var pending = await Subjects().ListPendingAccessRequestsAsync(CancellationToken.None);
-        pending.Select(s => s.Id).Should().Equal(withPasskey, newer, older);
+        pending.Select(s => s.Id).Should().BeEquivalentTo([withPasskey, newer, older]);
         pending.Should().OnlyContain(s => s.Roles.Count == 0);
-        (await Subjects().AnyPendingAccessRequestNamedAsync("Ann", CancellationToken.None)).Should().BeTrue();
-        (await Subjects().AnyPendingAccessRequestNamedAsync("Zed", CancellationToken.None)).Should().BeFalse();
+        pending.Should().Contain(s => s.Name == "Ann").And.NotContain(s => s.Name == "Bot");
 
         (await Subjects().FindCredentiallessSubjectIdsAsync(new EnrolmentMatch.AccessRequest("Ann"), CancellationToken.None))
             .Should().Equal(newer, older);
@@ -185,7 +202,7 @@ public class SubjectRepositoryTests : IDisposable
         });
 
         await Subjects().UpdateAsync(id, new SubjectEdit(PreferredLanguage: "fr", Preferences: "{}", ApprovalStatus: "Pending", IsActive: false), CancellationToken.None);
-        (await Subjects().GetPreferencesAsync(id, CancellationToken.None)).Should().Be(new SubjectPreferences("fr", "{}"));
+        (await GetAsync(id)).Should().BeEquivalentTo(new { PreferredLanguage = "fr", Preferences = "{}" });
         (await GetAsync(id)).Should().BeEquivalentTo(new { ApprovalStatus = "Pending", IsActive = false });
 
         var profile = await Subjects().UpdateProfileAsync(id, new SubjectProfile("P", null, null, true), CancellationToken.None);
@@ -273,7 +290,7 @@ public class SubjectRepositoryTests : IDisposable
 
         (await Subjects().RemoveRoleAsync(id, "admin", CancellationToken.None)).Should().BeTrue();
         (await Subjects().RemoveRoleAsync(id, "admin", CancellationToken.None)).Should().BeFalse();
-        (await Subjects().GetRoleNamesAsync(id, CancellationToken.None)).Should().BeEmpty();
+        (await Subjects().GetRolesAsync(id, CancellationToken.None)).Should().BeEmpty();
     }
 
     [Fact]
@@ -294,8 +311,6 @@ public class SubjectRepositoryTests : IDisposable
         var identities = await Subjects().GetOidcIdentitiesAsync(id, CancellationToken.None);
         identities.Select(i => i.Id).Should().Equal(first, second);
         identities[1].Should().BeEquivalentTo(new { LastUsedAt = Now.AddHours(1), Email = "new@b.example", ProviderName = "Old" });
-        (await Subjects().GetMostRecentlyUsedOidcIdentityAsync(id, CancellationToken.None))!.Id.Should().Be(second);
-        (await Subjects().GetMostRecentlyUsedOidcIdentityAsync(Guid.CreateVersion7(), CancellationToken.None)).Should().BeNull();
     }
 
     [Fact]
@@ -369,5 +384,9 @@ public class SubjectRepositoryTests : IDisposable
         await using var pinned = DbUnitOfWork.Own(_db.CreateContext());
         var cannotPin = () => new SubjectRepository(pinned).IsDemoSubjectAsync(created, CancellationToken.None);
         await cannotPin.Should().ThrowAsync<InvalidOperationException>("a unit runs on its own context and pins no other");
+        var cannotDelete = () => new SubjectRepository(pinned).DeleteAsync(created, CancellationToken.None);
+        await cannotDelete.Should().ThrowAsync<InvalidOperationException>("a unit's owner commits; the delete's transaction is its own");
+        var cannotRemove = () => new SubjectRepository(pinned).TryRemoveFactorAsync(created, new SignInFactor.Passkey(Guid.NewGuid()), CancellationToken.None);
+        await cannotRemove.Should().ThrowAsync<InvalidOperationException>();
     }
 }

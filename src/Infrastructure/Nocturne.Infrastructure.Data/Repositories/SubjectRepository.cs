@@ -15,20 +15,22 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// <remarks>
 /// Registered transient, like the factory it holds: the authentication middleware, the hub
 /// revalidation and the demo refusal resolve it from whatever provider they hold, and a
-/// root-resolved repository reads as no one, which is what those callers read as before.
-/// Writes are tracked reads and saves rather than bulk statements, so a consumer's test on the
-/// InMemory provider runs them; the two exceptions, the factor removal's delete inside its
-/// serializable transaction and the audit scrub inside the subject delete's, say why.
+/// root-resolved repository reads as no one. Writes are tracked reads and saves rather than bulk
+/// statements, so a consumer's test on the InMemory provider runs them; the two exceptions, the
+/// factor removal's delete inside its serializable transaction and the audit scrub inside the
+/// subject delete's, say why.
 /// </remarks>
 public class SubjectRepository : ISubjectRepository
 {
     private readonly INocturneDbContextFactory? _contexts;
     private readonly DbUnitOfWork? _unit;
+    private readonly TimeProvider _time;
 
     /// <summary>A repository whose calls each open their own context and save what they write.</summary>
-    public SubjectRepository(INocturneDbContextFactory contexts)
+    public SubjectRepository(INocturneDbContextFactory contexts, TimeProvider? time = null)
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _time = time ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -37,15 +39,22 @@ public class SubjectRepository : ISubjectRepository
     /// transaction with its tenant and membership. A read tracks its rows, so a write on the same
     /// unit edits the rows it read in place.
     /// </summary>
-    public SubjectRepository(DbUnitOfWork unit)
+    public SubjectRepository(DbUnitOfWork unit, TimeProvider? time = null)
     {
         _unit = unit ?? throw new ArgumentNullException(nameof(unit));
+        _time = time ?? TimeProvider.System;
     }
 
     private ValueTask<DbContextLease> OpenAsync(CancellationToken ct) => DbContextLease.OpenAsync(_unit, _contexts, ct);
 
     private INocturneDbContextFactory Pinnable => _contexts ?? throw new InvalidOperationException(
         "A repository over a unit of work runs on the unit's context and cannot pin another.");
+
+    /// <summary>The factory for a method that commits a transaction of its own, which a unit's owner does instead.</summary>
+    private INocturneDbContextFactory Transactional => _contexts ?? throw new InvalidOperationException(
+        "A repository over a unit of work runs inside the unit's commit and cannot open a transaction of its own.");
+
+    private DateTime Now => _time.GetUtcNow().UtcDateTime;
 
     private Task SaveAsync(NocturneDbContext db, CancellationToken ct) =>
         _unit is null ? db.SaveChangesAsync(ct) : Task.CompletedTask;
@@ -86,9 +95,23 @@ public class SubjectRepository : ISubjectRepository
                 {
                     SubjectId = entity.Id,
                     RoleId = role.Id,
-                    AssignedAt = DateTime.UtcNow,
+                    AssignedAt = Now,
                 });
             }
+        }
+
+        if (subject.OidcIdentity is { } link)
+        {
+            db.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = entity.Id,
+                ProviderId = link.ProviderId,
+                OidcSubjectId = link.OidcSubjectId,
+                Issuer = link.Issuer,
+                Email = link.Email,
+                LinkedAt = link.LinkedAt,
+            });
         }
 
         await SaveAsync(db, ct);
@@ -112,26 +135,6 @@ public class SubjectRepository : ISubjectRepository
         var ids = subjectIds.ToList();
         var entities = await Subjects(lease.Context).Where(s => ids.Contains(s.Id)).ToListAsync(ct);
         return entities.Select(e => ToRecord(e)!).ToList();
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task<IReadOnlyDictionary<Guid, string>> GetNamesAsync(IReadOnlyCollection<Guid> subjectIds, CancellationToken ct)
-    {
-        if (subjectIds.Count == 0)
-            return new Dictionary<Guid, string>();
-
-        await using var lease = await OpenAsync(ct);
-        var ids = subjectIds.ToList();
-        return await lease.Context.Subjects.AsNoTracking()
-            .Where(s => ids.Contains(s.Id))
-            .ToDictionaryAsync(s => s.Id, s => s.Name, ct);
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task<bool> ExistsAsync(Guid subjectId, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        return await lease.Context.Subjects.AnyAsync(s => s.Id == subjectId, ct);
     }
 
     /// <inheritdoc/>
@@ -177,13 +180,6 @@ public class SubjectRepository : ISubjectRepository
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync(ct);
         return entities.Select(e => ToRecord(e)!).ToList();
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task<bool> AnyPendingAccessRequestNamedAsync(string displayName, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        return await lease.Context.Subjects.AnyAsync(s => s.ApprovalStatus == "Pending" && s.Name == displayName, ct);
     }
 
     /// <inheritdoc/>
@@ -236,7 +232,7 @@ public class SubjectRepository : ISubjectRepository
             entity.Preferences = edit.Preferences;
         if (edit.LastLoginAt is { } lastLogin)
             entity.LastLoginAt = lastLogin;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = Now;
 
         await SaveAsync(db, ct);
         return true;
@@ -257,7 +253,7 @@ public class SubjectRepository : ISubjectRepository
         entity.Email = profile.Email;
         entity.Notes = profile.Notes;
         entity.IsActive = profile.IsActive;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = Now;
 
         await SaveAsync(db, ct);
         return ToRecord(entity);
@@ -280,8 +276,7 @@ public class SubjectRepository : ISubjectRepository
     /// <inheritdoc/>
     public virtual async Task<bool> DeleteAsync(Guid subjectId, CancellationToken ct)
     {
-        await using var lease = await OpenAsync(ct);
-        var db = lease.Context;
+        await using var db = await Transactional.CreateAsync(ct);
         var entity = await db.Subjects.FirstOrDefaultAsync(s => s.Id == subjectId, ct);
         if (entity is null)
             return false;
@@ -371,16 +366,6 @@ public class SubjectRepository : ISubjectRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<string>> GetRoleNamesAsync(Guid subjectId, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        return await lease.Context.SubjectRoles.AsNoTracking()
-            .Where(sr => sr.SubjectId == subjectId)
-            .Select(sr => sr.Role!.Name)
-            .ToListAsync(ct);
-    }
-
-    /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<Role>> GetRolesAsync(Guid subjectId, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
@@ -444,18 +429,6 @@ public class SubjectRepository : ISubjectRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<SubjectOidcIdentity?> GetMostRecentlyUsedOidcIdentityAsync(Guid subjectId, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        var identity = await lease.Context.SubjectOidcIdentities.AsNoTracking()
-            .Include(x => x.Provider)
-            .Where(x => x.SubjectId == subjectId)
-            .OrderByDescending(x => x.LastUsedAt ?? x.LinkedAt)
-            .FirstOrDefaultAsync(ct);
-        return identity is null ? null : ToIdentity(identity);
-    }
-
-    /// <inheritdoc/>
     public virtual async Task<OidcIdentityMatch?> FindByOidcIdentityAsync(string oidcSubjectId, string issuer, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
@@ -515,8 +488,7 @@ public class SubjectRepository : ISubjectRepository
     /// <inheritdoc/>
     public virtual async Task<FactorRemovalResult> TryRemoveFactorAsync(Guid subjectId, SignInFactor factor, CancellationToken ct)
     {
-        await using var lease = await OpenAsync(ct);
-        var db = lease.Context;
+        await using var db = await Transactional.CreateAsync(ct);
         return factor switch
         {
             SignInFactor.Passkey { CredentialId: var id } => await RemoveFactorAsync(
@@ -602,16 +574,6 @@ public class SubjectRepository : ISubjectRepository
     {
         await using var db = await Pinnable.CreateSystemPinnedAsync(tenantId, ct);
         return await db.OrphanedSubjectsOf(tenantId).AnyAsync(ct);
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task<SubjectPreferences?> GetPreferencesAsync(Guid subjectId, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        return await lease.Context.Subjects.AsNoTracking()
-            .Where(s => s.Id == subjectId)
-            .Select(s => new SubjectPreferences(s.PreferredLanguage, s.Preferences))
-            .FirstOrDefaultAsync(ct);
     }
 
     private static SubjectRecord? ToRecord(SubjectEntity? subject) =>

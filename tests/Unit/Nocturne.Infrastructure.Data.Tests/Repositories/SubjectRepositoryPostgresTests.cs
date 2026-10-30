@@ -4,6 +4,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -108,19 +109,51 @@ public class SubjectRepositoryPostgresTests(SubjectRepositoryPostgresTests.Datab
         (await readingAsNoOne.TenantHasCredentialedMemberAsync(Guid.NewGuid(), CancellationToken.None)).Should().BeFalse();
     }
 
+    /// <summary>
+    /// A scope whose every unpinned entry point reads as <paramref name="scopeSubject"/>, so under
+    /// the <c>subject_pin</c> policy any other subject's row is hidden from it; only
+    /// <see cref="CreateForSubjectAsync"/> reaches another subject, and records that it was taken.
+    /// </summary>
+    private sealed class SubjectScopedFactory(Func<Guid, NocturneDbContext> create, Guid scopeSubject) : INocturneDbContextFactory
+    {
+        public List<Guid> PinnedTo { get; } = [];
+
+        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default) => AsScope();
+
+        public ValueTask<NocturneDbContext> CreateForTenantAsync(Guid tenantId, CancellationToken ct = default) => AsScope();
+
+        public ValueTask<NocturneDbContext> CreatePlatformAsync(CancellationToken ct = default) => AsScope();
+
+        public ValueTask<NocturneDbContext> CreateSystemPinnedAsync(Guid tenantId, CancellationToken ct = default) => AsScope();
+
+        public ValueTask<NocturneDbContext> CreateForSubjectAsync(Guid subjectId, CancellationToken ct = default)
+        {
+            PinnedTo.Add(subjectId);
+            var context = create(Guid.Empty);
+            context.SubjectId = subjectId;
+            return ValueTask.FromResult(context);
+        }
+
+        private ValueTask<NocturneDbContext> AsScope()
+        {
+            var context = create(Guid.Empty);
+            context.SubjectId = scopeSubject;
+            return ValueTask.FromResult(context);
+        }
+    }
+
     [Fact]
-    public async Task SubjectPinned_TheSignInStateIsReadUnderThePolicyThatHidesEveryOtherSubject()
+    public async Task SubjectPinned_TheSignInStateIsReadAsTheSubjectItselfAndNotAsTheScope()
     {
         var a = await SeedTenantAsync("c");
-        var subjects = new SubjectRepository(new Factory(Context, Guid.Empty));
+        var factory = new SubjectScopedFactory(Context, scopeSubject: a.Orphan);
+        var subjects = new SubjectRepository(factory);
 
+        // Read as the scope, the credentialed subject's row is hidden by subject_pin; the repository
+        // reaches it only by pinning the read to that subject.
+        (await subjects.IsPlatformAdminAsync(a.Credentialed, CancellationToken.None)).Should().BeFalse("the scope's reader is another subject");
         (await subjects.GetSignInStateAsync(a.Credentialed, CancellationToken.None)).Should().Be(new SubjectSignInState(true, false));
         (await subjects.GetSignInStateAsync(Guid.NewGuid(), CancellationToken.None)).Should().BeNull();
-
-        // The same pin the repository takes: the policy admits the pinned subject's row alone.
-        await using var pinned = Context(Guid.Empty);
-        pinned.SubjectId = a.Credentialed;
-        (await pinned.Subjects.AnyAsync(s => s.Id == a.Credentialed)).Should().BeTrue();
-        (await pinned.Subjects.AnyAsync(s => s.Id == a.Orphan)).Should().BeFalse("subject_pin hides the rows of every other subject");
+        factory.PinnedTo.Should().HaveCount(2).And.StartWith(a.Credentialed);
     }
 }

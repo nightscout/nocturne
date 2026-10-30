@@ -7,6 +7,10 @@ namespace Nocturne.Core.Models.Authorization;
 /// Global roles to assign on creation, by name. A name no role carries is skipped; duplicates,
 /// in any case, assign once.
 /// </param>
+/// <param name="OidcIdentity">
+/// The provider identity the subject is created from, linked in the same save as the subject, so
+/// two first sign-ins racing on one identity cannot leave a subject with no way in.
+/// </param>
 public sealed record NewSubject(
     string Name,
     string? Username = null,
@@ -18,13 +22,22 @@ public sealed record NewSubject(
     string ApprovalStatus = "Approved",
     string? AccessRequestMessage = null,
     Guid? Id = null,
-    IReadOnlyList<string>? RoleNames = null);
+    IReadOnlyList<string>? RoleNames = null,
+    NewOidcLink? OidcIdentity = null);
+
+/// <summary>An OIDC identity to link to the subject it is stored with.</summary>
+public sealed record NewOidcLink(
+    Guid ProviderId,
+    string OidcSubjectId,
+    string Issuer,
+    string? Email,
+    DateTime LinkedAt);
 
 /// <summary>A stored subject.</summary>
 /// <param name="Roles">
 /// The subject's global roles. Read with the subject by the single-subject reads
 /// (<c>GetAsync</c>, <c>FindSystemSubjectAsync</c>, <c>FindMemberByUsernameAsync</c>,
-/// <c>FindByOidcIdentityAsync</c>); a list read leaves it empty.
+/// <c>FindByOidcIdentityAsync</c>); a list read and a passkey's holder leave it empty.
 /// </param>
 public sealed record SubjectRecord(
     Guid Id,
@@ -64,9 +77,6 @@ public sealed record SubjectEdit(
 
 /// <summary>The profile fields an administrator's edit replaces together, null members included.</summary>
 public sealed record SubjectProfile(string Name, string? Email, string? Notes, bool IsActive);
-
-/// <summary>A subject's display preferences: the language code and the serialized preferences blob.</summary>
-public sealed record SubjectPreferences(string? PreferredLanguage, string? Preferences);
 
 /// <summary>What keeps a subject's credentials valid between requests.</summary>
 public sealed record SubjectSignInState(bool IsActive, bool IsPlatformAdmin);

@@ -18,7 +18,8 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// <remarks>
 /// The text scan does not see an entity reached through a navigation property, so a host member
 /// that holds one that way is caught only by the reflection half, and a query that goes through a
-/// navigation is not caught at all. An <see cref="Exemption"/> names a file that may still use the
+/// navigation is not caught at all: a subject read as <c>TenantMember.Subject</c> is a membership
+/// read, which lands with that concept. An <see cref="Exemption"/> names a file that may still use the
 /// concept's <c>DbSet</c>s or types, with the reason; a later slice or follow-up deletes it. One
 /// that <see cref="Exemption.CoversMembers"/> also exempts, for its own concept only, the members
 /// of the type the file is named after and of the types nested in it, which is where a local the

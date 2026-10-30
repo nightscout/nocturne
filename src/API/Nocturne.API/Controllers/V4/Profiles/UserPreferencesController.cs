@@ -51,7 +51,7 @@ public class UserPreferencesController : ControllerBase
             return Problem(detail: "Not authenticated", statusCode: 401, title: "Unauthorized");
         }
 
-        var subject = await _subjects.GetPreferencesAsync(authContext.SubjectId.Value, HttpContext.RequestAborted);
+        var subject = await _subjects.GetAsync(authContext.SubjectId.Value, HttpContext.RequestAborted);
 
         if (subject == null)
         {
@@ -101,7 +101,7 @@ public class UserPreferencesController : ControllerBase
         }
 
         var subjectId = authContext.SubjectId.Value;
-        var stored = await _subjects.GetPreferencesAsync(subjectId, HttpContext.RequestAborted);
+        var stored = await _subjects.GetAsync(subjectId, HttpContext.RequestAborted);
 
         if (stored == null)
         {

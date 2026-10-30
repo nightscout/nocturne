@@ -589,7 +589,7 @@ public partial class TenantService : ITenantService
             if (existingIdentity is null)
             {
                 ownerSubjectId = credential?.SubjectId ?? oidcIdentity?.SubjectId ?? Guid.CreateVersion7();
-                if (await subjects.ExistsAsync(ownerSubjectId, token))
+                if (await subjects.GetAsync(ownerSubjectId, token) is not null)
                 {
                     throw new ProvisionConflictException(
                         $"Subject {ownerSubjectId} already exists; a provisioned owner is always a new subject.");

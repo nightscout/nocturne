@@ -74,7 +74,7 @@ public class SleepReportService : ISleepReportService
         if (_caller.SubjectId is not { } subjectId)
             return DayOfWeek.Monday;
 
-        var subject = await _subjects.GetPreferencesAsync(subjectId, ct);
+        var subject = await _subjects.GetAsync(subjectId, ct);
         if (subject is null)
             return DayOfWeek.Monday;
 

@@ -412,7 +412,7 @@ public class AlertSetupService(
 
     private async Task<string> UnitsAsync(NocturneDbContext db, Guid callerId, CancellationToken ct)
     {
-        var preferences = (await subjects.GetPreferencesAsync(callerId, ct))?.Preferences;
+        var preferences = (await subjects.GetAsync(callerId, ct))?.Preferences;
         var tenantUnits = await db.Tenants.AsNoTracking()
             .Where(t => t.Id == db.TenantId)
             .Select(t => t.DefaultGlucoseUnits)

@@ -121,14 +121,14 @@ public class MemberInviteService : IMemberInviteService
         var inviteUrl =
             $"{origin}{IMemberInviteService.JoinPath}?{IMemberInviteService.TokenQueryParameter}={token}";
 
-        var names = await _subjects.GetNamesAsync([createdBySubjectId], CancellationToken.None);
+        var createdBy = (await _subjects.GetManyAsync([createdBySubjectId], CancellationToken.None)).SingleOrDefault();
 
         return new MemberInviteResult(
             inviteId,
             token,
             inviteUrl,
             expiresAt,
-            names.GetValueOrDefault(createdBySubjectId) ?? "");
+            createdBy?.Name ?? "");
     }
 
     /// <inheritdoc />

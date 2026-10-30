@@ -77,7 +77,7 @@ public class MembershipRequestService : IMembershipRequestService
             "request_created", entity.Id, tenantId, subjectId);
 
         // Look up the requester's name for the notification
-        var subjectName = (await _subjects.GetNamesAsync([subjectId], ct)).GetValueOrDefault(subjectId) ?? "Someone";
+        var subjectName = (await _subjects.GetManyAsync([subjectId], ct)).SingleOrDefault()?.Name ?? "Someone";
 
         var candidates = await db.TenantMembers
             .AsNoTracking()

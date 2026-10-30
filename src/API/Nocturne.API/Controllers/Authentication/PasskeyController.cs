@@ -820,7 +820,7 @@ public class PasskeyController : ControllerBase
 
         if (subjectId == null)
         {
-            if (await _subjects.AnyPendingAccessRequestNamedAsync(displayName, HttpContext.RequestAborted))
+            if ((await _subjects.ListPendingAccessRequestsAsync(HttpContext.RequestAborted)).Any(s => s.Name == displayName))
                 return Conflict(new ProblemDetails
                 {
                     Detail = "A pending access request with this name already exists",

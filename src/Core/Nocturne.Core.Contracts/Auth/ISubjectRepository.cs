@@ -10,15 +10,18 @@ namespace Nocturne.Core.Contracts.Auth;
 /// </summary>
 /// <remarks>
 /// <c>subjects</c> and the tables beside it carry no tenant and no tenant policy; the
-/// <c>subject_pin</c> policy narrows them only on a context pinned to a subject. So every method
-/// runs as the scope's reader unless its remarks name a pin, and a method that names one
-/// preserves the pin its caller held before the read moved here: a platform context for reads
-/// made where no tenant is resolved, a subject pin for the hub's revalidation, a system pin for
-/// the two setup-state reads a public share host must answer.
+/// <c>subject_pin</c> policy narrows them only on a context pinned to a subject. Every method runs
+/// as the scope's reader unless its remarks name a pin: a platform context where the caller has no
+/// resolved tenant, the subject pin where the caller is the subject's own connection, the setup
+/// flow's tenant pin, and the system pin for the two setup-state reads a public share host must
+/// answer, which <c>SystemPinnedAllowlistTests</c> limits to their callers.
 /// </remarks>
 public interface ISubjectRepository
 {
-    /// <summary>Stores a subject with the roles <see cref="NewSubject.RoleNames"/> names and returns its id.</summary>
+    /// <summary>
+    /// Stores a subject, with the roles <see cref="NewSubject.RoleNames"/> names and the identity
+    /// <see cref="NewSubject.OidcIdentity"/> links, in one save, and returns its id.
+    /// </summary>
     Task<Guid> CreateAsync(NewSubject subject, CancellationToken ct);
 
     /// <summary>The subject with <paramref name="subjectId"/>, with its roles; null when there is none.</summary>
@@ -26,12 +29,6 @@ public interface ISubjectRepository
 
     /// <summary>Those of <paramref name="subjectIds"/> that exist, roles not read.</summary>
     Task<IReadOnlyList<SubjectRecord>> GetManyAsync(IReadOnlyCollection<Guid> subjectIds, CancellationToken ct);
-
-    /// <summary>The display names of those of <paramref name="subjectIds"/> that exist.</summary>
-    Task<IReadOnlyDictionary<Guid, string>> GetNamesAsync(IReadOnlyCollection<Guid> subjectIds, CancellationToken ct);
-
-    /// <summary>Whether a subject with <paramref name="subjectId"/> exists.</summary>
-    Task<bool> ExistsAsync(Guid subjectId, CancellationToken ct);
 
     /// <summary>The system subject named <paramref name="name"/>, with its roles; null when there is none.</summary>
     Task<SubjectRecord?> FindSystemSubjectAsync(string name, CancellationToken ct);
@@ -50,17 +47,15 @@ public interface ISubjectRepository
     /// ordering is what lets the options and complete steps resolve the same row.
     /// </summary>
     /// <remarks>
-    /// Pinned to <paramref name="tenantId"/>, as the setup flow's other reads are. <c>subjects</c>
-    /// is not tenant-scoped, so the read sees every subject on the instance, the demo visitor
-    /// included, which is why the demo exclusion is part of the predicate.
+    /// Pinned to <paramref name="tenantId"/>: setup runs on the apex host, where the scope has no
+    /// tenant, and the flow pins the one it is setting up. <c>subjects</c> is not tenant-scoped, so
+    /// the read sees every subject on the instance, the demo visitor included, which is why the
+    /// demo exclusion is part of the predicate.
     /// </remarks>
     Task<SubjectRecord?> FindSetupOwnerCandidateAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>The pending access requests, newest first, roles not read. A system subject is never one.</summary>
     Task<IReadOnlyList<SubjectRecord>> ListPendingAccessRequestsAsync(CancellationToken ct);
-
-    /// <summary>Whether a pending access request named <paramref name="displayName"/> exists.</summary>
-    Task<bool> AnyPendingAccessRequestNamedAsync(string displayName, CancellationToken ct);
 
     /// <summary>
     /// The subjects part-way through an anonymous enrolment that <paramref name="match"/> names:
@@ -70,10 +65,17 @@ public interface ISubjectRepository
     /// </summary>
     Task<IReadOnlyList<Guid>> FindCredentiallessSubjectIdsAsync(EnrolmentMatch match, CancellationToken ct);
 
-    /// <summary>Applies <paramref name="edit"/> to the subject; false when there is no such subject.</summary>
+    /// <summary>
+    /// Applies <paramref name="edit"/> to the subject and stamps it updated; false when there is
+    /// no such subject. A null member of the edit leaves its field as it is.
+    /// </summary>
     Task<bool> UpdateAsync(Guid subjectId, SubjectEdit edit, CancellationToken ct);
 
-    /// <summary>Replaces the subject's profile fields and returns it as edited, with its roles; null when there is no such subject.</summary>
+    /// <summary>
+    /// Replaces the subject's profile fields, null members included, and returns it as edited with
+    /// its roles; null when there is no such subject. Unlike <see cref="UpdateAsync"/> this can
+    /// clear the email and the notes, which an administrator's edit does.
+    /// </summary>
     Task<SubjectRecord?> UpdateProfileAsync(Guid subjectId, SubjectProfile profile, CancellationToken ct);
 
     /// <summary>Sets, or with null clears, the message a subject submitted with its access request.</summary>
@@ -89,19 +91,25 @@ public interface ISubjectRepository
 
     /// <summary>Whether the subject is a demo tenant's visitor; null when there is no such subject.</summary>
     /// <remarks>
-    /// On a platform context: the demo refusal runs on the tenantless, subject-scoped endpoints,
-    /// where no tenant is resolved, and on the demo tenant's reset.
+    /// On a platform context: the demo refusal guards the tenantless, subject-scoped endpoints,
+    /// where no tenant is resolved, and the demo tenant's reset runs with none.
     /// </remarks>
     Task<bool?> IsDemoSubjectAsync(Guid subjectId, CancellationToken ct);
 
-    /// <summary>Whether the subject holds platform admin; false when there is no such subject.</summary>
+    /// <summary>
+    /// Whether the subject holds platform admin; false when there is no such subject. Read as the
+    /// scope's reader, unlike <see cref="GetSignInStateAsync"/>.
+    /// </summary>
     Task<bool> IsPlatformAdminAsync(Guid subjectId, CancellationToken ct);
 
     /// <summary>Whether any subject holds platform admin.</summary>
-    /// <remarks>On a platform context: asked by the startup bootstrap, which has no request scope.</remarks>
+    /// <remarks>
+    /// On a platform context: the startup bootstrap that asks has no request scope. The scope's
+    /// reader counts with <see cref="CountPlatformAdminsAsync"/>.
+    /// </remarks>
     Task<bool> AnyPlatformAdminAsync(CancellationToken ct);
 
-    /// <summary>How many subjects hold platform admin.</summary>
+    /// <summary>How many subjects hold platform admin, read as the scope's reader.</summary>
     Task<int> CountPlatformAdminsAsync(CancellationToken ct);
 
     /// <summary>Grants platform admin to those of <paramref name="subjectIds"/> that exist and returns how many.</summary>
@@ -113,13 +121,11 @@ public interface ISubjectRepository
     /// such subject.
     /// </summary>
     /// <remarks>
-    /// Pinned to <paramref name="subjectId"/>: the hub revalidation reads as the connection's own
-    /// subject, so the <c>subject_pin</c> policy admits that row and no other.
+    /// Pinned to <paramref name="subjectId"/>: the hub revalidation proves a connection's
+    /// credential as that connection's own subject, so the <c>subject_pin</c> policy admits that
+    /// row and no other. <see cref="IsPlatformAdminAsync"/> is the same flag as the scope's reader.
     /// </remarks>
     Task<SubjectSignInState?> GetSignInStateAsync(Guid subjectId, CancellationToken ct);
-
-    /// <summary>The names of the subject's global roles.</summary>
-    Task<IReadOnlyList<string>> GetRoleNamesAsync(Guid subjectId, CancellationToken ct);
 
     /// <summary>The subject's global roles.</summary>
     Task<IReadOnlyList<Role>> GetRolesAsync(Guid subjectId, CancellationToken ct);
@@ -134,16 +140,13 @@ public interface ISubjectRepository
     /// <summary>The subject's linked OIDC identities with their providers, oldest link first.</summary>
     Task<IReadOnlyList<SubjectOidcIdentity>> GetOidcIdentitiesAsync(Guid subjectId, CancellationToken ct);
 
-    /// <summary>The OIDC identity the subject most recently signed in with, or linked; null when none is linked.</summary>
-    Task<SubjectOidcIdentity?> GetMostRecentlyUsedOidcIdentityAsync(Guid subjectId, CancellationToken ct);
-
     /// <summary>
     /// The identity <paramref name="oidcSubjectId"/> at <paramref name="issuer"/> and the subject
     /// it links to, with its roles; null when no such identity is linked.
     /// </summary>
     Task<OidcIdentityMatch?> FindByOidcIdentityAsync(string oidcSubjectId, string issuer, CancellationToken ct);
 
-    /// <summary>Links an OIDC identity to a subject and returns its id.</summary>
+    /// <summary>Links an OIDC identity to an existing subject and returns its id.</summary>
     Task<Guid> AddOidcIdentityAsync(NewSubjectOidcIdentity identity, CancellationToken ct);
 
     /// <summary>
@@ -178,8 +181,9 @@ public interface ISubjectRepository
     /// identity, i.e. whether the tenant is past first-run setup.
     /// </summary>
     /// <remarks>
-    /// System-pinned: the auth status and setup state are asked on public-share requests, which
-    /// read as a share and are hidden every table no category governs.
+    /// System-pinned: the auth status and the setup state are answered on public-share requests,
+    /// which read as a share and are hidden every table no category governs. The callers are
+    /// pinned by <c>SystemPinnedAllowlistTests</c>.
     /// </remarks>
     Task<bool> TenantHasCredentialedMemberAsync(Guid tenantId, CancellationToken ct);
 
@@ -189,7 +193,4 @@ public interface ISubjectRepository
     /// </summary>
     /// <remarks>System-pinned, as <see cref="TenantHasCredentialedMemberAsync"/> is.</remarks>
     Task<bool> HasOrphanedMemberAsync(Guid tenantId, CancellationToken ct);
-
-    /// <summary>The subject's display preferences; null when there is no such subject.</summary>
-    Task<SubjectPreferences?> GetPreferencesAsync(Guid subjectId, CancellationToken ct);
 }

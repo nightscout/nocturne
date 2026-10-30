@@ -84,11 +84,8 @@ public class SubjectService : ISubjectService
             new NewSubject(
                 Name: name ?? email ?? oidcSubjectId,
                 Email: verifiedEmail,
-                RoleNames: defaultRoles?.ToList()),
-            CancellationToken.None);
-
-        await _subjects.AddOidcIdentityAsync(
-            new NewSubjectOidcIdentity(subjectId, providerId, oidcSubjectId, issuer, email, now),
+                RoleNames: defaultRoles?.ToList(),
+                OidcIdentity: new NewOidcLink(providerId, oidcSubjectId, issuer, email, now)),
             CancellationToken.None);
 
         _logger.LogInformation(
@@ -183,7 +180,7 @@ public class SubjectService : ISubjectService
 
     /// <inheritdoc />
     public async Task<List<string>> GetSubjectRolesAsync(Guid subjectId) =>
-        (await _subjects.GetRoleNamesAsync(subjectId, CancellationToken.None)).ToList();
+        (await _subjects.GetRolesAsync(subjectId, CancellationToken.None)).Select(role => role.Name).ToList();
 
     /// <inheritdoc />
     public async Task<List<string>> GetSubjectPermissionsAsync(Guid subjectId)
@@ -345,8 +342,10 @@ public class SubjectService : ISubjectService
     }
 
     /// <inheritdoc />
-    public Task<SubjectOidcIdentity?> GetMostRecentlyUsedIdentityAsync(Guid subjectId) =>
-        _subjects.GetMostRecentlyUsedOidcIdentityAsync(subjectId, CancellationToken.None);
+    public async Task<SubjectOidcIdentity?> GetMostRecentlyUsedIdentityAsync(Guid subjectId) =>
+        (await _subjects.GetOidcIdentitiesAsync(subjectId, CancellationToken.None))
+            .OrderByDescending(identity => identity.LastUsedAt ?? identity.LinkedAt)
+            .FirstOrDefault();
 
     /// <inheritdoc />
     public Task<FactorRemovalResult> TryRemoveOidcIdentityAsync(Guid subjectId, Guid identityId) =>

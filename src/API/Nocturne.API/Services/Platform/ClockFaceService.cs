@@ -104,7 +104,7 @@ public class ClockFaceService : IClockFaceService
     public async Task<ClockFaceConfig> GetStarterConfigAsync(string userId, CancellationToken cancellationToken = default)
     {
         var preferences = Guid.TryParse(userId, out var subjectId)
-            ? (await _subjects.GetPreferencesAsync(subjectId, cancellationToken))?.Preferences
+            ? (await _subjects.GetAsync(subjectId, cancellationToken))?.Preferences
             : null;
 
         return ClockFaceConfig.Starter(UserDisplayPreferences.Deserialize(preferences));

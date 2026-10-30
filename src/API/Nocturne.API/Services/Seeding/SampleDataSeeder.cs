@@ -1112,7 +1112,7 @@ public class SampleDataSeeder
         if (exists)
             return 0;
 
-        var ownerPreferences = (await _subjects.GetPreferencesAsync(owner, ct))?.Preferences;
+        var ownerPreferences = (await _subjects.GetAsync(owner, ct))?.Preferences;
 
         db.ClockFaces.Add(new ClockFaceEntity
         {
