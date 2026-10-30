@@ -199,32 +199,6 @@ public class OAuthTokenRepository : IOAuthTokenRepository
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Pinned to the grants' tenant: the caller revoking a grant may be a platform admin whose own
-    /// scope is another tenant, and the tokens are in the grant's. The grant's revocation is in the
-    /// predicate, so the pin cannot revoke a live grant's tokens, and the token's own
-    /// <c>RevokedAt</c> is too, so a rotation that won meanwhile keeps its stamp. A tracked save
-    /// rather than a bulk update: the callers' tests run on the EF InMemory provider, which has no
-    /// <c>ExecuteUpdate</c>.
-    /// </remarks>
-    public virtual async Task<int> RevokeRefreshTokensOfRevokedGrantsAsync(
-        Guid tenantId, IReadOnlyCollection<Guid> grantIds, DateTime now, CancellationToken ct)
-    {
-        await using var db = await OpenForTenantAsync(tenantId, ct);
-        var ids = grantIds.ToList();
-        var tokens = await db.OAuthRefreshTokens
-            .Where(t => ids.Contains(t.GrantId) && t.RevokedAt == null && t.Grant!.RevokedAt != null)
-            .ToListAsync(ct);
-        foreach (var token in tokens)
-        {
-            token.RevokedAt = now;
-        }
-
-        await db.SaveChangesAsync(ct);
-        return tokens.Count;
-    }
-
-    /// <inheritdoc/>
     public virtual async Task<bool> UserCodeExistsAsync(string userCode, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);

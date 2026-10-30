@@ -10,8 +10,9 @@ namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
 /// <summary>
 /// <see cref="OAuthTokenRepository"/> over SQLite, which runs the conditional updates the claims are
-/// made of: each claim is granted once, the pinned calls reach only their tenant, and a lookup
-/// carries what the token's grant says.
+/// made of: each claim is granted once, the pinned sweep reaches only its tenant, and a lookup
+/// carries what the token's grant says. The revoke of a grant's tokens runs on a unit of work and
+/// is covered with the grant repository.
 /// </summary>
 public class OAuthTokenRepositoryTests : IDisposable
 {
@@ -134,52 +135,6 @@ public class OAuthTokenRepositoryTests : IDisposable
             _grant, _tenant, _subject, found.Grant!.Scopes, "app", LimitTo24Hours: true, IsRevoked: false));
         found.Grant.Scopes.Should().Equal("glucose.read");
         (await repo.FindRefreshTokenAsync("missing", CancellationToken.None)).Should().BeNull();
-    }
-
-    [Fact]
-    public async Task RevokingARevokedGrantsTokensIsPinnedToItsTenantAndSparesOtherGrants()
-    {
-        var otherGrant = Guid.CreateVersion7();
-        await using (var db = _db.CreateContext(_otherTenant))
-        {
-            db.OAuthGrants.Add(new OAuthGrantEntity
-            {
-                Id = otherGrant, ClientEntityId = _client, SubjectId = _subject, Scopes = ["glucose.read"], GrantType = "app",
-                RevokedAt = Now,
-            });
-            await db.SaveChangesAsync();
-        }
-        await using (var db = _db.CreateContext())
-        {
-            await db.OAuthGrants.Where(g => g.Id == _grant).ExecuteUpdateAsync(s => s.SetProperty(g => g.RevokedAt, Now));
-        }
-
-        var tokenInGrant = await Repository().StoreRefreshTokenAsync(Token("t1"), CancellationToken.None);
-        var rotatedEarlier = await Repository().StoreRefreshTokenAsync(Token("t0"), CancellationToken.None);
-        (await Repository().TryRotateRefreshTokenAsync(rotatedEarlier, tokenInGrant, Now.AddMinutes(-1), CancellationToken.None)).Should().BeTrue();
-        var otherTenantsToken = await Repository(_otherTenant)
-            .StoreRefreshTokenAsync(Token("t2", _otherTenant, otherGrant), CancellationToken.None);
-
-        var revoked = await Repository(_otherTenant)
-            .RevokeRefreshTokensOfRevokedGrantsAsync(_tenant, [_grant, otherGrant], Now, CancellationToken.None);
-
-        revoked.Should().Be(1);
-        (await Repository().GetRefreshTokenAsync(tokenInGrant, CancellationToken.None))!.RevokedAt.Should().Be(Now);
-        (await Repository().GetRefreshTokenAsync(rotatedEarlier, CancellationToken.None))!.RevokedAt
-            .Should().Be(Now.AddMinutes(-1), "a rotation's stamp is not overwritten");
-        (await Repository(_otherTenant).GetRefreshTokenAsync(otherTenantsToken, CancellationToken.None))!.RevokedAt.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task ALiveGrantsTokensCannotBeRevokedThroughThePin()
-    {
-        var token = await Repository().StoreRefreshTokenAsync(Token("t1"), CancellationToken.None);
-
-        var revoked = await Repository(_otherTenant)
-            .RevokeRefreshTokensOfRevokedGrantsAsync(_tenant, [_grant], Now, CancellationToken.None);
-
-        revoked.Should().Be(0);
-        (await Repository().GetRefreshTokenAsync(token, CancellationToken.None))!.RevokedAt.Should().BeNull();
     }
 
     [Fact]

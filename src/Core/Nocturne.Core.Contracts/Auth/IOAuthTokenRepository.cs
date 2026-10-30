@@ -9,9 +9,9 @@ namespace Nocturne.Core.Contracts.Auth;
 /// token pair. First-party session tokens are on <see cref="IFirstPartyTokenRepository"/>.
 /// </summary>
 /// <remarks>
-/// Every method runs as the scope's reader on its tenant, except <see cref="DeleteExpiredCodesAsync"/>
-/// and <see cref="RevokeRefreshTokensOfRevokedGrantsAsync"/>, which pin the tenant they are given, and
-/// <see cref="RevokeRefreshTokensOfGrantsAsync"/>, which runs only on a caller's unit of work. A <c>Try</c> method is one conditional statement and
+/// Every method runs as the scope's reader on its tenant, except <see cref="DeleteExpiredCodesAsync"/>,
+/// which pins the tenant it is given, and <see cref="RevokeRefreshTokensOfGrantsAsync"/>, which runs
+/// only on a caller's unit of work. A <c>Try</c> method is one conditional statement and
 /// returns whether this caller's statement changed the row; a lookup returns null for a row the
 /// reader cannot see; any other write returning <c>bool</c> says whether it found a row to change.
 /// </remarks>
@@ -79,15 +79,6 @@ public interface IOAuthTokenRepository
     /// <exception cref="InvalidOperationException">The repository is not over a unit of work.</exception>
     Task<int> RevokeRefreshTokensOfGrantsAsync(
         IReadOnlyCollection<Guid> grantIds, DateTime now, CancellationToken ct);
-
-    /// <summary>
-    /// Revokes, at <paramref name="now"/>, the live refresh tokens of those of
-    /// <paramref name="grantIds"/> in <paramref name="tenantId"/> that are already revoked, and
-    /// returns how many it revoked. A token of a grant still live is left alone, so the pin lets a
-    /// caller finish a revocation it has committed and nothing else.
-    /// </summary>
-    Task<int> RevokeRefreshTokensOfRevokedGrantsAsync(
-        Guid tenantId, IReadOnlyCollection<Guid> grantIds, DateTime now, CancellationToken ct);
 
     /// <summary>Whether a device code with the normalized <paramref name="userCode"/> is stored.</summary>
     Task<bool> UserCodeExistsAsync(string userCode, CancellationToken ct);
