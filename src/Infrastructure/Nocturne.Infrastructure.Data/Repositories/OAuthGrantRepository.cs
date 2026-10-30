@@ -117,15 +117,6 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<OAuthGrantRecord?> FindActiveOfSubjectAsync(Guid grantId, Guid ownerSubjectId, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        return ToRecord(await GrantsWithClient(lease.Context)
-            .Where(g => g.Id == grantId && g.SubjectId == ownerSubjectId && g.RevokedAt == null)
-            .FirstOrDefaultAsync(ct));
-    }
-
-    /// <inheritdoc/>
     public virtual async Task<OAuthGrantRecord?> FindOfSubjectAsync(Guid grantId, Guid ownerSubjectId, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
@@ -135,49 +126,18 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<OAuthGrantRecord?> FindDirectGrantAsync(Guid grantId, Guid? subjectId, CancellationToken ct)
+    public virtual async Task<IReadOnlyList<OAuthGrantRecord>> ListDirectAsync(
+        Guid? subjectId, DateTime? liveAt, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
-        return ToRecord(await Grants(lease.Context)
-            .Where(g => g.Id == grantId
-                     && (subjectId == null || g.SubjectId == subjectId.Value)
-                     && g.GrantType == OAuthGrantTypes.Direct)
-            .FirstOrDefaultAsync(ct));
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<OAuthGrantRecord>> GetUnrevokedDirectGrantsAsync(Guid? subjectId, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        return ToRecords(await Grants(lease.Context)
+        var grants = Grants(lease.Context)
             .Where(g => (subjectId == null || g.SubjectId == subjectId.Value)
                      && g.GrantType == OAuthGrantTypes.Direct
-                     && g.RevokedAt == null)
-            .OrderByDescending(g => g.CreatedAt)
-            .ToListAsync(ct));
-    }
+                     && g.RevokedAt == null);
+        if (liveAt is { } now)
+            grants = grants.Where(IsLiveDirectGrant(now));
 
-    /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<OAuthGrantRecord>> GetLiveDirectGrantsAsync(
-        Guid subjectId, DateTime now, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        return ToRecords(await Grants(lease.Context)
-            .Where(g => g.SubjectId == subjectId)
-            .Where(IsLiveDirectGrant(now))
-            .OrderByDescending(g => g.CreatedAt)
-            .ToListAsync(ct));
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task<OAuthGrantRecord?> FindLiveDirectGrantAsync(
-        Guid grantId, Guid subjectId, DateTime now, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        return ToRecord(await Grants(lease.Context)
-            .Where(g => g.SubjectId == subjectId)
-            .Where(IsLiveDirectGrant(now))
-            .FirstOrDefaultAsync(g => g.Id == grantId, ct));
+        return ToRecords(await grants.OrderByDescending(g => g.CreatedAt).ToListAsync(ct));
     }
 
     /// <inheritdoc/>
@@ -206,14 +166,6 @@ public class OAuthGrantRepository : IOAuthGrantRepository
             .Where(g => g.TokenHash != null)
             .Select(g => g.TokenHash!)
             .ToHashSetAsync(ct);
-    }
-
-    /// <inheritdoc/>
-    public virtual async Task<OAuthGrantRecord?> FindGuestAsync(Guid grantId, CancellationToken ct)
-    {
-        await using var lease = await OpenAsync(ct);
-        return ToRecord(await Grants(lease.Context)
-            .FirstOrDefaultAsync(g => g.Id == grantId && g.GrantType == OAuthGrantTypes.Guest, ct));
     }
 
     /// <inheritdoc/>
@@ -277,7 +229,7 @@ public class OAuthGrantRepository : IOAuthGrantRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<OAuthGrantRecord> CreateAsync(NewOAuthGrant grant, CancellationToken ct)
+    public virtual async Task<Guid> CreateAsync(NewOAuthGrant grant, CancellationToken ct)
     {
         await using var lease = await OpenAsync(ct);
         var db = lease.Context;
@@ -298,11 +250,7 @@ public class OAuthGrantRepository : IOAuthGrantRepository
         };
         db.OAuthGrants.Add(entity);
         await SaveAsync(db, ct);
-
-        if (entity.ClientEntityId is not null)
-            entity.Client = await db.OAuthClients.AsNoTracking().FirstOrDefaultAsync(c => c.Id == entity.ClientEntityId, ct);
-
-        return ToRecord(entity)!;
+        return entity.Id;
     }
 
     /// <inheritdoc/>
@@ -408,7 +356,8 @@ public class OAuthGrantRepository : IOAuthGrantRepository
 
     /// <summary>
     /// What makes a direct grant usable at <paramref name="now"/>. Every read that authenticates or
-    /// exchanges one goes through it, so none can accept a grant another refuses.
+    /// exchanges one goes through it, and <see cref="OAuthGrantRecord.IsLiveDirectGrantAt"/> is the
+    /// same rule for a record already read, so none can accept a grant another refuses.
     /// </summary>
     private static Expression<Func<OAuthGrantEntity, bool>> IsLiveDirectGrant(DateTime now) =>
         g => g.GrantType == OAuthGrantTypes.Direct

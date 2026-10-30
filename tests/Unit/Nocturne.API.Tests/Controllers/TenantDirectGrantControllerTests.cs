@@ -84,6 +84,7 @@ public class TenantDirectGrantControllerTests : IDisposable
         _auditDbContext = _db.CreateContext();
         var httpContext = new DefaultHttpContext();
         var directGrantService = new DirectGrantService(
+            factory.Object.AsNocturneFactory(),
             new AuthAuditService(
                 _auditDbContext.AsFactory(),
                 new HttpContextAccessor { HttpContext = httpContext },
@@ -94,8 +95,7 @@ public class TenantDirectGrantControllerTests : IDisposable
             new Mock<ILogger<DirectGrantService>>().Object);
         var tenantMemberService = new TenantMemberService(factory.Object.AsNocturneFactory());
 
-        _controller = new TenantDirectGrantController(
-            factory.Object.AsNocturneFactory(), tenantMemberService, directGrantService)
+        _controller = new TenantDirectGrantController(tenantMemberService, directGrantService)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

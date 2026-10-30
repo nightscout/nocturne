@@ -380,12 +380,12 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
 
     /// <inheritdoc />
     /// <remarks>
-    /// The table carries no tenant, so the reader's tenant is immaterial, and the subject GUC is
-    /// unset on the scope's context, so every row of the subject is in reach.
+    /// On a platform context, as the demo reset that retires the visitor ran it before the move:
+    /// the table carries no tenant, and with no subject pinned every row of the subject is in reach.
     /// </remarks>
     public async Task<int> DeleteAllForSubjectAsync(Guid subjectId, CancellationToken ct = default)
     {
-        await using var db = await _contexts.CreateAsync(ct);
+        await using var db = await _contexts.CreatePlatformAsync(ct);
         return await db.RefreshTokens
             .Where(t => t.SubjectId == subjectId)
             .ExecuteDeleteAsync(ct);

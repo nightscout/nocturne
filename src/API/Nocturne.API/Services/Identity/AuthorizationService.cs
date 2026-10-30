@@ -305,6 +305,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <summary>
     /// Get all subjects
     /// </summary>
+    /// <remarks>Lists the tokens <see cref="IsDeviceToken"/> admits, and no others.</remarks>
     /// <returns>List of all subjects</returns>
     public async Task<List<Subject>> GetAllSubjectsAsync()
     {
@@ -319,7 +320,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 return [];
             }
 
-            var grants = await _grants.GetLiveDirectGrantsAsync(
+            var grants = await _grants.ListDirectAsync(
                 deviceSubjectId, _time.GetUtcNow().UtcDateTime, CancellationToken.None);
             return grants.Select(MapGrantToLegacySubject).ToList();
         }
@@ -353,9 +354,8 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 return null;
             }
 
-            var grant = await _grants.FindLiveDirectGrantAsync(
-                guid, deviceSubjectId, _time.GetUtcNow().UtcDateTime, CancellationToken.None);
-            return grant == null ? null : MapGrantToLegacySubject(grant);
+            var grant = await _grants.GetAsync(guid, CancellationToken.None);
+            return grant is null || !IsDeviceToken(grant, deviceSubjectId) ? null : MapGrantToLegacySubject(grant);
         }
         catch (Exception ex)
         {
@@ -371,8 +371,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <returns>Created subject, carrying the plaintext token this one time</returns>
     public async Task<Subject> CreateSubjectAsync(Subject subject)
     {
-        await using var unit = await DbUnitOfWork.OpenAsync(_contexts);
-        var db = unit.Context;
+        await using var db = await _contexts.CreateAsync();
         try
         {
             var label = subject.Name ?? "Unknown";
@@ -392,7 +391,7 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             }
 
             var result = await _directGrantService.CreateAsync(
-                unit,
+                pinnedTenantId: null,
                 deviceSubjectId,
                 label,
                 [.. scopes],
@@ -452,10 +451,9 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 return null;
             }
 
-            var grant = await _grants.FindLiveDirectGrantAsync(
-                guid, deviceSubjectId, _time.GetUtcNow().UtcDateTime, CancellationToken.None);
+            var grant = await _grants.GetAsync(guid, CancellationToken.None);
 
-            if (grant == null)
+            if (grant == null || !IsDeviceToken(grant, deviceSubjectId))
             {
                 return null;
             }
@@ -495,12 +493,15 @@ public class AuthorizationService : IAuthorizationService, IDisposable
     /// <summary>
     /// Delete a subject by ID
     /// </summary>
+    /// <remarks>
+    /// Revokes rather than deletes: the row is the audit trail for everything the token did. Scoped
+    /// to the device subject for the reason on <see cref="IsDeviceToken"/>.
+    /// </remarks>
     /// <param name="id">Subject ID</param>
     /// <returns>True if deleted, false if not found</returns>
     public async Task<bool> DeleteSubjectAsync(string id)
     {
-        await using var unit = await DbUnitOfWork.OpenAsync(_contexts);
-        var db = unit.Context;
+        await using var db = await _contexts.CreateAsync();
         try
         {
             _logger.LogDebug("Deleting subject: {Id}", id);
@@ -511,11 +512,9 @@ public class AuthorizationService : IAuthorizationService, IDisposable
                 return false;
             }
 
-            // Revoked rather than deleted: the row is the audit trail for everything the token did.
-            // Scoped to the device subject for the reason given on DeviceGrants.
             return await db.FindDeviceSubjectOf(db.TenantId) is { } deviceSubjectId
                 && await _directGrantService.RevokeAsync(
-                    unit, guid, deviceSubjectId, ipAddress: null, userAgent: null);
+                    pinnedTenantId: null, guid, deviceSubjectId, ipAddress: null, userAgent: null);
         }
         catch (Exception ex)
         {
@@ -524,10 +523,15 @@ public class AuthorizationService : IAuthorizationService, IDisposable
         }
     }
 
-    // The live tokens this API owns are the ones issued to the tenant's device subject, which is
-    // who it issues to, so every grant read above is scoped to that subject. A member's own tokens
-    // are theirs to manage through DirectGrantController; listing them here would put every
-    // member's credentials on an admin screen and let DeleteSubjectAsync revoke them.
+    /// <summary>
+    /// Whether <paramref name="grant"/> is a token this API owns: a direct grant live now, issued to
+    /// the tenant's device subject <paramref name="deviceSubjectId"/>, which is who it issues to.
+    /// A member's own tokens are theirs to manage through <c>DirectGrantController</c>; admitting
+    /// them here would put every member's credentials on an admin screen and let
+    /// <see cref="DeleteSubjectAsync"/> revoke them.
+    /// </summary>
+    private bool IsDeviceToken(OAuthGrantRecord grant, Guid deviceSubjectId) =>
+        grant.SubjectId == deviceSubjectId && grant.IsLiveDirectGrantAt(_time.GetUtcNow().UtcDateTime);
 
     /// <summary>
     /// The scopes a Nightscout <c>roles</c> list confers. Each entry is looked up as a role name

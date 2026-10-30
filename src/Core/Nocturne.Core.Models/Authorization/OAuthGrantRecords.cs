@@ -60,6 +60,19 @@ public sealed record OAuthGrantRecord(
     bool IsMigrated)
 {
     public bool IsRevoked => RevokedAt.HasValue;
+
+    /// <summary>
+    /// Whether this is a direct grant that authenticates at <paramref name="now"/>: not revoked,
+    /// and either open-ended or short of its expiry. The expiry instant itself does not
+    /// authenticate.
+    /// </summary>
+    /// <remarks>
+    /// The same rule the store applies when it reads live direct grants,
+    /// <c>OAuthGrantRepository.IsLiveDirectGrant</c>, so a grant one read refuses is not accepted
+    /// by a caller judging a record.
+    /// </remarks>
+    public bool IsLiveDirectGrantAt(DateTime now) =>
+        GrantType == OAuthGrantTypes.Direct && RevokedAt is null && (ExpiresAt is null || ExpiresAt > now);
 }
 
 /// <summary>What a grant edit changes; a null member leaves the stored value as it is.</summary>

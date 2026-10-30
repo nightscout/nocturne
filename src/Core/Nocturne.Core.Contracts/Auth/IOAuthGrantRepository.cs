@@ -56,29 +56,15 @@ public interface IOAuthGrantRepository
     /// <summary>The unrevoked grants of <paramref name="subjectId"/>, of every type, newest first.</summary>
     Task<IReadOnlyList<OAuthGrantRecord>> GetActiveForSubjectAsync(Guid subjectId, CancellationToken ct);
 
-    /// <summary>The unrevoked grant <paramref name="grantId"/> owned by <paramref name="ownerSubjectId"/>.</summary>
-    Task<OAuthGrantRecord?> FindActiveOfSubjectAsync(Guid grantId, Guid ownerSubjectId, CancellationToken ct);
-
     /// <summary>The grant <paramref name="grantId"/> owned by <paramref name="ownerSubjectId"/>, in any state.</summary>
     Task<OAuthGrantRecord?> FindOfSubjectAsync(Guid grantId, Guid ownerSubjectId, CancellationToken ct);
 
     /// <summary>
-    /// The direct grant <paramref name="grantId"/>, in any state, owned by <paramref name="subjectId"/>
-    /// when one is given.
+    /// The unrevoked direct grants, newest first: of <paramref name="subjectId"/> when one is
+    /// given, else of the whole tenant; and when <paramref name="liveAt"/> is given, only those
+    /// live at that instant (see <see cref="OAuthGrantRecord.IsLiveDirectGrantAt"/>).
     /// </summary>
-    Task<OAuthGrantRecord?> FindDirectGrantAsync(Guid grantId, Guid? subjectId, CancellationToken ct);
-
-    /// <summary>
-    /// The unrevoked direct grants, expired or not, newest first: of <paramref name="subjectId"/>
-    /// when one is given, else of the whole tenant.
-    /// </summary>
-    Task<IReadOnlyList<OAuthGrantRecord>> GetUnrevokedDirectGrantsAsync(Guid? subjectId, CancellationToken ct);
-
-    /// <summary>The direct grants of <paramref name="subjectId"/> live at <paramref name="now"/>, newest first.</summary>
-    Task<IReadOnlyList<OAuthGrantRecord>> GetLiveDirectGrantsAsync(Guid subjectId, DateTime now, CancellationToken ct);
-
-    /// <summary>The direct grant <paramref name="grantId"/> of <paramref name="subjectId"/> if live at <paramref name="now"/>.</summary>
-    Task<OAuthGrantRecord?> FindLiveDirectGrantAsync(Guid grantId, Guid subjectId, DateTime now, CancellationToken ct);
+    Task<IReadOnlyList<OAuthGrantRecord>> ListDirectAsync(Guid? subjectId, DateTime? liveAt, CancellationToken ct);
 
     /// <summary>
     /// The direct grant <paramref name="lookup"/> identifies if live at <paramref name="now"/>, read
@@ -92,9 +78,6 @@ public interface IOAuthGrantRepository
 
     /// <summary>The token hashes of every grant of the tenant that has one.</summary>
     Task<IReadOnlySet<string>> GetTokenHashesAsync(CancellationToken ct);
-
-    /// <summary>The guest link <paramref name="grantId"/>, in any state.</summary>
-    Task<OAuthGrantRecord?> FindGuestAsync(Guid grantId, CancellationToken ct);
 
     /// <summary>The guest links of <paramref name="dataOwnerSubjectId"/>, newest first.</summary>
     Task<IReadOnlyList<OAuthGrantRecord>> GetGuestLinksAsync(
@@ -113,8 +96,11 @@ public interface IOAuthGrantRepository
     Task<IReadOnlyDictionary<Guid, string?>> GetClientDisplayNamesAsync(
         IReadOnlyCollection<Guid> grantIds, CancellationToken ct);
 
-    /// <summary>Stores a grant and returns it as stored, with its client.</summary>
-    Task<OAuthGrantRecord> CreateAsync(NewOAuthGrant grant, CancellationToken ct);
+    /// <summary>
+    /// Stores a grant and returns its id. The record is read back with <see cref="GetAsync"/> once
+    /// saved: on a unit of work the tenant is stamped only then.
+    /// </summary>
+    Task<Guid> CreateAsync(NewOAuthGrant grant, CancellationToken ct);
 
     /// <summary>Stores an adopted credential as a migrated direct grant and returns its id.</summary>
     Task<Guid> AdoptLegacyCredentialAsync(AdoptedLegacyCredential credential, CancellationToken ct);

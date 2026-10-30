@@ -19,14 +19,15 @@ namespace Nocturne.API.Tests.Infrastructure;
 /// The text scan does not see an entity reached through a navigation property, so a host member
 /// that holds one that way is caught only by the reflection half, and a query that goes through a
 /// navigation is not caught at all. An <see cref="Exemption"/> names a file that may still use the
-/// concept's <c>DbSet</c>s or types, with the reason; a later slice or follow-up deletes it. The
-/// reflection half honours it for the type the file is named after and the types nested in it,
-/// which is where a local the file holds across an <c>await</c> ends up.
+/// concept's <c>DbSet</c>s or types, with the reason; a later slice or follow-up deletes it. One
+/// that <see cref="Exemption.CoversMembers"/> also exempts, for its own concept only, the members
+/// of the type the file is named after and of the types nested in it, which is where a local the
+/// file holds across an <c>await</c> ends up.
 /// </remarks>
 [Trait("Category", "Unit")]
 public class HostPersistenceGuardTests
 {
-    private sealed record Exemption(string File, string Reason);
+    private sealed record Exemption(string File, string Reason, bool CoversMembers = false);
 
     private sealed record Concept(string Name, string[] Entities, string[] DbSets, Exemption[] Exemptions)
     {
@@ -35,7 +36,8 @@ public class HostPersistenceGuardTests
 
         public bool Exempts(string path) => Exemptions.Any(e => e.File == path);
 
-        public bool Exempts(Type type) => Exemptions.Any(e => Path.GetFileNameWithoutExtension(e.File) == Outermost(type).Name);
+        public bool Exempts(Type type) => Exemptions.Any(e =>
+            e.CoversMembers && Path.GetFileNameWithoutExtension(e.File) == Outermost(type).Name);
 
         private static Type Outermost(Type type) => type.DeclaringType is { } outer ? Outermost(outer) : type;
     }
@@ -65,7 +67,8 @@ public class HostPersistenceGuardTests
                 new("src/API/Nocturne.API/Services/Auth/OAuthCodeCleanupService.cs",
                     "deletes the OAuth clients no grant or code names, by a subquery on the grant table; moves with OAuth client persistence in #3102"),
                 new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
-                    "dev-only whole-schema snapshot restore that re-points the invites of a tenant alongside every other table in one transaction"),
+                    "dev-only whole-schema snapshot restore that re-points the invites of a tenant alongside every other table in one transaction",
+                    CoversMembers: true),
             ]),
     ];
 
@@ -134,6 +137,26 @@ public class HostPersistenceGuardTests
             var text = File.ReadAllText(Path.Combine(root, exemption.File));
             concept.Patterns.Should().Contain(pattern => pattern.IsMatch(text), $"{exemption.File} is exempt from {concept.Name} but uses none of it");
         }
+    }
+
+    /// <summary>
+    /// A member exemption is the listing concept's alone: the same file's types stay checked for
+    /// every other concept, and a file exempt from the text scan only is not exempt here at all.
+    /// </summary>
+    [Fact]
+    public void AMemberExemptionBelongsToTheConceptThatListsIt()
+    {
+        var devAdmin = Api.GetType("Nocturne.API.Controllers.V4.DevOnly.DevAdminController")!;
+        var cleanup = Api.GetType("Nocturne.API.Services.Auth.OAuthCodeCleanupService")!;
+        var grants = Concepts.Single(c => c.Name.StartsWith("grants", StringComparison.Ordinal));
+        var tokens = Concepts.Single(c => c.Name.StartsWith("OAuth tokens", StringComparison.Ordinal));
+
+        grants.Exempts(devAdmin).Should().BeTrue();
+        grants.Exempts(devAdmin.GetNestedTypes(BindingFlags.NonPublic | BindingFlags.Public).FirstOrDefault() ?? devAdmin).Should().BeTrue();
+        tokens.Exempts(devAdmin).Should().BeFalse("the file is listed by another concept");
+        Concepts[0].Exempts(devAdmin).Should().BeFalse();
+        tokens.Exempts(cleanup).Should().BeFalse("a text-scan exemption does not cover members");
+        grants.Exempts(cleanup).Should().BeFalse();
     }
 
     [Theory]

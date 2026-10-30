@@ -6,6 +6,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -15,10 +16,11 @@ namespace Nocturne.API.Services.Auth;
 /// tenant grant endpoints so token generation and hashing live in one place.
 /// </summary>
 /// <remarks>
-/// Callers pass the <see cref="DbUnitOfWork"/> the operation should run on: the self-service
-/// endpoints open one as the request's reader, while platform-admin endpoints open one pinned to
-/// the target tenant. Grant rows are tenant-scoped, so the unit's tenant decides which grants are
-/// visible and which tenant a new grant is bound to.
+/// Each operation runs on a unit of work the service opens and commits itself. A self-service
+/// caller passes no tenant and the unit reads as the request's reader; a platform-admin caller
+/// that has checked its right to act on another tenant pins it, as its context pin did before
+/// the service owned the unit. Grant rows are tenant-scoped, so the unit's tenant decides which
+/// grants are visible and which tenant a new grant is bound to.
 /// </remarks>
 /// <seealso cref="DirectGrantTokenHandler"/>
 public interface IDirectGrantService
@@ -27,7 +29,7 @@ public interface IDirectGrantService
     /// Creates a new direct grant for <paramref name="subjectId"/>. The plaintext token is
     /// returned once and cannot be retrieved again.
     /// </summary>
-    /// <param name="unit">The tenant-scoped unit of work to create the grant on.</param>
+    /// <param name="pinnedTenantId">The tenant to create the grant on; null for the request's.</param>
     /// <param name="subjectId">The subject the grant is issued to.</param>
     /// <param name="label">The human-readable label.</param>
     /// <param name="scopes">The requested scopes; normalized before storage.</param>
@@ -49,7 +51,7 @@ public interface IDirectGrantService
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created grant, or an error message describing the invalid input.</returns>
     Task<DirectGrantCreationResult> CreateAsync(
-        DbUnitOfWork unit,
+        Guid? pinnedTenantId,
         Guid subjectId,
         string label,
         IReadOnlyCollection<string>? scopes,
@@ -63,20 +65,19 @@ public interface IDirectGrantService
     /// <summary>
     /// Lists non-revoked direct grants, newest first. Never returns token material.
     /// </summary>
-    /// <param name="unit">The tenant-scoped unit of work to query.</param>
+    /// <param name="pinnedTenantId">The tenant to list; null for the request's.</param>
     /// <param name="subjectId">
-    /// When set, only grants issued to this subject; when null, every grant on the unit's
-    /// tenant. Passed explicitly so a caller cannot widen the read to the whole tenant by
-    /// omitting it.
+    /// When set, only grants issued to this subject; when null, every grant on the tenant. Passed
+    /// explicitly so a caller cannot widen the read to the whole tenant by omitting it.
     /// </param>
     /// <param name="ct">The cancellation token.</param>
     Task<List<DirectGrantDto>> ListAsync(
-        DbUnitOfWork unit, Guid? subjectId, CancellationToken ct = default);
+        Guid? pinnedTenantId, Guid? subjectId, CancellationToken ct = default);
 
     /// <summary>
     /// Revokes a direct grant by setting its <c>RevokedAt</c> timestamp. Idempotent.
     /// </summary>
-    /// <param name="unit">The tenant-scoped unit of work to revoke on.</param>
+    /// <param name="pinnedTenantId">The tenant the grant is on; null for the request's.</param>
     /// <param name="grantId">The grant to revoke.</param>
     /// <param name="subjectId">When set, the grant must belong to this subject.</param>
     /// <param name="ipAddress">The caller's IP address, for the audit trail.</param>
@@ -88,7 +89,7 @@ public interface IDirectGrantService
     /// <param name="ct">The cancellation token.</param>
     /// <returns><c>true</c> when the grant was found (revoked now or already); <c>false</c> otherwise.</returns>
     Task<bool> RevokeAsync(
-        DbUnitOfWork unit,
+        Guid? pinnedTenantId,
         Guid grantId,
         Guid? subjectId,
         string? ipAddress,
@@ -113,23 +114,31 @@ public class DirectGrantService : IDirectGrantService
     private const string TokenPrefix = "noc_";
     private const int TokenRandomBytes = 32;
 
+    private readonly INocturneDbContextFactory _contexts;
     private readonly IAuthAuditService _auditService;
     private readonly GrantRevocationService _grantRevocation;
     private readonly ILogger<DirectGrantService> _logger;
 
     public DirectGrantService(
+        INocturneDbContextFactory contexts,
         IAuthAuditService auditService,
         GrantRevocationService grantRevocation,
         ILogger<DirectGrantService> logger)
     {
+        _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
         _auditService = auditService;
         _grantRevocation = grantRevocation;
         _logger = logger;
     }
 
+    private ValueTask<DbUnitOfWork> OpenAsync(Guid? pinnedTenantId, CancellationToken ct) =>
+        pinnedTenantId is { } tenantId
+            ? DbUnitOfWork.OpenForTenantAsync(_contexts, tenantId, ct)
+            : DbUnitOfWork.OpenAsync(_contexts, ct);
+
     /// <inheritdoc />
     public async Task<DirectGrantCreationResult> CreateAsync(
-        DbUnitOfWork unit,
+        Guid? pinnedTenantId,
         Guid subjectId,
         string label,
         IReadOnlyCollection<string>? scopes,
@@ -159,7 +168,9 @@ public class DirectGrantService : IDirectGrantService
         var randomBytes = RandomNumberGenerator.GetBytes(TokenRandomBytes);
         var plaintextToken = TokenPrefix + Base64UrlEncode(randomBytes);
 
-        var grant = await new OAuthGrantRepository(unit).CreateAsync(
+        await using var unit = await OpenAsync(pinnedTenantId, ct);
+        var grants = new OAuthGrantRepository(unit);
+        var grantId = await grants.CreateAsync(
             new NewOAuthGrant(
                 ClientEntityId: null,
                 subjectId,
@@ -174,7 +185,9 @@ public class DirectGrantService : IDirectGrantService
                 expiresAt,
                 limitTo24Hours),
             ct);
-        await unit.Context.SaveChangesAsync(ct);
+        await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), ct);
+        var grant = await grants.GetAsync(grantId, ct)
+            ?? throw new InvalidOperationException($"Grant {grantId} is not readable on the unit that created it.");
 
         _logger.LogInformation(
             "DirectGrantAudit: {Event} grant_id={GrantId} subject_id={SubjectId} scopes={Scopes}",
@@ -203,9 +216,10 @@ public class DirectGrantService : IDirectGrantService
 
     /// <inheritdoc />
     public async Task<List<DirectGrantDto>> ListAsync(
-        DbUnitOfWork unit, Guid? subjectId, CancellationToken ct = default)
+        Guid? pinnedTenantId, Guid? subjectId, CancellationToken ct = default)
     {
-        var grants = await new OAuthGrantRepository(unit).GetUnrevokedDirectGrantsAsync(subjectId, ct);
+        await using var unit = await OpenAsync(pinnedTenantId, ct);
+        var grants = await new OAuthGrantRepository(unit).ListDirectAsync(subjectId, liveAt: null, ct);
 
         return grants.Select(g => new DirectGrantDto
         {
@@ -223,7 +237,7 @@ public class DirectGrantService : IDirectGrantService
 
     /// <inheritdoc />
     public async Task<bool> RevokeAsync(
-        DbUnitOfWork unit,
+        Guid? pinnedTenantId,
         Guid grantId,
         Guid? subjectId,
         string? ipAddress,
@@ -231,9 +245,12 @@ public class DirectGrantService : IDirectGrantService
         AuthAuditActor? actor = null,
         CancellationToken ct = default)
     {
-        var grant = await new OAuthGrantRepository(unit).FindDirectGrantAsync(grantId, subjectId, ct);
+        await using var unit = await OpenAsync(pinnedTenantId, ct);
+        var grant = await new OAuthGrantRepository(unit).GetAsync(grantId, ct);
 
-        if (grant == null)
+        if (grant == null
+            || grant.GrantType != OAuthGrantTypes.Direct
+            || (subjectId != null && grant.SubjectId != subjectId.Value))
         {
             return false;
         }
@@ -243,7 +260,9 @@ public class DirectGrantService : IDirectGrantService
             return true;
         }
 
-        var outcome = await _grantRevocation.RevokeAsync(unit, grant, ct);
+        var outcome = await _grantRevocation.StageAsync(unit, grant, ct);
+        await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), ct);
+        _grantRevocation.EvictSessions([grant]);
 
         _logger.LogInformation(
             "DirectGrantAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_devices={DeviceCount}",

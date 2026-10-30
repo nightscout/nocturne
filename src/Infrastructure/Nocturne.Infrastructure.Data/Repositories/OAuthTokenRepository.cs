@@ -174,9 +174,9 @@ public class OAuthTokenRepository : IOAuthTokenRepository
     /// Runs only over a unit of work, where the owner has staged the grants' revocation on the same
     /// context: the two save together, so no token is revoked under a grant that stays live, and the
     /// grants' <c>RevokedAt</c>, unsaved at this point, cannot be in the predicate. The token's own
-    /// <c>RevokedAt</c> is, so a rotation that won meanwhile keeps its stamp. A tracked save rather
-    /// than a bulk update, as every write on a unit is, which also lets the callers' tests run on the
-    /// EF InMemory provider.
+    /// <c>RevokedAt</c> is, so a rotation that won meanwhile keeps its stamp. Tracked rows rather
+    /// than a bulk update, for the reason on <see cref="RecordDevicePollAsync"/>'s sibling: the
+    /// callers' tests run on the EF InMemory provider, which has no <c>ExecuteUpdate</c>.
     /// </remarks>
     public virtual async Task<int> RevokeRefreshTokensOfGrantsAsync(
         IReadOnlyCollection<Guid> grantIds, DateTime now, CancellationToken ct)

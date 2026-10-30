@@ -110,14 +110,12 @@ public class GrantRevocationTests : IDisposable
 
             default:
                 var directGrants = new DirectGrantService(
+                    db.AsFactory(),
                     new Mock<IAuthAuditService>().Object,
                     new GrantRevocationService(_sessionCache),
                     NullLogger<DirectGrantService>.Instance);
-                await using (var unit = await DbUnitOfWork.OpenAsync(db.AsFactory()))
-                {
-                    (await directGrants.RevokeAsync(
-                        unit, grantId, subjectId: null, ipAddress: null, userAgent: null)).Should().BeTrue();
-                }
+                (await directGrants.RevokeAsync(
+                    pinnedTenantId: null, grantId, subjectId: null, ipAddress: null, userAgent: null)).Should().BeTrue();
                 break;
         }
     }

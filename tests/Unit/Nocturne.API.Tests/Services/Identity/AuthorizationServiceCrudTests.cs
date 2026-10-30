@@ -214,7 +214,7 @@ public class AuthorizationServiceCrudTests : IDisposable
         result.Should().BeFalse();
         _mockDirectGrantService.Verify(
             d => d.RevokeAsync(
-                It.IsAny<DbUnitOfWork>(), otherMembersGrant, It.Is<Guid?>(id => id == null),
+                It.IsAny<Guid?>(), otherMembersGrant, It.Is<Guid?>(id => id == null),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
@@ -237,7 +237,7 @@ public class AuthorizationServiceCrudTests : IDisposable
         await create.Should().ThrowAsync<ArgumentException>();
         _mockDirectGrantService.Verify(
             d => d.CreateAsync(
-                It.IsAny<DbUnitOfWork>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()),
@@ -291,7 +291,7 @@ public class AuthorizationServiceCrudTests : IDisposable
 
         _mockDirectGrantService
             .Setup(d => d.CreateAsync(
-                It.IsAny<DbUnitOfWork>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()))
@@ -318,7 +318,7 @@ public class AuthorizationServiceCrudTests : IDisposable
         // authenticate and then be dropped straight back to unauthenticated.
         _mockDirectGrantService.Verify(
             d => d.CreateAsync(
-                It.IsAny<DbUnitOfWork>(),
+                It.IsAny<Guid?>(),
                 _deviceSubjectId,
                 "New Device Subject",
                 It.Is<IReadOnlyCollection<string>>(scopes => scopes.Contains(Scope.GlucoseRead)),
@@ -341,7 +341,7 @@ public class AuthorizationServiceCrudTests : IDisposable
             }]);
         _mockDirectGrantService
             .Setup(d => d.CreateAsync(
-                It.IsAny<DbUnitOfWork>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()))
@@ -362,7 +362,7 @@ public class AuthorizationServiceCrudTests : IDisposable
 
         _mockDirectGrantService.Verify(
             d => d.CreateAsync(
-                It.IsAny<DbUnitOfWork>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), It.IsAny<string>(),
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), true,
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()),
@@ -477,7 +477,7 @@ public class AuthorizationServiceCrudTests : IDisposable
 
         _mockDirectGrantService
             .Setup(d => d.RevokeAsync(
-                It.IsAny<DbUnitOfWork>(), grantId, _deviceSubjectId, null, null,
+                It.IsAny<Guid?>(), grantId, _deviceSubjectId, null, null,
                 It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
@@ -492,7 +492,7 @@ public class AuthorizationServiceCrudTests : IDisposable
     {
         _mockDirectGrantService
             .Setup(d => d.RevokeAsync(
-                It.IsAny<DbUnitOfWork>(), It.IsAny<Guid>(), _deviceSubjectId, null, null,
+                It.IsAny<Guid?>(), It.IsAny<Guid>(), _deviceSubjectId, null, null,
                 It.IsAny<AuthAuditActor>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 

@@ -85,7 +85,7 @@ public class OAuthGrantRepositoryPostgresTests(OAuthGrantRepositoryPostgresTests
         var grant = await new OAuthGrantRepository(new Factory(Context, tenant)).CreateAsync(
             new NewOAuthGrant(null, subject, OAuthGrantTypes.Direct, [Scope.GlucoseRead], slug, hash, null, null, false),
             CancellationToken.None);
-        return new Seeded(tenant, subject, grant.Id, hash);
+        return new Seeded(tenant, subject, grant, hash);
     }
 
     [Fact]

@@ -83,7 +83,7 @@ public class OAuthGrantService : IOAuthGrantService
 
         var scopeList = scopes.Distinct().OrderBy(s => s).ToList();
 
-        var grant = await _grants.CreateAsync(
+        var grantId = await _grants.CreateAsync(
             new NewOAuthGrant(
                 clientEntityId,
                 subjectId,
@@ -96,6 +96,8 @@ public class OAuthGrantService : IOAuthGrantService
                 limitTo24Hours,
                 approvedByDeviceCode),
             ct);
+        var grant = await _grants.GetAsync(grantId, ct)
+            ?? throw new InvalidOperationException($"Grant {grantId} is not readable after its save.");
 
         _logger.LogInformation(
             "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} client_entity_id={ClientEntityId} scopes={Scopes}",
@@ -129,8 +131,8 @@ public class OAuthGrantService : IOAuthGrantService
         Guid ownerSubjectId,
         CancellationToken ct = default)
     {
-        var grant = await _grants.FindActiveOfSubjectAsync(grantId, ownerSubjectId, ct);
-        return grant == null ? null : ToInfo(grant);
+        var grant = await _grants.FindOfSubjectAsync(grantId, ownerSubjectId, ct);
+        return grant is null || grant.IsRevoked ? null : ToInfo(grant);
     }
 
     /// <inheritdoc />
@@ -145,7 +147,9 @@ public class OAuthGrantService : IOAuthGrantService
             return;
         }
 
-        var outcome = await _grantRevocation.RevokeAsync(unit, grant, ct);
+        var outcome = await _grantRevocation.StageAsync(unit, grant, ct);
+        await unit.CommitAsync(token => unit.Context.SaveChangesAsync(token), ct);
+        _grantRevocation.EvictSessions([grant]);
 
         _logger.LogInformation(
             "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_tokens={TokenCount} revoked_devices={DeviceCount}",

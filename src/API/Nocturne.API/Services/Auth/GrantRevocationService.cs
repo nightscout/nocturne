@@ -1,5 +1,4 @@
 using Nocturne.API.Services.ClientDevices;
-using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -11,11 +10,12 @@ namespace Nocturne.API.Services.Auth;
 /// refresh tokens issued under it, its registered client devices, and its cached guest session.
 /// </summary>
 /// <remarks>
-/// Runs on the caller's <see cref="DbUnitOfWork"/>, never a context it resolves itself, so a
-/// platform-admin caller's tenant pin decides which grant the consequences apply to. The grants,
-/// their tokens and their devices are staged on the unit and committed together in
-/// <see cref="RevokeAllAsync"/>, which is the unit's commit point: a token cannot outlive its grant
-/// or die before it, and whatever else the caller staged lands with them.
+/// A writer on the caller's <see cref="DbUnitOfWork"/>, never a context it resolves itself, so a
+/// platform-admin caller's tenant pin decides which grant the consequences apply to. It stages
+/// the grants, their tokens and their devices and saves nothing: the owner commits the unit, so
+/// a token cannot outlive its grant or die before it, and whatever else the owner staged lands
+/// with them. The guest session cache is evicted by the owner after the commit, through
+/// <see cref="EvictSessions"/>, so a session is never dropped for a revoke that did not land.
 /// </remarks>
 public sealed class GrantRevocationService
 {
@@ -27,28 +27,24 @@ public sealed class GrantRevocationService
     }
 
     /// <summary>
-    /// Revokes <paramref name="grant"/> and applies every consequence, as
-    /// <see cref="RevokeAllAsync"/> does.
+    /// Stages the revocation of <paramref name="grant"/> with every consequence, as
+    /// <see cref="StageAsync(DbUnitOfWork, IReadOnlyCollection{OAuthGrantRecord}, CancellationToken)"/> does.
     /// </summary>
-    /// <param name="unit">The caller's unit of work, on the grant's tenant.</param>
-    /// <param name="grant">The grant to revoke.</param>
-    /// <param name="ct">The cancellation token.</param>
-    public Task<GrantRevocationOutcome> RevokeAsync(
+    public Task<GrantRevocationOutcome> StageAsync(
         DbUnitOfWork unit,
         OAuthGrantRecord grant,
         CancellationToken ct = default) =>
-        RevokeAllAsync(unit, [grant], ct);
+        StageAsync(unit, [grant], ct);
 
     /// <summary>
-    /// Revokes every one of <paramref name="grants"/> with their refresh tokens and device
-    /// registrations, commits <paramref name="unit"/>, then evicts their guest sessions. The commit
-    /// also lands whatever else the caller has staged on the unit, so a change that must not outlive
-    /// the grants, or be outlived by them, lands with them.
+    /// Stages on <paramref name="unit"/> the revocation of every one of <paramref name="grants"/>
+    /// with their refresh tokens and device registrations. The owner commits the unit, then calls
+    /// <see cref="EvictSessions"/>.
     /// </summary>
     /// <param name="unit">The caller's unit of work, on the grants' tenant.</param>
     /// <param name="grants">The grants to revoke.</param>
     /// <param name="ct">The cancellation token.</param>
-    public async Task<GrantRevocationOutcome> RevokeAllAsync(
+    public async Task<GrantRevocationOutcome> StageAsync(
         DbUnitOfWork unit,
         IReadOnlyCollection<OAuthGrantRecord> grants,
         CancellationToken ct = default)
@@ -56,32 +52,32 @@ public sealed class GrantRevocationService
         var now = DateTime.UtcNow;
         var grantIds = grants.Select(g => g.Id).ToList();
 
-        var outcome = await unit.CommitAsync(async token =>
+        await new OAuthGrantRepository(unit).RevokeAsync(grantIds, now, ct);
+
+        var removedDevices = 0;
+        foreach (var grantId in grantIds)
         {
-            await new OAuthGrantRepository(unit).RevokeAsync(grantIds, now, token);
+            removedDevices += await unit.Context.RemoveGrantDevicesAsync(grantId, ct);
+        }
 
-            var removedDevices = 0;
-            foreach (var grantId in grantIds)
-            {
-                removedDevices += await unit.Context.RemoveGrantDevicesAsync(grantId, token);
-            }
+        var revokedTokens = await new OAuthTokenRepository(unit)
+            .RevokeRefreshTokensOfGrantsAsync(grantIds, now, ct);
 
-            var revokedTokens = await new OAuthTokenRepository(unit)
-                .RevokeRefreshTokensOfGrantsAsync(grantIds, now, token);
+        return new GrantRevocationOutcome(revokedTokens, removedDevices);
+    }
 
-            await unit.Context.SaveChangesAsync(token);
-            return new GrantRevocationOutcome(revokedTokens, removedDevices);
-        }, ct: ct);
-
-        // The cached guest session is what makes a revoked link stop resolving before its 30-second
-        // TTL, so it has to be evicted on every revoke path, not only the ones that enter
-        // GuestLinkService.
+    /// <summary>
+    /// Drops the cached guest sessions of <paramref name="grants"/>, once their revocation has
+    /// committed. The cached session is what makes a revoked link stop resolving before its
+    /// 30-second TTL, so it is evicted on every revoke path, not only the ones that enter
+    /// <see cref="GuestLinkService"/>.
+    /// </summary>
+    public void EvictSessions(IEnumerable<OAuthGrantRecord> grants)
+    {
         foreach (var grant in grants)
         {
             _guestSessionCache.Evict(grant.TenantId, grant.Id);
         }
-
-        return outcome;
     }
 }
 

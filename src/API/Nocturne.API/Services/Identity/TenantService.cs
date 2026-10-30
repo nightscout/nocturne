@@ -422,12 +422,15 @@ public partial class TenantService : ITenantService
             .ToListAsync(ct);
 
         // Grants carry no membership join either; left live, every one would work again the moment
-        // the subject is re-added. The revocation's commit lands the removal with them.
+        // the subject is re-added. They are staged on the unit with the removal, so one commit lands
+        // both.
         var grants = await new OAuthGrantRepository(unit).GetActiveForSubjectAsync(subjectId, ct);
 
         context.TenantMembers.Remove(member);
         context.ChatIdentityDirectory.RemoveRange(chatLinks);
-        await _grantRevocation.RevokeAllAsync(unit, grants, ct);
+        await _grantRevocation.StageAsync(unit, grants, ct);
+        await unit.CommitAsync(token => context.SaveChangesAsync(token), ct);
+        _grantRevocation.EvictSessions(grants);
 
         return new MemberRemovalResult(true);
     }
