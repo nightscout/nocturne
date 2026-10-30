@@ -72,6 +72,14 @@ public class SubjectRepositoryTests : IDisposable
     /// <summary>An id that sorts after every <see cref="Ordered"/> id with a smaller <paramref name="n"/>, on SQLite and in memory alike.</summary>
     private static Guid Ordered(int n) => Guid.Parse($"00000000-0000-7000-8000-{n:D12}");
 
+    /// <summary>The context stamps <c>created_at</c> on add from its own clock; a later save leaves it alone.</summary>
+    private void SetCreatedAt(Guid subject, DateTime createdAt)
+    {
+        using var db = _db.CreateContext();
+        db.Subjects.Single(s => s.Id == subject).CreatedAt = createdAt;
+        db.SaveChanges();
+    }
+
     private Task<Guid> LinkAsync(Guid subject, Guid provider, string sub, string issuer = "https://issuer.example") =>
         Subjects().AddOidcIdentityAsync(new NewSubjectOidcIdentity(subject, provider, sub, issuer, "a@b.example", Now), CancellationToken.None);
 
@@ -107,13 +115,15 @@ public class SubjectRepositoryTests : IDisposable
         match.Subject.Roles.Select(r => r.Name).Should().Equal("admin");
         match.Identity.Should().BeEquivalentTo(new { SubjectId = id, ProviderId = _provider, Email = "f@x.example", LinkedAt = Now });
 
-        // The same id again fails the save; the identity must fail with it rather than link to nothing.
-        var clash = () => CreateAsync(new NewSubject("Again", Id: id,
-            OidcIdentity: link with { OidcSubjectId = "ext-second" }));
+        // The race: a second first sign-in on the same identity. The unique (sub, issuer) index
+        // refuses the identity, and the subject must fail with it rather than stay as a shell.
+        var again = Guid.CreateVersion7();
+        var clash = () => CreateAsync(new NewSubject("Again", Email: "f@x.example", Id: again, OidcIdentity: link));
         await clash.Should().ThrowAsync<DbUpdateException>();
-        (await Subjects().FindByOidcIdentityAsync("ext-second", "https://issuer.example", CancellationToken.None)).Should().BeNull();
+        (await Subjects().GetAsync(again, CancellationToken.None)).Should().BeNull("the loser's subject is not stored without its identity");
+        (await Subjects().FindByOidcIdentityAsync("ext-first", "https://issuer.example", CancellationToken.None))!.Subject.Id.Should().Be(id);
         await using var check = _db.CreateContext();
-        (await check.SubjectOidcIdentities.CountAsync(i => i.OidcSubjectId == "ext-second")).Should().Be(0);
+        (await check.SubjectOidcIdentities.CountAsync(i => i.OidcSubjectId == "ext-first")).Should().Be(1);
     }
 
     [Fact]
@@ -153,11 +163,12 @@ public class SubjectRepositoryTests : IDisposable
     [Fact]
     public async Task TheSetupOwnerCandidateIsTheOldestActivePersonAndNeverTheDemoVisitor()
     {
-        await CreateAsync(new NewSubject("Demo", IsDemoSubject: true));
-        await CreateAsync(new NewSubject("System", IsSystemSubject: true));
-        await CreateAsync(new NewSubject("Gone", IsActive: false));
-        var owner = await CreateAsync(new NewSubject("Owner"));
-        await CreateAsync(new NewSubject("Later"));
+        // Explicit ids: the candidate is the first by id, and v7 ids minted in one millisecond do not order.
+        await CreateAsync(new NewSubject("Demo", IsDemoSubject: true, Id: Ordered(1)));
+        await CreateAsync(new NewSubject("System", IsSystemSubject: true, Id: Ordered(2)));
+        await CreateAsync(new NewSubject("Gone", IsActive: false, Id: Ordered(3)));
+        var owner = await CreateAsync(new NewSubject("Owner", Id: Ordered(4)));
+        await CreateAsync(new NewSubject("Later", Id: Ordered(5)));
 
         (await Subjects().FindSetupOwnerCandidateAsync(_tenant, CancellationToken.None))!.Id.Should().Be(owner);
     }
@@ -177,8 +188,13 @@ public class SubjectRepositoryTests : IDisposable
         var linkedToDisabled = await CreateAsync(new NewSubject("Inv3", Username: "inv", Id: Ordered(7)));
         await LinkAsync(linkedToDisabled, _disabledProvider, "ext2", "https://old.example");
 
+        // The pending list orders by CreatedAt, which the context stamps at save; spread them out.
+        SetCreatedAt(older, Now.AddMinutes(-2));
+        SetCreatedAt(newer, Now.AddMinutes(-1));
+        SetCreatedAt(withPasskey, Now);
+
         var pending = await Subjects().ListPendingAccessRequestsAsync(CancellationToken.None);
-        pending.Select(s => s.Id).Should().BeEquivalentTo([withPasskey, newer, older]);
+        pending.Select(s => s.Id).Should().Equal(withPasskey, newer, older);
         pending.Should().OnlyContain(s => s.Roles.Count == 0);
         pending.Should().Contain(s => s.Name == "Ann").And.NotContain(s => s.Name == "Bot");
 

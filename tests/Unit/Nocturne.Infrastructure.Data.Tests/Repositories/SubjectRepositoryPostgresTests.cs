@@ -71,6 +71,8 @@ public class SubjectRepositoryPostgresTests(SubjectRepositoryPostgresTests.Datab
         var subjects = new SubjectRepository(new Factory(Context, tenant));
         var credentialed = await subjects.CreateAsync(new NewSubject($"{slug}-credentialed"), CancellationToken.None);
         var orphan = await subjects.CreateAsync(new NewSubject($"{slug}-orphan"), CancellationToken.None);
+        // A flag that reads true when the row is visible, so a hidden row is told from a false one.
+        await subjects.GrantPlatformAdminAsync([credentialed], CancellationToken.None);
         await new PasskeyCredentialRepository(new Factory(Context, tenant)).CreateAsync(
             new NewPasskeyCredential(credentialed, Guid.NewGuid().ToByteArray(), [1], 0, [], null, null, DateTime.UtcNow),
             CancellationToken.None);
@@ -151,8 +153,10 @@ public class SubjectRepositoryPostgresTests(SubjectRepositoryPostgresTests.Datab
 
         // Read as the scope, the credentialed subject's row is hidden by subject_pin; the repository
         // reaches it only by pinning the read to that subject.
+        (await new SubjectRepository(new Factory(Context, Guid.Empty)).IsPlatformAdminAsync(a.Credentialed, CancellationToken.None))
+            .Should().BeTrue("unpinned, the flag is there to read");
         (await subjects.IsPlatformAdminAsync(a.Credentialed, CancellationToken.None)).Should().BeFalse("the scope's reader is another subject");
-        (await subjects.GetSignInStateAsync(a.Credentialed, CancellationToken.None)).Should().Be(new SubjectSignInState(true, false));
+        (await subjects.GetSignInStateAsync(a.Credentialed, CancellationToken.None)).Should().Be(new SubjectSignInState(true, true));
         (await subjects.GetSignInStateAsync(Guid.NewGuid(), CancellationToken.None)).Should().BeNull();
         factory.PinnedTo.Should().HaveCount(2).And.StartWith(a.Credentialed);
     }

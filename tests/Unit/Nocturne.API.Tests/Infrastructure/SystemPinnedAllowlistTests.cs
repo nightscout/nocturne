@@ -38,7 +38,7 @@ public class SystemPinnedAllowlistTests
     ];
 
     /// <summary>
-    /// The host members that call a <see cref="SystemPinnedReads"/> read: the anonymous auth
+    /// The members outside the module that call a <see cref="SystemPinnedReads"/> read: the anonymous auth
     /// status a share host's login page asks, and the setup state asked on public-share requests.
     /// The scan is by name, so <c>IInstanceSetupState.TenantHasCredentialedMemberAsync</c>, the
     /// facade over the same pinned read, pins its callers too.
@@ -53,7 +53,12 @@ public class SystemPinnedAllowlistTests
 
     private static readonly IReadOnlyList<string> Callers = Scan(ScannedTrees, [Method]);
 
-    private static readonly IReadOnlyList<string> ReadCallers = Scan(["src/API"], SystemPinnedReads);
+    /// <summary>Where the pinned reads live; every other tree is a caller.</summary>
+    private const string Module = "src/Infrastructure/Nocturne.Infrastructure.Data/";
+
+    private static readonly IReadOnlyList<string> ReadCallers = Scan(ScannedTrees, SystemPinnedReads)
+        .Where(caller => !caller.StartsWith(Module, StringComparison.Ordinal))
+        .ToList();
 
     [Fact]
     public void OnlyTheAllowlistCallsTheSystemPin()
