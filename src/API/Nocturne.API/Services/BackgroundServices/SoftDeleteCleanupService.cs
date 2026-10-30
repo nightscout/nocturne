@@ -24,14 +24,20 @@ public class SoftDeleteCleanupService(
     /// Restricted to tenant-scoped entities because <see cref="PurgeBatchedAsync"/> relies on
     /// row-level security to keep its raw DELETE inside one tenant.
     /// </summary>
-    internal static IReadOnlyList<string> SoftDeletableTables(IModel model) =>
+    internal static IReadOnlyList<PurgeTable> SoftDeletableTables(IModel model) =>
         [.. model.GetEntityTypes()
             .Where(t => typeof(ISoftDeletable).IsAssignableFrom(t.ClrType)
-                        && typeof(ITenantScoped).IsAssignableFrom(t.ClrType))
-            .Select(t => t.GetTableName())
-            .OfType<string>()
+                        && typeof(ITenantScoped).IsAssignableFrom(t.ClrType)
+                        && t.GetTableName() is not null)
+            .Select(t => new PurgeTable(t.GetTableName()!, DeduplicationService.LinkedRecordTypeKeyOf(t.ClrType)))
             .Distinct()
-            .Order()];
+            .OrderBy(t => t.Table, StringComparer.Ordinal)];
+
+    /// <summary>
+    /// A table the sweep purges, with the <see cref="Nocturne.Core.Models.RecordTypeKeys"/> key its
+    /// rows are linked under when deduplication covers them.
+    /// </summary>
+    internal sealed record PurgeTable(string Table, string? LinkedRecordType);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -59,7 +65,7 @@ public class SoftDeleteCleanupService(
     internal async Task PurgeExpiredRecordsAsync(CancellationToken ct)
     {
         List<Guid> allTenantIds;
-        IReadOnlyList<string> tables;
+        IReadOnlyList<PurgeTable> tables;
         await using (var platform = await contextFactory.CreatePlatformAsync(ct))
         {
             allTenantIds = await platform.Tenants
@@ -84,14 +90,12 @@ public class SoftDeleteCleanupService(
                     totalDeleted += tableDeleted;
                 }
 
-                var orphanedLinks = await CleanupOrphanedLinkedRecordsAsync(tenantId, ct);
-
-                if (totalDeleted > 0 || orphanedLinks > 0)
+                if (totalDeleted > 0)
                 {
                     logger.LogInformation(
                         "Soft-delete cleanup for tenant {TenantId}: hard-deleted {Count} expired records "
-                        + "and {OrphanedLinks} orphaned links (retention: {Days} days)",
-                        tenantId, totalDeleted, orphanedLinks, retentionDays);
+                        + "(retention: {Days} days)",
+                        tenantId, totalDeleted, retentionDays);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -116,20 +120,10 @@ public class SoftDeleteCleanupService(
     /// </summary>
     /// <returns>Total number of records deleted.</returns>
     private Task<int> PurgeBatchedAsync(
-        Guid tenantId, string table, TimeSpan minAge, CancellationToken ct) =>
-        contextFactory.PurgeOlderThanAsync(tenantId, table, AgeColumn, minAge, BatchSize, ct);
+        Guid tenantId, PurgeTable table, TimeSpan minAge, CancellationToken ct) =>
+        contextFactory.PurgeOlderThanAsync(
+            tenantId, table.Table, AgeColumn, minAge, BatchSize, table.LinkedRecordType, ct);
 
     /// <summary>Age column on every soft-deletable table.</summary>
     internal const string AgeColumn = "deleted_at";
-
-    /// <summary>
-    /// Removes linked_records that reference hard-deleted records, and links of a record type that
-    /// no longer has a table behind it.
-    /// </summary>
-    /// <returns>The number of links deleted.</returns>
-    private async Task<int> CleanupOrphanedLinkedRecordsAsync(Guid tenantId, CancellationToken ct)
-    {
-        await using var db = await contextFactory.CreateForTenantAsync(tenantId, ct);
-        return await DeduplicationService.DeleteOrphanedLinksAsync(db, ct);
-    }
 }

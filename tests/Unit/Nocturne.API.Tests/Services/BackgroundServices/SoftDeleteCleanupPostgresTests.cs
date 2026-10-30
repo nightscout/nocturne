@@ -3,6 +3,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Tests.Shared.Infrastructure;
 using Npgsql;
@@ -83,6 +85,64 @@ public class SoftDeleteCleanupPostgresTests(SoftDeleteCleanupPostgresTests.Datab
         await reader.ReadAsync();
         return reader.GetInt64(0);
     }
+
+    /// <summary>
+    /// The purge deletes a deduplicated row's links in the statement that deletes the row, so
+    /// nothing is left for an orphan sweep. The live row's link, and a link of another type that
+    /// happens to share the purged id, stay.
+    /// </summary>
+    [Fact]
+    public async Task PurgeExpiredRecordsAsync_DeletesTheLinksOfThePurgedRowsWithThem()
+    {
+        var tenant = Guid.NewGuid();
+        await SeedTenantAsync(tenant, retentionDays: null, deletedDaysAgo: 40);
+        var expired = Guid.CreateVersion7();
+        var live = Guid.CreateVersion7();
+        await using (var seed = Context())
+        {
+            seed.TenantId = tenant;
+            seed.Boluses.Add(new BolusEntity
+            {
+                Id = expired, TenantId = tenant, Insulin = 1, Timestamp = DateTime.UtcNow, DeletedAt = DateTime.UtcNow.AddDays(-40),
+            });
+            seed.Boluses.Add(new BolusEntity { Id = live, TenantId = tenant, Insulin = 2, Timestamp = DateTime.UtcNow });
+            seed.LinkedRecords.Add(Link(tenant, "bolus", expired));
+            seed.LinkedRecords.Add(Link(tenant, "bolus", live));
+            seed.LinkedRecords.Add(Link(tenant, "carbintake", expired));
+            await seed.SaveChangesAsync();
+        }
+
+        var service = new SoftDeleteCleanupService(
+            new Factory(Context),
+            new ConfigurationBuilder().Build(),
+            NullLogger<SoftDeleteCleanupService>.Instance);
+
+        await service.PurgeExpiredRecordsAsync(CancellationToken.None);
+
+        await using var db = Context();
+        db.TenantId = tenant;
+        (await db.Boluses.IgnoreQueryFilters().Where(b => b.TenantId == tenant).Select(b => b.Id).ToListAsync())
+            .Should().Equal(live);
+        (await db.LinkedRecords.Select(l => new { l.RecordType, l.RecordId }).ToListAsync())
+            .Should().BeEquivalentTo(
+            [
+                new { RecordType = "bolus", RecordId = live },
+                new { RecordType = "carbintake", RecordId = expired },
+            ]);
+    }
+
+    private static LinkedRecordEntity Link(Guid tenant, string recordType, Guid recordId) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        TenantId = tenant,
+        CanonicalId = Guid.CreateVersion7(),
+        RecordType = recordType,
+        RecordId = recordId,
+        SourceTimestamp = 0,
+        DataSource = "test",
+        IsPrimary = true,
+        SysCreatedAt = DateTime.UtcNow,
+    };
 
     [Fact]
     public async Task PurgeExpiredRecordsAsync_AppliesEachTenantsOwnRetention()

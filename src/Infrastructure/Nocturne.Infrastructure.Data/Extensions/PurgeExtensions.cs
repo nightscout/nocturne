@@ -1,5 +1,7 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
@@ -27,15 +29,29 @@ public static class PurgeExtensions
     /// <param name="rows">The set to purge from.</param>
     /// <param name="predicate">Row filter, or <c>null</c> for the tenant's whole table.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>The number of rows deleted.</returns>
-    public static Task<int> PurgeAsync<TEntity>(
+    /// <returns>The number of rows deleted, links not counted.</returns>
+    public static async Task<int> PurgeAsync<TEntity>(
         this DbSet<TEntity> rows,
         Expression<Func<TEntity, bool>>? predicate = null,
         CancellationToken ct = default)
         where TEntity : class, ITenantScoped
     {
         var purgeable = rows.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey]);
+        var selected = predicate is null ? purgeable : purgeable.Where(predicate);
 
-        return (predicate is null ? purgeable : purgeable.Where(predicate)).ExecuteDeleteAsync(ct);
+        // A deduplicated row's links go first: a purge that stops between the two statements then
+        // leaves a record with no link, which matching reads as a group of its own, rather than a
+        // link with no record (see Services.DeduplicationService.DeleteOrphanedLinksAsync).
+        if (DuplicateGroupPrimaries.RecordTypeOf<TEntity>() is { } recordType)
+        {
+            var key = RecordTypeKeys.Key(recordType);
+            var context = (NocturneDbContext)rows.GetService<ICurrentDbContext>().Context;
+            var purgedIds = selected.Select(e => EF.Property<Guid>(e, "Id"));
+            await context.LinkedRecords
+                .Where(lr => lr.RecordType == key && purgedIds.Contains(lr.RecordId))
+                .ExecuteDeleteAsync(ct);
+        }
+
+        return await selected.ExecuteDeleteAsync(ct);
     }
 }

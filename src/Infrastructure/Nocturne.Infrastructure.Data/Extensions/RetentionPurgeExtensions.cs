@@ -56,8 +56,14 @@ public static partial class RetentionPurgeExtensions
     /// <param name="timestampColumn">Age column. Must be a bare lowercase SQL identifier.</param>
     /// <param name="minAge">Retention window. Rows strictly older than this are deleted.</param>
     /// <param name="batchSize">Rows per statement. Must be at least 1.</param>
+    /// <param name="linkedRecordType">
+    /// The <see cref="Core.Models.RecordTypeKeys"/> key the table's rows are linked under in
+    /// <c>linked_records</c>, or null for a table deduplication does not cover. When given, each
+    /// batch deletes the purged rows' links in the same statement, so a hard delete leaves no link
+    /// behind for a sweep to find (<see cref="DeduplicationService.DeleteOrphanedLinksAsync"/>).
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>Total number of rows deleted.</returns>
+    /// <returns>Total number of rows deleted, links not counted.</returns>
     /// <exception cref="ArgumentException">An identifier is not a bare lowercase identifier.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="minAge"/> is not positive, or <paramref name="batchSize"/> is below 1.
@@ -69,6 +75,7 @@ public static partial class RetentionPurgeExtensions
         string timestampColumn,
         TimeSpan minAge,
         int batchSize = DefaultBatchSize,
+        string? linkedRecordType = null,
         CancellationToken ct = default)
     {
         // Both identifiers are interpolated into SQL, so they are validated rather than trusted:
@@ -97,6 +104,29 @@ public static partial class RetentionPurgeExtensions
                 LIMIT {{batchSize}})
             """;
 
+        object[] parameters = [cutoff, tenantId];
+
+        // The links go in the same statement as their rows, so neither can outlive the other. The
+        // slice is a CTE both deletes read, so they agree on it; the row delete stays the outer
+        // statement so the command's affected rows still count rows.
+        if (linkedRecordType is not null)
+        {
+            sql = $$"""
+                WITH doomed AS (
+                    SELECT ctid, id FROM {{table}}
+                    WHERE tenant_id = {1} AND {{timestampColumn}} < {0}
+                    LIMIT {{batchSize}}),
+                unlinked AS (
+                    DELETE FROM linked_records
+                    WHERE tenant_id = {1} AND record_type = {2}
+                      AND record_id IN (SELECT id FROM doomed))
+                DELETE FROM {{table}}
+                WHERE tenant_id = {1}
+                  AND ctid IN (SELECT ctid FROM doomed)
+                """;
+            parameters = [cutoff, tenantId, linkedRecordType];
+        }
+
         var totalDeleted = 0;
         int batchDeleted;
 
@@ -104,7 +134,7 @@ public static partial class RetentionPurgeExtensions
         {
             await using var db = await factory.CreateForTenantAsync(tenantId, ct);
 
-            batchDeleted = await db.Database.ExecuteSqlRawAsync(sql, [cutoff, tenantId], ct);
+            batchDeleted = await db.Database.ExecuteSqlRawAsync(sql, parameters, ct);
 
             totalDeleted += batchDeleted;
         }

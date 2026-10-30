@@ -30,6 +30,32 @@ public class SoftDeleteCleanupTablesTests
 
         var tables = SoftDeleteCleanupService.SoftDeletableTables(context.Model);
 
-        tables.Should().Equal(Expected);
+        tables.Select(t => t.Table).Should().Equal(Expected);
+    }
+
+    [Fact]
+    public void SoftDeletableTables_NamesTheLinkedRecordTypeOfEveryDeduplicatedTable()
+    {
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseSqlite("DataSource=:memory:")
+            .Options;
+        using var context = new NocturneDbContext(options);
+
+        var linked = SoftDeleteCleanupService.SoftDeletableTables(context.Model)
+            .Where(t => t.LinkedRecordType is not null)
+            .ToDictionary(t => t.Table, t => t.LinkedRecordType);
+
+        linked.Should().BeEquivalentTo(new Dictionary<string, string?>
+        {
+            ["bg_checks"] = "bgcheck",
+            ["bolus_calculations"] = "boluscalculation",
+            ["boluses"] = "bolus",
+            ["carb_intakes"] = "carbintake",
+            ["device_events"] = "deviceevent",
+            ["notes"] = "note",
+            ["sensor_glucose"] = "sensorglucose",
+            ["state_spans"] = "statespan",
+            ["temp_basals"] = "tempbasal",
+        }, "a deduplicated table purged without its key would leave orphaned links behind");
     }
 }
