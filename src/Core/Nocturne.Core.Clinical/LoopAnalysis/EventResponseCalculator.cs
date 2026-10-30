@@ -87,14 +87,15 @@ public static class EventResponseCalculator
         {
             var result = new EventCohortResult { Cohort = cohort.Cohort, Response = EventAnchors.ResponseOf(cohort.Anchor) };
             var counted = new List<EventEpisode>();
-            foreach (var anchor in anchors.Of(cohort.Anchor))
+            foreach (var anchor in cohort.FoodFilterWithheld ? [] : anchors.Of(cohort.Anchor))
             {
                 if (anchor.Mills < from || anchor.Mills >= to || anchor.Mills + window.AfterMs > inputs.Now
                     || !mask.Analysed.Contains(anchor.Mills) || !Matches(cohort, anchor, zone))
                     continue;
                 if (anchor.Kind == EventAnchorKind.Meal && cohort.HasFoodFilter)
                 {
-                    if (!inputs.MealFoods.TryGetValue(anchor.Mills, out var foods) || foods.Count == 0)
+                    if (!inputs.MealFoods.TryGetValue(anchor.Mills, out var recorded)
+                        || recorded.Where(IsFoodRecord).ToList() is not { Count: > 0 } foods)
                     {
                         result.MealsWithoutFoodRecord++;
                         continue;
@@ -203,6 +204,9 @@ public static class EventResponseCalculator
             return false;
         return true;
     }
+
+    /// <summary>Whether a record names a food or a category; one of unspecified carbs is not a food record.</summary>
+    public static bool IsFoodRecord(MealFood food) => food.FoodId is not null || !string.IsNullOrWhiteSpace(food.Category);
 
     private static EventResponseEvent Event(EventEpisode episode, List<int> cohorts, TimeZoneInfo zone)
     {

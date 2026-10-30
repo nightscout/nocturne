@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using FluentAssertions;
+using Nocturne.API.Mcp;
 using Nocturne.API.Mcp.Reports;
 using Nocturne.API.Mcp.Reports.Datasets;
 using Nocturne.Core.Models.LoopAnalysis;
@@ -250,6 +251,49 @@ public partial class LoopAnalysisDatasetTests
         summary.Should().Contain("Food filter: 6 meals carried a food record, and 4 of them matched it. 9 meals had only carbs, with no food record, so the filter could not apply to them and they are not counted.");
         summary.Should().Contain("Median peak rise +68 mg/dL, 55 minutes after the event (middle half +40 to +90 mg/dL).");
         summary.Should().Contain("Back near the start within the window: 3 of 4 (75%).");
+    }
+
+    [Fact]
+    public void A_sensor_start_cohort_is_audited_as_device_events_not_treatments()
+    {
+        var report = new EventResponseReport
+        {
+            Definition = new EventResponseDefinition { Cohorts = [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.SensorStart }] },
+            Primary = new EventResponseRange { Events = [new EventResponseEvent { Anchor = EventAnchorKind.SensorStart }] },
+        };
+        report.WithheldSeries.AddRange([LoopAnalysisSeries.EventIob, LoopAnalysisSeries.EventCob, LoopAnalysisSeries.EventNetInsulin]);
+        var log = new McpToolReadLog();
+
+        EventResponseDataset.RecordReads(log, report, ran: true, readFoodNames: false);
+
+        log.Datasets.Should().Equal("glucose", "device_events");
+        log.RecordCount.Should().Be(1, "one sensor start was read; readings are not counted");
+    }
+
+    [Fact]
+    public void A_food_filtered_meal_cohort_is_audited_with_foods_and_its_events()
+    {
+        var report = new EventResponseReport
+        {
+            Definition = new EventResponseDefinition { Cohorts = [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodIds = [Pasta] }] },
+            Primary = new EventResponseRange { Events = [new EventResponseEvent { Anchor = EventAnchorKind.Meal }, new EventResponseEvent { Anchor = EventAnchorKind.Meal }] },
+        };
+        var log = new McpToolReadLog();
+
+        EventResponseDataset.RecordReads(log, report, ran: true, readFoodNames: true);
+
+        log.Datasets.Should().BeEquivalentTo(["foods", "glucose", "treatments"]);
+        log.RecordCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void An_event_panel_that_read_nothing_audits_nothing()
+    {
+        var log = new McpToolReadLog();
+
+        EventResponseDataset.RecordReads(log, new EventResponseReport(), ran: false, readFoodNames: false);
+
+        log.Datasets.Should().BeEmpty();
     }
 
     [Fact]

@@ -282,7 +282,7 @@ public class LoopAnalysisEventResponseIntegrationTests(ApiIntegrationTestFixture
     }
 
     [Fact]
-    public async Task Ignores_a_food_filter_without_food_read_and_says_so()
+    public async Task Withholds_a_food_filtered_cohort_without_food_read_and_says_so()
     {
         await SeedProfileAsync("Australia/Sydney");
         await SeedWeekAsync(WeekStart);
@@ -294,7 +294,9 @@ public class LoopAnalysisEventResponseIntegrationTests(ApiIntegrationTestFixture
         body.GetProperty("ignoredFilters").EnumerateArray().Select(f => f.GetString()).Should().Equal("foodIds1");
         body.GetProperty("unavailableFilters").EnumerateArray().Select(f => f.GetProperty("filter").GetString())
             .Should().Contain(["foodIds", "foodCategory"]);
-        body.GetProperty("primary").GetProperty("cohorts")[0].GetProperty("events").GetInt32().Should().Be(7);
+        body.GetProperty("primary").GetProperty("cohorts")[0].GetProperty("events").GetInt32()
+            .Should().Be(0, "a filter the caller may not apply leaves the cohort empty, never every meal");
+        body.GetProperty("definition").GetProperty("cohorts")[0].GetProperty("foodFilterWithheld").GetBoolean().Should().BeTrue();
     }
 
     [Theory]

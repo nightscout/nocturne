@@ -124,17 +124,33 @@ public class EventResponseCalculatorTests
             glucose: Flat(120), carbs: carbs, mealFoods: foods).Cohorts.Single();
         var unfiltered = Calculate([Cohort(1)], glucose: Flat(120), carbs: carbs, mealFoods: foods).Cohorts.Single();
 
+        // A record of unspecified carbs names no food, so that meal is counted as carbs only.
         byId.Events.Should().Be(1);
         byId.Anchors.Should().Be(1);
-        byId.MealsWithFoodRecord.Should().Be(3);
-        byId.MealsWithoutFoodRecord.Should().Be(1);
+        byId.MealsWithFoodRecord.Should().Be(2);
+        byId.MealsWithoutFoodRecord.Should().Be(2);
         byCategory.Events.Should().Be(1);
-        byCategory.MealsWithFoodRecord.Should().Be(3);
-        byCategory.MealsWithoutFoodRecord.Should().Be(1);
+        byCategory.MealsWithFoodRecord.Should().Be(2);
+        byCategory.MealsWithoutFoodRecord.Should().Be(2);
         both.Events.Should().Be(0);
         unfiltered.Events.Should().Be(4);
         unfiltered.MealsWithFoodRecord.Should().Be(0);
         unfiltered.MealsWithoutFoodRecord.Should().Be(0);
+    }
+
+    [Fact]
+    public void AWithheldFoodFilter_CountsNoEvents_NeverEveryMeal()
+    {
+        var lunch = Local(2024, 6, 11, 12);
+
+        var cohort = Calculate(
+            [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodFilterWithheld = true }],
+            glucose: Flat(120), carbs: [new(lunch, 60)]).Cohorts.Single();
+
+        cohort.Events.Should().Be(0);
+        cohort.Anchors.Should().Be(0);
+        cohort.MealsWithFoodRecord.Should().Be(0);
+        cohort.MealsWithoutFoodRecord.Should().Be(0);
     }
 
     [Fact]

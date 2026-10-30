@@ -266,6 +266,22 @@ public class ReportSpecRunnerTests
     }
 
     [Fact]
+    public async Task A_dataset_that_throws_fails_only_its_own_panel()
+    {
+        var fine = new FakeDataset("fine", Scope.GlucoseRead, TimeSpan.Zero);
+        var broken = new FakeDataset("broken", Scope.GlucoseRead, TimeSpan.Zero, fails: true);
+        var (runner, context, _) = Arrange(new ReportDatasetRegistry([fine, broken]), Scope.GlucoseRead);
+
+        var result = await runner.RunAsync(FakeSpec("broken", "fine"), context, CancellationToken.None);
+
+        result.Panels.Select(p => p.Status).Should().Equal(ReportPanelStatus.Failed, ReportPanelStatus.Ok);
+        result.Panels[0].Rows.Should().BeEmpty();
+        result.Panels[0].Summary.Should().Be(ReportSpecRunner.FailedNote).And.NotContain("a dataset bug");
+        result.Panels[1].Rows.Should().HaveCount(1);
+        result.Warnings.Should().ContainSingle().Which.Should().StartWith("Panel p1: Not shown");
+    }
+
+    [Fact]
     public async Task A_caller_that_cancels_is_not_reported_as_a_timeout()
     {
         var stuck = new FakeDataset("stuck", Scope.GlucoseRead, Timeout.InfiniteTimeSpan);
@@ -294,7 +310,7 @@ public class ReportSpecRunnerTests
         public override string DatasetName => Name;
     }
 
-    private sealed class FakeDataset(string name, string scope, TimeSpan delay) : IReportDataset
+    private sealed class FakeDataset(string name, string scope, TimeSpan delay, bool fails = false) : IReportDataset
     {
         public int Runs { get; private set; }
 
@@ -314,6 +330,8 @@ public class ReportSpecRunnerTests
         {
             Runs++;
             await Task.Delay(delay, cancellationToken);
+            if (fails)
+                throw new ArgumentOutOfRangeException(nameof(request), "a dataset bug");
             return new ReportDatasetOutput { Rows = [new Dictionary<string, object?> { ["value"] = 1 }], Summary = name };
         }
     }

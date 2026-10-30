@@ -76,6 +76,12 @@ public class EventCohortDefinition
     /// <summary>Local weekdays the anchor must fall on; null or empty for every day.</summary>
     public List<DayOfWeek>? DaysOfWeek { get; set; }
 
+    /// <summary>
+    /// The cohort asked for a food filter the caller may not read, so it counts no events: the
+    /// filter is removed and the cohort is never widened to every meal.
+    /// </summary>
+    public bool FoodFilterWithheld { get; set; }
+
     /// <summary>Whether the cohort is narrowed by the foods its meals carry.</summary>
     [JsonIgnore]
     public bool HasFoodFilter => FoodIds is { Count: > 0 } || !string.IsNullOrWhiteSpace(FoodCategory);

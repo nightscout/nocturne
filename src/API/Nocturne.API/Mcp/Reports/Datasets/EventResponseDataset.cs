@@ -190,8 +190,16 @@ internal sealed class EventResponseDataset : IReportDataset
                 kept.Add((asked[i], i + 1));
         }
 
-        var query = parameters.ToEventQuery([.. kept.Select(k => k.Cohort)]);
-        var definition = query.ToDefinition();
+        // With every cohort left out there is nothing to read; an empty query would mean every meal.
+        var definition = kept.Count > 0
+            ? parameters.ToEventQuery([.. kept.Select(k => k.Cohort)]).ToDefinition()
+            : new EventResponseDefinition
+            {
+                MinutesBefore = parameters.MinutesBefore,
+                MinutesAfter = parameters.MinutesAfter,
+                IsolatedOnly = parameters.IsolatedOnly,
+                RequireCorroboration = parameters.RequireCorroboration,
+            };
         var number = definition.Cohorts.ToDictionary(c => c.Cohort, c => kept[c.Cohort - 1].Number);
         var ignored = LoopAnalysisReadScopeGuard.NarrowEvents(definition, request.GrantedScopes)
             .Select(name => name.StartsWith("anchor", StringComparison.Ordinal) && int.TryParse(name[6..], out var n) && number.TryGetValue(n, out var original)
@@ -212,11 +220,8 @@ internal sealed class EventResponseDataset : IReportDataset
         var slotMinutes = EventResponseCalculator.SlotMinutes(definition);
 
         var events = report.Primary.Events;
-        var counted = report.Primary.Cohorts.Sum(c => c.Events);
-        if (counted > 0)
-            request.ReadLog.Record("glucose", counted);
-        if (events.Count > 0)
-            request.ReadLog.Record("treatments", events.Count);
+        RecordReads(request.ReadLog, report, ran: definition.Cohorts.Count > 0 && resolved.Filter is not null && resolved.Zone is not null,
+            readFoodNames: foodNames.Count > 0);
 
         var rows = request.Primitive == ReportPrimitive.Table
             ? EventRows(events.Take(MaxEvents), labels, number, useMmol)
@@ -246,20 +251,41 @@ internal sealed class EventResponseDataset : IReportDataset
         };
     }
 
-    /// <summary>The names of the foods the cohorts filter on, by id, where the token reads foods.</summary>
+    /// <summary>The category each anchor's events are records of, as the read audit names it.</summary>
+    internal static string AnchorCategory(EventAnchorKind anchor) =>
+        anchor == EventAnchorKind.SensorStart ? "device_events" : "treatments";
+
+    /// <summary>
+    /// The read-audit categories of what the panel read: glucose (readings, not counted here), each
+    /// cohort anchor's category with the events it read, treatments for the insulin and carb series
+    /// where they were served, and foods where a food filter ran or names were read.
+    /// </summary>
+    internal static void RecordReads(McpToolReadLog log, EventResponseReport report, bool ran, bool readFoodNames)
+    {
+        if (readFoodNames)
+            log.Record("foods", 0);
+        if (!ran)
+            return;
+        log.Record("glucose", 0);
+        var events = report.Primary.Events.Concat(report.Comparison?.Events ?? []).ToList();
+        foreach (var anchor in report.Definition.Cohorts.Select(c => c.Anchor).Distinct())
+            log.Record(AnchorCategory(anchor), events.Count(e => e.Anchor == anchor));
+        if (events.Count > 0 && new[] { LoopAnalysisSeries.EventIob, LoopAnalysisSeries.EventCob, LoopAnalysisSeries.EventNetInsulin }
+                .Any(s => !report.WithheldSeries.Contains(s)))
+            log.Record("treatments", 0);
+        if (report.Definition.Cohorts.Any(c => c.HasFoodFilter))
+            log.Record("foods", 0);
+    }
+
+    /// <summary>The names of the foods the cohorts filter on, by id, in one read, where the token reads foods.</summary>
     private static async Task<IReadOnlyDictionary<Guid, string>> FoodNamesAsync(
         IServiceProvider services, EventResponseDefinition definition, bool foodRead, CancellationToken ct)
     {
-        var names = new Dictionary<Guid, string>();
-        if (!foodRead)
-            return names;
-        var foods = services.GetRequiredService<IFoodRepository>();
-        foreach (var id in definition.Cohorts.SelectMany(c => c.FoodIds ?? []).Distinct())
-        {
-            if (await foods.GetFoodByIdAsync(id.ToString(), ct) is { } food)
-                names[id] = food.Name;
-        }
-        return names;
+        var ids = definition.Cohorts.SelectMany(c => c.FoodIds ?? []).Distinct().ToList();
+        if (!foodRead || ids.Count == 0)
+            return new Dictionary<Guid, string>();
+        var foods = await services.GetRequiredService<IFoodRepository>().GetFoodsByIdsAsync(ids, ct);
+        return foods.ToDictionary(f => f.Key, f => f.Value.Name);
     }
 
     /// <summary>A cohort's number, kind and filters: "Cohort 2: Meal, 06:00-10:00, Mon Tue, foods Penne or Rice".</summary>

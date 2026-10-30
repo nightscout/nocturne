@@ -29,6 +29,7 @@ public class McpLoopAnalysisIntegrationTests(ApiIntegrationTestFixture fixture, 
     private string _baseDomain = null!;
     private string _session = null!;
     private Guid _penne;
+    private Guid _tenantId;
 
     public override async Task InitializeAsync()
     {
@@ -39,6 +40,7 @@ public class McpLoopAnalysisIntegrationTests(ApiIntegrationTestFixture fixture, 
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
+        _tenantId = tenantId;
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = "SELECT slug FROM tenants WHERE id = @id;";
@@ -129,6 +131,112 @@ public class McpLoopAnalysisIntegrationTests(ApiIntegrationTestFixture fixture, 
         var refused = await CallToolAsync(client, "find_foods", new { query = "pen" });
         refused.TryGetProperty("error", out var scopeError).Should().BeTrue();
         scopeError.GetProperty("message").GetString().Should().Contain("food.read");
+    }
+
+    [Fact]
+    public async Task A_single_food_filtered_cohort_without_food_read_is_an_empty_panel_not_every_meal_or_an_error()
+    {
+        using var client = McpClient(await McpTokenAsync("glucose.read treatments.read"));
+
+        var call = await CallToolAsync(client, "render_report", new
+        {
+            spec = new
+            {
+                version = 1,
+                range = new { hours = 9 * 24 },
+                panels = new object[]
+                {
+                    new { id = "bands", dataset = new { name = "event_response", cohorts = new object[] { new { anchor = "Meal", foods = new[] { _penne } } } }, primitive = "range_bands" },
+                    new { id = "events", dataset = new { name = "event_response", cohorts = new object[] { new { anchor = "Meal", foodCategory = "Pasta" } } }, primitive = "table" },
+                },
+            },
+        });
+
+        call.TryGetProperty("error", out var error).Should().BeFalse(error.ToString());
+        call.GetProperty("result").TryGetProperty("isError", out var isError).Should().BeFalse(isError.ToString());
+        var text = ToolText(call);
+        text.Should().Contain("Cohort 1 is not shown: its food filter needs the food.read scope");
+        text.Should().Contain("This token's scopes show no cohort.");
+        text.Should().NotContain("events.", "no cohort ran, so nothing is counted");
+        foreach (var panel in call.GetProperty("result").GetProperty("structuredContent").GetProperty("panels").EnumerateArray())
+        {
+            panel.GetProperty("status").GetString().Should().Be("ok");
+            panel.GetProperty("rows").GetArrayLength().Should().Be(0, "the food-filtered cohort is never widened to every meal");
+        }
+    }
+
+    [Fact]
+    public async Task Find_foods_counts_carb_entries_only_for_a_token_that_reads_treatments()
+    {
+        var since = DateTime.UtcNow;
+        await SetReadAuditAsync(true);
+        try
+        {
+            await FindFoodsWithAndWithoutTreatmentsAsync(since);
+        }
+        finally
+        {
+            await SetReadAuditAsync(false);
+        }
+    }
+
+    private async Task FindFoodsWithAndWithoutTreatmentsAsync(DateTime since)
+    {
+
+        using (var foodOnly = McpClient(await McpTokenAsync("food.read")))
+        {
+            var call = await CallToolAsync(foodOnly, "find_foods", new { query = "pen" });
+            var text = ToolText(call);
+            text.Should().Contain($"Penne (id {_penne}, category Pasta).");
+            text.Should().Contain("Carb entries are not counted: they need the treatments.read scope");
+            text.Should().NotContain("carb entr", "no count of meals reaches a token without treatments.read")
+                .And.NotContain("90 days");
+            var food = call.GetProperty("result").GetProperty("structuredContent").GetProperty("foods")[0];
+            food.GetProperty("carbEntries").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+
+        using (var withTreatments = McpClient(await McpTokenAsync("food.read treatments.read")))
+            ToolText(await CallToolAsync(withTreatments, "find_foods", new { query = "pen" }))
+                .Should().Contain("Penne (id " + _penne + ", category Pasta): 2 carb entries in the last 90 days.");
+
+        var rows = await AuditEntitiesAsync("MCP find_foods", since, 2);
+        rows.Should().Equal(["foods", "foods,treatments"], "the counts read carb entries, the food.read-only call did not");
+    }
+
+    private async Task SetReadAuditAsync(bool enabled)
+    {
+        using var session = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slug, _baseDomain, _session);
+        var response = await session.PutAsJsonAsync("/api/v4/audit/config", new { readAuditEnabled = enabled });
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// The read-audit entity types of a tool's calls since <paramref name="since"/>, oldest first, once
+    /// <paramref name="expected"/> rows are written.
+    /// </summary>
+    private async Task<List<string?>> AuditEntitiesAsync(string endpoint, DateTime since, int expected)
+    {
+        var rows = new List<string?>();
+        for (var attempt = 0; attempt < 50 && rows.Count < expected; attempt++)
+        {
+            await Task.Delay(100);
+            rows.Clear();
+            await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT set_config('app.current_tenant_id', @t, false);
+                SELECT entity_type FROM read_access_log WHERE endpoint = @e AND created_at >= @since ORDER BY created_at;
+                """;
+            cmd.Parameters.AddWithValue("t", _tenantId.ToString());
+            cmd.Parameters.AddWithValue("e", endpoint);
+            cmd.Parameters.AddWithValue("since", since);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            await reader.NextResultAsync();
+            while (await reader.ReadAsync())
+                rows.Add(reader.IsDBNull(0) ? null : reader.GetString(0));
+        }
+        return rows;
     }
 
     [Fact]

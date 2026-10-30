@@ -54,7 +54,7 @@ export interface ReportResolution {
   downsampled: boolean;
 }
 
-export type ReportPanelStatus = "ok" | "not_permitted" | "timed_out";
+export type ReportPanelStatus = "ok" | "not_permitted" | "timed_out" | "failed";
 
 export interface ReportPanel {
   id: string;

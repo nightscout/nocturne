@@ -128,8 +128,15 @@ internal sealed class DailyProfileDataset : IReportDataset
         var readings = report.Primary.Slots.Sum(s => s.Glucose?.N ?? 0);
         if (readings > 0)
             request.ReadLog.Record("glucose", readings);
-        if (report.Primary.Days.Count > 0 && request.HasScope(Scope.TreatmentsRead))
-            request.ReadLog.Record("treatments", 0);
+        if (report.Primary.Days.Count > 0)
+        {
+            // Categories by the series served; their slot values are aggregates, so no count is given.
+            bool Served(params LoopAnalysisSeries[] series) => series.Any(s => !report.WithheldSeries.Contains(s));
+            if (Served(LoopAnalysisSeries.DeliveredBasal, LoopAnalysisSeries.NetLoopCorrection, LoopAnalysisSeries.Iob, LoopAnalysisSeries.Cob))
+                request.ReadLog.Record("treatments", 0);
+            if (Served(LoopAnalysisSeries.ScheduledBasal, LoopAnalysisSeries.Target))
+                request.ReadLog.Record("profiles", 0);
+        }
 
         return new ReportDatasetOutput
         {

@@ -103,9 +103,11 @@ internal sealed class SettingsEvidenceDataset : IReportDataset
         report = Serve(resolved, report, request);
 
         var rows = report.Primary is { } primary ? Rows(primary, parameters.Setting, request.UseMmol) : [];
-        if (rows.Count > 0)
+        // The figures come from glucose, insulin and the profile together; the rows are figures, not
+        // records, so no count is given.
+        if (report.Primary is not null)
         {
-            request.ReadLog.Record("glucose", rows.Count);
+            request.ReadLog.Record("glucose", 0);
             request.ReadLog.Record("treatments", 0);
             request.ReadLog.Record("profiles", 0);
         }

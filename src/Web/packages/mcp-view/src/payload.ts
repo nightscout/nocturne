@@ -16,7 +16,7 @@ const reportResultSchema = z.object({
       id: z.string(),
       dataset: z.string(),
       primitive: z.enum(["time_series", "stat_tiles", "table", "glucose_chart", "range_bands"]),
-      status: z.enum(["ok", "not_permitted", "timed_out"]),
+      status: z.enum(["ok", "not_permitted", "timed_out", "failed"]),
       window: z.object({ from: z.number(), to: z.number() }),
       fields: z.array(z.object({ name: z.string(), label: z.string() }).passthrough()).default([]),
       rows: z.array(z.record(z.string(), z.unknown())).default([]),

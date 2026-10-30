@@ -165,7 +165,7 @@ public partial class AnalyticsReadScopeGuardTests
     }
 
     [Fact]
-    public void LoopAnalysis_Events_WithoutFood_DropTheFoodFiltersAndKeepTheCohort()
+    public void LoopAnalysis_Events_WithoutFood_WithholdTheFilteredCohortsInsteadOfWideningThem()
     {
         var food = Guid.NewGuid();
         var definition = new EventResponseDefinition
@@ -181,7 +181,7 @@ public partial class AnalyticsReadScopeGuardTests
 
         ignored.Should().Equal("foodIds1", "foodCategory2");
         definition.Cohorts.Should().HaveCount(2);
-        definition.Cohorts.Should().OnlyContain(c => !c.HasFoodFilter);
+        definition.Cohorts.Should().OnlyContain(c => !c.HasFoodFilter && c.FoodFilterWithheld);
         definition.Cohorts[0].DaysOfWeek.Should().Equal(DayOfWeek.Monday);
         LoopAnalysisReadScopeGuard.UnavailableEventFilters(Granted(Scope.GlucoseRead, Scope.TreatmentsRead)).Select(f => f.Filter)
             .Should().Equal("foodIds", "foodCategory");
@@ -198,6 +198,19 @@ public partial class AnalyticsReadScopeGuardTests
         LoopAnalysisReadScopeGuard.NarrowEvents(definition, Granted(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.FoodRead))
             .Should().BeEmpty();
         definition.Cohorts[0].FoodCategory.Should().Be("Pasta");
+        definition.Cohorts[0].FoodFilterWithheld.Should().BeFalse();
+    }
+
+    [Fact]
+    public void LoopAnalysis_Events_WithoutFood_LeaveACohortWithNoFoodFilterAsItIs()
+    {
+        var definition = new EventResponseDefinition
+        {
+            Cohorts = [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal }],
+        };
+
+        LoopAnalysisReadScopeGuard.NarrowEvents(definition, Granted(Scope.GlucoseRead, Scope.TreatmentsRead)).Should().BeEmpty();
+        definition.Cohorts[0].FoodFilterWithheld.Should().BeFalse();
     }
 
     [Fact]

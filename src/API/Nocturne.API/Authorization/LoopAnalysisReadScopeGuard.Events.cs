@@ -49,8 +49,10 @@ internal static partial class LoopAnalysisReadScopeGuard
         AnchorScopes[anchor].FirstOrDefault(scope => !AnalyticsReadScopes.Allows(grantedScopes, scope));
 
     /// <summary>
-    /// Drops from <paramref name="definition"/> every cohort whose anchor the caller could not read,
-    /// the options without <c>treatments.read</c>, and the food filters without <c>food.read</c>.
+    /// Drops from <paramref name="definition"/> every cohort whose anchor the caller could not read
+    /// and the options without <c>treatments.read</c>. Without <c>food.read</c> a food-filtered
+    /// cohort loses its filter and is marked <see cref="EventCohortDefinition.FoodFilterWithheld"/>,
+    /// so it counts no events rather than every meal.
     /// </summary>
     /// <returns>
     /// The query parameters ignored: each dropped cohort's <c>anchor{n}</c>, the options, and each
@@ -80,6 +82,7 @@ internal static partial class LoopAnalysisReadScopeGuard
                 foreach (var filter in FoodFilters.Where(f => f.IsSet(cohort)))
                 {
                     filter.Clear(cohort);
+                    cohort.FoodFilterWithheld = true;
                     ignored.Add($"{filter.Name}{cohort.Cohort}");
                 }
             }

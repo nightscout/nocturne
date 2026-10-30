@@ -58,6 +58,19 @@ public class FoodRepository : IFoodRepository
         return entity != null ? FoodMapper.ToDomainModel(entity) : null;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, Food>> GetFoodsByIdsAsync(
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (ids.Count == 0)
+            return new Dictionary<Guid, Food>();
+        await using var db = await _contexts.CreateAsync(cancellationToken);
+        var entities = await db.Foods.AsNoTracking().Where(f => ids.Contains(f.Id)).ToListAsync(cancellationToken);
+        return entities.ToDictionary(e => e.Id, FoodMapper.ToDomainModel);
+    }
+
     /// <summary>
     /// The food <paramref name="id"/> names: its legacy ObjectId, its own UUID, or the id v3 serves
     /// for it (<see cref="MongoObjectId.Coerce"/>), which is the UUID's 24-hex prefix, or a hash of a

@@ -576,6 +576,7 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task EveryToolCall_WritesOneReadAuditRow_FailedCallsIncluded()
     {
+        var since = DateTime.UtcNow;
         using (var session = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _sessionA))
         {
             var enabled = await session.PutAsJsonAsync("/api/v4/audit/config", new { readAuditEnabled = true });
@@ -615,9 +616,10 @@ public class McpEndpointIntegrationTests : ApiIntegrationTestBase
             cmd.CommandText = """
                 SELECT set_config('app.current_tenant_id', @t, false);
                 SELECT status_code, query_parameters::text, entity_type FROM read_access_log
-                WHERE endpoint IN ('MCP show_glucose', 'MCP render_report') ORDER BY created_at;
+                WHERE endpoint IN ('MCP show_glucose', 'MCP render_report') AND created_at >= @since ORDER BY created_at;
                 """;
             cmd.Parameters.AddWithValue("t", _tenantAId.ToString());
+            cmd.Parameters.AddWithValue("since", since);
             await using var reader = await cmd.ExecuteReaderAsync();
             await reader.NextResultAsync();
             while (await reader.ReadAsync())

@@ -48,6 +48,10 @@ internal enum ReportPanelStatus
     /// <summary>Not finished within the report's time limit.</summary>
     [JsonStringEnumMemberName("timed_out")]
     TimedOut,
+
+    /// <summary>The dataset failed; the other panels are still drawn.</summary>
+    [JsonStringEnumMemberName("failed")]
+    Failed,
 }
 
 internal sealed record ReportPanelResult

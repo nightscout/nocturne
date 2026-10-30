@@ -24,9 +24,10 @@ internal sealed record ReportRunContext(
 /// Panels run in turn, not together: the datasets share the request's scoped services, which are
 /// not made for concurrent use. The whole report has <see cref="Timeout"/>; panels not finished by
 /// then come back <see cref="ReportPanelStatus.TimedOut"/> and named in a warning, beside the
-/// finished ones.
+/// finished ones. A dataset that throws fails only its own panel (<see cref="ReportPanelStatus.Failed"/>),
+/// in the same way.
 /// </remarks>
-internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProvider time)
+internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProvider time, ILogger<ReportSpecRunner>? logger = null)
 {
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(20);
 
@@ -34,6 +35,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
 
     /// <summary>How far back a history-clamped caller reads; the database clamps reads to the same window.</summary>
     public static readonly TimeSpan ClampedHistory = TimeSpan.FromHours(24);
+
+    internal const string FailedNote = "Not shown: an error occurred when this panel was read. The other panels are not affected.";
 
     internal const string LimitedNote = "Limited to the last 24 hours: this token does not read older data.";
 
@@ -88,6 +91,12 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 panels.Add(TimedOut(panel, dataset, from, to));
                 continue;
             }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger?.LogError(ex, "Report dataset {Dataset} failed for panel {Panel}", dataset.Name, panel.Id);
+                panels.Add(Empty(panel, dataset, from, to, ReportPanelStatus.Failed, FailedNote));
+                continue;
+            }
 
             var resolved = Resolve(panel, dataset, from, to, output, context.UseMmol);
             panels.Add(limited ? resolved with { Summary = resolved.Summary + '\n' + LimitedNote, Limited = true } : resolved);
@@ -100,6 +109,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
                 $"{(timedOut.Count == 1 ? "Panel" : "Panels")} {string.Join(", ", timedOut)} did not finish in "
                 + $"{Timeout.TotalSeconds.ToString("0", CultureInfo.InvariantCulture)} seconds and {(timedOut.Count == 1 ? "has" : "have")} no data. "
                 + "Ask for a shorter range or fewer panels.");
+        var failed = panels.Where(p => p.Status == ReportPanelStatus.Failed).Select(p => p.Id).ToList();
+        if (failed.Count > 0)
+            warnings.Add($"{(failed.Count == 1 ? "Panel" : "Panels")} {string.Join(", ", failed)}: {FailedNote}");
         var limitedPanels = panels.Where(p => p.Limited).Select(p => p.Id).ToList();
         if (limitedPanels.Count > 0)
             warnings.Add($"{(limitedPanels.Count == 1 ? "Panel" : "Panels")} {string.Join(", ", limitedPanels)}: {LimitedNote}");
