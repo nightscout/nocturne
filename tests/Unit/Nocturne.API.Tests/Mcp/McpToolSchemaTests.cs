@@ -18,6 +18,12 @@ public class McpToolSchemaTests(AuthenticationTestFactory factory) : IClassFixtu
     [InlineData("describe_dataset", new[] { "name" })]
     [InlineData("refine_report", new[] { "spec", "patch" })]
     [InlineData("find_foods", new[] { "query" })]
+    [InlineData("show_agp", new[] { "days" })]
+    [InlineData("show_treatments", new[] { "hours" })]
+    [InlineData("get_glucose_statistics", new[] { "days" })]
+    [InlineData("get_recent_treatments", new[] { "hours", "types" })]
+    [InlineData("get_profile_summary", new string[0])]
+    [InlineData("get_loop_health", new[] { "days" })]
     public void The_audit_keeps_the_arguments_the_input_schema_declares(string name, string[] declared)
     {
         var tools = factory.Services.GetRequiredService<IOptions<McpServerOptions>>().Value.ToolCollection!;

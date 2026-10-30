@@ -23,19 +23,31 @@ internal static class LoopAnalysisDatasetRun
     /// The request for the local days the panel's range touches, with these masks and, when given, a
     /// comparison range. A history-clamped caller is read over its last 24 hours, as on the pages.
     /// </summary>
-    public static async Task<LoopAnalysisRequest> ResolveAsync(
+    public static Task<LoopAnalysisRequest> ResolveAsync(
         ReportDatasetRequest request,
+        LoopAnalysisDatasetParameters parameters,
+        ReportDateRange? comparison,
+        CancellationToken ct) =>
+        ResolveAsync(request.Services, request.From, request.To, request.GrantedScopes, request.HistoryClamped, parameters, comparison, ct);
+
+    /// <summary>The request for the local days <paramref name="from"/> to <paramref name="to"/> touch, for a caller outside a report panel.</summary>
+    public static async Task<LoopAnalysisRequest> ResolveAsync(
+        IServiceProvider services,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        IReadOnlySet<string> grantedScopes,
+        bool historyClamped,
         LoopAnalysisDatasetParameters parameters,
         ReportDateRange? comparison,
         CancellationToken ct)
     {
-        var clock = request.Services.GetRequiredService<TenantClockResolver>();
-        var time = request.Services.GetRequiredService<TimeProvider>();
+        var clock = services.GetRequiredService<TenantClockResolver>();
+        var time = services.GetRequiredService<TimeProvider>();
         var zone = (await clock.ResolveAsync(ct)).Zone ?? TimeZoneInfo.Utc;
 
         var query = parameters.ToQuery(
-            LocalSlotBinning.LocalDay(request.From.ToUnixTimeMilliseconds(), zone),
-            LocalSlotBinning.LocalDay(request.To.ToUnixTimeMilliseconds() - 1, zone));
+            LocalSlotBinning.LocalDay(from.ToUnixTimeMilliseconds(), zone),
+            LocalSlotBinning.LocalDay(to.ToUnixTimeMilliseconds() - 1, zone));
         var sent = new HashSet<string>(parameters.Sent(), StringComparer.OrdinalIgnoreCase);
         if (comparison is not null)
         {
@@ -46,12 +58,15 @@ internal static class LoopAnalysisDatasetRun
         }
 
         return await new LoopAnalysisRequestResolver(clock, time)
-            .ResolveAsync(query, request.GrantedScopes, request.HistoryClamped, sent, ct);
+            .ResolveAsync(query, grantedScopes, historyClamped, sent, ct);
     }
 
     /// <summary>The page's response filled and narrowed for the caller, as the controller serves it.</summary>
     public static T Serve<T>(LoopAnalysisRequest resolved, T response, ReportDatasetRequest request) where T : LoopAnalysisResponse =>
-        LoopAnalysisReadScopeGuard.Redact(resolved.Fill(response), request.GrantedScopes);
+        Serve(resolved, response, request.GrantedScopes);
+
+    public static T Serve<T>(LoopAnalysisRequest resolved, T response, IReadOnlySet<string> grantedScopes) where T : LoopAnalysisResponse =>
+        LoopAnalysisReadScopeGuard.Redact(resolved.Fill(response), grantedScopes);
 
     /// <summary>The range read, for the panel's window.</summary>
     public static ReportWindow? Window(LoopAnalysisResponse response) =>

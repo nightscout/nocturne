@@ -36,6 +36,8 @@ internal static class McpServiceExtensions
             .WithTools<GlucoseTools>()
             .WithTools<DatasetTools>()
             .WithTools<FoodTools>()
+            .WithTools<PresetTools>()
+            .WithTools<SummaryTools>()
             .WithResources<ReportResources>()
             .WithRequestFilters(filters =>
             {
