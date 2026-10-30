@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.Storage;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -155,6 +156,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFoodRepository, FoodRepository>();
 
         services.AddScoped<ISettingsRepository, SettingsRepository>();
+        services.AddTransient<IOAuthTokenRepository, OAuthTokenRepository>();
 
         // Register avatar storage
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();
