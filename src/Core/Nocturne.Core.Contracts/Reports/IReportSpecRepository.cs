@@ -13,6 +13,9 @@ public interface IReportSpecRepository
 
     Task<SavedReportSpec?> GetAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>The number of live custom reports.</summary>
+    Task<int> CountAsync(CancellationToken ct = default);
+
     Task<SavedReportSpecWrite> CreateAsync(
         string name, string specJson, int version, Guid? createdBySubjectId, CancellationToken ct = default);
 

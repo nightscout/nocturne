@@ -158,7 +158,9 @@ public class CustomReportTests
     [Theory]
     [InlineData("", "Enter a name.")]
     [InlineData("   ", "Enter a name.")]
-    [InlineData("a\nb", "A name cannot have line breaks or control characters.")]
+    [InlineData("a\nb", "A name cannot have line breaks, control characters or hidden format characters.")]
+    [InlineData("Lunch\u202Eevil", "A name cannot have line breaks, control characters or hidden format characters.")]
+    [InlineData("Lunch\u200B", "A name cannot have line breaks, control characters or hidden format characters.")]
     public void A_name_is_refused_with_a_reason(string name, string message)
     {
         var errors = new List<CustomReportSpecError>();
@@ -194,6 +196,8 @@ public class CustomReportTests
         public Task<SavedReportSpec?> GetAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult(Rows.FirstOrDefault(r => r.Id == id));
 
+        public Task<int> CountAsync(CancellationToken ct = default) => Task.FromResult(Rows.Count);
+
         public Task<SavedReportSpecWrite> CreateAsync(string name, string specJson, int version, Guid? createdBySubjectId, CancellationToken ct = default)
         {
             if (Rows.Any(r => r.Name == name))
@@ -203,11 +207,21 @@ public class CustomReportTests
             return Task.FromResult(new SavedReportSpecWrite(SavedReportSpecWriteStatus.Saved, row));
         }
 
-        public Task<SavedReportSpecWrite> UpdateAsync(Guid id, string? name, string? specJson, int? version, CancellationToken ct = default) =>
-            throw new NotSupportedException();
+        public Task<SavedReportSpecWrite> UpdateAsync(Guid id, string? name, string? specJson, int? version, CancellationToken ct = default)
+        {
+            var index = Rows.FindIndex(r => r.Id == id);
+            if (index < 0)
+                return Task.FromResult(new SavedReportSpecWrite(SavedReportSpecWriteStatus.NotFound));
+            Rows[index] = Rows[index] with { Name = name ?? Rows[index].Name };
+            return Task.FromResult(new SavedReportSpecWrite(SavedReportSpecWriteStatus.Saved, Rows[index]));
+        }
 
-        public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default) => Task.FromResult(Rows.RemoveAll(r => r.Id == id) > 0);
     }
+
+    private static readonly Guid Creator = Guid.CreateVersion7();
+
+    private static readonly CustomReportEditor Member = new(Creator, EditsAll: false);
 
     private static ReportSpecStore Store(FakeRepository repository)
     {
@@ -224,7 +238,7 @@ public class CustomReportTests
         var repository = new FakeRepository();
         var store = Store(repository);
 
-        var saved = await store.CreateAsync(" Lunch ", JsonDocument.Parse(TwoPanels).RootElement, null, default);
+        var saved = await store.CreateAsync(" Lunch ", JsonDocument.Parse(TwoPanels).RootElement, Member, default);
 
         saved.Status.Should().Be(CustomReportWriteStatus.Saved);
         saved.Report!.Name.Should().Be("Lunch");
@@ -234,11 +248,11 @@ public class CustomReportTests
 
         var refused = await store.CreateAsync("Other", JsonDocument.Parse("""
             { "version": 1, "panels": [{ "dataset": { "name": "insulin" }, "primitive": "time_series", "bindings": { "y": ["glucose"] } }] }
-            """).RootElement, null, default);
+            """).RootElement, Member, default);
         refused.Status.Should().Be(CustomReportWriteStatus.Invalid);
         refused.Errors.Should().ContainSingle().Which.Path.Should().Be("panels[0].dataset.name");
 
-        var taken = await store.CreateAsync("Lunch", JsonDocument.Parse(TwoPanels).RootElement, null, default);
+        var taken = await store.CreateAsync("Lunch", JsonDocument.Parse(TwoPanels).RootElement, Member, default);
         taken.Status.Should().Be(CustomReportWriteStatus.NameTaken);
         repository.Rows.Should().ContainSingle();
     }
@@ -250,7 +264,7 @@ public class CustomReportTests
         const string old = """{"version":0,"panels":[{"dataset":{"name":"glucose_series"},"primitive":"time_series","bindings":{"y":["glucose"]}}]}""";
         repository.Rows.Add(new SavedReportSpec(Guid.CreateVersion7(), "Old", old, 0, null, DateTime.UtcNow, DateTime.UtcNow));
 
-        var report = await Store(repository).GetAsync(repository.Rows[0].Id, default);
+        var report = await Store(repository).GetAsync(repository.Rows[0].Id, Member, default);
 
         report!.Errors.Should().ContainSingle().Which.Path.Should().Be("version");
         report.Spec.GetProperty("version").GetInt32().Should().Be(0);
@@ -262,8 +276,56 @@ public class CustomReportTests
         var huge = JsonDocument.Parse(
             "{\"version\":1,\"title\":\"" + new string('a', ReportSpecLink.MaxSpecBytes) + "\",\"panels\":[]}").RootElement;
 
-        var write = await Store(new FakeRepository()).CreateAsync("Big", huge, null, default);
+        var write = await Store(new FakeRepository()).CreateAsync("Big", huge, Member, default);
 
         write.Errors.Should().ContainSingle().Which.Should().Be(new CustomReportSpecError("spec", ReportSpecLink.TooLarge));
+    }
+
+    [Fact]
+    public async Task A_missing_spec_is_an_error_naming_the_spec_not_an_exception()
+    {
+        var store = Store(new FakeRepository());
+
+        (await store.CreateAsync("No spec", null, Member, default)).Errors
+            .Should().ContainSingle().Which.Should().Be(new CustomReportSpecError("spec", "Send a spec."));
+        (await store.CreateAsync("Undefined", default(JsonElement), Member, default)).Errors
+            .Should().ContainSingle().Which.Path.Should().Be("spec");
+    }
+
+    [Fact]
+    public async Task The_tenant_keeps_at_most_100_reports()
+    {
+        var repository = new FakeRepository();
+        for (var i = 0; i < ReportSpecStore.MaxReports; i++)
+            repository.Rows.Add(new SavedReportSpec(Guid.CreateVersion7(), $"r{i}", "{}", 1, Creator, DateTime.UtcNow, DateTime.UtcNow));
+
+        var write = await Store(repository).CreateAsync("One more", JsonDocument.Parse(TwoPanels).RootElement, Member, default);
+
+        write.Status.Should().Be(CustomReportWriteStatus.Invalid);
+        write.Errors.Should().ContainSingle().Which.Should().Be(new CustomReportSpecError("name", ReportSpecStore.TooMany));
+        repository.Rows.Should().HaveCount(ReportSpecStore.MaxReports);
+    }
+
+    [Fact]
+    public async Task Only_the_creator_or_a_member_who_edits_every_report_renames_or_deletes()
+    {
+        var repository = new FakeRepository();
+        var store = Store(repository);
+        var saved = (await store.CreateAsync("Mine", JsonDocument.Parse(TwoPanels).RootElement, Member, default)).Report!;
+        saved.CanEdit.Should().BeTrue();
+
+        var other = new CustomReportEditor(Guid.CreateVersion7(), EditsAll: false);
+        (await store.ListAsync(other, default)).Single().CanEdit.Should().BeFalse();
+        (await store.GetAsync(saved.Id, other, default))!.CanEdit.Should().BeFalse();
+        (await store.UpdateAsync(saved.Id, "Taken", null, other, default)).Status.Should().Be(CustomReportWriteStatus.Forbidden);
+        (await store.DeleteAsync(saved.Id, other, default)).Should().Be(CustomReportWriteStatus.Forbidden);
+        (await store.DeleteAsync(saved.Id, new CustomReportEditor(null, EditsAll: false), default))
+            .Should().Be(CustomReportWriteStatus.Forbidden, "a caller with no subject owns nothing");
+
+        (await store.UpdateAsync(saved.Id, "Renamed", null, Member, default)).Status.Should().Be(CustomReportWriteStatus.Saved);
+        var owner = new CustomReportEditor(Guid.CreateVersion7(), EditsAll: true);
+        (await store.ListAsync(owner, default)).Single().CanEdit.Should().BeTrue();
+        (await store.DeleteAsync(saved.Id, owner, default)).Should().Be(CustomReportWriteStatus.Saved);
+        (await store.DeleteAsync(saved.Id, owner, default)).Should().Be(CustomReportWriteStatus.NotFound);
     }
 }

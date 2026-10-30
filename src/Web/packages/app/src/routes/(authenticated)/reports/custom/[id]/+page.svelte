@@ -102,14 +102,16 @@
             <Link class="size-4" aria-hidden="true" />
             Copy link
           </Button>
-          <Button variant="outline" size="sm" onclick={startRename}>
-            <Pencil class="size-4" aria-hidden="true" />
-            Rename
-          </Button>
-          <Button variant="outline" size="sm" onclick={() => (confirmingDelete = true)}>
-            <Trash2 class="size-4" aria-hidden="true" />
-            Delete
-          </Button>
+          {#if report.canEdit}
+            <Button variant="outline" size="sm" onclick={startRename}>
+              <Pencil class="size-4" aria-hidden="true" />
+              Rename
+            </Button>
+            <Button variant="outline" size="sm" onclick={() => (confirmingDelete = true)}>
+              <Trash2 class="size-4" aria-hidden="true" />
+              Delete
+            </Button>
+          {/if}
         </div>
       {/if}
     </div>

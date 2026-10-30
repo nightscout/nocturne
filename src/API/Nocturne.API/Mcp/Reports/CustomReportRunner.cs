@@ -31,24 +31,25 @@ internal sealed class CustomReportRunner(
     public async Task<CustomReportRunResponse> RunAsync(CustomReportRunRequest request, CancellationToken cancellationToken)
     {
         JsonElement spec;
+        var given = request.Spec is { ValueKind: not (JsonValueKind.Undefined or JsonValueKind.Null) } sent ? sent : (JsonElement?)null;
         if (request.Encoded is not null)
         {
-            if (request.Spec is not null)
-                return Refused(null, new CustomReportSpecError("spec", "Send the spec or the encoded spec, not both."));
+            if (given is not null)
+                return await RefusedAsync(null, "Send the spec or the encoded spec, not both.", cancellationToken);
             var read = ReportSpecLink.Decode(request.Encoded);
             if (read.Spec is not { } decoded)
-                return Refused(null, new CustomReportSpecError("spec", read.Error!));
+                return await RefusedAsync(null, read.Error!, cancellationToken);
             spec = decoded;
         }
-        else if (request.Spec is { } given)
+        else if (given is { } inline)
         {
-            if (!ReportSpecLink.WithinLimit(given))
-                return Refused(null, new CustomReportSpecError("spec", ReportSpecLink.TooLarge));
-            spec = given;
+            if (!ReportSpecLink.WithinLimit(inline))
+                return await RefusedAsync(null, ReportSpecLink.TooLarge, cancellationToken);
+            spec = inline;
         }
         else
         {
-            return Refused(null, new CustomReportSpecError("spec", "Send a spec."));
+            return await RefusedAsync(null, ReportSpecStore.SendASpec, cancellationToken);
         }
 
         var validation = validator.Validate(
@@ -78,12 +79,21 @@ internal sealed class CustomReportRunner(
     private static CustomReportRunResponse Refused(JsonElement? spec, params CustomReportSpecError[] errors) =>
         new(null, spec, errors);
 
-    private Task AuditAsync(JsonElement spec, int status, CancellationToken cancellationToken)
+    /// <summary>A run refused before the spec could be read: audited as a 400 that read nothing, as <c>render_report</c> audits every call.</summary>
+    private async Task<CustomReportRunResponse> RefusedAsync(JsonElement? spec, string message, CancellationToken cancellationToken)
+    {
+        await AuditAsync(spec, StatusCodes.Status400BadRequest, cancellationToken);
+        return Refused(spec, new CustomReportSpecError("spec", message));
+    }
+
+    private Task AuditAsync(JsonElement? spec, int status, CancellationToken cancellationToken)
     {
         var http = httpContextAccessor.HttpContext
             ?? throw new InvalidOperationException("A custom report ran outside an HTTP request.");
-        var arguments = McpToolGuard.SanitizeArguments(
-            new Dictionary<string, JsonElement> { ["spec"] = spec }, new HashSet<string>(StringComparer.Ordinal) { "spec" });
+        var arguments = spec is { } sent
+            ? McpToolGuard.SanitizeArguments(
+                new Dictionary<string, JsonElement> { ["spec"] = sent }, new HashSet<string>(StringComparer.Ordinal) { "spec" })
+            : null;
         return McpToolGuard.WriteReadAuditAsync(services, http, AuditEndpoint, tenantId => McpToolGuard.BuildReadEntry(
             tenantId, AuditEndpoint, arguments, status, readLog, audit, http, DateTime.UtcNow), cancellationToken);
     }

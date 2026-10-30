@@ -24,6 +24,12 @@ public sealed class ReportSpecRepository(INocturneDbContextFactory contexts) : I
         return row is null ? null : ToModel(row);
     }
 
+    public async Task<int> CountAsync(CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        return await db.ReportSpecs.CountAsync(ct);
+    }
+
     public async Task<SavedReportSpecWrite> CreateAsync(
         string name, string specJson, int version, Guid? createdBySubjectId, CancellationToken ct = default)
     {

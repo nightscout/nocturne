@@ -125,6 +125,11 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         (await b.PutAsJsonAsync($"{Route}/{id}", new { name = "Taken over" })).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await b.DeleteAsync($"{Route}/{id}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
 
+        var other = await ReadAsync(await a.PostAsJsonAsync(Route, new { name = "Evenings", spec = Spec() }), HttpStatusCode.OK);
+        var clash = await ReadAsync(await a.PutAsJsonAsync($"{Route}/{id}", new { name = "Evenings" }), HttpStatusCode.Conflict);
+        clash.GetProperty("errors").GetProperty("name")[0].GetString().Should().Contain("Another custom report has this name");
+        (await a.DeleteAsync($"{Route}/{other.GetProperty("id").GetGuid()}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
         var renamed = await ReadAsync(await a.PutAsJsonAsync($"{Route}/{id}", new { name = "Mornings" }), HttpStatusCode.OK);
         renamed.GetProperty("name").GetString().Should().Be("Mornings");
         var read = await ReadAsync(await a.GetAsync($"{Route}/{id}"), HttpStatusCode.OK);
@@ -152,6 +157,9 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         }), HttpStatusCode.BadRequest);
 
         refused.GetProperty("errors").GetProperty("panels[0].dataset.name")[0].GetString().Should().Contain("'insulin' is not a dataset");
+
+        var noSpec = await ReadAsync(await a.PostAsJsonAsync(Route, new { name = "No spec" }), HttpStatusCode.BadRequest);
+        noSpec.GetProperty("errors").GetProperty("spec")[0].GetString().Should().Be("Send a spec.");
         (await ReadAsync(await a.GetAsync(Route), HttpStatusCode.OK)).EnumerateArray()
             .Select(r => r.GetProperty("name").GetString()).Should().NotContain("Broken");
     }
@@ -203,6 +211,9 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
             (await cmd.ExecuteNonQueryAsync()).Should().Be(1);
         }
         using var clamped = Session(_slugA, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subject));
+
+        (await clamped.PostAsJsonAsync(Route, new { name = "Clamped", spec = Spec() })).StatusCode
+            .Should().Be(HttpStatusCode.Forbidden, "a member limited to a day of the record does not add reports for everyone");
 
         var report = await ReadAsync(await clamped.GetAsync($"{Route}/{saved.GetProperty("id").GetGuid()}"), HttpStatusCode.OK);
         var started = DateTimeOffset.UtcNow;
@@ -291,9 +302,12 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
             await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = Spec() }), HttpStatusCode.OK);
 
             var rows = new List<(int Status, string? Entities)>();
-            for (var attempt = 0; attempt < 50 && rows.Count < 1; attempt++)
+            var settled = false;
+            for (var attempt = 0; attempt < 60 && !settled; attempt++)
             {
-                await Task.Delay(100);
+                // Once a row is there, read once more after a pause, so a second row has time to land.
+                settled = rows.Count > 0;
+                await Task.Delay(rows.Count > 0 ? 1000 : 100);
                 rows.Clear();
                 await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
                 await conn.OpenAsync();
@@ -319,5 +333,103 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         {
             (await a.PutAsJsonAsync("/api/v4/audit/config", new { readAuditEnabled = false })).StatusCode.Should().Be(HttpStatusCode.OK);
         }
+    }
+
+    private async Task<(Guid Subject, string Session)> SeedViewerAsync(string name)
+    {
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        var (subject, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantAId, name);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            DELETE FROM subject_roles WHERE subject_id = @subject;
+            UPDATE tenant_members SET direct_permissions = '["glucose.read","reports.read"]'::jsonb WHERE subject_id = @subject;
+            """;
+        cmd.Parameters.AddWithValue("subject", subject);
+        await cmd.ExecuteNonQueryAsync();
+        return (subject, await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subject));
+    }
+
+    [Fact]
+    public async Task A_viewer_saves_and_changes_only_their_own_reports_and_an_owner_changes_anyones()
+    {
+        using var owner = Session(_slugA, _sessionA);
+        var ownersReport = await ReadAsync(await owner.PostAsJsonAsync(Route, new { name = "Owner's", spec = Spec() }), HttpStatusCode.OK);
+        var ownersId = ownersReport.GetProperty("id").GetGuid();
+
+        var (_, viewerSession) = await SeedViewerAsync("Reports Viewer");
+        using var viewer = Session(_slugA, viewerSession);
+
+        var list = await ReadAsync(await viewer.GetAsync(Route), HttpStatusCode.OK);
+        list.EnumerateArray().Single(r => r.GetProperty("id").GetGuid() == ownersId).GetProperty("canEdit").GetBoolean()
+            .Should().BeFalse("the viewer did not create it and edits no one else's");
+        (await ReadAsync(await viewer.GetAsync($"{Route}/{ownersId}"), HttpStatusCode.OK)).GetProperty("canEdit").GetBoolean().Should().BeFalse();
+        (await viewer.PutAsJsonAsync($"{Route}/{ownersId}", new { name = "Mine now" })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await viewer.DeleteAsync($"{Route}/{ownersId}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var viewersReport = await ReadAsync(await viewer.PostAsJsonAsync(Route, new { name = "Viewer's", spec = Spec() }), HttpStatusCode.OK);
+        var viewersId = viewersReport.GetProperty("id").GetGuid();
+        viewersReport.GetProperty("canEdit").GetBoolean().Should().BeTrue();
+        await ReadAsync(await viewer.PutAsJsonAsync($"{Route}/{viewersId}", new { name = "Viewer's, renamed" }), HttpStatusCode.OK);
+
+        (await ReadAsync(await owner.GetAsync(Route), HttpStatusCode.OK)).EnumerateArray()
+            .Should().OnlyContain(r => r.GetProperty("canEdit").GetBoolean(), "an owner edits every report");
+        (await owner.DeleteAsync($"{Route}/{viewersId}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await ReadAsync(await owner.GetAsync($"{Route}/{ownersId}"), HttpStatusCode.OK)).GetProperty("name").GetString().Should().Be("Owner's");
+    }
+
+    [Fact]
+    public async Task The_101st_report_is_refused_with_a_message()
+    {
+        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT set_config('app.current_tenant_id', @tenant, false);
+                INSERT INTO report_specs (id, tenant_id, name, spec, version, created_at, updated_at)
+                SELECT gen_random_uuid(), @tenantId, 'Seeded ' || n, '{"version":1,"panels":[]}'::jsonb, 1, now(), now()
+                FROM generate_series(1, 100) AS n;
+                """;
+            cmd.Parameters.AddWithValue("tenant", _tenantAId.ToString());
+            cmd.Parameters.AddWithValue("tenantId", _tenantAId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        using var a = Session(_slugA, _sessionA);
+        var refused = await ReadAsync(await a.PostAsJsonAsync(Route, new { name = "One more", spec = Spec() }), HttpStatusCode.BadRequest);
+
+        refused.GetProperty("errors").GetProperty("name")[0].GetString()
+            .Should().Be("This account has 100 custom reports, the most it can keep. Delete a report to save another.");
+        (await ReadAsync(await a.GetAsync(Route), HttpStatusCode.OK)).GetArrayLength().Should().Be(100);
+    }
+
+    [Fact]
+    public async Task An_app_token_cannot_write_and_a_guest_link_cannot_read()
+    {
+        using var owner = Session(_slugA, _sessionA);
+        var saved = await ReadAsync(await owner.PostAsJsonAsync(Route, new { name = "Shared", spec = Spec() }), HttpStatusCode.OK);
+        var id = saved.GetProperty("id").GetGuid();
+
+        var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(owner, scope: "glucose.read reports.read");
+        var flow = await AuthTestHelpers.ExecutePkceFlowAsync(owner, clientId, scope: "glucose.read reports.read");
+        using (var app = Session(_slugA, flow.AccessToken))
+        {
+            (await app.GetAsync(Route)).StatusCode.Should().Be(HttpStatusCode.OK, "an app may read the list");
+            (await app.PostAsJsonAsync(Route, new { name = "App", spec = Spec() })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await app.PutAsJsonAsync($"{Route}/{id}", new { name = "App" })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await app.DeleteAsync($"{Route}/{id}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
+
+        var created = await ReadAsync(await owner.PostAsJsonAsync("/api/v4/guest-links", new { label = "Reports", scopes = new[] { "glucose.read" } }), HttpStatusCode.OK);
+        using var anonymous = AuthTestHelpers.CreateTenantClient(Fixture, _slugA, _baseDomain);
+        var activated = await anonymous.PostAsJsonAsync("/api/v4/guest-links/activate", new { code = created.GetProperty("code").GetString() });
+        activated.StatusCode.Should().Be(HttpStatusCode.OK, await activated.Content.ReadAsStringAsync());
+        var cookie = activated.Headers.GetValues("Set-Cookie").First(c => c.StartsWith("nocturne-guest-session", StringComparison.Ordinal)).Split(';')[0];
+
+        using var guest = AuthTestHelpers.CreateTenantClient(Fixture, _slugA, _baseDomain);
+        guest.DefaultRequestHeaders.Add("Cookie", cookie);
+        (await guest.GetAsync(Route)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await guest.GetAsync($"{Route}/{id}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 }

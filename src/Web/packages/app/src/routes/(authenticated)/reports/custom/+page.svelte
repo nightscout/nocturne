@@ -81,15 +81,17 @@
               <Table.Cell class="whitespace-nowrap tabular-nums">{formatDateTime(report.updatedAt)}</Table.Cell>
               <Table.Cell class="tabular-nums">{formatNumber(report.panelCount ?? 0)}</Table.Cell>
               <Table.Cell class="text-right">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Delete {report.name}"
-                  onclick={() => (pendingDelete = report)}
-                >
-                  <Trash2 class="size-4" aria-hidden="true" />
-                  Delete
-                </Button>
+                {#if report.canEdit}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Delete {report.name}"
+                    onclick={() => (pendingDelete = report)}
+                  >
+                    <Trash2 class="size-4" aria-hidden="true" />
+                    Delete
+                  </Button>
+                {/if}
               </Table.Cell>
             </Table.Row>
           {/each}
