@@ -1,8 +1,11 @@
 using FluentAssertions;
+using Moq;
+using Nocturne.API.Mcp;
 using Nocturne.API.Mcp.Reports;
 using Nocturne.API.Mcp.Reports.Datasets;
 using Nocturne.API.Mcp.Tools;
 using Nocturne.Core.Clinical.Statistics;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -33,7 +36,7 @@ public class PresetToolTests
     public async Task A_glucose_only_agp_has_no_insulin_tiles_and_says_so()
     {
         var harness = new Harness();
-        var (runner, context, _) = harness.Arrange(Scope.GlucoseRead);
+        var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead);
 
         var result = await runner.RunAsync(PresetTools.Normalise(Validator, PresetTools.AgpSpec(14), false), context, CancellationToken.None);
 
@@ -43,6 +46,55 @@ public class PresetToolTests
         figures.Omitted.Select(o => o.Field).Should().Equal("tdd", "basalPercent", "carbsPerDay");
         result.Summary.Should().Contain("[figures] Key figures").And.Contain("Fields omitted: tdd, basalPercent, carbsPerDay (scope not granted).");
         harness.VerifyNoInsulinRead();
+        harness.GlucoseReads.Should().Be(1, "the three panels share one read of the same range");
+        readLog.Datasets.Should().Equal("glucose");
+        readLog.RecordCount.Should().Be(14 * 288);
+    }
+
+    [Fact]
+    public void A_clamped_callers_presets_are_titled_with_the_window_served()
+    {
+        PresetTools.Normalise(Validator, PresetTools.AgpSpec(14, clamped: true), false).Title.Should().Be("Ambulatory glucose profile, last 24 hours");
+        PresetTools.Normalise(Validator, PresetTools.TreatmentsSpec(72, clamped: true), false).Title.Should().Be("Treatments, last 24 hours");
+        PresetTools.Normalise(Validator, PresetTools.TreatmentsSpec(6, clamped: true), false).Title.Should().Be("Treatments, last 6 hours");
+    }
+
+    [Fact]
+    public void A_profile_with_a_name_outside_ascii_is_written_whole()
+    {
+        var profile = new ActiveProfileSchedules { ProfileName = "Été 🏃", Share = 1, Basal = [new ScheduleEntry { Time = "00:00", Value = 0.8 }] };
+
+        SummaryTools.ProfileText([profile], false).Should().StartWith("Profile 'Été 🏃': in force for 100% of the last 24 hours.");
+    }
+
+    [Fact]
+    public async Task Show_treatments_audits_the_glucose_and_the_treatments_it_read()
+    {
+        var harness = new Harness();
+        harness.WithBoluses((Now.AddHours(-2), 4.5));
+        var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead, Scope.TreatmentsRead);
+        harness.Chart.Setup(c => c.GetDashboardChartDataAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DashboardChartData { GlucoseData = [new GlucosePointDto { Time = Now.AddHours(-1).ToUnixTimeMilliseconds(), Sgv = 120 }] });
+
+        await runner.RunAsync(PresetTools.Normalise(Validator, PresetTools.TreatmentsSpec(24), false), context, CancellationToken.None);
+
+        readLog.Datasets.Should().Equal("glucose", "treatments");
+        readLog.RecordCount.Should().Be(2, "one reading and one bolus");
+    }
+
+    [Fact]
+    public void Loop_health_audits_every_category_it_read_whatever_the_guard_withheld()
+    {
+        var readLog = new McpToolReadLog();
+        var report = new Nocturne.Core.Models.LoopAnalysis.LoopHealthResponse
+        {
+            Primary = new() { Days = [new() { Date = "2026-10-29" }] },
+            WithheldSeries = [Nocturne.Core.Models.LoopAnalysis.LoopAnalysisSeries.LoopActivity],
+        };
+
+        SummaryTools.RecordLoopHealthReads(report, readLog);
+
+        readLog.Datasets.Should().Equal("glucose", "treatments", "device_status", "profiles");
     }
 
     [Fact]
@@ -62,6 +114,13 @@ public class PresetToolTests
     {
         SummaryTools.Cap(new string('x', 20_000)).Length.Should().Be(SummaryTools.MaxTextLength);
         SummaryTools.Cap("short").Should().Be("short");
+
+        // Four UTF-8 bytes and two UTF-16 units each: the cap counts bytes and never splits a pair.
+        var capped = SummaryTools.Cap(string.Concat(Enumerable.Repeat("\U0001D538", 5_000)));
+        System.Text.Encoding.UTF8.GetByteCount(capped).Should().BeLessThanOrEqualTo(SummaryTools.MaxTextLength);
+        capped.Should().EndWith("(Cut to 8 kB.)");
+        capped.EnumerateRunes().Should().NotContain(System.Text.Rune.ReplacementChar);
+        char.IsHighSurrogate(capped[capped.IndexOf('\n', StringComparison.Ordinal) - 1]).Should().BeFalse();
     }
 
     [Fact]

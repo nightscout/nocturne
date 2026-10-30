@@ -27,6 +27,7 @@ public class McpPresetIntegrationTests(ApiIntegrationTestFixture fixture, ITestO
     private string _slug = null!;
     private string _baseDomain = null!;
     private string _session = null!;
+    private Guid _tenantId;
 
     public override async Task InitializeAsync()
     {
@@ -37,6 +38,7 @@ public class McpPresetIntegrationTests(ApiIntegrationTestFixture fixture, ITestO
         await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
         await conn.OpenAsync();
         var tenantId = await AuthTestHelpers.GetTenantIdAsync(conn);
+        _tenantId = tenantId;
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = "SELECT slug FROM tenants WHERE id = @id;";
@@ -154,6 +156,93 @@ public class McpPresetIntegrationTests(ApiIntegrationTestFixture fixture, ITestO
 
         ToolText(await CallToolAsync(client, "get_profile_summary", new { }))
             .Should().Be("The profile is not shown: it needs the therapy.read scope, which this token does not hold.");
+    }
+
+    [Fact]
+    public async Task Each_preset_and_text_tool_writes_one_audit_row_naming_what_it_read_once()
+    {
+        var since = DateTime.UtcNow;
+        await SetReadAuditAsync(true);
+        try
+        {
+            using var client = McpClient(await McpTokenAsync("glucose.read treatments.read devices.read therapy.read"));
+            var agp = await CallToolAsync(client, "show_agp", new { days = 14 });
+            var readings = agp.GetProperty("result").GetProperty("structuredContent").GetProperty("panels")[0].GetProperty("rows")[0];
+            readings.TryGetProperty("tdd", out _).Should().BeTrue();
+            await CallToolAsync(client, "show_treatments", new { hours = 24 });
+            await CallToolAsync(client, "get_glucose_statistics", new { days = 14 });
+            await CallToolAsync(client, "get_recent_treatments", new { hours = 48 });
+            await CallToolAsync(client, "get_profile_summary", new { });
+            await CallToolAsync(client, "get_loop_health", new { days = 7 });
+
+            var glucoseReadings = await GlucoseRowsAsync(DateTime.UtcNow.AddDays(-14));
+            var rows = await AuditAsync(since, 6);
+            rows.Should().HaveCount(6);
+            rows["MCP show_agp"].Entities.Should().Be("glucose,treatments");
+            rows["MCP show_agp"].Count.Should().BeInRange(glucoseReadings, glucoseReadings + 100,
+                "the three glucose panels share one read, counted once, beside the insulin and carb records");
+            rows["MCP show_treatments"].Entities.Should().Be("glucose,treatments");
+            rows["MCP get_glucose_statistics"].Entities.Should().Be("glucose,treatments");
+            rows["MCP get_glucose_statistics"].Count.Should().BeInRange(glucoseReadings, glucoseReadings + 100);
+            rows["MCP get_recent_treatments"].Entities.Should().Be("treatments");
+            rows["MCP get_recent_treatments"].Count.Should().BeGreaterThan(0);
+            rows["MCP get_profile_summary"].Entities.Should().Be("profiles");
+            rows["MCP get_loop_health"].Entities.Should().Be("glucose,treatments,device_status,profiles");
+        }
+        finally
+        {
+            await SetReadAuditAsync(false);
+        }
+    }
+
+    private async Task SetReadAuditAsync(bool enabled)
+    {
+        using var session = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slug, _baseDomain, _session);
+        var response = await session.PutAsJsonAsync("/api/v4/audit/config", new { readAuditEnabled = enabled });
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+    }
+
+    private async Task<int> GlucoseRowsAsync(DateTime since)
+    {
+        await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT set_config('app.current_tenant_id', @t, false);
+            SELECT count(*)::int FROM sensor_glucose WHERE timestamp >= @since;
+            """;
+        cmd.Parameters.AddWithValue("t", _tenantId.ToString());
+        cmd.Parameters.AddWithValue("since", since);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        await reader.NextResultAsync();
+        await reader.ReadAsync();
+        return reader.GetInt32(0);
+    }
+
+    /// <summary>The MCP read-audit rows since <paramref name="since"/>, by endpoint, once <paramref name="expected"/> are written.</summary>
+    private async Task<Dictionary<string, (string? Entities, int Count)>> AuditAsync(DateTime since, int expected)
+    {
+        var rows = new Dictionary<string, (string? Entities, int Count)>();
+        for (var attempt = 0; attempt < 50 && rows.Count < expected; attempt++)
+        {
+            await Task.Delay(100);
+            rows.Clear();
+            await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT set_config('app.current_tenant_id', @t, false);
+                SELECT endpoint, entity_type, record_count FROM read_access_log
+                WHERE endpoint LIKE 'MCP %' AND created_at >= @since ORDER BY created_at;
+                """;
+            cmd.Parameters.AddWithValue("t", _tenantId.ToString());
+            cmd.Parameters.AddWithValue("since", since);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            await reader.NextResultAsync();
+            while (await reader.ReadAsync())
+                rows[reader.GetString(0)] = (reader.IsDBNull(1) ? null : reader.GetString(1), reader.IsDBNull(2) ? 0 : reader.GetInt32(2));
+        }
+        return rows;
     }
 
     private async Task SeedProfileAsync()

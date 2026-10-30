@@ -140,7 +140,8 @@ internal sealed class DeviceStatusDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = Summarise(pump, uploader, sensor, request.From, request.To),
+            Summary = Summarise(pump, uploader, sensor, request.From, request.To,
+                sensorAsked: request.Primitive == ReportPrimitive.StatTiles, clamped: request.HistoryClamped),
             Resolution = new ReportResolution(1, interval, sourceRows, rows.Count, rows.Count < sourceRows),
         };
     }
@@ -157,7 +158,9 @@ internal sealed class DeviceStatusDataset : IReportDataset
         IReadOnlyList<UploaderSnapshot> uploader,
         DeviceAgeInfo? sensor,
         DateTimeOffset from,
-        DateTimeOffset to)
+        DateTimeOffset to,
+        bool sensorAsked = false,
+        bool clamped = false)
     {
         static string At(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
         static string N(double value) => value.ToString("0.#", CultureInfo.InvariantCulture);
@@ -180,6 +183,10 @@ internal sealed class DeviceStatusDataset : IReportDataset
             : $"Uploader battery: {uploaderBattery[^1].Battery}% at {At(uploaderBattery[^1].Mills)}, lowest {uploaderBattery.Min(u => u.Battery)}%.");
         if (sensor is not null)
             lines.Add($"Sensor age now: {sensor.Days} days {sensor.Hours} hours.");
+        else if (sensorAsked)
+            lines.Add(clamped
+                ? "Sensor age now: not shown. This token reads only the last 24 hours, and the latest sensor start can be older."
+                : "Sensor age now: no sensor start or change found.");
         return string.Join('\n', lines);
     }
 }

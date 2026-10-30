@@ -1,11 +1,8 @@
 using System.Globalization;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
-using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Clinical.Statistics;
 using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
@@ -20,8 +17,6 @@ namespace Nocturne.API.Mcp.Reports.Datasets;
 /// </summary>
 internal sealed class GlucoseStatisticsDataset : IReportDataset
 {
-    private const DiabetesPopulation Population = DiabetesPopulation.Type1Adult;
-
     public string Name => GlucoseStatisticsParameters.Name;
 
     public string Description =>
@@ -133,27 +128,12 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
 
     /// <summary>
     /// The canonical readings over the request's range and their analysis, as
-    /// <c>GET /api/v4/statistics/range-analytics</c> computes it. Records the readings for the audit.
+    /// <c>GET /api/v4/statistics/range-analytics</c> computes it, shared by the run's panels over the
+    /// same range (<see cref="ReportRunCache"/>), which records the readings for the audit once.
     /// </summary>
     internal static async Task<(IReadOnlyList<SensorGlucose> Entries, ExtendedGlucoseAnalytics Analysis)> AnalyseAsync(
-        ReportDatasetRequest request, CancellationToken cancellationToken)
-    {
-        var services = request.Services;
-        var from = request.From.UtcDateTime;
-        var to = request.To.UtcDateTime;
-
-        var raw = await services.GetRequiredService<ISensorGlucoseRepository>().GetForAnalyticsAsync(
-            from, to, null, null, int.MaxValue, descending: false, ct: cancellationToken);
-        var entries = await services.GetRequiredService<ICanonicalGlucoseService>().SelectAsync(raw.ToList(), cancellationToken);
-        var clock = await services.GetRequiredService<TenantClockResolver>().ResolveAsync(cancellationToken);
-
-        var analysis = services.GetRequiredService<IStatisticsService>().AnalyzeGlucoseDataExtended(
-            entries, [], [], StatisticsService.WindowDays(from, to), Population, timeZone: clock.Zone);
-
-        if (entries.Count > 0)
-            request.ReadLog.Record("glucose", entries.Count);
-        return (entries, analysis);
-    }
+        ReportDatasetRequest request, CancellationToken cancellationToken) =>
+        (await request.Cache.GlucoseAsync(request, cancellationToken), await request.Cache.AnalysisAsync(request, cancellationToken));
 
     /// <summary>The insulin delivery figures over the range, or null when no insulin or carb record is in it.</summary>
     private static async Task<InsulinDeliveryStatistics?> InsulinAsync(ReportDatasetRequest request, CancellationToken cancellationToken)

@@ -24,7 +24,7 @@ namespace Nocturne.API.Mcp.Tools;
 [McpServerToolType]
 internal sealed class SummaryTools
 {
-    /// <summary>The most characters a text tool returns: 8 kB of ASCII.</summary>
+    /// <summary>The most a text tool returns: 8 kB of UTF-8.</summary>
     internal const int MaxTextLength = 8 * 1024;
 
     internal const int MaxDays = 90;
@@ -156,16 +156,33 @@ internal sealed class SummaryTools
         public override string DatasetName => "loop_health";
     }
 
-    /// <summary>A text result, cut to <see cref="MaxTextLength"/> if it ever runs over.</summary>
+    /// <summary>A text result, cut to <see cref="MaxTextLength"/> UTF-8 bytes if it ever runs over.</summary>
     internal static CallToolResult Text(string text) => new()
     {
         Content = [new TextContentBlock { Text = Cap(text) }],
     };
 
+    /// <summary>
+    /// <paramref name="text"/>, or as much of it as fits <see cref="MaxTextLength"/> UTF-8 bytes with the
+    /// note that it was cut, ending on a whole character: a surrogate pair is never split.
+    /// </summary>
     internal static string Cap(string text)
     {
+        if (Encoding.UTF8.GetByteCount(text) <= MaxTextLength)
+            return text;
+
         const string cut = "\n(Cut to 8 kB.)";
-        return text.Length <= MaxTextLength ? text : text[..(MaxTextLength - cut.Length)] + cut;
+        var budget = MaxTextLength - Encoding.UTF8.GetByteCount(cut);
+        var kept = new StringBuilder();
+        var bytes = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (bytes + rune.Utf8SequenceLength > budget)
+                break;
+            kept.Append(rune.ToString());
+            bytes += rune.Utf8SequenceLength;
+        }
+        return kept.Append(cut).ToString();
     }
 
     private static string ReportText(ReportResult report)
@@ -216,22 +233,16 @@ internal sealed class SummaryTools
         return text.ToString().TrimEnd();
     }
 
-    /// <summary>The categories the served figures read; the figures are aggregates, so no count.</summary>
+    /// <summary>
+    /// The categories the Loop health page reads: the service reads every source before the guard
+    /// narrows what is served, so the audit names what was read, not what was shown. Aggregates, no count.
+    /// </summary>
     internal static void RecordLoopHealthReads(LoopHealthResponse report, McpToolReadLog readLog)
     {
         if (report.Primary.Days.Count == 0)
             return;
-        bool Served(params LoopAnalysisSeries[] series) => series.Any(s => !report.WithheldSeries.Contains(s));
-        if (Served(LoopAnalysisSeries.CgmActivity))
-            readLog.Record("glucose", 0);
-        if (Served(LoopAnalysisSeries.LoopActivity, LoopAnalysisSeries.UnrecordedDelivery, LoopAnalysisSeries.ZeroDelivery,
-                LoopAnalysisSeries.AutomaticBoluses, LoopAnalysisSeries.MaxBasal))
-            readLog.Record("treatments", 0);
-        if (Served(LoopAnalysisSeries.LoopActivity, LoopAnalysisSeries.LoopGaps, LoopAnalysisSeries.AtMaxIob,
-                LoopAnalysisSeries.SuggestedNotEnacted, LoopAnalysisSeries.SensitivityRatio))
-            readLog.Record("device_status", 0);
-        if (Served(LoopAnalysisSeries.MaxBasal, LoopAnalysisSeries.LoopLimits, LoopAnalysisSeries.OrefMaxIob))
-            readLog.Record("profiles", 0);
+        foreach (var category in new[] { "glucose", "treatments", "device_status", "profiles" })
+            readLog.Record(category, 0);
     }
 
     internal static string LoopHealthText(LoopHealthResponse report)

@@ -127,9 +127,13 @@ internal sealed record ReportDatasetRequest(
     IReadOnlySet<string> GrantedScopes,
     IServiceProvider Services,
     McpToolReadLog ReadLog,
-    bool HistoryClamped = false)
+    bool HistoryClamped = false,
+    Datasets.ReportRunCache? RunCache = null)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
+
+    /// <summary>The run's shared reads; a request made outside a run gets its own.</summary>
+    public Datasets.ReportRunCache Cache { get; } = RunCache ?? new Datasets.ReportRunCache();
 }
 
 /// <summary>A dataset's rows over the whole catalogue, before the runner picks the bound fields.</summary>

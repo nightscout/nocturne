@@ -13,6 +13,9 @@ internal sealed record ReportRunContext(
     bool HistoryClamped = false)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
+
+    /// <summary>What the run's panels have read, shared between panels over the same range.</summary>
+    public Datasets.ReportRunCache Cache { get; } = new();
 }
 
 /// <summary>
@@ -83,7 +86,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             {
                 output = await dataset.RunAsync(
                     new ReportDatasetRequest(panel.Dataset, panel.Primitive, from, to, context.UseMmol,
-                        context.GrantedScopes, context.Services, context.ReadLog, context.HistoryClamped),
+                        context.GrantedScopes, context.Services, context.ReadLog, context.HistoryClamped, context.Cache),
                     linked.Token);
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
@@ -178,8 +181,18 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Summary = output.Summary,
             Omitted = output.Omitted,
             Resolution = output.Resolution,
-            Markers = panel.Primitive == ReportPrimitive.TimeSeries ? output.Markers : [],
+            Markers = panel.Primitive == ReportPrimitive.TimeSeries ? MarkersFor(fields, output.Markers) : [],
         };
+    }
+
+    /// <summary>
+    /// The markers a time series draws: every one over a line; where the panel binds marker fields
+    /// (a treatments panel's 'insulin' or 'carbs'), only the markers of those fields' kinds.
+    /// </summary>
+    internal static IReadOnlyList<ReportMarker> MarkersFor(IReadOnlyList<ReportField> fields, IReadOnlyList<ReportMarker> markers)
+    {
+        var kinds = fields.Where(f => f.Marker is not null).Select(f => f.Marker!.Value).ToHashSet();
+        return kinds.Count == 0 ? markers : [.. markers.Where(m => kinds.Contains(m.Kind))];
     }
 
     private static ReportPanelResult TimedOut(ReportPanelSpec panel, IReportDataset dataset, DateTimeOffset from, DateTimeOffset to) =>

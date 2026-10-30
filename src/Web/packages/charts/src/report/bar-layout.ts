@@ -1,5 +1,6 @@
 import type { ScaleBand } from "d3-scale";
 import { resolveChartColor } from "../colors.js";
+import { isChartColor } from "../enums.js";
 import { boundFields, type ReportField, type ReportPanel } from "./types.js";
 
 /** One drawn piece of a bar: its category, the field it shows, where it starts and ends, and its colour. */
@@ -30,7 +31,7 @@ export const NEUTRAL_BAR = "var(--muted-foreground)";
 /**
  * A bar panel's segments. Every colour comes from the panel: a category whose field names a colour
  * field (glucose bands) colours its one bar from that row's value; otherwise each y field's bar takes
- * the field's theme colour; with neither, the bar is neutral.
+ * the field's theme colour; with neither, or with a value that is not a theme colour, the bar is neutral.
  */
 export function barLayout(panel: Pick<ReportPanel, "fields" | "rows" | "bindings">): BarLayout {
   const xName = panel.bindings.x ?? "";
@@ -52,12 +53,12 @@ export function barLayout(panel: Pick<ReportPanel, "fields" | "rows" | "bindings
       const value = row[field.name];
       if (typeof value !== "number") return;
       const fromRow = rowColor ? row[rowColor] : null;
-      const color =
-        typeof fromRow === "string" && fromRow
-          ? resolveChartColor(fromRow)
-          : field.color
-            ? resolveChartColor(field.color)
-            : NEUTRAL_BAR;
+      // Only a theme colour the API names may reach a CSS variable; anything else is drawn neutral.
+      const color = isChartColor(fromRow)
+        ? resolveChartColor(fromRow)
+        : rowColor === null && isChartColor(field.color)
+          ? resolveChartColor(field.color)
+          : NEUTRAL_BAR;
       const start = stacked ? base : 0;
       const end = start + value;
       if (stacked) base = end;

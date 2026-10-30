@@ -3,6 +3,7 @@ using System.Text.Json;
 using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
+using Nocturne.API.Extensions;
 using Nocturne.API.Mcp.Reports;
 using Nocturne.Core.Models.Authorization;
 
@@ -31,13 +32,15 @@ internal sealed class PresetTools
     public static async Task<CallToolResult> ShowAgp(
         ReportSpecValidator validator,
         ReportRenderer renderer,
+        IHttpContextAccessor httpContextAccessor,
         [Description("How many days back from now, 1 to 90. Default 14, the standard AGP period.")] int days = 14,
         CancellationToken cancellationToken = default)
     {
         if (days is < 1 or > MaxAgpDays)
             throw new McpInvalidArgumentsException($"days must be between 1 and {MaxAgpDays}.");
 
-        var spec = Normalise(validator, AgpSpec(days), await renderer.UsesMmolAsync(cancellationToken));
+        var clamped = httpContextAccessor.HttpContext?.IsCallerHistoryClamped() ?? false;
+        var spec = Normalise(validator, AgpSpec(days, clamped), await renderer.UsesMmolAsync(cancellationToken));
         return (await renderer.RenderAsync(spec, cancellationToken)).Result;
     }
 
@@ -51,13 +54,15 @@ internal sealed class PresetTools
     public static async Task<CallToolResult> ShowTreatments(
         ReportSpecValidator validator,
         ReportRenderer renderer,
+        IHttpContextAccessor httpContextAccessor,
         [Description("How many hours back from now, 1 to 72. Default 24.")] int hours = 24,
         CancellationToken cancellationToken = default)
     {
         if (hours is < 1 or > MaxTreatmentHours)
             throw new McpInvalidArgumentsException($"hours must be between 1 and {MaxTreatmentHours}.");
 
-        var spec = Normalise(validator, TreatmentsSpec(hours), await renderer.UsesMmolAsync(cancellationToken));
+        var clamped = httpContextAccessor.HttpContext?.IsCallerHistoryClamped() ?? false;
+        var spec = Normalise(validator, TreatmentsSpec(hours, clamped), await renderer.UsesMmolAsync(cancellationToken));
         return (await renderer.RenderAsync(spec, cancellationToken)).Result;
     }
 
@@ -65,10 +70,13 @@ internal sealed class PresetTools
     /// The web AGP report's layout as a spec: its figure strip, its 24-hour percentile chart (the hourly
     /// distribution it draws, <c>averagedStats</c>), and its time in range bar.
     /// </summary>
-    internal static object AgpSpec(int days) => new
+    /// <param name="clamped">The caller reads only the last 24 hours, so the title names the window the runner serves.</param>
+    internal static object AgpSpec(int days, bool clamped = false) => new
     {
         version = ReportSpec.CurrentVersion,
-        title = $"Ambulatory glucose profile, last {days} {(days == 1 ? "day" : "days")}",
+        title = clamped
+            ? "Ambulatory glucose profile, last 24 hours"
+            : $"Ambulatory glucose profile, last {days} {(days == 1 ? "day" : "days")}",
         range = new { hours = days * 24 },
         panels = new object[]
         {
@@ -101,10 +109,10 @@ internal sealed class PresetTools
     };
 
     /// <summary>The glucose line with the treatment markers on it, and the treatment records under it.</summary>
-    internal static object TreatmentsSpec(int hours) => new
+    internal static object TreatmentsSpec(int hours, bool clamped = false) => new
     {
         version = ReportSpec.CurrentVersion,
-        title = $"Treatments, last {hours} {(hours == 1 ? "hour" : "hours")}",
+        title = $"Treatments, last {Shown(hours, clamped)} {(Shown(hours, clamped) == 1 ? "hour" : "hours")}",
         range = new { hours },
         panels = new object[]
         {
@@ -125,6 +133,9 @@ internal sealed class PresetTools
             },
         },
     };
+
+    /// <summary>The hours a clamped caller is served: at most the last 24.</summary>
+    private static int Shown(int hours, bool clamped) => clamped ? Math.Min(hours, 24) : hours;
 
     /// <summary>A preset's spec as the validator normalises it; a preset that fails validation is a bug, not the caller's error.</summary>
     internal static ReportSpec Normalise(ReportSpecValidator validator, object spec, bool useMmol)

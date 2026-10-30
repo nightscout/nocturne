@@ -2,8 +2,6 @@ using System.Globalization;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Glucose;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using static Nocturne.API.Mcp.Reports.Datasets.LoopAnalysisDatasetRun;
@@ -81,13 +79,9 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var services = request.Services;
-        var raw = await services.GetRequiredService<ISensorGlucoseRepository>().GetForAnalyticsAsync(
-            request.From.UtcDateTime, request.To.UtcDateTime, null, null, int.MaxValue, descending: false, ct: cancellationToken);
-        var entries = await services.GetRequiredService<ICanonicalGlucoseService>().SelectAsync(raw.ToList(), cancellationToken);
+        var entries = await request.Cache.GlucoseAsync(request, cancellationToken);
         var clock = await services.GetRequiredService<TenantClockResolver>().ResolveAsync(cancellationToken);
         var hours = services.GetRequiredService<IStatisticsService>().CalculateAveragedStats(entries, clock.Zone).ToList();
-        if (entries.Count > 0)
-            request.ReadLog.Record("glucose", entries.Count);
 
         var useMmol = request.UseMmol;
         var rows = hours.Select(h =>

@@ -205,7 +205,7 @@ describe("time_series markers", () => {
     expect(automatic).toHaveLength(1);
   });
 
-  it("draws a treatments field the API marks as a marker as markers, not a line", async () => {
+  it("draws a treatments panel's markers at their amounts, the algorithm's outlined as the API says, and no line", async () => {
     const insulin = {
       ...markedLine,
       id: "doses",
@@ -215,15 +215,21 @@ describe("time_series markers", () => {
       rows: [
         { time: from + 20 * MINUTE, insulin: 3 },
         { time: from + 70 * MINUTE, insulin: null },
-        { time: from + 100 * MINUTE, insulin: 1.5 },
+        { time: from + 100 * MINUTE, insulin: 0.3 },
       ],
-      markers: [],
+      // The rows carry no automatic flag: only the API's markers say which bolus the algorithm gave.
+      markers: [
+        { time: from + 20 * MINUTE, kind: "bolus", amount: 3, automatic: false },
+        { time: from + 100 * MINUTE, kind: "bolus", amount: 0.3, automatic: true },
+      ],
     };
     render(ReportView, { result: { structuredContent: report([insulin]) }, locale: "en-US" });
 
     const series = page.getByTestId("report-time-series");
     await expect.poll(() => series.element().querySelectorAll("[data-testid=report-bolus-marker]").length).toBe(2);
     expect(series.element().querySelectorAll("path.fill-none")).toHaveLength(0);
+    expect(series.element().querySelectorAll("[data-testid=report-bolus-marker] polygon[fill=none]")).toHaveLength(1);
+    await expect.element(page.getByText("0.3U")).toBeInTheDocument();
   });
 });
 

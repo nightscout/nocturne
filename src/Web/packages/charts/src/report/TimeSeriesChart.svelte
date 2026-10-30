@@ -2,9 +2,9 @@
   Lines of one unit over time from a report panel's rows, with an optional shaded band between two
   fields. A field on the glucose scale is coloured as the dashboard's glucose line is (lineStopsFor),
   in the report's one colour mode; every other line takes its field's theme colour, and a field that
-  holds its value until the next row is drawn as steps. A field the API marks as a bolus or carb
-  marker is drawn as the dashboard's markers at its values, and the panel's own treatment markers sit
-  on its first line.
+  holds its value until the next row is drawn as steps. The panel's treatment markers (the API's) are
+  drawn as the dashboard's markers on its first line, or at their amounts where every field is a
+  marker field, which is not drawn as a line.
 -->
 <script lang="ts">
   import { Area, Axis, Chart, ChartClipPath, LinearGradient, Rule, Spline, Svg, Tooltip } from "layerchart";
@@ -60,7 +60,6 @@
   const linear = $derived(xKind === "time_of_day" || xKind === "offset");
   const bound = $derived(boundFields(panel, panel.bindings.y));
   const lines = $derived(bound.filter((f) => !f.marker));
-  const markerFields = $derived(bound.filter((f) => f.marker));
   const band = $derived(boundFields(panel, panel.bindings.band));
   const thresholds = $derived(lines.some((f) => f.glucoseScale) ? (panel.thresholds ?? null) : null);
 
@@ -102,42 +101,34 @@
   }
 
   /**
-   * Where each marker sits: a marker field's at its own value; the panel's treatment markers on the
-   * first line at the reading nearest them, a carb raised above a bolus at the same time.
+   * Where each of the panel's treatment markers sits: on the first line at the reading nearest it, a
+   * carb raised above a bolus at the same time; on a panel whose fields are all markers, at its own
+   * amount. What a marker is (its kind, amount, whether the algorithm gave it) is the API's.
    */
   function placeMarkers(xScale: (d: Date) => number, yScale: (v: number) => number, height: number): PlacedMarker[] {
-    const placed: PlacedMarker[] = [];
-    for (const field of markerFields) {
-      for (const p of drawnFor(field.name)) {
-        const amount = num(p.row, field.name) ?? 0;
-        placed.push({
-          key: `${field.name}-${p.time.getTime()}-${placed.length}`,
-          x: xScale(p.time),
-          y: yScale(amount),
-          kind: field.marker ?? "bolus",
-          amount,
-          automatic: p.row.automatic === "yes",
-        });
-      }
-    }
     const line = lines[0];
     const along = line ? drawnFor(line.name) : [];
-    for (const [i, m] of (panel.markers ?? []).entries()) {
-      let nearest: Point | undefined;
-      for (const p of along)
-        if (!nearest || Math.abs(p.time.getTime() - m.time) < Math.abs(nearest.time.getTime() - m.time)) nearest = p;
-      const value = nearest && line ? num(nearest.row, line.name) : null;
-      const y = value === null ? height - 12 : yScale(value);
-      placed.push({
+    return (panel.markers ?? []).map((m, i) => {
+      let y: number;
+      if (line) {
+        let nearest: Point | undefined;
+        for (const p of along)
+          if (!nearest || Math.abs(p.time.getTime() - m.time) < Math.abs(nearest.time.getTime() - m.time)) nearest = p;
+        const value = nearest ? num(nearest.row, line.name) : null;
+        const onLine = value === null ? height - 12 : yScale(value);
+        y = m.kind === "carbs" ? onLine - 34 : onLine;
+      } else {
+        y = yScale(m.amount);
+      }
+      return {
         key: `marker-${m.kind}-${m.time}-${i}`,
         x: xScale(new Date(m.time)),
-        y: m.kind === "carbs" ? y - 34 : y,
+        y,
         kind: m.kind,
         amount: m.amount,
         automatic: m.automatic ?? false,
-      });
-    }
-    return placed;
+      };
+    });
   }
 
   const lineColor = (color: string | null | undefined) =>
@@ -225,7 +216,7 @@
                 />
               {/if}
             {/each}
-            {#if labels && (markerFields.length > 0 || (panel.markers ?? []).length > 0)}
+            {#if labels && (panel.markers ?? []).length > 0}
               <ReportMarkerLayer
                 markers={placeMarkers(context.xScale, context.yScale, context.height)}
                 {labels}

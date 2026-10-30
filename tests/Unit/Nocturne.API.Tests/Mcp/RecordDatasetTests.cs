@@ -76,7 +76,13 @@ public class RecordDatasetTests
             Therapy.Setup(t => t.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync(zone);
         }
 
-        public (ReportSpecRunner Runner, ReportRunContext Context, McpToolReadLog ReadLog) Arrange(params string[] scopes)
+        public (ReportSpecRunner Runner, ReportRunContext Context, McpToolReadLog ReadLog) Arrange(params string[] scopes) =>
+            Arrange(false, scopes);
+
+        public (ReportSpecRunner Runner, ReportRunContext Context, McpToolReadLog ReadLog) ArrangeClamped(params string[] scopes) =>
+            Arrange(true, scopes);
+
+        private (ReportSpecRunner Runner, ReportRunContext Context, McpToolReadLog ReadLog) Arrange(bool clamped, string[] scopes)
         {
             var services = new ServiceCollection()
                 .AddSingleton(Glucose.Object).AddSingleton(Canonical.Object).AddSingleton(Therapy.Object)
@@ -90,7 +96,7 @@ public class RecordDatasetTests
                 .BuildServiceProvider();
             var readLog = new McpToolReadLog();
             return (new ReportSpecRunner(ReportSpecValidatorTests.Registry, new FixedTime(Now)),
-                new ReportRunContext(false, scopes.ToHashSet(), services, readLog), readLog);
+                new ReportRunContext(false, scopes.ToHashSet(), services, readLog, clamped), readLog);
         }
 
         public void WithBoluses(params (DateTimeOffset At, double Units)[] boluses) =>
@@ -110,7 +116,14 @@ public class RecordDatasetTests
                 It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
             Carbs.Verify(c => c.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(),
                 It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+            Temps.Verify(t => t.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(),
+                It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+            Injections.Verify(i => i.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(),
+                It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
         }
+
+        /// <summary>How many times the glucose readings were read from the repository.</summary>
+        public int GlucoseReads => Glucose.Invocations.Count(i => i.Method.Name == nameof(ISensorGlucoseRepository.GetForAnalyticsAsync));
     }
 
     // ---- treatments ----
@@ -196,6 +209,46 @@ public class RecordDatasetTests
     }
 
     [Fact]
+    public async Task An_injection_is_not_a_bolus_and_the_markers_carry_the_algorithms_flag()
+    {
+        var harness = new Harness();
+        harness.Boluses.Setup(b => b.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<bool>(), It.IsAny<BolusKind?>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new Bolus { Timestamp = Now.AddHours(-3).UtcDateTime, Insulin = 4.5 },
+                new Bolus { Timestamp = Now.AddHours(-2).UtcDateTime, Insulin = 0.3, Automatic = true },
+            ]);
+        harness.Injections.Setup(i => i.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null, It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new BasalInjection { Timestamp = Now.AddHours(-1).UtcDateTime, Units = 20 }]);
+        var (runner, context, _) = harness.Arrange(Scope.TreatmentsRead);
+
+        var result = await runner.RunAsync(Spec("""
+            { "version": 1, "range": { "hours": 6 }, "panels": [
+              { "id": "line", "dataset": { "name": "treatments" }, "primitive": "time_series" },
+              { "id": "rows", "dataset": { "name": "treatments" }, "primitive": "table" } ] }
+            """), context, CancellationToken.None);
+
+        var line = result.Panels[0];
+        line.Bindings.Y.Should().Equal("insulin");
+        line.Markers.Select(m => (m.Kind, m.Amount, m.Automatic)).Should().Equal(
+            (ReportMarkerKind.Bolus, 4.5, false), (ReportMarkerKind.Bolus, 0.3, true));
+        var injection = result.Panels[1].Rows.Single(r => (string?)r["type"] == "basal_injection");
+        injection["insulin"].Should().BeNull("a 20 U long-acting dose is not a bolus");
+        injection["injectionUnits"].Should().Be(20.0);
+    }
+
+    [Fact]
+    public void The_treatments_summary_says_when_a_kind_reached_the_read_limit()
+    {
+        var records = new List<TreatmentsDataset.Record> { new(Now.ToUnixTimeMilliseconds(), ReportTreatmentType.Bolus, Insulin: 0.2, Automatic: true) };
+
+        TreatmentsDataset.Summarise(records, Now.AddDays(-14), Now, TreatmentsDataset.Kinds(new TreatmentsParameters()),
+                new StatisticsService(new FixedTime(Now)), 1, new HashSet<ReportTreatmentType> { ReportTreatmentType.Bolus })
+            .Should().Contain($"Only the latest {TreatmentsDataset.RecordLimit} records of each kind are read, and this period has more of these kinds: bolus.");
+    }
+
+    [Fact]
     public async Task Without_treatments_read_the_treatments_panel_is_not_read()
     {
         var harness = new Harness();
@@ -259,8 +312,26 @@ public class RecordDatasetTests
         panel.Fields.Select(f => f.Name).Should().Equal("time", "delivered");
         panel.Rows.Should().OnlyContain(r => !r.ContainsKey("scheduled"));
         panel.Omitted.Should().ContainSingle().Which.Should().Be(new ReportOmittedField("scheduled", Scope.TherapyRead));
-        panel.Summary.Should().NotContain("Scheduled rate").And.EndWith("Fields omitted: scheduled (scope not granted).");
-        readLog.Datasets.Should().Equal("treatments");
+        panel.Summary.Should().NotContain("Scheduled rate").And.Contain("The schedule on its own is omitted: it needs the therapy.read scope");
+        readLog.Datasets.Should().Equal(["treatments", "profiles"], "the series is built on the profile whatever the token holds");
+    }
+
+    [Fact]
+    public async Task Panels_over_the_same_range_read_the_glucose_once_and_audit_it_once()
+    {
+        var harness = new Harness();
+        var (runner, context, readLog) = harness.Arrange(Scope.GlucoseRead);
+
+        await runner.RunAsync(Spec("""
+            { "version": 1, "range": { "hours": 336 }, "panels": [
+              { "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles" },
+              { "dataset": { "name": "glucose_distribution_by_hour" }, "primitive": "range_bands" },
+              { "dataset": { "name": "glucose_distribution" }, "primitive": "bar" } ] }
+            """), context, CancellationToken.None);
+
+        harness.GlucoseReads.Should().Be(1);
+        readLog.Datasets.Should().Equal("glucose");
+        readLog.RecordCount.Should().Be(14 * 288, "fourteen days of five-minute readings, counted once");
     }
 
     // ---- device_status ----
@@ -302,6 +373,20 @@ public class RecordDatasetTests
             + "Uploader battery: 55% at 2026-10-29 10:30, lowest 55%.\n"
             + "Sensor age now: 2 days 4 hours.");
         readLog.Datasets.Should().Equal("device_status", "device_events");
+    }
+
+    [Fact]
+    public async Task A_clamped_callers_tiles_say_why_the_sensor_age_is_missing()
+    {
+        var harness = new Harness();
+        harness.Age.Setup(a => a.GetSensorAgeAsync(It.IsAny<DeviceAgePreferences>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(new SensorAgeInfo());
+        var (runner, context, _) = harness.ArrangeClamped(Scope.DevicesRead);
+
+        var panel = (await runner.RunAsync(Spec("""
+            { "version": 1, "range": { "hours": 72 }, "panels": [ { "dataset": { "name": "device_status" }, "primitive": "stat_tiles" } ] }
+            """), context, CancellationToken.None)).Panels.Single();
+
+        panel.Summary.Should().Contain("Sensor age now: not shown. This token reads only the last 24 hours, and the latest sensor start can be older.");
     }
 
     [Fact]
@@ -410,6 +495,20 @@ public class RecordDatasetTests
         rows.Keys.Should().Equal("2026-10-29", "2026-10-30");
         readLog.Datasets.Should().Equal("glucose", "treatments");
         panel.Summary.Should().Contain("Most carbs: 40 g on 2026-10-29.", "09:00Z is 22:00 on the 29th in Auckland");
+    }
+
+    [Fact]
+    public async Task A_clamped_callers_first_day_is_flagged_partial()
+    {
+        var (runner, context, _) = new Harness().ArrangeClamped(Scope.GlucoseRead);
+
+        var panel = (await runner.RunAsync(Spec("""
+            { "version": 1, "range": { "hours": 72 }, "panels": [ { "dataset": { "name": "daily_summary" }, "primitive": "table" } ] }
+            """), context, CancellationToken.None)).Panels.Single();
+
+        // The clamp moves the start to 2026-10-28 12:00 UTC, half way through that day.
+        panel.Rows.Select(r => (r["date"], r["partial"])).Should().Equal(("2026-10-28", (object?)true), ("2026-10-29", (object?)false));
+        panel.Summary.Should().Contain("The day 2026-10-28 is partial: this token reads only the last 24 hours, so its row starts at 2026-10-28 12:00 UTC.");
     }
 
     [Fact]

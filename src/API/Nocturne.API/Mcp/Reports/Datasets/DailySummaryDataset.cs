@@ -48,6 +48,8 @@ internal sealed class DailySummaryDataset : IReportDataset
         new("totalBolus", "Bolus", ReportFieldKind.Number, "U", "The day's bolus insulin, the algorithm's included.", Scope.TreatmentsRead, ChartColor.InsulinBolus),
         new("totalBasal", "Basal", ReportFieldKind.Number, "U", "The day's basal insulin.", Scope.TreatmentsRead, ChartColor.InsulinBasal),
         new("totalCarbs", "Carbs", ReportFieldKind.Number, "g", "The day's carbs.", Scope.TreatmentsRead, ChartColor.Carbs),
+        new("partial", "Partial day", ReportFieldKind.Category, null,
+            "true for a day that starts before the last 24 hours a history-limited token reads: its row covers only part of the day."),
     ];
 
     /// <summary>The fields read from insulin and carb records.</summary>
@@ -74,6 +76,7 @@ internal sealed class DailySummaryDataset : IReportDataset
         {
             ["date"] = "2026-10-28", ["day"] = 1793145600000L, ["readings"] = 287, ["timeInRange"] = 74.2, ["timeBelow"] = 1.4,
             ["timeAbove"] = 24.4, ["mean"] = 148.0, ["totalInsulin"] = 41.6, ["totalBolus"] = 21.3, ["totalBasal"] = 20.3, ["totalCarbs"] = 172.0,
+            ["partial"] = false,
         },
     ];
 
@@ -131,6 +134,7 @@ internal sealed class DailySummaryDataset : IReportDataset
                 ["timeBelow"] = P(d.VeryLowPercent + d.LowPercent),
                 ["timeAbove"] = P(d.HighPercent + d.VeryHighPercent),
                 ["mean"] = any ? GlucoseUnits.Scale(d.AverageGlucose, useMmol) : null,
+                ["partial"] = request.HistoryClamped && d.Timestamp < request.From.ToUnixTimeMilliseconds(),
             };
             if (treatments)
             {
@@ -145,7 +149,8 @@ internal sealed class DailySummaryDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = Summarise(rows, startDate, endDate, useMmol, [.. omitted.Select(o => o.Field)]),
+            Summary = Summarise(rows, startDate, endDate, useMmol, [.. omitted.Select(o => o.Field)],
+                request.HistoryClamped ? request.From : null),
             Omitted = omitted,
             Window = days.Count == 0 ? null : new ReportWindow(days[0].Timestamp, days[^1].EndTimestamp),
         };
@@ -157,13 +162,18 @@ internal sealed class DailySummaryDataset : IReportDataset
         DateOnly start,
         DateOnly end,
         bool useMmol,
-        IReadOnlyList<string> omitted)
+        IReadOnlyList<string> omitted,
+        DateTimeOffset? clampedFrom = null)
     {
         string N(object? value, string format) => value is IFormattable f ? f.ToString(format, CultureInfo.InvariantCulture) : "no data";
         var lines = new List<string>
         {
             string.Create(CultureInfo.InvariantCulture, $"Daily summary over local days {start:yyyy-MM-dd} to {end:yyyy-MM-dd}."),
         };
+
+        if (clampedFrom is { } cut && rows.FirstOrDefault(r => r.GetValueOrDefault("partial") is true) is { } first)
+            lines.Add(string.Create(CultureInfo.InvariantCulture,
+                $"The day {first["date"]} is partial: this token reads only the last 24 hours, so its row starts at {cut:yyyy-MM-dd HH:mm} UTC."));
 
         var withData = rows.Where(r => r["readings"] is int n && n > 0).ToList();
         lines.Add($"Days with glucose readings: {withData.Count} of {rows.Count}.");

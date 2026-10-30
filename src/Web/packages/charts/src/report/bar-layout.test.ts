@@ -56,4 +56,18 @@ describe("barLayout", () => {
     ]);
     expect(layout.categories).toEqual(["Mon", "Tue"]);
   });
+
+  it("draws a value that is not a theme colour as neutral, so no row can reach another CSS variable", () => {
+    const layout = barLayout({
+      fields: [field("band", { kind: "category", unit: null, colorField: "color" }), field("percent"), field("color", { kind: "category" })],
+      bindings: { x: "band", y: ["percent"] },
+      rows: [
+        { band: "A", percent: 10, color: "background); fill: url(https://example.com/x" },
+        { band: "B", percent: 20, color: "primary-foreground" },
+        { band: "C", percent: 30, color: null },
+      ],
+    });
+
+    expect(layout.segments.map((s) => s.color)).toEqual([NEUTRAL_BAR, NEUTRAL_BAR, NEUTRAL_BAR]);
+  });
 });

@@ -8,7 +8,8 @@ namespace Nocturne.API.Mcp.Reports.Datasets;
 /// <summary>
 /// The basal the dashboard's basal track draws (<see cref="IChartDataService.GetBasalSeriesAsync"/>,
 /// <c>GET /api/v4/chartdata/basal-series</c>): the delivered rate at each change and the rate the
-/// schedule called for there. The scheduled rate is the profile's, so it needs therapy.read.
+/// schedule called for there. The scheduled rate is the profile's, so it needs therapy.read; the
+/// service reads the profile for every caller, and the audit says so.
 /// </summary>
 internal sealed class BasalDeliveryDataset : IReportDataset
 {
@@ -64,9 +65,11 @@ internal sealed class BasalDeliveryDataset : IReportDataset
         if (series.Count > 0)
             request.ReadLog.Record("treatments", series.Count);
 
-        var therapy = request.HasScope(Scope.TherapyRead);
-        if (therapy && series.Any(p => p.ScheduledRate is not null))
+        // The series is built on the profile's schedule whatever the token holds (a scheduled or
+        // inferred row's delivered rate is the schedule's), so the profile is read in every case.
+        if (series.Count > 0)
             request.ReadLog.Record("profiles", 0);
+        var therapy = request.HasScope(Scope.TherapyRead);
 
         var interval = GlucoseSeriesDataset.IntervalFor(request.From, request.To, 1, Budget);
         var kept = Thin(series, from, interval);
@@ -125,7 +128,8 @@ internal sealed class BasalDeliveryDataset : IReportDataset
                 .Select(g => $"{g.Key} {g.Count()}")) + ".");
         }
         if (omitted.Count > 0)
-            lines.Add($"Fields omitted: {string.Join(", ", omitted)} (scope not granted).");
+            lines.Add("The schedule on its own is omitted: it needs the therapy.read scope, which this token does not hold. "
+                + "A row from the schedule still shows the scheduled rate as the delivered rate.");
         return string.Join('\n', lines);
     }
 }

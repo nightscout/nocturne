@@ -132,47 +132,56 @@ export const PumpModeState = {
 } as const;
 export type PumpModeState = (typeof PumpModeState)[keyof typeof PumpModeState];
 
-/** The API's `ChartColor`: each value names the CSS custom property `themes/nocturne.css` or the host defines. */
-export type ChartColor =
-	| 'glucose-very-low'
-	| 'glucose-low'
-	| 'glucose-in-range'
-	| 'glucose-high'
-	| 'glucose-very-high'
-	| 'insulin-bolus'
-	| 'insulin-basal'
-	| 'insulin-temp-basal'
-	| 'carbs'
-	| 'pump-mode-automatic'
-	| 'pump-mode-limited'
-	| 'pump-mode-manual'
-	| 'pump-mode-boost'
-	| 'pump-mode-ease-off'
-	| 'pump-mode-sleep'
-	| 'pump-mode-exercise'
-	| 'pump-mode-suspended'
-	| 'pump-mode-off'
-	| 'pump-mode-liberty'
-	| 'system-event-alarm'
-	| 'system-event-hazard'
-	| 'system-event-warning'
-	| 'system-event-info'
-	| 'activity-sleep'
-	| 'activity-exercise'
-	| 'activity-illness'
-	| 'activity-travel'
-	| 'tracker-sensor'
-	| 'tracker-cannula'
-	| 'tracker-pod'
-	| 'tracker-reservoir'
-	| 'tracker-battery'
-	| 'tracker-consumable'
-	| 'tracker-appointment'
-	| 'tracker-reminder'
-	| 'tracker-custom'
-	| 'heart-rate'
-	| 'steps'
-	| 'chart-1'
-	| 'chart-2'
-	| 'muted-foreground'
-	| 'primary';
+/** The API's `ChartColor` values: each names the CSS custom property `themes/nocturne.css` or the host defines. */
+export const CHART_COLORS = [
+	'glucose-very-low',
+	'glucose-low',
+	'glucose-in-range',
+	'glucose-high',
+	'glucose-very-high',
+	'insulin-bolus',
+	'insulin-basal',
+	'insulin-temp-basal',
+	'carbs',
+	'pump-mode-automatic',
+	'pump-mode-limited',
+	'pump-mode-manual',
+	'pump-mode-boost',
+	'pump-mode-ease-off',
+	'pump-mode-sleep',
+	'pump-mode-exercise',
+	'pump-mode-suspended',
+	'pump-mode-off',
+	'pump-mode-liberty',
+	'system-event-alarm',
+	'system-event-hazard',
+	'system-event-warning',
+	'system-event-info',
+	'activity-sleep',
+	'activity-exercise',
+	'activity-illness',
+	'activity-travel',
+	'tracker-sensor',
+	'tracker-cannula',
+	'tracker-pod',
+	'tracker-reservoir',
+	'tracker-battery',
+	'tracker-consumable',
+	'tracker-appointment',
+	'tracker-reminder',
+	'tracker-custom',
+	'heart-rate',
+	'steps',
+	'chart-1',
+	'chart-2',
+	'muted-foreground',
+	'primary',
+] as const;
+export type ChartColor = (typeof CHART_COLORS)[number];
+
+const chartColors: ReadonlySet<string> = new Set(CHART_COLORS);
+
+/** Whether a value from the API is one of the theme colours, so it may name a CSS custom property. */
+export function isChartColor(value: unknown): value is ChartColor {
+	return typeof value === 'string' && chartColors.has(value);
+}

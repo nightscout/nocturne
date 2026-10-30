@@ -28,7 +28,7 @@ internal sealed class TreatmentsDataset : IReportDataset
     public string Description =>
         "Treatment records in the range, one row each, oldest first: boluses (with the algorithm's), carb entries, temp "
         + "basals, notes, overrides and long-acting injections. Filter by 'types', 'minCarbs' and 'minInsulin'. Draw as table, "
-        + "or time_series with y 'insulin' or 'carbs', which draws each record as the dashboard's bolus or carb marker. At most "
+        + "or time_series with y 'insulin' or 'carbs', which draws each bolus or carb entry as the dashboard's marker. At most "
         + $"{Budget} rows: a range with more keeps the latest {Budget}.";
 
     public Type ParametersType => typeof(TreatmentsParameters);
@@ -39,8 +39,10 @@ internal sealed class TreatmentsDataset : IReportDataset
     [
         new("time", "Time", ReportFieldKind.Time, null, "When the record starts, Unix milliseconds."),
         new("type", "Type", ReportFieldKind.Category, null, "bolus, carbs, temp_basal, note, override or basal_injection."),
-        new("insulin", "Insulin", ReportFieldKind.Number, "U", "Units of a bolus or a long-acting injection.",
+        new("insulin", "Bolus", ReportFieldKind.Number, "U", "Units of a bolus. Empty for every other kind.",
             Color: ChartColor.InsulinBolus, Marker: ReportMarkerKind.Bolus),
+        new("injectionUnits", "Injection", ReportFieldKind.Number, "U", "Units of a long-acting injection. Empty for every other kind.",
+            Color: ChartColor.InsulinBasal),
         new("carbs", "Carbs", ReportFieldKind.Number, "g", "Grams of a carb entry.", Color: ChartColor.Carbs, Marker: ReportMarkerKind.Carbs),
         new("rate", "Rate", ReportFieldKind.Number, "U/h", "The rate of a temp basal."),
         new("durationMinutes", "Duration", ReportFieldKind.Number, "min", "How long a temp basal or override ran. Empty while it runs."),
@@ -93,29 +95,43 @@ internal sealed class TreatmentsDataset : IReportDataset
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var parameters = (TreatmentsParameters)request.Parameters;
-        var records = await ReadAsync(request.Services, Kinds(parameters), request.From.UtcDateTime, request.To.UtcDateTime, cancellationToken);
+        var (records, limited) = await ReadAsync(request.Services, Kinds(parameters), request.From.UtcDateTime, request.To.UtcDateTime, cancellationToken);
         var kept = Filter(records, parameters);
         if (records.Count > 0)
             request.ReadLog.Record("treatments", records.Count);
 
         var latest = kept.OrderByDescending(r => r.Time).Take(Budget).OrderBy(r => r.Time).ToList();
         var summary = Summarise(kept, request.From, request.To, Kinds(parameters),
-            request.Services.GetRequiredService<IStatisticsService>(), latest.Count);
+            request.Services.GetRequiredService<IStatisticsService>(), latest.Count, limited);
 
         return new ReportDatasetOutput
         {
             Rows = [.. latest.Select(Row)],
             Summary = summary,
             Resolution = new ReportResolution(0, 0, kept.Count, latest.Count, latest.Count < kept.Count),
+            Markers = Markers(latest),
         };
     }
+
+    /// <summary>
+    /// The bolus and carb entries among <paramref name="rows"/> as the markers a time series draws, with
+    /// the algorithm's boluses marked so: the view draws what this says, never deciding from a row.
+    /// </summary>
+    internal static IReadOnlyList<ReportMarker> Markers(IEnumerable<Record> rows) =>
+        [.. rows.Select(r => r.Type switch
+        {
+            ReportTreatmentType.Bolus => new ReportMarker(r.Time, ReportMarkerKind.Bolus, Math.Round(r.Insulin ?? 0, 2), r.Automatic == true),
+            ReportTreatmentType.Carbs => new ReportMarker(r.Time, ReportMarkerKind.Carbs, Math.Round(r.Carbs ?? 0, 1)),
+            _ => null,
+        }).OfType<ReportMarker>()];
 
     /// <summary>The kinds a request names, every kind when it names none.</summary>
     internal static IReadOnlySet<ReportTreatmentType> Kinds(TreatmentsParameters parameters) =>
         (parameters.Types is { Count: > 0 } types ? types : Enum.GetValues<ReportTreatmentType>()).ToHashSet();
 
     /// <summary>The records of <paramref name="kinds"/> from <paramref name="from"/> to <paramref name="to"/>, as rows before filtering.</summary>
-    internal static async Task<List<Record>> ReadAsync(
+    /// <returns>The rows, and the kinds whose read stopped at <see cref="RecordLimit"/>, so their counts are of the latest records only.</returns>
+    internal static async Task<(List<Record> Rows, IReadOnlySet<ReportTreatmentType> Limited)> ReadAsync(
         IServiceProvider services, IReadOnlySet<ReportTreatmentType> kinds, DateTime from, DateTime to, CancellationToken ct)
     {
         var rows = new List<Record>();
@@ -140,7 +156,8 @@ internal sealed class TreatmentsDataset : IReportDataset
         if (kinds.Contains(ReportTreatmentType.BasalInjection))
             rows.AddRange((await services.GetRequiredService<IBasalInjectionRepository>().GetAsync(from, to, null, null, RecordLimit, 0, true, ct))
                 .Select(i => new Record(i.Mills, ReportTreatmentType.BasalInjection, Insulin: i.Units, Detail: Cut(i.InsulinContext?.InsulinName))));
-        return rows;
+        var limited = rows.GroupBy(r => r.Type).Where(g => g.Count() >= RecordLimit).Select(g => g.Key).ToHashSet();
+        return (rows, limited);
     }
 
     /// <summary>The records the amount filters keep: each applies to its own kinds only.</summary>
@@ -156,7 +173,8 @@ internal sealed class TreatmentsDataset : IReportDataset
     {
         ["time"] = r.Time,
         ["type"] = Wire(r.Type),
-        ["insulin"] = r.Insulin is { } u ? Math.Round(u, 2) : null,
+        ["insulin"] = r.Type == ReportTreatmentType.Bolus && r.Insulin is { } u ? Math.Round(u, 2) : null,
+        ["injectionUnits"] = r.Type == ReportTreatmentType.BasalInjection && r.Insulin is { } units ? Math.Round(units, 2) : null,
         ["carbs"] = r.Carbs is { } g ? Math.Round(g, 1) : null,
         ["rate"] = r.Rate is { } rate ? Math.Round(rate, 3) : null,
         ["durationMinutes"] = r.DurationMinutes is { } m ? Math.Round(m) : null,
@@ -191,7 +209,8 @@ internal sealed class TreatmentsDataset : IReportDataset
         DateTimeOffset to,
         IReadOnlySet<ReportTreatmentType> kinds,
         IStatisticsService statistics,
-        int rowsServed)
+        int rowsServed,
+        IReadOnlySet<ReportTreatmentType>? limited = null)
     {
         static string At(long mills) => DateTimeOffset.FromUnixTimeMilliseconds(mills).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
         static string N(double value, string format = "0.##") => value.ToString(format, CultureInfo.InvariantCulture);
@@ -257,8 +276,13 @@ internal sealed class TreatmentsDataset : IReportDataset
             text.Append(".\n");
         }
 
+        if (limited is { Count: > 0 })
+            text.Append(CultureInfo.InvariantCulture,
+                $"Only the latest {RecordLimit} records of each kind are read, and this period has more of these kinds: "
+                + $"{string.Join(", ", limited.Order().Select(Wire))}. Their counts and totals cover only those records.\n");
         if (rowsServed < records.Count)
-            text.Append(CultureInfo.InvariantCulture, $"The rows hold the latest {rowsServed} of {records.Count} records. The counts above cover all of them.\n");
+            text.Append(CultureInfo.InvariantCulture,
+                $"The rows hold the latest {rowsServed} of {records.Count} records. The counts above cover all {records.Count} records.\n");
         return text.ToString().TrimEnd();
     }
 }
