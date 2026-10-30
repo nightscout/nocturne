@@ -13,9 +13,12 @@ namespace Nocturne.API.Services.Auth;
 /// Runs on the caller's context, never one it resolves itself, so a platform-admin caller's
 /// tenant pin decides which grant the consequences apply to; the refresh tokens are revoked
 /// through <see cref="IOAuthTokenRepository"/> pinned to each grant's tenant for the same reason.
-/// The grant stamp is saved before the tokens are revoked: a refresh under a revoked grant is
-/// refused on the grant, so a token the second step never reached is dead anyway, whereas a token
-/// revoked under a grant the first step never reached would read as a sign-out.
+/// The grant and its devices save on the caller's context first; the tokens are then revoked in a
+/// second context, by <see cref="IOAuthTokenRepository.RevokeRefreshTokensOfRevokedGrantsAsync"/>,
+/// which only reaches tokens of a grant already revoked. The two steps are not one transaction,
+/// which is safe because the refresh path refuses a revoked grant before any grace or rotation
+/// step: a token the second step never reached is dead anyway. One transaction needs the callers
+/// to hand over a unit of work (#3102).
 /// </remarks>
 public sealed class GrantRevocationService
 {
@@ -29,7 +32,8 @@ public sealed class GrantRevocationService
     }
 
     /// <summary>
-    /// Revokes <paramref name="grant"/>, applies every consequence, then saves.
+    /// Revokes <paramref name="grant"/> and applies every consequence, as
+    /// <see cref="RevokeAllAsync"/> does.
     /// </summary>
     /// <param name="db">The caller's tenant-scoped context, tracking <paramref name="grant"/>.</param>
     /// <param name="grant">The grant to revoke.</param>
@@ -41,9 +45,10 @@ public sealed class GrantRevocationService
         RevokeAllAsync(db, [grant], ct);
 
     /// <summary>
-    /// Revokes every one of <paramref name="grants"/>, applies every consequence, then saves. The
-    /// save also commits whatever else the caller has staged on <paramref name="db"/>, so a change
-    /// that must not outlive the grants, or be outlived by them, lands with them.
+    /// Revokes every one of <paramref name="grants"/>, saves the grants and their device removals
+    /// on <paramref name="db"/>, then revokes their refresh tokens and evicts their guest sessions.
+    /// The save also commits whatever else the caller has staged on <paramref name="db"/>, so a
+    /// change that must not outlive the grants, or be outlived by them, lands with them.
     /// </summary>
     /// <param name="db">The caller's tenant-scoped context, tracking <paramref name="grants"/>.</param>
     /// <param name="grants">The grants to revoke.</param>
@@ -72,7 +77,7 @@ public sealed class GrantRevocationService
         var revokedTokens = 0;
         foreach (var tenant in grants.GroupBy(g => g.TenantId))
         {
-            revokedTokens += await _tokens.RevokeRefreshTokensOfGrantsAsync(
+            revokedTokens += await _tokens.RevokeRefreshTokensOfRevokedGrantsAsync(
                 tenant.Key, tenant.Select(g => g.Id).ToList(), now, ct);
         }
 

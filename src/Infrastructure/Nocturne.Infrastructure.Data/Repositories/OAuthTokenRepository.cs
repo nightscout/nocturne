@@ -136,31 +136,31 @@ public class OAuthTokenRepository : IOAuthTokenRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task RevokeRefreshTokenAsync(Guid tokenId, DateTime now, CancellationToken ct)
+    public virtual async Task<bool> RevokeRefreshTokenAsync(Guid tokenId, DateTime now, CancellationToken ct)
     {
         await using var db = await _contexts.CreateAsync(ct);
-        await db.OAuthRefreshTokens
+        var revoked = await db.OAuthRefreshTokens
             .Where(t => t.Id == tokenId && t.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now), ct);
+        return revoked == 1;
     }
 
     /// <inheritdoc/>
     /// <remarks>
     /// Pinned to the grants' tenant: the caller revoking a grant may be a platform admin whose own
-    /// scope is another tenant, and the tokens are in the grant's.
+    /// scope is another tenant, and the tokens are in the grant's. The grant's revocation is in the
+    /// predicate, so the pin cannot revoke a live grant's tokens, and the token's own
+    /// <c>RevokedAt</c> is too, so a rotation that won meanwhile keeps its stamp. One statement:
+    /// the token rows are not audited, so nothing needs the change tracker.
     /// </remarks>
-    public virtual async Task<int> RevokeRefreshTokensOfGrantsAsync(
+    public virtual async Task<int> RevokeRefreshTokensOfRevokedGrantsAsync(
         Guid tenantId, IReadOnlyCollection<Guid> grantIds, DateTime now, CancellationToken ct)
     {
         await using var db = await _contexts.CreateForTenantAsync(tenantId, ct);
         var ids = grantIds.ToList();
-        var tokens = await db.OAuthRefreshTokens
-            .Where(t => ids.Contains(t.GrantId) && t.RevokedAt == null)
-            .ToListAsync(ct);
-        foreach (var token in tokens)
-            token.RevokedAt = now;
-        await db.SaveChangesAsync(ct);
-        return tokens.Count;
+        return await db.OAuthRefreshTokens
+            .Where(t => ids.Contains(t.GrantId) && t.RevokedAt == null && t.Grant!.RevokedAt != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now), ct);
     }
 
     /// <inheritdoc/>
@@ -218,12 +218,23 @@ public class OAuthTokenRepository : IOAuthTokenRepository
         UpdateDeviceCodeAsync(id, d => d.DeniedAt = now, ct);
 
     /// <inheritdoc/>
-    public virtual Task<bool> RecordDevicePollAsync(Guid id, DateTime polledAt, int interval, CancellationToken ct) =>
-        UpdateDeviceCodeAsync(id, d =>
-        {
-            d.LastPolledAt = polledAt;
-            d.Interval = interval;
-        }, ct);
+    /// <remarks>
+    /// A tracked save rather than an <c>ExecuteUpdate</c>: it is the save between a poll's read of
+    /// the code and its claim, which is where a rival poll can redeem the code, and the exchange
+    /// test for that race stages the rival in a <c>SaveChangesInterceptor</c>.
+    /// </remarks>
+    public virtual Task<bool> RecordDevicePollAsync(Guid id, DateTime polledAt, CancellationToken ct) =>
+        UpdateDeviceCodeAsync(id, d => d.LastPolledAt = polledAt, ct);
+
+    /// <inheritdoc/>
+    public virtual async Task<bool> BumpDeviceCodeIntervalAsync(Guid id, int by, CancellationToken ct)
+    {
+        await using var db = await _contexts.CreateAsync(ct);
+        var bumped = await db.OAuthDeviceCodes
+            .Where(d => d.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.Interval, d => d.Interval + by), ct);
+        return bumped == 1;
+    }
 
     /// <inheritdoc/>
     public virtual async Task<bool> TryRedeemDeviceCodeAsync(Guid id, DateTime now, CancellationToken ct)

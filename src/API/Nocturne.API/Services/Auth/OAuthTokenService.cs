@@ -40,11 +40,14 @@ public class OAuthTokenService : IOAuthTokenService
     /// <inheritdoc cref="RefreshReuseGrace"/>
     private const int MaxGraceRedemptions = 1;
 
+    /// <param name="tokens">The stored codes and refresh tokens.</param>
     /// <param name="contexts">For <see cref="LoadGrantAsync"/> only.</param>
     /// <param name="jwtService">Service for generating and validating JWT access tokens and refresh tokens.</param>
     /// <param name="subjectService">Service for resolving subject permissions and roles for token claims.</param>
     /// <param name="grantService">Service for persisting and querying OAuth consent grants.</param>
     /// <param name="revocationCache">Blocklist of revoked access tokens, keyed by <c>jti</c>.</param>
+    /// <param name="timeProvider">The clock every lifetime and claim is stamped by.</param>
+    /// <param name="logger">The logger.</param>
     public OAuthTokenService(
         IOAuthTokenRepository tokens,
         INocturneDbContextFactory contexts,
@@ -403,7 +406,11 @@ public class OAuthTokenService : IOAuthTokenService
             return false;
         }
 
-        await _tokens.RevokeRefreshTokenAsync(refreshToken.Id, UtcNow, ct);
+        if (!await _tokens.RevokeRefreshTokenAsync(refreshToken.Id, UtcNow, ct))
+        {
+            return false;
+        }
+
         _logger.LogInformation(
             "OAuthAudit: {Event} token_id={TokenId} grant_id={GrantId}",
             "refresh_token_revoked", refreshToken.Id, refreshToken.GrantId);
@@ -488,18 +495,18 @@ public class OAuthTokenService : IOAuthTokenService
         if (entity.LastPolledAt != null
             && (UtcNow - entity.LastPolledAt.Value).TotalSeconds < entity.Interval)
         {
-            var interval = entity.Interval + 5;
-            await _tokens.RecordDevicePollAsync(entity.Id, UtcNow, interval, ct);
+            await _tokens.BumpDeviceCodeIntervalAsync(entity.Id, 5, ct);
+            await _tokens.RecordDevicePollAsync(entity.Id, UtcNow, ct);
 
             _logger.LogDebug(
-                "Device code polling too fast for client {ClientId}, interval increased to {Interval}s",
+                "Device code polling too fast for client {ClientId}, interval increased to at least {Interval}s",
                 clientId,
-                interval
+                entity.Interval + 5
             );
             return OAuthTokenResult.Fail("slow_down", "Polling too frequently. Increase interval.");
         }
 
-        await _tokens.RecordDevicePollAsync(entity.Id, UtcNow, entity.Interval, ct);
+        await _tokens.RecordDevicePollAsync(entity.Id, UtcNow, ct);
 
         if (!entity.IsApproved || entity.GrantId == null)
         {

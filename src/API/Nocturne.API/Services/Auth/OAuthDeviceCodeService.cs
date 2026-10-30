@@ -31,6 +31,7 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
     /// <summary>
     /// Initialises a new <see cref="OAuthDeviceCodeService"/>.
     /// </summary>
+    /// <param name="tokens">The stored device codes.</param>
     /// <param name="jwtService">Used to generate and hash the opaque device code value.</param>
     /// <param name="clientService">Used to look up registered OAuth clients by ID.</param>
     /// <param name="grantService">Used to create or update grants when a device code is approved.</param>
@@ -241,7 +242,13 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             ct: ct
         );
 
-        await _tokens.ApproveDeviceCodeAsync(entity.Id, subjectId, grant.Id, DateTime.UtcNow, ct);
+        if (!await _tokens.ApproveDeviceCodeAsync(entity.Id, subjectId, grant.Id, DateTime.UtcNow, ct))
+        {
+            _logger.LogWarning(
+                "Cannot approve device code {UserCode}: it was deleted before the approval was stored",
+                normalized);
+            return false;
+        }
 
         _logger.LogInformation(
             "Device code {UserCode} approved by subject {SubjectId} for client {ClientId}, created grant {GrantId} of type {GrantType}",
@@ -292,7 +299,13 @@ public class OAuthDeviceCodeService : IOAuthDeviceCodeService
             return false;
         }
 
-        await _tokens.DenyDeviceCodeAsync(entity.Id, DateTime.UtcNow, ct);
+        if (!await _tokens.DenyDeviceCodeAsync(entity.Id, DateTime.UtcNow, ct))
+        {
+            _logger.LogWarning(
+                "Cannot deny device code {UserCode}: it was deleted before the denial was stored",
+                normalized);
+            return false;
+        }
 
         _logger.LogInformation(
             "Device code {UserCode} denied for client {ClientId}",

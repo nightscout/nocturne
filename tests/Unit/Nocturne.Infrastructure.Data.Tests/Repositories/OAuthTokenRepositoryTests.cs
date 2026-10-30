@@ -115,8 +115,8 @@ public class OAuthTokenRepositoryTests : IDisposable
         var repo = Repository();
         var token = await repo.StoreRefreshTokenAsync(Token("t1"), CancellationToken.None);
 
-        await repo.RevokeRefreshTokenAsync(token, Now, CancellationToken.None);
-        await repo.RevokeRefreshTokenAsync(token, Now.AddHours(1), CancellationToken.None);
+        (await repo.RevokeRefreshTokenAsync(token, Now, CancellationToken.None)).Should().BeTrue();
+        (await repo.RevokeRefreshTokenAsync(token, Now.AddHours(1), CancellationToken.None)).Should().BeFalse();
 
         (await repo.IsRefreshTokenSignedOutAsync(token, CancellationToken.None)).Should().BeTrue();
         (await repo.GetRefreshTokenAsync(token, CancellationToken.None))!.RevokedAt.Should().Be(Now, "a revocation is not re-stamped");
@@ -137,7 +137,7 @@ public class OAuthTokenRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task RevokingAGrantsTokensIsPinnedToTheGrantsTenantAndSparesOtherGrants()
+    public async Task RevokingARevokedGrantsTokensIsPinnedToItsTenantAndSparesOtherGrants()
     {
         var otherGrant = Guid.CreateVersion7();
         await using (var db = _db.CreateContext(_otherTenant))
@@ -145,20 +145,41 @@ public class OAuthTokenRepositoryTests : IDisposable
             db.OAuthGrants.Add(new OAuthGrantEntity
             {
                 Id = otherGrant, ClientEntityId = _client, SubjectId = _subject, Scopes = ["glucose.read"], GrantType = "app",
+                RevokedAt = Now,
             });
             await db.SaveChangesAsync();
         }
+        await using (var db = _db.CreateContext())
+        {
+            await db.OAuthGrants.Where(g => g.Id == _grant).ExecuteUpdateAsync(s => s.SetProperty(g => g.RevokedAt, Now));
+        }
 
         var tokenInGrant = await Repository().StoreRefreshTokenAsync(Token("t1"), CancellationToken.None);
+        var rotatedEarlier = await Repository().StoreRefreshTokenAsync(Token("t0"), CancellationToken.None);
+        (await Repository().TryRotateRefreshTokenAsync(rotatedEarlier, tokenInGrant, Now.AddMinutes(-1), CancellationToken.None)).Should().BeTrue();
         var otherTenantsToken = await Repository(_otherTenant)
             .StoreRefreshTokenAsync(Token("t2", _otherTenant, otherGrant), CancellationToken.None);
 
         var revoked = await Repository(_otherTenant)
-            .RevokeRefreshTokensOfGrantsAsync(_tenant, [_grant, otherGrant], Now, CancellationToken.None);
+            .RevokeRefreshTokensOfRevokedGrantsAsync(_tenant, [_grant, otherGrant], Now, CancellationToken.None);
 
         revoked.Should().Be(1);
         (await Repository().GetRefreshTokenAsync(tokenInGrant, CancellationToken.None))!.RevokedAt.Should().Be(Now);
+        (await Repository().GetRefreshTokenAsync(rotatedEarlier, CancellationToken.None))!.RevokedAt
+            .Should().Be(Now.AddMinutes(-1), "a rotation's stamp is not overwritten");
         (await Repository(_otherTenant).GetRefreshTokenAsync(otherTenantsToken, CancellationToken.None))!.RevokedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ALiveGrantsTokensCannotBeRevokedThroughThePin()
+    {
+        var token = await Repository().StoreRefreshTokenAsync(Token("t1"), CancellationToken.None);
+
+        var revoked = await Repository(_otherTenant)
+            .RevokeRefreshTokensOfRevokedGrantsAsync(_tenant, [_grant], Now, CancellationToken.None);
+
+        revoked.Should().Be(0);
+        (await Repository().GetRefreshTokenAsync(token, CancellationToken.None))!.RevokedAt.Should().BeNull();
     }
 
     [Fact]
@@ -181,18 +202,23 @@ public class OAuthTokenRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task APollIsRecordedWithTheIntervalTheClientIsHeldTo()
+    public async Task APollIsRecordedAndEachBumpAddsToTheInterval()
     {
         var repo = Repository();
         var id = await repo.StoreDeviceCodeAsync(
             new NewDeviceCode("app", "device", "BCDFGHJK", ["glucose.read"], Now.AddMinutes(30), 5), CancellationToken.None);
 
-        (await repo.RecordDevicePollAsync(id, Now, 10, CancellationToken.None)).Should().BeTrue();
-        (await repo.RecordDevicePollAsync(Guid.CreateVersion7(), Now, 10, CancellationToken.None)).Should().BeFalse();
+        (await repo.RecordDevicePollAsync(id, Now, CancellationToken.None)).Should().BeTrue();
+        (await repo.RecordDevicePollAsync(Guid.CreateVersion7(), Now, CancellationToken.None)).Should().BeFalse();
+        (await repo.BumpDeviceCodeIntervalAsync(id, 5, CancellationToken.None)).Should().BeTrue();
+        (await repo.BumpDeviceCodeIntervalAsync(id, 5, CancellationToken.None)).Should().BeTrue();
+        (await repo.BumpDeviceCodeIntervalAsync(Guid.CreateVersion7(), 5, CancellationToken.None)).Should().BeFalse();
 
         var stored = await repo.FindDeviceCodeAsync("device", CancellationToken.None);
         stored!.LastPolledAt.Should().Be(Now);
-        stored.Interval.Should().Be(10);
+        stored.Interval.Should().Be(15);
+        (await repo.ApproveDeviceCodeAsync(Guid.CreateVersion7(), _subject, _grant, Now, CancellationToken.None)).Should().BeFalse();
+        (await repo.DenyDeviceCodeAsync(Guid.CreateVersion7(), Now, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
