@@ -8,35 +8,43 @@ namespace Nocturne.API.Tests.Infrastructure;
 
 /// <summary>
 /// A concept whose persistence module is in Infrastructure.Data is reached from the web host
-/// through its contract only: no file in the API project names one of its entity types, and no
-/// member of the API assembly takes or returns one. Each slice of #2129 adds its concept to
-/// <see cref="Enforced"/> as it lands; a concept in <see cref="Pending"/> is listed so the next
-/// slice has its entity set to hand and the names cannot go stale meanwhile.
+/// through its contract only. For each concept in <see cref="Concepts"/> this checks three things:
+/// no file in the API project contains one of its entity type names or one of its
+/// <c>DbSet</c>s as a member access (<c>.AlertRules</c>), doc comments and comments included; no
+/// constructor, method, field or property of the API assembly carries one of its entity types;
+/// and every listed entity is a type Infrastructure.Data declares. Each slice of #2129 adds its
+/// concept as it lands.
 /// </summary>
 /// <remarks>
-/// A file is named in <see cref="Concept.ExemptFiles"/> only for a port still under way, with the
-/// slice that removes the exemption. The text scan counts a name anywhere in the file, doc
-/// comments included: an entity the host still talks about is one it still reaches for.
+/// The text scan does not see an entity reached through a navigation property, so a host member
+/// that holds one that way is caught only by the reflection half, and a query that goes through a
+/// navigation is not caught at all. An <see cref="Exemption"/> names a file that may still use the
+/// concept's <c>DbSet</c>s or types, with the reason; a later slice or follow-up deletes it.
 /// </remarks>
 [Trait("Category", "Unit")]
 public class HostPersistenceGuardTests
 {
-    private sealed record Concept(string Name, string[] Entities, string[] ExemptFiles);
+    private sealed record Exemption(string File, string Reason);
 
-    private static readonly Concept[] Enforced =
-    [
-        new("alert rules (#3100)", ["AlertRuleEntity", "AlertRuleChannelEntity"], []),
-    ];
+    private sealed record Concept(string Name, string[] Entities, string[] DbSets, Exemption[] Exemptions)
+    {
+        public IEnumerable<Regex> Patterns =>
+            Entities.Select(NamePattern).Concat(DbSets.Select(DbSetPattern));
 
-    private static readonly Concept[] Pending =
+        public bool Exempts(string path) => Exemptions.Any(e => e.File == path);
+    }
+
+    private static readonly Concept[] Concepts =
     [
-        new("OAuth grants and tokens (#3101)",
-            ["OAuthClientEntity", "OAuthGrantEntity", "OAuthAuthorizationCodeEntity", "OAuthRefreshTokenEntity", "OAuthDeviceCodeEntity", "RefreshTokenEntity"],
-            []),
-        new("identity and tenancy (#3102)",
-            ["SubjectEntity", "SubjectRoleEntity", "SubjectOidcIdentityEntity", "TenantEntity", "TenantMemberEntity", "TenantMemberRoleEntity", "TenantRoleEntity"],
-            []),
-        new("connector configuration (#3103)", ["ConnectorConfigurationEntity"], []),
+        new("alert rules (#3100)",
+            ["AlertRuleEntity", "AlertRuleChannelEntity"],
+            ["AlertRules", "AlertRuleChannels"],
+            [
+                new("src/API/Nocturne.API/Controllers/V4/Monitoring/AlertInvitesController.cs",
+                    "reads whether a channel exists before minting an invite; a read outside the slice's write scope"),
+                new("src/API/Nocturne.API/Services/Platform/InstanceKey/UndecryptableSecretScanner.cs",
+                    "reads every channel secret of the tenant for the instance-key scan; a read outside the slice's write scope"),
+            ]),
     ];
 
     private const string Host = "src/API/Nocturne.API";
@@ -45,30 +53,33 @@ public class HostPersistenceGuardTests
     private static readonly Assembly Data = typeof(NocturneDbContext).Assembly;
 
     [Fact]
-    public void NoHostFileNamesAnEnforcedEntity()
+    public void NoHostFileNamesAnEntityOrDbSetOfAConcept()
     {
         var root = RepositoryRoot();
         var namers = HostFiles(root)
-            .SelectMany(path => Enforced
-                .Where(concept => !concept.ExemptFiles.Contains(path))
-                .SelectMany(concept => concept.Entities)
-                .Where(entity => NamePattern(entity).IsMatch(File.ReadAllText(Path.Combine(root, path))))
-                .Select(entity => $"{path}({entity})"))
+            .Select(path => (path, text: File.ReadAllText(Path.Combine(root, path))))
+            .SelectMany(file => Concepts
+                .Where(concept => !concept.Exempts(file.path))
+                .SelectMany(concept => concept.Patterns)
+                .Where(pattern => pattern.IsMatch(file.text))
+                .Select(pattern => $"{file.path}({pattern})"))
             .ToList();
 
-        namers.Should().BeEmpty("the host reaches a ported concept's rows through its repository contract, not its entities");
+        namers.Should().BeEmpty("the host reaches a ported concept's rows through its repository contract, not its entities or DbSets");
     }
 
     [Fact]
-    public void NoHostMemberTakesOrReturnsAnEnforcedEntity()
+    public void NoHostMemberCarriesAnEntityOfAConcept()
     {
-        var entities = Enforced.SelectMany(c => c.Entities).ToHashSet(StringComparer.Ordinal);
+        var entities = Concepts.SelectMany(c => c.Entities).ToHashSet(StringComparer.Ordinal);
         const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
 
         var members = Api.GetTypes()
             .Where(t => !t.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false))
             .SelectMany(t => t.GetConstructors(all).SelectMany(c => c.GetParameters().Select(p => p.ParameterType))
                 .Concat(t.GetMethods(all).SelectMany(m => m.GetParameters().Select(p => p.ParameterType).Append(m.ReturnType)))
+                .Concat(t.GetFields(all).Select(f => f.FieldType))
+                .Concat(t.GetProperties(all).Select(p => p.PropertyType))
                 .SelectMany(EntitiesIn)
                 .Where(entities.Contains)
                 .Select(entity => $"{t.FullName}({entity})"))
@@ -82,22 +93,23 @@ public class HostPersistenceGuardTests
     public void EveryListedEntityIsDeclaredInInfrastructureData()
     {
         var declared = Data.GetTypes().Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
-        var listed = Enforced.Concat(Pending).SelectMany(c => c.Entities).Distinct();
+        var dbSets = typeof(NocturneDbContext).GetProperties().Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
 
-        listed.Should().OnlyContain(entity => declared.Contains(entity), "a renamed entity would drop out of the guard");
+        Concepts.SelectMany(c => c.Entities).Should().OnlyContain(entity => declared.Contains(entity), "a renamed entity would drop out of the guard");
+        Concepts.SelectMany(c => c.DbSets).Should().OnlyContain(set => dbSets.Contains(set), "a renamed DbSet would drop out of the guard");
     }
 
     [Fact]
-    public void EveryExemptFileExistsAndNamesItsConcept()
+    public void EveryExemptFileExistsAndUsesItsConcept()
     {
         var root = RepositoryRoot();
-        foreach (var concept in Enforced)
+        var exemptions = Concepts.SelectMany(c => c.Exemptions.Select(e => (Concept: c, Exemption: e))).ToList();
+
+        exemptions.Should().NotBeEmpty();
+        foreach (var (concept, exemption) in exemptions)
         {
-            foreach (var path in concept.ExemptFiles)
-            {
-                var text = File.ReadAllText(Path.Combine(root, path));
-                concept.Entities.Should().Contain(entity => NamePattern(entity).IsMatch(text), $"{path} is exempt from {concept.Name} but names none of its entities");
-            }
+            var text = File.ReadAllText(Path.Combine(root, exemption.File));
+            concept.Patterns.Should().Contain(pattern => pattern.IsMatch(text), $"{exemption.File} is exempt from {concept.Name} but uses none of it");
         }
     }
 
@@ -105,11 +117,15 @@ public class HostPersistenceGuardTests
     [InlineData("var rule = new AlertRuleEntity();", true)]
     [InlineData("/// <see cref=\"AlertRuleEntity.AllowThroughDnd\"/>", true)]
     [InlineData("var rule = new AlertRuleEntityBuilder();", false)]
-    [InlineData("var rules = alerts.AlertRules;", false)]
-    public void FindsAWholeNameOnly(string text, bool expected) =>
-        NamePattern("AlertRuleEntity").IsMatch(text).Should().Be(expected);
+    [InlineData("await db.AlertRules.Where(r => r.Id == id).ExecuteDeleteAsync(ct);", true)]
+    [InlineData("var rules = alerts.AlertRulesController;", false)]
+    [InlineData("var rules = await _alerts.GetRulesAsync(tenant, ct); // AlertRules", false)]
+    public void FindsAWholeNameOrAMemberAccessOnly(string text, bool expected) =>
+        Concepts[0].Patterns.Any(pattern => pattern.IsMatch(text)).Should().Be(expected);
 
     private static Regex NamePattern(string entity) => new($@"\b{Regex.Escape(entity)}\b", RegexOptions.CultureInvariant);
+
+    private static Regex DbSetPattern(string dbSet) => new($@"\.{Regex.Escape(dbSet)}\b", RegexOptions.CultureInvariant);
 
     /// <summary>The entity names a type names, directly or as a generic or element type.</summary>
     private static IEnumerable<string> EntitiesIn(Type type)

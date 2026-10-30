@@ -556,7 +556,6 @@ public class SampleDataSeeder
             ? [new AlertRuleChannelWrite(ChannelType.InApp, owner.ToString())]
             : [];
         var seeded = await _alertRules.CreateMissingByNameAsync(
-            tenantId,
             DemoAlertSeeds.Defaults
                 .Select(seed => new NewAlertRule(
                     new AlertRuleWrite(

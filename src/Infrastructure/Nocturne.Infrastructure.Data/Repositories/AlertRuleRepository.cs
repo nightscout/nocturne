@@ -29,6 +29,8 @@ public class AlertRuleRepository : IAlertRuleRepository
     /// A repository whose calls run on <paramref name="unit"/>, which the caller owns. A write is
     /// staged on the unit and not saved: the owner saves it, through <c>AlertRuleRearm</c> when the
     /// change invalidates a re-arm hold, so the save and the hold's clear land in one transaction.
+    /// A read tracks its rows, so a write on the same unit edits the rows it read in place: no row
+    /// is loaded twice, and only the columns the write changed are saved.
     /// </summary>
     public AlertRuleRepository(DbUnitOfWork unit, TimeProvider? time = null)
     {
@@ -252,9 +254,10 @@ public class AlertRuleRepository : IAlertRuleRepository
 
     /// <inheritdoc/>
     public virtual async Task<SeededAlertRules> CreateMissingByNameAsync(
-        Guid tenantId, IReadOnlyList<NewAlertRule> rules, CancellationToken ct)
+        IReadOnlyList<NewAlertRule> rules, CancellationToken ct)
     {
-        await using var db = await OpenForTenantAsync(tenantId, ct);
+        await using var lease = await OpenAsync(ct);
+        var db = lease.Context;
 
         var idsByName = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         var created = 0;
@@ -264,7 +267,7 @@ public class AlertRuleRepository : IAlertRuleRepository
             var existing = await db.AlertRules.FirstOrDefaultAsync(r => r.Name == name, ct);
             if (existing is null)
             {
-                existing = NewEntity(tenantId, rule, Now);
+                existing = NewEntity(db.TenantId, rule, Now);
                 db.AlertRules.Add(existing);
                 created++;
             }
@@ -272,12 +275,14 @@ public class AlertRuleRepository : IAlertRuleRepository
             idsByName[name] = existing.Id;
         }
 
-        await db.SaveChangesAsync(ct);
+        await SaveAsync(db, ct);
         return new SeededAlertRules(idsByName, created);
     }
 
-    private static IQueryable<AlertRuleEntity> RulesWithChannels(NocturneDbContext db) =>
-        db.AlertRules.AsNoTracking().Include(r => r.Channels);
+    private IQueryable<AlertRuleEntity> RulesWithChannels(NocturneDbContext db) =>
+        _unit is null
+            ? db.AlertRules.AsNoTracking().Include(r => r.Channels)
+            : db.AlertRules.Include(r => r.Channels);
 
     /// <summary>
     /// The rule as tracked, from the context first so a rule this unit has staged is found, with its

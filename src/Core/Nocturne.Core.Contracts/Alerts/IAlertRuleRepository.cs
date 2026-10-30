@@ -4,13 +4,14 @@ using Nocturne.Core.Models.Alerts;
 namespace Nocturne.Core.Contracts.Alerts;
 
 /// <summary>
-/// Writes to alert rules and their channels, and the reads that find a rule by whose it is. The
-/// reads every caller shares are on <see cref="IAlertRepository"/>.
+/// Writes to alert rules and their channels, and the reads that find rules by their tag: the
+/// feature that manages them or the starter kind they were made as. The reads every caller shares
+/// are on <see cref="IAlertRepository"/>.
 /// </summary>
 /// <remarks>
-/// Every method runs as the scope's reader on its tenant, except the two that take a tenant and
-/// pin it. A write that returns <c>false</c> or null found no such rule of the tenant and changed
-/// nothing.
+/// Every method runs as the scope's reader on its tenant, except <see cref="SetScopeClassAsync"/>,
+/// which pins the tenant it is given. A write that returns <c>false</c> or null found no such rule
+/// of the tenant and changed nothing.
 /// </remarks>
 public interface IAlertRuleRepository
 {
@@ -74,13 +75,15 @@ public interface IAlertRuleRepository
     /// <paramref name="tenantId"/> in one statement, and returns how many rows it reached. Stamps
     /// nothing else: a reclassification is not an edit.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The repository runs on a caller's unit of work, whose tenant it cannot replace.
+    /// </exception>
     Task<int> SetScopeClassAsync(
         Guid tenantId, RuleScopeClass scopeClass, IReadOnlyCollection<Guid> ruleIds, CancellationToken ct);
 
     /// <summary>
-    /// Stores each of <paramref name="rules"/> whose name <paramref name="tenantId"/> has no rule
-    /// with yet, and returns every one's id by name.
+    /// Stores each of <paramref name="rules"/> whose name the tenant has no rule with yet, and
+    /// returns every one's id by name.
     /// </summary>
-    Task<SeededAlertRules> CreateMissingByNameAsync(
-        Guid tenantId, IReadOnlyList<NewAlertRule> rules, CancellationToken ct);
+    Task<SeededAlertRules> CreateMissingByNameAsync(IReadOnlyList<NewAlertRule> rules, CancellationToken ct);
 }

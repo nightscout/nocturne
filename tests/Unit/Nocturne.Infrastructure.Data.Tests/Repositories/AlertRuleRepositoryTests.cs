@@ -249,7 +249,6 @@ public class AlertRuleRepositoryTests
         var existing = await repo.CreateAsync(new NewAlertRule(Low() with { Name = "Urgent low" }, []), CancellationToken.None);
 
         var seeded = await repo.CreateMissingByNameAsync(
-            Tenant,
             [
                 new NewAlertRule(Low() with { Name = "Urgent low" }, []),
                 new NewAlertRule(Low() with { Name = "High" }, [new AlertRuleChannelWrite(ChannelType.InApp, "owner")]),
@@ -287,6 +286,25 @@ public class AlertRuleRepositoryTests
         (await after.AlertRules.SingleAsync(r => r.Id == id)).Name.Should().Be("Renamed");
         (await after.AlertRules.Include(r => r.Channels).SingleAsync(r => r.Id == created))
             .Channels.Should().ContainSingle().Which.Destination.Should().Be("on-staged");
+    }
+
+    [Fact]
+    public async Task OverAUnitAReadTracksItsRowsSoAWriteEditsThemInPlace()
+    {
+        await using var seed = Db();
+        var id = await Repository(seed).CreateAsync(
+            new NewAlertRule(Low(), [new AlertRuleChannelWrite(ChannelType.InApp, "m")], ManagedBy: "tracker:1"), CancellationToken.None);
+
+        await using var unit = await DbUnitOfWork.OpenAsync(new TestNocturneDbContextFactory(seed));
+        var repo = new AlertRuleRepository(unit, _clock);
+        var managed = await repo.GetManagedRulesAsync("tracker:1", CancellationToken.None);
+        await repo.UpdateAsync(id, AlertRuleWrite.Of(managed[id]) with { Name = "Renamed" }, CancellationToken.None);
+
+        var entry = unit.Context.ChangeTracker.Entries<AlertRuleEntity>().Should().ContainSingle().Subject;
+        entry.State.Should().Be(EntityState.Modified);
+        entry.Property(r => r.Name).IsModified.Should().BeTrue();
+        entry.Property(r => r.Description).IsModified.Should().BeFalse("a value the write did not change is not written over a concurrent edit");
+        entry.Property(r => r.ConditionParams).IsModified.Should().BeFalse();
     }
 
     [Fact]
