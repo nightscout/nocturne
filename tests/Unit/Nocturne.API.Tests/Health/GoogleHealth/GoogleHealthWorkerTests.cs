@@ -28,6 +28,7 @@ public class GoogleHealthWorkerTests
             .Returns<Guid, CancellationToken>((id, _) => Task.FromResult<TenantDetailDto?>(
                 new(id, id.ToString(), "tenant", true, DateTime.UtcNow, [])));
         var services = new ServiceCollection();
+        services.AddSingleton(ConfiguredPlatform);
         services.AddSingleton(tenantService.Object);
         services.AddSingleton(Mock.Of<IConnectorConfigurationService>());
         services.AddScoped<ITenantAccessor, TenantAccessor>();
@@ -47,7 +48,7 @@ public class GoogleHealthWorkerTests
         });
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
-            coordinator, ConfiguredPlatform, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
+            coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         foreach (var tenant in tenants) Assert.True(await coordinator.QueueAsync(tenant, 1, default));
         await worker.StartAsync(default);
         try
@@ -114,13 +115,14 @@ public class GoogleHealthWorkerTests
                 return new SyncResult { Success = true };
             });
         var services = new ServiceCollection();
+        services.AddSingleton(ConfiguredPlatform);
         services.AddSingleton(tenants.Object);
         services.AddSingleton(configurations.Object);
         services.AddSingleton(sync.Object);
         services.AddScoped<ITenantAccessor, TenantAccessor>();
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
-            coordinator, ConfiguredPlatform, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
+            coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
         var scheduled = await coordinator.AcquireAsync(tenant, default);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -199,13 +201,14 @@ public class GoogleHealthWorkerTests
                 It.IsAny<DateTime?>(), It.IsAny<bool?>(), It.IsAny<CancellationToken>()))
             .Returns(() => Fail<bool>());
         var services = new ServiceCollection();
+        services.AddSingleton(ConfiguredPlatform);
         services.AddSingleton(tenants.Object);
         services.AddSingleton(sync.Object);
         services.AddSingleton(configurations.Object);
         services.AddScoped<ITenantAccessor, TenantAccessor>();
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
-            coordinator, ConfiguredPlatform, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
+            coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await worker.StartAsync(default);
@@ -250,10 +253,11 @@ public class GoogleHealthWorkerTests
         services.AddSingleton(tenants.Object);
         services.AddSingleton(sync.Object);
         services.AddSingleton(Mock.Of<IConnectorConfigurationService>());
+        services.AddSingleton<IGoogleHealthPlatformSettings>(ConfiguredPlatform);
         services.AddScoped<ITenantAccessor, TenantAccessor>();
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
-            coordinator, ConfiguredPlatform, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
+            coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await worker.StartAsync(default);
@@ -283,13 +287,14 @@ public class GoogleHealthWorkerTests
         var sync = new Mock<IConnectorSyncService>();
         var configurations = new Mock<IConnectorConfigurationService>();
         var services = new ServiceCollection();
+        services.AddSingleton<IGoogleHealthPlatformSettings>(new FixedGoogleHealthPlatformSettings(new()));
         services.AddSingleton(Mock.Of<ITenantService>());
         services.AddSingleton(sync.Object);
         services.AddSingleton(configurations.Object);
         services.AddScoped<ITenantAccessor, TenantAccessor>();
         using var provider = services.BuildServiceProvider();
         using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
-            coordinator, Options.Create(new GoogleHealthPlatformOptions()), TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
+            coordinator, TimeProvider.System, NullLogger<GoogleHealthWorker>.Instance);
         Assert.True(await coordinator.QueueAsync(tenant, 1, default));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await worker.StartAsync(default);
@@ -304,7 +309,7 @@ public class GoogleHealthWorkerTests
         configurations.VerifyNoOtherCalls();
     }
 
-    private static readonly IOptions<GoogleHealthPlatformOptions> ConfiguredPlatform = Options.Create(
+    private static readonly IGoogleHealthPlatformSettings ConfiguredPlatform = new FixedGoogleHealthPlatformSettings(
         new GoogleHealthPlatformOptions
         {
             ClientId = "synthetic.apps.googleusercontent.com",

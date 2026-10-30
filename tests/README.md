@@ -105,7 +105,7 @@ To add a vendor, write a module exporting a `Vendor` and list it in `server.ts`.
 Google Health (`vendors/google-health.ts`) validates authorization-code PKCE, client credentials,
 redirect URIs and one-use codes, serves account identity, refresh/revocation and two pages of
 steps, heart rate, weight and sleep. The stack configures one instance client
-(`GOOGLE_HEALTH_CLIENT_ID`/`_SECRET`) whose redirect URI is the apex of the TLS proxy, so every
+(configured by global setup through the platform-admin settings API) whose redirect URI is the apex of the TLS proxy, so every
 tenant shares it; each consent picks a fake Google account named after the tenant
 (`mock_account`), which keeps tenants' data apart. The browser spec intercepts only Google's
 external consent navigation; the apex callback, its relay to the tenant host, the web callback,
