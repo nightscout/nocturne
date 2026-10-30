@@ -1,7 +1,8 @@
 <!--
   Links between the pages of a report made of several (a report category with `pages`), for the
   report header: the pages the viewer can load, even on a page it cannot. Each keeps the query
-  string, so the pages share their range and filters.
+  string, so the pages share their range and filters. A custom report's page links back to the list
+  of saved custom reports.
 -->
 <script lang="ts">
   import { page } from "$app/state";
@@ -18,7 +19,21 @@
           ?.reports.filter((r) => r.status === "available") ?? [])
       : []
   );
+  const customSubPage = $derived(page.url.pathname.startsWith("/reports/custom/"));
 </script>
+
+{#if customSubPage}
+  <div class="relative border-t border-border px-3 @md:px-6 print:hidden">
+    <nav aria-label="Custom reports" class="flex flex-wrap gap-1 py-1.5" data-testid="report-pages">
+      <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- reportPagePath puts the app base before the path -->
+      <a href={reportPagePath("/reports/custom")}
+        class="rounded-md px-2.5 py-1 text-sm pointer-coarse:py-2 font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        All custom reports
+      </a>
+    </nav>
+  </div>
+{/if}
 
 {#if family && reachable.length > 0}
   <div class="relative border-t border-border px-3 @md:px-6 print:hidden">

@@ -16,6 +16,7 @@ import Footprints from "@lucide/svelte/icons/footprints";
 import Gauge from "@lucide/svelte/icons/gauge";
 import HeartPulse from "@lucide/svelte/icons/heart-pulse";
 import Layers from "@lucide/svelte/icons/layers";
+import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard";
 import Moon from "@lucide/svelte/icons/moon";
 import PieChart from "@lucide/svelte/icons/chart-pie";
 import Repeat from "@lucide/svelte/icons/repeat";
@@ -151,6 +152,16 @@ export function reportCategories(): ReportCategory[] {
           scopes: [READ.glucose, READ.reports],
           icon: Activity,
           status: "available",
+        },
+        {
+          title: "Custom reports",
+          description: "Reports that an assistant made from your data, saved to open again",
+          href: "/reports/custom",
+          keywords: ["custom", "saved", "assistant", "mcp", "claude", "chatgpt"],
+          scopes: [READ.reports],
+          icon: LayoutDashboard,
+          status: "available",
+          memberOnly: true,
         },
       ],
     },
@@ -434,11 +445,21 @@ function reportSubRoutes(): Record<string, { title: string; description: string 
       title: "Sleep night report",
       description: "Sleep stages and overnight glucose for one night",
     },
+    "/reports/custom/new": {
+      title: "New custom report",
+      description: "A report that an assistant made, opened from its link",
+    },
+    "/reports/custom/[id]": {
+      title: "Custom report",
+      description: "A saved custom report, run on your current data",
+    },
   };
 }
 
 function subRouteKey(pathname: string): string {
-  return /^\/reports\/sleep\/[^/]+$/.test(pathname) ? "/reports/sleep/[date]" : pathname;
+  if (/^\/reports\/sleep\/[^/]+$/.test(pathname)) return "/reports/sleep/[date]";
+  if (/^\/reports\/custom\/[^/]+$/.test(pathname) && pathname !== "/reports/custom/new") return "/reports/custom/[id]";
+  return pathname;
 }
 
 /**
