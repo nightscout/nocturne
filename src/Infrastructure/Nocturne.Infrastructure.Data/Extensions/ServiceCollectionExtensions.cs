@@ -160,6 +160,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISettingsRepository, SettingsRepository>();
         services.AddTransient<IOAuthTokenRepository, OAuthTokenRepository>();
         services.AddTransient<IOAuthGrantRepository, OAuthGrantRepository>();
+        services.AddTransient<IOAuthClientRepository, OAuthClientRepository>();
         services.AddTransient<IMemberInviteRepository, MemberInviteRepository>();
         services.AddTransient<ISubjectRepository, SubjectRepository>();
         services.AddTransient<ITenantRepository, TenantRepository>();

@@ -37,7 +37,7 @@ public class OAuthCodeCleanupServiceTests : IDisposable
     }
 
     private OAuthCodeCleanupService CreateService() =>
-        new(_seed.AsFactory(), new TenantRepository(_seed.AsFactory()), new OAuthTokenRepository(_seed.AsFactory()), NullLogger<OAuthCodeCleanupService>.Instance);
+        new(_seed.AsFactory(), new TenantRepository(_seed.AsFactory()), new OAuthTokenRepository(_seed.AsFactory()), new OAuthClientRepository(_seed.AsFactory()), NullLogger<OAuthCodeCleanupService>.Instance);
 
     private async Task<OAuthClientEntity> ClientAsync(
         Guid tenantId, string clientId, DateTime createdAt, string? softwareId = null)
@@ -203,6 +203,7 @@ public class OAuthCodeCleanupServiceTests : IDisposable
             contexts,
             new TenantRepository(contexts),
             new OAuthTokenRepository(contexts),
+            new OAuthClientRepository(contexts),
             NullLogger<OAuthCodeCleanupService>.Instance);
 
         await service.CleanupAsync(CancellationToken.None);

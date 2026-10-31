@@ -58,18 +58,21 @@ public class HostPersistenceGuardTests
         new("OAuth tokens (#3101)",
             ["OAuthAuthorizationCodeEntity", "OAuthRefreshTokenEntity", "OAuthDeviceCodeEntity"],
             ["OAuthAuthorizationCodes", "OAuthRefreshTokens", "OAuthDeviceCodes"],
-            [
-                new("src/API/Nocturne.API/Services/Auth/OAuthCodeCleanupService.cs",
-                    "deletes the OAuth clients no grant or code names, by a subquery on the code tables; moves with OAuth client persistence in #3102"),
-            ]),
+            []),
         new("grants and invites (#3102)",
             ["OAuthGrantEntity", "MemberInviteEntity", "RefreshTokenEntity"],
             ["OAuthGrants", "MemberInvites", "RefreshTokens"],
             [
-                new("src/API/Nocturne.API/Services/Auth/OAuthCodeCleanupService.cs",
-                    "deletes the OAuth clients no grant or code names, by a subquery on the grant table; moves with OAuth client persistence in #3102"),
                 new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
                     "dev-only whole-schema snapshot restore that re-points the invites of a tenant alongside every other table in one transaction",
+                    CoversMembers: true),
+            ]),
+        new("OAuth clients (#3102)",
+            ["OAuthClientEntity"],
+            ["OAuthClients"],
+            [
+                new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
+                    "dev-only whole-schema snapshot export and restore of a tenant's OAuth clients alongside every other table",
                     CoversMembers: true),
             ]),
         new("subjects and credentials (#3102)",
@@ -181,16 +184,17 @@ public class HostPersistenceGuardTests
     public void AMemberExemptionBelongsToTheConceptThatListsIt()
     {
         var devAdmin = Api.GetType("Nocturne.API.Controllers.V4.DevOnly.DevAdminController")!;
-        var cleanup = Api.GetType("Nocturne.API.Services.Auth.OAuthCodeCleanupService")!;
+        var receipts = Api.GetType("Nocturne.API.Services.Alerts.AlertReceiptService")!;
         var grants = Concepts.Single(c => c.Name.StartsWith("grants", StringComparison.Ordinal));
         var tokens = Concepts.Single(c => c.Name.StartsWith("OAuth tokens", StringComparison.Ordinal));
+        var subjects = Concepts.Single(c => c.Name.StartsWith("subjects", StringComparison.Ordinal));
 
         grants.Exempts(devAdmin).Should().BeTrue();
         grants.Exempts(devAdmin.GetNestedTypes(BindingFlags.NonPublic | BindingFlags.Public).FirstOrDefault() ?? devAdmin).Should().BeTrue();
         tokens.Exempts(devAdmin).Should().BeFalse("the file is listed by another concept");
         Concepts[0].Exempts(devAdmin).Should().BeFalse();
-        tokens.Exempts(cleanup).Should().BeFalse("a text-scan exemption does not cover members");
-        grants.Exempts(cleanup).Should().BeFalse();
+        subjects.Exempts("src/API/Nocturne.API/Services/Alerts/AlertReceiptService.cs").Should().BeTrue();
+        subjects.Exempts(receipts).Should().BeFalse("a text-scan exemption does not cover members");
     }
 
     [Theory]

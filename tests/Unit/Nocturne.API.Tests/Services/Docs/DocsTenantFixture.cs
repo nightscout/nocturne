@@ -132,14 +132,14 @@ internal sealed class DocsTenantFixture : IDisposable
             new Mock<ILogger<DemoTenantService>>().Object);
 
         return new ScalarAuthProvider(
-            dbFactory.Object.AsNocturneFactory(),
+            new OAuthClientRepository(dbFactory.Object.AsNocturneFactory()),
             new TenantRepository(dbFactory.Object.AsNocturneFactory()),
             demoTenantService,
             SessionService.Object,
             new RedirectUriValidator(),
             cache ?? new MemoryCache(new MemoryCacheOptions()),
             Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
-            TimeProvider.System, new Mock<ILogger<ScalarAuthProvider>>().Object);
+            new Mock<ILogger<ScalarAuthProvider>>().Object);
     }
 
     public void Dispose() => _db.Dispose();

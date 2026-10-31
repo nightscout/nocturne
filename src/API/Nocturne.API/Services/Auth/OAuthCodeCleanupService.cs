@@ -27,6 +27,7 @@ public class OAuthCodeCleanupService : BackgroundService
     private readonly INocturneDbContextFactory _contexts;
     private readonly ITenantRepository _tenants;
     private readonly IOAuthTokenRepository _tokens;
+    private readonly IOAuthClientRepository _clients;
     private readonly ILogger<OAuthCodeCleanupService> _logger;
 
     /// <summary>
@@ -52,16 +53,19 @@ public class OAuthCodeCleanupService : BackgroundService
     /// </summary>
     /// <param name="contexts">Root-resolved, so each tenant's context is pinned explicitly.</param>
     /// <param name="tokens">Root-resolved likewise; the sweep pins each tenant on the call.</param>
+    /// <param name="clients">Root-resolved likewise.</param>
     public OAuthCodeCleanupService(
         INocturneDbContextFactory contexts,
         ITenantRepository tenants,
         IOAuthTokenRepository tokens,
+        IOAuthClientRepository clients,
         ILogger<OAuthCodeCleanupService> logger
     )
     {
         _contexts = contexts;
         _tenants = tenants;
         _tokens = tokens;
+        _clients = clients;
         _logger = logger;
     }
 
@@ -131,15 +135,8 @@ public class OAuthCodeCleanupService : BackgroundService
                 deletedDeviceCodes += deletedCodes.DeviceCodes;
                 deletedAuthCodes += deletedCodes.AuthorizationCodes;
 
-                await using var db = await _contexts.CreateForTenantAsync(tenantId, ct);
-                deletedClients += await db
-                    .OAuthClients.Where(c =>
-                        c.CreatedAt < clientCutoff
-                        && c.SoftwareId != ScalarAuthProvider.ScalarSoftwareId
-                        && !db.OAuthGrants.Any(g => g.ClientEntityId == c.Id)
-                        && !db.OAuthAuthorizationCodes.Any(a => a.ClientEntityId == c.Id)
-                        && !db.OAuthDeviceCodes.Any(d => d.ClientId == c.ClientId))
-                    .ExecuteDeleteAsync(ct);
+                deletedClients += await _clients.DeleteUnreferencedAsync(
+                    tenantId, clientCutoff, ScalarAuthProvider.ScalarSoftwareId, ct);
             }
             catch (Exception ex) when (ex is DbException or DbUpdateException or RetryLimitExceededException)
             {
