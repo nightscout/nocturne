@@ -195,6 +195,12 @@ public class LoopAnalysisResponse
     /// </summary>
     public bool RangeOutsideHistory { get; set; }
 
+    /// <summary>
+    /// The caller is <see cref="HistoryClamped"/> and the range covers only part of its window: the
+    /// dates or the report panel asked for less than all of it.
+    /// </summary>
+    public bool NarrowerThanHistoryWindow { get; set; }
+
     /// <summary>The hours of history a clamped caller may read.</summary>
     public int HistoryWindowHours => HistoryClamp.WindowHours;
 

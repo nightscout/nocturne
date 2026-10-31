@@ -29,9 +29,10 @@ internal static class LoopAnalysisDatasetRun
         LoopAnalysisDatasetParameters parameters,
         ReportDateRange? comparison,
         CancellationToken ct) =>
-        ResolveAsync(request.Services, request.From, request.To, request.GrantedScopes, request.HistoryClamped, parameters, comparison, ct);
+        ResolveAsync(request.Services, request.From, request.To, request.GrantedScopes, request.HistoryClamped, parameters, comparison, ct, request.Now);
 
     /// <summary>The request for the local days <paramref name="from"/> to <paramref name="to"/> touch, for a caller outside a report panel.</summary>
+    /// <param name="asOf">The instant <paramref name="from"/> and <paramref name="to"/> were resolved against.</param>
     public static async Task<LoopAnalysisRequest> ResolveAsync(
         IServiceProvider services,
         DateTimeOffset from,
@@ -40,7 +41,8 @@ internal static class LoopAnalysisDatasetRun
         bool historyClamped,
         LoopAnalysisDatasetParameters parameters,
         ReportDateRange? comparison,
-        CancellationToken ct)
+        CancellationToken ct,
+        DateTimeOffset? asOf = null)
     {
         var clock = services.GetRequiredService<TenantClockResolver>();
         var time = services.GetRequiredService<TimeProvider>();
@@ -59,7 +61,7 @@ internal static class LoopAnalysisDatasetRun
         }
 
         return await new LoopAnalysisRequestResolver(clock, time)
-            .ResolveAsync(query, grantedScopes, historyClamped, sent, ct, (from.UtcDateTime, to.UtcDateTime));
+            .ResolveAsync(query, grantedScopes, historyClamped, sent, ct, (from.UtcDateTime, to.UtcDateTime), asOf?.UtcDateTime);
     }
 
     /// <summary>The page's response filled and narrowed for the caller, as the controller serves it.</summary>
@@ -105,7 +107,7 @@ internal static class LoopAnalysisDatasetRun
     {
         if (response.RangeOutsideHistory)
             return "No data: the range ends before the last 24 hours, and this token reads only the last 24 hours.";
-        return response.PrimaryRange is not { } range || range.To - range.From >= HistoryClamp.Window
+        return !response.NarrowerThanHistoryWindow || response.PrimaryRange is not { } range
             ? "This token reads only the last 24 hours, so the analysis covers that window and has no comparison."
             : string.Create(CultureInfo.InvariantCulture,
                 $"This token reads only the last 24 hours, so the analysis covers only the part of the range in that window, {range.From:yyyy-MM-dd HH:mm} to {range.To:yyyy-MM-dd HH:mm} UTC, and has no comparison.");

@@ -272,21 +272,7 @@ public class McpLoopAnalysisIntegrationTests(ApiIntegrationTestFixture fixture, 
     [Fact]
     public async Task A_clamped_member_asking_for_six_hours_of_events_is_served_those_six_hours()
     {
-        Guid subject;
-        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
-        {
-            await conn.OpenAsync();
-            (subject, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "MCP loop clamped");
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                UPDATE tenant_members SET limit_to_24_hours = true, direct_permissions = '["glucose.read","treatments.read"]'::jsonb
-                WHERE subject_id = @subject;
-                """;
-            cmd.Parameters.AddWithValue("subject", subject);
-            (await cmd.ExecuteNonQueryAsync()).Should().Be(1);
-        }
-        var session = await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subject);
-        using var client = McpClient(await McpTokenAsync("glucose.read treatments.read", session));
+        using var client = McpClient(await McpTokenAsync("glucose.read treatments.read", await ClampedSessionAsync()));
 
         var started = DateTimeOffset.UtcNow;
         var call = await CallToolAsync(client, "render_report", new
@@ -309,6 +295,47 @@ public class McpLoopAnalysisIntegrationTests(ApiIntegrationTestFixture fixture, 
             .Should().BeCloseTo(started.AddHours(-6), TimeSpan.FromMinutes(1), "the six hours asked for, not the whole 24-hour window");
         DateTimeOffset.FromUnixTimeMilliseconds(window.GetProperty("to").GetInt64()).Should().BeCloseTo(started, TimeSpan.FromMinutes(1));
         text.Should().Contain("only the part of the range in that window").And.NotContain("covers that window");
+    }
+
+    [Fact]
+    public async Task A_clamped_member_asking_for_more_than_its_window_is_told_the_analysis_covers_that_window()
+    {
+        using var client = McpClient(await McpTokenAsync("glucose.read treatments.read", await ClampedSessionAsync()));
+
+        var call = await CallToolAsync(client, "render_report", new
+        {
+            spec = new
+            {
+                version = 1,
+                range = new { hours = 48 },
+                panels = new object[] { new { dataset = new { name = "event_response", cohorts = new object[] { new { anchor = "Meal" } } }, primitive = "table" } },
+            },
+        });
+
+        call.TryGetProperty("error", out var error).Should().BeFalse(error.ToString());
+        var text = ToolText(call);
+        Log(text);
+        text.Should().Contain("This token reads only the last 24 hours, so the analysis covers that window and has no comparison.")
+            .And.NotContain("only the part of the range");
+    }
+
+    /// <summary>A session for a new member limited to the last 24 hours, with glucose and treatments.</summary>
+    private async Task<string> ClampedSessionAsync()
+    {
+        Guid subject;
+        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        {
+            await conn.OpenAsync();
+            (subject, _) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "MCP loop clamped");
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE tenant_members SET limit_to_24_hours = true, direct_permissions = '["glucose.read","treatments.read"]'::jsonb
+                WHERE subject_id = @subject;
+                """;
+            cmd.Parameters.AddWithValue("subject", subject);
+            (await cmd.ExecuteNonQueryAsync()).Should().Be(1);
+        }
+        return await AuthTestHelpers.IssueSessionTokenAsync(Fixture, subject);
     }
 
     private async Task SeedProfileAsync()

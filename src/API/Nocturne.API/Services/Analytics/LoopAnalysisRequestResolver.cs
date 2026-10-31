@@ -14,6 +14,7 @@ namespace Nocturne.API.Services.Analytics;
 /// dates cannot be placed, and when <see cref="RangeOutsideHistory"/>.
 /// </param>
 /// <param name="RangeOutsideHistory">See <see cref="LoopAnalysisResponse.RangeOutsideHistory"/>.</param>
+/// <param name="NarrowerThanHistoryWindow">See <see cref="LoopAnalysisResponse.NarrowerThanHistoryWindow"/>.</param>
 internal sealed record LoopAnalysisRequest(
     LoopAnalysisFilter? Filter,
     TimeZoneInfo? Zone,
@@ -24,13 +25,21 @@ internal sealed record LoopAnalysisRequest(
     List<string> IgnoredFilters,
     List<LoopAnalysisUnavailableFilter> UnavailableFilters,
     bool HistoryClamped,
-    bool RangeOutsideHistory = false)
+    bool RangeOutsideHistory = false,
+    bool NarrowerThanHistoryWindow = false)
 {
+    /// <summary>
+    /// For a history-clamped caller, the whole window, so the envelope can list the profiles the
+    /// caller may filter by even when <see cref="Filter"/> is null.
+    /// </summary>
+    public LoopAnalysisFilter? HistoryWindowFilter { get; init; }
+
     /// <summary>Writes what every page reports about how its request was read into <paramref name="response"/>.</summary>
     public T Fill<T>(T response) where T : LoopAnalysisResponse
     {
         response.HistoryClamped = HistoryClamped;
         response.RangeOutsideHistory = RangeOutsideHistory;
+        response.NarrowerThanHistoryWindow = NarrowerThanHistoryWindow;
         response.TimeZoneUnavailableReason = Reason;
         response.PrimaryRange = PrimaryRange;
         response.ComparisonRange = ComparisonRange;
@@ -77,8 +86,8 @@ internal sealed class LoopAnalysisRequestResolver(TenantClockResolver tenantCloc
     /// and resolves the local dates to instants in the tenant zone (<see cref="LoopAnalysisRanges"/>).
     /// A history-clamped caller is analysed over the part of that range inside its last
     /// <see cref="HistoryClamp.Window"/>, with no comparison; a range that ends before the window is
-    /// empty and flagged <see cref="LoopAnalysisRequest.RangeOutsideHistory"/>, with no filter. Every
-    /// resolved range ends no later than now. The query must have no <see cref="Problem"/>.
+    /// empty and flagged <see cref="LoopAnalysisRequest.RangeOutsideHistory"/>. An empty range has no
+    /// filter. Every resolved range ends no later than now. The query must have no <see cref="Problem"/>.
     /// </summary>
     /// <param name="passed">The parameters the caller sent; only those are reported as ignored.</param>
     /// <param name="within">
@@ -86,13 +95,15 @@ internal sealed class LoopAnalysisRequestResolver(TenantClockResolver tenantCloc
     /// clamped caller's range is cut to them as well, since its window is not whole days anyway; an
     /// unclamped caller is read over the whole local days they touch, as on the pages.
     /// </param>
+    /// <param name="asOf">The instant <paramref name="within"/> was resolved against, so a range that ends then ends now; defaults to the clock.</param>
     public async Task<LoopAnalysisRequest> ResolveAsync(
         LoopAnalysisQuery query,
         IReadOnlySet<string> granted,
         bool clamped,
         IReadOnlySet<string> passed,
         CancellationToken ct,
-        (DateTime From, DateTime To)? within = null)
+        (DateTime From, DateTime To)? within = null,
+        DateTime? asOf = null)
     {
         var masks = query.ToMasks();
         var ignored = LoopAnalysisReadScopeGuard.NarrowFilter(masks, granted);
@@ -109,10 +120,11 @@ internal sealed class LoopAnalysisRequestResolver(TenantClockResolver tenantCloc
         }
 
         var maxDays = V4ReadLimits.MaxAnalyticsSpanDays;
-        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var now = asOf ?? timeProvider.GetUtcNow().UtcDateTime;
         var primary = LoopAnalysisRanges.Resolve(query.StartDate, query.EndDate, zone, maxDays, now);
         DateTime? visibleFrom = null;
         var outside = false;
+        var narrower = false;
         if (clamped)
         {
             var windowStart = now - HistoryClamp.Window;
@@ -122,11 +134,12 @@ internal sealed class LoopAnalysisRequestResolver(TenantClockResolver tenantCloc
             if (primary.To <= windowStart)
                 ignored.Add("endDate");
             ignored.AddRange(comparisonParameters);
+            outside = primary.To <= windowStart || within?.To <= windowStart;
             var (from, to) = within is { } asked
                 ? (asked.From > windowStart ? asked.From : windowStart, asked.To < now ? asked.To : now)
                 : (windowStart, now);
             primary = LoopAnalysisRanges.Intersect(primary, from, to, zone);
-            outside = primary.To <= primary.From;
+            narrower = !outside && primary.To > primary.From && (primary.From > windowStart || primary.To < now);
         }
         ignored = [.. ignored.Where(passed.Contains)];
 
@@ -138,7 +151,8 @@ internal sealed class LoopAnalysisRequestResolver(TenantClockResolver tenantCloc
             _ => null,
         };
 
-        var filter = outside ? null : new LoopAnalysisFilter
+        var readProfileNames = !LoopAnalysisReadScopeGuard.WithheldEnvelope(granted).Contains(LoopAnalysisSeries.ProfileNames);
+        var filter = primary.To <= primary.From ? null : new LoopAnalysisFilter
         {
             From = primary.From,
             To = primary.To,
@@ -146,10 +160,19 @@ internal sealed class LoopAnalysisRequestResolver(TenantClockResolver tenantCloc
             CompareTo = comparison?.To,
             Now = now,
             Masks = masks,
-            ReadProfileNames = !LoopAnalysisReadScopeGuard.WithheldEnvelope(granted).Contains(LoopAnalysisSeries.ProfileNames),
+            ReadProfileNames = readProfileNames,
             HistoryVisibleFrom = visibleFrom,
         };
-        return new LoopAnalysisRequest(filter, zone, null, primary, comparison, masks, ignored, unavailable, clamped, outside);
+        var windowFilter = visibleFrom is { } edge
+            ? new LoopAnalysisFilter
+            {
+                From = edge, To = now, Now = now, Masks = masks, ReadProfileNames = readProfileNames, HistoryVisibleFrom = edge,
+            }
+            : null;
+        return new LoopAnalysisRequest(filter, zone, null, primary, comparison, masks, ignored, unavailable, clamped, outside, narrower)
+        {
+            HistoryWindowFilter = windowFilter,
+        };
     }
 
     private static bool OutOfRange(DateOnly date) => date < EarliestDate || date > LatestDate;

@@ -199,6 +199,27 @@ public class LoopAnalysisDailyProfileIntegrationTests(ApiIntegrationTestFixture 
     }
 
     [Fact]
+    public async Task A_history_clamped_member_asking_up_to_yesterday_is_read_from_the_window_start_to_local_midnight()
+    {
+        await SeedProfileAsync("Australia/Sydney");
+        using var clamped = await CreateHistoryClampedClientAsync();
+        var now = DateTime.UtcNow;
+        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        var today = SydneyToday();
+        var midnight = TimeZoneInfo.ConvertTimeToUtc(today.ToDateTime(TimeOnly.MinValue), sydney);
+
+        var body = await GetOkAsync(clamped, Query(RecentDays(3, endDaysAgo: 1)));
+
+        body.GetProperty("rangeOutsideHistory").GetBoolean().Should().BeFalse();
+        body.GetProperty("narrowerThanHistoryWindow").GetBoolean().Should().BeTrue();
+        var primaryRange = body.GetProperty("primaryRange");
+        primaryRange.GetProperty("from").GetDateTime().ToUniversalTime().Should().BeCloseTo(now.AddHours(-24), TimeSpan.FromMinutes(5));
+        primaryRange.GetProperty("to").GetDateTime().ToUniversalTime().Should().Be(midnight);
+        primaryRange.GetProperty("endDate").GetString().Should().Be(today.AddDays(-1).ToString("yyyy-MM-dd"));
+        body.GetProperty("ignoredFilters").EnumerateArray().Select(f => f.GetString()).Should().Equal("startDate");
+    }
+
+    [Fact]
     public async Task A_history_clamped_member_asking_for_a_range_before_its_window_gets_an_empty_range_and_the_reason()
     {
         await SeedProfileAsync("Australia/Sydney");

@@ -140,7 +140,7 @@ internal sealed class SummaryTools
         var scopes = http.GetGrantedScopes();
         var now = time.GetUtcNow();
         var resolved = await LoopAnalysisDatasetRun.ResolveAsync(
-            http.RequestServices, now.AddDays(-days), now, scopes, http.IsCallerHistoryClamped(), new LoopHealthParameters(), null, cancellationToken);
+            http.RequestServices, now.AddDays(-days), now, scopes, http.IsCallerHistoryClamped(), new LoopHealthParameters(), null, cancellationToken, now);
         var report = resolved.Filter is { } filter && resolved.Zone is { } zone
             ? await loopAnalysis.GetLoopHealthAsync(filter, zone, cancellationToken)
             : new LoopHealthResponse();

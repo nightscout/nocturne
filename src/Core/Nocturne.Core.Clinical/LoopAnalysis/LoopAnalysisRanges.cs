@@ -49,24 +49,12 @@ public static class LoopAnalysisRanges
         return previous;
     }
 
-    /// <summary>The last <paramref name="window"/> before <paramref name="nowUtc"/>, for a history-clamped caller.</summary>
-    public static LoopAnalysisResolvedRange Clamped(DateTime nowUtc, TimeSpan window, TimeZoneInfo tz)
-    {
-        var from = nowUtc - window;
-        var toMills = nowUtc.ToMills();
-        return new LoopAnalysisResolvedRange
-        {
-            StartDate = LocalSlotBinning.LocalDay(from.ToMills(), tz),
-            EndDate = LocalSlotBinning.LocalDay(toMills - 1, tz),
-            From = from,
-            To = nowUtc,
-        };
-    }
-
     /// <summary>
     /// The part of <paramref name="range"/> from <paramref name="from"/> (inclusive) to
     /// <paramref name="to"/> (exclusive), with the local dates that part spans. When they do not
     /// overlap, an empty range: <c>From</c> and <c>To</c> both <paramref name="from"/>, on its local day.
+    /// <c>Shortened</c> stays set only when the start was not moved: a cut start drops the days the
+    /// 90-day limit would have dropped too.
     /// </summary>
     public static LoopAnalysisResolvedRange Intersect(
         LoopAnalysisResolvedRange range, DateTime from, DateTime to, TimeZoneInfo tz)
@@ -78,7 +66,7 @@ public static class LoopAnalysisRanges
             var day = LocalSlotBinning.LocalDay(from.ToMills(), tz);
             return new LoopAnalysisResolvedRange
             {
-                StartDate = day, EndDate = day, From = from, To = from, Shortened = range.Shortened,
+                StartDate = day, EndDate = day, From = from, To = from,
             };
         }
         return new LoopAnalysisResolvedRange
@@ -87,7 +75,7 @@ public static class LoopAnalysisRanges
             EndDate = LocalSlotBinning.LocalDay(end.ToMills() - 1, tz),
             From = start,
             To = end,
-            Shortened = range.Shortened,
+            Shortened = range.Shortened && start == range.From,
         };
     }
 

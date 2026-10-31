@@ -642,6 +642,11 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         var to = Date(toElement, $"{at}.to", latest, error);
         if (from is null || to is null)
             return null;
+        if (from > now)
+        {
+            error($"{at}.from", "'from' must not be after now: there is no data after now.");
+            return null;
+        }
         if (to <= from)
         {
             error($"{at}.to", "'to' must be after 'from'.");

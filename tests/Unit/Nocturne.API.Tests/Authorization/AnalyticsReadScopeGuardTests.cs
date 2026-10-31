@@ -1155,7 +1155,7 @@ public partial class AnalyticsReadScopeGuardTests
         RedactionCoverage.AssertWithheld(
             AidSystemMetricsReadScopeGuard.Redact(RedactionCoverage.Populated<AidSystemMetrics>(), Granted()),
             [typeof(AidSystemMetrics)],
-            ["AidSystemMetrics.TimeZoneUnavailableReason"]);
+            ["AidSystemMetrics.TimeZoneUnavailableReason", "AidSystemMetrics.RangeOutsideHistory", "AidSystemMetrics.HistoryWindowHours"]);
     }
 
     [Theory]
@@ -1369,7 +1369,7 @@ public partial class AnalyticsReadScopeGuardTests
             [
                 .. new[]
                 {
-                    "Primary", "Comparison", "HistoryClamped", "RangeOutsideHistory", "TimeZoneUnavailableReason", "PrimaryRange",
+                    "Primary", "Comparison", "HistoryClamped", "RangeOutsideHistory", "NarrowerThanHistoryWindow", "TimeZoneUnavailableReason", "PrimaryRange",
                     "ComparisonRange", "AppliedFilters", "IgnoredFilters", "WithheldSeries", "UnavailableFilters",
                     "Definition", "SlotMinutes", "BackToStartMgdl", "UnavailableAnchors", "WithheldReason", "Rules",
                     "HistoryWindowHours", "Limits", "LoopGapMinutes", "ContextLookbackMs",

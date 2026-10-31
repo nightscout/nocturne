@@ -118,6 +118,7 @@ internal interface IReportDataset
 }
 
 /// <summary>One panel's run of a dataset.</summary>
+/// <param name="Now">The instant the runner resolved <see cref="From"/> and <see cref="To"/> against; null outside a run.</param>
 internal sealed record ReportDatasetRequest(
     ReportDatasetParameters Parameters,
     ReportPrimitive Primitive,
@@ -128,7 +129,8 @@ internal sealed record ReportDatasetRequest(
     IServiceProvider Services,
     McpToolReadLog ReadLog,
     bool HistoryClamped = false,
-    Datasets.ReportRunCache? RunCache = null)
+    Datasets.ReportRunCache? RunCache = null,
+    DateTimeOffset? Now = null)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 

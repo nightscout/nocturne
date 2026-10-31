@@ -43,20 +43,6 @@ public class LoopAnalysisRangesTests
     }
 
     [Fact]
-    public void Clamped_IsTheLastWindowBeforeNow()
-    {
-        var now = Utc(2024, 6, 10, 3);
-
-        var range = LoopAnalysisRanges.Clamped(now, TimeSpan.FromHours(24), Sydney);
-
-        range.From.Should().Be(now.AddHours(-24));
-        range.To.Should().Be(now);
-        range.StartDate.Should().Be(new DateOnly(2024, 6, 9));
-        range.EndDate.Should().Be(new DateOnly(2024, 6, 10));
-        range.To.Should().BeAfter(range.From);
-    }
-
-    [Fact]
     public void ARangeThroughToday_EndsAtNow()
     {
         var range = LoopAnalysisRanges.Resolve(new DateOnly(2024, 6, 4), new DateOnly(2024, 6, 10), Sydney, 90, SixTwenty);
@@ -183,5 +169,47 @@ public class LoopAnalysisRangesTests
         (range.To - range.From).Should().Be(TimeSpan.FromHours(24));
         range.StartDate.Should().Be(new DateOnly(2024, 4, 7));
         range.EndDate.Should().Be(new DateOnly(2024, 4, 7));
+    }
+
+    [Fact]
+    public void Intersect_AWindowStartingOnLocalMidnight_SpansOneWholeLocalDay()
+    {
+        var now = Utc(2024, 6, 10, 14); // midnight on 11 June, local
+
+        var range = Intersected(new DateOnly(2024, 6, 1), new DateOnly(2024, 6, 11), now);
+
+        range.From.Should().Be(Utc(2024, 6, 9, 14), "midnight on 10 June, local");
+        range.To.Should().Be(now);
+        range.StartDate.Should().Be(new DateOnly(2024, 6, 10));
+        range.EndDate.Should().Be(new DateOnly(2024, 6, 10));
+    }
+
+    [Fact]
+    public void Intersect_OnTheDayClocksGoForward_TakesAnHourOfTheDayBefore()
+    {
+        // 2024-10-06 in Sydney is 23 hours long: 02:00 AEST springs forward to 03:00 AEDT. Now is midnight on 7 October.
+        var now = Utc(2024, 10, 6, 13);
+
+        var range = Intersected(new DateOnly(2024, 10, 5), new DateOnly(2024, 10, 7), now);
+
+        range.From.Should().Be(Utc(2024, 10, 5, 13), "23:00 AEST on 5 October");
+        range.To.Should().Be(now);
+        (range.To - range.From).Should().Be(TimeSpan.FromHours(24));
+        range.StartDate.Should().Be(new DateOnly(2024, 10, 5));
+        range.EndDate.Should().Be(new DateOnly(2024, 10, 6));
+    }
+
+    [Fact]
+    public void Intersect_KeepsShortenedOnlyWhenTheStartWasNotMoved()
+    {
+        var shortened = LoopAnalysisRanges.Resolve(new DateOnly(2024, 1, 1), new DateOnly(2024, 6, 10), Sydney, 90, SixTwenty);
+        shortened.Shortened.Should().BeTrue();
+
+        LoopAnalysisRanges.Intersect(shortened, SixTwenty.AddHours(-24), SixTwenty, Sydney).Shortened
+            .Should().BeFalse("the window, not the 90-day limit, set the start");
+        LoopAnalysisRanges.Intersect(shortened, shortened.From.AddDays(-1), SixTwenty, Sydney).Shortened
+            .Should().BeTrue();
+        LoopAnalysisRanges.Intersect(shortened, SixTwenty.AddDays(1), SixTwenty.AddDays(2), Sydney).Shortened
+            .Should().BeFalse("an empty range kept nothing");
     }
 }

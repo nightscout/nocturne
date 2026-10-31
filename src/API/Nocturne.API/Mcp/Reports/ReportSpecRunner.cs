@@ -86,7 +86,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             {
                 output = await dataset.RunAsync(
                     new ReportDatasetRequest(panel.Dataset, panel.Primitive, from, to, context.UseMmol,
-                        context.GrantedScopes, context.Services, context.ReadLog, context.HistoryClamped, context.Cache),
+                        context.GrantedScopes, context.Services, context.ReadLog, context.HistoryClamped, context.Cache, now),
                     linked.Token);
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)

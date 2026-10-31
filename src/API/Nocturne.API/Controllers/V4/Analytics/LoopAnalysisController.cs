@@ -165,10 +165,19 @@ public class LoopAnalysisController(
     [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(LoopAnalysisResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public Task<ActionResult<LoopAnalysisResponse>> GetEnvelope(
+    public async Task<ActionResult<LoopAnalysisResponse>> GetEnvelope(
         [FromQuery] LoopAnalysisQuery query,
-        CancellationToken cancellationToken = default) =>
-        ServeAsync(query, (filter, _, ct) => EnvelopeOnlyAsync(new LoopAnalysisResponse(), filter, ct), cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var (invalid, request) = await TryResolveAsync(query, cancellationToken);
+        if (invalid is not null)
+            return invalid;
+
+        var response = new LoopAnalysisResponse();
+        if (request!.Zone is not null && (request.Filter ?? request.HistoryWindowFilter) is { } filter)
+            response = await EnvelopeOnlyAsync(response, filter, cancellationToken);
+        return Ok(LoopAnalysisReadScopeGuard.Redact(request.Fill(response), HttpContext.GetGrantedScopes()));
+    }
 
     /// <summary>
     /// Glucose, net loop correction, net insulin above schedule, IOB and COB aligned on up to three

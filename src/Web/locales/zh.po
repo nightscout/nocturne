@@ -38556,3 +38556,9 @@ msgid "This page uses only the data from the last hour in each range that you se
 msgid_plural "This page uses only the data from the last # hours in each range that you select."
 msgstr[0] ""
 msgstr[1] ""
+
+#: src/lib/components/reports/AidSystemUseCard.svelte
+msgid "The range that you selected ends before the last hour. You can see only the last hour, so this card has no data for this range."
+msgid_plural "The range that you selected ends before the last # hours. You can see only the last # hours, so this card has no data for this range."
+msgstr[0] ""
+msgstr[1] ""

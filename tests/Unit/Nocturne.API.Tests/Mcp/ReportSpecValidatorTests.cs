@@ -237,6 +237,21 @@ public class ReportSpecValidatorTests
     }
 
     [Fact]
+    public void A_panel_range_starting_after_now_names_its_from()
+    {
+        var now = DateTimeOffset.UtcNow;
+        string At(double hours) => now.AddHours(hours).ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+
+        var error = SingleError($$"""
+            { "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "table",
+              "range": { "from": "{{At(2)}}", "to": "{{At(10)}}" } } ] }
+            """);
+
+        error.Path.Should().Be("panels[0].range.from");
+        error.Message.Should().Contain("'from'");
+    }
+
+    [Fact]
     public void Not_an_object()
     {
         SingleError("[]").Path.Should().Be("spec");

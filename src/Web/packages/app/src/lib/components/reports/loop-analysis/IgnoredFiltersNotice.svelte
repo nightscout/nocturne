@@ -2,8 +2,8 @@
   Names the filters a response ignored: those the caller's access does not include the data for,
   and the Meals and events values outside the limits the API serves, which it replaced with its
   default. A food filter the caller may not apply leaves its cohort empty rather than unfiltered,
-  so it is named apart. The range parameters are left out: under the history clamp they are always ignored,
-  and the clamp note says so instead.
+  so it is named apart. The range parameters are left out: under the history clamp the comparison is
+  always ignored and a date is ignored when the window moved it, and the clamp note says so instead.
 -->
 <script lang="ts">
   import * as Alert from "#lib/components/ui/alert/index.js";

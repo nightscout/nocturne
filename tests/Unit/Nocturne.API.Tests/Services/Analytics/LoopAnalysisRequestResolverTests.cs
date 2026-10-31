@@ -51,6 +51,7 @@ public class LoopAnalysisRequestResolverTests
         resolved.IgnoredFilters.Should().Equal("compare");
         resolved.HistoryClamped.Should().BeTrue();
         resolved.RangeOutsideHistory.Should().BeFalse();
+        resolved.NarrowerThanHistoryWindow.Should().BeTrue("local midnight is after the window start");
         resolved.ComparisonRange.Should().BeNull();
         resolved.Filter!.HistoryVisibleFrom.Should().Be(WindowStart);
         resolved.Filter.CompareFrom.Should().BeNull();
@@ -67,6 +68,7 @@ public class LoopAnalysisRequestResolverTests
         resolved.PrimaryRange.EndDate.Should().Be(new DateOnly(2024, 6, 10));
         resolved.IgnoredFilters.Should().Equal("startDate", "compare");
         resolved.RangeOutsideHistory.Should().BeFalse();
+        resolved.NarrowerThanHistoryWindow.Should().BeFalse();
         resolved.Filter!.From.Should().Be(WindowStart);
         resolved.Filter.HistoryVisibleFrom.Should().Be(WindowStart);
     }
@@ -95,6 +97,31 @@ public class LoopAnalysisRequestResolverTests
         resolved.PrimaryRange.To.Should().Be(Now);
         resolved.Filter!.HistoryVisibleFrom.Should().Be(WindowStart, "the edge of what the caller may read is the window's, not the request's");
         resolved.IgnoredFilters.Should().BeEmpty();
+        resolved.NarrowerThanHistoryWindow.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Clamped_AskedForTheWholeWindowAsOfAnEarlierInstant_IsTheWholeWindow()
+    {
+        var asOf = Now.AddMilliseconds(-40);
+
+        var resolved = await Resolver().ResolveAsync(
+            Query(9, 10), Granted, true, new HashSet<string>(), CancellationToken.None, (asOf.AddHours(-24), asOf), asOf);
+
+        resolved.PrimaryRange!.From.Should().Be(asOf.AddHours(-24));
+        resolved.PrimaryRange.To.Should().Be(asOf);
+        resolved.NarrowerThanHistoryWindow.Should().BeFalse("the panel asked for the whole window as of its own clock");
+    }
+
+    [Fact]
+    public async Task Clamped_AskedOnlyForTheFuture_IsEmptyButNotBeforeTheWindow()
+    {
+        var resolved = await Resolver().ResolveAsync(
+            Query(10, 10), Granted, true, new HashSet<string>(), CancellationToken.None, (Now.AddHours(2), Now.AddHours(10)));
+
+        resolved.Filter.Should().BeNull();
+        resolved.RangeOutsideHistory.Should().BeFalse("the range does not end before the window");
+        resolved.NarrowerThanHistoryWindow.Should().BeFalse();
     }
 
     [Fact]
