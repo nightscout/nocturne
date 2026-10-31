@@ -4,7 +4,7 @@
   API accepts travels in the body rather than in the address.
 -->
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  import { untrack, type Snippet } from "svelte";
   import { runCustomReport } from "#lib/api/generated/customReports.generated.remote.js";
   import type { CustomReportRunRequest, CustomReportRunResponse } from "#lib/api/generated/nocturne-api-client.js";
   import { remoteErrorMessage } from "#lib/api/remote-error.js";
@@ -25,7 +25,8 @@
     let current = true;
     run = null;
     failure = null;
-    runCustomReport(sent)
+    // A command's call reads and writes its own pending count; untracked, so this effect follows only `request`.
+    untrack(() => runCustomReport(sent))
       .then((answer) => {
         if (current) run = answer;
       })
