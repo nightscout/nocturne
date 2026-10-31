@@ -45,3 +45,4 @@ export { default as PercentileBands } from "./report/PercentileBands.svelte";
 export { default as RangeBandsChart } from "./report/RangeBandsChart.svelte";
 export { default as ReportView } from "./report/ReportView.svelte";
 export { default as BarChart } from "./report/BarChart.svelte";
+export { default as StackedBar, type StackedBarSegment, type StackedBarInset } from "./report/StackedBar.svelte";

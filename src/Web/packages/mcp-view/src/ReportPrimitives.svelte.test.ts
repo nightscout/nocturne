@@ -193,6 +193,37 @@ describe("bar primitive", () => {
 });
 
 describe("time_series markers", () => {
+  it("draws one horizontal stacked bar of the five ranges, in their colours and order, with each percent in its key", async () => {
+    const stackedRanges = {
+      id: "ranges", title: "Time in each glucose range", dataset: "glucose_distribution", primitive: "bar", status: "ok", window,
+      bindings: { x: "period", y: ["veryLow", "low", "inRange", "high", "veryHigh"], stacked: true, orientation: "horizontal" },
+      fields: [
+        field("period", "Period", "category", null),
+        field("veryLow", "Very low", "percent", "%", { color: "glucose-very-low" }),
+        field("low", "Low", "percent", "%", { color: "glucose-low" }),
+        field("inRange", "In range", "percent", "%", { color: "glucose-in-range" }),
+        field("high", "High", "percent", "%", { color: "glucose-high" }),
+        field("veryHigh", "Very high", "percent", "%", { color: "glucose-very-high" }),
+      ],
+      rows: [{ period: "2026-10-15 to 2026-10-29", veryLow: 0.4, low: 1.6, inRange: 71.8, high: 20.9, veryHigh: 5.3 }],
+      summary: "Glucose distribution.",
+    };
+    render(ReportView, { result: { structuredContent: report([stackedRanges]) }, locale: "en-US" });
+
+    const bar = page.getByTestId("report-bar");
+    await expect.element(bar).toHaveAttribute("data-orientation", "horizontal");
+    await expect.poll(() => bar.element().querySelectorAll("[data-testid=stacked-bar-segment]").length).toBe(5);
+    const segments = [...bar.element().querySelectorAll("[data-testid=stacked-bar-segment]")];
+    expect(segments.map((s) => s.getAttribute("data-key"))).toEqual(["veryLow", "low", "inRange", "high", "veryHigh"]);
+    expect(segments.map((s) => s.getAttribute("data-color"))).toEqual([
+      "var(--glucose-very-low)", "var(--glucose-low)", "var(--glucose-in-range)", "var(--glucose-high)", "var(--glucose-very-high)",
+    ]);
+    const widths = segments.map((s) => s.getBoundingClientRect().width);
+    expect(widths[2]).toBeGreaterThan(widths[3]);
+    const key = [...bar.element().querySelectorAll("[data-testid=stacked-bar-key]")].map((li) => li.textContent?.trim());
+    expect(key).toEqual(["0.4% Very low", "1.6% Low", "71.8% In range", "20.9% High", "5.3% Very high"]);
+  });
+
   it("draws the panel's boluses and carbs as the dashboard's markers on the glucose line", async () => {
     render(ReportView, { result: { structuredContent: report([markedLine]) }, locale: "en-US" });
 

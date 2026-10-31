@@ -44,7 +44,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
     private static readonly string[] SpecKeys = ["version", "title", "range", "panels"];
     private static readonly string[] PanelKeys = ["id", "title", "dataset", "primitive", "bindings", "range"];
     private static readonly string[] RangeKeys = ["hours", "from", "to"];
-    private static readonly string[] BindingKeys = ["x", "y", "band", "columns", "series", "stacked"];
+    private static readonly string[] BindingKeys = ["x", "y", "band", "columns", "series", "stacked", "orientation"];
 
     public ReportSpecValidation Validate(JsonElement spec, bool useMmol = false)
     {
@@ -399,6 +399,19 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         if (primitive != ReportPrimitive.Bar && stackedSent)
             error($"{at}.stacked", $"{primitive.WireName()} does not use 'stacked'. Remove it.");
 
+        ReportBarOrientation? orientation = null;
+        var orientationSent = present && element.TryGetProperty("orientation", out var orientationValue) && orientationValue.ValueKind != JsonValueKind.Null;
+        if (orientationSent)
+        {
+            orientation = element.GetProperty("orientation") is { ValueKind: JsonValueKind.String } o
+                ? o.GetString() switch { "vertical" => ReportBarOrientation.Vertical, "horizontal" => ReportBarOrientation.Horizontal, _ => null }
+                : null;
+            if (orientation is null)
+                error($"{at}.orientation", "Send \"vertical\" or \"horizontal\".");
+        }
+        if (primitive != ReportPrimitive.Bar && orientationSent)
+            error($"{at}.orientation", $"{primitive.WireName()} does not use 'orientation'. Remove it.");
+
         var x = Text("x", out var xSent);
         var y = List("y");
         var band = List("band");
@@ -417,6 +430,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             series = defaults.Series;
             seriesSent = series is not null;
             stacked = defaults.Stacked;
+            orientation = defaults.Orientation;
         }
 
         ReportField? Field(string path, string name)
@@ -564,7 +578,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
                 {
                     if (!malformed.Contains("y"))
                         error($"{at}.y", $"Missing. Send the fields to draw as bars. Fields: {fieldNames}.");
-                    return new ReportBindings { X = xName, Stacked = stacked };
+                    return new ReportBindings { X = xName, Stacked = stacked, Orientation = orientation ?? ReportBarOrientation.Vertical };
                 }
 
                 if (y.Distinct().Count() != y.Count)
@@ -584,7 +598,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
                         $"The fields {string.Join(", ", yFields.Select(f => $"'{f.Name}' ({f.Unit ?? "no unit"})"))} have different units. "
                         + "Put fields of another unit in their own panel.");
 
-                return new ReportBindings { X = xName, Y = y, Stacked = stacked ?? false };
+                return new ReportBindings { X = xName, Y = y, Stacked = stacked ?? false, Orientation = orientation ?? ReportBarOrientation.Vertical };
             }
 
             case ReportPrimitive.GlucoseChart:

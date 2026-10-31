@@ -19,7 +19,9 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
     public string Description =>
         "Glucose distribution: the percent of the range's covered time in each clinical glucose band (very low, low, "
         + "in range, high, very high) and the minutes in each, from the same analysis as glucose_statistics. Draw as "
-        + "bar (one bar per band, in the band's color) or stat_tiles (one tile per band).";
+        + "bar (one bar per band, in the band's color; or, with x 'period' and the five band fields veryLow, low, inRange, "
+        + "high, veryHigh as y, stacked and horizontal, one bar of the whole range split by band, as the AGP report draws "
+        + "it) or stat_tiles (one tile per band).";
 
     public Type ParametersType => typeof(GlucoseDistributionParameters);
 
@@ -43,9 +45,17 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
         new("veryHigh", "Very high", ReportFieldKind.Percent, "%", "Percent of the covered time very high.", Color: ChartColor.GlucoseVeryHigh),
     ];
 
-    public IReadOnlyList<ReportField> Fields { get; } = [.. BarFields, .. TileFields];
+    public IReadOnlyList<ReportField> Fields { get; } = [.. BarFields, PeriodField, .. TileFields];
 
-    public IReadOnlyList<ReportField> FieldsFor(ReportPrimitive primitive) => primitive == ReportPrimitive.Bar ? BarFields : TileFields;
+    private static readonly ReportField PeriodField =
+        new("period", "Period", ReportFieldKind.Category, null, "The range, as one category: bind it as x with the band fields as y for one stacked bar.");
+
+    public IReadOnlyList<ReportField> FieldsFor(ReportPrimitive primitive) =>
+        primitive == ReportPrimitive.Bar ? [.. BarFields, PeriodField, .. TileFields] : TileFields;
+
+    /// <summary>A bar panel bound to <c>period</c>: one row for the whole range, the bands as its columns.</summary>
+    internal static bool OneRow(ReportDatasetRequest request) =>
+        request.Primitive != ReportPrimitive.Bar || request.Bindings?.X == PeriodField.Name;
 
     public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive == ReportPrimitive.Bar
         ? new ReportBindings { X = "band", Y = ["percent"], Stacked = false }
@@ -84,7 +94,7 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
         var useMmol = request.UseMmol;
 
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows = count == 0 ? []
-            : request.Primitive == ReportPrimitive.Bar
+            : !OneRow(request)
                 ? [.. bands.Select(b => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
                 {
                     ["band"] = b.Label,
@@ -93,7 +103,10 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
                     ["minutes"] = Math.Round(b.Minutes),
                     ["color"] = b.Color,
                 })]
-                : [bands.ToDictionary(b => b.Key, b => (object?)Math.Round(b.Percent, 1))];
+                : [new Dictionary<string, object?>(bands.Select(b => KeyValuePair.Create(b.Key, (object?)Math.Round(b.Percent, 1))))
+                {
+                    [PeriodField.Name] = string.Create(CultureInfo.InvariantCulture, $"{request.From:yyyy-MM-dd} to {request.To:yyyy-MM-dd}"),
+                }];
 
         return new ReportDatasetOutput
         {

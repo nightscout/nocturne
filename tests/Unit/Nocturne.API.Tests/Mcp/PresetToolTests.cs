@@ -29,7 +29,10 @@ public class PresetToolTests
             ("profile", "glucose_distribution_by_hour", ReportPrimitive.RangeBands),
             ("ranges", "glucose_distribution", ReportPrimitive.Bar));
         spec.Panels.Should().OnlyContain(p => p.Range!.Hours == 14 * 24);
-        spec.Panels[2].Bindings.Should().BeEquivalentTo(new ReportBindings { X = "band", Y = ["percent"], Stacked = false });
+        spec.Panels[2].Bindings.Should().BeEquivalentTo(new ReportBindings
+        {
+            X = "period", Y = ["veryLow", "low", "inRange", "high", "veryHigh"], Stacked = true, Orientation = ReportBarOrientation.Horizontal,
+        }, "the web AGP report draws time in range as one horizontal stacked bar");
     }
 
     [Fact]

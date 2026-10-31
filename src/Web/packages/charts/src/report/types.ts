@@ -64,6 +64,8 @@ export interface ReportBindings {
   series?: string | null;
   /** bar: stack the y fields in one bar per category. */
   stacked?: boolean | null;
+  /** bar: bars up from a category axis along the bottom (vertical, the default), or across from one down the side. */
+  orientation?: "vertical" | "horizontal" | null;
 }
 
 export interface ReportResolution {

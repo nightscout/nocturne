@@ -89,7 +89,7 @@ internal sealed record ReportPanelSpec
     + "and optional 'band' (two fields: the lower and upper edge of a shaded range). "
     + "range_bands: 'x', 'y' (one field: the median line), 'band' (two fields, or four: outer low, inner low, inner high, "
     + "outer high) and optional 'series' (a category field; one set of bands per value). Optional; each dataset has defaults. "
-    + "bar: 'x' (a category field), 'y' (one or more number fields in one unit) and optional 'stacked'. "
+    + "bar: 'x' (a category field), 'y' (one or more number fields in one unit), optional 'stacked' and 'orientation'. "
     + "table and stat_tiles: optional 'columns' (the fields to show, in order). glucose_chart: none for glucose_series; "
     + "for event_response as range_bands, defaulting to the median and the middle half by cohort.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -114,6 +114,23 @@ internal sealed record ReportBindings
 
     [Description("bar only: true to stack the 'y' fields in one bar per category, false (the default) to draw them side by side.")]
     public bool? Stacked { get; init; }
+
+    [Description(
+        "bar only: 'vertical' (the default) for bars up from a category axis along the bottom, 'horizontal' for bars across "
+        + "from one down the side. One stacked category laid horizontal is drawn as one bar of parts of a whole, with each "
+        + "part's value printed in its key: glucose_distribution with x 'period' and the five bands as y.")]
+    public ReportBarOrientation? Orientation { get; init; }
+}
+
+/// <summary>Which way a bar panel's bars run.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReportBarOrientation>))]
+internal enum ReportBarOrientation
+{
+    [JsonStringEnumMemberName("vertical")]
+    Vertical,
+
+    [JsonStringEnumMemberName("horizontal")]
+    Horizontal,
 }
 
 /// <summary>

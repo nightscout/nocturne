@@ -104,6 +104,13 @@ internal sealed class PresetTools
                 title = "Time in each glucose range",
                 dataset = new { name = GlucoseDistributionParameters.Name },
                 primitive = "bar",
+                bindings = new
+                {
+                    x = "period",
+                    y = new[] { "veryLow", "low", "inRange", "high", "veryHigh" },
+                    stacked = true,
+                    orientation = "horizontal",
+                },
             },
         },
     };

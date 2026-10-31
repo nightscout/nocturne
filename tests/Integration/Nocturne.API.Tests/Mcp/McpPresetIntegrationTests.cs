@@ -68,7 +68,15 @@ public class McpPresetIntegrationTests(ApiIntegrationTestFixture fixture, ITestO
             .Should().Equal(("figures", "stat_tiles", "ok"), ("profile", "range_bands", "ok"), ("ranges", "bar", "ok"));
         panels[0].GetProperty("fields").EnumerateArray().Select(f => f.GetProperty("name").GetString()).Should().Contain(["tdd", "carbsPerDay"]);
         panels[1].GetProperty("rows").GetArrayLength().Should().Be(24);
-        panels[2].GetProperty("rows").EnumerateArray().Select(r => r.GetProperty("color").GetString())
+        var ranges = panels[2];
+        ranges.GetProperty("bindings").GetProperty("orientation").GetString().Should().Be("horizontal");
+        ranges.GetProperty("bindings").GetProperty("stacked").GetBoolean().Should().BeTrue();
+        ranges.GetProperty("bindings").GetProperty("y").EnumerateArray().Select(y => y.GetString())
+            .Should().Equal("veryLow", "low", "inRange", "high", "veryHigh");
+        var bands = ranges.GetProperty("rows").EnumerateArray().Should().ContainSingle().Subject;
+        new[] { "veryLow", "low", "inRange", "high", "veryHigh" }.Sum(k => bands.GetProperty(k).GetDouble()).Should().BeApproximately(100, 0.5);
+        ranges.GetProperty("fields").EnumerateArray().Where(f => f.TryGetProperty("color", out var c) && c.ValueKind == JsonValueKind.String)
+            .Select(f => f.GetProperty("color").GetString())
             .Should().Equal("glucose-very-low", "glucose-low", "glucose-in-range", "glucose-high", "glucose-very-high");
         text.Should().Contain("Ambulatory glucose profile, last 14 days").And.Contain("[ranges] Time in each glucose range")
             .And.Contain("Insulin per day").And.NotContain("Fields omitted");

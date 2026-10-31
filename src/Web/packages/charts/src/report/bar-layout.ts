@@ -1,6 +1,7 @@
 import type { ScaleBand } from "d3-scale";
 import { resolveChartColor } from "../colors.js";
 import { isChartColor } from "../enums.js";
+import type { GlucoseRange } from "../print/patterns.js";
 import { boundFields, type ReportField, type ReportPanel } from "./types.js";
 
 /** One drawn piece of a bar: its category, the field it shows, where it starts and ends, and its colour. */
@@ -14,6 +15,8 @@ export interface BarSegment {
   end: number;
   value: number;
   color: string;
+  /** The print texture of a glucose range's bar, so paper still tells the ranges apart. */
+  pattern: GlucoseRange | null;
 }
 
 export interface BarLayout {
@@ -21,9 +24,18 @@ export interface BarLayout {
   fields: ReportField[];
   segments: BarSegment[];
   stacked: boolean;
+  horizontal: boolean;
   /** The top of the value axis. */
   max: number;
 }
+
+const GLUCOSE_PATTERNS: Partial<Record<string, GlucoseRange>> = {
+  "glucose-very-low": "very-low",
+  "glucose-low": "low",
+  "glucose-in-range": "in-range",
+  "glucose-high": "high",
+  "glucose-very-high": "very-high",
+};
 
 /** A bar that neither the row nor the field gives a colour: chrome, not a clinical colour. */
 export const NEUTRAL_BAR = "var(--muted-foreground)";
@@ -34,6 +46,7 @@ export const NEUTRAL_BAR = "var(--muted-foreground)";
  * the field's theme colour; with neither, or with a value that is not a theme colour, the bar is neutral.
  */
 export function barLayout(panel: Pick<ReportPanel, "fields" | "rows" | "bindings">): BarLayout {
+  const horizontal = panel.bindings.orientation === "horizontal";
   const xName = panel.bindings.x ?? "";
   const xField = panel.fields.find((f) => f.name === xName);
   const fields = boundFields(panel, panel.bindings.y);
@@ -54,19 +67,17 @@ export function barLayout(panel: Pick<ReportPanel, "fields" | "rows" | "bindings
       if (typeof value !== "number") return;
       const fromRow = rowColor ? row[rowColor] : null;
       // Only a theme colour the API names may reach a CSS variable; anything else is drawn neutral.
-      const color = isChartColor(fromRow)
-        ? resolveChartColor(fromRow)
-        : rowColor === null && isChartColor(field.color)
-          ? resolveChartColor(field.color)
-          : NEUTRAL_BAR;
+      const theme = isChartColor(fromRow) ? fromRow : rowColor === null && isChartColor(field.color) ? field.color : null;
+      const color = theme ? resolveChartColor(theme) : NEUTRAL_BAR;
       const start = stacked ? base : 0;
       const end = start + value;
       if (stacked) base = end;
       max = Math.max(max, end);
-      segments.push({ key: `${name}-${field.name}`, category: name, field, slot: stacked ? 0 : i, start, end, value, color });
+      segments.push({ key: `${name}-${field.name}`, category: name, field, slot: stacked ? 0 : i, start, end, value, color,
+        pattern: theme ? (GLUCOSE_PATTERNS[theme] ?? null) : null });
     });
   }
-  return { categories, fields, segments, stacked, max: max > 0 ? max * 1.05 : 1 };
+  return { categories, fields, segments, stacked, horizontal, max: max > 0 ? max * 1.05 : 1 };
 }
 
 function isBandScale(scale: unknown): scale is ScaleBand<string> {

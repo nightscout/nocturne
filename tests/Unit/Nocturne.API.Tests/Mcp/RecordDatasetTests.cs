@@ -416,13 +416,33 @@ public class RecordDatasetTests
             { "version": 1, "range": { "hours": 336 }, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "bar" } ] }
             """), context, CancellationToken.None)).Panels.Single();
 
-        panel.Bindings.Should().BeEquivalentTo(new ReportBindings { X = "band", Y = ["percent"], Stacked = false });
+        panel.Bindings.Should().BeEquivalentTo(new ReportBindings { X = "band", Y = ["percent"], Stacked = false, Orientation = ReportBarOrientation.Vertical });
         panel.Fields.Select(f => f.Name).Should().Equal("band", "percent", "color");
         panel.Fields.Single(f => f.Name == "band").ColorField.Should().Be("color");
         panel.Rows.Select(r => r["color"]).Should().Equal(
             ChartColor.GlucoseVeryLow, ChartColor.GlucoseLow, ChartColor.GlucoseInRange, ChartColor.GlucoseHigh, ChartColor.GlucoseVeryHigh);
         panel.Rows.Sum(r => (double)r["percent"]!).Should().BeApproximately(100, 0.5);
         readLog.Datasets.Should().Equal("glucose");
+    }
+
+    [Fact]
+    public async Task A_distribution_bar_bound_to_the_period_is_one_row_with_the_bands_as_columns()
+    {
+        var (runner, context, _) = new Harness().Arrange(Scope.GlucoseRead);
+
+        var panel = (await runner.RunAsync(Spec("""
+            { "version": 1, "range": { "hours": 336 }, "panels": [ { "dataset": { "name": "glucose_distribution" }, "primitive": "bar",
+              "bindings": { "x": "period", "y": ["veryLow", "low", "inRange", "high", "veryHigh"], "stacked": true, "orientation": "horizontal" } } ] }
+            """), context, CancellationToken.None)).Panels.Single();
+
+        panel.Bindings.Orientation.Should().Be(ReportBarOrientation.Horizontal);
+        panel.Bindings.Stacked.Should().BeTrue();
+        panel.Fields.Select(f => f.Name).Should().Equal("period", "veryLow", "low", "inRange", "high", "veryHigh");
+        panel.Fields.Skip(1).Select(f => f.Color).Should().Equal(
+            ChartColor.GlucoseVeryLow, ChartColor.GlucoseLow, ChartColor.GlucoseInRange, ChartColor.GlucoseHigh, ChartColor.GlucoseVeryHigh);
+        var row = panel.Rows.Should().ContainSingle().Subject;
+        row["period"].Should().Be("2026-10-15 to 2026-10-29");
+        new[] { "veryLow", "low", "inRange", "high", "veryHigh" }.Sum(k => (double)row[k]!).Should().BeApproximately(100, 0.5);
     }
 
     [Fact]
@@ -490,7 +510,7 @@ public class RecordDatasetTests
         var (start, _) = StatisticsService.PunchCardRange(new DateOnly(2026, 10, 29), new DateOnly(2026, 10, 30),
             TimeZoneInfo.FindSystemTimeZoneById("Pacific/Auckland"));
         harness.Carbs.Verify(c => c.GetAsync(start, It.IsAny<DateTime?>(), null, null, int.MaxValue, 0, false, null, null, It.IsAny<CancellationToken>()));
-        panel.Bindings.Should().BeEquivalentTo(new ReportBindings { X = "date", Y = ["timeBelow", "timeInRange", "timeAbove"], Stacked = true });
+        panel.Bindings.Should().BeEquivalentTo(new ReportBindings { X = "date", Y = ["timeBelow", "timeInRange", "timeAbove"], Stacked = true, Orientation = ReportBarOrientation.Vertical });
         var rows = panel.Rows.ToDictionary(r => (string)r["date"]!);
         rows.Keys.Should().Equal("2026-10-29", "2026-10-30");
         readLog.Datasets.Should().Equal("glucose", "treatments");

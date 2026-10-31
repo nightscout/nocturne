@@ -132,6 +132,7 @@ internal interface IReportDataset
 
 /// <summary>One panel's run of a dataset.</summary>
 /// <param name="Now">The instant the runner resolved <see cref="From"/> and <see cref="To"/> against; null outside a run.</param>
+/// <param name="Bindings">The panel's normalised bindings, for a dataset whose rows take the shape they bind.</param>
 internal sealed record ReportDatasetRequest(
     ReportDatasetParameters Parameters,
     ReportPrimitive Primitive,
@@ -143,7 +144,8 @@ internal sealed record ReportDatasetRequest(
     McpToolReadLog ReadLog,
     bool HistoryClamped = false,
     Datasets.ReportRunCache? RunCache = null,
-    DateTimeOffset? Now = null)
+    DateTimeOffset? Now = null,
+    ReportBindings? Bindings = null)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 
