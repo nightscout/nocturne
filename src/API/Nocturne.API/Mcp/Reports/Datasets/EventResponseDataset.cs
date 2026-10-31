@@ -23,6 +23,12 @@ internal sealed class EventResponseDataset : IReportDataset
     /// <summary>The most events a table carries; the summary counts every one.</summary>
     public const int MaxEvents = 2000;
 
+    /// <summary>The most single events a glucose chart draws per cohort, newest first; the band covers every one.</summary>
+    public const int MaxTracesPerCohort = 30;
+
+    /// <summary>The most points one event's trace carries; a longer window is thinned to every n-th slot.</summary>
+    public const int TracePointBudget = 72;
+
     public string Name => EventResponseParameters.Name;
 
     public string Description =>
@@ -31,7 +37,8 @@ internal sealed class EventResponseDataset : IReportDataset
         + "the foods a meal carries a food record of (ids from find_foods). Drawn as range_bands: one row per cohort and "
         + "five-minute slot from the event, with glucose and glucose change percentiles (P10, P25, P50, P75, P90) across "
         + "the cohort's events and the median IOB, COB and net loop correction. Drawn as table: one row per event with its "
-        + "figures and a one-sentence summary. Reads local days; needs glucose.read, and treatments.read for meal, bolus, "
+        + "figures and a one-sentence summary. Drawn as glucose_chart: each cohort's median and middle half over the "
+        + $"window, with up to {MaxTracesPerCohort} single events per cohort (the newest) drawn faintly under it. Reads local days; needs glucose.read, and treatments.read for meal, bolus, "
         + "exercise, override, temporary target and rise cohorts, devices.read for sensor starts, food.read for a food filter.";
 
     public Type ParametersType => typeof(EventResponseParameters);
@@ -88,17 +95,27 @@ internal sealed class EventResponseDataset : IReportDataset
     public IReadOnlyList<ReportField> FieldsFor(ReportPrimitive primitive) =>
         primitive == ReportPrimitive.Table ? EventFields : SlotFields;
 
-    public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive == ReportPrimitive.RangeBands
-        ? new ReportBindings
+    public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive switch
+    {
+        ReportPrimitive.RangeBands => new ReportBindings
         {
             X = "minute",
             Y = ["glucoseP50"],
             Band = ["glucoseP10", "glucoseP25", "glucoseP75", "glucoseP90"],
             Series = "series",
-        }
-        : null;
+        },
+        ReportPrimitive.GlucoseChart => new ReportBindings
+        {
+            X = "minute",
+            Y = ["glucoseP50"],
+            Band = ["glucoseP25", "glucoseP75"],
+            Series = "series",
+        },
+        _ => null,
+    };
 
-    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } = [ReportPrimitive.RangeBands, ReportPrimitive.Table];
+    public IReadOnlyList<ReportPrimitive> AllowedPrimitives { get; } =
+        [ReportPrimitive.RangeBands, ReportPrimitive.Table, ReportPrimitive.GlucoseChart];
 
     public TimeSpan DefaultRange => TimeSpan.FromDays(30);
 
@@ -244,8 +261,17 @@ internal sealed class EventResponseDataset : IReportDataset
             foreach (var field in EventFields)
                 fieldSeries.TryAdd(field.Name, LoopAnalysisSeries.EventList);
 
-        if (events.Count > MaxEvents)
+        if (request.Primitive == ReportPrimitive.Table && events.Count > MaxEvents)
             notes.Add($"The table shows the first {MaxEvents} of {events.Count} events.");
+
+        IReadOnlyList<ReportTrace> traces = [];
+        if (request.Primitive == ReportPrimitive.GlucoseChart)
+        {
+            var (drawn, note) = Traces(report, slotMinutes, number, useMmol);
+            traces = drawn;
+            if (note is not null)
+                notes.Add(note);
+        }
 
         return new ReportDatasetOutput
         {
@@ -254,7 +280,46 @@ internal sealed class EventResponseDataset : IReportDataset
             Omitted = Omitted(report, fieldSeries),
             Window = Window(report),
             Cohorts = [.. askedLabels.Select((label, i) => new ReportCohort(i + 1, label))],
+            Traces = traces,
         };
+    }
+
+    /// <summary>
+    /// Each cohort's newest events as traces of their own glucose, at most
+    /// <see cref="MaxTracesPerCohort"/> a cohort and <see cref="TracePointBudget"/> points a trace,
+    /// and the sentence that says how many were drawn and whether the budget thinned them.
+    /// </summary>
+    internal static (IReadOnlyList<ReportTrace> Traces, string? Note) Traces(
+        EventResponseReport report, IReadOnlyList<int> slotMinutes, IReadOnlyDictionary<int, int> number, bool useMmol)
+    {
+        var step = Math.Max(1, (int)Math.Ceiling(slotMinutes.Count / (double)TracePointBudget));
+        var traces = new List<ReportTrace>();
+        var counts = new List<string>();
+        foreach (var cohort in report.Definition.Cohorts)
+        {
+            var events = report.Primary.Events.Where(e => e.Cohorts.Contains(cohort.Cohort)).OrderByDescending(e => e.At).ToList();
+            var drawn = events.Take(MaxTracesPerCohort).ToList();
+            var shown = number.GetValueOrDefault(cohort.Cohort, cohort.Cohort);
+            foreach (var e in drawn)
+            {
+                var points = new List<double[]>();
+                for (var k = 0; k < e.GlucoseTrace.Count && k < slotMinutes.Count; k += step)
+                    if (e.GlucoseTrace[k] is { } mgdl)
+                        points.Add([slotMinutes[k], Glucose(mgdl, useMmol)!.Value]);
+                traces.Add(new ReportTrace(shown, new DateTimeOffset(DateTime.SpecifyKind(e.At, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
+                    points, EventSentence(e, useMmol)));
+            }
+            if (events.Count > 0)
+                counts.Add(drawn.Count == events.Count
+                    ? $"cohort {shown}, all {events.Count}"
+                    : $"cohort {shown}, the newest {drawn.Count} of {events.Count}");
+        }
+        if (counts.Count == 0)
+            return (traces, null);
+        var note = $"Single events drawn under the band: {string.Join("; ", counts)}.";
+        if (step > 1)
+            note += $" Each event's line has one point every {step * EventResponseDefinition.SlotMinutes} minutes, to stay within {TracePointBudget} points.";
+        return (traces, note);
     }
 
     /// <summary>The category each anchor's events are records of, as the read audit names it.</summary>

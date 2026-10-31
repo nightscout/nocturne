@@ -330,6 +330,14 @@ public class EventResponseEvent
     /// </summary>
     public string? GlucoseCoverage { get; set; }
 
+    /// <summary>
+    /// The event's own glucose in each slot of the window, mg/dL, null where the slot held no
+    /// reading, in the order of <see cref="EventResponseReport.SlotMinutes"/>: the trace the
+    /// slot aggregates are taken across. Not served by the endpoint; a report draws it.
+    /// </summary>
+    [JsonIgnore]
+    public List<double?> GlucoseTrace { get; set; } = [];
+
     public EventMetrics Metrics { get; set; } = new();
 }
 

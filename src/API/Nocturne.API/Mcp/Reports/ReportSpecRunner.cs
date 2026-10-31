@@ -184,6 +184,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Resolution = output.Resolution,
             Markers = panel.Primitive == ReportPrimitive.TimeSeries ? MarkersFor(fields, output.Markers) : [],
             Cohorts = output.Cohorts,
+            Traces = panel.Primitive == ReportPrimitive.GlucoseChart ? output.Traces : [],
         };
     }
 

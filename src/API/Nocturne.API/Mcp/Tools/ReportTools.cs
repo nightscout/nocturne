@@ -44,7 +44,7 @@ internal static class ReportTools
     [Description(
         "Draws a report of one to six panels from Nocturne's data. Each panel reads one dataset over a "
         + "time range and draws it as one primitive: time_series (lines over time, with an optional shaded "
-        + "band), stat_tiles (a row of figures), table, glucose_chart (the full dashboard chart), or "
+        + "band), stat_tiles (a row of figures), table, glucose_chart (the full dashboard chart; over event_response, single events under each cohort's band), or "
         + "range_bands (percentile bands under a median line, over the time of day or minutes from an event), or bar "
         + "(bars over a category, side by side or stacked). "
         + "Datasets: glucose_series (readings with IOB, COB and basal, and bolus and carb markers), glucose_statistics "

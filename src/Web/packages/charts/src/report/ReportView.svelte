@@ -118,6 +118,15 @@
           onselect={onselectrow && (selectable?.(panel) ?? true) ? (row, i) => onselectrow(panel, row, i) : undefined}
           selected={selected?.panel === panel.id ? selected.row : null}
         />
+      {:else if panel.primitive === "glucose_chart" && !panel.chart}
+        <RangeBandsChart
+          {panel}
+          format={zoned}
+          heightClass={plotHeight}
+          lineColorMode={colorMode}
+          traces={panel.traces ?? []}
+          oncontext={oncontext ? (text) => oncontext(panel, text) : undefined}
+        />
       {:else if panel.primitive === "glucose_chart" && panel.chart}
         <GlucoseChart
           data={transformChartData(panel.chart)}

@@ -100,6 +100,16 @@ export interface ReportPanel {
   markers?: ReportMarker[];
   /** Every event cohort the panel asked for, with the API's label naming its filter. */
   cohorts?: ReportCohort[];
+  /** A glucose chart of event cohorts: single events' glucose, drawn faintly under each cohort's band. */
+  traces?: ReportTrace[];
+}
+
+/** One event's glucose over the window, aligned on its anchor: [minutes from it, glucose] pairs. */
+export interface ReportTrace {
+  cohort: number;
+  at: number;
+  points: [number, number][];
+  sentence: string;
 }
 
 /** An event cohort a panel asked for: its number (1 to 3) and the label that names its filter. */

@@ -9,10 +9,11 @@
   target range shaded, the low and high limits drawn, and, for a single series, the median coloured
   by range as the time series colours glucose. Several cohorts keep their own hues, so they stay
   apart. Hovering a slot shows each series' median and middle spread; picking it hands `oncontext`
-  the API's sentence for each series at that slot.
+  the API's sentence for each series at that slot. `traces` (a glucose chart of event cohorts) are
+  single events' glucose, drawn faintly in their cohort's hue under the bands.
 -->
 <script lang="ts">
-  import { Axis, Chart, LinearGradient, Rect, Rule, Svg, Tooltip } from "layerchart";
+  import { Axis, Chart, LinearGradient, Rect, Rule, Spline, Svg, Tooltip } from "layerchart";
   import PercentileBands from "./PercentileBands.svelte";
   import { cohortBands, GLUCOSE_BANDS, type BandColors, type PercentileAggregate } from "./percentile-bands.js";
   import { reportGlucoseStops } from "./glucose-scale.js";
@@ -26,6 +27,7 @@
     type ReportField,
     type ReportPanel,
     type ReportRow,
+    type ReportTrace,
   } from "./types.js";
   import type { ChartFormat } from "../format.js";
 
@@ -37,9 +39,11 @@
     lineColorMode?: Exclude<LineColorMode, "single">;
     /** Called with the API's sentences for the picked slot; slots are not picked without it. */
     oncontext?: (text: string) => void;
+    /** Single events drawn faintly under their cohort's bands. */
+    traces?: ReportTrace[];
   }
 
-  let { panel, format, heightClass = "h-[280px]", lineColorMode = "continuous", oncontext }: Props = $props();
+  let { panel, format, heightClass = "h-[280px]", lineColorMode = "continuous", oncontext, traces = [] }: Props = $props();
 
   type Slot = { aggregate: PercentileAggregate | null; row: ReportRow | null };
   type Point = { slot: number; index: number };
@@ -109,10 +113,16 @@
   /** One glucose series takes the glucose colours; several keep their cohort hues so they read apart. */
   const rangeColoured = $derived(thresholds !== null && groups.length === 1);
 
+  /** A minute from the event on the slot axis: slots are evenly spaced from the first x. */
+  const slotStep = $derived(xs.length > 1 ? xs[1] - xs[0] : 1);
+  const slotOf = (minute: number) => (minute - xs[0]) / slotStep + 0.5;
+  const traceColor = (trace: ReportTrace) => cohortBands(trace.cohort - 1).median;
+
   const yDomain = $derived.by((): [number, number] => {
     const values = groups.flatMap((g) =>
       g.slots.flatMap((s) => (s.aggregate ? [s.aggregate.p10, s.aggregate.p25, s.aggregate.p50, s.aggregate.p75, s.aggregate.p90] : [])),
-    ).filter((v): v is number => v !== undefined);
+    ).concat(traces.flatMap((t) => t.points.map(([, value]) => value)))
+      .filter((v): v is number => v !== undefined);
     if (values.length === 0) return [0, 1];
     const min = Math.min(0, ...values);
     const max = Math.max(thresholds?.high ?? 0, ...values);
@@ -218,6 +228,18 @@
           {#if yDomain[0] < 0}
             <Rule y={0} class="stroke-foreground/40" />
           {/if}
+          {#each traces as trace (`${trace.cohort}-${trace.at}`)}
+            <Spline
+              data={trace.points}
+              x={(p: [number, number]) => slotOf(p[0])}
+              y={(p: [number, number]) => p[1]}
+              stroke={traceColor(trace)}
+              stroke-width={1}
+              stroke-opacity={0.28}
+              fill="none"
+              data-testid="report-trace"
+            />
+          {/each}
           {#each groups as group (group.key)}
             <g data-testid="report-range-bands-series" data-series={group.name} data-color={group.colors.median}>
               {#if rangeColoured && thresholds}

@@ -221,6 +221,7 @@ public static class EventResponseCalculator
             Grams = episode.Anchor.Grams is { } grams ? SlotSummary.Round(grams) : null,
             Cohorts = cohorts,
             GlucoseCoverage = GlucoseCoverage(episode),
+            GlucoseTrace = [.. episode.Slots.Select(s => s.Glucose is { } g ? SlotSummary.Round(g) : (double?)null)],
             Metrics = Rounded(episode.Metrics),
         };
     }

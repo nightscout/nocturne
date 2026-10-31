@@ -181,7 +181,19 @@ internal sealed record ReportDatasetOutput
 
     /// <summary>Every cohort the panel asked for, in order, with its label, shown or not.</summary>
     public IReadOnlyList<ReportCohort> Cohorts { get; init; } = [];
+
+    /// <summary>Single events' glucose aligned on their anchor, which a glucose chart of cohorts draws under the band.</summary>
+    public IReadOnlyList<ReportTrace> Traces { get; init; } = [];
 }
+
+/// <summary>
+/// One event's glucose over the window, aligned on its anchor.
+/// </summary>
+/// <param name="Cohort">The cohort's number, as <see cref="ReportCohort.Number"/>.</param>
+/// <param name="At">The anchor, Unix milliseconds.</param>
+/// <param name="Points">[minutes from the anchor, glucose in the display unit] pairs; slots with no reading are left out.</param>
+/// <param name="Sentence">What the event's figures show, as the event table's sentence.</param>
+internal sealed record ReportTrace(int Cohort, long At, IReadOnlyList<double[]> Points, string Sentence);
 
 /// <summary>An event cohort a panel asked for: its number (1 to 3, in the order sent) and the label that names its filter.</summary>
 internal sealed record ReportCohort(int Number, string Label);

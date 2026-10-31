@@ -4,6 +4,7 @@ using FluentAssertions;
 using Nocturne.API.Mcp;
 using Nocturne.API.Mcp.Reports;
 using Nocturne.API.Mcp.Reports.Datasets;
+using Nocturne.Core.Clinical.LoopAnalysis;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.LoopAnalysis;
 using Xunit;
@@ -388,6 +389,59 @@ public partial class LoopAnalysisDatasetTests
             .Should().Be("From 23:00 to 00:00: median 128 mg/dL, middle half 108 to 155 mg/dL, 168 readings on 14 days.");
         GlucoseDistributionByHourDataset.HourSentence(new AveragedStats { Hour = 3 }, useMmol: false)
             .Should().Be("From 03:00 to 04:00: no readings.");
+    }
+
+    [Fact]
+    public void An_event_response_glucose_chart_gets_the_median_and_middle_half_by_cohort()
+    {
+        var validation = Validate("""
+            { "version": 1, "panels": [ { "dataset": { "name": "event_response", "cohorts": [ { "anchor": "Meal" } ] }, "primitive": "glucose_chart" } ] }
+            """);
+
+        validation.Errors.Should().BeEmpty();
+        validation.Spec!.Panels[0].Bindings.Should().BeEquivalentTo(new ReportBindings
+        {
+            X = "minute", Y = ["glucoseP50"], Band = ["glucoseP25", "glucoseP75"], Series = "series",
+        });
+        Validate("""
+            { "version": 1, "panels": [ { "dataset": { "name": "glucose_series" }, "primitive": "glucose_chart", "bindings": { "y": ["glucose"] } } ] }
+            """).Errors.Should().ContainSingle(e => e.Path == "panels[0].bindings.y");
+    }
+
+    [Fact]
+    public void Traces_are_each_cohorts_newest_events_within_the_point_budget()
+    {
+        var definition = new EventResponseDefinition
+        {
+            MinutesBefore = 120, MinutesAfter = 480,
+            Cohorts = [new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal }],
+        };
+        var slots = EventResponseCalculator.SlotMinutes(definition);
+        var start = new DateTime(2026, 10, 1, 6, 0, 0, DateTimeKind.Utc);
+        var report = new EventResponseReport
+        {
+            Definition = definition,
+            Primary = new EventResponseRange
+            {
+                Events = [.. Enumerable.Range(0, 40).Select(i => new EventResponseEvent
+                {
+                    At = start.AddDays(i), Date = $"day {i}", Time = "06:00", Anchor = EventAnchorKind.Meal, Response = EventResponseKind.Rise,
+                    Cohorts = [1], GlucoseTrace = [.. slots.Select(m => m == 0 ? null : (double?)(100 + i))],
+                })],
+            },
+        };
+
+        var (traces, note) = EventResponseDataset.Traces(report, slots, new Dictionary<int, int> { [1] = 1 }, useMmol: false);
+
+        slots.Count.Should().BeGreaterThan(EventResponseDataset.TracePointBudget);
+        traces.Should().HaveCount(EventResponseDataset.MaxTracesPerCohort);
+        traces[0].At.Should().Be(new DateTimeOffset(start.AddDays(39)).ToUnixTimeMilliseconds(), "the newest event is drawn first");
+        traces.Should().OnlyContain(t => t.Cohort == 1 && t.Points.Count <= EventResponseDataset.TracePointBudget && t.Points.Count > 0);
+        traces[0].Points.Should().NotContain(p => p[0] == 0, "a slot with no reading is left out");
+        traces[0].Points[0].Should().Equal(-120, 139);
+        traces[0].Sentence.Should().StartWith("Meal on day 39 at 06:00");
+        note.Should().Be("Single events drawn under the band: cohort 1, the newest 30 of 40. "
+            + "Each event's line has one point every 10 minutes, to stay within 72 points.");
     }
 
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement;

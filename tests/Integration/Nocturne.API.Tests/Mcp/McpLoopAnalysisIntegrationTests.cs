@@ -113,6 +113,44 @@ public class McpLoopAnalysisIntegrationTests(ApiIntegrationTestFixture fixture, 
     }
 
     [Fact]
+    public async Task A_glucose_chart_of_one_cohort_returns_its_events_as_traces_within_the_budget()
+    {
+        using var client = McpClient(await McpTokenAsync("glucose.read treatments.read"));
+
+        var call = await CallToolAsync(client, "render_report", new
+        {
+            spec = new
+            {
+                version = 1,
+                range = new { hours = 9 * 24 },
+                panels = new object[]
+                {
+                    new { id = "overlay", dataset = new { name = "event_response", cohorts = new object[] { new { anchor = "Meal" } }, minutesAfter = 480 }, primitive = "glucose_chart" },
+                },
+            },
+        });
+        call.TryGetProperty("error", out var error).Should().BeFalse(error.ToString());
+        var text = ToolText(call);
+        Log(text);
+
+        text.Should().Contain("Single events drawn under the band: cohort 1, all 7.");
+        text.Should().Contain("Each event's line has one point every 10 minutes, to stay within 72 points.");
+        var panel = call.GetProperty("result").GetProperty("structuredContent").GetProperty("panels")[0];
+        panel.GetProperty("status").GetString().Should().Be("ok");
+        panel.GetProperty("primitive").GetString().Should().Be("glucose_chart");
+        var traces = panel.GetProperty("traces");
+        traces.GetArrayLength().Should().Be(7);
+        foreach (var trace in traces.EnumerateArray())
+        {
+            trace.GetProperty("cohort").GetInt32().Should().Be(1);
+            trace.GetProperty("points").GetArrayLength().Should().BeInRange(1, 72);
+            trace.GetProperty("sentence").GetString().Should().StartWith("Meal of 45 g on ");
+        }
+        panel.GetProperty("rows").GetArrayLength().Should().BeGreaterThan(0, "the band and the median come as slot rows");
+        panel.GetProperty("bindings").GetProperty("band").EnumerateArray().Select(b => b.GetString()).Should().Equal("glucoseP25", "glucoseP75");
+    }
+
+    [Fact]
     public async Task Without_food_read_a_food_filtered_cohort_is_not_shown_and_the_summary_says_why()
     {
         using var client = McpClient(await McpTokenAsync("glucose.read treatments.read"));

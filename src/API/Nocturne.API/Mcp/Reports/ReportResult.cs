@@ -108,6 +108,9 @@ internal sealed record ReportPanelResult
 
     /// <summary>Every event cohort the panel asked for, with the label that names its filter; empty for other datasets.</summary>
     public IReadOnlyList<ReportCohort> Cohorts { get; init; } = [];
+
+    /// <summary>A glucose chart of event cohorts: single events' glucose, drawn faintly under each cohort's band.</summary>
+    public IReadOnlyList<ReportTrace> Traces { get; init; } = [];
 }
 
 internal sealed record ReportWindow(long From, long To);

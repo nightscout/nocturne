@@ -487,6 +487,8 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
                 return new ReportBindings { X = xName, Y = y, Band = band };
             }
 
+            // A glucose chart of event cohorts lays out its band as range_bands does.
+            case ReportPrimitive.GlucoseChart when dataset.DefaultBindings(ReportPrimitive.GlucoseChart) is not null:
             case ReportPrimitive.RangeBands:
             {
                 NotFor("columns", columns is not null);
@@ -494,7 +496,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
                 if (xName is null)
                     error($"{at}.x", "Missing. Send a field of kind 'time_of_day' or 'offset'.");
                 else if (Field($"{at}.x", xName) is { } xField && xField.Kind is not (ReportFieldKind.Offset or ReportFieldKind.TimeOfDay))
-                    error($"{at}.x", $"'{xName}' is not a field range_bands can lay out. Send a field of kind 'time_of_day' or 'offset'.");
+                    error($"{at}.x", $"'{xName}' is not a field {primitive.WireName()} can lay out. Send a field of kind 'time_of_day' or 'offset'.");
 
                 ReportField? median = null;
                 if (y is not { Count: 1 })

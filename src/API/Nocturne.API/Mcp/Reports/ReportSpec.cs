@@ -90,7 +90,8 @@ internal sealed record ReportPanelSpec
     + "range_bands: 'x', 'y' (one field: the median line), 'band' (two fields, or four: outer low, inner low, inner high, "
     + "outer high) and optional 'series' (a category field; one set of bands per value). Optional; each dataset has defaults. "
     + "bar: 'x' (a category field), 'y' (one or more number fields in one unit) and optional 'stacked'. "
-    + "table and stat_tiles: optional 'columns' (the fields to show, in order). glucose_chart: none.")]
+    + "table and stat_tiles: optional 'columns' (the fields to show, in order). glucose_chart: none for glucose_series; "
+    + "for event_response as range_bands, defaulting to the median and the middle half by cohort.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportBindings
 {
@@ -199,7 +200,8 @@ internal enum ReportPrimitive
 
     /// <summary>
     /// The dashboard's glucose chart: readings with insulin, carbs, basal, pump modes, profiles and
-    /// the health tracks the token allows. <c>show_glucose</c> draws this.
+    /// the health tracks the token allows. <c>show_glucose</c> draws this. Over event cohorts
+    /// (<c>event_response</c>), each cohort's band and median over single events' glucose.
     /// </summary>
     [JsonStringEnumMemberName("glucose_chart")]
     GlucoseChart,

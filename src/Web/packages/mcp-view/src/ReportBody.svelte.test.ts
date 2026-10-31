@@ -354,6 +354,35 @@ describe("ReportView", () => {
     await expect.poll(() => [...series.querySelectorAll("path")].some((p) => (p.getAttribute("stroke") ?? "").startsWith("url("))).toBe(true);
   });
 
+  it("draws a glucose chart of cohorts: faint single events under each cohort's band", async () => {
+    const traces = [0, 1, 2].map((i) => ({
+      cohort: 1, at: from + i * 86_400_000, sentence: `Meal ${i}.`,
+      points: minutes.map((minute): [number, number] => [minute, 110 + i * 10 + Math.max(0, Math.min(minute, 60))]),
+    }));
+    const overlay = {
+      ...eventResult,
+      panels: [{
+        ...eventResult.panels[0], id: "overlay", primitive: "glucose_chart",
+        bindings: { x: "minute", y: ["glucoseP50"], band: ["glucoseP25", "glucoseP75"], series: "series" },
+        rows: slotRows("Meal: all", 1, 0), traces,
+      }],
+    };
+    const selectEvent = vi.fn();
+    render(ReportView, { result: { structuredContent: overlay }, locale: "en-US", selectEvent });
+
+    const chart = page.getByTestId("report-range-bands");
+    await expect.element(chart).toBeVisible();
+    await expect.poll(() => chart.element().querySelectorAll("[data-testid=report-trace]").length).toBe(3);
+    const trace = chart.element().querySelector("[data-testid=report-trace]")!;
+    expect(trace.getAttribute("stroke")).toBe(cohortBands(0).median);
+    expect(Number(trace.getAttribute("stroke-opacity"))).toBeLessThan(0.5);
+
+    const box = chart.element().querySelector("svg")!.getBoundingClientRect();
+    await chart.click({ position: { x: box.width * 0.6, y: box.height / 2 } });
+    await expect.poll(() => selectEvent.mock.calls.length).toBe(1);
+    expect(selectEvent.mock.calls[0][0]).toMatch(/^Meal: all, /);
+  });
+
   it("offers no host control when the host granted no call", async () => {
     render(ReportView, { result: { structuredContent: eventResult }, locale: "en-US" });
 
