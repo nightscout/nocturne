@@ -3,6 +3,7 @@ using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Protocol;
 using Nocturne.API.Extensions;
+using Nocturne.API.Mcp.Images;
 using Nocturne.API.Mcp.Reports;
 using Nocturne.API.Mcp.Reports.Datasets;
 using Nocturne.API.Mcp.Tools;
@@ -71,6 +72,10 @@ internal static class McpServiceExtensions
         services.AddScoped<ICustomReportRunner, CustomReportRunner>();
         services.AddSingleton(ReportTools.Create);
         services.AddSingleton(ReportTools.CreateRefine);
+        services.AddSingleton(ReportTools.CreateImage);
+        services.AddScoped<ReportImageRenderer>();
+        services.AddScoped<IReportImageClient, WebReportImageClient>();
+        services.AddHttpClient(WebReportImageClient.HttpClientName, client => client.Timeout = WebReportImageClient.Timeout);
     }
 
     public static void MapNocturneMcp(this WebApplication app)

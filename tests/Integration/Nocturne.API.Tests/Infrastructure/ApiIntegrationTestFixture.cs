@@ -73,6 +73,9 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
 
     public ControllableDemoModeService DemoModeService { get; } = new();
 
+    /// <summary>The web app's report image route, which the API reaches through <c>WEB_URL</c>.</summary>
+    public ReportImageWebStub ReportImageWeb { get; private set; } = null!;
+
     /// <summary>
     /// The clock the API issues and validates JWTs on, and nothing else. A test shifts it to age a
     /// token without waiting out its lifetime.
@@ -205,6 +208,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         _database = await SharedPostgres.CreateMigratedDatabaseAsync("api_integration");
+        ReportImageWeb = await ReportImageWebStub.StartAsync(InstanceKey);
 
         // The port is chosen before the host is built, since BASE_DOMAIN and the CORS origins the API
         // reads at startup carry it, so Kestrel cannot bind port 0. The probe releases the port before
@@ -273,6 +277,8 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
         {
             await _factory.DisposeAsync();
         }
+        if (ReportImageWeb is not null)
+            await ReportImageWeb.DisposeAsync();
     }
 
     /// <summary>
@@ -469,6 +475,7 @@ public class ApiIntegrationTestFixture : IAsyncLifetime
             builder.UseSetting($"ConnectionStrings:{ServiceNames.PostgreSql}-migrator", database.MigratorConnectionString);
             builder.UseSetting($"{PostgreSqlConfiguration.SectionName}:{nameof(PostgreSqlConfiguration.MaxPoolSize)}", MaxPoolSize.ToString());
             builder.UseSetting("INSTANCE_KEY", InstanceKey);
+            builder.UseSetting("WEB_URL", ReportImageWeb.Url);
             builder.UseSetting("BASE_DOMAIN", $"localhost:{port}");
             builder.UseSetting("DemoService:Enabled", "false");
             builder.ConfigureTestServices(services =>

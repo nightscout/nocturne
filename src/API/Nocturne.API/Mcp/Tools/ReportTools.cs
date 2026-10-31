@@ -7,6 +7,7 @@ using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Nocturne.API.Extensions;
+using Nocturne.API.Mcp.Images;
 using Nocturne.API.Mcp.Reports;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -20,6 +21,12 @@ internal static class ReportTools
     public const string RenderReportName = "render_report";
 
     public const string RefineReportName = "refine_report";
+
+    public const string RenderReportImageName = "render_report_image";
+
+    /// <summary>When the image tool is the one to use, said the same way in every description that offers it.</summary>
+    public const string WhenToUseImages =
+        "Use it for a document or message that cannot show the interactive view, such as a written report, a doc or an email.";
 
     /// <summary>The tool, with <see cref="ReportSpecSchema.InputSchema"/> in place of the raw argument's.</summary>
     public static McpServerTool Create(IServiceProvider services)
@@ -39,6 +46,46 @@ internal static class ReportTools
         return tool;
     }
 
+    /// <summary><c>render_report_image</c>, with <see cref="ReportSpecSchema.ImageInputSchema"/> in place of the raw arguments'.</summary>
+    public static McpServerTool CreateImage(IServiceProvider services)
+    {
+        var method = typeof(ReportTools).GetMethod(nameof(RenderReportImage), BindingFlags.Public | BindingFlags.Static)!;
+        var tool = McpServerTool.Create(method, (object?)null, new McpServerToolCreateOptions { Services = services });
+        tool.ProtocolTool.InputSchema = ReportSpecSchema.ImageInputSchema;
+        return tool;
+    }
+
+    [McpServerTool(Name = RenderReportImageName, Title = "Render report image", ReadOnly = true, OpenWorld = false)]
+    [McpAppUi(Visibility = [McpUiToolVisibility.Model])]
+    [Description(
+        "Draws the chart panels of a report spec as PNG images, with the same charts and clinical colours as the report "
+        + "view: the same spec, datasets, primitives and limits as render_report. " + WhenToUseImages + " Returns each "
+        + "panel's text summary, then one image per chart panel (time_series, range_bands, bar, comparison, glucose_chart; "
+        + "at most 4, or the one panelId names). Stat tiles and tables have no image: their figures are in the text. The "
+        + "images together may be at most about 1.5 MB; a larger answer is refused with what to lower.")]
+    public static async Task<CallToolResult> RenderReportImage(
+        ReportSpecValidator validator,
+        ReportRenderer renderer,
+        ReportImageRenderer images,
+        [Description(ReportSpecSchema.SpecDescription)] JsonElement? spec = null,
+        [Description(ReportSpecSchema.PanelIdDescription)] string? panelId = null,
+        [Description(ReportSpecSchema.WidthDescription)] int? width = null,
+        [Description(ReportSpecSchema.HeightDescription)] int? height = null,
+        [Description(ReportSpecSchema.ThemeDescription)] string? theme = null,
+        [Description(ReportSpecSchema.PixelRatioDescription)] int? devicePixelRatio = null,
+        CancellationToken cancellationToken = default)
+    {
+        var options = ReportImageRenderer.ReadOptions(RenderReportImageName, panelId, width, height, theme, devicePixelRatio);
+        var validation = validator.Validate(spec ?? default, await renderer.UsesMmolAsync(cancellationToken));
+        if (!validation.IsValid)
+            throw new McpInvalidArgumentsException(
+                "The report spec is not valid. Change these and call render_report_image again:\n"
+                + string.Join('\n', validation.Errors.Select(e => $"- {e}")));
+        ReportImageRenderer.CheckPanels(validation.Spec!, options, RenderReportImageName);
+
+        return await images.RenderAsync(validation.Spec!, options, cancellationToken);
+    }
+
     [McpServerTool(Name = RenderReportName, Title = "Render report", ReadOnly = true, OpenWorld = false)]
     [McpAppUi(ResourceUri = ReportResources.ReportUri)]
     [Description(
@@ -55,7 +102,8 @@ internal static class ReportTools
         + "settings_evidence (observed basal, ISF and carb ratio beside the profile's), daily_profile (each five-minute "
         + "slot of the day), glucose_distribution_by_hour. "
         + "Call describe_dataset for a dataset's fields and limits. Returns a text summary "
-        + "of each panel. An invalid spec is refused with a list of what to change.")]
+        + "of each panel. An invalid spec is refused with a list of what to change. For the same report as PNG images, "
+        + "call render_report_image. " + WhenToUseImages)]
     public static async Task<CallToolResult> RenderReport(
         ReportSpecValidator validator,
         ReportRenderer renderer,
@@ -109,7 +157,8 @@ internal sealed class DatasetTools
     [Description(
         "Describes a dataset render_report can draw: what it holds, its parameters, its fields with units "
         + "and kinds, the primitives that can draw it, its default and longest range, its point limit, and "
-        + "three made-up sample rows that show the shape of its rows. Reads no data.")]
+        + "three made-up sample rows that show the shape of its rows. Reads no data. A panel drawn as a chart "
+        + "primitive can also be drawn as an image by render_report_image. " + ReportTools.WhenToUseImages)]
     public static async Task<CallToolResult> DescribeDataset(
         IReportDatasetRegistry registry,
         ITenantAppearanceReader appearance,

@@ -3,6 +3,7 @@ using ModelContextProtocol;
 using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
+using Nocturne.API.Mcp.Images;
 using Nocturne.API.Mcp.Reports;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -24,13 +25,17 @@ internal sealed class GlucoseTools
     [McpRequireScope(Scope.GlucoseRead)]
     public static async Task<CallToolResult> ShowGlucose(
         ReportRenderer renderer,
+        ReportImageRenderer images,
         [Description("How many hours back from now to show, 1 to 24.")] int hours = 6,
+        [Description("Set to true to get the charts as PNG images, not the interactive view. " + ReportTools.WhenToUseImages)] bool asImage = false,
         CancellationToken cancellationToken = default)
     {
         if (hours is < 1 or > MaxHours)
             throw new McpInvalidArgumentsException($"hours must be between 1 and {MaxHours}.");
 
-        return (await renderer.RenderAsync(Preset(hours), cancellationToken)).Result;
+        return asImage
+            ? await images.RenderAsync(Preset(hours), ReportImageRenderer.Defaults, cancellationToken)
+            : (await renderer.RenderAsync(Preset(hours), cancellationToken)).Result;
     }
 
     /// <summary>The spec <c>show_glucose</c> draws: one dashboard chart of the last <paramref name="hours"/> hours.</summary>

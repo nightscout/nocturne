@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -31,6 +32,20 @@ internal static class ReportSpecSchema
     /// <summary><c>refine_report</c>'s input schema: the spec as <see cref="InputSchema"/> has it, and a <see cref="ReportSpecPatch"/>.</summary>
     public static JsonElement RefineInputSchema { get; } = Build(nameof(RefineShape));
 
+    /// <summary><c>render_report_image</c>'s input schema: the spec as <see cref="InputSchema"/> has it, and the image arguments.</summary>
+    public static JsonElement ImageInputSchema { get; } = Build(nameof(ImageShape));
+
+    public const string PanelIdDescription =
+        "The id of the one panel to draw. Without it, every chart panel is drawn, at most 4. Stat tiles and tables have no image.";
+
+    public const string WidthDescription = "The image's width in pixels, 320 to 2400. Default 1200.";
+
+    public const string HeightDescription = "The image's height in pixels, 200 to 1600. Default 600.";
+
+    public const string ThemeDescription = "light (the default, for a document on white) or dark.";
+
+    public const string PixelRatioDescription = "1 (the default) or 2 for a sharper image at twice the pixels in each direction and about four times the size.";
+
     /// <summary>A dataset's parameters as the SDK describes a tool argument of that type.</summary>
     public static JsonElement ParametersSchema(Type parametersType) =>
         AIJsonUtilities.CreateJsonSchema(parametersType, serializerOptions: McpJsonUtilities.DefaultOptions);
@@ -48,6 +63,15 @@ internal static class ReportSpecSchema
     }
 
     private static void Shape([Description(SpecDescription)] ReportSpec spec) => _ = spec;
+
+    private static void ImageShape(
+        [Description(SpecDescription)] ReportSpec spec,
+        [Description(PanelIdDescription)] string? panelId,
+        [Description(WidthDescription), Range(320, 2400)] int? width,
+        [Description(HeightDescription), Range(200, 1600)] int? height,
+        [Description(ThemeDescription), AllowedValues("light", "dark")] string? theme,
+        [Description(PixelRatioDescription), Range(1, 2)] int? devicePixelRatio) =>
+        _ = (spec, panelId, width, height, theme, devicePixelRatio);
 
     private static void RefineShape(
         [Description("The normalised spec render_report returned.")] ReportSpec spec,

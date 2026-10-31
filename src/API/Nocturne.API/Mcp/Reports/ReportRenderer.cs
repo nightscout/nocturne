@@ -32,15 +32,20 @@ internal sealed class ReportRenderer(
     {
         var report = await RunAsync(spec, cancellationToken, shortened);
 
+        return (new CallToolResult
+        {
+            Content = [new TextContentBlock { Text = SummaryText(report) }],
+            StructuredContent = JsonSerializer.SerializeToElement(report, jsonOptions.Value.JsonSerializerOptions),
+        }, report);
+    }
+
+    /// <summary>The text an assistant reads: every panel's summary, then the report's warnings.</summary>
+    public static string SummaryText(ReportResult report)
+    {
         var text = new StringBuilder(report.Summary);
         foreach (var warning in report.Warnings)
             text.Append('\n').Append("Warning: ").Append(warning);
-
-        return (new CallToolResult
-        {
-            Content = [new TextContentBlock { Text = text.ToString() }],
-            StructuredContent = JsonSerializer.SerializeToElement(report, jsonOptions.Value.JsonSerializerOptions),
-        }, report);
+        return text.ToString();
     }
 
     /// <summary>
