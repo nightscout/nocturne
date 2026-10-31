@@ -17,8 +17,8 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// A spec is a definition, not a patient record, and the taxonomy has no <c>reports.readwrite</c>.
 /// Every write needs the member's own sign-in (<see cref="RequireInteractiveSessionAttribute"/>), so
 /// an app's token, a direct grant or an api-secret that may read reports cannot change them. Saving
-/// is refused to a history-clamped member, who is limited to a day of the record; renaming and
-/// deleting are for the report's creator, or a member who edits every report (an owner or a holder
+/// and changing are refused to a history-clamped member, who is limited to a day of the record and
+/// would otherwise set what every member's copy of the report reads; changing and deleting are for the report's creator, or a member who edits every report (an owner or a holder
 /// of <see cref="Scope.TenantSettings"/>, <see cref="MemberScopeResolver.IsExemptFromHistoryClamp"/>).
 /// Share and guest links are refused everything (<see cref="DenyNoAccountViewerAttribute"/>); the
 /// table is hidden from shares too. Nothing here is cached: a saved spec is the tenant's, and a run
@@ -78,10 +78,11 @@ public class CustomReportsController(
 
     /// <summary>
     /// Runs a spec for the caller. An invalid spec is not an error status: the response lists what
-    /// to change, so a page can show it.
+    /// to change, so a page can show it. A command, so the spec travels in the body: a spec up to
+    /// its 16 kB limit would not fit in a request line.
     /// </summary>
     [HttpPost("run")]
-    [RemoteQuery]
+    [RemoteCommand]
     [RequestSizeLimit(MaxBodyBytes)]
     [ProducesResponseType(typeof(CustomReportRunResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CustomReportRunResponse>> RunCustomReport(
@@ -108,7 +109,10 @@ public class CustomReportsController(
         return Result(await store.CreateAsync(request.Name, request.Spec, Caller(), cancellationToken));
     }
 
-    /// <summary>Renames a custom report, replaces its spec, or both: its creator, or a member who edits every report.</summary>
+    /// <summary>
+    /// Renames a custom report, replaces its spec, or both: its creator, or a member who edits every
+    /// report. Refused to a history-clamped member, as saving is.
+    /// </summary>
     [HttpPut("{id:guid}")]
     [RequireInteractiveSession]
     [RemoteCommand(Invalidates = ["GetCustomReports", "GetCustomReport"])]
@@ -119,8 +123,12 @@ public class CustomReportsController(
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CustomReport>> UpdateCustomReport(
-        Guid id, [FromBody] CustomReportUpdateRequest request, CancellationToken cancellationToken) =>
-        Result(await store.UpdateAsync(id, request.Name, request.Spec, Caller(), cancellationToken));
+        Guid id, [FromBody] CustomReportUpdateRequest request, CancellationToken cancellationToken)
+    {
+        if (HttpContext.IsCallerHistoryClamped())
+            return Forbid();
+        return Result(await store.UpdateAsync(id, request.Name, request.Spec, Caller(), cancellationToken));
+    }
 
     /// <summary>Deletes a custom report: its creator, or a member who edits every report.</summary>
     [HttpDelete("{id:guid}")]

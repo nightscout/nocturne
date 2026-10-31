@@ -59,9 +59,9 @@ internal sealed class PeriodComparisonDataset : IReportDataset
     {
         var p = (PeriodComparisonParameters)parameters;
         if (p.Preset is not null && (p.A is not null || p.B is not null))
-            yield return ("preset", "Send 'preset', or 'a' and 'b', not both.");
+            yield return ("preset", "Use a preset, or period A and period B, not both.");
         else if ((p.A is null) != (p.B is null))
-            yield return (p.A is null ? "a" : "b", "Send 'a' and 'b' together, or 'preset' alone.");
+            yield return (p.A is null ? "a" : "b", "Set period A and period B together, or use a preset.");
         if (p.Preset is { } preset && !Enum.IsDefined(preset))
             yield return ("preset", "Send one of: last7-prior7, last14-prior14, last30-prior30, thisMonth-lastMonth.");
         foreach (var (name, period) in new[] { ("a", p.A), ("b", p.B) })
@@ -69,7 +69,7 @@ internal sealed class PeriodComparisonDataset : IReportDataset
             if (period is null)
                 continue;
             if (period.To < period.From)
-                yield return ($"{name}.to", "'to' must not be before 'from'.");
+                yield return ($"{name}.to", "The last day must not be before the first day.");
             else if (period.To.DayNumber - period.From.DayNumber + 1 > PeriodComparisonParameters.MaxPeriodDays)
                 yield return (name, $"A period covers at most {PeriodComparisonParameters.MaxPeriodDays} days.");
             if (period.From.Year < 2000 || period.To.Year > 2999)

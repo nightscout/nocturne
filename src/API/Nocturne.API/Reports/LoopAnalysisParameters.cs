@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.LoopAnalysis;
 
 namespace Nocturne.API.Reports;
@@ -14,23 +15,29 @@ internal abstract record LoopAnalysisDatasetParameters : ReportDatasetParameters
 {
     public const int MaxProfileNameLength = 100;
 
-    [Description("Leave out time an override ran. Default false. Needs treatments.read.")]
+    [Description("Leave out time an override ran.")]
+    [ReportNeedsScope(Scope.TreatmentsRead)]
     public bool ExcludeOverrides { get; init; }
 
-    [Description("Leave out time a temporary target ran. Default false. Needs treatments.read.")]
+    [Description("Leave out time a temporary target ran.")]
+    [ReportNeedsScope(Scope.TreatmentsRead)]
     public bool ExcludeTemporaryTargets { get; init; }
 
-    [Description("Leave out exercise time. Default false. Needs treatments.read.")]
+    [Description("Leave out exercise time.")]
+    [ReportNeedsScope(Scope.TreatmentsRead)]
     public bool ExcludeExercise { get; init; }
 
-    [Description("Leave out illness time. Default true. Needs treatments.read.")]
+    [Description("Leave out illness time.")]
+    [ReportNeedsScope(Scope.TreatmentsRead)]
     public bool ExcludeIllness { get; init; } = true;
 
-    [Description("Leave out time the pump was in manual mode or had no AID algorithm. Default true. Needs devices.read.")]
+    [Description("Leave out time the pump was in manual mode or had no AID algorithm.")]
+    [ReportNeedsScope(Scope.DevicesRead)]
     [DisplayName("Exclude manual mode")]
     public bool ExcludeOpenLoop { get; init; } = true;
 
-    [Description("Analyze only time this profile was active. Optional. Needs therapy.read.")]
+    [Description("Analyze only time this profile was active. Optional.")]
+    [ReportNeedsScope(Scope.TherapyRead)]
     [StringLength(MaxProfileNameLength)]
     public string? ProfileName { get; init; }
 
@@ -153,12 +160,14 @@ internal sealed record ReportEventCohort
 
     [Description(
         "Meal groups only: the foods to match. A meal matches when it has a food record of one of them. "
-        + "Meals with carbs only and no food record cannot match and are counted apart. Needs food.read.")]
+        + "Meals with carbs only and no food record cannot match and are counted apart.")]
+    [ReportNeedsScope(Scope.FoodRead)]
     [Length(1, EventResponseDefinition.MaxFoods)]
     [ReportInput(ReportInputAttribute.Foods)]
     public IReadOnlyList<Guid>? Foods { get; init; }
 
-    [Description("Meal groups only: a food category. A meal matches when it has a food record of that category. Needs food.read.")]
+    [Description("Meal groups only: a food category. A meal matches when it has a food record of that category.")]
+    [ReportNeedsScope(Scope.FoodRead)]
     [StringLength(EventResponseDefinition.MaxFoodCategoryLength)]
     [ReportInput(ReportInputAttribute.FoodCategory)]
     public string? FoodCategory { get; init; }
@@ -197,23 +206,25 @@ internal sealed record EventResponseParameters : LoopAnalysisDatasetParameters
     [DisplayName("Event groups")]
     public IReadOnlyList<ReportEventCohort>? Cohorts { get; init; }
 
-    [Description("Minutes of window before each event: 0, 30, 60, 90 or 120. Default 60.")]
+    [Description("The part of each event's window before the event.")]
     [Range(0, 120)]
     [AllowedValues(0, 30, 60, 90, 120)]
     [DisplayName("Minutes before each event")]
     public int MinutesBefore { get; init; } = EventResponseDefinition.DefaultMinutesBefore;
 
-    [Description("Minutes of window after each event: 120, 180, 240, 300, 360, 420 or 480. Default 300.")]
+    [Description("The part of each event's window after the event.")]
     [Range(120, 480)]
     [AllowedValues(120, 180, 240, 300, 360, 420, 480)]
     [DisplayName("Minutes after each event")]
     public int MinutesAfter { get; init; } = EventResponseDefinition.DefaultMinutesAfter;
 
-    [Description("Only events with no other meal, correction bolus or unannounced rise in their window. Default false. Needs treatments.read.")]
+    [Description("Only events with no other meal, correction bolus or unannounced rise in their window.")]
+    [ReportNeedsScope(Scope.TreatmentsRead)]
     [DisplayName("Only events with nothing else near them")]
     public bool IsolatedOnly { get; init; }
 
-    [Description("Count an unannounced rise only where the loop answered it with extra insulin. Default false. Needs treatments.read.")]
+    [Description("Count an unannounced rise only where the loop answered it with extra insulin.")]
+    [ReportNeedsScope(Scope.TreatmentsRead)]
     [DisplayName("Count only rises with extra insulin")]
     public bool RequireCorroboration { get; init; }
 

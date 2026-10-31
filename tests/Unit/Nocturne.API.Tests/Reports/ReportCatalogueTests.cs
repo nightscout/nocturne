@@ -212,7 +212,7 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
                 Collect(property.Value, shapes);
     }
 
-    /// <summary>A node as the form tells it apart: its type, then enum, format and input kind.</summary>
+    /// <summary>A node as the form tells it apart: its type, then enum, any format, and input kind.</summary>
     private static string Shape(JsonElement node)
     {
         var type = node.GetProperty("type").GetString()!;
@@ -222,7 +222,7 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
         var parts = new List<string> { type };
         if (node.TryGetProperty("enum", out _))
             parts.Add("enum");
-        if (node.TryGetProperty("format", out var format) && format.GetString() is "date" or "uuid")
+        if (node.TryGetProperty("format", out var format))
             parts.Add(format.GetString()!);
         if (node.TryGetProperty("x-input", out var input))
             parts.Add(input.GetString()!);
@@ -250,9 +250,14 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
 
         Property("event_response", "cohorts").GetProperty("items").GetProperty("title").GetString().Should().Be("Event group");
         var cohort = Property("event_response", "cohorts").GetProperty("items").GetProperty("properties");
-        cohort.GetProperty("anchor").GetProperty("default").GetString().Should().Be("Meal", "a new group starts at its type's default");
-        cohort.GetProperty("timeOfDay").GetProperty("properties").GetProperty("fromMinute").GetProperty("x-input").GetString()
-            .Should().Be(ReportInputAttribute.MinuteOfDay);
+        cohort.GetProperty("anchor").TryGetProperty("default", out _).Should().BeFalse("the event is required: a new group picks it");
+        var from = cohort.GetProperty("timeOfDay").GetProperty("properties").GetProperty("fromMinute");
+        from.GetProperty("x-input").GetString().Should().Be(ReportInputAttribute.MinuteOfDay);
+        from.TryGetProperty("default", out _).Should().BeFalse("a required member's zero is no choice: 00:00 to 00:00 holds nothing");
+        var overrides = Property("event_response", "excludeOverrides");
+        overrides.GetProperty("x-scope").GetString().Should().Be(Scope.TreatmentsRead);
+        overrides.GetProperty("description").GetString().Should().Be("Leave out time an override ran. Needs the treatments permission.");
+        Property("event_response", "excludeOpenLoop").GetProperty("description").GetString().Should().EndWith("Needs the devices permission.");
         cohort.GetProperty("foods").GetProperty("x-input").GetString().Should().Be(ReportInputAttribute.Foods);
         cohort.GetProperty("foodCategory").GetProperty("x-input").GetString().Should().Be(ReportInputAttribute.FoodCategory);
         cohort.GetProperty("anchor").GetProperty("x-enumLabels").EnumerateArray().Select(l => l.GetString())

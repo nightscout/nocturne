@@ -38,6 +38,12 @@ public sealed record CustomReport(
 public sealed record CustomReportRunRequest
 {
     public JsonElement? Spec { get; init; }
+
+    /// <summary>
+    /// The run is the report builder's preview of a spec being edited, not a report being viewed;
+    /// its read-audit row says so (<see cref="CustomReportRunner.PreviewAuditEndpoint"/>).
+    /// </summary>
+    public bool Preview { get; init; }
 }
 
 /// <summary>

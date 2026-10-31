@@ -58,6 +58,18 @@ public class ReportSpecValidatorTests
     }
 
     [Fact]
+    public void A_time_of_day_window_that_starts_and_ends_together_is_refused_at_the_window()
+    {
+        var error = SingleError("""
+            { "version": 1, "panels": [ { "dataset": { "name": "event_response",
+              "cohorts": [ { "anchor": "Meal", "timeOfDay": { "fromMinute": 0, "toMinute": 0 } } ] }, "primitive": "table" } ] }
+            """);
+
+        error.Path.Should().Be("panels[0].dataset.cohorts[0].timeOfDay");
+        error.Message.Should().Contain("holds no events");
+    }
+
+    [Fact]
     public void A_panel_without_a_range_gets_its_datasets_default()
     {
         var spec = Validate("""

@@ -79,11 +79,11 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
         if (((GlucoseSeriesParameters)parameters).Markers is not { Count: > 0 })
             yield break;
         if (primitive != ReportPrimitive.TimeSeries)
-            yield return ("markers", $"Only a time_series panel draws markers. This panel is {primitive.WireName()}. Remove 'markers'.");
+            yield return ("markers", "Only lines over time draw markers. Remove the markers, or show this panel as lines over time.");
         else if (span > MarkerMaxRange)
             yield return ("markers",
                 $"Markers cover at most {ReportSpecValidator.Describe(MarkerMaxRange)}. This range is {ReportSpecValidator.Describe(span)}. "
-                + "Shorten the range, or remove 'markers'.");
+                + "Shorten the range, or remove the markers.");
     }
 
     public async Task<ReportDatasetOutput> RunAsync(ReportDatasetRequest request, CancellationToken cancellationToken)

@@ -121,7 +121,7 @@ internal sealed class EventResponseDataset : IReportDataset
     {
         var p = (EventResponseParameters)parameters;
         if (p.Cohorts is { Count: 0 or > EventResponseDefinition.MaxCohorts })
-            yield return ("cohorts", $"Send 1 to {EventResponseDefinition.MaxCohorts} cohorts, or leave 'cohorts' out for every meal.");
+            yield return ("cohorts", $"Use 1 to {EventResponseDefinition.MaxCohorts} groups, or none for every meal.");
         if (!EventResponseDefinition.MinutesBeforeChoices.Contains(p.MinutesBefore))
             yield return ("minutesBefore", $"Send one of: {string.Join(", ", EventResponseDefinition.MinutesBeforeChoices)}.");
         if (!EventResponseDefinition.MinutesAfterChoices.Contains(p.MinutesAfter))
@@ -131,7 +131,7 @@ internal sealed class EventResponseDataset : IReportDataset
         if (p.ComparisonRange is { } comparison)
         {
             if (comparison.To < comparison.From)
-                yield return ("comparisonRange.to", "'to' must not be before 'from'.");
+                yield return ("comparisonRange.to", "The last day must not be before the first day.");
             if (comparison.From.Year < 2000 || comparison.To.Year > 2999)
                 yield return ("comparisonRange", "Send dates from 2000 on.");
         }
@@ -146,21 +146,23 @@ internal sealed class EventResponseDataset : IReportDataset
                 yield return ($"{at}.anchor", "Send one of: Meal, CorrectionBolus, SensorStart, ExerciseStart, OverrideStart, TemporaryTargetStart, UnannouncedRise.");
             if (c.TimeOfDay is { } window && (window.FromMinute is < 0 or > 1439 || window.ToMinute is < 0 or > 1439))
                 yield return ($"{at}.timeOfDay", "Send minutes after midnight, 0 to 1439.");
+            else if (c.TimeOfDay is { } empty && empty.FromMinute == empty.ToMinute)
+                yield return ($"{at}.timeOfDay", "The window starts and ends at the same time, so it holds no events. Use a different end time.");
             if (c.Grams is { } grams)
             {
                 if (!meal)
-                    yield return ($"{at}.grams", "Only a Meal cohort takes grams. Remove it.");
+                    yield return ($"{at}.grams", "Only a group of meals has a meal size. Remove the meal size.");
                 else if (grams.Min is < 0 or > EventResponseDefinition.MaxGrams || grams.Max is < 0 or > EventResponseDefinition.MaxGrams)
                     yield return ($"{at}.grams", $"Send grams from 0 to {EventResponseDefinition.MaxGrams}.");
             }
             if (c.HasFoodFilter && !meal)
-                yield return ($"{at}.foods", "Only a Meal cohort takes foods or a food category. Remove them.");
+                yield return ($"{at}.foods", "Only a group of meals has foods or a food category. Remove them.");
             if (c.Foods is { Count: 0 or > EventResponseDefinition.MaxFoods })
-                yield return ($"{at}.foods", $"Send 1 to {EventResponseDefinition.MaxFoods} food ids, or leave 'foods' out.");
+                yield return ($"{at}.foods", $"Pick 1 to {EventResponseDefinition.MaxFoods} foods, or none for every food.");
             if (c.FoodCategory is { Length: > EventResponseDefinition.MaxFoodCategoryLength })
                 yield return ($"{at}.foodCategory", $"Use {EventResponseDefinition.MaxFoodCategoryLength} characters or fewer.");
             if (c.DayOfWeek is { Count: 0 })
-                yield return ($"{at}.dayOfWeek", "Send at least one weekday, or leave 'dayOfWeek' out for every day.");
+                yield return ($"{at}.dayOfWeek", "Pick at least one weekday, or none for every day.");
             if (c.DayOfWeek is { } days && days.Any(d => !Enum.IsDefined(d)))
                 yield return ($"{at}.dayOfWeek", "Send weekdays as Mon, Tue, Wed, Thu, Fri, Sat or Sun.");
         }

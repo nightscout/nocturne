@@ -26,21 +26,24 @@ internal sealed class CustomReportRunner(
     /// <summary>The read-audit row's endpoint.</summary>
     public const string AuditEndpoint = "POST /api/v4/reports/custom/run";
 
+    /// <summary>The read-audit row's endpoint for a builder preview: the same read, told apart from viewing a report.</summary>
+    public const string PreviewAuditEndpoint = "POST /api/v4/reports/custom/run (preview)";
+
     private JsonSerializerOptions Json => jsonOptions.Value.JsonSerializerOptions;
 
     public async Task<CustomReportRunResponse> RunAsync(CustomReportRunRequest request, CancellationToken cancellationToken)
     {
         if (request.Spec is not { ValueKind: not (JsonValueKind.Undefined or JsonValueKind.Null) } spec)
-            return await RefusedAsync(null, ReportSpecStore.SendASpec, cancellationToken);
+            return await RefusedAsync(null, ReportSpecStore.SendASpec, request.Preview, cancellationToken);
         if (!ReportSpec.WithinLimit(spec))
-            return await RefusedAsync(null, ReportSpec.TooLarge, cancellationToken);
+            return await RefusedAsync(null, ReportSpec.TooLarge, request.Preview, cancellationToken);
 
         var validation = validator.Validate(
             ReportSpecRewriter.Current.Rewrite(spec), await renderer.UsesMmolAsync(cancellationToken));
         if (!validation.IsValid)
         {
             // An invalid spec read nothing: a 400 row with no categories.
-            await AuditAsync(spec, StatusCodes.Status400BadRequest, cancellationToken);
+            await AuditAsync(spec, StatusCodes.Status400BadRequest, request.Preview, cancellationToken);
             return Refused(spec, [.. ReportSpecStore.Errors(validation)]);
         }
 
@@ -55,7 +58,7 @@ internal sealed class CustomReportRunner(
         finally
         {
             if (!cancellationToken.IsCancellationRequested)
-                await AuditAsync(normalised, status, cancellationToken);
+                await AuditAsync(normalised, status, request.Preview, cancellationToken);
         }
     }
 
@@ -63,18 +66,19 @@ internal sealed class CustomReportRunner(
         new(null, spec, errors);
 
     /// <summary>A run refused before the spec could be read: audited as a 400 that read nothing.</summary>
-    private async Task<CustomReportRunResponse> RefusedAsync(JsonElement? spec, string message, CancellationToken cancellationToken)
+    private async Task<CustomReportRunResponse> RefusedAsync(JsonElement? spec, string message, bool preview, CancellationToken cancellationToken)
     {
-        await AuditAsync(spec, StatusCodes.Status400BadRequest, cancellationToken);
+        await AuditAsync(spec, StatusCodes.Status400BadRequest, preview, cancellationToken);
         return Refused(spec, new CustomReportSpecError("spec", message));
     }
 
-    private Task AuditAsync(JsonElement? spec, int status, CancellationToken cancellationToken)
+    private Task AuditAsync(JsonElement? spec, int status, bool preview, CancellationToken cancellationToken)
     {
+        var endpoint = preview ? PreviewAuditEndpoint : AuditEndpoint;
         var http = httpContextAccessor.HttpContext
             ?? throw new InvalidOperationException("A custom report ran outside an HTTP request.");
         var arguments = spec is { } sent ? ReportReadAudit.SpecArgument(sent) : null;
-        return ReportReadAudit.WriteAsync(services, http, AuditEndpoint, tenantId => ReportReadAudit.BuildEntry(
-            tenantId, AuditEndpoint, arguments, status, readLog, audit, http, DateTime.UtcNow), cancellationToken);
+        return ReportReadAudit.WriteAsync(services, http, endpoint, tenantId => ReportReadAudit.BuildEntry(
+            tenantId, endpoint, arguments, status, readLog, audit, http, DateTime.UtcNow), cancellationToken);
     }
 }

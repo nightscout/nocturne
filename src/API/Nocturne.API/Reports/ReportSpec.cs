@@ -178,14 +178,13 @@ internal sealed record GlucoseSeriesParameters : ReportDatasetParameters
     [JsonIgnore]
     public override string DatasetName => Name;
 
-    [Description("Minutes between rows, 1 to 60. Default 5. A long range can make it coarser, to keep each series under its point limit.")]
+    [Description("Minutes between rows, 1 to 60. A long range can make it coarser, to keep each series under its point limit.")]
     [Range(1, 60)]
     [DisplayName("Minutes between rows")]
     public int IntervalMinutes { get; init; } = DefaultIntervalMinutes;
 
-    [Description(
-        "time_series only: treatment markers to draw on the glucose line, 'bolus' and/or 'carbs'. Optional. Needs "
-        + "treatments.read; without it the markers are left out and the summary says so. A range of at most 72 hours.")]
+    [Description("Treatment markers to draw on the glucose line. Lines over time only, over a range of at most 72 hours. Optional.")]
+    [ReportNeedsScope(Nocturne.Core.Models.Authorization.Scope.TreatmentsRead)]
     public IReadOnlyList<ReportMarkerKind>? Markers { get; init; }
 }
 

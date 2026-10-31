@@ -65,7 +65,7 @@ internal sealed class TreatmentsDataset : IReportDataset
     {
         var p = (TreatmentsParameters)parameters;
         if (p.Types is { Count: 0 })
-            yield return ("types", "Send at least one kind, or leave 'types' out for every kind.");
+            yield return ("types", "Pick at least one kind, or none for every kind.");
         if (p.MinCarbs is < 0 or > 1000)
             yield return ("minCarbs", "Send 0 to 1000 grams.");
         if (p.MinInsulin is < 0 or > 100)

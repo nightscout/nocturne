@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Extensions;
@@ -14,11 +15,11 @@ namespace Nocturne.API.Reports;
 /// <param name="MaxRangeHours">The longest range any dataset covers, in hours.</param>
 /// <param name="MaxNameLength">The longest name a saved report may have.</param>
 public sealed record CustomReportCatalogue(
-    int MaxPanels,
-    int MaxTitleLength,
-    int MaxRangeHours,
-    int MaxNameLength,
-    IReadOnlyList<CustomReportDataset> Datasets);
+    [property: Required] int MaxPanels,
+    [property: Required] int MaxTitleLength,
+    [property: Required] int MaxRangeHours,
+    [property: Required] int MaxNameLength,
+    [property: Required] IReadOnlyList<CustomReportDataset> Datasets);
 
 /// <summary>A dataset a panel may read.</summary>
 /// <param name="Name">The name a spec gives it.</param>
@@ -32,29 +33,29 @@ public sealed record CustomReportCatalogue(
 /// <param name="DefaultRangeHours">The range a panel gets when neither it nor the report gives one.</param>
 /// <param name="MaxPanelsPerReport">The most panels of this dataset one report holds.</param>
 public sealed record CustomReportDataset(
-    string Name,
-    string Label,
-    string Description,
-    string RequiredScope,
-    bool Permitted,
-    JsonElement Parameters,
-    IReadOnlyList<CustomReportField> Fields,
-    IReadOnlyList<CustomReportDatasetPrimitive> Primitives,
-    double DefaultRangeHours,
-    int MaxPanelsPerReport);
+    [property: Required] string Name,
+    [property: Required] string Label,
+    [property: Required] string Description,
+    [property: Required] string RequiredScope,
+    [property: Required] bool Permitted,
+    [property: Required] JsonElement Parameters,
+    [property: Required] IReadOnlyList<CustomReportField> Fields,
+    [property: Required] IReadOnlyList<CustomReportDatasetPrimitive> Primitives,
+    [property: Required] double DefaultRangeHours,
+    [property: Required] int MaxPanelsPerReport);
 
 /// <summary>A field of a dataset's rows.</summary>
 /// <param name="Kind">time, number, category, percent, offset (minutes from an event) or time_of_day.</param>
 /// <param name="Scope">The read scope it needs beyond the dataset's, or null.</param>
 /// <param name="Permitted">Whether the caller holds the dataset's scope and <paramref name="Scope"/>.</param>
 public sealed record CustomReportField(
-    string Name,
-    string Label,
-    string Kind,
+    [property: Required] string Name,
+    [property: Required] string Label,
+    [property: Required] string Kind,
     string? Unit,
-    string Description,
+    [property: Required] string Description,
     string? Scope,
-    bool Permitted);
+    [property: Required] bool Permitted);
 
 /// <summary>A primitive that may draw a dataset.</summary>
 /// <param name="Name">The name a spec gives it.</param>
@@ -64,12 +65,12 @@ public sealed record CustomReportField(
 /// <param name="DefaultBindings">The bindings a new panel starts with, as the validator normalises them.</param>
 /// <param name="Bindings">The bindings this primitive takes and the fields each may name.</param>
 public sealed record CustomReportDatasetPrimitive(
-    string Name,
-    string Label,
-    double MaxRangeHours,
-    string RangeLimit,
-    CustomReportBindings DefaultBindings,
-    IReadOnlyList<CustomReportBindingSlot> Bindings);
+    [property: Required] string Name,
+    [property: Required] string Label,
+    [property: Required] double MaxRangeHours,
+    [property: Required] string RangeLimit,
+    [property: Required] CustomReportBindings DefaultBindings,
+    [property: Required] IReadOnlyList<CustomReportBindingSlot> Bindings);
 
 /// <summary>A panel's bindings, as a spec writes them.</summary>
 public sealed record CustomReportBindings(
@@ -92,20 +93,20 @@ public sealed record CustomReportBindings(
 /// <param name="Required">Whether a panel must give it; a missing optional one is left out.</param>
 /// <param name="Choices">The values it takes, for choice.</param>
 public sealed record CustomReportBindingSlot(
-    string Key,
-    string Label,
-    string Input,
-    IReadOnlyList<string> Fields,
-    IReadOnlyList<int> Counts,
-    bool Required,
-    IReadOnlyList<CustomReportChoice> Choices);
+    [property: Required] string Key,
+    [property: Required] string Label,
+    [property: Required] string Input,
+    [property: Required] IReadOnlyList<string> Fields,
+    [property: Required] IReadOnlyList<int> Counts,
+    [property: Required] bool Required,
+    [property: Required] IReadOnlyList<CustomReportChoice> Choices);
 
 /// <summary>A value a choice takes, with its words.</summary>
-public sealed record CustomReportChoice(string Value, string Label);
+public sealed record CustomReportChoice([property: Required] string Value, [property: Required] string Label);
 
 /// <summary>A spec the builder offers as a start.</summary>
 /// <param name="Spec">The normalised spec.</param>
-public sealed record CustomReportTemplate(string Id, string Name, string Description, JsonElement Spec);
+public sealed record CustomReportTemplate([property: Required] string Id, [property: Required] string Name, [property: Required] string Description, [property: Required] JsonElement Spec);
 
 /// <summary>The report builder's catalogue and templates, for the request's caller.</summary>
 public interface ICustomReportCatalogue

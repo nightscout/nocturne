@@ -225,6 +225,27 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
 
         var unclamped = await ReadAsync(await owner.PostAsJsonAsync($"{Route}/run", new { spec = report.GetProperty("spec") }), HttpStatusCode.OK);
         unclamped.GetProperty("result").GetProperty("panels")[1].GetProperty("rows")[0].GetProperty("readings").GetInt32().Should().Be(2);
+
+        // A report the clamped member made before the clamp: its creator may not replace what every member's copy reads.
+        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT set_config('app.current_tenant_id', @tenant, false);
+                UPDATE report_specs SET created_by_subject_id = @subject WHERE id = @id;
+                """;
+            cmd.Parameters.AddWithValue("tenant", _tenantAId.ToString());
+            cmd.Parameters.AddWithValue("subject", subject);
+            cmd.Parameters.AddWithValue("id", saved.GetProperty("id").GetGuid());
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var own = await ReadAsync(await clamped.GetAsync($"{Route}/{saved.GetProperty("id").GetGuid()}"), HttpStatusCode.OK);
+        own.GetProperty("canEdit").GetBoolean().Should().BeTrue("the clamped member made it");
+        (await clamped.PutAsJsonAsync($"{Route}/{saved.GetProperty("id").GetGuid()}", new { spec = Spec("Replaced") })).StatusCode
+            .Should().Be(HttpStatusCode.Forbidden, "a clamped member does not change what every member's copy reads");
+        (await clamped.PutAsJsonAsync($"{Route}/{saved.GetProperty("id").GetGuid()}", new { name = "Renamed" })).StatusCode
+            .Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -266,6 +287,25 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         using var a = Session(_slugA, _sessionA);
 
         var run = await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = Spec("<b>bold</b>") }), HttpStatusCode.OK);
+
+        // A spec of over 8 kB, more than a gateway accepts in a request line, runs: the run is a POST.
+        var cohort = new { anchor = "Meal", foods = Enumerable.Range(0, 20).Select(_ => Guid.NewGuid()).ToArray() };
+        var wide = new
+        {
+            version = 1,
+            title = "Wide",
+            panels = Enumerable.Range(0, 4).Select(i => new
+            {
+                id = $"meals{i}",
+                dataset = new { name = "event_response", cohorts = new[] { cohort, cohort, cohort } },
+                primitive = "table",
+                range = new { hours = 72 },
+            }).ToArray(),
+        };
+        JsonSerializer.Serialize(wide).Length.Should().BeGreaterThan(8 * 1024);
+        var wideRun = await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = wide }), HttpStatusCode.OK);
+        wideRun.GetProperty("errors").GetArrayLength().Should().Be(0);
+        wideRun.GetProperty("result").GetProperty("panels").GetArrayLength().Should().Be(4);
         run.GetProperty("errors").GetArrayLength().Should().Be(0);
         run.GetProperty("result").GetProperty("spec").GetProperty("title").GetString().Should().Be("<b>bold</b>", "a title is data; the page writes it as text");
         run.GetProperty("result").TryGetProperty("openUrl", out _).Should().BeFalse("a run carries no link that opens a spec");
@@ -287,34 +327,37 @@ public class CustomReportsIntegrationTests : ApiIntegrationTestBase
         try
         {
             await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = Spec() }), HttpStatusCode.OK);
+            await ReadAsync(await a.PostAsJsonAsync($"{Route}/run", new { spec = Spec(), preview = true }), HttpStatusCode.OK);
 
-            var rows = new List<(int Status, string? Entities)>();
+            var rows = new List<(string Endpoint, int Status, string? Entities)>();
             var settled = false;
             for (var attempt = 0; attempt < 60 && !settled; attempt++)
             {
                 // Once a row is there, read once more after a pause, so a second row has time to land.
-                settled = rows.Count > 0;
-                await Task.Delay(rows.Count > 0 ? 1000 : 100);
+                settled = rows.Count > 1;
+                await Task.Delay(rows.Count > 1 ? 1000 : 100);
                 rows.Clear();
                 await using var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync());
                 await conn.OpenAsync();
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandText = """
                     SELECT set_config('app.current_tenant_id', @t, false);
-                    SELECT status_code, entity_type FROM read_access_log
-                    WHERE endpoint = 'POST /api/v4/reports/custom/run' AND created_at >= @since;
+                    SELECT endpoint, status_code, entity_type FROM read_access_log
+                    WHERE endpoint LIKE 'POST /api/v4/reports/custom/run%' AND created_at >= @since;
                     """;
                 cmd.Parameters.AddWithValue("t", _tenantAId.ToString());
                 cmd.Parameters.AddWithValue("since", since);
                 await using var reader = await cmd.ExecuteReaderAsync();
                 await reader.NextResultAsync();
                 while (await reader.ReadAsync())
-                    rows.Add((reader.GetInt32(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
+                    rows.Add((reader.GetString(0), reader.GetInt32(1), reader.IsDBNull(2) ? null : reader.GetString(2)));
             }
 
-            var row = rows.Should().ContainSingle().Subject;
-            row.Status.Should().Be(200);
-            row.Entities.Should().Be("glucose,treatments", "the series reads treatments for IOB and COB, and the statistics read glucose");
+            rows.Select(r => r.Endpoint).Should().BeEquivalentTo(
+                ["POST /api/v4/reports/custom/run", "POST /api/v4/reports/custom/run (preview)"],
+                "one row for viewing and one for the builder's preview, told apart");
+            rows.Should().OnlyContain(r => r.Status == 200);
+            rows.Should().OnlyContain(r => r.Entities == "glucose,treatments", "the series reads treatments for IOB and COB, and the statistics read glucose");
         }
         finally
         {

@@ -17,11 +17,12 @@ namespace Nocturne.API.Reports;
 /// </summary>
 /// <remarks>
 /// Added to the exporter's output: <c>title</c> (the property's or, for a list's item, the type's
-/// <see cref="DisplayNameAttribute"/>, else the property's name in words), <c>description</c> (<see cref="DescriptionAttribute"/>), <c>minimum</c>/<c>maximum</c>
-/// (<see cref="RangeAttribute"/>), <c>maxLength</c> (<see cref="StringLengthAttribute"/>),
-/// <c>minItems</c>/<c>maxItems</c> (<see cref="LengthAttribute"/>), <c>enum</c>
-/// (<see cref="AllowedValuesAttribute"/>), <c>pattern</c>, the top-level <c>default</c>s a new
-/// parameters object holds, <c>x-enumLabels</c> beside every <c>enum</c>, and
+/// <see cref="DisplayNameAttribute"/>, else the property's name in words), <c>description</c>
+/// (<see cref="DescriptionAttribute"/>), <c>minimum</c>/<c>maximum</c> (<see cref="RangeAttribute"/>),
+/// <c>maxLength</c> (<see cref="StringLengthAttribute"/>), <c>minItems</c>/<c>maxItems</c>
+/// (<see cref="LengthAttribute"/>), <c>enum</c> (<see cref="AllowedValuesAttribute"/>), <c>pattern</c>,
+/// the <c>default</c>s of optional members, <c>x-enumLabels</c> beside every <c>enum</c>,
+/// <c>x-scope</c> and a sentence that names it (<see cref="ReportNeedsScopeAttribute"/>), and
 /// <c>x-input</c> (<see cref="ReportInputAttribute"/>) for a value picked from the tenant's own
 /// records. A nullable type is written as its non-null type: a parameter left out is null.
 /// </remarks>
@@ -47,8 +48,9 @@ internal static partial class ReportParametersSchema
     }
 
     /// <summary>
-    /// The value each parameter holds in a new object of its type, as its <c>default</c>, so the form
-    /// shows it filled in: a boolean, a number or an enum. Read from an instance of the concrete type,
+    /// The value each optional parameter holds in a new object of its type, as its <c>default</c>, so
+    /// the form shows it filled in: a boolean, a number or an enum. A required member has none: its
+    /// type's zero is no choice (a time-of-day window from 00:00 to 00:00 holds nothing). Read from an instance of the concrete type,
     /// since a parameter declared on an abstract base is given its default there, and from each
     /// nested object's or list item's own type.
     /// </summary>
@@ -63,7 +65,7 @@ internal static partial class ReportParametersSchema
                 continue;
             var member = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .FirstOrDefault(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name) == name);
-            if (member is null)
+            if (member is null || member.GetCustomAttribute<JsonRequiredAttribute>() is not null)
                 continue;
             var memberType = Nullable.GetUnderlyingType(member.PropertyType) ?? member.PropertyType;
             if (instance[name] is JsonValue value
@@ -126,6 +128,12 @@ internal static partial class ReportParametersSchema
             schema["pattern"] = pattern.Pattern;
         if (property.GetCustomAttribute<ReportInputAttribute>() is { } input)
             schema["x-input"] = input.Kind;
+        if (property.GetCustomAttribute<ReportNeedsScopeAttribute>() is { } needs)
+        {
+            schema["x-scope"] = needs.Scope;
+            var sentence = $"Needs the {ReportNeedsScopeAttribute.Noun(needs.Scope)} permission.";
+            schema["description"] = schema["description"] is JsonValue text ? $"{text.GetValue<string>()} {sentence}" : sentence;
+        }
 
         return schema;
     }
@@ -156,6 +164,26 @@ internal static partial class ReportParametersSchema
 
     [GeneratedRegex("(?<=[a-z0-9])([A-Z])")]
     private static partial Regex WordBoundary();
+}
+
+/// <summary>
+/// A parameter that does nothing without a read scope beyond the dataset's: the schema says so in
+/// words (<c>description</c>) and names the scope (<c>x-scope</c>).
+/// </summary>
+[AttributeUsage(AttributeTargets.Property)]
+internal sealed class ReportNeedsScopeAttribute(string scope) : Attribute
+{
+    public string Scope { get; } = scope;
+
+    /// <summary>A read scope as a member names the data it covers.</summary>
+    public static string Noun(string scope) => scope switch
+    {
+        Nocturne.Core.Models.Authorization.Scope.TreatmentsRead => "treatments",
+        Nocturne.Core.Models.Authorization.Scope.DevicesRead => "devices",
+        Nocturne.Core.Models.Authorization.Scope.TherapyRead => "therapy settings",
+        Nocturne.Core.Models.Authorization.Scope.FoodRead => "food",
+        _ => throw new ArgumentOutOfRangeException(nameof(scope), scope, "No words for this scope."),
+    };
 }
 
 /// <summary>
