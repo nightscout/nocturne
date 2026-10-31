@@ -24,6 +24,8 @@ export default defineConfig({
     environment: "node",
     // The static chart theme reads the stylesheets as text, which vitest empties unless it processes them.
     css: { include: [/\.css\?raw$/] },
+    // Draw on the test's thread from the source, not in a worker from a bundle built earlier.
+    env: { NOCTURNE_REPORT_IMAGE_WORKER: "off" },
     // As in the app's SSR build (vite.config.ts `ssr.noExternal`): layerchart's and @layerstack's
     // dist import `svelte` without declaring it, which Node cannot resolve from pnpm's store, so
     // they go through Vite. Matched against the resolved path.

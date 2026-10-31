@@ -38377,6 +38377,7 @@ msgid "All custom reports"
 msgstr ""
 
 #: src/lib/components/reports/custom/custom-report-labels.svelte.ts
+#: src/lib/server/report-image/report-image-words.svelte.ts
 msgid "No data in this range."
 msgstr ""
 
@@ -38577,4 +38578,29 @@ msgstr ""
 
 #: src/lib/components/reports/custom/CustomReportRun.svelte
 msgid "Download PNG"
+msgstr ""
+
+#. 0: count
+#: src/lib/server/report-image/report-image-words.svelte.ts
+msgid "This image does not show {0} of the figures. The summary has all of them."
+msgstr ""
+
+#: src/lib/components/reports/custom/CustomReportRun.svelte
+msgid "Only a member who is signed in can download an image."
+msgstr ""
+
+#: src/lib/components/reports/custom/CustomReportRun.svelte
+msgid "You made many images in the last minute. Wait a minute and try again."
+msgstr ""
+
+#: src/lib/components/reports/custom/CustomReportRun.svelte
+msgid "This panel has too much data for an image. Choose a shorter range."
+msgstr ""
+
+#: src/lib/components/reports/custom/CustomReportRun.svelte
+msgid "The image renderer is busy. Try again."
+msgstr ""
+
+#: src/lib/components/reports/custom/CustomReportRun.svelte
+msgid "This panel cannot be made into an image."
 msgstr ""

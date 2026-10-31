@@ -5,7 +5,9 @@ import {
   renderReportImage,
   REPORT_IMAGE_LIMITS,
   ReportImageError,
+  ReportImageTooLargeError,
 } from "#lib/server/report-image/render.js";
+import { RenderPoolBusyError } from "#lib/server/report-image/pool.js";
 
 const json = (status: number, error: string) =>
   new Response(JSON.stringify({ error }), { status, headers: { "Content-Type": "application/json" } });
@@ -32,8 +34,8 @@ async function readCapped(request: Request, limit: number): Promise<string | nul
 }
 
 /**
- * A report panel as a PNG, for the API's render_report_image tool. It draws only the result it is
- * sent and reads no data. Like the bot dispatch route, it is reachable from the internet through the
+ * A report panel as a PNG, for the API's render_report_image tool. It draws only the panel it is sent,
+ * in a worker thread, and reads no data. Like the bot dispatch route, it is reachable from the internet through the
  * gateway's `/api/**` route and is exempted from the proxy in hooks.server.ts, so the caller must
  * present the instance key before anything is read.
  */
@@ -53,13 +55,15 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   try {
-    const png = renderReportImage(readReportImageRequest(body));
+    const png = await renderReportImage(readReportImageRequest(body));
     return new Response(new Uint8Array(png), {
       status: 200,
       headers: { "Content-Type": "image/png", "Cache-Control": "no-store" },
     });
   } catch (err) {
+    if (err instanceof ReportImageTooLargeError) return json(413, err.message);
     if (err instanceof ReportImageError) return json(400, err.message);
+    if (err instanceof RenderPoolBusyError) return json(503, "The image renderer is busy. Try again.");
     console.error("Report image render failed:", err);
     return json(500, "The image could not be drawn.");
   }

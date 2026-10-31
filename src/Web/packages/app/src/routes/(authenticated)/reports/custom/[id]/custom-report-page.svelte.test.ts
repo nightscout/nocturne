@@ -32,12 +32,17 @@ vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   }),
 }));
 
-vi.mock("#lib/api/report-image.remote.js", () => ({
-  drawReportPanelImage: remoteCommand((arg) => {
-    calls.images.push(arg);
-    return "iVBORw0KGgo=";
-  }),
-}));
+const image = vi.hoisted(() => ({ refuse: null as string | null }));
+vi.mock("#lib/api/report-image.remote.js", async () => {
+  const { error } = await import("@sveltejs/kit");
+  return {
+    drawReportPanelImage: remoteCommand((arg) => {
+      calls.images.push(arg);
+      if (image.refuse) error(503, image.refuse);
+      return "iVBORw0KGgo=";
+    }),
+  };
+});
 
 vi.mock("$app/navigation", () => ({
   goto: (url: string) => {
@@ -63,9 +68,20 @@ describe("saved custom report page", () => {
     pageState.url = new URL("http://localhost/reports/custom/a1") as typeof pageState.url;
     saved = { id: "a1", name: "Fortnight", spec: normalisedSpec, errors: [], canEdit: true };
     runResult = statTilesResult;
+    image.refuse = null;
   });
 
-  it("saves a chart panel as the PNG the image renderer draws, sending only that panel", async () => {
+  it("says in the page's words why an image was refused", async () => {
+    runResult = chartResult;
+    image.refuse = "busy";
+    render(CustomReportPage, {});
+
+    await page.getByRole("button", { name: "Download PNG" }).click();
+
+    await expect.element(page.getByRole("alert")).toHaveTextContent("The image renderer is busy. Try again.");
+  });
+
+  it("saves a chart panel as the PNG the image renderer draws, sending the spec to run again and the panel's id", async () => {
     runResult = chartResult;
     const created: Blob[] = [];
     const createObjectURL = vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
@@ -87,9 +103,7 @@ describe("saved custom report page", () => {
 
       await vi.waitFor(() => expect(clicked).toEqual(["glucose-and-target-range.png"]));
       expect(calls.images).toHaveLength(1);
-      const sent = calls.images[0] as { panelId: string; result: { panels: { id: string }[] } };
-      expect(sent.panelId).toBe("line");
-      expect(sent.result.panels.map((p) => p.id)).toEqual(["line"]);
+      expect(calls.images).toEqual([{ spec: normalisedSpec, panelId: "line" }]);
       expect(created[0].type).toBe("image/png");
     } finally {
       createObjectURL.mockRestore();

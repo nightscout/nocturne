@@ -81,8 +81,9 @@ COPY --from=builder /app/packages/app/build ./build
 COPY --from=builder /app/packages/app/server.js ./server.js
 COPY --from=builder /app/packages/app/server-origin-warning.js ./server-origin-warning.js
 
-# Smoke test critical runtime imports used by SvelteKit server chunks.
-RUN node -e "import('zod'); import('@nocturne/bridge'); import('./server-origin-warning.js')"
+# Smoke test critical runtime imports used by SvelteKit server chunks, the canvas the report image
+# worker draws on (a native addon: the musl build must load on alpine) and the worker bundle itself.
+RUN node -e "import('zod'); import('@nocturne/bridge'); import('./server-origin-warning.js'); import('@napi-rs/canvas').then((c) => c.createCanvas(2, 2).toBuffer('image/png')); import('./build/report-image-worker/worker.mjs')"
 
 ENV NODE_ENV=production
 ENV PORT=5173

@@ -1,17 +1,11 @@
-import { createCanvas, GlobalFonts, Path2D } from "@napi-rs/canvas";
-import { renderCapturedChart, type CapturedChart } from "layerchart/server";
-import { render } from "svelte/server";
+import { existsSync } from "node:fs";
+import { availableParallelism } from "node:os";
+import { resolve } from "node:path";
 import { readReport, type ReportPanel, type ReportResult } from "@nocturne/charts/core";
-import {
-  paint,
-  resolveChartTheme,
-  STATIC_FONT_FAMILY,
-  StaticReportPanel,
-  staticPrimitive,
-  type StaticRender,
-} from "@nocturne/charts/server";
-import { glucoseChartLabels } from "#lib/components/dashboard/glucose-chart/chart-labels.svelte.js";
-import cabin from "../../../../static/fonts/Cabin-VariableFont_wdth,wght.ttf?inline";
+import { staticDefaultHeight, staticPrimitive } from "@nocturne/charts/server";
+import { drawPanel, type DrawJob } from "./draw.js";
+import { RenderPool } from "./pool.js";
+import { reportImageWords } from "./report-image-words.svelte.js";
 
 /** The limits a request is held to, whoever sends it; the API applies the same before it asks. */
 export const REPORT_IMAGE_LIMITS = {
@@ -19,52 +13,28 @@ export const REPORT_IMAGE_LIMITS = {
   maxWidth: 2400,
   minHeight: 200,
   maxHeight: 1600,
-  devicePixelRatios: [1, 2],
-  /** The most of a request body read: one panel of a report, which the API sends alone. */
+  /** The most of a request body read: one panel, which the API sends alone. */
   maxBodyBytes: 4 * 1024 * 1024,
+  /**
+   * The most rows, trace points and chart points one panel may hold. The API sends at most 2000 rows
+   * a series; past this a single render takes seconds and hundreds of megabytes.
+   */
+  maxPoints: 12_000,
 } as const;
-
-export interface ReportImageOptions {
-  width: number;
-  height: number;
-  theme: "light" | "dark";
-  devicePixelRatio: 1 | 2;
-}
-
-export type ReportImageRequest = ReportImageOptions & { report: ReportResult; panel: ReportPanel };
 
 /** Why a request cannot be drawn, in words for the caller. */
 export class ReportImageError extends Error {}
 
-/**
- * A request body as a report, one of its chart panels and the size and theme to draw it in. The
- * panel is the one named, else the report's first chart panel.
- */
-export function readReportImageRequest(body: unknown): ReportImageRequest {
-  if (!isObject(body)) throw new ReportImageError("Send a JSON object.");
-  const fields = body;
-  const report = readReport(fields.result);
-  if (!report) throw new ReportImageError("result: Send a report result as render_report returns it.");
+/** A panel with more points than one image draws (`REPORT_IMAGE_LIMITS.maxPoints`); the route answers 413. */
+export class ReportImageTooLargeError extends ReportImageError {}
 
-  const width = whole(fields.width ?? 1200, "width", REPORT_IMAGE_LIMITS.minWidth, REPORT_IMAGE_LIMITS.maxWidth);
-  const height = whole(fields.height ?? 600, "height", REPORT_IMAGE_LIMITS.minHeight, REPORT_IMAGE_LIMITS.maxHeight);
-  const ratio = fields.devicePixelRatio ?? 1;
-  if (ratio !== 1 && ratio !== 2) throw new ReportImageError("devicePixelRatio: Send 1 or 2.");
-  const theme = fields.theme ?? "light";
-  if (theme !== "light" && theme !== "dark") throw new ReportImageError("theme: Send light or dark.");
-
-  const panelId = fields.panelId;
-  if (panelId !== undefined && panelId !== null && typeof panelId !== "string")
-    throw new ReportImageError("panelId: Send a panel id as text.");
-  const panel = panelId
-    ? report.panels.find((p) => p.id === panelId)
-    : report.panels.find((p) => staticPrimitive(p) && p.status === "ok");
-  if (!panel) throw new ReportImageError(panelId ? `panelId: The report has no panel '${panelId}'.` : "The report has no chart panel.");
-  if (panel.status !== "ok") throw new ReportImageError(`Panel '${panel.id}' was not drawn: ${panel.sentence ?? panel.summary}`);
-  if (!staticPrimitive(panel))
-    throw new ReportImageError(`Panel '${panel.id}' is a ${panel.primitive}, which has no image: its figures are in the summary.`);
-
-  return { report, panel, width, height, theme, devicePixelRatio: ratio };
+export interface ReportImageRequest {
+  report: ReportResult;
+  panel: ReportPanel;
+  width: number;
+  height: number;
+  theme: "light" | "dark";
+  devicePixelRatio: 1 | 2;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -77,56 +47,117 @@ function whole(value: unknown, name: string, min: number, max: number): number {
   return value;
 }
 
-let canvasReady = false;
-
-/** Path2D for layerchart's canvas marks, and the app's Cabin, so text measures the same on every host. */
-function prepareCanvas() {
-  if (canvasReady) return;
-  if (!("Path2D" in globalThis)) Object.assign(globalThis, { Path2D });
-  const base64 = String(cabin).slice(String(cabin).indexOf(",") + 1);
-  GlobalFonts.register(Buffer.from(base64, "base64"), STATIC_FONT_FAMILY);
-  canvasReady = true;
+/** A BCP-47 tag Intl knows, or null for none; anything else is refused. */
+function locale(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.length > 35) throw new ReportImageError("locale: Send a language tag such as en-GB.");
+  try {
+    return Intl.getCanonicalLocales(value)[0] ?? null;
+  } catch {
+    throw new ReportImageError("locale: Send a language tag such as en-GB.");
+  }
 }
 
-/** The panel as a PNG, drawn by the panel's primitive in its static mode on a canvas of the requested size. */
-export function renderReportImage(request: ReportImageRequest): Buffer {
-  prepareCanvas();
-  const { report, panel, width, height, devicePixelRatio } = request;
-  const theme = resolveChartTheme(request.theme);
-  const capture: Partial<CapturedChart> = {};
-  const scratch = createCanvas(1, 1).getContext("2d");
-  const still: StaticRender = {
-    theme,
-    width,
-    height,
-    capture,
-    gradient: (y0, y1, stops) => {
-      const gradient = scratch.createLinearGradient(0, y0, 0, y1);
-      for (const [offset, color] of stops) gradient.addColorStop(Math.min(1, Math.max(0, offset)), color);
-      return gradient;
-    },
-  };
+/** Rows, single-event trace points and dashboard chart points: what a render's cost grows with. */
+export function pointsOf(panel: ReportPanel): number {
+  const chart = panel.chart;
+  const chartPoints = chart
+    ? (chart.glucoseData?.length ?? 0) + (chart.basalSeries?.length ?? 0) + (chart.bolusMarkers?.length ?? 0) + (chart.carbMarkers?.length ?? 0)
+    : 0;
+  return panel.rows.length + (panel.traces ?? []).reduce((sum, t) => sum + t.points.length, 0) + (panel.markers?.length ?? 0) + chartPoints;
+}
 
-  void render(StaticReportPanel, {
-    props: {
-      report,
-      panel,
-      still,
-      format: { locale: "en-GB", hour12: false },
-      labels: glucoseChartLabels(),
-      noData: "No data in this range.",
-    },
-  }).body;
+/**
+ * The API's request (`WebReportImageClient`): one panel and the parts of its report the drawing
+ * reads (units, zone, colour mode, locale, clock), the size, theme and ratio. A missing height is
+ * the primitive's own (`staticDefaultHeight`).
+ */
+export function readReportImageRequest(body: unknown): ReportImageRequest {
+  if (!isObject(body)) throw new ReportImageError("Send a JSON object.");
+  const hour12 = body.hour12;
+  if (hour12 !== undefined && hour12 !== null && typeof hour12 !== "boolean") throw new ReportImageError("hour12: Send true or false.");
+  const report = readReport({
+    spec: { version: 1, title: null },
+    units: body.units,
+    timeZone: body.timeZone ?? null,
+    glucoseColorMode: body.glucoseColorMode === "threshold" ? "threshold" : "continuous",
+    locale: locale(body.locale),
+    hour12: hour12 ?? null,
+    summary: "",
+    warnings: [],
+    panels: [body.panel],
+  });
+  if (!report) throw new ReportImageError("panel: Send one panel and its units as render_report returns them.");
+  return readOptions(report, report.panels[0], body);
+}
 
-  const { chartState, rootNode } = capture;
-  if (!chartState || !rootNode) throw new Error(`Panel '${panel.id}' drew nothing to capture.`);
-  return Buffer.from(
-    renderCapturedChart({ chartState, rootNode }, {
-      width,
-      height,
-      devicePixelRatio,
-      background: paint(theme, "var(--background)", "#ffffff"),
-      createCanvas: (w, h) => createCanvas(w, h),
-    }),
-  );
+/** The size, theme and ratio for a panel already chosen; the checks every request gets. */
+export function readOptions(report: ReportResult, panel: ReportPanel, fields: Record<string, unknown>): ReportImageRequest {
+  if (panel.status !== "ok") throw new ReportImageError(`Panel '${panel.id}' was not drawn: ${panel.sentence ?? panel.summary}`);
+  if (!staticPrimitive(panel))
+    throw new ReportImageError(`Panel '${panel.id}' is a ${panel.primitive}, which has no image: its figures are in the summary.`);
+  const points = pointsOf(panel);
+  if (points > REPORT_IMAGE_LIMITS.maxPoints)
+    throw new ReportImageTooLargeError(
+      `Panel '${panel.id}' has ${points} points, more than the ${REPORT_IMAGE_LIMITS.maxPoints} one image draws. Send a shorter range.`,
+    );
+
+  const width = whole(fields.width ?? 1200, "width", REPORT_IMAGE_LIMITS.minWidth, REPORT_IMAGE_LIMITS.maxWidth);
+  const height = whole(fields.height ?? staticDefaultHeight(panel), "height", REPORT_IMAGE_LIMITS.minHeight, REPORT_IMAGE_LIMITS.maxHeight);
+  const ratio = fields.devicePixelRatio ?? 1;
+  if (ratio !== 1 && ratio !== 2) throw new ReportImageError("devicePixelRatio: Send 1 or 2.");
+  const theme = fields.theme ?? "light";
+  if (theme !== "light" && theme !== "dark") throw new ReportImageError("theme: Send light or dark.");
+  return { report: { ...report, panels: [panel] }, panel, width, height, theme, devicePixelRatio: ratio };
+}
+
+/**
+ * The worker bundle: `NOCTURNE_REPORT_IMAGE_WORKER` when it names a file, else in a production build
+ * `build/report-image-worker/worker.mjs` under the app (the working directory, or `packages/app`
+ * below it in the image). The dev server draws on this thread, from the source it is serving, rather
+ * than from a bundle built from older source; `off` does the same anywhere (the render tests).
+ */
+function workerScript(): string | null {
+  const named = process.env.NOCTURNE_REPORT_IMAGE_WORKER;
+  if (named === "off") return null;
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- the operator's setting, not request data
+  if (named) return existsSync(named) ? named : null;
+  if (import.meta.env.DEV) return null;
+  const candidates = [
+    resolve(process.cwd(), "build/report-image-worker/worker.mjs"),
+    resolve(process.cwd(), "packages/app/build/report-image-worker/worker.mjs"),
+  ];
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed paths under the working directory
+  return candidates.find((path) => existsSync(path)) ?? null;
+}
+
+let pool: RenderPool<DrawJob> | null | undefined;
+let warned = false;
+
+/** Two workers (or one on a single core), four jobs waiting, fifteen seconds a job. */
+function renderPool(): RenderPool<DrawJob> | null {
+  if (pool !== undefined) return pool;
+  const script = workerScript();
+  pool = script
+    ? new RenderPool<DrawJob>(script, { size: Math.min(2, availableParallelism()), queueLimit: 4, timeoutMs: 15_000 })
+    : null;
+  return pool;
+}
+
+/**
+ * The panel as a PNG, drawn in a worker thread (`RenderPool`, which refuses with `RenderPoolBusyError`
+ * when full). With no worker (the dev server, or a build without the worker bundle) it draws on this
+ * thread; a production build says so once.
+ */
+export async function renderReportImage(request: ReportImageRequest): Promise<Buffer> {
+  const job: DrawJob = { ...request, ...reportImageWords() };
+  const workers = renderPool();
+  if (!workers) {
+    if (!warned && !import.meta.env.DEV && process.env.NOCTURNE_REPORT_IMAGE_WORKER !== "off") {
+      console.warn("The report image worker is not built (pnpm run build:report-image-worker); images draw on the main thread.");
+      warned = true;
+    }
+    return Buffer.from(drawPanel(job));
+  }
+  return Buffer.from(await workers.run(job));
 }

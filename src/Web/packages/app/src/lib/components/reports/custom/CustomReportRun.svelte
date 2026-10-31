@@ -5,7 +5,8 @@
 -->
 <script lang="ts">
   import { ReportView } from "@nocturne/charts";
-  import { readReport, staticPrimitive, type ReportPanel, type ReportResult } from "@nocturne/charts/core";
+  import { isHttpError } from "@sveltejs/kit";
+  import { readReport, staticPrimitive, type ReportPanel } from "@nocturne/charts/core";
   import Download from "@lucide/svelte/icons/download";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -33,20 +34,40 @@
     return `${words || panel.id}.png`;
   }
 
-  async function download(shown: ReportResult, panel: ReportPanel) {
+  /** What the page says for each refusal the image command gives (`ReportImageFailure`); anything else is the general sentence. */
+  function failureText(err: unknown): string {
+    const code = isHttpError(err) ? err.body.message : null;
+    switch (code) {
+      case "not_member":
+        return "Only a member who is signed in can download an image.";
+      case "rate_limited":
+        return "You made many images in the last minute. Wait a minute and try again.";
+      case "too_large":
+        return "This panel has too much data for an image. Choose a shorter range.";
+      case "busy":
+        return "The image renderer is busy. Try again.";
+      case "not_drawable":
+        return "This panel cannot be made into an image.";
+      default:
+        return "The image could not be made.";
+    }
+  }
+
+  async function download(panel: ReportPanel) {
     drawing = panel.id;
     failed = null;
     try {
-      const base64 = await drawReportPanelImage({ result: { ...shown, panels: [panel] }, panelId: panel.id });
+      const base64 = await drawReportPanelImage({ spec: run.spec, panelId: panel.id });
       const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
       const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
       const link = document.createElement("a");
       link.href = url;
       link.download = fileName(panel);
       link.click();
-      URL.revokeObjectURL(url);
+      // A browser starts the download after the click returns; the URL must outlive it.
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (err) {
-      failed = { panel: panel.id, message: err instanceof Error && err.message ? err.message : "The image could not be made." };
+      failed = { panel: panel.id, message: failureText(err) };
     } finally {
       drawing = null;
     }
@@ -75,12 +96,11 @@
         </a>
       {/if}
       {#if report && panel.status === "ok" && staticPrimitive(panel)}
-        {@const shown = report}
         <Button
           variant="ghost-muted"
           size="xs"
           disabled={drawing !== null}
-          onclick={() => download(shown, panel)}
+          onclick={() => download(panel)}
           data-testid="download-panel-png"
         >
           <Download class="size-3.5" aria-hidden="true" />
