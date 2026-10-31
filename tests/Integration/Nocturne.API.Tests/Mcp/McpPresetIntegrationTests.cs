@@ -183,7 +183,7 @@ public class McpPresetIntegrationTests(ApiIntegrationTestFixture fixture, ITestO
         var panel = result.GetProperty("panels")[0];
         panel.GetProperty("status").GetString().Should().Be("ok");
         panel.GetProperty("atRangeLimit").GetBoolean().Should().BeTrue();
-        panel.GetProperty("rangeLimit").GetString().Should().Be("This chart covers at most 3 days.");
+        panel.GetProperty("rangeLimit").GetString().Should().Be("This panel covers at most 3 days.");
         panel.GetProperty("summary").GetString().Should().Contain("Cut to the latest 3 days: the range asked for was longer.");
         var span = panel.GetProperty("window").GetProperty("to").GetInt64() - panel.GetProperty("window").GetProperty("from").GetInt64();
         span.Should().Be((long)TimeSpan.FromDays(3).TotalMilliseconds);

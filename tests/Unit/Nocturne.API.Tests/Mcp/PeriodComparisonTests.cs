@@ -150,7 +150,7 @@ public class PeriodComparisonTests
             new DateTimeOffset(2026, 10, 16, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             new DateTimeOffset(2026, 10, 30, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()));
         readLog.Datasets.Should().Equal("glucose");
-        panel.LinkQuery.Should().Contain(new KeyValuePair<string, string?>("aFrom", "2026-10-16"));
+        panel.LinkQuery!.Select(p => $"{p.Key}={p.Value}").Should().Equal("preset=last7-prior7");
     }
 
     [Fact]

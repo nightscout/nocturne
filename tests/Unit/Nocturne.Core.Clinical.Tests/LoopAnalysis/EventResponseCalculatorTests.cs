@@ -39,13 +39,15 @@ public class EventResponseCalculatorTests
         long? from = null,
         long? to = null,
         long? now = null,
-        IReadOnlyDictionary<long, IReadOnlyList<MealFood>>? mealFoods = null)
+        IReadOnlyDictionary<long, IReadOnlyList<MealFood>>? mealFoods = null,
+        bool includeTraces = false)
     {
         var definition = new EventResponseDefinition
         {
             Cohorts = [.. cohorts],
             IsolatedOnly = isolatedOnly,
             RequireCorroboration = requireCorroboration,
+            IncludeTraces = includeTraces,
         };
         var inputs = new EventResponseInputs
         {
@@ -184,6 +186,18 @@ public class EventResponseCalculatorTests
 
         range.Cohorts.Single().Events.Should().Be(2);
         range.Events.Select(e => e.Date).Should().Equal("2024-06-10", "2024-06-15");
+    }
+
+    [Fact]
+    public void EachEventsGlucoseTrace_IsKeptOnlyWhenAsked()
+    {
+        var meal = Local(2024, 6, 12, 8);
+
+        var plain = Calculate([Cohort(1, from: 0, to: 1439)], glucose: Flat(120), carbs: [new(meal, 30)]);
+        var traced = Calculate([Cohort(1, from: 0, to: 1439)], glucose: Flat(120), carbs: [new(meal, 30)], includeTraces: true);
+
+        plain.Events.Single().GlucoseTrace.Should().BeEmpty();
+        traced.Events.Single().GlucoseTrace.Should().HaveCount(72).And.Contain(120);
     }
 
     [Fact]

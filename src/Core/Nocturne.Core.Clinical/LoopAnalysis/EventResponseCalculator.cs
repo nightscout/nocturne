@@ -154,7 +154,7 @@ public static class EventResponseCalculator
             Events = listEvents
                 ? [.. membership.Values.SelectMany(members => members
                     .GroupBy(m => m.Episode)
-                    .Select(g => Event(g.Key, [.. g.Select(m => m.Cohort).Distinct().Order()], zone)))]
+                    .Select(g => Event(g.Key, [.. g.Select(m => m.Cohort).Distinct().Order()], zone, definition.IncludeTraces)))]
                 : [],
         };
     }
@@ -208,7 +208,7 @@ public static class EventResponseCalculator
     /// <summary>Whether a record names a food or a category; one of unspecified carbs is not a food record.</summary>
     public static bool IsFoodRecord(MealFood food) => food.FoodId is not null || !string.IsNullOrWhiteSpace(food.Category);
 
-    private static EventResponseEvent Event(EventEpisode episode, List<int> cohorts, TimeZoneInfo zone)
+    private static EventResponseEvent Event(EventEpisode episode, List<int> cohorts, TimeZoneInfo zone, bool trace)
     {
         var (date, time) = LocalSlotBinning.DayInReview(episode.Anchor.Mills, zone);
         return new EventResponseEvent
@@ -221,7 +221,7 @@ public static class EventResponseCalculator
             Grams = episode.Anchor.Grams is { } grams ? SlotSummary.Round(grams) : null,
             Cohorts = cohorts,
             GlucoseCoverage = GlucoseCoverage(episode),
-            GlucoseTrace = [.. episode.Slots.Select(s => s.Glucose is { } g ? SlotSummary.Round(g) : (double?)null)],
+            GlucoseTrace = trace ? [.. episode.Slots.Select(s => s.Glucose is { } g ? SlotSummary.Round(g) : (double?)null)] : [],
             Metrics = Rounded(episode.Metrics),
         };
     }

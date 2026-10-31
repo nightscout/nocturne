@@ -143,13 +143,20 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var dataset = registry.Find(panel.Dataset.DatasetName)!;
         var max = dataset.MaxRange(panel.Primitive);
         var (from, to) = Resolve(panel.Range!, now);
-        var covers = $"This chart covers at most {ReportSpecValidator.Describe(max)}.";
+        var covers = $"This panel covers at most {ReportSpecValidator.Describe(max)}.";
         if (to - from < max - TimeSpan.FromMinutes(1))
             return result;
-        var cut = shortened?.Contains(result.Id) == true
-            ? $"\nCut to the latest {ReportSpecValidator.Describe(max)}: the range asked for was longer. {covers}"
-            : "";
-        return result with { AtRangeLimit = true, RangeLimit = covers, Summary = result.Summary + cut };
+        if (shortened?.Contains(result.Id) != true)
+            return result with { AtRangeLimit = true, RangeLimit = covers };
+        // The view folds the summary, so the cut is also on the range line it always shows.
+        var cut = $"Cut to the latest {ReportSpecValidator.Describe(max)}: the range asked for was longer.";
+        return result with
+        {
+            AtRangeLimit = true,
+            RangeLimit = covers,
+            Summary = $"{result.Summary}\n{cut} {covers}",
+            Context = result.Context is null ? cut : $"{result.Context} {cut}",
+        };
     }
 
     internal static (DateTimeOffset From, DateTimeOffset To) Resolve(ReportRange range, DateTimeOffset now) =>
@@ -207,6 +214,9 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Resolution = output.Resolution,
             Markers = panel.Primitive == ReportPrimitive.TimeSeries ? MarkersFor(fields, output.Markers) : [],
             Cohorts = output.Cohorts,
+            Spans = panel.Primitive is ReportPrimitive.RangeBands or ReportPrimitive.GlucoseChart
+                ? ReportBandSpan.Of([.. (panel.Bindings!.Band ?? []).Select(name => catalogue.Single(f => f.Name == name))])
+                : [],
             Facts = output.Facts.Count > ReportFacts.Max ? [.. output.Facts.Take(ReportFacts.Max)] : output.Facts,
             Sentence = output.Sentence,
             Context = output.Context,

@@ -95,6 +95,14 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
                 index++;
             }
 
+            foreach (var group in panels.GroupBy(p => p.Dataset.DatasetName))
+            {
+                if (registry.Find(group.Key) is { } heavy && group.Count() > heavy.MaxPanelsPerReport)
+                    Error($"panels[{panels.IndexOf(group.ElementAt(heavy.MaxPanelsPerReport))}].dataset.name",
+                        $"A report holds at most {heavy.MaxPanelsPerReport} {heavy.Name} panels; this one has {group.Count()}. "
+                        + "Split them into more than one report.");
+            }
+
             for (var i = 0; i < panels.Count; i++)
             {
                 if (panels[i].Id is null)
@@ -433,7 +441,9 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         var band = List("band");
         var columns = List("columns");
         var series = Text("series", out var seriesSent);
-        var fields = dataset.FieldsFor(primitive);
+        // Companion fields travel with every row and are never drawn on their own.
+        var fields = dataset.FieldsFor(primitive).Where(f => !f.Companion).ToList();
+        var companions = dataset.FieldsFor(primitive).Where(f => f.Companion).Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
         var fieldNames = string.Join(", ", fields.Select(f => f.Name));
 
         if (!present && dataset.DefaultBindings(primitive) is { } defaults)
@@ -452,7 +462,9 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         ReportField? Field(string path, string name)
         {
             var field = fields.FirstOrDefault(f => f.Name == name);
-            if (field is null)
+            if (field is null && companions.Contains(name))
+                error(path, $"'{name}' comes with every row and cannot be drawn on its own. Fields: {fieldNames}.");
+            else if (field is null)
                 error(path, $"'{Shorten(name)}' is not a field of {dataset.Name}. Fields: {fieldNames}.");
             return field?.ResolveUnit(useMmol);
         }

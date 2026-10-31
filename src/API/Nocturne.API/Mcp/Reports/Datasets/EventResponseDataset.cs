@@ -221,6 +221,7 @@ internal sealed class EventResponseDataset : IReportDataset
                 RequireCorroboration = parameters.RequireCorroboration,
             };
         var number = definition.Cohorts.ToDictionary(c => c.Cohort, c => kept[c.Cohort - 1].Number);
+        definition.IncludeTraces = request.Primitive == ReportPrimitive.GlucoseChart;
         var ignored = LoopAnalysisReadScopeGuard.NarrowEvents(definition, request.GrantedScopes)
             .Select(name => name.StartsWith("anchor", StringComparison.Ordinal) && int.TryParse(name[6..], out var n) && number.TryGetValue(n, out var original)
                 ? $"cohorts[{original - 1}] ({asked[original - 1].Anchor})"
@@ -265,27 +266,37 @@ internal sealed class EventResponseDataset : IReportDataset
             notes.Add($"The table shows the first {MaxEvents} of {events.Count} events.");
 
         IReadOnlyList<ReportTrace> traces = [];
+        var sentence = NoTimeZone(report, "Meals & events") ?? WindowSentence(report.Definition);
         if (request.Primitive == ReportPrimitive.GlucoseChart)
         {
             var (drawn, note) = Traces(report, slotMinutes, number, useMmol);
             traces = drawn;
             if (note is not null)
                 notes.Add(note);
+            if (note == TracesWithheldNote)
+                sentence += " " + note;
         }
+        var counted = report.WithheldSeries.Contains(LoopAnalysisSeries.EventList)
+            ? report.Primary.Cohorts.Sum(c => c.Events)
+            : report.Primary.Events.Count;
 
         return new ReportDatasetOutput
         {
             Rows = rows,
             Summary = Summarise(report, labels, number, notes, useMmol),
             Facts = FactsOf(report, labels, useMmol),
-            Sentence = NoTimeZone(report, "Meals & events") ?? WindowSentence(report.Definition),
-            Context = ContextLine(report, ReportFacts.Plural(report.Primary.Events.Count, "event")),
+            Sentence = sentence,
+            Context = ContextLine(report, ReportFacts.Plural(counted, "event")),
             Omitted = Omitted(report, fieldSeries),
             Window = Window(report),
             Cohorts = [.. askedLabels.Select((label, i) => new ReportCohort(i + 1, label))],
             Traces = traces,
         };
     }
+
+    /// <summary>Why a glucose chart of cohorts draws no single events: the event list is withheld.</summary>
+    internal const string TracesWithheldNote =
+        "Single events are not drawn: the list of events needs the treatments.read scope, which this token does not hold.";
 
     /// <summary>
     /// Each cohort's newest events as traces of their own glucose, at most
@@ -295,6 +306,8 @@ internal sealed class EventResponseDataset : IReportDataset
     internal static (IReadOnlyList<ReportTrace> Traces, string? Note) Traces(
         EventResponseReport report, IReadOnlyList<int> slotMinutes, IReadOnlyDictionary<int, int> number, bool useMmol)
     {
+        if (report.WithheldSeries.Contains(LoopAnalysisSeries.EventList) && report.Primary.Cohorts.Any(c => c.Events > 0))
+            return ([], TracesWithheldNote);
         var step = Math.Max(1, (int)Math.Ceiling(slotMinutes.Count / (double)TracePointBudget));
         var traces = new List<ReportTrace>();
         var counts = new List<string>();

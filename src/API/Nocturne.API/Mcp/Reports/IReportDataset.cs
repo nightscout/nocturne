@@ -115,6 +115,9 @@ internal interface IReportDataset
     /// <summary>The longest range a panel of this dataset drawn as <paramref name="primitive"/> may ask for.</summary>
     TimeSpan MaxRange(ReportPrimitive primitive);
 
+    /// <summary>The most panels of this dataset one report may hold, for a dataset whose panel costs more than one read.</summary>
+    int MaxPanelsPerReport => ReportSpec.MaxPanels;
+
     /// <summary>The most rows one series of this dataset carries; longer ranges are downsampled.</summary>
     int PointBudget { get; }
 
@@ -211,6 +214,33 @@ internal sealed record ReportDatasetOutput
 /// <param name="Points">[minutes from the anchor, glucose in the display unit] pairs; slots with no reading are left out.</param>
 /// <param name="Sentence">What the event's figures show, as the event table's sentence.</param>
 internal sealed record ReportTrace(int Cohort, long At, IReadOnlyList<double[]> Points, string Sentence);
+
+/// <summary>One shaded span of a band panel: its words ("Glucose P25–P75") and its low and high edge fields.</summary>
+internal sealed record ReportBandSpan(string Label, string Low, string High)
+{
+    /// <summary>
+    /// The spans of <paramref name="band"/> (two edges, or four: outer low, inner low, inner high, outer high), inner first.
+    /// Two edges of one family ("Glucose P25", "Glucose P75") share its name once; edges of two families keep both names.
+    /// </summary>
+    public static IReadOnlyList<ReportBandSpan> Of(IReadOnlyList<ReportField> band)
+    {
+        static ReportBandSpan Span(ReportField low, ReportField high)
+        {
+            var a = low.Label.Split(' ');
+            var b = high.Label.Split(' ');
+            var label = a.Length == b.Length && a.Length > 1 && a[..^1].SequenceEqual(b[..^1])
+                ? $"{string.Join(' ', a[..^1])} {a[^1]}–{b[^1]}"
+                : $"{low.Label} to {high.Label}";
+            return new ReportBandSpan(label, low.Name, high.Name);
+        }
+        return band.Count switch
+        {
+            4 => [Span(band[1], band[2]), Span(band[0], band[3])],
+            2 => [Span(band[0], band[1])],
+            _ => [],
+        };
+    }
+}
 
 /// <summary>An event cohort a panel asked for: its number (1 to 3, in the order sent) and the label that names its filter.</summary>
 internal sealed record ReportCohort(int Number, string Label);

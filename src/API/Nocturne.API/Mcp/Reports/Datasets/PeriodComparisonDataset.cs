@@ -37,6 +37,8 @@ internal sealed class PeriodComparisonDataset : IReportDataset
         new("b", "Period B", ReportFieldKind.Number, null, "The figure over period B, in the row's unit; empty where B has no data."),
         new("delta", "Change", ReportFieldKind.Number, null, "B minus A, in the row's unit."),
         new("changePercent", "Change (%)", ReportFieldKind.Number, "%", "The change as a percent of A."),
+        new("direction", "Direction", ReportFieldKind.Category, null,
+            "up, down or flat: which way B moved from A at the figure's rounding; empty where a side has no value."),
         new("unit", "Unit", ReportFieldKind.Category, null, "The row's unit: %, mg/dL or mmol/L, min, U, g; empty for an index."),
         new("verdict", "Verdict", ReportFieldKind.Category, null,
             "better or worse: whether B's value is better than A's for this figure; empty where neither a rise nor a fall is better, or nothing changed."),
@@ -53,6 +55,9 @@ internal sealed class PeriodComparisonDataset : IReportDataset
     public TimeSpan MaxRange(ReportPrimitive primitive) => TimeSpan.FromDays(PeriodComparisonParameters.MaxPeriodDays);
 
     public int PointBudget => 40;
+
+    /// <summary>Each panel reads and analyses two periods, so a report holds at most two.</summary>
+    public int MaxPanelsPerReport => 2;
 
     public IReadOnlyList<IReadOnlyDictionary<string, object?>> SampleRows { get; } =
     [
@@ -199,7 +204,7 @@ internal sealed class PeriodComparisonDataset : IReportDataset
         var now = request.Now ?? request.Services.GetRequiredService<TimeProvider>().GetUtcNow();
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
         var (a, b) = Periods(parameters, today);
-        var window = new ReportWindow(Start(a.From, zone).ToUnixTimeMilliseconds(), Start(b.To.AddDays(1), zone).ToUnixTimeMilliseconds());
+        var window = WindowOf(a, b, zone);
         var labels = new Dictionary<string, string> { ["a"] = a.Label, ["b"] = b.Label };
         var context = string.Create(CultureInfo.InvariantCulture,
             $"{a.Label}: {a.From:yyyy-MM-dd} to {a.To:yyyy-MM-dd}. {b.Label}: {b.From:yyyy-MM-dd} to {b.To:yyyy-MM-dd}. Local days.");
@@ -229,18 +234,42 @@ internal sealed class PeriodComparisonDataset : IReportDataset
             Context = context,
             Window = window,
             FieldLabels = labels,
-            LinkQuery =
-            [
-                new("preset", "custom"),
-                new("aFrom", a.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-                new("aTo", a.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-                new("aLabel", a.Label),
-                new("bFrom", b.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-                new("bTo", b.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
-                new("bLabel", b.Label),
-            ],
+            LinkQuery = LinkQueryOf(parameters, a, b),
         };
     }
+
+    /// <summary>From the earlier period's first day to the later period's last, whichever order A and B are in.</summary>
+    internal static ReportWindow WindowOf(Period a, Period b, TimeZoneInfo zone)
+    {
+        var from = a.From < b.From ? a.From : b.From;
+        var to = a.To > b.To ? a.To : b.To;
+        return new ReportWindow(Start(from, zone).ToUnixTimeMilliseconds(), Start(to.AddDays(1), zone).ToUnixTimeMilliseconds());
+    }
+
+    /// <summary>
+    /// The web comparison page's query: a preset by its name, so the page writes its own (translated)
+    /// period names; dates only for periods the caller named.
+    /// </summary>
+    internal static IReadOnlyList<KeyValuePair<string, string?>> LinkQueryOf(PeriodComparisonParameters parameters, Period a, Period b)
+    {
+        if (parameters.A is null)
+            return [new("preset", PresetName(parameters.Preset ?? ReportComparisonPreset.Last14Prior14))];
+        string Day(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        return
+        [
+            new("preset", "custom"),
+            new("aFrom", Day(a.From)), new("aTo", Day(a.To)), new("aLabel", a.Label),
+            new("bFrom", Day(b.From)), new("bTo", Day(b.To)), new("bLabel", b.Label),
+        ];
+    }
+
+    internal static string PresetName(ReportComparisonPreset preset) => preset switch
+    {
+        ReportComparisonPreset.Last7Prior7 => "last7-prior7",
+        ReportComparisonPreset.Last30Prior30 => "last30-prior30",
+        ReportComparisonPreset.ThisMonthLastMonth => "thisMonth-lastMonth",
+        _ => "last14-prior14",
+    };
 
     private static DateTimeOffset Start(DateOnly day, TimeZoneInfo zone)
     {
@@ -299,6 +328,7 @@ internal sealed class PeriodComparisonDataset : IReportDataset
                 ["b"] = vb,
                 ["delta"] = delta,
                 ["changePercent"] = change,
+                ["direction"] = delta switch { null => null, 0 => "flat", > 0 => "up", _ => "down" },
                 ["unit"] = glucose ? (useMmol ? "mmol/L" : "mg/dL") : metric.Unit,
                 ["verdict"] = verdict,
                 ["color"] = metric.Color,

@@ -112,6 +112,12 @@ internal sealed record ReportPanelResult
     /// <summary>A glucose chart of event cohorts: single events' glucose, drawn faintly under each cohort's band.</summary>
     public IReadOnlyList<ReportTrace> Traces { get; init; } = [];
 
+    /// <summary>
+    /// A band panel's spans, inner first: the label the view prints for each and the fields of its low and
+    /// high edge. Empty for a panel without a band.
+    /// </summary>
+    public IReadOnlyList<ReportBandSpan> Spans { get; init; } = [];
+
     /// <summary>At most six figures the view prints under the panel, label above value; empty where the panel has none.</summary>
     public IReadOnlyList<ReportFact> Facts { get; init; } = [];
 

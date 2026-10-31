@@ -129,6 +129,10 @@ public class EventResponseDefinition
     /// <c>UnannouncedRises.CorroborationBasalHours</c>.
     /// </summary>
     public bool RequireCorroboration { get; set; }
+
+    /// <summary>Keep each listed event's own glucose per slot (<see cref="EventResponseEvent.GlucoseTrace"/>) for a report that draws it. Not served.</summary>
+    [JsonIgnore]
+    public bool IncludeTraces { get; set; }
 }
 
 /// <summary>The bounds of an <see cref="EventResponseDefinition"/>, as the builder offers them.</summary>

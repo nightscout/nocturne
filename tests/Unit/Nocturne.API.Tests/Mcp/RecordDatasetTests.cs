@@ -348,8 +348,8 @@ public class RecordDatasetTests
 
         var full = result.Panels[0];
         full.AtRangeLimit.Should().BeTrue();
-        full.RangeLimit.Should().Be("This chart covers at most 90 days.");
-        full.Summary.Should().EndWith("Cut to the latest 90 days: the range asked for was longer. This chart covers at most 90 days.");
+        full.RangeLimit.Should().Be("This panel covers at most 90 days.");
+        full.Summary.Should().EndWith("Cut to the latest 90 days: the range asked for was longer. This panel covers at most 90 days.");
         result.Panels[1].AtRangeLimit.Should().BeFalse();
         result.Panels[1].RangeLimit.Should().BeNull();
     }

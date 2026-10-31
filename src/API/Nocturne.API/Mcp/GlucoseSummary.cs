@@ -120,7 +120,7 @@ internal static class GlucoseSummary
     /// sentence (the episodes, and on a chart the treatments drawn) and its range line.
     /// </summary>
     public static (IReadOnlyList<Reports.ReportFact> Facts, string Sentence, string Context) Facts(
-        DashboardChartData data, IStatisticsService statistics, bool useMmol, DateTimeOffset from, DateTimeOffset to, bool chart)
+        DashboardChartData data, IStatisticsService statistics, bool useMmol, DateTimeOffset from, DateTimeOffset to, bool chart, bool treatments)
     {
         var basic = statistics.CalculateBasicStats(data.GlucoseData.Select(r => r.Sgv));
         var context = $"{Reports.ReportFacts.Window(from, to)}. {Reports.ReportFacts.Plural(basic.Count, "reading")}.";
@@ -140,7 +140,9 @@ internal static class GlucoseSummary
             Reports.ReportFacts.Glucose("Highest", basic.Max, useMmol),
         ];
         var sentence = $"{Reports.ReportFacts.Plural(tir.Episodes.BelowRange, "episode")} below range and {tir.Episodes.AboveRange} above it.";
-        if (chart)
+        if (chart && !treatments)
+            sentence += " Boluses and carbs need the treatments.read scope, which this token does not hold.";
+        else if (chart)
             sentence += $" {data.BolusMarkers.Count} {(data.BolusMarkers.Count == 1 ? "bolus" : "boluses")} and "
                 + $"{data.CarbMarkers.Count} {(data.CarbMarkers.Count == 1 ? "carb entry" : "carb entries")} on the chart.";
         return (facts, sentence, context);
