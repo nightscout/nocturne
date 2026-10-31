@@ -144,23 +144,9 @@
   const withUnit = (value: number | undefined, field: ReportField) =>
     `${formatReportValue(value, field, format)}${field.unit ? ` ${field.unit}` : ""}`;
 
-  /** "P25–P75" from "Glucose P25" and "Glucose P75": the edge labels without the words they share. */
-  function spanLabel(low: ReportField, high: ReportField): string {
-    const a = low.label.split(" ");
-    const b = high.label.split(" ");
-    let shared = 0;
-    while (shared < a.length - 1 && shared < b.length - 1 && a[shared] === b[shared]) shared++;
-    return `${a.slice(shared).join(" ")}–${b.slice(shared).join(" ")}`;
-  }
+  /** The API's span labels, inner first; the inner span is P25 to P75 of the aggregate, the outer P10 to P90. */
   const spans = $derived(
-    edges.length === 4
-      ? [
-          { label: spanLabel(edges[1], edges[2]), low: "p25", high: "p75" } as const,
-          { label: spanLabel(edges[0], edges[3]), low: "p10", high: "p90" } as const,
-        ]
-      : edges.length === 2
-        ? [{ label: spanLabel(edges[0], edges[1]), low: "p25", high: "p75" } as const]
-        : [],
+    (panel.spans ?? []).map((span, i) => ({ label: span.label, low: i === 0 ? ("p25" as const) : ("p10" as const), high: i === 0 ? ("p75" as const) : ("p90" as const) })),
   );
 
   /** The API's sentences for every series at a slot, primary range first. */
@@ -296,7 +282,7 @@
                   {@const aggregate = group.slots[index]?.aggregate}
                   {#if aggregate}
                     <Tooltip.Item label={group.name} value={withUnit(aggregate.p50, median)} color={group.colors.median} />
-                    {#each spans as span (span.label)}
+                    {#each spans as span (span.low)}
                       {#if aggregate[span.low] !== undefined && aggregate[span.high] !== undefined}
                         <Tooltip.Item
                           label={span.label}

@@ -8,9 +8,9 @@
   import { resolveChartColor } from "../colors.js";
   import { isChartColor } from "../enums.js";
   import type { ChartFormat } from "../format.js";
-  import type { GlucoseRange } from "../print/patterns.js";
   import ComparisonRow from "./ComparisonRow.svelte";
   import StackedBar, { type StackedBarSegment } from "./StackedBar.svelte";
+  import { GLUCOSE_PATTERNS } from "./bar-layout.js";
   import { comparisonBar } from "./comparison.js";
   import type { ReportPanel, ReportRow } from "./types.js";
 
@@ -31,13 +31,6 @@
     return unit === "" ? shown : unit === "%" ? `${shown}%` : `${shown} ${unit}`;
   }
 
-  const PATTERNS: Partial<Record<string, GlucoseRange>> = {
-    "glucose-very-low": "very-low",
-    "glucose-low": "low",
-    "glucose-in-range": "in-range",
-    "glucose-high": "high",
-    "glucose-very-high": "very-high",
-  };
 
   /** One period's time in each range, from the rows whose colour names a glucose range, in their order. */
   function bands(side: "a" | "b"): StackedBarSegment[] {
@@ -45,7 +38,7 @@
       const color = row.color;
       const value = num(row, side);
       if (!isChartColor(color) || value === null) return [];
-      return [{ key: text(row, "metric"), label: text(row, "label"), value, color: resolveChartColor(color), pattern: PATTERNS[color] ?? null }];
+      return [{ key: text(row, "metric"), label: text(row, "label"), value, color: resolveChartColor(color), pattern: GLUCOSE_PATTERNS[color] ?? null }];
     });
   }
 
@@ -77,7 +70,7 @@
       bText: b === null ? emptyText : withUnit(b, unit),
       deltaText,
       verdict,
-      ...comparisonBar(change ?? 0, delta === null || delta === 0),
+      ...comparisonBar(change ?? 0, row.direction !== "up" && row.direction !== "down"),
     };
   }
 </script>

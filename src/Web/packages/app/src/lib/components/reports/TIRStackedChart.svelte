@@ -89,6 +89,7 @@
     emphasis="target"
     {inset}
     {markers}
+    tooltipValue={(value) => ({ value: value / 100, format: "percent" })}
   />
 
   {#if thresholds || personalRange}

@@ -29,7 +29,8 @@ export interface BarLayout {
   max: number;
 }
 
-const GLUCOSE_PATTERNS: Partial<Record<string, GlucoseRange>> = {
+/** The print texture of each glucose range's theme colour. */
+export const GLUCOSE_PATTERNS: Partial<Record<string, GlucoseRange>> = {
   "glucose-very-low": "very-low",
   "glucose-low": "low",
   "glucose-in-range": "in-range",

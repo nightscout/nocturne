@@ -100,6 +100,8 @@ export interface ReportPanel {
   link?: string | null;
   /** Treatment markers a time series panel draws on its line. */
   markers?: ReportMarker[];
+  /** A band panel's spans, inner first: the API's words for each and its edge fields. */
+  spans?: { label: string; low: string; high: string }[];
   /** At most six figures the API picked for the panel, label above value. */
   facts?: ReportFact[];
   /** The API's one sentence under the facts; for a panel that was not drawn, why. */

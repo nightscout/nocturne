@@ -229,6 +229,7 @@ describe("time_series markers", () => {
       metric, group, label, a, b, unit, verdict, color,
       delta: a !== null && b !== null ? Math.round((b - a) * 10) / 10 : null,
       changePercent: a !== null && b !== null && a !== 0 ? Math.round(((b - a) / a) * 1000) / 10 : null,
+      direction: a === null || b === null ? null : b > a ? "up" : b < a ? "down" : "flat",
     });
     const comparison = {
       id: "comparison", title: "Two periods side by side", dataset: "period_comparison", primitive: "comparison", status: "ok", window,

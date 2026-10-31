@@ -42,8 +42,10 @@
     orientation?: "vertical" | "horizontal";
     /** The whole the parts are out of. */
     max?: number;
-    /** A part's value as the key and tooltip print it. */
+    /** A part's value as the key prints it, and the tooltip unless `tooltipValue` is given. */
     formatValue?: (value: number) => string;
+    /** A part's value as the tooltip prints it: a text, or a number with a layerchart format. */
+    tooltipValue?: (value: number) => { value: number | string; format?: "percent" };
     /** The key: beside the bar when vertical; when horizontal, under it on paper only unless keyOnScreen. */
     showLabels?: boolean;
     keyOnScreen?: boolean;
@@ -60,6 +62,7 @@
     orientation = "vertical",
     max = 100,
     formatValue = (value: number) => `${Math.round(value)}%`,
+    tooltipValue,
     showLabels = true,
     keyOnScreen = false,
     compact = false,
@@ -69,6 +72,7 @@
   }: Props = $props();
 
   const vertical = $derived(orientation === "vertical");
+  const tip = (value: number) => tooltipValue?.(value) ?? { value: formatValue(value), format: undefined };
 
   // Cumulative positions, no minimum size: a 0 part draws nothing, its key still prints it.
   const stacked = $derived.by(() => {
@@ -160,9 +164,11 @@
   <Tooltip.Root>
       <Tooltip.List>
         {#each segments.toReversed() as segment (segment.key)}
-          <Tooltip.Item label={segment.label} value={formatValue(segment.value)} color={segment.color} />
+          {@const shown = tip(segment.value)}
+          <Tooltip.Item label={segment.label} value={shown.value} format={shown.format} color={segment.color} />
           {#if inset && segment.key === inset.within && inset.value > 0}
-            <Tooltip.Item label={inset.label} value={formatValue(inset.value)} color={inset.color} />
+            {@const insetShown = tip(inset.value)}
+            <Tooltip.Item label={inset.label} value={insetShown.value} format={insetShown.format} color={inset.color} />
           {/if}
         {/each}
       </Tooltip.List>

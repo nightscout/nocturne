@@ -286,6 +286,10 @@ describe("ReportView", () => {
         id: "bands", dataset: "event_response", primitive: "range_bands", bindings: eventsSpec.panels[0].bindings, status: "ok", window,
         fields: bandFields, rows: [...slotRows("Meal: all", 1, 0), ...slotRows("Correction bolus: all", 2, 40)],
         cohorts: [{ number: 1, label: "Meal: all" }, { number: 2, label: "Correction bolus: all" }],
+        spans: [
+          { label: "Glucose P25–P75", low: "glucoseP25", high: "glucoseP75" },
+          { label: "Glucose P10–P90", low: "glucoseP10", high: "glucoseP90" },
+        ],
         summary: "Cohort 1 (Meal: all): 12 events.", link: "https://dev.nocturne.localhost/reports/loop-analysis/meals-and-events?anchor1=Meal",
       },
       {
@@ -358,7 +362,11 @@ describe("ReportView", () => {
 
     await expect.poll(() => selectEvent.mock.calls.length).toBe(1);
     const text = selectEvent.mock.calls[0][0] as string;
-    expect(text).toMatch(/^Meal: all, -?\d+ minutes from the event: median \d+ mg\/dL\. Correction bolus: all, /);
+    const minute = Number(/^Meal: all, (-?\d+) minutes/.exec(text)?.[1]);
+    const at = (rows: ReturnType<typeof slotRows>) => rows.find((r) => r.minute === minute)!.sentence;
+    expect(text).toBe(`${at(slotRows("Meal: all", 1, 0))} ${at(slotRows("Correction bolus: all", 2, 40))}`);
+    expect(minute).toBeGreaterThan(minutes[0]);
+    expect(minute).toBeLessThan(minutes.at(-1)!);
   });
 
   it("gives one glucose series the glucose chart's treatment: target shaded, limits drawn, median coloured by range", async () => {
@@ -451,14 +459,14 @@ describe("ReportView", () => {
     const refine = vi.fn(async () => {});
     const atLimit = {
       ...eventResult,
-      panels: [{ ...eventResult.panels[0], atRangeLimit: true, rangeLimit: "This chart covers at most 3 days." }, eventResult.panels[1]],
+      panels: [{ ...eventResult.panels[0], atRangeLimit: true, rangeLimit: "This panel covers at most 3 days." }, eventResult.panels[1]],
     };
     render(ReportView, { result: { structuredContent: atLimit }, locale: "en-US", refine });
 
     const buttons = page.getByRole("button", { name: "Load earlier data" });
     await expect.element(buttons.first()).toBeDisabled();
-    await expect.element(buttons.first()).toHaveAttribute("title", "This chart covers at most 3 days.");
-    await expect.element(page.getByTestId("range-limit")).toHaveTextContent("This chart covers at most 3 days.");
+    await expect.element(buttons.first()).toHaveAttribute("title", "This panel covers at most 3 days.");
+    await expect.element(page.getByTestId("range-limit")).toHaveTextContent("This panel covers at most 3 days.");
     await expect.element(buttons.nth(1)).toBeEnabled();
   });
 
