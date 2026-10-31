@@ -1,4 +1,6 @@
 using System.Text.Json.Serialization;
+using Nocturne.API.Extensions;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 
@@ -43,6 +45,10 @@ internal enum ReportFieldKind
 /// <param name="GlucoseScale">Drawn on the glucose scale and coloured by the glucose thresholds.</param>
 /// <param name="Marker">Drawn on a time series as the dashboard's bolus or carb marker at each value, not as a line.</param>
 /// <param name="Step">The value holds until the next row, so a line of it is drawn as steps.</param>
+/// <param name="Companion">
+/// Sent with every row of the panel, bound or not: a row's sentence, or the cohort and range a band
+/// row belongs to, which the view needs to colour and name what it draws.
+/// </param>
 /// <param name="ColorField">
 /// The field each row carries its theme colour in, for a bar of this category; the runner sends it
 /// with the field, so a bar's colour is the data's, never the view's.
@@ -58,9 +64,16 @@ internal sealed record ReportField(
     bool GlucoseScale = false,
     ReportMarkerKind? Marker = null,
     bool Step = false,
-    string? ColorField = null)
+    string? ColorField = null,
+    bool Companion = false)
 {
     public const string GlucoseUnit = "glucose";
+
+    /// <summary>
+    /// A row field holding one sentence the API wrote about the row, which a chart hands the assistant
+    /// when the reader picks the row; a <see cref="Companion"/> field.
+    /// </summary>
+    public const string SentenceField = "sentence";
 
     /// <summary>Whether the field's values are glucose, or glucose per something, so written in the display unit.</summary>
     public bool InGlucoseUnit => Unit is not null && (Unit == GlucoseUnit || Unit.StartsWith(GlucoseUnit + "/", StringComparison.Ordinal));
@@ -165,7 +178,13 @@ internal sealed record ReportDatasetOutput
 
     /// <summary>Treatment markers to draw on a time series panel.</summary>
     public IReadOnlyList<ReportMarker> Markers { get; init; } = [];
+
+    /// <summary>Every cohort the panel asked for, in order, with its label, shown or not.</summary>
+    public IReadOnlyList<ReportCohort> Cohorts { get; init; } = [];
 }
+
+/// <summary>An event cohort a panel asked for: its number (1 to 3, in the order sent) and the label that names its filter.</summary>
+internal sealed record ReportCohort(int Number, string Label);
 
 internal sealed record ReportOmittedField(string Field, string Scope);
 
@@ -183,7 +202,20 @@ internal sealed record ReportResolution(
 
 /// <summary>Glucose cut-points in the display unit, and the mg/dL in one display unit (1, or 18.0182 for mmol/L).</summary>
 /// <remarks>The view needs the factor to place the continuous glucose spectrum, whose stops are in mg/dL, on a display-unit axis.</remarks>
-internal sealed record ReportThresholds(double VeryLow, double Low, double High, double VeryHigh, double MgdlPerUnit);
+internal sealed record ReportThresholds(double VeryLow, double Low, double High, double VeryHigh, double MgdlPerUnit)
+{
+    /// <summary><paramref name="thresholds"/> (mg/dL) in the display unit; the clinical consensus limits by default.</summary>
+    public static ReportThresholds Of(GlycemicThresholds? thresholds, bool useMmol)
+    {
+        var t = thresholds ?? new GlycemicThresholds();
+        return new ReportThresholds(
+            GlucoseUnits.Scale(t.VeryLow, useMmol),
+            GlucoseUnits.Scale(t.Low, useMmol),
+            GlucoseUnits.Scale(t.High, useMmol),
+            GlucoseUnits.Scale(t.VeryHigh, useMmol),
+            useMmol ? GlucoseConstants.MgdlPerMmol : 1);
+    }
+}
 
 /// <summary>The registered datasets, by name.</summary>
 internal interface IReportDatasetRegistry

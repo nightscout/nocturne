@@ -41,12 +41,12 @@ internal sealed class EventResponseDataset : IReportDataset
     private static readonly IReadOnlyList<ReportField> SlotFields =
     [
         new("series", "Series", ReportFieldKind.Category, null, "The cohort and range the row belongs to, as a label."),
-        new("cohort", "Cohort", ReportFieldKind.Number, null, "The cohort's number, 1 to 3, in the order the cohorts were sent."),
-        new("range", "Range", ReportFieldKind.Category, null, "primary, or comparison for the comparison range."),
+        new("cohort", "Cohort", ReportFieldKind.Number, null, "The cohort's number, 1 to 3, in the order the cohorts were sent.", Companion: true),
+        new("range", "Range", ReportFieldKind.Category, null, "primary, or comparison for the comparison range.", Companion: true),
         new("minute", "Minutes from event", ReportFieldKind.Offset, "min", "Start of the five-minute slot, minutes from the event; negative before it."),
         new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of glucose across the cohort's events in the slot."),
         new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of glucose."),
-        new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median glucose."),
+        new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median glucose.", GlucoseScale: true),
         new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of glucose."),
         new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of glucose."),
         new("deltaP10", "Change P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of glucose minus the glucose at the event."),
@@ -59,6 +59,8 @@ internal sealed class EventResponseDataset : IReportDataset
         new("netLoopCorrectionP50", "Net loop correction median", ReportFieldKind.Number, "U/h",
             "Median of the algorithm's temp basal above schedule plus its automatic boluses.", Scope.TreatmentsRead, ChartColor.InsulinBasal),
         new("events", "Events", ReportFieldKind.Number, null, "Events with a glucose value in the slot."),
+        new(ReportField.SentenceField, "Sentence", ReportFieldKind.Category, null,
+            "One sentence that states the slot's glucose figures for its cohort; the view hands it to the assistant when the slot is picked.", Companion: true),
     ];
 
     private static readonly IReadOnlyList<ReportField> EventFields =
@@ -108,10 +110,11 @@ internal sealed class EventResponseDataset : IReportDataset
     [
         new Dictionary<string, object?>
         {
-            ["series"] = "Cohort 1: Meal", ["cohort"] = 1, ["range"] = "primary", ["minute"] = 60,
+            ["series"] = "Meal: all", ["cohort"] = 1, ["range"] = "primary", ["minute"] = 60,
             ["glucoseP10"] = 120.0, ["glucoseP25"] = 140.0, ["glucoseP50"] = 165.0, ["glucoseP75"] = 190.0, ["glucoseP90"] = 215.0,
             ["deltaP10"] = 10.0, ["deltaP25"] = 30.0, ["deltaP50"] = 55.0, ["deltaP75"] = 80.0, ["deltaP90"] = 100.0,
             ["iobP50"] = 2.4, ["cobP50"] = 22.0, ["netLoopCorrectionP50"] = 0.6, ["events"] = 14,
+            [ReportField.SentenceField] = "Meal: all, 60 minutes after the meal: median 165 mg/dL, middle half 140 to 190 mg/dL, 14 events.",
         },
         new Dictionary<string, object?>
         {
@@ -215,8 +218,10 @@ internal sealed class EventResponseDataset : IReportDataset
         report = Serve(resolved, report, request);
         report.IgnoredFilters.AddRange(ignored);
 
-        var foodNames = await FoodNamesAsync(services, definition, foodRead, cancellationToken);
-        var labels = definition.Cohorts.ToDictionary(c => c.Cohort, c => CohortLabel(c, number[c.Cohort], foodNames));
+        var askedDefinition = parameters.ToEventQuery(asked).ToDefinition();
+        var foodNames = await FoodNamesAsync(services, askedDefinition, foodRead, cancellationToken);
+        var askedLabels = askedDefinition.Cohorts.Select(c => CohortLabel(c, foodNames, foodRead)).ToList();
+        var labels = definition.Cohorts.ToDictionary(c => c.Cohort, c => askedLabels[number[c.Cohort] - 1]);
         var slotMinutes = EventResponseCalculator.SlotMinutes(definition);
 
         var events = report.Primary.Events;
@@ -245,9 +250,10 @@ internal sealed class EventResponseDataset : IReportDataset
         return new ReportDatasetOutput
         {
             Rows = rows,
-            Summary = Summarise(report, labels, notes, useMmol),
+            Summary = Summarise(report, labels, number, notes, useMmol),
             Omitted = Omitted(report, fieldSeries),
             Window = Window(report),
+            Cohorts = [.. askedLabels.Select((label, i) => new ReportCohort(i + 1, label))],
         };
     }
 
@@ -288,10 +294,23 @@ internal sealed class EventResponseDataset : IReportDataset
         return foods.ToDictionary(f => f.Key, f => f.Value.Name);
     }
 
-    /// <summary>A cohort's number, kind and filters: "Cohort 2: Meal, 06:00-10:00, Mon Tue, foods Penne or Rice".</summary>
-    internal static string CohortLabel(EventCohortDefinition cohort, int number, IReadOnlyDictionary<Guid, string> foodNames)
+    /// <summary>
+    /// A cohort's kind and the filter that sets it apart: "Meal: Penne or Rice, 06:00-10:00, Mon Tue",
+    /// or "Meal: all" with no filter, so two cohorts of one kind never read the same.
+    /// </summary>
+    /// <param name="foodRead">The token reads foods; without it a food filter is named, not its foods.</param>
+    internal static string CohortLabel(EventCohortDefinition cohort, IReadOnlyDictionary<Guid, string> foodNames, bool foodRead = true)
     {
-        var parts = new List<string> { cohort.Anchor.ToString() };
+        var parts = new List<string>();
+        if (cohort.HasFoodFilter && !foodRead)
+            parts.Add("a food filter");
+        else
+        {
+            if (cohort.FoodIds is { Count: > 0 } ids)
+                parts.Add(string.Join(" or ", ids.Select(id => foodNames.GetValueOrDefault(id, id.ToString()))));
+            if (cohort.FoodCategory is { } category && !string.IsNullOrWhiteSpace(category))
+                parts.Add($"category {category.Trim()}");
+        }
         if (cohort.FromMinute is not null || cohort.ToMinute is not null)
             parts.Add($"{Clock(cohort.FromMinute ?? 0)}-{Clock(cohort.ToMinute ?? 0)}");
         if (cohort.MinGrams is not null || cohort.MaxGrams is not null)
@@ -299,11 +318,47 @@ internal sealed class EventResponseDataset : IReportDataset
                 : cohort.MinGrams is { } atLeast ? $"at least {Number(atLeast)} g" : $"at most {Number(cohort.MaxGrams!.Value)} g");
         if (cohort.DaysOfWeek is { Count: > 0 } days)
             parts.Add(string.Join(' ', days.Select(d => CultureInfo.InvariantCulture.DateTimeFormat.GetAbbreviatedDayName(d))));
-        if (cohort.FoodIds is { Count: > 0 } ids)
-            parts.Add("foods " + string.Join(" or ", ids.Select(id => foodNames.GetValueOrDefault(id, id.ToString()))));
-        if (cohort.FoodCategory is { } category)
-            parts.Add($"food category {category}");
-        return $"Cohort {number}: {string.Join(", ", parts)}";
+        return $"{AnchorWords(cohort.Anchor)}: {(parts.Count == 0 ? "all" : string.Join(", ", parts))}";
+    }
+
+    /// <summary>The anchor as the start of a sentence or label: "Meal", "Correction bolus".</summary>
+    internal static string AnchorWords(EventAnchorKind anchor) => anchor switch
+    {
+        EventAnchorKind.Meal => "Meal",
+        EventAnchorKind.CorrectionBolus => "Correction bolus",
+        EventAnchorKind.SensorStart => "Sensor start",
+        EventAnchorKind.ExerciseStart => "Exercise start",
+        EventAnchorKind.OverrideStart => "Override start",
+        EventAnchorKind.TemporaryTargetStart => "Temporary target start",
+        EventAnchorKind.UnannouncedRise => "Unannounced rise",
+        _ => anchor.ToString(),
+    };
+
+    /// <summary>
+    /// The sentence for one cohort's slot: where it is from the event, and its glucose median, middle
+    /// half and count of events.
+    /// </summary>
+    internal static string SlotSentence(string label, EventAnchorKind anchor, int minute, bool comparison, LoopAnalysisAggregate? glucose, bool useMmol)
+    {
+        var noun = AnchorWords(anchor).ToLowerInvariant();
+        var when = minute switch
+        {
+            0 => $"at the {noun}",
+            > 0 => $"{minute} minutes after the {noun}",
+            _ => $"{-minute} minutes before the {noun}",
+        };
+        var who = comparison ? $"{label} (comparison range)" : label;
+        return $"{who}, {when}: {GlucoseSpread(glucose, glucose?.N ?? 0, "event", useMmol)}";
+    }
+
+    /// <summary>"median 175 mg/dL, middle half 140 to 210 mg/dL, 32 events.", or "no readings." for an empty slot.</summary>
+    internal static string GlucoseSpread(LoopAnalysisAggregate? glucose, int n, string noun, bool useMmol)
+    {
+        if (glucose is null || n == 0)
+            return "no readings.";
+        var unit = useMmol ? "mmol/L" : "mg/dL";
+        string G(double mgdl) => Number(Glucose(mgdl, useMmol)!.Value, useMmol ? "0.0" : "0");
+        return $"median {G(glucose.P50)} {unit}, middle half {G(glucose.P25)} to {G(glucose.P75)} {unit}, {n} {(n == 1 ? noun : noun + "s")}.";
     }
 
     private static List<IReadOnlyDictionary<string, object?>> SlotRows(
@@ -323,6 +378,7 @@ internal sealed class EventResponseDataset : IReportDataset
                 if (!labels.TryGetValue(cohort.Cohort, out var label))
                     continue;
                 var series = name == "primary" ? label : label + " (comparison)";
+                var anchor = report.Definition.Cohorts.FirstOrDefault(c => c.Cohort == cohort.Cohort)?.Anchor ?? EventAnchorKind.Meal;
                 for (var k = 0; k < cohort.Slots.Count && k < slotMinutes.Count; k++)
                 {
                     var slot = cohort.Slots[k];
@@ -346,6 +402,7 @@ internal sealed class EventResponseDataset : IReportDataset
                         ["cobP50"] = Round(slot.Cob?.P50, 1),
                         ["netLoopCorrectionP50"] = Round(slot.NetLoopCorrection?.P50, 3),
                         ["events"] = slot.Glucose?.N ?? 0,
+                        [ReportField.SentenceField] = SlotSentence(label, anchor, slotMinutes[k], name == "comparison", slot.Glucose, useMmol),
                     });
                 }
             }
@@ -441,6 +498,7 @@ internal sealed class EventResponseDataset : IReportDataset
     internal static string Summarise(
         EventResponseReport report,
         IReadOnlyDictionary<int, string> labels,
+        IReadOnlyDictionary<int, int> number,
         IReadOnlyList<string> notes,
         bool useMmol)
     {
@@ -467,7 +525,7 @@ internal sealed class EventResponseDataset : IReportDataset
         foreach (var cohort in report.Definition.Cohorts)
         {
             var result = report.Primary.Cohorts.FirstOrDefault(c => c.Cohort == cohort.Cohort);
-            var label = labels[cohort.Cohort];
+            var label = $"Cohort {number.GetValueOrDefault(cohort.Cohort, cohort.Cohort)} ({labels[cohort.Cohort]})";
             if (result is null)
             {
                 lines.Add($"{label}: no data.");

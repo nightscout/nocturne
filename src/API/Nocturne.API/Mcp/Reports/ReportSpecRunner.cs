@@ -158,7 +158,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             .Select(name => catalogue.Single(f => f.Name == name).ColorField)
             .OfType<string>()
             .Where(name => catalogue.Any(f => f.Name == name));
-        var fields = bound.Concat(colours).Distinct(StringComparer.Ordinal)
+        var companions = catalogue.Where(f => f.Companion).Select(f => f.Name);
+        var fields = bound.Concat(colours).Concat(companions).Distinct(StringComparer.Ordinal)
             .Where(name => !omitted.Contains(name))
             .Select(name => catalogue.Single(f => f.Name == name).ResolveUnit(useMmol))
             .ToList();
@@ -175,13 +176,14 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Window = output.Window ?? new ReportWindow(from.ToUnixTimeMilliseconds(), to.ToUnixTimeMilliseconds()),
             Fields = fields,
             Rows = [.. output.Rows.Select(row => (IReadOnlyDictionary<string, object?>)names.ToDictionary(n => n, n => row.GetValueOrDefault(n)))],
-            Thresholds = output.Thresholds,
+            Thresholds = output.Thresholds ?? (fields.Any(f => f.GlucoseScale) ? ReportThresholds.Of(null, useMmol) : null),
             Chart = panel.Primitive == ReportPrimitive.GlucoseChart ? output.Chart : null,
             OmittedScopes = output.OmittedScopes,
             Summary = output.Summary,
             Omitted = output.Omitted,
             Resolution = output.Resolution,
             Markers = panel.Primitive == ReportPrimitive.TimeSeries ? MarkersFor(fields, output.Markers) : [],
+            Cohorts = output.Cohorts,
         };
     }
 

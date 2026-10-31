@@ -13,7 +13,8 @@
   import { formatClockTime, type ChartFormat, type GlucoseUnits } from "../format.js";
   import type { ChartLabels } from "../labels.js";
   import ReportMarkerLayer, { type PlacedMarker } from "./ReportMarkerLayer.svelte";
-  import { lineStopsFor, type LineColorMode } from "../view/glucose-gradient-stops.js";
+  import type { LineColorMode } from "../view/glucose-gradient-stops.js";
+  import { reportGlucoseStops } from "./glucose-scale.js";
   import {
     boundFields,
     formatMinuteOfDay,
@@ -21,7 +22,6 @@
     formatReportValue,
     type ReportPanel,
     type ReportRow,
-    type ReportThresholds,
   } from "./types.js";
 
   interface Props {
@@ -92,13 +92,6 @@
     for (const p of points) for (const n of names) max = Math.max(max, num(p.row, n) ?? 0);
     return max > 0 ? max * 1.1 : 1;
   });
-
-  // The stops are placed in mg/dL; the axis is in the display unit, which the API relates to mg/dL.
-  function glucoseStops(t: ReportThresholds, yScale: (value: number) => number, height: number) {
-    const f = t.mgdlPerUnit;
-    const mgdl = { veryLow: t.veryLow * f, low: t.low * f, high: t.high * f, veryHigh: t.veryHigh * f };
-    return lineStopsFor(lineColorMode, mgdl, (value) => yScale(value / f), height);
-  }
 
   /**
    * Where each of the panel's treatment markers sits: on the first line at the reading nearest it, a
@@ -188,7 +181,7 @@
             {#each lines as field (field.name)}
               {#if field.glucoseScale && thresholds}
                 <LinearGradient
-                  stops={glucoseStops(thresholds, context.yScale, context.height)}
+                  stops={reportGlucoseStops(thresholds, lineColorMode, context.yScale, context.height)}
                   units="userSpaceOnUse"
                   vertical
                   y1="0"

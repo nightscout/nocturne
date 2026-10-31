@@ -172,12 +172,7 @@ internal sealed class GlucoseSeriesDataset : IReportDataset
             Summary = summary,
             Omitted = omitted,
             OmittedScopes = GlucoseSummary.OmittedScopes(request.HasScope),
-            Thresholds = new ReportThresholds(
-                GlucoseUnits.Scale(thresholds.VeryLow, request.UseMmol),
-                GlucoseUnits.Scale(thresholds.Low, request.UseMmol),
-                GlucoseUnits.Scale(thresholds.High, request.UseMmol),
-                GlucoseUnits.Scale(thresholds.VeryHigh, request.UseMmol),
-                request.UseMmol ? GlucoseConstants.MgdlPerMmol : 1),
+            Thresholds = ReportThresholds.Of(thresholds, request.UseMmol),
             Chart = chart ? data : null,
             Markers = markers,
             Resolution = new ReportResolution(

@@ -83,15 +83,20 @@ public class McpLoopAnalysisIntegrationTests(ApiIntegrationTestFixture fixture, 
         var text = ToolText(call);
         Log(text);
 
-        text.Should().Contain("Cohort 1: Meal, foods Penne: 2 events.");
+        text.Should().Contain("Cohort 1 (Meal: Penne): 2 events.");
         text.Should().Contain("Food filter: 3 meals carried a food record, and 2 of them matched it. 4 meals had only carbs, with no food record, so the filter could not apply to them and they are not counted.");
-        text.Should().Contain("Cohort 2: Meal: 7 events.");
+        text.Should().Contain("Cohort 2 (Meal: all): 7 events.");
 
         var structured = call.GetProperty("result").GetProperty("structuredContent");
         var bands = structured.GetProperty("panels")[0];
         bands.GetProperty("status").GetString().Should().Be("ok");
         bands.GetProperty("rows").EnumerateArray().Select(r => r.GetProperty("series").GetString()).Distinct()
-            .Should().Equal("Cohort 1: Meal, foods Penne", "Cohort 2: Meal");
+            .Should().Equal("Meal: Penne", "Meal: all");
+        bands.GetProperty("cohorts").EnumerateArray().Select(c => c.GetProperty("label").GetString())
+            .Should().Equal("Meal: Penne", "Meal: all");
+        var peak = bands.GetProperty("rows").EnumerateArray().First(r => r.GetProperty("cohort").GetInt32() == 2 && r.GetProperty("minute").GetInt32() == 60);
+        peak.GetProperty("sentence").GetString().Should().MatchRegex(@"^Meal: all, 60 minutes after the meal: median \d+ mg/dL, middle half \d+ to \d+ mg/dL, 7 events\.$");
+        bands.GetProperty("thresholds").GetProperty("low").GetDouble().Should().Be(70);
         bands.GetProperty("link").GetString().Should().Contain("/reports/loop-analysis/meals-and-events?").And.Contain($"foodIds1={_penne}");
         var events = structured.GetProperty("panels")[1].GetProperty("rows");
         events.GetArrayLength().Should().Be(2);
@@ -127,7 +132,7 @@ public class McpLoopAnalysisIntegrationTests(ApiIntegrationTestFixture fixture, 
 
         var text = ToolText(call);
         text.Should().Contain("Cohort 1 is not shown: its food filter needs the food.read scope");
-        text.Should().Contain("Cohort 2: Meal: 7 events.");
+        text.Should().Contain("Cohort 2 (Meal: all): 7 events.");
         var refused = await CallToolAsync(client, "find_foods", new { query = "pen" });
         refused.TryGetProperty("error", out var scopeError).Should().BeTrue();
         scopeError.GetProperty("message").GetString().Should().Contain("food.read");

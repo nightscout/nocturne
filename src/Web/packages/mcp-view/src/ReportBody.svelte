@@ -54,7 +54,14 @@
     hour12: new Intl.DateTimeFormat(locale, { hour: "numeric" }).resolvedOptions().hour12 ?? false,
   });
 
-  const originalSpec = $derived((original ? readReport(original.structuredContent) : report)?.spec);
+  const originalReport = $derived(original ? readReport(original.structuredContent) : report);
+  const originalSpec = $derived(originalReport?.spec);
+
+  /** The API's label for a cohort the assistant first asked for, which stays when the cohort is switched off. */
+  function cohortLabel(panel: ReportPanel, index: number, cohort: SpecCohort): string {
+    const labelled = originalReport?.panels.find((p) => p.id === panel.id)?.cohorts?.find((c) => c.number === index + 1);
+    return labelled?.label ?? cohort.anchor;
+  }
 
   let selected = $state<{ panel: string; row: number } | null>(null);
 
@@ -98,7 +105,7 @@
                   disabled={busy}
                   onCheckedChange={(checked) => toggleCohort(panel, i, checked === true)}
                 />
-                <label for="cohort-{panel.id}-{i}">Cohort {i + 1}: {cohort.anchor}</label>
+                <label for="cohort-{panel.id}-{i}">{cohortLabel(panel, i, cohort)}</label>
               </span>
             {/each}
           </fieldset>
@@ -142,6 +149,7 @@
       selectable={(panel) => panel.fields.some((f) => f.name === "summary")}
       {selected}
       controls={panelControls}
+      oncontext={selectEvent ? (_panel, text) => selectEvent(text) : undefined}
     />
   {/if}
 </main>

@@ -105,6 +105,9 @@ internal sealed record ReportPanelResult
 
     /// <summary>The web report that shows this panel's data, with its range and parameters; null where there is none.</summary>
     public string? Link { get; init; }
+
+    /// <summary>Every event cohort the panel asked for, with the label that names its filter; empty for other datasets.</summary>
+    public IReadOnlyList<ReportCohort> Cohorts { get; init; } = [];
 }
 
 internal sealed record ReportWindow(long From, long To);

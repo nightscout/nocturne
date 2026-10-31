@@ -98,6 +98,23 @@ export interface ReportPanel {
   link?: string | null;
   /** Treatment markers a time series panel draws on its line. */
   markers?: ReportMarker[];
+  /** Every event cohort the panel asked for, with the API's label naming its filter. */
+  cohorts?: ReportCohort[];
+}
+
+/** An event cohort a panel asked for: its number (1 to 3) and the label that names its filter. */
+export interface ReportCohort {
+  number: number;
+  label: string;
+}
+
+/** The row field holding the API's one sentence about the row, which a chart hands the assistant when the row is picked. */
+export const SENTENCE_FIELD = "sentence";
+
+/** The sentence the API wrote for a row, or null. */
+export function rowSentence(row: ReportRow | null | undefined): string | null {
+  const value = row?.[SENTENCE_FIELD];
+  return typeof value === "string" && value !== "" ? value : null;
 }
 
 export interface ReportResult {

@@ -214,6 +214,7 @@ describe("ReportView", () => {
       return {
         series, cohort, range: "primary", minute,
         glucoseP10: 90 + rise, glucoseP25: 100 + rise, glucoseP50: 115 + rise, glucoseP75: 130 + rise, glucoseP90: 150 + rise,
+        sentence: `${series}, ${minute} minutes from the event: median ${115 + rise} mg/dL.`,
       };
     });
   const bandFields = [
@@ -224,6 +225,7 @@ describe("ReportView", () => {
     field("glucoseP25", "Glucose P25", "number", "mg/dL"),
     field("glucoseP75", "Glucose P75", "number", "mg/dL"),
     field("glucoseP90", "Glucose P90", "number", "mg/dL"),
+    field("sentence", "Sentence", "category", null),
   ];
   const sentence = "Meal of 45 g on 2026-10-12 at 08:05: started at 110 mg/dL, rose 72 mg/dL to its peak 55 minutes later.";
   const eventsSpec = {
@@ -242,8 +244,9 @@ describe("ReportView", () => {
     panels: [
       {
         id: "bands", dataset: "event_response", primitive: "range_bands", bindings: eventsSpec.panels[0].bindings, status: "ok", window,
-        fields: bandFields, rows: [...slotRows("Cohort 1: Meal", 1, 0), ...slotRows("Cohort 2: CorrectionBolus", 2, 40)],
-        summary: "Cohort 1: Meal: 12 events.", link: "https://dev.nocturne.localhost/reports/loop-analysis/meals-and-events?anchor1=Meal",
+        fields: bandFields, rows: [...slotRows("Meal: all", 1, 0), ...slotRows("Correction bolus: all", 2, 40)],
+        cohorts: [{ number: 1, label: "Meal: all" }, { number: 2, label: "Correction bolus: all" }],
+        summary: "Cohort 1 (Meal: all): 12 events.", link: "https://dev.nocturne.localhost/reports/loop-analysis/meals-and-events?anchor1=Meal",
       },
       {
         id: "events", dataset: "event_response", primitive: "table", bindings: { columns: ["at", "summary"] }, status: "ok", window,
@@ -259,26 +262,96 @@ describe("ReportView", () => {
     const chart = page.getByTestId("report-range-bands");
     await expect.element(chart).toBeVisible();
     const series = chart.element().querySelectorAll("[data-testid=report-range-bands-series]");
-    expect([...series].map((s) => s.getAttribute("data-series"))).toEqual(["Cohort 1: Meal", "Cohort 2: CorrectionBolus"]);
+    expect([...series].map((s) => s.getAttribute("data-series"))).toEqual(["Meal: all", "Correction bolus: all"]);
     await expect.poll(() => series[1].querySelectorAll("path").length).toBeGreaterThanOrEqual(3);
-    await expect.element(page.getByText("Cohort 2: CorrectionBolus")).toBeVisible();
+    await expect.element(page.getByText("Correction bolus: all")).toBeVisible();
   });
 
   it("keeps a cohort's colour when another is off, and draws a comparison as its dashed overlay", async () => {
-    const comparison = slotRows("Cohort 2: CorrectionBolus (comparison)", 2, 20).map((r) => ({ ...r, range: "comparison" }));
+    const comparison = slotRows("Correction bolus: all (comparison)", 2, 20).map((r) => ({ ...r, range: "comparison" }));
     const onlySecond = {
       ...eventResult,
-      panels: [{ ...eventResult.panels[0], rows: [...slotRows("Cohort 2: CorrectionBolus", 2, 40), ...comparison] }],
+      panels: [{ ...eventResult.panels[0], rows: [...slotRows("Correction bolus: all", 2, 40), ...comparison] }],
     };
     render(ReportView, { result: { structuredContent: onlySecond }, locale: "en-US" });
 
     const chart = page.getByTestId("report-range-bands");
     await expect.element(chart).toBeVisible();
     const series = [...chart.element().querySelectorAll("[data-testid=report-range-bands-series]")];
-    expect(series.map((s) => s.getAttribute("data-series"))).toEqual(["Cohort 2: CorrectionBolus"]);
+    expect(series.map((s) => s.getAttribute("data-series"))).toEqual(["Correction bolus: all"]);
     expect(series[0].getAttribute("data-color")).toBe(cohortBands(1).median);
     await expect.poll(() => series[0].querySelectorAll("path[stroke-dasharray]").length).toBeGreaterThanOrEqual(1);
     await expect.element(page.getByText("Comparison range")).toBeVisible();
+  });
+
+  it("labels each cohort checkbox with the API's label, which names its filter", async () => {
+    render(ReportView, { result: { structuredContent: eventResult }, locale: "en-US", refine: vi.fn(async () => {}) });
+
+    await expect.element(page.getByRole("checkbox", { name: "Meal: all" })).toBeVisible();
+    await expect.element(page.getByRole("checkbox", { name: "Correction bolus: all" })).toBeVisible();
+  });
+
+  it("shows each cohort's median and middle spread at the hovered slot", async () => {
+    render(ReportView, { result: { structuredContent: eventResult }, locale: "en-US" });
+
+    const chart = page.getByTestId("report-range-bands");
+    await expect.element(chart).toBeVisible();
+    const box = chart.element().querySelector("svg")!.getBoundingClientRect();
+    await chart.hover({ position: { x: box.width * 0.6, y: box.height / 2 } });
+
+    const tooltip = page.getByTestId("report-range-bands-tooltip");
+    await expect.element(tooltip).toBeVisible();
+    await expect.element(tooltip).toHaveTextContent(/Meal: all\s*1\d\d mg\/dL/);
+    await expect.element(tooltip).toHaveTextContent(/Correction bolus: all/);
+    await expect.element(tooltip).toHaveTextContent(/P25–P75\s*\d+–\d+ mg\/dL/);
+    await expect.element(tooltip).toHaveTextContent(/P10–P90/);
+  });
+
+  it("hands the API's sentences for a picked slot to the host", async () => {
+    const selectEvent = vi.fn();
+    render(ReportView, { result: { structuredContent: eventResult }, locale: "en-US", selectEvent });
+
+    const chart = page.getByTestId("report-range-bands");
+    await expect.element(chart).toBeVisible();
+    const box = chart.element().querySelector("svg")!.getBoundingClientRect();
+    await chart.click({ position: { x: box.width * 0.6, y: box.height / 2 } });
+
+    await expect.poll(() => selectEvent.mock.calls.length).toBe(1);
+    const text = selectEvent.mock.calls[0][0] as string;
+    expect(text).toMatch(/^Meal: all, -?\d+ minutes from the event: median \d+ mg\/dL\. Correction bolus: all, /);
+  });
+
+  it("gives one glucose series the glucose chart's treatment: target shaded, limits drawn, median coloured by range", async () => {
+    const hours = Array.from({ length: 24 }, (_, h) => h * 60);
+    const profile = {
+      spec: { version: 1 },
+      units: "mg/dl",
+      summary: "profile",
+      panels: [
+        {
+          id: "profile", dataset: "glucose_distribution_by_hour", primitive: "range_bands", status: "ok", window,
+          bindings: { x: "hour", y: ["glucoseP50"], band: ["glucoseP10", "glucoseP25", "glucoseP75", "glucoseP90"] },
+          fields: [
+            field("hour", "Hour", "time_of_day", "min"),
+            field("glucoseP50", "Glucose median", "number", "mg/dL", { color: "glucose-in-range", glucoseScale: true }),
+            field("glucoseP10", "Glucose P10", "number", "mg/dL"),
+            field("glucoseP25", "Glucose P25", "number", "mg/dL"),
+            field("glucoseP75", "Glucose P75", "number", "mg/dL"),
+            field("glucoseP90", "Glucose P90", "number", "mg/dL"),
+          ],
+          rows: hours.map((hour) => ({ hour, glucoseP10: 80, glucoseP25: 100, glucoseP50: 140, glucoseP75: 190, glucoseP90: 240 })),
+          thresholds: { veryLow: 54, low: 70, high: 180, veryHigh: 250, mgdlPerUnit: 1 },
+          summary: "Glucose by hour.",
+        },
+      ],
+    };
+    render(ReportView, { result: { structuredContent: profile }, locale: "en-US" });
+
+    const chart = page.getByTestId("report-range-bands");
+    await expect.element(chart).toBeVisible();
+    await expect.element(page.getByTestId("report-range-bands-target")).toBeInTheDocument();
+    const series = chart.element().querySelector("[data-testid=report-range-bands-series]")!;
+    await expect.poll(() => [...series.querySelectorAll("path")].some((p) => (p.getAttribute("stroke") ?? "").startsWith("url("))).toBe(true);
   });
 
   it("offers no host control when the host granted no call", async () => {
@@ -301,7 +374,7 @@ describe("ReportView", () => {
       panels: [{ id: "bands", range: { from: new Date(window.from - (window.to - window.from)).toISOString(), to: new Date(window.to).toISOString() } }],
     });
 
-    await page.getByRole("checkbox", { name: "Cohort 2: CorrectionBolus" }).click();
+    await page.getByRole("checkbox", { name: "Correction bolus: all" }).click();
     expect(refine).toHaveBeenLastCalledWith({ panels: [{ id: "bands", dataset: { cohorts: [{ anchor: "Meal" }] } }] });
   });
 

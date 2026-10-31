@@ -4,6 +4,7 @@ using FluentAssertions;
 using Nocturne.API.Mcp;
 using Nocturne.API.Mcp.Reports;
 using Nocturne.API.Mcp.Reports.Datasets;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.LoopAnalysis;
 using Xunit;
 
@@ -243,10 +244,10 @@ public partial class LoopAnalysisDatasetTests
     public void The_event_summary_counts_carbs_only_meals_a_food_filter_could_not_match()
     {
         var report = Meals(foodFilter: true);
-        var labels = new Dictionary<int, string> { [1] = "Cohort 1: Meal, foods Penne" };
-        var summary = EventResponseDataset.Summarise(report, labels, [], useMmol: false);
+        var labels = new Dictionary<int, string> { [1] = "Meal: Penne" };
+        var summary = EventResponseDataset.Summarise(report, labels, new Dictionary<int, int> { [1] = 1 }, [], useMmol: false);
 
-        summary.Should().Contain("Cohort 1: Meal, foods Penne: 4 events.");
+        summary.Should().Contain("Cohort 1 (Meal: Penne): 4 events.");
         summary.Should().Contain("Not counted: 1 without a reading at the time.");
         summary.Should().Contain("Food filter: 6 meals carried a food record, and 4 of them matched it. 9 meals had only carbs, with no food record, so the filter could not apply to them and they are not counted.");
         summary.Should().Contain("Median peak rise +68 mg/dL, 55 minutes after the event (middle half +40 to +90 mg/dL).");
@@ -300,7 +301,7 @@ public partial class LoopAnalysisDatasetTests
     public void Without_a_food_filter_the_event_summary_says_nothing_of_food()
     {
         var summary = EventResponseDataset.Summarise(
-            Meals(foodFilter: false), new Dictionary<int, string> { [1] = "Cohort 1: Meal" }, [], useMmol: false);
+            Meals(foodFilter: false), new Dictionary<int, string> { [1] = "Meal: all" }, new Dictionary<int, int> { [1] = 1 }, [], useMmol: false);
 
         summary.Should().NotContain("food");
     }
@@ -327,7 +328,7 @@ public partial class LoopAnalysisDatasetTests
     }
 
     [Fact]
-    public void A_cohort_label_names_its_filters()
+    public void A_cohort_label_names_its_kind_and_its_filter()
     {
         var label = EventResponseDataset.CohortLabel(
             new EventCohortDefinition
@@ -335,10 +336,58 @@ public partial class LoopAnalysisDatasetTests
                 Cohort = 1, Anchor = EventAnchorKind.Meal, FromMinute = 360, ToMinute = 600, MinGrams = 20, MaxGrams = 80,
                 DaysOfWeek = [DayOfWeek.Monday], FoodIds = [Pasta], FoodCategory = "Pasta",
             },
-            2,
             new Dictionary<Guid, string> { [Pasta] = "Penne" });
 
-        label.Should().Be("Cohort 2: Meal, 06:00-10:00, 20-80 g, Mon, foods Penne, food category Pasta");
+        label.Should().Be("Meal: Penne, category Pasta, 06:00-10:00, 20-80 g, Mon");
+    }
+
+    [Fact]
+    public void Two_cohorts_of_one_kind_get_labels_that_tell_them_apart()
+    {
+        var names = new Dictionary<Guid, string> { [Pasta] = "Pizza" };
+        EventResponseDataset.CohortLabel(new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodIds = [Pasta] }, names)
+            .Should().Be("Meal: Pizza");
+        EventResponseDataset.CohortLabel(new EventCohortDefinition { Cohort = 2, Anchor = EventAnchorKind.Meal }, names)
+            .Should().Be("Meal: all");
+        EventResponseDataset.CohortLabel(new EventCohortDefinition { Cohort = 3, Anchor = EventAnchorKind.CorrectionBolus }, names)
+            .Should().Be("Correction bolus: all");
+    }
+
+    [Fact]
+    public void A_food_filter_the_token_cannot_read_is_named_but_its_foods_are_not()
+    {
+        EventResponseDataset.CohortLabel(
+                new EventCohortDefinition { Cohort = 1, Anchor = EventAnchorKind.Meal, FoodIds = [Pasta] }, new Dictionary<Guid, string>(), foodRead: false)
+            .Should().Be("Meal: a food filter");
+    }
+
+    [Fact]
+    public void A_slot_sentence_states_the_cohort_the_offset_and_the_glucose_spread()
+    {
+        var glucose = new LoopAnalysisAggregate { P25 = 140, P50 = 175, P75 = 210, N = 32 };
+
+        EventResponseDataset.SlotSentence("Meal: Pizza", EventAnchorKind.Meal, 60, comparison: false, glucose, useMmol: false)
+            .Should().Be("Meal: Pizza, 60 minutes after the meal: median 175 mg/dL, middle half 140 to 210 mg/dL, 32 events.");
+        EventResponseDataset.SlotSentence("Meal: all", EventAnchorKind.Meal, -30, comparison: true, glucose, useMmol: true)
+            .Should().Be("Meal: all (comparison range), 30 minutes before the meal: median 9.7 mmol/L, middle half 7.8 to 11.7 mmol/L, 32 events.");
+        EventResponseDataset.SlotSentence("Correction bolus: all", EventAnchorKind.CorrectionBolus, 0, comparison: false, null, useMmol: false)
+            .Should().Be("Correction bolus: all, at the correction bolus: no readings.");
+        Imperative().IsMatch(EventResponseDataset.SlotSentence("Meal: all", EventAnchorKind.Meal, 60, false, glucose, false)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void An_hour_sentence_states_the_hour_and_its_glucose_spread()
+    {
+        var hour = new AveragedStats
+        {
+            Hour = 23, Count = 168, DayCount = 14,
+            Percentiles = new GlucosePercentiles { P25 = 108, P50 = 128, P75 = 155 },
+        };
+
+        GlucoseDistributionByHourDataset.HourSentence(hour, useMmol: false)
+            .Should().Be("From 23:00 to 00:00: median 128 mg/dL, middle half 108 to 155 mg/dL, 168 readings on 14 days.");
+        GlucoseDistributionByHourDataset.HourSentence(new AveragedStats { Hour = 3 }, useMmol: false)
+            .Should().Be("From 03:00 to 04:00: no readings.");
     }
 
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement;

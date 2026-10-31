@@ -35,6 +35,8 @@
     selected?: { panel: string; row: number } | null;
     /** The host's controls for a panel, drawn under its primitive. */
     controls?: Snippet<[ReportPanel]>;
+    /** Called with the API's sentence for what the reader picked in a chart; charts pick nothing without it. */
+    oncontext?: (panel: ReportPanel, text: string) => void;
   }
 
   let {
@@ -47,6 +49,7 @@
     selectable,
     selected = null,
     controls,
+    oncontext,
   }: Props = $props();
 
   /** The report's zone when this browser knows it, so times match the summaries; else the browser's own. */
@@ -97,7 +100,13 @@
       {:else if panel.primitive === "bar"}
         <BarChart {panel} format={zoned} heightClass={plotHeight} />
       {:else if panel.primitive === "range_bands"}
-        <RangeBandsChart {panel} format={zoned} heightClass={plotHeight} />
+        <RangeBandsChart
+          {panel}
+          format={zoned}
+          heightClass={plotHeight}
+          lineColorMode={colorMode}
+          oncontext={oncontext ? (text) => oncontext(panel, text) : undefined}
+        />
       {:else if panel.primitive === "stat_tiles"}
         <StatTiles {panel} format={zoned} emptyText={labels.noData} />
       {:else if panel.primitive === "table"}

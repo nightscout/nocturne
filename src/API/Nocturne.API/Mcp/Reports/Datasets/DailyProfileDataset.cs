@@ -46,7 +46,8 @@ internal sealed class DailyProfileDataset : IReportDataset
         new("minuteOfDay", "Time of day", ReportFieldKind.TimeOfDay, "min", "Start of the slot, minutes after local midnight."),
         new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of the slot's readings, pooled across days."),
         new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the slot's readings."),
-        new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median of the slot's readings.", Color: ChartColor.GlucoseInRange),
+        new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median of the slot's readings.",
+            Color: ChartColor.GlucoseInRange, GlucoseScale: true),
         new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the slot's readings."),
         new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the slot's readings."),
         new("readings", "Readings", ReportFieldKind.Number, null, "Readings in the slot across the range."),
@@ -61,6 +62,8 @@ internal sealed class DailyProfileDataset : IReportDataset
             "The low edge of the target range in force (a temporary target where one ran), median across days.", Scope.TherapyRead, ChartColor.GlucoseLow),
         new("targetHigh", "Target high", ReportFieldKind.Number, ReportField.GlucoseUnit,
             "The high edge of the target range in force, median across days.", Scope.TherapyRead, ChartColor.GlucoseHigh),
+        new(ReportField.SentenceField, "Sentence", ReportFieldKind.Category, null,
+            "One sentence that states the slot's glucose figures; the view hands it to the assistant when the slot is picked.", Companion: true),
     ];
 
     public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive == ReportPrimitive.RangeBands
@@ -87,6 +90,7 @@ internal sealed class DailyProfileDataset : IReportDataset
             ["minuteOfDay"] = 480, ["glucoseP10"] = 95.0, ["glucoseP25"] = 112.0, ["glucoseP50"] = 134.0, ["glucoseP75"] = 162.0,
             ["glucoseP90"] = 190.0, ["readings"] = 14, ["scheduledBasal"] = 0.85, ["deliveredBasal"] = 1.1, ["netLoopCorrection"] = 0.3,
             ["iob"] = 1.8, ["cob"] = 12.0, ["targetLow"] = 100.0, ["targetHigh"] = 110.0,
+            [ReportField.SentenceField] = "At 08:00: median 134 mg/dL, middle half 112 to 162 mg/dL, 14 readings.",
         },
     ];
 
@@ -123,6 +127,7 @@ internal sealed class DailyProfileDataset : IReportDataset
             ["cob"] = Round(s.Cob?.P50, 1),
             ["targetLow"] = Glucose(s.TargetLow, useMmol),
             ["targetHigh"] = Glucose(s.TargetHigh, useMmol),
+            [ReportField.SentenceField] = $"At {Clock(s.MinuteOfDay)}: {EventResponseDataset.GlucoseSpread(s.Glucose, s.Glucose?.N ?? 0, "reading", useMmol)}",
         }).ToList();
 
         var readings = report.Primary.Slots.Sum(s => s.Glucose?.N ?? 0);

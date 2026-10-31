@@ -33,7 +33,8 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
         new("hour", "Hour", ReportFieldKind.TimeOfDay, "min", "Start of the local hour, minutes after midnight."),
         new("glucoseP10", "Glucose P10", ReportFieldKind.Number, ReportField.GlucoseUnit, "10th percentile of the hour's readings."),
         new("glucoseP25", "Glucose P25", ReportFieldKind.Number, ReportField.GlucoseUnit, "25th percentile of the hour's readings."),
-        new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median of the hour's readings.", Color: ChartColor.GlucoseInRange),
+        new("glucoseP50", "Glucose median", ReportFieldKind.Number, ReportField.GlucoseUnit, "Median of the hour's readings.",
+            Color: ChartColor.GlucoseInRange, GlucoseScale: true),
         new("glucoseP75", "Glucose P75", ReportFieldKind.Number, ReportField.GlucoseUnit, "75th percentile of the hour's readings."),
         new("glucoseP90", "Glucose P90", ReportFieldKind.Number, ReportField.GlucoseUnit, "90th percentile of the hour's readings."),
         new("mean", "Mean", ReportFieldKind.Number, ReportField.GlucoseUnit, "Mean of the hour's readings."),
@@ -45,6 +46,8 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
         new("aboveTightRange", "Above tight range", ReportFieldKind.Percent, "%", "Percent of the hour's covered time above the tight range but in range."),
         new("high", "High", ReportFieldKind.Percent, "%", "Percent of the hour's covered time high.", Color: ChartColor.GlucoseHigh),
         new("veryHigh", "Very high", ReportFieldKind.Percent, "%", "Percent of the hour's covered time very high.", Color: ChartColor.GlucoseVeryHigh),
+        new(ReportField.SentenceField, "Sentence", ReportFieldKind.Category, null,
+            "One sentence that states the hour's glucose figures; the view hands it to the assistant when the hour is picked.", Companion: true),
     ];
 
     public ReportBindings? DefaultBindings(ReportPrimitive primitive) => primitive == ReportPrimitive.RangeBands
@@ -71,6 +74,7 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
             ["hour"] = 420, ["glucoseP10"] = 92.0, ["glucoseP25"] = 108.0, ["glucoseP50"] = 128.0, ["glucoseP75"] = 155.0,
             ["glucoseP90"] = 184.0, ["mean"] = 133.0, ["readings"] = 168, ["days"] = 14, ["veryLow"] = 0.0, ["low"] = 1.2,
             ["tightRange"] = 61.0, ["aboveTightRange"] = 26.4, ["high"] = 10.1, ["veryHigh"] = 1.3,
+            [ReportField.SentenceField] = "From 07:00 to 08:00: median 128 mg/dL, middle half 108 to 155 mg/dL, 168 readings on 14 days.",
         },
     ];
 
@@ -106,6 +110,7 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
                 ["aboveTightRange"] = P(h.TimeInRange.AboveTightTarget),
                 ["high"] = P(h.TimeInRange.High),
                 ["veryHigh"] = P(h.TimeInRange.VeryHigh),
+                [ReportField.SentenceField] = HourSentence(h, useMmol),
             };
         }).ToList();
 
@@ -114,6 +119,18 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
             Rows = rows,
             Summary = Summarise(hours, request.From, request.To, clock.Zone is null, useMmol),
         };
+    }
+
+    /// <summary>"From 07:00 to 08:00: median 128 mg/dL, middle half 108 to 155 mg/dL, 168 readings on 14 days."</summary>
+    internal static string HourSentence(AveragedStats hour, bool useMmol)
+    {
+        var head = $"From {Clock(hour.Hour * 60)} to {Clock((hour.Hour + 1) % 24 * 60)}";
+        if (hour.Count == 0)
+            return $"{head}: no readings.";
+        var unit = useMmol ? "mmol/L" : "mg/dL";
+        string G(double mgdl) => Number(Glucose(mgdl, useMmol)!.Value, useMmol ? "0.0" : "0");
+        return $"{head}: median {G(hour.Percentiles.P50)} {unit}, middle half {G(hour.Percentiles.P25)} to {G(hour.Percentiles.P75)} {unit}, "
+            + $"{hour.Count} {(hour.Count == 1 ? "reading" : "readings")} on {hour.DayCount} {(hour.DayCount == 1 ? "day" : "days")}.";
     }
 
     internal static string Summarise(IReadOnlyList<AveragedStats> hours, DateTimeOffset from, DateTimeOffset to, bool utc, bool useMmol)
