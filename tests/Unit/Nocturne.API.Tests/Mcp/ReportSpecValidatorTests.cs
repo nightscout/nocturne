@@ -58,6 +58,37 @@ public class ReportSpecValidatorTests
     }
 
     [Fact]
+    public void A_refinement_longer_than_the_dataset_covers_is_cut_to_its_latest_part_not_refused()
+    {
+        var json = JsonDocument.Parse("""
+            { "version": 1, "panels": [
+              { "id": "chart", "dataset": { "name": "glucose_series" }, "primitive": "glucose_chart",
+                "range": { "from": "2026-10-01T00:00:00Z", "to": "2026-10-07T00:00:00Z" } },
+              { "id": "stats", "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles", "range": { "hours": 9999 } },
+              { "id": "line", "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose"] }, "range": { "hours": 6 } } ] }
+            """).RootElement;
+
+        Validator.Validate(json).Errors.Should().Contain(e => e.Path == "panels[0].range", "a spec a model sends is refused, as before");
+
+        var refined = Validator.Validate(json, clampRanges: true);
+        refined.Errors.Should().ContainSingle(e => e.Path == "panels[1].range.hours", "a malformed range is still an error");
+
+        var valid = Validator.Validate(JsonDocument.Parse("""
+            { "version": 1, "panels": [
+              { "id": "chart", "dataset": { "name": "glucose_series" }, "primitive": "glucose_chart",
+                "range": { "from": "2026-10-01T00:00:00Z", "to": "2026-10-07T00:00:00Z" } },
+              { "id": "stats", "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles", "range": { "hours": 2160 } },
+              { "id": "line", "dataset": { "name": "glucose_series" }, "primitive": "time_series", "bindings": { "y": ["glucose"] }, "range": { "hours": 6 } } ] }
+            """).RootElement, clampRanges: true);
+        valid.Errors.Should().BeEmpty();
+        valid.Spec!.Panels[0].Range.Should().Be(new ReportRange
+        {
+            From = new DateTimeOffset(2026, 10, 4, 0, 0, 0, TimeSpan.Zero), To = new DateTimeOffset(2026, 10, 7, 0, 0, 0, TimeSpan.Zero),
+        });
+        valid.Shortened.Should().BeEquivalentTo(["chart"]);
+    }
+
+    [Fact]
     public void A_panel_without_a_range_gets_its_datasets_default()
     {
         var spec = Validate("""

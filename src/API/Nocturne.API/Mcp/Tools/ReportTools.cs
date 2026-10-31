@@ -75,7 +75,8 @@ internal static class ReportTools
     [McpAppUi(ResourceUri = ReportResources.ReportUri, Visibility = [McpUiToolVisibility.App])]
     [Description(
         "For the report view: draws a report again with a patch applied to the spec render_report returned: a new range "
-        + "for every panel, or a panel's new range or dataset parameters. Validated and limited as render_report is.")]
+        + "for every panel, or a panel's new range or dataset parameters. Validated and limited as render_report is, except "
+        + "that a range longer than a panel's dataset covers is cut to the latest part it covers, and the panel's summary says so.")]
     public static async Task<CallToolResult> RefineReport(
         ReportSpecValidator validator,
         ReportRenderer renderer,
@@ -89,13 +90,13 @@ internal static class ReportTools
                 "The patch cannot be applied. Change these and call refine_report again:\n"
                 + string.Join('\n', errors.Select(e => $"- {e}")));
 
-        var validation = validator.Validate(merged, await renderer.UsesMmolAsync(cancellationToken));
+        var validation = validator.Validate(merged, await renderer.UsesMmolAsync(cancellationToken), clampRanges: true);
         if (!validation.IsValid)
             throw new McpInvalidArgumentsException(
                 "The refined report spec is not valid. Change these and call refine_report again:\n"
                 + string.Join('\n', validation.Errors.Select(e => $"- {e}")));
 
-        return (await renderer.RenderAsync(validation.Spec!, cancellationToken)).Result;
+        return (await renderer.RenderAsync(validation.Spec!, cancellationToken, validation.Shortened)).Result;
     }
 }
 

@@ -100,6 +100,10 @@ export interface ReportPanel {
   link?: string | null;
   /** Treatment markers a time series panel draws on its line. */
   markers?: ReportMarker[];
+  /** The range is the longest the dataset covers drawn so: no earlier data can be added. */
+  atRangeLimit?: boolean;
+  /** The API's sentence saying how long a range the panel covers, when it is at that limit. */
+  rangeLimit?: string | null;
   /** Every event cohort the panel asked for, with the API's label naming its filter. */
   cohorts?: ReportCohort[];
   /** A glucose chart of event cohorts: single events' glucose, drawn faintly under each cohort's band. */

@@ -13,7 +13,8 @@ internal sealed record ReportSpecError(string Path, string Message)
     public override string ToString() => $"{Path}: {Message}";
 }
 
-internal sealed record ReportSpecValidation(ReportSpec? Spec, IReadOnlyList<ReportSpecError> Errors)
+/// <param name="Shortened">The panels whose range was cut to their dataset's limit, by id; only when the caller asked for that.</param>
+internal sealed record ReportSpecValidation(ReportSpec? Spec, IReadOnlyList<ReportSpecError> Errors, IReadOnlySet<string>? Shortened = null)
 {
     public bool IsValid => Errors.Count == 0 && Spec is not null;
 }
@@ -46,7 +47,11 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
     private static readonly string[] RangeKeys = ["hours", "from", "to"];
     private static readonly string[] BindingKeys = ["x", "y", "band", "columns", "series", "stacked", "orientation"];
 
-    public ReportSpecValidation Validate(JsonElement spec, bool useMmol = false)
+    /// <param name="clampRanges">
+    /// Cut a range longer than its dataset covers to the latest part it covers, in place of refusing it:
+    /// for refinements the view asks for (load earlier data), never for a spec a model sent.
+    /// </param>
+    public ReportSpecValidation Validate(JsonElement spec, bool useMmol = false, bool clampRanges = false)
     {
         var errors = new List<ReportSpecError>();
         void Error(string path, string message) => errors.Add(new ReportSpecError(path, message));
@@ -69,6 +74,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         var reportRange = spec.TryGetProperty("range", out var r) ? ReadRange(r, "range", now, Error) : null;
 
         var panels = new List<ReportPanelSpec>();
+        var shortenedAt = new HashSet<int>();
         if (!spec.TryGetProperty("panels", out var panelsElement) || panelsElement.ValueKind != JsonValueKind.Array)
         {
             Error("panels", $"Missing. Send a list of 1 to {ReportSpec.MaxPanels} panels.");
@@ -84,7 +90,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (var panel in panelsElement.EnumerateArray())
             {
-                if (ReadPanel(panel, index, reportRange, ids, now, useMmol, Error) is { } read)
+                if (ReadPanel(panel, index, reportRange, ids, now, useMmol, clampRanges ? shortenedAt : null, Error) is { } read)
                     panels.Add(read);
                 index++;
             }
@@ -105,7 +111,8 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
 
         return new ReportSpecValidation(
             new ReportSpec { Version = ReportSpec.CurrentVersion, Title = title, Range = reportRange, Panels = panels },
-            errors);
+            errors,
+            clampRanges ? shortenedAt.Select(i => panels[i].Id!).ToHashSet(StringComparer.Ordinal) : null);
     }
 
     private ReportPanelSpec? ReadPanel(
@@ -115,6 +122,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
         HashSet<string> ids,
         DateTimeOffset now,
         bool useMmol,
+        HashSet<int>? shortened,
         Action<string, string> error)
     {
         var at = $"panels[{index}]";
@@ -169,6 +177,14 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
             range ??= new ReportRange { Hours = (int)dataset.DefaultRange.TotalHours };
             var max = dataset.MaxRange(drawn);
             var span = range.Hours is { } hours ? TimeSpan.FromHours(hours) : range.To!.Value - range.From!.Value;
+            if (span > max && shortened is not null)
+            {
+                range = range.Hours is not null
+                    ? new ReportRange { Hours = (int)max.TotalHours }
+                    : new ReportRange { From = range.To!.Value - max, To = range.To };
+                span = max;
+                shortened.Add(index);
+            }
             if (span > max)
                 Error($"{at}.range",
                     $"{dataset.Name} drawn as {drawn.WireName()} covers at most {Describe(max)}; this range is {Describe(span)}. "

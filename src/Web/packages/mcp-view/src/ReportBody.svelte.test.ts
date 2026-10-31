@@ -407,6 +407,21 @@ describe("ReportView", () => {
     expect(refine).toHaveBeenLastCalledWith({ panels: [{ id: "bands", dataset: { cohorts: [{ anchor: "Meal" }] } }] });
   });
 
+  it("offers no earlier data at a dataset's range limit, and says why", async () => {
+    const refine = vi.fn(async () => {});
+    const atLimit = {
+      ...eventResult,
+      panels: [{ ...eventResult.panels[0], atRangeLimit: true, rangeLimit: "This chart covers at most 3 days." }, eventResult.panels[1]],
+    };
+    render(ReportView, { result: { structuredContent: atLimit }, locale: "en-US", refine });
+
+    const buttons = page.getByRole("button", { name: "Load earlier data" });
+    await expect.element(buttons.first()).toBeDisabled();
+    await expect.element(buttons.first()).toHaveAttribute("title", "This chart covers at most 3 days.");
+    await expect.element(page.getByTestId("range-limit")).toHaveTextContent("This chart covers at most 3 days.");
+    await expect.element(buttons.nth(1)).toBeEnabled();
+  });
+
   it("hands the selected event's own sentence to the host, and opens the matching web report", async () => {
     const selectEvent = vi.fn();
     const openLink = vi.fn();

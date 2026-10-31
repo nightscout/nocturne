@@ -92,10 +92,20 @@
   {#if refinable || (openLink && panel.link)}
     <div class="mt-1 flex flex-wrap items-center gap-2" data-testid="report-panel-controls">
       {#if refinable}
-        <Button variant="outline" size="sm" disabled={busy} onclick={() => loadEarlier(panel)}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy || panel.atRangeLimit === true}
+          title={panel.atRangeLimit ? (panel.rangeLimit ?? undefined) : undefined}
+          aria-describedby={panel.atRangeLimit && panel.rangeLimit ? `limit-${panel.id}` : undefined}
+          onclick={() => loadEarlier(panel)}
+        >
           <History class="size-4" />
           Load earlier data
         </Button>
+        {#if panel.atRangeLimit && panel.rangeLimit}
+          <span id="limit-{panel.id}" class="text-xs text-muted-foreground" data-testid="range-limit">{panel.rangeLimit}</span>
+        {/if}
         {#if panelCohorts.length > 1}
           <fieldset class="flex flex-wrap items-center gap-3 text-xs" aria-label="Cohorts">
             {#each panelCohorts as cohort, i (i)}

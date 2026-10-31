@@ -5,12 +5,14 @@ using System.Text;
 namespace Nocturne.API.Mcp.Reports;
 
 /// <summary>The caller a report runs for: its scopes, its services and its read-audit log.</summary>
+/// <param name="Shortened">The panels whose range the validator cut to their dataset's limit, by id, which their summaries name.</param>
 internal sealed record ReportRunContext(
     bool UseMmol,
     IReadOnlySet<string> GrantedScopes,
     IServiceProvider Services,
     McpToolReadLog ReadLog,
-    bool HistoryClamped = false)
+    bool HistoryClamped = false,
+    IReadOnlySet<string>? Shortened = null)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 
@@ -105,6 +107,8 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             panels.Add(limited ? resolved with { Summary = resolved.Summary + '\n' + LimitedNote, Limited = true } : resolved);
         }
 
+        panels = [.. panels.Select((result, i) => AtLimit(result, spec.Panels[i], now, context.Shortened))];
+
         var warnings = new List<string>();
         var timedOut = panels.Where(p => p.Status == ReportPanelStatus.TimedOut).Select(p => p.Id).ToList();
         if (timedOut.Count > 0)
@@ -128,6 +132,24 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Summary = JoinSummaries(spec, panels),
             Warnings = warnings,
         };
+    }
+
+    /// <summary>
+    /// The panel marked at its dataset's longest range, with the sentence that says how long that is, so the
+    /// view offers no earlier data it cannot draw; a range the validator cut to it says so in the summary.
+    /// </summary>
+    private ReportPanelResult AtLimit(ReportPanelResult result, ReportPanelSpec panel, DateTimeOffset now, IReadOnlySet<string>? shortened)
+    {
+        var dataset = registry.Find(panel.Dataset.DatasetName)!;
+        var max = dataset.MaxRange(panel.Primitive);
+        var (from, to) = Resolve(panel.Range!, now);
+        var covers = $"This chart covers at most {ReportSpecValidator.Describe(max)}.";
+        if (to - from < max - TimeSpan.FromMinutes(1))
+            return result;
+        var cut = shortened?.Contains(result.Id) == true
+            ? $"\nCut to the latest {ReportSpecValidator.Describe(max)}: the range asked for was longer. {covers}"
+            : "";
+        return result with { AtRangeLimit = true, RangeLimit = covers, Summary = result.Summary + cut };
     }
 
     internal static (DateTimeOffset From, DateTimeOffset To) Resolve(ReportRange range, DateTimeOffset now) =>

@@ -138,6 +138,58 @@ public class McpPresetIntegrationTests(ApiIntegrationTestFixture fixture, ITestO
     }
 
     [Fact]
+    public async Task Loading_earlier_data_past_a_charts_limit_cuts_the_range_and_marks_the_panel_at_its_limit()
+    {
+        using var client = McpClient(await McpTokenAsync("glucose.read treatments.read"));
+        var call = await CallToolAsync(client, "render_report", new
+        {
+            spec = new { version = 1, panels = new object[] { new { id = "chart", dataset = new { name = "glucose_series" }, primitive = "glucose_chart", range = new { hours = 24 } } } },
+        });
+        call.TryGetProperty("error", out var error).Should().BeFalse(error.ToString());
+        var result = call.GetProperty("result").GetProperty("structuredContent");
+        result.GetProperty("panels")[0].GetProperty("atRangeLimit").GetBoolean().Should().BeFalse();
+
+        // The view's "Load earlier data" doubles the window backwards each press: 2, 4, then 8 days asked for.
+        for (var press = 1; press <= 3; press++)
+        {
+            var window = result.GetProperty("panels")[0].GetProperty("window");
+            var from = window.GetProperty("from").GetInt64();
+            var to = window.GetProperty("to").GetInt64();
+            var refined = await CallToolAsync(client, "refine_report", new
+            {
+                spec = result.GetProperty("spec"),
+                patch = new
+                {
+                    panels = new[]
+                    {
+                        new
+                        {
+                            id = "chart",
+                            range = new
+                            {
+                                from = DateTimeOffset.FromUnixTimeMilliseconds(from - (to - from)).ToString("O"),
+                                to = DateTimeOffset.FromUnixTimeMilliseconds(to).ToString("O"),
+                            },
+                        },
+                    },
+                },
+            });
+            refined.TryGetProperty("error", out var refineError).Should().BeFalse(refineError.ToString());
+            var refinedResult = refined.GetProperty("result");
+            refinedResult.TryGetProperty("isError", out _).Should().BeFalse(ToolText(refined));
+            result = refinedResult.GetProperty("structuredContent");
+        }
+
+        var panel = result.GetProperty("panels")[0];
+        panel.GetProperty("status").GetString().Should().Be("ok");
+        panel.GetProperty("atRangeLimit").GetBoolean().Should().BeTrue();
+        panel.GetProperty("rangeLimit").GetString().Should().Be("This chart covers at most 3 days.");
+        panel.GetProperty("summary").GetString().Should().Contain("Cut to the latest 3 days: the range asked for was longer.");
+        var span = panel.GetProperty("window").GetProperty("to").GetInt64() - panel.GetProperty("window").GetProperty("from").GetInt64();
+        span.Should().Be((long)TimeSpan.FromDays(3).TotalMilliseconds);
+    }
+
+    [Fact]
     public async Task Show_treatments_draws_markers_on_the_line_and_the_records_in_a_table()
     {
         using var client = McpClient(await McpTokenAsync("glucose.read treatments.read"));

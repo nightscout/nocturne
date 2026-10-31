@@ -334,6 +334,26 @@ public class RecordDatasetTests
         readLog.RecordCount.Should().Be(14 * 288, "fourteen days of five-minute readings, counted once");
     }
 
+    [Fact]
+    public async Task A_panel_at_its_datasets_longest_range_says_so_and_a_cut_one_says_why()
+    {
+        var (runner, arranged, _) = new Harness().Arrange(Scope.GlucoseRead);
+        var context = arranged with { Shortened = new HashSet<string> { "long" } };
+
+        var result = await runner.RunAsync(Spec("""
+            { "version": 1, "panels": [
+              { "id": "long", "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles", "range": { "hours": 2160 } },
+              { "id": "short", "dataset": { "name": "glucose_statistics" }, "primitive": "stat_tiles", "range": { "hours": 24 } } ] }
+            """), context, CancellationToken.None);
+
+        var full = result.Panels[0];
+        full.AtRangeLimit.Should().BeTrue();
+        full.RangeLimit.Should().Be("This chart covers at most 90 days.");
+        full.Summary.Should().EndWith("Cut to the latest 90 days: the range asked for was longer. This chart covers at most 90 days.");
+        result.Panels[1].AtRangeLimit.Should().BeFalse();
+        result.Panels[1].RangeLimit.Should().BeNull();
+    }
+
     // ---- device_status ----
 
     [Fact]

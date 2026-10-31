@@ -26,9 +26,11 @@ internal sealed class ReportRenderer(
     IOptions<MvcJsonOptions> jsonOptions)
 {
     /// <summary>The joined summaries as text, the <see cref="ReportResult"/> as <c>structuredContent</c>.</summary>
-    public async Task<(CallToolResult Result, ReportResult Report)> RenderAsync(ReportSpec spec, CancellationToken cancellationToken)
+    /// <param name="shortened">The panels whose range the validator cut to their dataset's limit, by id.</param>
+    public async Task<(CallToolResult Result, ReportResult Report)> RenderAsync(
+        ReportSpec spec, CancellationToken cancellationToken, IReadOnlySet<string>? shortened = null)
     {
-        var report = await RunAsync(spec, cancellationToken);
+        var report = await RunAsync(spec, cancellationToken, shortened);
 
         var text = new StringBuilder(report.Summary);
         foreach (var warning in report.Warnings)
@@ -45,7 +47,7 @@ internal sealed class ReportRenderer(
     /// The report, with each panel's web report link and the link that opens the whole spec in the
     /// web app (<see cref="ReportResult.OpenUrl"/>), both on the request's host.
     /// </summary>
-    public async Task<ReportResult> RunAsync(ReportSpec spec, CancellationToken cancellationToken)
+    public async Task<ReportResult> RunAsync(ReportSpec spec, CancellationToken cancellationToken, IReadOnlySet<string>? shortened = null)
     {
         var http = httpContextAccessor.HttpContext
             ?? throw new InvalidOperationException("A report ran outside an HTTP request.");
@@ -53,7 +55,7 @@ internal sealed class ReportRenderer(
 
         var report = await runner.RunAsync(
             spec,
-            new ReportRunContext(useMmol, http.GetGrantedScopes(), services, readLog, http.IsCallerHistoryClamped()),
+            new ReportRunContext(useMmol, http.GetGrantedScopes(), services, readLog, http.IsCallerHistoryClamped(), shortened),
             cancellationToken);
 
         var origin = $"{http.Request.PublicScheme()}://{http.Request.Host}";
