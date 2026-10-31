@@ -97,8 +97,8 @@ public class CustomReportsController(
     [RemoteCommand(Invalidates = ["GetCustomReports"])]
     [RequestSizeLimit(MaxBodyBytes)]
     [ProducesResponseType(typeof(CustomReport), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CustomReport>> CreateCustomReport(
         [FromBody] CustomReportCreateRequest request, CancellationToken cancellationToken)
@@ -114,9 +114,9 @@ public class CustomReportsController(
     [RemoteCommand(Invalidates = ["GetCustomReports", "GetCustomReport"])]
     [RequestSizeLimit(MaxBodyBytes)]
     [ProducesResponseType(typeof(CustomReport), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CustomReport>> UpdateCustomReport(
         Guid id, [FromBody] CustomReportUpdateRequest request, CancellationToken cancellationToken) =>

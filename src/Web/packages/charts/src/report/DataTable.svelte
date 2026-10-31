@@ -3,6 +3,7 @@
   a row can be picked by click or by Enter or Space on it; `selected` marks the picked one.
 -->
 <script lang="ts">
+  import { PICK_KEYS } from "./pick-keys.js";
   import type { ChartFormat } from "../format.js";
   import { formatReportValue, type ReportPanel, type ReportRow } from "./types.js";
 
@@ -21,7 +22,7 @@
   let { panel, format, heightClass = "max-h-[280px]", onselect, selected = null, emptyText = "No data in this range." }: Props = $props();
 
   function onkeydown(event: KeyboardEvent, row: ReportRow, index: number) {
-    if (event.key !== "Enter" && event.key !== " ") return;
+    if (!PICK_KEYS.includes(event.key)) return;
     event.preventDefault();
     onselect?.(row, index);
   }
