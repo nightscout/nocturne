@@ -137,7 +137,7 @@ describe("eHbA1c chart tooltips", () => {
     await expect
       .element(page.getByLabelText("Result (mmol/mol)"))
       .toBeVisible();
-    await expect.element(page.getByTestId("lab-marker").first()).toHaveTextContent("49 mmol/mol");
+    await expect.element(page.getByTestId("lab-marker").first()).toHaveTextContent("48.6 mmol/mol");
     await expect.element(page.getByRole("group", { name: /A1c units/i })).not.toBeInTheDocument();
   });
 
@@ -174,5 +174,59 @@ describe("eHbA1c chart tooltips", () => {
     const markerBounds = beforeHistoryMarker.getBoundingClientRect();
 
     expect(screenLineStart.x).toBeGreaterThan(markerBounds.right);
+  });
+});
+
+describe("eHbA1c lab tooltip on a dense timeline", () => {
+  const sparseLength = timelinePoints.length;
+
+  beforeEach(() => {
+    for (let day = 6; day <= 95; day++) {
+      const date = new Date(Date.UTC(2025, 0, day));
+      timelinePoints.push({
+        date: date.toISOString().slice(0, 10),
+        estimatedA1cPercent: 6.3,
+        a1cDisplay: { percent: 6.3, mmolMol: 45.35535 },
+        weightedAverageGlucoseMgdl: 180,
+        readingCount: 100,
+        daysWithData: 30,
+      });
+    }
+    applyPreferences({ a1cName: "HbA1c", a1cUnits: "percent" });
+    render(EHbA1cPage, {});
+    return () => {
+      timelinePoints.length = sparseLength;
+    };
+  });
+
+  it("shows a lab result only when the pointer is close to its marker", async () => {
+    await expect.element(page.getByTestId("lab-marker").first()).toBeVisible();
+    const chart = page.getByTestId("ehba1c-chart");
+    const chartBounds = ((await chart.elements())[0] as HTMLElement).getBoundingClientRect();
+    const markers = (await page.getByTestId("lab-marker").elements()) as SVGPolygonElement[];
+    const center = (marker: SVGPolygonElement) => {
+      const bounds = marker.getBoundingClientRect();
+      return {
+        x: bounds.x + bounds.width / 2 - chartBounds.x,
+        y: bounds.y + bounds.height / 2 - chartBounds.y,
+      };
+    };
+    const dayWidth = (center(markers[1]).x - center(markers[0]).x) / 2;
+    expect(dayWidth).toBeLessThan(9);
+    const tooltip = page.getByTestId("ehba1c-tooltip");
+    const tooltipText = async () => (await tooltip.elements())[0].textContent ?? "";
+
+    const marker = center(markers[1]);
+    await userEvent.hover(chart, { position: { x: marker.x + 10, y: marker.y } });
+    await expect.element(tooltip).toBeVisible();
+    expect(await tooltipText()).toContain("Same-day lab test");
+
+    // Two days to the side, the tooltip reads that day's estimate rather than the lab draw.
+    await userEvent.hover(chart, { position: { x: marker.x + 2 * dayWidth + 10, y: marker.y } });
+    await expect.poll(tooltipText).not.toContain("Lab result");
+
+    // Low in the chart, by the date axis, the lab draw above does not take over.
+    await userEvent.hover(chart, { position: { x: marker.x + 4, y: chartBounds.height - 24 } });
+    await expect.poll(tooltipText).not.toContain("Lab result");
   });
 });

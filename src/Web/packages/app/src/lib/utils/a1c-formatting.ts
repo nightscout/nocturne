@@ -21,9 +21,14 @@ export function formatA1cValue(
   return formatA1cNumber(a1cDisplayValue(value));
 }
 
+/** One digit more than a lab report: two decimals for percent, one for mmol/mol. */
+function a1cDecimals(): number {
+  return a1cUnits.current === "percent" ? 2 : 1;
+}
+
 export function formatA1cNumber(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "–";
-  return value.toFixed(a1cUnits.current === "percent" ? 1 : 0);
+  return value.toFixed(a1cDecimals());
 }
 
 export function formatA1c(value: A1cDisplayValue | null | undefined): string {
