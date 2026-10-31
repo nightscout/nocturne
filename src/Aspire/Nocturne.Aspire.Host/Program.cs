@@ -802,6 +802,11 @@ class Program
                 // OAuth/OIDC discovery endpoints → API
                 ApplyEdgeTransforms(yarp.AddRoute("/.well-known/{**catch-all}", api.GetEndpoint("http")));
 
+                // MCP endpoint (streamable HTTP) → API. Outside /api, so the web fallback would
+                // answer it with the SPA 404 page otherwise.
+                ApplyEdgeTransforms(yarp.AddRoute("/mcp", api.GetEndpoint("http")));
+                ApplyEdgeTransforms(yarp.AddRoute("/mcp/{**catch-all}", api.GetEndpoint("http")));
+
                 // Legacy Nightscout /pebble (watchfaces, Loop, LoopFollow) → API. It sits
                 // outside /api, so without this route the web fallback answers with the SPA
                 // 404 page instead. Authorization is the API's default-deny fallback policy.
