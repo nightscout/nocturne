@@ -22,7 +22,7 @@
     groups: { name: string; rows: ReportRow[] }[];
     rowOf: (row: ReportRow) => Row;
     columns: { label: string; a: string; b: string; delta: string };
-    /** The last line when rows are left out: how many the image does not show. */
+    /** The host's words for the last line when rows are left out: how many the image does not show. No line without it. */
     moreRows?: (count: number) => string;
   }
 
@@ -34,7 +34,7 @@
     groups,
     rowOf,
     columns,
-    moreRows = (count: number) => `The summary has ${count} more ${count === 1 ? "figure" : "figures"}.`,
+    moreRows,
   }: Props = $props();
 
   const theme = $derived(still.theme);
@@ -116,7 +116,7 @@
           <Text x={W} y={line.y} value={row.deltaText} textAnchor="end" fill={verdictColor(row.verdict)} fontSize={13} style={text.strong} />
         {/if}
       {/each}
-      {#if layout.left > 0}
+      {#if layout.left > 0 && moreRows}
         <Text x={0} y={chart.height - 4} value={moreRows(layout.left)} fill={text.muted} fontSize={12} style={text.font} />
       {/if}
     </Canvas>

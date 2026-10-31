@@ -61,3 +61,78 @@ export interface ChartLabels {
 	scheduledTrackers: (count: number) => string;
 	mealPeriod: (period: MealPeriod) => string;
 }
+
+const FIRST = "\u0001";
+const SECOND = "\u0002";
+
+/**
+ * A ChartLabels as plain data, so it can cross to a worker thread: its words as they are, and each
+ * function called with stand-ins for its values. A count is kept for one and for many only, which
+ * is all a language with two plural forms needs; the static charts draw no counted words.
+ */
+export interface SerializedChartLabels {
+	words: Omit<ChartLabels, ChartLabelFunction>;
+	templates: Record<Exclude<ChartLabelFunction, CountedLabel | "mealPeriod">, string>;
+	counted: Record<CountedLabel, { one: string; many: string }>;
+	mealPeriods: Record<MealPeriod, string>;
+}
+
+type ChartLabelFunction =
+	| "insulinAmount"
+	| "carbAmount"
+	| "basalRate"
+	| "basalInjection"
+	| "rangeLimits"
+	| "target"
+	| "alarms"
+	| "scheduledTrackers"
+	| "mealPeriod";
+
+type CountedLabel = "alarms" | "scheduledTrackers";
+
+const MANY = 7;
+
+export function serializeChartLabels(labels: ChartLabels): SerializedChartLabels {
+	const { insulinAmount, carbAmount, basalRate, basalInjection, rangeLimits, target, alarms, scheduledTrackers, mealPeriod, ...words } =
+		labels;
+	return {
+		words,
+		templates: {
+			insulinAmount: insulinAmount(FIRST),
+			carbAmount: carbAmount(FIRST),
+			basalRate: basalRate(FIRST),
+			basalInjection: basalInjection(FIRST, SECOND),
+			rangeLimits: rangeLimits(FIRST, SECOND),
+			target: target(FIRST),
+		},
+		counted: {
+			alarms: { one: alarms(1), many: alarms(MANY) },
+			scheduledTrackers: { one: scheduledTrackers(1), many: scheduledTrackers(MANY) },
+		},
+		mealPeriods: {
+			Breakfast: mealPeriod("Breakfast"),
+			Lunch: mealPeriod("Lunch"),
+			Dinner: mealPeriod("Dinner"),
+			Snack: mealPeriod("Snack"),
+			LateNight: mealPeriod("LateNight"),
+		},
+	};
+}
+
+export function deserializeChartLabels(data: SerializedChartLabels): ChartLabels {
+	const fill = (template: string, first: string, second = "") => template.replaceAll(FIRST, first).replaceAll(SECOND, second);
+	const count = ({ one, many }: { one: string; many: string }) => (n: number) =>
+		n === 1 ? one : many.replaceAll(String(MANY), String(n));
+	return {
+		...data.words,
+		insulinAmount: (units) => fill(data.templates.insulinAmount, units),
+		carbAmount: (grams) => fill(data.templates.carbAmount, grams),
+		basalRate: (rate) => fill(data.templates.basalRate, rate),
+		basalInjection: (units, name) => fill(data.templates.basalInjection, units, name ?? ""),
+		rangeLimits: (low, high) => fill(data.templates.rangeLimits, low, high),
+		target: (range) => fill(data.templates.target, range),
+		alarms: count(data.counted.alarms),
+		scheduledTrackers: count(data.counted.scheduledTrackers),
+		mealPeriod: (period) => data.mealPeriods[period],
+	};
+}

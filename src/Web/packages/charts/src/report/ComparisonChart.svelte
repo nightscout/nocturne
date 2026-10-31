@@ -22,9 +22,11 @@
     emptyText: string;
     /** Drawn on a canvas in the theme's colours, for an image. */
     static?: StaticRender;
+    /** In an image, the host's words for how many figures did not fit. */
+    moreRows?: (count: number) => string;
   }
 
-  let { panel, format, emptyText, static: still }: Props = $props();
+  let { panel, format, emptyText, static: still, moreRows }: Props = $props();
 
   const label = (name: string) => panel.fields.find((f) => f.name === name)?.label ?? name;
   const text = (row: ReportRow, name: string) => (typeof row[name] === "string" ? String(row[name]) : "");
@@ -88,6 +90,7 @@
     {groups}
     rowOf={rowProps}
     columns={{ label: label("label"), a: label("a"), b: label("b"), delta: label("delta") }}
+    {moreRows}
   />
 {:else if panel.rows.length === 0}
   <p class="py-6 text-center text-sm text-muted-foreground">{emptyText}</p>

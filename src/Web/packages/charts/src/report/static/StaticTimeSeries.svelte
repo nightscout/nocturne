@@ -105,8 +105,8 @@
         />
       {/if}
       {#if model.thresholds}
-        <Rule y={model.thresholds.low} stroke={paint(theme, "var(--glucose-low)")} strokeOpacity={0.6} dashArray="4 4" />
-        <Rule y={model.thresholds.high} stroke={paint(theme, "var(--glucose-high)")} strokeOpacity={0.6} dashArray="4 4" />
+        <Rule y={model.thresholds.low} stroke={paint(theme, "var(--glucose-low)", undefined, 0.6)} dashArray="4 4" />
+        <Rule y={model.thresholds.high} stroke={paint(theme, "var(--glucose-high)", undefined, 0.6)} dashArray="4 4" />
       {/if}
       {#each model.lines as field (field.name)}
         <Path

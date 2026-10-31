@@ -7,7 +7,7 @@ import { paint } from "./static-theme.js";
 
 const MODES = ["light", "dark"] as const;
 
-/** ChartColor values no stylesheet defines (Phase 0's known gap): the live chart draws them unset. */
+/** ChartColor values no stylesheet defines: the live chart draws them unset, an image in the muted colour. */
 const UNDEFINED_CHART_COLORS = [
   "activity-sleep",
   "activity-exercise",
@@ -39,6 +39,18 @@ describe("the static chart theme", () => {
     const written = [...declaring.matchAll(/^\s*--([a-z0-9-]+)\s*:/gm)].map((m) => m[1]);
     const { light, dark } = clinicalColorNames();
     expect(new Set([...light, ...dark])).toEqual(new Set(written));
+  });
+
+  it("finds every custom property of themes/nocturne.css in a block it reads", () => {
+    const css = readFileSync(new URL("../themes/nocturne.css", import.meta.url), "utf8");
+    expect(readCustomProperties(css).unread).toEqual([]);
+  });
+
+  it("applies every dark override themes/nocturne.css declares", () => {
+    const css = readFileSync(new URL("../themes/nocturne.css", import.meta.url), "utf8");
+    const dark = resolveChartTheme("dark");
+    for (const [name, value] of readCustomProperties(css).dark)
+      expect(paint(dark, `var(--${name})`), name).toBe(paint(dark, value));
   });
 
   it.each(MODES)("resolves every ChartColor the stylesheets define (%s)", (mode) => {
@@ -105,5 +117,36 @@ describe("CSS colour expressions", () => {
     expect(root.get("b")).toBe("#fff");
     expect(dark.get("a")).toBe("#000");
     expect(root.has("color-a")).toBe(false);
+  });
+
+  it("reads :root under a dark colour-scheme query, and dark selector lists, as the dark scheme", () => {
+    const { root, dark, unread } = readCustomProperties(`
+      :root { --a: #fff; --b: #eee; }
+      @media (prefers-color-scheme: dark) { :root { --a: #000; } }
+      :root.dark { --b: #111; }
+      .dark, [data-theme="night"] { --c: #222; }
+      @media print { :root { --d: #333; } }`);
+    expect(root.get("a")).toBe("#fff");
+    expect(dark.get("a")).toBe("#000");
+    expect(dark.get("b")).toBe("#111");
+    expect(dark.get("c")).toBe("#222");
+    expect(root.get("d")).toBe("#333");
+    expect(unread).toEqual([]);
+  });
+
+  it("names a custom property declared in a block it does not read", () => {
+    const { unread } = readCustomProperties(`
+      .chart { --lane: red; }
+      :root { --a: #fff; .nested { --b: #000; } --c: #111; }
+      @theme inline { --color-a: var(--a); }`);
+    expect(unread).toEqual([{ selector: ".chart", name: "lane" }, { selector: ".nested", name: "b" }]);
+  });
+
+  it("keeps a block's declarations that follow a nested block", () => {
+    expect(readCustomProperties(":root { --a: #fff; .x { --b: #000; } --c: #111; }").root.get("c")).toBe("#111");
+  });
+
+  it("scales a colour's alpha for a mark that ignores opacity", () => {
+    expect(paint(resolveChartTheme("light"), "#ff0000", undefined, 0.5)).toBe("#ff000080");
   });
 });

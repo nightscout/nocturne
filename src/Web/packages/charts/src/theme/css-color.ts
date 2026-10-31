@@ -224,36 +224,67 @@ export function cssColorToHex(value: string, vars: CustomProperties = new Map())
   return colour ? toHex(colour) : null;
 }
 
+/** A custom property declared where the theme reader does not look: what it was, and in which block. */
+export interface UnreadDeclaration {
+  selector: string;
+  name: string;
+}
+
+/** Whether a selector list addresses the dark scheme's root: `.dark`, `:root.dark`, `html.dark`. */
+function isDarkSelector(selector: string): boolean {
+  return selector.split(",").some((s) => /^(:root|html)?\.dark$/.test(s.trim()));
+}
+
+/** Whether a selector list addresses the document root alone. */
+function isRootSelector(selector: string): boolean {
+  return selector.split(",").every((s) => /^(:root|html)$/.test(s.trim()));
+}
+
 /**
- * The custom properties a stylesheet declares on `:root` and on `.dark` (inside any at-rule), as
- * written. A later declaration of a name replaces an earlier one, as in the cascade.
+ * The custom properties a stylesheet declares for the light scheme (`:root`) and the dark one
+ * (`.dark`, `:root.dark`, or `:root` inside `@media (prefers-color-scheme: dark)`), inside any other
+ * at-rule, as written. A later declaration of a name replaces an earlier one, as in the cascade.
+ * Declarations in any other block (except Tailwind's `@theme`, which only maps them to utilities)
+ * are returned as `unread`, so a test can refuse a stylesheet the reader would misread.
  */
-export function readCustomProperties(css: string): { root: Map<string, string>; dark: Map<string, string> } {
+export function readCustomProperties(css: string): {
+  root: Map<string, string>;
+  dark: Map<string, string>;
+  unread: UnreadDeclaration[];
+} {
   const source = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const root = new Map<string, string>();
   const dark = new Map<string, string>();
+  const unread: UnreadDeclaration[] = [];
   const open: { selector: string; body: string }[] = [];
   let text = "";
   for (const ch of source) {
     if (ch === "{") {
       // The selector is what follows the last statement of the enclosing block.
-      const selector = text.slice(text.lastIndexOf(";") + 1).trim();
-      if (open.length > 0) open[open.length - 1].body += text;
+      const cut = text.lastIndexOf(";") + 1;
+      const selector = text.slice(cut).trim();
+      if (open.length > 0) open[open.length - 1].body += text.slice(0, cut);
       open.push({ selector, body: "" });
       text = "";
     } else if (ch === "}") {
       const block = open.pop();
       if (block) {
         block.body += text;
-        const target = block.selector === ":root" ? root : block.selector === ".dark" ? dark : null;
-        if (target) for (const [name, value] of declarations(block.body)) target.set(name, value);
+        const inDarkMedia = open.some((b) => /^@media\b.*prefers-color-scheme\s*:\s*dark/i.test(b.selector));
+        const target = isDarkSelector(block.selector) || (inDarkMedia && isRootSelector(block.selector))
+          ? dark
+          : isRootSelector(block.selector) ? root : null;
+        for (const [name, value] of declarations(block.body)) {
+          if (target) target.set(name, value);
+          else if (!block.selector.startsWith("@theme")) unread.push({ selector: block.selector, name });
+        }
       }
       text = "";
     } else {
       text += ch;
     }
   }
-  return { root, dark };
+  return { root, dark, unread };
 }
 
 /** `--name: value;` pairs in a block's own text; a value written over several lines is joined. */

@@ -130,11 +130,11 @@
         rule={{ stroke: text.border }}
         tickLabelProps={{ fill: text.muted, fontSize: 12, style: text.font }}
       />
-      <Rule y={thresholds.high} stroke={paint(theme, "var(--glucose-high)")} strokeOpacity={0.5} dashArray={dashOf("target-range-limit")} />
-      <Rule y={thresholds.low} stroke={paint(theme, "var(--glucose-very-low)")} strokeOpacity={0.5} dashArray={dashOf("target-range-limit")} />
+      <Rule y={thresholds.high} stroke={paint(theme, "var(--glucose-high)", undefined, 0.5)} dashArray={dashOf("target-range-limit")} />
+      <Rule y={thresholds.low} stroke={paint(theme, "var(--glucose-very-low)", undefined, 0.5)} dashArray={dashOf("target-range-limit")} />
       {#each [...new Set([thresholds.targetLow, thresholds.targetHigh])] as target (target)}
         {#if target !== null}
-          <Rule y={target} stroke={paint(theme, "var(--glucose-in-range)")} strokeOpacity={0.7} dashArray={dashOf("glucose-target")} />
+          <Rule y={target} stroke={paint(theme, "var(--glucose-in-range)", undefined, 0.7)} dashArray={dashOf("glucose-target")} />
         {/if}
       {/each}
       {#each basalSteps(chart.xScale) as step, i (i)}

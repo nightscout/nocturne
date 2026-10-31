@@ -159,6 +159,10 @@ export interface ReportResult {
   panels: ReportPanel[];
   summary: string;
   warnings?: string[];
+  /** The tenant's regional format (BCP-47), which an image writes dates and numbers in; null for the host's. */
+  locale?: string | null;
+  /** Whether the tenant reads a 12-hour clock; null for the host's. */
+  hour12?: boolean | null;
   /** The web app's page that opens the whole spec, on the tenant's host; null when the spec is too large for a link. */
   openUrl?: string | null;
 }

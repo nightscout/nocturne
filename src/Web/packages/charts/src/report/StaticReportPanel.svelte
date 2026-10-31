@@ -23,11 +23,18 @@
     labels: ChartLabels;
     /** The words a panel with no rows prints. */
     noData: string;
+    /** How many of a comparison's figures did not fit the image. */
+    moreRows: (count: number) => string;
   }
 
-  let { report, panel, still, format, labels, noData }: Props = $props();
+  let { report, panel, still, format, labels, noData, moreRows }: Props = $props();
 
-  const zoned = $derived<ChartFormat>({ ...format, timeZone: report.timeZone ?? "UTC" });
+  /** The tenant's regional format and clock where the report carries them, else the host's. */
+  const zoned = $derived<ChartFormat>({
+    locale: report.locale ?? format.locale,
+    hour12: report.hour12 ?? format.hour12,
+    timeZone: report.timeZone ?? "UTC",
+  });
   const colorMode = $derived(report.glucoseColorMode ?? "continuous");
 </script>
 
@@ -38,7 +45,7 @@
 {:else if panel.primitive === "bar"}
   <BarChart {panel} format={zoned} static={still} />
 {:else if panel.primitive === "comparison"}
-  <ComparisonChart {panel} format={zoned} emptyText={noData} static={still} />
+  <ComparisonChart {panel} format={zoned} emptyText={noData} static={still} {moreRows} />
 {:else if panel.primitive === "glucose_chart" && panel.chart}
   <GlucoseChart
     data={transformChartData(panel.chart)}

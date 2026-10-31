@@ -104,14 +104,14 @@
         {@const top = chart.yScale(model.thresholds.high)}
         {@const bottom = chart.yScale(model.thresholds.low)}
         <Rect x={0} y={top} width={chart.width} height={Math.max(0, bottom - top)} fill={paint(theme, "var(--glucose-in-range)")} fillOpacity={0.1} />
-        <Rule y={model.thresholds.low} stroke={paint(theme, "var(--glucose-low)")} strokeOpacity={0.6} dashArray="4 4" />
-        <Rule y={model.thresholds.high} stroke={paint(theme, "var(--glucose-high)")} strokeOpacity={0.6} dashArray="4 4" />
+        <Rule y={model.thresholds.low} stroke={paint(theme, "var(--glucose-low)", undefined, 0.6)} dashArray="4 4" />
+        <Rule y={model.thresholds.high} stroke={paint(theme, "var(--glucose-high)", undefined, 0.6)} dashArray="4 4" />
       {/if}
       {#if model.zeroSlot >= 0}
-        <Rule x={model.zeroSlot} stroke={text.foreground} strokeOpacity={0.5} dashArray="2 2" />
+        <Rule x={model.zeroSlot} stroke={paint(theme, "var(--foreground)", undefined, 0.5)} dashArray="2 2" />
       {/if}
       {#if model.yDomain[0] < 0}
-        <Rule y={0} stroke={text.foreground} strokeOpacity={0.4} />
+        <Rule y={0} stroke={paint(theme, "var(--foreground)", undefined, 0.4)} />
       {/if}
       {#each model.traces as trace (`${trace.cohort}-${trace.at}`)}
         <Spline

@@ -1,5 +1,5 @@
 import type { GradientStop } from "../view/glucose-gradient-stops.js";
-import { cssColorToHex, type CustomProperties } from "./css-color.js";
+import { parseCssColor, toHex, type CustomProperties } from "./css-color.js";
 
 /**
  * The theme a chart drawn with no stylesheet (a canvas on the server) paints in: every custom
@@ -14,10 +14,14 @@ export interface StaticTheme {
   fontFamily: string;
 }
 
-/** The colour `value` (any expression the charts write) paints in `theme`, as hex; `fallback` when it is none. */
-export function paint(theme: StaticTheme, value: string | null | undefined, fallback = "var(--muted-foreground)"): string {
-  const resolved = value ? cssColorToHex(value, theme.variables) : null;
-  return resolved ?? cssColorToHex(fallback, theme.variables) ?? "#808080";
+/**
+ * The colour `value` (any expression the charts write) paints in `theme`, as hex; `fallback` when it
+ * is none. `opacity` scales its alpha, for marks whose canvas drawing ignores an opacity prop
+ * (layerchart's canvas `Line`, and so `Rule`, reads no `strokeOpacity`).
+ */
+export function paint(theme: StaticTheme, value: string | null | undefined, fallback = "var(--muted-foreground)", opacity = 1): string {
+  const colour = (value ? parseCssColor(value, theme.variables) : null) ?? parseCssColor(fallback, theme.variables);
+  return colour ? toHex({ ...colour, a: colour.a * opacity }) : "#808080";
 }
 
 /**
