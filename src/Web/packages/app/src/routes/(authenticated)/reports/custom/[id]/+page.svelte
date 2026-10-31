@@ -1,6 +1,6 @@
 <!--
   A saved custom report: its spec as the API read it back, run for the viewer. A spec that no longer
-  validates shows the API's reasons instead. Rename, delete and copy the link from here.
+  validates shows the API's reasons instead. Edit, rename, delete and copy the link from here.
 -->
 <script lang="ts">
   import { goto } from "$app/navigation";
@@ -24,6 +24,7 @@
   import { copyToClipboard } from "#lib/utils/index.js";
   import Link from "@lucide/svelte/icons/link";
   import Pencil from "@lucide/svelte/icons/pencil";
+  import SquarePen from "@lucide/svelte/icons/square-pen";
   import Trash2 from "@lucide/svelte/icons/trash-2";
 
   const id = $derived(page.params.id ?? "");
@@ -103,6 +104,10 @@
             Copy link
           </Button>
           {#if report.canEdit}
+            <Button variant="outline" size="sm" href={resolve("/(authenticated)/reports/custom/[id]/edit", { id })}>
+              <SquarePen class="size-4" aria-hidden="true" />
+              Edit
+            </Button>
             <Button variant="outline" size="sm" onclick={startRename}>
               <Pencil class="size-4" aria-hidden="true" />
               Rename

@@ -12,6 +12,7 @@
   import { describeSubmitError } from "#lib/forms/submit-error.js";
   import { formatDateTime, formatNumber } from "#lib/utils/formatting.js";
   import LayoutDashboard from "@lucide/svelte/icons/layout-dashboard";
+  import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
 
   const resource = contextResource(() => getCustomReports(), {
@@ -40,7 +41,7 @@
 </script>
 
 <div class="@container space-y-6">
-  <div class="flex items-start gap-3">
+  <div class="flex flex-wrap items-start gap-3">
     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
       <LayoutDashboard class="h-5 w-5 text-primary" aria-hidden="true" />
     </div>
@@ -51,6 +52,10 @@
         account sees the same list.
       </p>
     </div>
+    <Button class="@lg:ml-auto" href={resolve("/(authenticated)/reports/custom/new")}>
+      <Plus aria-hidden="true" />
+      New report
+    </Button>
   </div>
 
   {#if deleteError}
@@ -60,7 +65,7 @@
   {#if resource.current}
     {#if reports.length === 0}
       <p class="text-sm text-muted-foreground">
-        No custom reports.
+        No custom reports. To make a report, select New report.
       </p>
     {:else}
       <Table.Root>

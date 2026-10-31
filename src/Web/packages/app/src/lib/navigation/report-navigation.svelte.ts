@@ -449,6 +449,10 @@ function reportSubRoutes(): Record<string, { title: string; description: string 
       title: "New custom report",
       description: "Make a report from the charts and figures of your data",
     },
+    "/reports/custom/[id]/edit": {
+      title: "Edit custom report",
+      description: "Change the panels of a saved custom report",
+    },
     "/reports/custom/[id]": {
       title: "Custom report",
       description: "A saved custom report, run on your current data",
@@ -458,6 +462,7 @@ function reportSubRoutes(): Record<string, { title: string; description: string 
 
 function subRouteKey(pathname: string): string {
   if (/^\/reports\/sleep\/[^/]+$/.test(pathname)) return "/reports/sleep/[date]";
+  if (/^\/reports\/custom\/[^/]+\/edit$/.test(pathname)) return "/reports/custom/[id]/edit";
   if (/^\/reports\/custom\/[^/]+$/.test(pathname) && pathname !== "/reports/custom/new") return "/reports/custom/[id]";
   return pathname;
 }
