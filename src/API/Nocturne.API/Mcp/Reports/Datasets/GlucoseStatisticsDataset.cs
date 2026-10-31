@@ -136,7 +136,7 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
         (await request.Cache.GlucoseAsync(request, cancellationToken), await request.Cache.AnalysisAsync(request, cancellationToken));
 
     /// <summary>The insulin delivery figures over the range, or null when no insulin or carb record is in it.</summary>
-    private static async Task<InsulinDeliveryStatistics?> InsulinAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
+    internal static async Task<InsulinDeliveryStatistics?> InsulinAsync(ReportDatasetRequest request, CancellationToken cancellationToken)
     {
         var from = request.From.UtcDateTime;
         var to = request.To.UtcDateTime;

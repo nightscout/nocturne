@@ -549,6 +549,7 @@ internal sealed partial class ReportSpecValidator(IReportDatasetRegistry registr
 
             case ReportPrimitive.Table:
             case ReportPrimitive.StatTiles:
+            case ReportPrimitive.Comparison:
             {
                 NotFor("x", xSent);
                 NotFor("y", y is not null);

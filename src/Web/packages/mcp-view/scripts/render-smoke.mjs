@@ -1,6 +1,7 @@
 // Renders the built dist/report.html the way an MCP Apps host does: in a sandboxed iframe under
 // the spec's default CSP, behind a minimal host that answers ui/initialize and sends one
-// report result (a dashboard chart panel, a time series panel with treatment markers and a bar panel). The vitest suite runs the unbundled sources, so only this sees the bundle.
+// report result (a dashboard chart panel, a time series panel with treatment markers, a bar panel, the
+// AGP's stacked time in range bar and a two-period comparison). The vitest suite runs the unbundled sources, so only this sees the bundle.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
@@ -77,6 +78,39 @@ const result = {
         ],
         summary: "bar summary",
       },
+      {
+        id: "stacked",
+        dataset: "glucose_distribution",
+        primitive: "bar",
+        bindings: { x: "period", y: ["veryLow", "low", "inRange", "high", "veryHigh"], stacked: true, orientation: "horizontal" },
+        status: "ok",
+        window: window_,
+        fields: [
+          field("period", "Period", "category", null),
+          field("veryLow", "Very low", "percent", "%", { color: "glucose-very-low" }),
+          field("low", "Low", "percent", "%", { color: "glucose-low" }),
+          field("inRange", "In range", "percent", "%", { color: "glucose-in-range" }),
+          field("high", "High", "percent", "%", { color: "glucose-high" }),
+          field("veryHigh", "Very high", "percent", "%", { color: "glucose-very-high" }),
+        ],
+        rows: [{ period: "2026-10-15 to 2026-10-29", veryLow: 1, low: 3, inRange: 70, high: 21, veryHigh: 5 }],
+        summary: "stacked summary",
+      },
+      {
+        id: "comparison",
+        dataset: "period_comparison",
+        primitive: "comparison",
+        bindings: { columns: ["metric", "group", "label", "a", "b", "delta", "changePercent", "unit", "verdict", "color"] },
+        status: "ok",
+        window: window_,
+        fields: ["metric", "group", "label", "a", "b", "delta", "changePercent", "unit", "verdict", "color"].map((n) => field(n, n, "category", null)),
+        rows: [
+          { metric: "inRange", group: "Time in each range", label: "In range", a: 60, b: 70, delta: 10, changePercent: 16.7, unit: "%", verdict: "better", color: "glucose-in-range" },
+          { metric: "high", group: "Time in each range", label: "High", a: 40, b: 30, delta: -10, changePercent: -25, unit: "%", verdict: "better", color: "glucose-high" },
+          { metric: "mean", group: "Overview", label: "Mean glucose", a: 160, b: 150, delta: -10, changePercent: -6.3, unit: "mg/dL", verdict: null, color: null },
+        ],
+        summary: "comparison summary",
+      },
     ],
   },
 };
@@ -126,6 +160,8 @@ let circles = 0;
 let lines;
 let markers;
 let bars;
+let stacked;
+let comparisonRows;
 try {
   await plot.waitFor({ timeout: 15_000 });
   for (let i = 0; i < 30 && circles < READINGS; i++) {
@@ -137,13 +173,22 @@ try {
   lines = await series.locator("path.fill-none").count();
   markers = await series.locator("[data-testid=report-bolus-marker], [data-testid=report-carb-marker]").count();
   bars = await page.frameLocator("#view").getByTestId("report-bar-segment").count();
+  const view = page.frameLocator("#view");
+  stacked = await view.locator("[data-orientation=horizontal] [data-testid=stacked-bar-segment]").count();
+  comparisonRows = await view.getByTestId("comparison-row").count();
 } finally {
   await browser.close();
 }
 
-if (errors.length > 0 || circles < READINGS || !(lines >= 1) || markers !== 2 || bars !== 3) {
-  console.error(`render smoke failed: ${circles} of ${READINGS} points drawn, ${lines} time-series lines, ${markers} markers, ${bars} bars`);
+if (errors.length > 0 || circles < READINGS || !(lines >= 1) || markers !== 2 || bars !== 3 || stacked !== 5 || comparisonRows !== 3) {
+  console.error(
+    `render smoke failed: ${circles} of ${READINGS} points drawn, ${lines} time-series lines, ${markers} markers, ${bars} bars, ` +
+      `${stacked} stacked segments, ${comparisonRows} comparison rows`,
+  );
   for (const error of errors) console.error(`  ${error}`);
   process.exit(1);
 }
-console.log(`render smoke passed: ${circles} points drawn, ${lines} time-series lines, ${markers} markers, ${bars} bars, no errors`);
+console.log(
+  `render smoke passed: ${circles} points drawn, ${lines} time-series lines, ${markers} markers, ${bars} bars, ` +
+    `${stacked} stacked segments, ${comparisonRows} comparison rows, no errors`,
+);

@@ -12,7 +12,7 @@ public class ReportSpecValidatorTests
     [
         new GlucoseSeriesDataset(), new GlucoseStatisticsDataset(), new EventResponseDataset(), new SettingsEvidenceDataset(),
         new DailyProfileDataset(), new GlucoseDistributionByHourDataset(), new TreatmentsDataset(), new BasalDeliveryDataset(),
-        new DeviceStatusDataset(), new GlucoseDistributionDataset(), new DailySummaryDataset(),
+        new DeviceStatusDataset(), new GlucoseDistributionDataset(), new DailySummaryDataset(), new PeriodComparisonDataset(),
     ]);
 
     private static readonly ReportSpecValidator Validator = new(Registry, TimeProvider.System);

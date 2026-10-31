@@ -46,3 +46,5 @@ export { default as RangeBandsChart } from "./report/RangeBandsChart.svelte";
 export { default as ReportView } from "./report/ReportView.svelte";
 export { default as BarChart } from "./report/BarChart.svelte";
 export { default as StackedBar, type StackedBarSegment, type StackedBarInset } from "./report/StackedBar.svelte";
+export { default as ComparisonRow } from "./report/ComparisonRow.svelte";
+export { default as ComparisonChart } from "./report/ComparisonChart.svelte";

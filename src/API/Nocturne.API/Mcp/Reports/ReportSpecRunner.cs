@@ -162,6 +162,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
         var fields = bound.Concat(colours).Concat(companions).Distinct(StringComparer.Ordinal)
             .Where(name => !omitted.Contains(name))
             .Select(name => catalogue.Single(f => f.Name == name).ResolveUnit(useMmol))
+            .Select(f => output.FieldLabels?.GetValueOrDefault(f.Name) is { } label ? f with { Label = label } : f)
             .ToList();
         var names = fields.Select(f => f.Name).ToList();
 
@@ -185,6 +186,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             Markers = panel.Primitive == ReportPrimitive.TimeSeries ? MarkersFor(fields, output.Markers) : [],
             Cohorts = output.Cohorts,
             Traces = panel.Primitive == ReportPrimitive.GlucoseChart ? output.Traces : [],
+            LinkQuery = output.LinkQuery,
         };
     }
 

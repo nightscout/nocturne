@@ -10,6 +10,8 @@
   import * as Select from "#lib/components/ui/select/index.js";
   import GlucoseRangeCalendarPicker from "#lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "#lib/components/reports/TIRStackedChart.svelte";
+  import { ComparisonRow } from "@nocturne/charts";
+  import { comparisonBar } from "@nocturne/charts/core";
   import TimeZoneNote from "#lib/components/reports/TimeZoneNote.svelte";
   import { setReportPrintMeta } from "#lib/components/reports/print/report-print.svelte.js";
   import {
@@ -433,9 +435,6 @@
   const periodA = $derived(withReadings(queryA.current, insulinQueryA.current));
   const periodB = $derived(withReadings(queryB.current, insulinQueryB.current));
 
-  // Cap percent change at ±60 % so outliers don't blow out the bar.
-  const BAR_CAP_PCT = 60;
-
   // Signed percent change from the first period to the second. A zero baseline admits no
   // proportional change, so any move off it saturates the bar in the move's direction
   // rather than drawing a flat bar beside a non-zero delta.
@@ -465,18 +464,12 @@
     }
 
     const delta = bv - av;
-    const flat = Math.abs(delta) < def.flatBelow;
-    const magnitude = Math.min(BAR_CAP_PCT, Math.abs(percentChange(av, bv)));
-
-    // The bar carries the sign of the change: it grows right when the second
-    // period is higher and left when it is lower.
     return {
       key,
       label: def.label,
       av,
       bv,
-      bar: flat ? "flat" : delta > 0 ? "up" : "down",
-      barWidth: (magnitude / BAR_CAP_PCT) * 50,
+      ...comparisonBar(percentChange(av, bv), Math.abs(delta) < def.flatBelow),
       deltaText: def.formatDelta(delta),
     };
   }
@@ -672,33 +665,14 @@
             {group.title}
           </div>
           {#each group.rows as row (row.key)}
-            <div
-              class="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5 print:py-1.5 @2xl:grid @2xl:flex-nowrap @2xl:gap-4 @2xl:[grid-template-columns:minmax(140px,1fr)_90px_90px_minmax(120px,2fr)_100px]"
-            >
-              <div class="w-full text-sm font-medium @2xl:w-auto">{row.label}</div>
-              <div class="text-sm tabular-nums text-muted-foreground @2xl:text-right">
-                {valueText(row.key, row.av)}
-              </div>
-              <div class="text-sm font-semibold tabular-nums @2xl:text-right">
-                {valueText(row.key, row.bv)}
-              </div>
-              <div class="relative order-last h-2 w-full overflow-hidden rounded-full bg-muted @2xl:order-none @2xl:w-auto">
-                <div class="absolute top-0 bottom-0 left-1/2 w-px bg-border"></div>
-                <div
-                  class="absolute top-0 bottom-0 rounded-full bg-foreground transition-all duration-200 {row.bar === 'flat'
-                    ? 'left-[calc(50%-1px)] w-0.5'
-                    : row.bar === 'up'
-                      ? 'left-1/2 w-(--bar-w)'
-                      : 'right-1/2 w-(--bar-w)'}"
-                  style:--bar-w="{row.barWidth}%"
-                ></div>
-              </div>
-              <div
-                class="ml-auto text-sm font-semibold tabular-nums @2xl:ml-0 @2xl:text-right"
-              >
-                {row.deltaText}
-              </div>
-            </div>
+            <ComparisonRow
+              label={row.label}
+              aText={valueText(row.key, row.av)}
+              bText={valueText(row.key, row.bv)}
+              deltaText={row.deltaText}
+              bar={row.bar}
+              barWidth={row.barWidth}
+            />
           {/each}
         {/each}
       </div>

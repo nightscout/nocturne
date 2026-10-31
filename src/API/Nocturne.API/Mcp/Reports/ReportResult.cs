@@ -111,6 +111,10 @@ internal sealed record ReportPanelResult
 
     /// <summary>A glucose chart of event cohorts: single events' glucose, drawn faintly under each cohort's band.</summary>
     public IReadOnlyList<ReportTrace> Traces { get; init; } = [];
+
+    /// <summary>The query <see cref="ReportLinks"/> opens the panel's web report with, where the dataset gives one.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<KeyValuePair<string, string?>>? LinkQuery { get; init; }
 }
 
 internal sealed record ReportWindow(long From, long To);

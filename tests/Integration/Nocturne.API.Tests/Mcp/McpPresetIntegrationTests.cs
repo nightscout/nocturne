@@ -99,6 +99,45 @@ public class McpPresetIntegrationTests(ApiIntegrationTestFixture fixture, ITestO
     }
 
     [Fact]
+    public async Task Compare_periods_draws_both_periods_figures_with_the_change_and_degrades_without_treatments()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        string Day(int back) => today.AddDays(-back).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var arguments = new { aFrom = Day(7), aTo = Day(4), bFrom = Day(3), bTo = Day(0) };
+
+        using var full = McpClient(await McpTokenAsync("glucose.read treatments.read"));
+        var call = await CallToolAsync(full, "compare_periods", arguments);
+        call.TryGetProperty("error", out var error).Should().BeFalse(error.ToString());
+        var text = ToolText(call);
+        Log(text);
+        var panel = call.GetProperty("result").GetProperty("structuredContent").GetProperty("panels")[0];
+        panel.GetProperty("status").GetString().Should().Be("ok");
+        panel.GetProperty("primitive").GetString().Should().Be("comparison");
+        var rows = panel.GetProperty("rows").EnumerateArray().ToDictionary(r => r.GetProperty("metric").GetString()!);
+        rows["inRange"].GetProperty("a").ValueKind.Should().Be(JsonValueKind.Number);
+        rows["inRange"].GetProperty("b").ValueKind.Should().Be(JsonValueKind.Number);
+        rows["inRange"].GetProperty("color").GetString().Should().Be("glucose-in-range");
+        rows["insulinPerDay"].GetProperty("a").GetDouble().Should().BeGreaterThan(0);
+        rows.Keys.Should().Contain(["gmi", "cv", "mean", "carbsPerDay"]);
+        panel.GetProperty("fields").EnumerateArray().Single(f => f.GetProperty("name").GetString() == "a").GetProperty("label").GetString()
+            .Should().Be($"Period A, {Day(7)} to {Day(4)}");
+        panel.GetProperty("link").GetString().Should().Contain("/reports/comparison?preset=custom&aFrom=" + Day(7));
+        text.Should().Contain($"Period comparison: A is Period A, {Day(7)} to {Day(4)} (4 days)").And.Contain("In range: ");
+
+        using var glucoseOnly = McpClient(await McpTokenAsync("glucose.read"));
+        var degraded = await CallToolAsync(glucoseOnly, "compare_periods", new { preset = "last7-prior7" });
+        degraded.TryGetProperty("error", out var degradedError).Should().BeFalse(degradedError.ToString());
+        var degradedRows = degraded.GetProperty("result").GetProperty("structuredContent").GetProperty("panels")[0].GetProperty("rows")
+            .EnumerateArray().Select(r => r.GetProperty("metric").GetString()).ToList();
+        degradedRows.Should().Contain("inRange").And.NotContain("insulinPerDay").And.NotContain("carbsPerDay");
+        ToolText(degraded).Should().Contain("Insulin and carb figures are not shown: they need the treatments.read scope");
+
+        var refused = await CallToolAsync(full, "compare_periods", new { preset = "lastYear" });
+        refused.GetProperty("result").GetProperty("isError").GetBoolean().Should().BeTrue();
+        ToolText(refused).Should().Contain("preset: ");
+    }
+
+    [Fact]
     public async Task Show_treatments_draws_markers_on_the_line_and_the_records_in_a_table()
     {
         using var client = McpClient(await McpTokenAsync("glucose.read treatments.read"));

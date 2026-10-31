@@ -66,6 +66,67 @@ internal sealed class PresetTools
         return (await renderer.RenderAsync(spec, cancellationToken)).Result;
     }
 
+    [McpServerTool(Name = "compare_periods", Title = "Compare periods", ReadOnly = true, OpenWorld = false)]
+    [McpAppUi(ResourceUri = ReportResources.ReportUri)]
+    [Description(
+        "Compares two periods side by side, laid out as the Nocturne comparison report: each period's time in each glucose "
+        + "range, then each figure (GMI, CV, mean, time and episodes high and low, variability and risk indexes, data coverage, "
+        + "and with treatments.read insulin and carbs) with both values and the change, marked better or worse where a lower "
+        + "or higher value is better. Send 'preset', or the four dates. Returns the text of every figure.")]
+    [McpRequireScope(Scope.GlucoseRead)]
+    public static async Task<CallToolResult> ComparePeriods(
+        ReportSpecValidator validator,
+        ReportRenderer renderer,
+        [Description("last7-prior7, last14-prior14, last30-prior30 or thisMonth-lastMonth. Default last14-prior14 when no dates are sent.")] string? preset = null,
+        [Description("Period A's first day, yyyy-MM-dd. Send with aTo, bFrom and bTo, in place of preset.")] string? aFrom = null,
+        [Description("Period A's last day, yyyy-MM-dd, counted.")] string? aTo = null,
+        [Description("Period B's first day, yyyy-MM-dd.")] string? bFrom = null,
+        [Description("Period B's last day, yyyy-MM-dd, counted.")] string? bTo = null,
+        CancellationToken cancellationToken = default)
+    {
+        var validation = validator.Validate(
+            JsonSerializer.SerializeToElement(ComparisonSpec(preset, aFrom, aTo, bFrom, bTo)), await renderer.UsesMmolAsync(cancellationToken));
+        if (!validation.IsValid)
+            throw new McpInvalidArgumentsException(
+                "The periods are not valid. Change these and call compare_periods again:\n"
+                + string.Join('\n', validation.Errors.Select(e => $"- {ComparisonArgument(e)}")));
+        return (await renderer.RenderAsync(validation.Spec!, cancellationToken)).Result;
+    }
+
+    /// <summary>The comparison report as a spec: one comparison panel over the two periods the arguments name.</summary>
+    internal static object ComparisonSpec(string? preset, string? aFrom, string? aTo, string? bFrom, string? bTo)
+    {
+        var dates = aFrom is not null || aTo is not null || bFrom is not null || bTo is not null;
+        var dataset = new Dictionary<string, object?> { ["name"] = PeriodComparisonParameters.Name };
+        if (preset is not null || !dates)
+            dataset["preset"] = preset ?? "last14-prior14";
+        if (dates)
+        {
+            if (aFrom is not null || aTo is not null)
+                dataset["a"] = new { from = aFrom, to = aTo };
+            if (bFrom is not null || bTo is not null)
+                dataset["b"] = new { from = bFrom, to = bTo };
+        }
+        return new
+        {
+            version = ReportSpec.CurrentVersion,
+            title = "Period comparison",
+            panels = new object[]
+            {
+                new { id = "comparison", title = "Two periods side by side", dataset, primitive = "comparison" },
+            },
+        };
+    }
+
+    /// <summary>A spec error in the names of compare_periods' arguments.</summary>
+    private static string ComparisonArgument(ReportSpecError error) => error.Path switch
+    {
+        "panels[0].dataset.preset" => $"preset: {error.Message}",
+        "panels[0].dataset.a" or "panels[0].dataset.a.from" or "panels[0].dataset.a.to" => $"aFrom, aTo: {error.Message}",
+        "panels[0].dataset.b" or "panels[0].dataset.b.from" or "panels[0].dataset.b.to" => $"bFrom, bTo: {error.Message}",
+        _ => error.Message,
+    };
+
     /// <summary>
     /// The web AGP report's layout as a spec: its figure strip, its 24-hour percentile chart (the hourly
     /// distribution it draws, <c>averagedStats</c>), and its time in range bar.

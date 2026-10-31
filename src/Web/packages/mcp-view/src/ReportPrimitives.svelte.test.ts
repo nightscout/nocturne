@@ -224,6 +224,56 @@ describe("time_series markers", () => {
     expect(key).toEqual(["0.4% Very low", "1.6% Low", "71.8% In range", "20.9% High", "5.3% Very high"]);
   });
 
+  it("draws a comparison: each period's range bar, then each figure's values and change, coloured only where the API says", async () => {
+    const row = (metric: string, group: string, label: string, a: number | null, b: number | null, unit: string, verdict: string | null, color: string | null = null) => ({
+      metric, group, label, a, b, unit, verdict, color,
+      delta: a !== null && b !== null ? Math.round((b - a) * 10) / 10 : null,
+      changePercent: a !== null && b !== null && a !== 0 ? Math.round(((b - a) / a) * 1000) / 10 : null,
+    });
+    const comparison = {
+      id: "comparison", title: "Two periods side by side", dataset: "period_comparison", primitive: "comparison", status: "ok", window,
+      bindings: { columns: ["metric", "group", "label", "a", "b", "delta", "changePercent", "unit", "verdict", "color"] },
+      fields: [
+        field("metric", "Figure key", "category", null), field("group", "Group", "category", null), field("label", "Figure", "category", null),
+        field("a", "Prior 14 days, 2026-10-02 to 2026-10-15", "number", null), field("b", "Last 14 days, 2026-10-16 to 2026-10-29", "number", null),
+        field("delta", "Change", "number", null), field("changePercent", "Change (%)", "number", "%"), field("unit", "Unit", "category", null),
+        field("verdict", "Verdict", "category", null), field("color", "Color", "category", null),
+      ],
+      rows: [
+        row("veryLow", "Time in each range", "Very low", 1, 0.5, "%", "better", "glucose-very-low"),
+        row("low", "Time in each range", "Low", 3, 2.5, "%", "better", "glucose-low"),
+        row("inRange", "Time in each range", "In range", 60, 70, "%", "better", "glucose-in-range"),
+        row("high", "Time in each range", "High", 30, 22, "%", "better", "glucose-high"),
+        row("veryHigh", "Time in each range", "Very high", 6, 5, "%", "better", "glucose-very-high"),
+        row("cv", "Overview", "Variability (CV)", 34, 38, "%", "worse"),
+        row("mean", "Overview", "Mean glucose", 160, 150, "mg/dL", null),
+        row("insulinPerDay", "Insulin and carbs", "Total insulin per day", null, 40, "U", null),
+      ],
+      summary: "Period comparison.",
+    };
+    render(ReportView, { result: { structuredContent: report([comparison]) }, locale: "en-US" });
+
+    const chart = page.getByTestId("report-comparison");
+    await expect.element(chart).toBeVisible();
+    const sides = [...chart.element().querySelectorAll("[data-testid=comparison-side]")];
+    expect(sides.map((s) => s.querySelector("p")?.textContent)).toEqual([
+      "Prior 14 days, 2026-10-02 to 2026-10-15", "Last 14 days, 2026-10-16 to 2026-10-29",
+    ]);
+    await expect.poll(() => sides[1].querySelectorAll("[data-testid=stacked-bar-segment]").length).toBe(5);
+    expect(sides[1].textContent).toContain("70% In range");
+
+    const deltas = [...chart.element().querySelectorAll("[data-testid=comparison-delta]")];
+    const byLabel = (name: string) => deltas[[...chart.element().querySelectorAll("[data-testid=comparison-row]")].findIndex((r) => r.textContent?.startsWith(name))];
+    expect(byLabel("In range").textContent).toContain("+10%");
+    expect(byLabel("In range").getAttribute("data-verdict")).toBe("better");
+    expect(byLabel("In range").className).toContain("text-status-normal");
+    expect(byLabel("Variability (CV)").className).toContain("text-status-critical");
+    expect(byLabel("Mean glucose").textContent).toContain("−10 mg/dL");
+    expect(byLabel("Mean glucose").className).not.toMatch(/status/);
+    expect(byLabel("Total insulin per day").textContent?.trim()).toBe("–");
+    await expect.element(page.getByRole("heading", { name: "Insulin and carbs" })).toBeVisible();
+  });
+
   it("draws the panel's boluses and carbs as the dashboard's markers on the glucose line", async () => {
     render(ReportView, { result: { structuredContent: report([markedLine]) }, locale: "en-US" });
 

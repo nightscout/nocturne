@@ -25,10 +25,13 @@ internal static class ReportLinks
             BasalDeliveryParameters => "/reports/basal-analysis",
             DeviceStatusParameters => "/reports/battery",
             GlucoseDistributionParameters => "/reports/agp",
+            PeriodComparisonParameters => "/reports/comparison",
             _ => null,
         };
         if (path is null)
             return null;
+        if (result.LinkQuery is { } own)
+            return QueryHelpers.AddQueryString(origin.TrimEnd('/') + path, own);
 
         var zone = zoneId is not null && TimeZoneInfo.TryFindSystemTimeZoneById(zoneId, out var found) ? found : TimeZoneInfo.Utc;
         string Day(long mills) => DateOnly.FromDateTime(

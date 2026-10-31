@@ -186,6 +186,12 @@ internal sealed record ReportDatasetOutput
 
     /// <summary>Single events' glucose aligned on their anchor, which a glucose chart of cohorts draws under the band.</summary>
     public IReadOnlyList<ReportTrace> Traces { get; init; } = [];
+
+    /// <summary>Labels that replace a field's catalogue label for this run: a comparison's period names, say.</summary>
+    public IReadOnlyDictionary<string, string>? FieldLabels { get; init; }
+
+    /// <summary>The query the panel's web report opens with, in place of the range's days; null for the range's days.</summary>
+    public IReadOnlyList<KeyValuePair<string, string?>>? LinkQuery { get; init; }
 }
 
 /// <summary>

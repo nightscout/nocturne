@@ -6,7 +6,7 @@ import type { ChartColor } from "../enums.js";
 import type { DashboardChartDataDto } from "../dto.js";
 import type { ChartFormat } from "../format.js";
 
-export type ReportPrimitive = "time_series" | "stat_tiles" | "table" | "glucose_chart" | "range_bands" | "bar";
+export type ReportPrimitive = "time_series" | "stat_tiles" | "table" | "glucose_chart" | "range_bands" | "bar" | "comparison";
 
 /** A treatment marker the dashboard chart draws. */
 export type ReportMarkerKind = "bolus" | "carbs";

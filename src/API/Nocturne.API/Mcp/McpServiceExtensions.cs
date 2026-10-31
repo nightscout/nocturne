@@ -62,6 +62,7 @@ internal static class McpServiceExtensions
         services.AddSingleton<IReportDataset, DeviceStatusDataset>();
         services.AddSingleton<IReportDataset, GlucoseDistributionDataset>();
         services.AddSingleton<IReportDataset, DailySummaryDataset>();
+        services.AddSingleton<IReportDataset, PeriodComparisonDataset>();
         services.AddSingleton<IReportDatasetRegistry, ReportDatasetRegistry>();
         services.AddSingleton<ReportSpecValidator>();
         services.AddSingleton<ReportSpecRunner>();

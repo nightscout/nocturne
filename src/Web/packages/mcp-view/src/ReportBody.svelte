@@ -88,9 +88,10 @@
 
 {#snippet panelControls(panel: ReportPanel)}
   {@const panelCohorts = panel.dataset === "event_response" ? cohortsOf(originalSpec, panel.id) : []}
-  {#if (refine && panel.status === "ok") || (openLink && panel.link)}
+  {@const refinable = refine && panel.status === "ok" && panel.primitive !== "comparison"}
+  {#if refinable || (openLink && panel.link)}
     <div class="mt-1 flex flex-wrap items-center gap-2" data-testid="report-panel-controls">
-      {#if refine && panel.status === "ok"}
+      {#if refinable}
         <Button variant="outline" size="sm" disabled={busy} onclick={() => loadEarlier(panel)}>
           <History class="size-4" />
           Load earlier data

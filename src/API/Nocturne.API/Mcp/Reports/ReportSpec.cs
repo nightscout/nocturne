@@ -90,7 +90,7 @@ internal sealed record ReportPanelSpec
     + "range_bands: 'x', 'y' (one field: the median line), 'band' (two fields, or four: outer low, inner low, inner high, "
     + "outer high) and optional 'series' (a category field; one set of bands per value). Optional; each dataset has defaults. "
     + "bar: 'x' (a category field), 'y' (one or more number fields in one unit), optional 'stacked' and 'orientation'. "
-    + "table and stat_tiles: optional 'columns' (the fields to show, in order). glucose_chart: none for glucose_series; "
+    + "table, stat_tiles and comparison: optional 'columns' (the fields to show, in order). glucose_chart: none for glucose_series; "
     + "for event_response as range_bands, defaulting to the median and the middle half by cohort.")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportBindings
@@ -109,7 +109,7 @@ internal sealed record ReportBindings
     [Description("range_bands only: a category field; each of its values is drawn as its own bands and line.")]
     public string? Series { get; init; }
 
-    [Description("table and stat_tiles only: the fields to show, in order. Default: every field the token can read.")]
+    [Description("table, stat_tiles and comparison only: the fields to show, in order. Default: every field the token can read.")]
     public IReadOnlyList<string>? Columns { get; init; }
 
     [Description("bar only: true to stack the 'y' fields in one bar per category, false (the default) to draw them side by side.")]
@@ -150,6 +150,7 @@ internal enum ReportBarOrientation
 [JsonDerivedType(typeof(DeviceStatusParameters), DeviceStatusParameters.Name)]
 [JsonDerivedType(typeof(GlucoseDistributionParameters), GlucoseDistributionParameters.Name)]
 [JsonDerivedType(typeof(DailySummaryParameters), DailySummaryParameters.Name)]
+[JsonDerivedType(typeof(PeriodComparisonParameters), PeriodComparisonParameters.Name)]
 internal abstract record ReportDatasetParameters
 {
     [JsonIgnore]
@@ -230,6 +231,10 @@ internal enum ReportPrimitive
     /// <summary>Bars over a category axis, one or more fields per category, side by side or stacked.</summary>
     [JsonStringEnumMemberName("bar")]
     Bar,
+
+    /// <summary>Two periods side by side: each one's time in range bar, then each figure's two values and the change.</summary>
+    [JsonStringEnumMemberName("comparison")]
+    Comparison,
 }
 
 internal static class ReportPrimitives
@@ -244,6 +249,7 @@ internal static class ReportPrimitives
         ReportPrimitive.GlucoseChart => "glucose_chart",
         ReportPrimitive.RangeBands => "range_bands",
         ReportPrimitive.Bar => "bar",
+        ReportPrimitive.Comparison => "comparison",
         _ => throw new ArgumentOutOfRangeException(nameof(primitive), primitive, null),
     };
 

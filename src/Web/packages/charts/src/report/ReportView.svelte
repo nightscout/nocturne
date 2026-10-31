@@ -10,6 +10,7 @@
   import type { ChartFormat } from "../format.js";
   import { transformChartData } from "../transform.js";
   import BarChart from "./BarChart.svelte";
+  import ComparisonChart from "./ComparisonChart.svelte";
   import DataTable from "./DataTable.svelte";
   import RangeBandsChart from "./RangeBandsChart.svelte";
   import StatTiles from "./StatTiles.svelte";
@@ -97,6 +98,8 @@
           labels={labels.chart}
           glucoseUnits={report.units}
         />
+      {:else if panel.primitive === "comparison"}
+        <ComparisonChart {panel} format={zoned} emptyText={labels.noData} />
       {:else if panel.primitive === "bar"}
         <BarChart {panel} format={zoned} heightClass={plotHeight} />
       {:else if panel.primitive === "range_bands"}

@@ -24,6 +24,7 @@ public class McpToolSchemaTests(AuthenticationTestFactory factory) : IClassFixtu
     [InlineData("get_recent_treatments", new[] { "hours", "types" })]
     [InlineData("get_profile_summary", new string[0])]
     [InlineData("get_loop_health", new[] { "days" })]
+    [InlineData("compare_periods", new[] { "preset", "aFrom", "aTo", "bFrom", "bTo" })]
     public void The_audit_keeps_the_arguments_the_input_schema_declares(string name, string[] declared)
     {
         var tools = factory.Services.GetRequiredService<IOptions<McpServerOptions>>().Value.ToolCollection!;

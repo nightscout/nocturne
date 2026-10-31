@@ -28,3 +28,4 @@ export * from "./report/read.js";
 export * from "./report/bar-layout.js";
 export type { ReportViewLabels } from "./report/report-view-labels.js";
 export * from "./report/glucose-scale.js";
+export * from "./report/comparison.js";
