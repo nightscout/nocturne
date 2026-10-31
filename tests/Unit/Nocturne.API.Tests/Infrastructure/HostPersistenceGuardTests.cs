@@ -100,13 +100,17 @@ public class HostPersistenceGuardTests
                     CoversMembers: true),
             ]),
         new("connector configuration (#3103)",
-            ["ConnectorConfigurationEntity", "DataSourceMetadataEntity", "ConnectorResetJobEntity"],
-            ["ConnectorConfigurations", "DataSourceMetadata", "ConnectorResetJobs"],
+            ["ConnectorConfigurationEntity", "ConnectorResetJobEntity"],
+            ["ConnectorConfigurations", "ConnectorResetJobs"],
             [
                 new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
                     "dev-only whole-schema snapshot export and restore of a tenant's connector configurations alongside every other table",
                     CoversMembers: true),
             ]),
+        new("data sources (#3103)",
+            ["DataSourceMetadataEntity"],
+            ["DataSourceMetadata"],
+            []),
     ];
 
     private const string Host = "src/API/Nocturne.API";

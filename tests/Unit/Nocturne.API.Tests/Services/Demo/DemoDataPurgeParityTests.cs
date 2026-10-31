@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Admin;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Demo;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
@@ -69,7 +70,9 @@ public class DemoDataPurgeParityTests : IDisposable
             (new ContextFactory(_db.Options)).AsNocturneFactory(), TimeProvider.System);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
-        context.AsFactory(),
+        new SourceOwnedDataRepository(context.AsFactory(), Mock.Of<IAuditContext>()),
+        new SourceOwnedDataRepository(context.AsFactory(), Mock.Of<IAuditContext>()),
+        new DemoDataPurger(context.AsFactory(), TimeProvider.System),
         new ConnectorConfigurationRepository(context.AsFactory()),
         _sensorGlucose.Object,
         _meterGlucose.Object,

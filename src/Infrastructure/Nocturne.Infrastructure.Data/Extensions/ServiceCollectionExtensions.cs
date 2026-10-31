@@ -172,6 +172,9 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IRecoveryCodeRepository, RecoveryCodeRepository>();
         services.AddTransient<IConnectorConfigurationRepository, ConnectorConfigurationRepository>();
         services.AddTransient<IConnectorResetJobRepository, ConnectorResetJobRepository>();
+        services.AddScoped<SourceOwnedDataRepository>();
+        services.AddScoped<ISourceOwnedDataReader>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
+        services.AddScoped<ISourceOwnedDataPurge>(sp => sp.GetRequiredService<SourceOwnedDataRepository>());
 
         // Register avatar storage
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();

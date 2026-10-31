@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Demo;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
@@ -53,7 +54,9 @@ public class DataSourceServiceDeleteDemoDataTests : IDisposable
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
-        context.AsFactory(),
+        new SourceOwnedDataRepository(context.AsFactory(), Mock.Of<IAuditContext>()),
+        new SourceOwnedDataRepository(context.AsFactory(), Mock.Of<IAuditContext>()),
+        new DemoDataPurger(context.AsFactory(), TimeProvider.System),
         new ConnectorConfigurationRepository(context.AsFactory()),
         _sensorGlucose.Object,
         _meterGlucose.Object,

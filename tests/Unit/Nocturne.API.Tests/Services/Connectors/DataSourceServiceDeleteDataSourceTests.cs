@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Demo;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
@@ -63,7 +64,9 @@ public class DataSourceServiceDeleteDataSourceTests : IDisposable
     private NocturneDbContext NewContext() => _db.CreateContext(TenantId);
 
     private DataSourceService CreateService(NocturneDbContext context) => new(
-        context.AsFactory(),
+        new SourceOwnedDataRepository(context.AsFactory(), _auditContext),
+        new SourceOwnedDataRepository(context.AsFactory(), _auditContext),
+        new DemoDataPurger(context.AsFactory(), TimeProvider.System),
         new ConnectorConfigurationRepository(context.AsFactory()),
         _sensorGlucose.Object,
         _meterGlucose.Object,

@@ -2,6 +2,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
@@ -84,4 +85,21 @@ internal static class DemoDataPurge
     /// <summary>APS snapshots the demo service wrote.</summary>
     public static async Task<long> PurgeDeviceStatusAsync(NocturneDbContext db, CancellationToken ct) =>
         await db.ApsSnapshots.PurgeAsync(SourceFilter.For<ApsSnapshotEntity>(DataSources.DemoService), ct);
+}
+
+/// <summary>
+/// <see cref="DemoDataPurge"/> over one context of the scope's reader, for a caller that holds no
+/// context of its own.
+/// </summary>
+public sealed class DemoDataPurger(INocturneDbContextFactory contexts, TimeProvider time)
+{
+    /// <summary>Hard-deletes everything the demo service wrote, returning the counts by group.</summary>
+    public async Task<(long Glucose, long Treatments, long DeviceStatus)> PurgeAsync(CancellationToken ct)
+    {
+        await using var db = await contexts.CreateAsync(ct);
+        var treatments = await DemoDataPurge.PurgeTreatmentsAsync(db, time, ct);
+        var glucose = await DemoDataPurge.PurgeEntriesAsync(db, ct);
+        var deviceStatus = await DemoDataPurge.PurgeDeviceStatusAsync(db, ct);
+        return (glucose, treatments, deviceStatus);
+    }
 }
