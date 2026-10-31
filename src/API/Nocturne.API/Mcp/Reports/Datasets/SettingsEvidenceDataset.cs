@@ -185,10 +185,6 @@ internal sealed class SettingsEvidenceDataset : IReportDataset
         return words.ToString().Replace("iob", "IOB", StringComparison.Ordinal).Replace("isf", "ISF", StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// What the data showed beside the profile, figure by figure. Each line reads "observed X next to
-    /// the profile's Y", as the calculator states its figures: an observation, never what to set.
-    /// </summary>
     /// <summary>For each setting, the blocks with an observed value out of all its blocks.</summary>
     internal static IReadOnlyList<ReportFact> FactsOf(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows) =>
     [
@@ -200,6 +196,10 @@ internal sealed class SettingsEvidenceDataset : IReportDataset
         }),
     ];
 
+    /// <summary>
+    /// What the data showed beside the profile, figure by figure. Each line reads "observed X next to
+    /// the profile's Y", as the calculator states its figures: an observation, never what to set.
+    /// </summary>
     internal static string Summarise(SettingsEvidenceReport report, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, bool useMmol)
     {
         const string what = "Settings evidence";

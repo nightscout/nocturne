@@ -115,8 +115,8 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
             Facts = count == 0 ? [] : [.. bands.Select(b => ReportFacts.Percent(b.Label, Math.Round(b.Percent, 1), Limits(b, useMmol)))],
             Sentence = count == 0
                 ? "No glucose readings in this period."
-                : $"Below range in all: {ReportFacts.Number(bands[0].Percent + bands[1].Percent)}%. "
-                    + $"Above range in all: {ReportFacts.Number(bands[3].Percent + bands[4].Percent)}%.",
+                : $"Below range, total: {ReportFacts.Number(bands[0].Percent + bands[1].Percent)}%. "
+                    + $"Above range, total: {ReportFacts.Number(bands[3].Percent + bands[4].Percent)}%.",
             Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(count, "reading")}.",
         };
     }
