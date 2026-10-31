@@ -16,8 +16,8 @@ namespace Nocturne.API.Reports;
 /// attributes the validator enforces written into it.
 /// </summary>
 /// <remarks>
-/// Added to the exporter's output: <c>title</c> (<see cref="DisplayNameAttribute"/>, else the name
-/// in words), <c>description</c> (<see cref="DescriptionAttribute"/>), <c>minimum</c>/<c>maximum</c>
+/// Added to the exporter's output: <c>title</c> (the property's or, for a list's item, the type's
+/// <see cref="DisplayNameAttribute"/>, else the property's name in words), <c>description</c> (<see cref="DescriptionAttribute"/>), <c>minimum</c>/<c>maximum</c>
 /// (<see cref="RangeAttribute"/>), <c>maxLength</c> (<see cref="StringLengthAttribute"/>),
 /// <c>minItems</c>/<c>maxItems</c> (<see cref="LengthAttribute"/>), <c>enum</c>
 /// (<see cref="AllowedValuesAttribute"/>), <c>pattern</c>, the top-level <c>default</c>s a new
@@ -47,19 +47,33 @@ internal static partial class ReportParametersSchema
     }
 
     /// <summary>
-    /// The value each top-level parameter holds in a new parameters object, as its <c>default</c>, so
-    /// the form shows it filled in. Read from an instance of the concrete type, since a parameter
-    /// declared on an abstract base is given its default there.
+    /// The value each parameter holds in a new object of its type, as its <c>default</c>, so the form
+    /// shows it filled in: a boolean, a number or an enum. Read from an instance of the concrete type,
+    /// since a parameter declared on an abstract base is given its default there, and from each
+    /// nested object's or list item's own type.
     /// </summary>
-    private static void Defaults(JsonNode schema, Type parametersType)
+    private static void Defaults(JsonNode schema, Type type)
     {
-        if (schema["properties"] is not JsonObject properties || parametersType.GetConstructor(Type.EmptyTypes) is null)
+        if (schema["properties"] is not JsonObject properties || type.GetConstructor(Type.EmptyTypes) is null)
             return;
-        var instance = JsonSerializer.SerializeToNode(Activator.CreateInstance(parametersType), parametersType, Options)!.AsObject();
-        foreach (var (name, property) in properties)
+        var instance = JsonSerializer.SerializeToNode(Activator.CreateInstance(type), type, Options)!.AsObject();
+        foreach (var (name, node) in properties)
         {
-            if (property is JsonObject node && instance[name] is JsonValue value)
-                node["default"] = value.DeepClone();
+            if (node is not JsonObject property)
+                continue;
+            var member = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name) == name);
+            if (member is null)
+                continue;
+            var memberType = Nullable.GetUnderlyingType(member.PropertyType) ?? member.PropertyType;
+            if (instance[name] is JsonValue value
+                && (memberType.IsEnum || value.GetValueKind() is JsonValueKind.True or JsonValueKind.False or JsonValueKind.Number))
+                property["default"] = value.DeepClone();
+            if (property["properties"] is not null)
+                Defaults(property, memberType);
+            else if (property["items"] is JsonObject items && items["properties"] is not null
+                && memberType.IsGenericType && memberType.GetGenericArguments() is [var element])
+                Defaults(items, element);
         }
     }
 
@@ -78,7 +92,11 @@ internal static partial class ReportParametersSchema
         }
 
         if (context.PropertyInfo?.AttributeProvider is not PropertyInfo property)
+        {
+            if (type.GetCustomAttribute<DisplayNameAttribute>() is { } typeName)
+                schema["title"] = typeName.DisplayName;
             return schema;
+        }
 
         schema["title"] = property.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName ?? Words(property.Name);
         if (property.GetCustomAttribute<DescriptionAttribute>() is { } description)

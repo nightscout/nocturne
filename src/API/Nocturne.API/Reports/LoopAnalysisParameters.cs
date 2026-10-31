@@ -128,6 +128,7 @@ internal sealed record ReportGrams
 [Description(
     "One cohort of events: an anchor kind, narrowed by time of day, weekday and, for meals, by size and by the foods "
     + "the meal carries a food record of.")]
+[DisplayName("Event group")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record ReportEventCohort
 {

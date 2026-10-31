@@ -248,7 +248,11 @@ public class ReportCatalogueTests(AuthenticationTestFactory factory) : IClassFix
         Property("event_response", "excludeIllness").GetProperty("default").GetBoolean().Should().BeTrue();
         Property("event_response", "excludeOverrides").GetProperty("default").GetBoolean().Should().BeFalse();
 
+        Property("event_response", "cohorts").GetProperty("items").GetProperty("title").GetString().Should().Be("Event group");
         var cohort = Property("event_response", "cohorts").GetProperty("items").GetProperty("properties");
+        cohort.GetProperty("anchor").GetProperty("default").GetString().Should().Be("Meal", "a new group starts at its type's default");
+        cohort.GetProperty("timeOfDay").GetProperty("properties").GetProperty("fromMinute").GetProperty("x-input").GetString()
+            .Should().Be(ReportInputAttribute.MinuteOfDay);
         cohort.GetProperty("foods").GetProperty("x-input").GetString().Should().Be(ReportInputAttribute.Foods);
         cohort.GetProperty("foodCategory").GetProperty("x-input").GetString().Should().Be(ReportInputAttribute.FoodCategory);
         cohort.GetProperty("anchor").GetProperty("x-enumLabels").EnumerateArray().Select(l => l.GetString())
