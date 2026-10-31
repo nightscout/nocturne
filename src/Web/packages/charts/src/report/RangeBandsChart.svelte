@@ -310,6 +310,8 @@
           />
         </Svg>
 
+        <!-- With the pointer over no slot there is nothing to say, so no tooltip box either. -->
+        {#if slotIndex(context.tooltip.data) >= 0}
         <Tooltip.Root {context} class="z-50 rounded-lg border border-border text-xs shadow-xl">
           {#snippet children({ data })}
             {@const index = slotIndex(data)}
@@ -334,6 +336,7 @@
             </div>
           {/snippet}
         </Tooltip.Root>
+        {/if}
       {/snippet}
     </Chart>
   </div>

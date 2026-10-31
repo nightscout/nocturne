@@ -28,6 +28,7 @@ const FORBIDDEN: { pattern: RegExp; reason: string }[] = [
 const UI_ALLOWED = new Set([
   "@nocturne/ui/glucose",
   "@nocturne/ui/utils",
+  "@nocturne/ui/keys",
   "@nocturne/ui/theme.css?raw",
   "@nocturne/ui/styles/nocturne-theme.css?raw",
 ]);
