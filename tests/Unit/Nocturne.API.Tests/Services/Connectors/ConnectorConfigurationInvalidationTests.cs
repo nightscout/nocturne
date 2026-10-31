@@ -54,14 +54,16 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
             .Returns<Dictionary<string, string>>(d => d);
 
         _service = new ConnectorConfigurationService(
-            _dbContext.AsFactory(), new OAuthGrantRepository(_dbContext.AsFactory()),
+            _dbContext.AsFactory(),
+            new ConnectorConfigurationRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory()),
+            new OAuthGrantRepository(_dbContext.AsFactory()),
             encryption.Object,
             Mock.Of<ISignalRBroadcastService>(),
             Mock.Of<IAuditContext>(),
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             [new RecordingInvalidator(_invalidated)],
-            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 

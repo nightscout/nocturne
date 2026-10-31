@@ -15,6 +15,7 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Connectors;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -39,6 +40,7 @@ public class DataSourceService : IDataSourceService
     internal const int DiscoveryWindowDays = 30;
 
     private readonly INocturneDbContextFactory _contexts;
+    private readonly IConnectorConfigurationRepository _configurations;
     private readonly ISensorGlucoseRepository _sensorGlucose;
     private readonly IMeterGlucoseRepository _meterGlucose;
     private readonly ICalibrationRepository _calibrations;
@@ -52,6 +54,7 @@ public class DataSourceService : IDataSourceService
 
     public DataSourceService(
         INocturneDbContextFactory contexts,
+        IConnectorConfigurationRepository configurations,
         ISensorGlucoseRepository sensorGlucose,
         IMeterGlucoseRepository meterGlucose,
         ICalibrationRepository calibrations,
@@ -65,6 +68,7 @@ public class DataSourceService : IDataSourceService
     )
     {
         _contexts = contexts ?? throw new ArgumentNullException(nameof(contexts));
+        _configurations = configurations ?? throw new ArgumentNullException(nameof(configurations));
         _profileActivationWriter = profileActivationWriter;
         _sensorGlucose = sensorGlucose;
         _meterGlucose = meterGlucose;
@@ -305,15 +309,9 @@ public class DataSourceService : IDataSourceService
         return (defaultActive, defaultStale);
     }
 
-    private async Task<Dictionary<string, (int active, int stale)>> LoadThresholdOverridesAsync(
-        NocturneDbContext db,
-        CancellationToken ct)
+    private static Dictionary<string, (int active, int stale)> LoadThresholdOverrides(
+        IReadOnlyList<ConnectorConfigurationRecord> configs)
     {
-        var configs = await db.ConnectorConfigurations
-            .AsNoTracking()
-            .Select(c => new { c.ConnectorName, c.ConfigurationJson })
-            .ToListAsync(ct);
-
         var result = new Dictionary<string, (int active, int stale)>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var config in configs)
@@ -453,11 +451,8 @@ public class DataSourceService : IDataSourceService
         var nonGlucoseStats = await GetNonGlucoseStatsAsync(db, windowStart, last24HoursDate, cancellationToken);
 
         // Load user threshold overrides and connector configs for LastSuccessfulSync
-        var thresholdOverrides = await LoadThresholdOverridesAsync(db, cancellationToken);
-        var connectorConfigs = await db.ConnectorConfigurations
-            .AsNoTracking()
-            .Select(c => new { c.ConnectorName, c.LastSuccessfulSync })
-            .ToListAsync(cancellationToken);
+        var connectorConfigs = await _configurations.ListAsync(cancellationToken);
+        var thresholdOverrides = LoadThresholdOverrides(connectorConfigs);
 
         var dataSources = new List<DataSourceInfo>();
         var processedNonGlucoseKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -595,7 +590,6 @@ public class DataSourceService : IDataSourceService
         CancellationToken cancellationToken = default
     )
     {
-        await using var db = await _contexts.CreateAsync(cancellationToken);
         var connectors = ConnectorMetadataService.GetAll()
             .Select(connector => new AvailableConnector
             {
@@ -614,12 +608,9 @@ public class DataSourceService : IDataSourceService
             .ToList();
 
         // Check which connectors have actual saved configuration in the database
-        var configuredNames = await db.ConnectorConfigurations
-            .AsNoTracking()
-            .Select(c => c.ConnectorName.ToLower())
-            .ToListAsync(cancellationToken);
-
-        var configuredSet = new HashSet<string>(configuredNames, StringComparer.OrdinalIgnoreCase);
+        var configuredSet = new HashSet<string>(
+            (await _configurations.ListAsync(cancellationToken)).Select(c => c.ConnectorName),
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (var connector in connectors)
         {

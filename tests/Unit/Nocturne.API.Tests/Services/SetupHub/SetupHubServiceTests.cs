@@ -50,7 +50,7 @@ public class SetupHubServiceTests
         {
             // Registered out of order on purpose: the key decides the hub order.
             new AboutItem(factory), new SharingItem(factory, new TenantRepository(factory), new TenantMembershipRepository(factory), new MemberInviteRepository(factory), new OAuthGrantRepository(factory), TimeProvider.System), new TherapyItem(factory),
-            DevicesItemOver(db), new AlertsItem(factory, new TenantRepository(factory), new AlertRuleRepository(factory)), new ConnectDataItem(factory),
+            DevicesItemOver(db), new AlertsItem(factory, new TenantRepository(factory), new AlertRuleRepository(factory)), new ConnectDataItem(factory, new ConnectorConfigurationRepository(factory)),
         });
     }
 

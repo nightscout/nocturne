@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -54,6 +55,7 @@ public class DataSourceServiceHealthRecordsTests : IDisposable
 
     private DataSourceService CreateService(NocturneDbContext context, params IConnectorDataPurge[] dataPurges) => new(
         context.AsFactory(),
+        new ConnectorConfigurationRepository(context.AsFactory()),
         Mock.Of<ISensorGlucoseRepository>(),
         Mock.Of<IMeterGlucoseRepository>(),
         Mock.Of<ICalibrationRepository>(),

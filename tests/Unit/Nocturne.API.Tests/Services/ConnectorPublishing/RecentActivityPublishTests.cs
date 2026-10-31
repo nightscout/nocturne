@@ -24,6 +24,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -211,6 +212,7 @@ public class RecentActivityPublishTests : IDisposable
         Mock.Of<ITenantOwnerResolver>(),
         Mock.Of<ITenantAccessor>(),
         _context.AsFactory(),
+        new ConnectorConfigurationRepository(_context.AsFactory()),
         Mock.Of<IProfileActivationRepository>(),
         new ProfileActivationWriter(Mock.Of<IProfileActivationRepository>(), Mock.Of<ITenantCache>(), TempBasalTestDeps.NoReresolution()),
         Mock.Of<IAuditContext>(),

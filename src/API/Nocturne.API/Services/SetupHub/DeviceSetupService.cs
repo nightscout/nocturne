@@ -6,6 +6,7 @@ using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Connectors.Core.Constants;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -34,6 +35,7 @@ public sealed class DeviceSetupConflictException(string message) : Exception(mes
 /// </summary>
 public partial class DeviceSetupService(
     INocturneDbContextFactory contexts,
+    IConnectorConfigurationRepository connectorConfigurations,
     IPatientDeviceRepository devices,
     IPatientInsulinRepository insulins,
     IDeviceReattributionService reattribution,
@@ -504,9 +506,7 @@ public partial class DeviceSetupService(
         if (pump is not null)
             found.Add(new(DeviceEvidenceSource.PumpStatus, $"{pump.Manufacturer} {pump.Model}".Trim()));
 
-        var connectors = await db.ConnectorConfigurations
-            .Select(c => new { c.ConnectorName, c.ConfigurationJson })
-            .ToListAsync(ct);
+        var connectors = await connectorConfigurations.ListAsync(ct);
         found.AddRange(connectors
             .Where(c => ConnectorConfigurationService.GetEnabledFromConfig(c.ConfigurationJson))
             .Select(c => c.ConnectorName)

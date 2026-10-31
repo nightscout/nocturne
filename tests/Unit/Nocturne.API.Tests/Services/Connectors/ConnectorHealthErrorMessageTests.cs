@@ -64,6 +64,8 @@ public class ConnectorHealthErrorMessageTests : IDisposable
         };
         _service = new ConnectorConfigurationService(
             contexts,
+            new ConnectorConfigurationRepository(contexts),
+            new SubjectRepository(contexts),
             new OAuthGrantRepository(contexts),
             encryptionService.Object,
             Mock.Of<ISignalRBroadcastService>(),
@@ -71,7 +73,6 @@ public class ConnectorHealthErrorMessageTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             Enumerable.Empty<IConnectorCacheInvalidator>(),
-            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
     }
 

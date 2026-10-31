@@ -83,8 +83,6 @@ public class HostPersistenceGuardTests
                     CoversMembers: true),
                 new("src/API/Nocturne.API/Services/Alerts/AlertReceiptService.cs",
                     "static helper over the alert read's own context that names the members who saw an alarm from their subject rows"),
-                new("src/API/Nocturne.API/Services/Connectors/ConnectorConfigurationService.cs",
-                    "demo-subject refusal on connector configuration writes; moves with connector configuration persistence (#2129)"),
             ]),
         new("tenants and memberships (#3102)",
             ["TenantEntity", "TenantMemberEntity", "TenantRoleEntity", "TenantMemberRoleEntity", "MembershipRequestEntity",
@@ -96,6 +94,14 @@ public class HostPersistenceGuardTests
             [
                 new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
                     "dev-only whole-schema snapshot export and restore of a tenant, its roles and memberships alongside every other table",
+                    CoversMembers: true),
+            ]),
+        new("connector configuration (#3103)",
+            ["ConnectorConfigurationEntity", "DataSourceMetadataEntity", "ConnectorResetJobEntity"],
+            ["ConnectorConfigurations", "DataSourceMetadata", "ConnectorResetJobs"],
+            [
+                new("src/API/Nocturne.API/Controllers/V4/DevOnly/DevAdminController.cs",
+                    "dev-only whole-schema snapshot export and restore of a tenant's connector configurations alongside every other table",
                     CoversMembers: true),
             ]),
     ];

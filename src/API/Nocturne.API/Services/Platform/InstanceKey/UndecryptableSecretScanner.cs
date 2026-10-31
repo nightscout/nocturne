@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Platform.InstanceKey;
@@ -27,7 +28,10 @@ public sealed record TenantUndecryptableSecrets(
 /// one of them: the link is checked by its hash, and the settings page already says when its stored
 /// copy cannot be shown.
 /// </summary>
-public class UndecryptableSecretScanner(INocturneDbContextFactory contexts, ISecretEncryptionService encryption)
+public class UndecryptableSecretScanner(
+    INocturneDbContextFactory contexts,
+    IConnectorConfigurationRepository connectorConfigurations,
+    ISecretEncryptionService encryption)
 {
     /// <summary>
     /// The connector configurations and alert channels of the scope's tenant whose secrets do not
@@ -35,13 +39,11 @@ public class UndecryptableSecretScanner(INocturneDbContextFactory contexts, ISec
     /// </summary>
     public async Task<TenantUndecryptableSecrets> ScanTenantAsync(CancellationToken cancellationToken)
     {
-        await using var db = await contexts.CreateAsync(cancellationToken);
-
-        var connectors = await db.ConnectorConfigurations.AsNoTracking()
+        var connectors = (await connectorConfigurations.ListAsync(cancellationToken))
             .Where(c => c.SecretsJson != "{}")
-            .OrderBy(c => c.ConnectorName)
-            .Select(c => new { c.ConnectorName, c.SecretsJson })
-            .ToListAsync(cancellationToken);
+            .ToList();
+
+        await using var db = await contexts.CreateAsync(cancellationToken);
 
         var channels = await db.AlertRuleChannels.AsNoTracking()
             .Where(c => c.Secret != null)

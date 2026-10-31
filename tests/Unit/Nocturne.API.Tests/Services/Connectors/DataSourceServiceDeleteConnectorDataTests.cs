@@ -33,6 +33,7 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Infrastructure.Data.Repositories;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -91,6 +92,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
         IEnumerable<IConnectorDataPurge> dataPurges,
         params IConnectorPurgeGuard[] purgeGuards) => new(
         context.AsFactory(),
+        new ConnectorConfigurationRepository(context.AsFactory()),
         _sensorGlucose.Object,
         _meterGlucose.Object,
         _calibrations.Object,
@@ -402,7 +404,7 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
             var writer = new ProfileActivationWriter(
                 ProfileActivationTestDeps.Repository(ctx), TestTenantCache.Create(), reresolver.Object);
             var service = new DataSourceService(
-                ctx.AsFactory(), _sensorGlucose.Object, _meterGlucose.Object, _calibrations.Object, _auditContext,
+                ctx.AsFactory(), new ConnectorConfigurationRepository(ctx.AsFactory()), _sensorGlucose.Object, _meterGlucose.Object, _calibrations.Object, _auditContext,
                 _connectorConfig.Object, writer, [], [], TimeProvider.System, NullLogger<DataSourceService>.Instance);
             (await service.DeleteConnectorDataAsync(ConnectorId)).Success.Should().BeTrue();
         }

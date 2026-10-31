@@ -672,7 +672,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         else
         {
             // Distinct because the same message repeats per chunk; see
-            // ConnectorConfigurationEntity.LastErrorMessageMaxLength. A failed sign-in outranks
+            // ConnectorConfigurationRecord.LastErrorMessageMaxLength. A failed sign-in outranks
             // whatever the run made of it, because it names the step that stopped the run.
             var errorMessage = signInFailure
                 ?? (result.Errors.Count > 0

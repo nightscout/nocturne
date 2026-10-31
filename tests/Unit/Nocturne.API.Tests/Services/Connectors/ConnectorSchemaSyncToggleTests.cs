@@ -62,6 +62,8 @@ public class ConnectorSchemaSyncToggleTests : IDisposable
     private ConnectorConfigurationService CreateService() =>
         new(
             _dbContext.AsFactory(),
+            new ConnectorConfigurationRepository(_dbContext.AsFactory()),
+            new SubjectRepository(_dbContext.AsFactory()),
             new OAuthGrantRepository(_dbContext.AsFactory()),
             Mock.Of<ISecretEncryptionService>(),
             Mock.Of<ISignalRBroadcastService>(),
@@ -69,6 +71,5 @@ public class ConnectorSchemaSyncToggleTests : IDisposable
             new ConfigurationBuilder().Build(),
             Mock.Of<IHostEnvironment>(),
             Enumerable.Empty<IConnectorCacheInvalidator>(),
-            TimeProvider.System,
             NullLogger<ConnectorConfigurationService>.Instance);
 }
