@@ -38566,3 +38566,15 @@ msgstr[1] "The range that you selected ends before the last # hours. You can see
 #: src/lib/components/reports/custom/custom-report-labels.svelte.ts
 msgid "Full summary"
 msgstr "Full summary"
+
+#: src/lib/components/reports/custom/CustomReportRun.svelte
+msgid "The image could not be made."
+msgstr "The image could not be made."
+
+#: src/lib/components/reports/custom/CustomReportRun.svelte
+msgid "Making the image"
+msgstr "Making the image"
+
+#: src/lib/components/reports/custom/CustomReportRun.svelte
+msgid "Download PNG"
+msgstr "Download PNG"

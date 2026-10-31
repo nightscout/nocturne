@@ -202,6 +202,9 @@ function cacheReadyStatus(host: string | null, body: App.TenantStatus): void {
   readyStatus.set(host ?? "", { body: Object.freeze(body), until: Date.now() + READY_TTL_MS });
 }
 
+/** The API's report image requests, answered here (routes/api/internal/report-image); see that route for its guard. */
+const REPORT_IMAGE_PATH = "/api/internal/report-image";
+
 /**
  * Static assets, the pages that ARE the setup/recovery/auth/share-unavailable/tenant-inactive
  * destinations (probing those would cause infinite redirect loops), and external webhook/bot
@@ -209,7 +212,7 @@ function cacheReadyStatus(host: string | null, body: App.TenantStatus): void {
  * cannot follow HTML redirects and will treat any non-2xx as a hard failure.
  */
 function skipsStatusProbe(pathname: string): boolean {
-  return STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) || pathname.startsWith(SHARE_UNAVAILABLE_PATH) || pathname.startsWith(TENANT_INACTIVE_PATH) || pathname.startsWith("/setup") || pathname.startsWith("/auth") || pathname.startsWith("/api/v4/webhooks") || pathname.startsWith("/api/v4/bot") || pathname.startsWith("/api/otel");
+  return STATIC_ASSET_PREFIXES.some((p) => pathname.startsWith(p)) || pathname.startsWith(SHARE_UNAVAILABLE_PATH) || pathname.startsWith(TENANT_INACTIVE_PATH) || pathname.startsWith("/setup") || pathname.startsWith("/auth") || pathname.startsWith("/api/v4/webhooks") || pathname.startsWith("/api/v4/bot") || pathname.startsWith(REPORT_IMAGE_PATH) || pathname.startsWith("/api/otel");
 }
 
 /**
@@ -320,7 +323,7 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
   if (isInternalOnlyApiPath(path)) {
     return new Response("Not Found", { status: 404 });
   }
-  if (path.startsWith("/api") && !path.startsWith("/api/v4/webhooks") && !path.startsWith("/api/v4/bot") && !path.startsWith("/api/otel")) {
+  if (path.startsWith("/api") && !path.startsWith("/api/v4/webhooks") && !path.startsWith("/api/v4/bot") && !path.startsWith(REPORT_IMAGE_PATH) && !path.startsWith("/api/otel")) {
     const apiBaseUrl = getApiBaseUrl();
     if (!apiBaseUrl) {
       throw new Error(

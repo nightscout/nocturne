@@ -38569,3 +38569,15 @@ msgstr[1] ""
 #: src/lib/components/reports/custom/custom-report-labels.svelte.ts
 msgid "Full summary"
 msgstr ""
+
+#: src/lib/components/reports/custom/CustomReportRun.svelte
+msgid "The image could not be made."
+msgstr ""
+
+#: src/lib/components/reports/custom/CustomReportRun.svelte
+msgid "Making the image"
+msgstr ""
+
+#: src/lib/components/reports/custom/CustomReportRun.svelte
+msgid "Download PNG"
+msgstr ""

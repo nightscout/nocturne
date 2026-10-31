@@ -33,3 +33,32 @@ export const normalisedSpec = {
   title: "Two weeks",
   panels: [{ id: "stats", dataset: { name: "glucose_statistics" }, primitive: "stat_tiles", range: { hours: 336 } }],
 };
+
+/** A run of one stat-tile panel and one glucose line: the line can be saved as an image, the tiles cannot. */
+export function chartResult() {
+  const result = statTilesResult("Glucose");
+  const { from, to } = result.panels[0].window;
+  return {
+    ...result,
+    panels: [
+      ...result.panels,
+      {
+        id: "line",
+        title: "Glucose and target range",
+        dataset: "glucose_series",
+        primitive: "time_series",
+        bindings: { x: "time", y: ["glucose"] },
+        status: "ok",
+        window: { from, to },
+        fields: [
+          { name: "time", label: "Time", kind: "time", unit: null },
+          { name: "glucose", label: "Glucose", kind: "number", unit: "mg/dL", color: "glucose-in-range" },
+        ],
+        rows: [{ time: from, glucose: 110 }, { time: to, glucose: 140 }],
+        summary: "Readings: 2.",
+        omittedScopes: [],
+        link: null,
+      },
+    ],
+  };
+}

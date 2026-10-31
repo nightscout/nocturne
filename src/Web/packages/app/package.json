@@ -98,6 +98,7 @@
     "vitest-browser-svelte": "^2.1.1"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.1.0",
     "@nocturne/bot": "workspace:*",
     "@nocturne/charts": "workspace:*",
     "@nocturne/bridge": "workspace:*",

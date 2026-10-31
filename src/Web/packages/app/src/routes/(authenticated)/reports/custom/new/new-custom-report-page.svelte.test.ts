@@ -9,6 +9,10 @@ import { normalisedSpec, statTilesResult } from "../custom-report-fixtures.js";
 const calls = vi.hoisted(() => ({ runs: [] as unknown[], creates: [] as unknown[], gotos: [] as string[] }));
 let response: CustomReportRunResponse;
 
+vi.mock("#lib/api/report-image.remote.js", () => ({
+  drawReportPanelImage: () => Promise.resolve(""),
+}));
+
 vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   runCustomReport: (arg: unknown) => {
     calls.runs.push(arg);

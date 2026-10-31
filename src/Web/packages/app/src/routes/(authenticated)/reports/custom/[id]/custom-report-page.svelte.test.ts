@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page as pageState } from "$app/state";
 import { remoteCommand, remoteQuery } from "#lib/test-stubs/remote-resource.js";
 import type { CustomReport } from "#lib/api/generated/nocturne-api-client.js";
-import { normalisedSpec, statTilesResult } from "../custom-report-fixtures.js";
+import { chartResult, normalisedSpec, statTilesResult } from "../custom-report-fixtures.js";
 
 const calls = vi.hoisted(() => ({
   runs: [] as unknown[],
@@ -12,14 +12,16 @@ const calls = vi.hoisted(() => ({
   deletes: [] as unknown[],
   gotos: [] as string[],
   copied: [] as string[],
+  images: [] as unknown[],
 }));
 let saved: CustomReport;
+let runResult: () => unknown = statTilesResult;
 
 vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   getCustomReport: () => remoteQuery(() => saved),
   runCustomReport: (arg: unknown) => {
     calls.runs.push(arg);
-    return remoteQuery(() => ({ result: statTilesResult(), spec: normalisedSpec, errors: [] }));
+    return remoteQuery(() => ({ result: runResult(), spec: normalisedSpec, errors: [] }));
   },
   updateCustomReport: remoteCommand((arg) => {
     calls.updates.push(arg);
@@ -27,6 +29,13 @@ vi.mock("#lib/api/generated/customReports.generated.remote.js", () => ({
   }),
   deleteCustomReport: remoteCommand((id) => {
     calls.deletes.push(id);
+  }),
+}));
+
+vi.mock("#lib/api/report-image.remote.js", () => ({
+  drawReportPanelImage: remoteCommand((arg) => {
+    calls.images.push(arg);
+    return "iVBORw0KGgo=";
   }),
 }));
 
@@ -53,6 +62,39 @@ describe("saved custom report page", () => {
     pageState.params = { id: "a1" };
     pageState.url = new URL("http://localhost/reports/custom/a1") as typeof pageState.url;
     saved = { id: "a1", name: "Fortnight", spec: normalisedSpec, errors: [], canEdit: true };
+    runResult = statTilesResult;
+  });
+
+  it("saves a chart panel as the PNG the image renderer draws, sending only that panel", async () => {
+    runResult = chartResult;
+    const created: Blob[] = [];
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      created.push(blob as Blob);
+      return "blob:report";
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const clicked: string[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      clicked.push(this.download);
+    });
+    try {
+      render(CustomReportPage, {});
+
+      const download = page.getByRole("button", { name: "Download PNG" });
+      await expect.element(download).toBeVisible();
+      expect(download.elements(), "stat tiles have no image").toHaveLength(1);
+      await download.click();
+
+      await vi.waitFor(() => expect(clicked).toEqual(["glucose-and-target-range.png"]));
+      expect(calls.images).toHaveLength(1);
+      const sent = calls.images[0] as { panelId: string; result: { panels: { id: string }[] } };
+      expect(sent.panelId).toBe("line");
+      expect(sent.result.panels.map((p) => p.id)).toEqual(["line"]);
+      expect(created[0].type).toBe("image/png");
+    } finally {
+      createObjectURL.mockRestore();
+      click.mockRestore();
+    }
   });
 
   it("runs the saved spec and draws it under the report's name", async () => {
