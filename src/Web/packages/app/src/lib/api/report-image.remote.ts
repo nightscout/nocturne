@@ -34,11 +34,10 @@ function withinRate(key: string, now = Date.now()): boolean {
 const MAX_SPEC_CHARS = 16 * 1024;
 
 /**
- * A chart panel of a custom report as the PNG the API's render_report_image tool gets: the spec is run
- * again by the API's custom report run under this member's own access (tenant, scopes, history clamp,
- * audit row), and the panel of that result is drawn by the same renderer at the tool's defaults. No
- * report data is taken from the page. Only a member's own session may ask: a share or guest link may
- * not. Answers the PNG as base64; a refusal is an error whose message is a `ReportImageFailure`.
+ * A chart panel of a custom report as a PNG: the spec is run again by the API's custom report run
+ * under this member's own access (tenant, scopes, history clamp, audit row), and the panel of that
+ * result is drawn at the default size. No report data is taken from the page. Only a member's own
+ * session may ask: a share or guest link may not. Answers the PNG as base64; a refusal is an error whose message is a `ReportImageFailure`.
  */
 export const drawReportPanelImage = command(
   z.object({

@@ -5,9 +5,10 @@ import { loadLocales, runWithLocale } from "wuchale/load-utils/server";
 import * as main from "../../../../../../locales/main.loader.server.svelte.js";
 import * as js from "../../../../../../locales/js.loader.server.js";
 import { locales } from "../../../../../../locales/data.js";
+import { readReport } from "@nocturne/charts/core";
 import { resolveChartTheme, paint } from "@nocturne/charts/server";
 import { everyPrimitive, stackedBarPanel, timeSeriesPanel } from "./report-image.fixtures.js";
-import { readReportImageRequest, renderReportImage, ReportImageError, ReportImageTooLargeError } from "./render.js";
+import { readOptions, renderReportImage, ReportImageError, ReportImageTooLargeError } from "./render.js";
 
 /** Set to a directory to keep the images the tests draw, to look at them. */
 const OUT = process.env.REPORT_IMAGE_OUT;
@@ -38,9 +39,25 @@ beforeAll(async () => {
 
 const panelIds = everyPrimitive.panels.filter((p) => p.primitive !== "stat_tiles").map((p) => p.id);
 
-/** The API's request for one panel of the fixture report. */
-function requestFor(panelId: string, extra: Record<string, unknown> = {}) {
-  return { panel: everyPrimitive.panels.find((p) => p.id === panelId), units: "mg/dl", timeZone: "Etc/UTC", ...extra };
+/** One panel of a report, with the size, theme and ratio in `options`, as the download asks for it. */
+function requestOf(panel: unknown, options: Record<string, unknown> = {}, report: { locale?: string; hour12?: boolean } = {}) {
+  const read = readReport({
+    spec: { version: 1, title: null },
+    units: "mg/dl",
+    timeZone: "Etc/UTC",
+    glucoseColorMode: "continuous",
+    locale: report.locale ?? null,
+    hour12: report.hour12 ?? null,
+    summary: "",
+    warnings: [],
+    panels: [panel],
+  });
+  if (!read) throw new Error("The fixture panel is not a report panel.");
+  return readOptions(read, read.panels[0], options);
+}
+
+function requestFor(panelId: string, options: Record<string, unknown> = {}) {
+  return requestOf(everyPrimitive.panels.find((p) => p.id === panelId), options);
 }
 
 /** The clinical colour each panel must show somewhere in its pixels. */
@@ -55,7 +72,7 @@ const expected: Record<string, string> = {
 
 describe.each(["light", "dark"] as const)("a report panel drawn as a PNG (%s)", (theme) => {
   it.each(panelIds)("draws %s at the requested size, not blank, in the clinical colours", async (panelId) => {
-    const request = readReportImageRequest(requestFor(panelId, { width: 800, height: 420, theme, devicePixelRatio: 2 }));
+    const request = requestFor(panelId, { width: 800, height: 420, theme, devicePixelRatio: 2 });
 
     const png = await runWithLocale("en", async () => renderReportImage(request));
 
@@ -75,18 +92,18 @@ describe.each(["light", "dark"] as const)("a report panel drawn as a PNG (%s)", 
 });
 
 describe("a report image request", () => {
-  const ask = (extra: Record<string, unknown>) => () => readReportImageRequest(requestFor(panelIds[0], extra));
+  const ask = (extra: Record<string, unknown>) => () => requestFor(panelIds[0], extra);
 
   it("draws at 1200 by 600, light, ratio 1 by default, with the tenant's locale and clock carried", () => {
-    const request = readReportImageRequest(requestFor(panelIds[0], { locale: "de-DE", hour12: true }));
+    const request = requestOf(everyPrimitive.panels.find((p) => p.id === panelIds[0]), {}, { locale: "de-DE", hour12: true });
     expect([request.width, request.height, request.theme, request.devicePixelRatio]).toEqual([1200, 600, "light", 1]);
     expect([request.report.locale, request.report.hour12]).toEqual(["de-DE", true]);
     expect(request.report.panels).toHaveLength(1);
   });
 
   it("gives one stacked bar a short default height and a comparison a tall one", () => {
-    expect(readReportImageRequest(requestFor("ranges-2")).height).toBe(240);
-    expect(readReportImageRequest(requestFor("comparison-4")).height).toBe(800);
+    expect(requestFor("ranges-2").height).toBe(240);
+    expect(requestFor("comparison-4").height).toBe(800);
   });
 
   it.each([
@@ -94,25 +111,26 @@ describe("a report image request", () => {
     [{ height: 10.5 }, "height: Send a whole number from 200 to 1600."],
     [{ devicePixelRatio: 3 }, "devicePixelRatio: Send 1 or 2."],
     [{ theme: "sepia" }, "theme: Send light or dark."],
-    [{ locale: "not a locale!" }, "locale: Send a language tag such as en-GB."],
-    [{ hour12: "yes" }, "hour12: Send true or false."],
-    [{ panel: everyPrimitive.panels.find((p) => p.primitive === "stat_tiles") }, "is a stat_tiles, which has no image: its figures are in the summary."],
-    [{ panel: { id: "x" } }, "panel: Send one panel and its units as render_report returns them."],
-    [{ units: "kelvin" }, "panel: Send one panel and its units as render_report returns them."],
   ])("refuses %j", (extra, message) => {
     expect(ask(extra)).toThrow(ReportImageError);
     expect(ask(extra)).toThrow(message);
   });
 
+  it("refuses a panel with no image", () => {
+    const tiles = () => requestOf(everyPrimitive.panels.find((p) => p.primitive === "stat_tiles"));
+    expect(tiles).toThrow(ReportImageError);
+    expect(tiles).toThrow("is a stat_tiles, which has no image: its figures are in the summary.");
+  });
+
   it("refuses a panel with more points than one image draws, as too large", () => {
     const rows = Array.from({ length: 12_001 }, (_, i) => ({ ...timeSeriesPanel.rows[0], time: timeSeriesPanel.rows[0].time + i }));
-    const huge = () => readReportImageRequest({ panel: { ...timeSeriesPanel, rows }, units: "mg/dl" });
+    const huge = () => requestOf({ ...timeSeriesPanel, rows });
     expect(huge).toThrow(ReportImageTooLargeError);
     expect(huge).toThrow("has 12004 points, more than the 12000 one image draws");
   });
 
   it("draws one stacked bar at its default height", async () => {
-    const png = await runWithLocale("en", async () => renderReportImage(readReportImageRequest({ panel: stackedBarPanel, units: "mg/dl" })));
+    const png = await runWithLocale("en", async () => renderReportImage(requestOf(stackedBarPanel)));
     const image = await pixels(png);
     expect([image.width, image.height]).toEqual([1200, 240]);
   }, 30_000);
@@ -121,7 +139,7 @@ describe("a report image request", () => {
     // A flat line in range and no band, so nothing but the high limit is near its colour.
     const flat = { ...timeSeriesPanel, bindings: { x: "time", y: ["glucose"] }, markers: [], rows: timeSeriesPanel.rows.map((r) => ({ ...r, glucose: 120 })) };
     const png = await runWithLocale("en", async () =>
-      renderReportImage(readReportImageRequest({ panel: flat, units: "mg/dl", width: 800, height: 420, theme: "light" })));
+      renderReportImage(requestOf(flat, { width: 800, height: 420, theme: "light" })));
     const image = await pixels(png);
     const palette = resolveChartTheme("light");
     // Antialiasing spreads the one-pixel line a little: at the live view's 60% it shows as about a

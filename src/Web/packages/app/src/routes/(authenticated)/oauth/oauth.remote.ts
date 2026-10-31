@@ -128,7 +128,6 @@ const consentSchema = z.object({
   code_challenge: z.string().min(1),
   approved: z.string(),
   limit_to_24_hours: z.string().optional(),
-  resource: z.string().optional(),
 });
 
 /**
@@ -155,13 +154,10 @@ export const consentForm = form(consentSchema, async (data, issue) => {
   if (data.limit_to_24_hours) {
     body.set("limit_to_24_hours", data.limit_to_24_hours);
   }
-  if (data.resource) {
-    body.set("resource", data.resource);
-  }
 
-  // Forward the client-facing host and scheme (tenant resolution, and the API compares the
-  // MCP `resource` against the origin it reconstructs from them) and the Cookie (authentication)
-  // since the API is a different origin from the incoming request
+  // Forward the client-facing host and scheme (tenant resolution, and the origins the API builds
+  // its redirects from) and the Cookie (authentication), since the API is a different origin from
+  // the incoming request
   const headers: Record<string, string> = {
     "Content-Type": "application/x-www-form-urlencoded",
     "X-Forwarded-Proto": getOriginalProto(event.request),

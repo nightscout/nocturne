@@ -47,8 +47,8 @@
     <div class="space-y-1">
       <h2 class="text-xl font-semibold">Saved custom reports</h2>
       <p class="text-sm text-muted-foreground">
-        An assistant that reads Nocturne through MCP can make a report from your data. Open its link
-        here, then save the report to open it again. Each member of this account sees the same list.
+        A custom report shows the charts and figures of your data that you select. Each member of this
+        account sees the same list.
       </p>
     </div>
   </div>
@@ -60,7 +60,7 @@
   {#if resource.current}
     {#if reports.length === 0}
       <p class="text-sm text-muted-foreground">
-        No custom reports. To add a report, open a report link from an assistant and select Save.
+        No custom reports.
       </p>
     {:else}
       <Table.Root>

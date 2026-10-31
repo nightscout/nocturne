@@ -7,7 +7,6 @@ export function statTilesResult(title: string | null = "Two weeks") {
     summary: "joined",
     warnings: [],
     timeZone: "UTC",
-    openUrl: null,
     panels: [
       {
         id: "stats",

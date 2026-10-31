@@ -112,11 +112,6 @@ jobs:
           test -f target/release/libnocturne_alerts.so
           test -f target/aarch64-unknown-linux-gnu/release/libnocturne_alerts.so
 
-      # The API embeds the MCP view (src/Web/packages/mcp-view), which its build bundles with pnpm.
-      - uses: ./.github/actions/setup-pnpm
-        with:
-          install: src/Web
-
       # The API's post-build targets would run the client codegen, which needs pnpm; only the
       # web image uses that client, so it is switched off here.
       - name: Build and push Nocturne.API container

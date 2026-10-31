@@ -1,7 +1,7 @@
 <!--
   A custom report run: the report drawn by the charts package's ReportView, or the reasons its spec
   cannot run. Each panel that matches a built-in report links to it, and each chart panel can be
-  saved as the PNG an assistant gets from render_report_image.
+  saved as a PNG.
 -->
 <script lang="ts">
   import { ReportView } from "@nocturne/charts";

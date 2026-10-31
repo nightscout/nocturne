@@ -1,20 +1,18 @@
 import { existsSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { resolve } from "node:path";
-import { readReport, type ReportPanel, type ReportResult } from "@nocturne/charts/core";
+import type { ReportPanel, ReportResult } from "@nocturne/charts/core";
 import { staticDefaultHeight, staticPrimitive } from "@nocturne/charts/server";
 import { drawPanel, type DrawJob } from "./draw.js";
 import { RenderPool } from "./pool.js";
 import { reportImageWords } from "./report-image-words.svelte.js";
 
-/** The limits a request is held to, whoever sends it; the API applies the same before it asks. */
+/** The limits an image is held to. */
 export const REPORT_IMAGE_LIMITS = {
   minWidth: 320,
   maxWidth: 2400,
   minHeight: 200,
   maxHeight: 1600,
-  /** The most of a request body read: one panel, which the API sends alone. */
-  maxBodyBytes: 4 * 1024 * 1024,
   /**
    * The most rows, trace points and chart points one panel may hold. The API sends at most 2000 rows
    * a series; past this a single render takes seconds and hundreds of megabytes.
@@ -25,7 +23,7 @@ export const REPORT_IMAGE_LIMITS = {
 /** Why a request cannot be drawn, in words for the caller. */
 export class ReportImageError extends Error {}
 
-/** A panel with more points than one image draws (`REPORT_IMAGE_LIMITS.maxPoints`); the route answers 413. */
+/** A panel with more points than one image draws (`REPORT_IMAGE_LIMITS.maxPoints`). */
 export class ReportImageTooLargeError extends ReportImageError {}
 
 export interface ReportImageRequest {
@@ -37,25 +35,10 @@ export interface ReportImageRequest {
   devicePixelRatio: 1 | 2;
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function whole(value: unknown, name: string, min: number, max: number): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max)
     throw new ReportImageError(`${name}: Send a whole number from ${min} to ${max}.`);
   return value;
-}
-
-/** A BCP-47 tag Intl knows, or null for none; anything else is refused. */
-function locale(value: unknown): string | null {
-  if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || value.length > 35) throw new ReportImageError("locale: Send a language tag such as en-GB.");
-  try {
-    return Intl.getCanonicalLocales(value)[0] ?? null;
-  } catch {
-    throw new ReportImageError("locale: Send a language tag such as en-GB.");
-  }
 }
 
 /** Rows, single-event trace points and dashboard chart points: what a render's cost grows with. */
@@ -65,30 +48,6 @@ export function pointsOf(panel: ReportPanel): number {
     ? (chart.glucoseData?.length ?? 0) + (chart.basalSeries?.length ?? 0) + (chart.bolusMarkers?.length ?? 0) + (chart.carbMarkers?.length ?? 0)
     : 0;
   return panel.rows.length + (panel.traces ?? []).reduce((sum, t) => sum + t.points.length, 0) + (panel.markers?.length ?? 0) + chartPoints;
-}
-
-/**
- * The API's request (`WebReportImageClient`): one panel and the parts of its report the drawing
- * reads (units, zone, colour mode, locale, clock), the size, theme and ratio. A missing height is
- * the primitive's own (`staticDefaultHeight`).
- */
-export function readReportImageRequest(body: unknown): ReportImageRequest {
-  if (!isObject(body)) throw new ReportImageError("Send a JSON object.");
-  const hour12 = body.hour12;
-  if (hour12 !== undefined && hour12 !== null && typeof hour12 !== "boolean") throw new ReportImageError("hour12: Send true or false.");
-  const report = readReport({
-    spec: { version: 1, title: null },
-    units: body.units,
-    timeZone: body.timeZone ?? null,
-    glucoseColorMode: body.glucoseColorMode === "threshold" ? "threshold" : "continuous",
-    locale: locale(body.locale),
-    hour12: hour12 ?? null,
-    summary: "",
-    warnings: [],
-    panels: [body.panel],
-  });
-  if (!report) throw new ReportImageError("panel: Send one panel and its units as render_report returns them.");
-  return readOptions(report, report.panels[0], body);
 }
 
 /** The size, theme and ratio for a panel already chosen; the checks every request gets. */

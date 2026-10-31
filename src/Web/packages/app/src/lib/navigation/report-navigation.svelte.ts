@@ -155,9 +155,9 @@ export function reportCategories(): ReportCategory[] {
         },
         {
           title: "Custom reports",
-          description: "Reports that an assistant made from your data, saved to open again",
+          description: "Reports that you make from the charts and figures of your data",
           href: "/reports/custom",
-          keywords: ["custom", "saved", "assistant", "mcp", "claude", "chatgpt"],
+          keywords: ["custom", "saved", "builder", "report builder"],
           scopes: [READ.reports],
           icon: LayoutDashboard,
           status: "available",
@@ -447,7 +447,7 @@ function reportSubRoutes(): Record<string, { title: string; description: string 
     },
     "/reports/custom/new": {
       title: "New custom report",
-      description: "A report that an assistant made, opened from its link",
+      description: "Make a report from the charts and figures of your data",
     },
     "/reports/custom/[id]": {
       title: "Custom report",

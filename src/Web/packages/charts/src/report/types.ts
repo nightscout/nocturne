@@ -1,5 +1,5 @@
 /**
- * Structural mirror of the API's report result (Nocturne.API/Mcp/Reports/ReportResult.cs), as
+ * Structural mirror of the API's report result (Nocturne.API/Reports/ReportResult.cs), as
  * dto.ts mirrors the dashboard chart. Every value, unit, label and colour arrives in it.
  */
 import type { ChartColor } from "../enums.js";
@@ -140,7 +140,7 @@ export interface ReportCohort {
   label: string;
 }
 
-/** The row field holding the API's one sentence about the row, which a chart hands the assistant when the row is picked. */
+/** The row field holding the API's one sentence about the row. */
 export const SENTENCE_FIELD = "sentence";
 
 /** The sentence the API wrote for a row, or null. */
@@ -163,8 +163,6 @@ export interface ReportResult {
   locale?: string | null;
   /** Whether the tenant reads a 12-hour clock; null for the host's. */
   hour12?: boolean | null;
-  /** The web app's page that opens the whole spec, on the tenant's host; null when the spec is too large for a link. */
-  openUrl?: string | null;
 }
 
 /** The fields a time series draws, looked up by name in the panel's catalogue entries. */

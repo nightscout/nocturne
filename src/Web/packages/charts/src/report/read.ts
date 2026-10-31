@@ -3,16 +3,15 @@ import type { LegendToggle } from "../options.js";
 import type { ReportResult } from "./types.js";
 
 /**
- * The API's report result (Nocturne.API/Mcp/Reports/ReportResult.cs), as the MCP tools'
- * `structuredContent` and the custom report run carry it. Checked only as deep as the view
- * branches on; the rows, fields and chart payload are drawn as they come.
+ * The API's report result (Nocturne.API/Reports/ReportResult.cs), as the custom report run carries
+ * it. Checked only as deep as the view branches on; the rows, fields and chart payload are drawn as
+ * they come.
  */
 const reportResultSchema = z.object({
   spec: z.object({ version: z.number(), title: z.string().nullish() }),
   units: z.enum(["mg/dl", "mmol"]),
   summary: z.string(),
   warnings: z.array(z.string()).default([]),
-  openUrl: z.string().nullish(),
   panels: z.array(
     z.object({
       id: z.string(),

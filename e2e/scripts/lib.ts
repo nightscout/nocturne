@@ -146,11 +146,6 @@ const API_INPUTS = [
   "scripts/alerts-native-build.cs", "Directory.Packages.props", "global.json",
 ];
 const WEB_INPUTS = ["src/Web", "Dockerfile.web"];
-/** The web sources the API image embeds: the MCP view and what it bundles (Nocturne.API.csproj). */
-const API_WEB_INPUTS = [
-  "src/Web/packages/mcp-view", "src/Web/packages/charts/src", "src/Web/packages/ui/src",
-  "src/Web/pnpm-lock.yaml",
-];
 const GENERATED_CLIENT = join(REPO_ROOT, "src/Web/packages/app/src/lib/api");
 const CLIENT_STAMP = join(E2E_DIR, ".state", "client-generated-from");
 
@@ -254,7 +249,7 @@ async function ensureImage(name: keyof Images, ref: string, build: (ref: string)
  * client comes first; the API publish and the web image build then run side by side.
  */
 export async function ensureImages(opts: { force?: boolean; only?: keyof Images } = {}): Promise<Images> {
-  const apiHash = inputsHash(API_INPUTS, inputsHash(API_WEB_INPUTS));
+  const apiHash = inputsHash(API_INPUTS);
   const api = () => ensureImage("api", `nocturne-api:e2e-${apiHash}`, buildApi, !!opts.force);
   if (opts.only === "api") {
     await api();

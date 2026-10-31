@@ -58,10 +58,6 @@ Run("pnpm", ["install", "--frozen-lockfile"], workingDir: Path.Combine(repoRoot,
 Console.WriteLine("    Building bridge package");
 Run("pnpm", ["run", "build"], workingDir: Path.Combine(repoRoot, "src", "Web", "packages", "bridge"));
 
-// The API container embeds it; the API build would build it too, but only when stale.
-Console.WriteLine("    Building MCP view package");
-Run("pnpm", ["--filter", "@nocturne/mcp-view", "run", "build"], workingDir: Path.Combine(repoRoot, "src", "Web"));
-
 // Step 1b: Generate architectural diagrams
 Console.WriteLine("==> Generating architectural diagrams");
 Run("dotnet", ["tool", "restore", "--verbosity", "quiet"]);
