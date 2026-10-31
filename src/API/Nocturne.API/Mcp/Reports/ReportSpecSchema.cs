@@ -40,7 +40,8 @@ internal static class ReportSpecSchema
 
     public const string WidthDescription = "The image's width in pixels, 320 to 2400. Default 1200.";
 
-    public const string HeightDescription = "The image's height in pixels, 200 to 1600. Default 600.";
+    public const string HeightDescription =
+        "The image's height in pixels, 200 to 1600. Default: each chart's own (600 for most, 240 for one stacked bar, 800 for a comparison).";
 
     public const string ThemeDescription = "light (the default, for a document on white) or dark.";
 

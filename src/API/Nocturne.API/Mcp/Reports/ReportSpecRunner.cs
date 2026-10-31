@@ -12,7 +12,8 @@ internal sealed record ReportRunContext(
     IServiceProvider Services,
     McpToolReadLog ReadLog,
     bool HistoryClamped = false,
-    IReadOnlySet<string>? Shortened = null)
+    IReadOnlySet<string>? Shortened = null,
+    TimeZoneInfo? Zone = null)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 
@@ -88,7 +89,7 @@ internal sealed class ReportSpecRunner(IReportDatasetRegistry registry, TimeProv
             {
                 output = await dataset.RunAsync(
                     new ReportDatasetRequest(panel.Dataset, panel.Primitive, from, to, context.UseMmol,
-                        context.GrantedScopes, context.Services, context.ReadLog, context.HistoryClamped, context.Cache, now, panel.Bindings),
+                        context.GrantedScopes, context.Services, context.ReadLog, context.HistoryClamped, context.Cache, now, panel.Bindings, context.Zone),
                     linked.Token);
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)

@@ -146,7 +146,7 @@ internal sealed class DeviceStatusDataset : IReportDataset
             Sentence = pump.Count + uploader.Count == 0
                 ? "No pump or uploader reports in this period."
                 : "The latest report of each, and the lowest in the period as its note.",
-            Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(pump.Count + uploader.Count, "report")}.",
+            Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(pump.Count + uploader.Count, "report")}.",
             Resolution = new ReportResolution(1, interval, sourceRows, rows.Count, rows.Count < sourceRows),
         };
     }

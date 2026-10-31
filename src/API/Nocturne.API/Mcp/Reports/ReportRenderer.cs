@@ -57,14 +57,16 @@ internal sealed class ReportRenderer(
         var http = httpContextAccessor.HttpContext
             ?? throw new InvalidOperationException("A report ran outside an HTTP request.");
         var useMmol = await UsesMmolAsync(cancellationToken);
+        var tenantZone = (await tenantClock.ResolveAsync(cancellationToken)).Zone;
 
         var report = await runner.RunAsync(
             spec,
-            new ReportRunContext(useMmol, http.GetGrantedScopes(), services, readLog, http.IsCallerHistoryClamped(), shortened),
+            new ReportRunContext(useMmol, http.GetGrantedScopes(), services, readLog, http.IsCallerHistoryClamped(), shortened, tenantZone),
             cancellationToken);
 
         var origin = $"{http.Request.PublicScheme()}://{http.Request.Host}";
-        var zone = (await tenantClock.ResolveAsync(cancellationToken)).Zone?.Id;
+        var zone = tenantZone?.Id;
+        var look = await appearance.GetTenantAppearanceAsync(tenant.TenantId, cancellationToken);
         return report with
         {
             TimeZone = zone is null ? null
@@ -73,6 +75,8 @@ internal sealed class ReportRenderer(
                 ? panel with { Link = ReportLinks.For(origin, spec.Panels[i], panel, zone) }
                 : panel)],
             OpenUrl = ReportSpecLink.NewReportUrl(origin, spec, jsonOptions.Value.JsonSerializerOptions),
+            Locale = string.IsNullOrWhiteSpace(look.RegionFormat) ? null : look.RegionFormat,
+            Hour12 = look.TimeFormat is null ? null : look.TimeFormat != "24",
         };
     }
 

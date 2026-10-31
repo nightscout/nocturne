@@ -120,10 +120,11 @@ internal static class GlucoseSummary
     /// sentence (the episodes, and on a chart the treatments drawn) and its range line.
     /// </summary>
     public static (IReadOnlyList<Reports.ReportFact> Facts, string Sentence, string Context) Facts(
-        DashboardChartData data, IStatisticsService statistics, bool useMmol, DateTimeOffset from, DateTimeOffset to, bool chart, bool treatments)
+        DashboardChartData data, IStatisticsService statistics, bool useMmol, DateTimeOffset from, DateTimeOffset to, bool chart, bool treatments,
+        TimeZoneInfo? zone = null)
     {
         var basic = statistics.CalculateBasicStats(data.GlucoseData.Select(r => r.Sgv));
-        var context = $"{Reports.ReportFacts.Window(from, to)}. {Reports.ReportFacts.Plural(basic.Count, "reading")}.";
+        var context = $"{Reports.ReportFacts.Window(from, to, zone)}. {Reports.ReportFacts.Plural(basic.Count, "reading")}.";
         if (basic.Count == 0)
             return ([], "No glucose readings in this period.", context);
 

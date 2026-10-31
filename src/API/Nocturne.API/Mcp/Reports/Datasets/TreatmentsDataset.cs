@@ -114,7 +114,7 @@ internal sealed class TreatmentsDataset : IReportDataset
                 : latest.Count < kept.Count
                     ? $"The table holds the latest {latest.Count} of {kept.Count} records; the counts cover all of them."
                     : $"The table holds every record, newest last.",
-            Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(kept.Count, "record")}.",
+            Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(kept.Count, "record")}.",
             Resolution = new ReportResolution(0, 0, kept.Count, latest.Count, latest.Count < kept.Count),
             Markers = Markers(latest),
         };

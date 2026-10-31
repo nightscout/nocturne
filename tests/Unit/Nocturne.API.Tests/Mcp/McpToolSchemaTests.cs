@@ -12,19 +12,19 @@ namespace Nocturne.API.Tests.Mcp;
 public class McpToolSchemaTests(AuthenticationTestFactory factory) : IClassFixture<AuthenticationTestFactory>
 {
     [Theory]
-    [InlineData("show_glucose", new[] { "hours", "asImage" })]
+    [InlineData("show_glucose", new[] { "hours" })]
     [InlineData("get_current_status", new string[0])]
     [InlineData("render_report", new[] { "spec" })]
     [InlineData("describe_dataset", new[] { "name" })]
     [InlineData("refine_report", new[] { "spec", "patch" })]
     [InlineData("find_foods", new[] { "query" })]
-    [InlineData("show_agp", new[] { "days", "asImage" })]
-    [InlineData("show_treatments", new[] { "hours", "asImage" })]
+    [InlineData("show_agp", new[] { "days" })]
+    [InlineData("show_treatments", new[] { "hours" })]
     [InlineData("get_glucose_statistics", new[] { "days" })]
     [InlineData("get_recent_treatments", new[] { "hours", "types" })]
     [InlineData("get_profile_summary", new string[0])]
     [InlineData("get_loop_health", new[] { "days" })]
-    [InlineData("compare_periods", new[] { "preset", "aFrom", "aTo", "bFrom", "bTo", "asImage" })]
+    [InlineData("compare_periods", new[] { "preset", "aFrom", "aTo", "bFrom", "bTo" })]
     [InlineData("render_report_image", new[] { "spec", "panelId", "width", "height", "theme", "devicePixelRatio" })]
     public void The_audit_keeps_the_arguments_the_input_schema_declares(string name, string[] declared)
     {
@@ -70,5 +70,11 @@ public class McpToolSchemaTests(AuthenticationTestFactory factory) : IClassFixtu
         render.ProtocolTool.Description.Should().Contain("render_report_image");
         tools.TryGetPrimitive("describe_dataset", out var describe).Should().BeTrue();
         describe!.ProtocolTool.Description.Should().Contain("render_report_image").And.Contain("cannot show the interactive view");
+        foreach (var preset in new[] { "show_glucose", "show_agp", "show_treatments", "compare_periods" })
+        {
+            tools.TryGetPrimitive(preset, out var tool).Should().BeTrue();
+            tool!.ProtocolTool.Description.Should().Contain("render_report_image", $"{preset} points at the image tool, having no image of its own");
+            McpToolGuard.DeclaredArguments(tool).Should().NotContain("asImage");
+        }
     }
 }

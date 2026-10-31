@@ -58,7 +58,7 @@ public sealed class ReportImageWebStub : IAsyncDisposable
                 context.Abort();
                 return;
             }
-            if (context.Request.Headers["X-Instance-Key"] != digest || string.IsNullOrEmpty(context.Request.Headers["X-Instance-Service"]))
+            if (context.Request.Headers["X-Instance-Key"] != digest || context.Request.Headers["X-Instance-Service"] != "nocturne-api")
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 return;

@@ -3,7 +3,6 @@ using ModelContextProtocol;
 using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
-using Nocturne.API.Mcp.Images;
 using Nocturne.API.Mcp.Reports;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -21,21 +20,18 @@ internal sealed class GlucoseTools
         "Shows the glucose chart for the last few hours, with insulin, carbs, basal, pump modes, "
         + "profiles, heart rate, steps and sleep where the token's scopes allow. Returns a text "
         + "summary: range, min, max, mean, time in range, below and above range, low and high episodes, "
-        + "and the number of boluses and carb entries. For other ranges or more panels, use render_report.")]
+        + "and the number of boluses and carb entries. For other ranges or more panels, use render_report. "
+        + ReportTools.ImageOfPreset)]
     [McpRequireScope(Scope.GlucoseRead)]
     public static async Task<CallToolResult> ShowGlucose(
         ReportRenderer renderer,
-        ReportImageRenderer images,
         [Description("How many hours back from now to show, 1 to 24.")] int hours = 6,
-        [Description("Set to true to get the charts as PNG images, not the interactive view. " + ReportTools.WhenToUseImages)] bool asImage = false,
         CancellationToken cancellationToken = default)
     {
         if (hours is < 1 or > MaxHours)
             throw new McpInvalidArgumentsException($"hours must be between 1 and {MaxHours}.");
 
-        return asImage
-            ? await images.RenderAsync(Preset(hours), ReportImageRenderer.Defaults, cancellationToken)
-            : (await renderer.RenderAsync(Preset(hours), cancellationToken)).Result;
+        return (await renderer.RenderAsync(Preset(hours), cancellationToken)).Result;
     }
 
     /// <summary>The spec <c>show_glucose</c> draws: one dashboard chart of the last <paramref name="hours"/> hours.</summary>

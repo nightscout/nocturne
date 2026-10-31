@@ -148,7 +148,8 @@ internal sealed record ReportDatasetRequest(
     bool HistoryClamped = false,
     Datasets.ReportRunCache? RunCache = null,
     DateTimeOffset? Now = null,
-    ReportBindings? Bindings = null)
+    ReportBindings? Bindings = null,
+    TimeZoneInfo? Zone = null)
 {
     public bool HasScope(string scope) => Scope.Satisfies(GrantedScopes, scope);
 

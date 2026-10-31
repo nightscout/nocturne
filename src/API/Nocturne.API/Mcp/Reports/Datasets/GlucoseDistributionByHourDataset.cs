@@ -120,7 +120,7 @@ internal sealed class GlucoseDistributionByHourDataset : IReportDataset
             Summary = Summarise(hours, request.From, request.To, clock.Zone is null, useMmol),
             Facts = FactsOf(hours, useMmol),
             Sentence = SentenceOf(hours, clock.Zone is null),
-            Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(hours.Sum(h => h.Count), "reading")}.",
+            Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(hours.Sum(h => h.Count), "reading")}.",
         };
     }
 

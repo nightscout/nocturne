@@ -28,6 +28,10 @@ internal static class ReportTools
     public const string WhenToUseImages =
         "Use it for a document or message that cannot show the interactive view, such as a written report, a doc or an email.";
 
+    /// <summary>How a preset's report becomes images: the spec it returns, sent to the image tool.</summary>
+    public const string ImageOfPreset =
+        "For the charts as PNG images, send the spec this tool returns (structuredContent.spec) to render_report_image. " + WhenToUseImages;
+
     /// <summary>The tool, with <see cref="ReportSpecSchema.InputSchema"/> in place of the raw argument's.</summary>
     public static McpServerTool Create(IServiceProvider services)
     {

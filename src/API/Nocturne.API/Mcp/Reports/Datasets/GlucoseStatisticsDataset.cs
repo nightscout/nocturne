@@ -124,7 +124,7 @@ internal sealed class GlucoseStatisticsDataset : IReportDataset
             Summary = Summarise(row, request.From, request.To, useMmol, [.. omitted.Select(o => o.Field)]),
             Facts = FactsOf(row, useMmol),
             Sentence = SentenceOf(row, useMmol, treatments),
-            Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(count, "reading")}.",
+            Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(count, "reading")}.",
             Omitted = omitted,
         };
     }

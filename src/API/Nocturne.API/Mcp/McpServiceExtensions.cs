@@ -75,7 +75,9 @@ internal static class McpServiceExtensions
         services.AddSingleton(ReportTools.CreateImage);
         services.AddScoped<ReportImageRenderer>();
         services.AddScoped<IReportImageClient, WebReportImageClient>();
-        services.AddHttpClient(WebReportImageClient.HttpClientName, client => client.Timeout = WebReportImageClient.Timeout);
+        services.AddSingleton<ReportImageRateLimit>();
+        // The client's own deadline covers the request and the whole body (WebReportImageClient.Timeout).
+        services.AddHttpClient(WebReportImageClient.HttpClientName, client => client.Timeout = System.Threading.Timeout.InfiniteTimeSpan);
     }
 
     public static void MapNocturneMcp(this WebApplication app)

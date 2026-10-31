@@ -90,7 +90,7 @@ internal sealed class BasalDeliveryDataset : IReportDataset
             Sentence = series.Count == 0 ? "No basal records in this period."
                 : "Changes by origin: " + string.Join(", ", series.GroupBy(p => p.Origin).OrderByDescending(g => g.Count())
                     .Select(g => $"{g.Key} {g.Count()}")) + ".",
-            Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(series.Count, "rate change")}.",
+            Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(series.Count, "rate change")}.",
             Omitted = omitted,
             Resolution = new ReportResolution(1, interval, series.Count, rows.Count, rows.Count < series.Count),
         };

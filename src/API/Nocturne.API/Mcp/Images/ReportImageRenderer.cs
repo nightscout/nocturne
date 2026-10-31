@@ -1,12 +1,45 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
+using System.Threading.RateLimiting;
 using ModelContextProtocol.Protocol;
 using Nocturne.API.Mcp.Reports;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Mcp.Images;
 
-/// <summary>The size, theme and pixel ratio of a report's images, and the one panel to draw when named.</summary>
-internal sealed record ReportImageOptions(string? PanelId, int Width, int Height, string Theme, int DevicePixelRatio);
+/// <summary>
+/// The size, theme and pixel ratio of a report's images, and the one panel to draw when named.
+/// <see cref="Height"/> null leaves each panel's height to its primitive (a single stacked bar is short).
+/// </summary>
+internal sealed record ReportImageOptions(string? PanelId, int Width, int? Height, string Theme, int DevicePixelRatio);
+
+/// <summary>
+/// How many image calls a tenant may make: each one runs a report and draws up to
+/// <see cref="ReportImageRenderer.MaxPanels"/> images, so it is held tighter than <c>/mcp</c> as a whole.
+/// One per API instance.
+/// </summary>
+internal sealed class ReportImageRateLimit : IDisposable
+{
+    public const int PerMinute = 20;
+
+    private readonly PartitionedRateLimiter<Guid> _limiter = PartitionedRateLimiter.Create<Guid, Guid>(tenant =>
+        RateLimitPartition.GetFixedWindowLimiter(tenant, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = PerMinute,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        }));
+
+    /// <summary>Takes one call's permit for the tenant; false when its minute is spent.</summary>
+    public bool TryAcquire(Guid tenantId)
+    {
+        using var lease = _limiter.AttemptAcquire(tenantId);
+        return lease.IsAcquired;
+    }
+
+    public void Dispose() => _limiter.Dispose();
+}
 
 /// <summary>
 /// A report as images: the spec runs through <see cref="ReportRenderer"/> exactly as for
@@ -14,10 +47,13 @@ internal sealed record ReportImageOptions(string? PanelId, int Width, int Height
 /// log), then each chart panel is drawn as a PNG by <see cref="IReportImageClient"/>. The result is
 /// the summary text followed by one image per panel, with no <c>structuredContent</c>: it is not a view.
 /// </summary>
-internal sealed class ReportImageRenderer(ReportRenderer renderer, IReportImageClient client)
+internal sealed class ReportImageRenderer(
+    ReportRenderer renderer,
+    IReportImageClient client,
+    ReportImageRateLimit rateLimit,
+    ITenantAccessor tenant)
 {
     public const int DefaultWidth = 1200;
-    public const int DefaultHeight = 600;
     public const int MinWidth = 320;
     public const int MaxWidth = 2400;
     public const int MinHeight = 200;
@@ -32,9 +68,6 @@ internal sealed class ReportImageRenderer(ReportRenderer renderer, IReportImageC
     /// <summary>The primitives that have an image. Stat tiles and tables are text, which the summary carries.</summary>
     public static bool IsChart(ReportPrimitive primitive) => primitive is ReportPrimitive.TimeSeries
         or ReportPrimitive.RangeBands or ReportPrimitive.Bar or ReportPrimitive.Comparison or ReportPrimitive.GlucoseChart;
-
-    /// <summary>Every chart panel at the default size, light, ratio 1: what a preset's <c>asImage</c> draws.</summary>
-    public static ReportImageOptions Defaults { get; } = new(null, DefaultWidth, DefaultHeight, "light", 1);
 
     /// <summary>The image arguments, defaulted and checked; every error is listed in one refusal.</summary>
     /// <exception cref="McpInvalidArgumentsException">An argument is out of range.</exception>
@@ -55,7 +88,7 @@ internal sealed class ReportImageRenderer(ReportRenderer renderer, IReportImageC
             throw new McpInvalidArgumentsException(
                 $"The image arguments are not valid. Change these and call {tool} again:\n" + string.Join('\n', errors.Select(e => $"- {e}")));
 
-        return new ReportImageOptions(panelId, width ?? DefaultWidth, height ?? DefaultHeight, theme ?? "light", devicePixelRatio ?? 1);
+        return new ReportImageOptions(panelId, width ?? DefaultWidth, height, theme ?? "light", devicePixelRatio ?? 1);
     }
 
     /// <summary>Refuses, before anything is read, a spec with no panel this can draw, or a named panel it does not hold or cannot draw.</summary>
@@ -78,15 +111,23 @@ internal sealed class ReportImageRenderer(ReportRenderer renderer, IReportImageC
                 $"The spec has no chart panel, so {tool} has nothing to draw. Stat tiles and tables are text: call render_report for them.");
     }
 
-    /// <summary>Runs the spec and draws its panels.</summary>
+    /// <summary>Runs the spec and draws its panels, within the tenant's image calls per minute.</summary>
+    /// <exception cref="McpInvalidArgumentsException">The tenant has made <see cref="ReportImageRateLimit.PerMinute"/> calls this minute.</exception>
     public async Task<CallToolResult> RenderAsync(ReportSpec spec, ReportImageOptions options, CancellationToken cancellationToken)
     {
+        if (!rateLimit.TryAcquire(tenant.TenantId))
+            throw new McpInvalidArgumentsException(
+                $"This account has asked for images {ReportImageRateLimit.PerMinute} times in the last minute, the most it may. Wait a minute and call again.");
         var report = await renderer.RunAsync(spec, cancellationToken);
         return await DrawAsync(report, options, cancellationToken);
     }
 
-    /// <summary>The summary text, then one image per drawn panel: the named one, else the first <see cref="MaxPanels"/> chart panels that were read.</summary>
-    /// <exception cref="McpInvalidArgumentsException">The images together are larger than <see cref="MaxTotalBase64Bytes"/>.</exception>
+    /// <summary>
+    /// The summary text, then one image per drawn panel: the named one, else the first
+    /// <see cref="MaxPanels"/> chart panels that were read. Each image may use only what is left of
+    /// <see cref="MaxTotalBase64Bytes"/>; a panel that does not fit, and those after it, are named instead.
+    /// </summary>
+    /// <exception cref="McpInvalidArgumentsException">Not even the first image fits.</exception>
     internal async Task<CallToolResult> DrawAsync(ReportResult report, ReportImageOptions options, CancellationToken cancellationToken)
     {
         var text = new StringBuilder(ReportRenderer.SummaryText(report));
@@ -104,30 +145,39 @@ internal sealed class ReportImageRenderer(ReportRenderer renderer, IReportImageC
                 $"Images are drawn for at most {MaxPanels} panels. Not drawn: {string.Join(", ", leftOut)}. Send panelId to draw one of them.");
 
         var images = new List<ContentBlock>();
-        long total = 0;
-        foreach (var panel in drawn)
+        long used = 0;
+        for (var i = 0; i < drawn.Count; i++)
         {
+            var panel = drawn[i];
             byte[] png;
             try
             {
                 png = await client.RenderAsync(
-                    new ReportImageRequest(report with { Panels = [panel] }, panel.Id, options.Width, options.Height, options.Theme, options.DevicePixelRatio),
-                    cancellationToken);
+                    ReportImageRequest.For(report, panel, options), RawBytesFor(MaxTotalBase64Bytes - used), cancellationToken);
             }
             catch (ReportImageUnavailableException ex)
             {
                 text.Append('\n').Append($"The images could not be drawn: {ex.Message} The report's text is above.");
                 return new CallToolResult { IsError = true, Content = [new TextContentBlock { Text = text.ToString() }] };
             }
+            catch (ReportImageTooLargeException)
+            {
+                var lower = options.DevicePixelRatio == 2 ? "a smaller width or height, or devicePixelRatio 1" : "a smaller width or height";
+                if (images.Count == 0)
+                    throw new McpInvalidArgumentsException(
+                        $"The image of panel {panel.Id} is larger than {MaxTotalBase64Bytes / (1024.0 * 1024.0):0.#} MB, the most one answer "
+                        + $"carries. Send {lower}, and call again.");
+                text.Append('\n').Append(
+                    $"Not drawn, because the images would pass {MaxTotalBase64Bytes / (1024.0 * 1024.0):0.#} MB, the most one answer carries: "
+                    + $"{string.Join(", ", drawn.Skip(i).Select(p => p.Id))}. Send {lower}, or one panelId, to draw them.");
+                break;
+            }
 
-            total += Base64Length(png.Length);
-            if (total > MaxTotalBase64Bytes)
-                throw new McpInvalidArgumentsException(
-                    $"The images are larger than {MaxTotalBase64Bytes / (1024.0 * 1024.0):0.#} MB, the most one answer carries. "
-                    + "Send a smaller width or height, devicePixelRatio 1, or one panelId, and call again.");
+            used += Base64Length(png.Length);
             images.Add(ImageContentBlock.FromBytes(png, "image/png"));
+            var (width, height) = PngSize(png);
             text.Append('\n').Append(string.Create(CultureInfo.InvariantCulture,
-                $"Image {images.Count}: panel {panel.Id}, {options.Width} by {options.Height} pixels at ratio {options.DevicePixelRatio}, {options.Theme} theme."));
+                $"Image {images.Count}: panel {panel.Id}, {width} by {height} pixels, {options.Theme} theme."));
         }
 
         return new CallToolResult { Content = [new TextContentBlock { Text = text.ToString() }, .. images] };
@@ -135,6 +185,14 @@ internal sealed class ReportImageRenderer(ReportRenderer renderer, IReportImageC
 
     /// <summary>The length of <paramref name="bytes"/> bytes written as base64.</summary>
     internal static long Base64Length(long bytes) => (bytes + 2) / 3 * 4;
+
+    /// <summary>The most raw bytes whose base64 fits in <paramref name="base64"/> characters.</summary>
+    internal static long RawBytesFor(long base64) => Math.Max(0, base64 / 4 * 3);
+
+    /// <summary>A PNG's pixel size, from its header; zero when it has none.</summary>
+    internal static (int Width, int Height) PngSize(byte[] png) => png.Length >= 24
+        ? (BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16)), BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20)))
+        : (0, 0);
 
     private static string Name(ReportPrimitive primitive) => primitive switch
     {

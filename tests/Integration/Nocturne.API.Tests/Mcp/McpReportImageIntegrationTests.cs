@@ -15,7 +15,7 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration.Mcp;
 
 /// <summary>
-/// <c>render_report_image</c> and the presets' <c>asImage</c> over <c>/mcp</c> on a seeded tenant, with
+/// <c>render_report_image</c> over <c>/mcp</c> on a seeded tenant, given a spec or a preset's spec, with
 /// the web app's image route played by <see cref="ReportImageWebStub"/>.
 /// </summary>
 [Collection(ApiIntegrationShards.Three)]
@@ -78,13 +78,14 @@ public class McpReportImageIntegrationTests(ApiIntegrationTestFixture fixture, I
         Convert.FromBase64String(content[1].GetProperty("data").GetString()!).Should().Equal(ReportImageWebStub.Png);
         var text = content[0].GetProperty("text").GetString()!;
         Log(text);
-        text.Should().Contain("[line]").And.Contain("[figures]").And.Contain("Image 1: panel line, 800 by 400 pixels at ratio 1, dark theme.");
+        text.Should().Contain("[line]").And.Contain("[figures]").And.Contain("Image 1: panel line, 1 by 1 pixels, dark theme.");
 
         var sent = Fixture.ReportImageWeb.Received.Skip(sentBefore).Should().ContainSingle("stat tiles have no image").Subject;
-        sent.GetProperty("panelId").GetString().Should().Be("line");
+        sent.GetProperty("panel").GetProperty("id").GetString().Should().Be("line");
         (sent.GetProperty("width").GetInt32(), sent.GetProperty("height").GetInt32(), sent.GetProperty("theme").GetString(), sent.GetProperty("devicePixelRatio").GetInt32())
             .Should().Be((800, 400, "dark", 1));
-        var panel = sent.GetProperty("result").GetProperty("panels").EnumerateArray().Should().ContainSingle().Subject;
+        sent.EnumerateObject().Select(p => p.Name).Should().NotContain(["result", "summary", "spec", "openUrl"], "only the panel and what draws it leave the API");
+        var panel = sent.GetProperty("panel");
         panel.GetProperty("primitive").GetString().Should().Be("time_series");
         panel.GetProperty("rows").GetArrayLength().Should().BeGreaterThan(50);
         panel.GetProperty("markers").GetArrayLength().Should().BeGreaterThan(0);
@@ -101,8 +102,7 @@ public class McpReportImageIntegrationTests(ApiIntegrationTestFixture fixture, I
         call.TryGetProperty("error", out var error).Should().BeFalse(error.ToString());
         call.GetProperty("result").GetProperty("content").EnumerateArray().Select(c => c.GetProperty("type").GetString())
             .Should().Equal("text", "image");
-        var panel = Fixture.ReportImageWeb.Received.Skip(sentBefore).Should().ContainSingle().Subject
-            .GetProperty("result").GetProperty("panels")[0];
+        var panel = Fixture.ReportImageWeb.Received.Skip(sentBefore).Should().ContainSingle().Subject.GetProperty("panel");
         panel.GetProperty("status").GetString().Should().Be("ok");
         (panel.TryGetProperty("markers", out var markers) ? markers.GetArrayLength() : 0).Should().Be(0, "markers need treatments.read");
         ToolText(call).Should().Contain("Markers omitted: bolus, carbs");
@@ -145,23 +145,18 @@ public class McpReportImageIntegrationTests(ApiIntegrationTestFixture fixture, I
     }
 
     [Fact]
-    public async Task The_presets_draw_their_chart_panels_as_images_when_asked()
+    public async Task A_presets_spec_drawn_by_render_report_image_gives_its_chart_panels_as_images()
     {
         using var client = McpClient(await McpTokenAsync("glucose.read treatments.read"));
 
-        var agp = await CallToolAsync(client, "show_agp", new { days = 7, asImage = true });
-        var glucose = await CallToolAsync(client, "show_glucose", new { hours = 6, asImage = true });
-        var treatments = await CallToolAsync(client, "show_treatments", new { hours = 24, asImage = true });
-        var comparison = await CallToolAsync(client, "compare_periods", new { preset = "last7-prior7", asImage = true });
+        var agp = await CallToolAsync(client, "show_agp", new { days = 7 });
+        var spec = agp.GetProperty("result").GetProperty("structuredContent").GetProperty("spec");
+        var images = await CallToolAsync(client, "render_report_image", new { spec });
 
-        static IEnumerable<string?> Types(JsonElement call) =>
-            call.GetProperty("result").GetProperty("content").EnumerateArray().Select(c => c.GetProperty("type").GetString());
-        Types(agp).Should().Equal("text", "image", "image");
-        Types(glucose).Should().Equal("text", "image");
-        Types(treatments).Should().Equal("text", "image");
-        Types(comparison).Should().Equal("text", "image");
-        foreach (var call in new[] { agp, glucose, treatments, comparison })
-            call.GetProperty("result").TryGetProperty("structuredContent", out _).Should().BeFalse();
+        images.TryGetProperty("error", out var error).Should().BeFalse(error.ToString());
+        images.GetProperty("result").GetProperty("content").EnumerateArray().Select(c => c.GetProperty("type").GetString())
+            .Should().Equal("text", "image", "image");
+        ToolText(images).Should().Contain("[figures] Key figures");
     }
 
     [Fact]

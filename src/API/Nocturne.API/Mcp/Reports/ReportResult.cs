@@ -33,6 +33,12 @@ internal sealed record ReportResult
 
     public IReadOnlyList<string> Warnings { get; init; } = [];
 
+    /// <summary>The tenant's regional format (BCP-47), which an image writes its dates and numbers in; null for the default.</summary>
+    public string? Locale { get; init; }
+
+    /// <summary>Whether the tenant reads times on a 12-hour clock; null when it chose none.</summary>
+    public bool? Hour12 { get; init; }
+
     /// <summary>
     /// The web app's page that opens this spec (<see cref="ReportSpecLink"/>), where a member can
     /// run and save it; null when the spec is too large for a link, and the panels' own

@@ -4,7 +4,6 @@ using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Nocturne.API.Extensions;
-using Nocturne.API.Mcp.Images;
 using Nocturne.API.Mcp.Reports;
 using Nocturne.Core.Models.Authorization;
 
@@ -28,15 +27,13 @@ internal sealed class PresetTools
         "Shows the ambulatory glucose profile (AGP) for the last few days, laid out as the Nocturne AGP report: the key "
         + "figures (time in range, mean, GMI, CV, below and above range, and with treatments.read insulin and carbs per day), "
         + "the glucose percentile bands over the hours of the day, and the time in each glucose band. Returns the text "
-        + "summary of each part.")]
+        + "summary of each part. " + ReportTools.ImageOfPreset)]
     [McpRequireScope(Scope.GlucoseRead)]
     public static async Task<CallToolResult> ShowAgp(
         ReportSpecValidator validator,
         ReportRenderer renderer,
-        ReportImageRenderer images,
         IHttpContextAccessor httpContextAccessor,
         [Description("How many days back from now, 1 to 90. Default 14, the standard AGP period.")] int days = 14,
-        [Description("Set to true to get the charts as PNG images, not the interactive view. " + ReportTools.WhenToUseImages)] bool asImage = false,
         CancellationToken cancellationToken = default)
     {
         if (days is < 1 or > MaxAgpDays)
@@ -44,7 +41,7 @@ internal sealed class PresetTools
 
         var clamped = httpContextAccessor.HttpContext?.IsCallerHistoryClamped() ?? false;
         var spec = Normalise(validator, AgpSpec(days, clamped), await renderer.UsesMmolAsync(cancellationToken));
-        return await RenderAsync(renderer, images, spec, asImage, cancellationToken);
+        return (await renderer.RenderAsync(spec, cancellationToken)).Result;
     }
 
     [McpServerTool(Name = "show_treatments", Title = "Show treatments", ReadOnly = true, OpenWorld = false)]
@@ -52,15 +49,13 @@ internal sealed class PresetTools
     [Description(
         "Shows the last few hours of glucose with bolus and carb markers on the line, and a table of the treatment "
         + "records (boluses, carbs, temp basals, notes, overrides, injections). Returns the text summary: counts, totals, "
-        + "largest and latest of each kind.")]
+        + "largest and latest of each kind. " + ReportTools.ImageOfPreset)]
     [McpRequireScope(Scope.TreatmentsRead)]
     public static async Task<CallToolResult> ShowTreatments(
         ReportSpecValidator validator,
         ReportRenderer renderer,
-        ReportImageRenderer images,
         IHttpContextAccessor httpContextAccessor,
         [Description("How many hours back from now, 1 to 72. Default 24.")] int hours = 24,
-        [Description("Set to true to get the charts as PNG images, not the interactive view. " + ReportTools.WhenToUseImages)] bool asImage = false,
         CancellationToken cancellationToken = default)
     {
         if (hours is < 1 or > MaxTreatmentHours)
@@ -68,7 +63,7 @@ internal sealed class PresetTools
 
         var clamped = httpContextAccessor.HttpContext?.IsCallerHistoryClamped() ?? false;
         var spec = Normalise(validator, TreatmentsSpec(hours, clamped), await renderer.UsesMmolAsync(cancellationToken));
-        return await RenderAsync(renderer, images, spec, asImage, cancellationToken);
+        return (await renderer.RenderAsync(spec, cancellationToken)).Result;
     }
 
     [McpServerTool(Name = "compare_periods", Title = "Compare periods", ReadOnly = true, OpenWorld = false)]
@@ -77,18 +72,16 @@ internal sealed class PresetTools
         "Compares two periods side by side, laid out as the Nocturne comparison report: each period's time in each glucose "
         + "range, then each figure (GMI, CV, mean, time and episodes high and low, variability and risk indexes, data coverage, "
         + "and with treatments.read insulin and carbs) with both values and the change, marked better or worse where a lower "
-        + "or higher value is better. Send 'preset', or the four dates. Returns the text of every figure.")]
+        + "or higher value is better. Send 'preset', or the four dates. Returns the text of every figure. " + ReportTools.ImageOfPreset)]
     [McpRequireScope(Scope.GlucoseRead)]
     public static async Task<CallToolResult> ComparePeriods(
         ReportSpecValidator validator,
         ReportRenderer renderer,
-        ReportImageRenderer images,
         [Description("last7-prior7, last14-prior14, last30-prior30 or thisMonth-lastMonth. Default last14-prior14 when no dates are sent.")] string? preset = null,
         [Description("Period A's first day, yyyy-MM-dd. Send with aTo, bFrom and bTo, in place of preset.")] string? aFrom = null,
         [Description("Period A's last day, yyyy-MM-dd, counted.")] string? aTo = null,
         [Description("Period B's first day, yyyy-MM-dd.")] string? bFrom = null,
         [Description("Period B's last day, yyyy-MM-dd, counted.")] string? bTo = null,
-        [Description("Set to true to get the charts as PNG images, not the interactive view. " + ReportTools.WhenToUseImages)] bool asImage = false,
         CancellationToken cancellationToken = default)
     {
         var validation = validator.Validate(
@@ -97,15 +90,9 @@ internal sealed class PresetTools
             throw new McpInvalidArgumentsException(
                 "The periods are not valid. Change these and call compare_periods again:\n"
                 + string.Join('\n', validation.Errors.Select(e => $"- {ComparisonArgument(e)}")));
-        return await RenderAsync(renderer, images, validation.Spec!, asImage, cancellationToken);
+        return (await renderer.RenderAsync(validation.Spec!, cancellationToken)).Result;
     }
 
-    /// <summary>The preset as the report view's result, or with <paramref name="asImage"/> as images of its chart panels.</summary>
-    private static async Task<CallToolResult> RenderAsync(
-        ReportRenderer renderer, ReportImageRenderer images, ReportSpec spec, bool asImage, CancellationToken cancellationToken) =>
-        asImage
-            ? await images.RenderAsync(spec, ReportImageRenderer.Defaults, cancellationToken)
-            : (await renderer.RenderAsync(spec, cancellationToken)).Result;
 
     /// <summary>The comparison report as a spec: one comparison panel over the two periods the arguments name.</summary>
     internal static object ComparisonSpec(string? preset, string? aFrom, string? aTo, string? bFrom, string? bTo)

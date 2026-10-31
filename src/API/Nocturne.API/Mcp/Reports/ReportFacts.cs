@@ -26,9 +26,18 @@ internal static class ReportFacts
 
     public static string GlucoseUnit(bool useMmol) => useMmol ? "mmol/L" : "mg/dL";
 
-    /// <summary>"2026-10-15 08:39 to 2026-10-29 08:39 UTC".</summary>
-    public static string Window(DateTimeOffset from, DateTimeOffset to) =>
-        string.Create(CultureInfo.InvariantCulture, $"{from.UtcDateTime:yyyy-MM-dd HH:mm} to {to.UtcDateTime:yyyy-MM-dd HH:mm} UTC");
+    /// <summary>
+    /// "2026-10-15 19:39 to 2026-10-29 19:39 Australia/Sydney" in the tenant's zone, the zone the
+    /// charts' time axes are drawn in; "... UTC" when the tenant has none.
+    /// </summary>
+    public static string Window(DateTimeOffset from, DateTimeOffset to, TimeZoneInfo? zone = null)
+    {
+        if (zone is null)
+            return string.Create(CultureInfo.InvariantCulture, $"{from.UtcDateTime:yyyy-MM-dd HH:mm} to {to.UtcDateTime:yyyy-MM-dd HH:mm} UTC");
+        var name = TimeZoneInfo.TryConvertWindowsIdToIanaId(zone.Id, out var iana) ? iana : zone.Id;
+        return string.Create(CultureInfo.InvariantCulture,
+            $"{TimeZoneInfo.ConvertTime(from, zone):yyyy-MM-dd HH:mm} to {TimeZoneInfo.ConvertTime(to, zone):yyyy-MM-dd HH:mm} {name}");
+    }
 
     /// <summary>"1 reading" or "4025 readings".</summary>
     public static string Plural(int count, string noun) =>

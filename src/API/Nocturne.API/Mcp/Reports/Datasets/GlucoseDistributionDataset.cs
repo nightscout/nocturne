@@ -117,7 +117,7 @@ internal sealed class GlucoseDistributionDataset : IReportDataset
                 ? "No glucose readings in this period."
                 : $"Below range, total: {ReportFacts.Number(bands[0].Percent + bands[1].Percent)}%. "
                     + $"Above range, total: {ReportFacts.Number(bands[3].Percent + bands[4].Percent)}%.",
-            Context = $"{ReportFacts.Window(request.From, request.To)}. {ReportFacts.Plural(count, "reading")}.",
+            Context = $"{ReportFacts.Window(request.From, request.To, request.Zone)}. {ReportFacts.Plural(count, "reading")}.",
         };
     }
 
